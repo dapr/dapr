@@ -16,7 +16,6 @@ package metrics
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,9 +74,7 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Check for metric count and code
-		assert.Eventually(t, func() bool {
-			return e.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:workflow", "error_code:ERR_INSTANCE_ID_NOT_FOUND")
-		}, 5*time.Second, 100*time.Millisecond)
+		assert.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:workflow", "error_code:ERR_INSTANCE_ID_NOT_FOUND"))
 	})
 
 	t.Run("HTTP conversation error metrics", func(t *testing.T) {
@@ -87,8 +84,6 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Check for metric count and code
-		assert.Eventually(t, func() bool {
-			return e.daprd.Metrics(t, ctx).MatchMetricAndSum(3, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE")
-		}, 5*time.Second, 100*time.Millisecond)
+		assert.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(3, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
 	})
 }
