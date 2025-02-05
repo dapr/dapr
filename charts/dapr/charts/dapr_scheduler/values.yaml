@@ -57,7 +57,7 @@ debug:
 securityContext:
   runAsNonRoot: true
   fsGroup: 65532
-  readOnlyRootFilesystem: true
+  readOnlyRootFilesystem: false
 
 resources: {}
 
