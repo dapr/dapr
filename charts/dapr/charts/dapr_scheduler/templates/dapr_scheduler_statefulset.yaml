@@ -172,7 +172,7 @@ spec:
           capabilities:
             add: ["SYS_PTRACE"]
   {{- else }}
-          readOnlyRootFilesystem: {{ .Values.securityContext.readOnlyRootFilesystem }}
+          readOnlyRootFilesystem: true
           capabilities:
             drop: ["ALL"]
   {{- end }}
