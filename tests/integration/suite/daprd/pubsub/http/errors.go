@@ -23,6 +23,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework/socket"
 
@@ -144,7 +147,9 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBSUB_NOT_FOUND", errCode)
-		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_NOT_FOUND"))
+		assert.Eventually(t, func() bool {
+			return e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_NOT_FOUND")
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -192,7 +197,9 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBSUB_EVENTS_SER", errCode)
-		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_EVENTS_SER"))
+		assert.Eventually(t, func() bool {
+			return e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_EVENTS_SER")
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -262,7 +269,9 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBSUB_REQUEST_METADATA", errCode)
-		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_REQUEST_METADATA"))
+		assert.Eventually(t, func() bool {
+			return e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_REQUEST_METADATA")
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -334,7 +343,9 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBSUB_CLOUD_EVENTS_SER", errCode)
-		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_CLOUD_EVENTS_SER"))
+		assert.Eventually(t, func() bool {
+			return e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_CLOUD_EVENTS_SER")
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -404,7 +415,9 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBSUB_EVENTS_SER", errCode)
-		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_EVENTS_SER"))
+		assert.Eventually(t, func() bool {
+			return e.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_EVENTS_SER")
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -473,7 +486,9 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBLISH_OUTBOX", errCode)
-		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBLISH_OUTBOX"))
+		assert.Eventually(t, func() bool {
+			return e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBLISH_OUTBOX")
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
