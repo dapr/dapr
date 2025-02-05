@@ -117,7 +117,9 @@ func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 }
 
 func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
-	if !req.SkipLock {
+	if req.SkipLock {
+		return e.callReminder(ctx, req)
+	} else {
 		cancel, err := e.locker.Lock(req.ActorType, req.ActorID)
 		if err != nil {
 			return err
