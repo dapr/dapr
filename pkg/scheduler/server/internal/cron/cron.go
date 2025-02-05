@@ -23,16 +23,15 @@ import (
 
 	"github.com/diagridio/go-etcd-cron/api"
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
-	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
@@ -41,11 +40,11 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.cron")
 
 type Options struct {
-	ID       string
-	Host     *schedulerv1pb.Host
-	Config   *embed.Config
-	Healthz  healthz.Healthz
-	Security security.Handler
+	ID      string
+	Host    *schedulerv1pb.Host
+	Config  *embed.Config
+	Healthz healthz.Healthz
+	Mode    modes.DaprMode
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -74,7 +73,7 @@ type cron struct {
 	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
 	lock            sync.RWMutex
 	currHosts       []*schedulerv1pb.Host
-	security        security.Handler
+	mode            modes.DaprMode
 
 	readyCh chan struct{}
 	closeCh chan struct{}
@@ -87,16 +86,15 @@ func New(opts Options) Interface {
 		config:          opts.Config,
 		host:            opts.Host,
 		hostBroadcaster: broadcaster.New[[]*schedulerv1pb.Host](),
-		security:        opts.Security,
 		readyCh:         make(chan struct{}),
 		closeCh:         make(chan struct{}),
 		hzETCD:          opts.Healthz.AddTarget(),
+		mode:            opts.Mode,
 	}
 }
 
 func (c *cron) Run(ctx context.Context) error {
 	defer c.hzETCD.NotReady()
-
 	log.Info("Starting etcd")
 
 	etcd, err := embed.StartEtcd(c.config)
@@ -104,6 +102,35 @@ func (c *cron) Run(ctx context.Context) error {
 		return err
 	}
 	defer etcd.Close()
+
+	c.hzETCD.Ready()
+
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints: []string{c.config.ListenClientUrls[0].Host},
+		Context:   ctx,
+		Logger:    etcd.GetLogger(),
+	})
+	if err != nil {
+		return err
+	}
+
+	if c.mode == modes.KubernetesMode {
+		defer func() {
+			log.Infof("Removing member from etcd: %d", etcd.Server.ID())
+			if _, err = client.MemberRemove(ctx, uint64(etcd.Server.ID())); err != nil {
+				log.Errorf("Error removing member from etcd: %s", err)
+			}
+		}()
+
+		purls := make([]string, 0, len(c.config.AdvertisePeerUrls))
+		for _, u := range c.config.AdvertisePeerUrls {
+			purls = append(purls, u.String())
+		}
+		log.Infof("Updating member %d with peer URLs %v", etcd.Server.ID(), purls)
+		if _, err = client.MemberUpdate(ctx, uint64(etcd.Server.ID()), purls); err != nil {
+			return err
+		}
+	}
 
 	select {
 	case <-etcd.Server.ReadyNotify():
@@ -113,25 +140,6 @@ func (c *cron) Run(ctx context.Context) error {
 	}
 
 	log.Info("Starting EtcdCron")
-
-	id, err := spiffeid.FromSegments(
-		c.security.ControlPlaneTrustDomain(),
-		"ns", c.security.ControlPlaneNamespace(), "dapr-scheduler",
-	)
-	if err != nil {
-		return err
-	}
-
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints: []string{c.config.ListenClientUrls[0].Host},
-		Context:   ctx,
-		TLS:       c.security.MTLSClientConfig(id),
-		Logger:    etcd.GetLogger(),
-	})
-	if err != nil {
-		return err
-	}
-
 	watchLeadershipCh := make(chan []*anypb.Any)
 
 	hostAny, err := anypb.New(c.host)
@@ -152,8 +160,6 @@ func (c *cron) Run(ctx context.Context) error {
 	}
 
 	c.connectionPool = pool.New(c.etcdcron)
-
-	c.hzETCD.Ready()
 
 	return concurrency.NewRunnerManager(
 		c.connectionPool.Run,

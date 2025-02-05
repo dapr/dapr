@@ -46,12 +46,16 @@ func TestServerConf(t *testing.T) {
 
 		assert.Equal(t, "id1=http://localhost:5001,id2=http://localhost:5002", config.InitialCluster)
 
-		clientURL := url.URL{
+		listenURL := url.URL{
 			Scheme: "http",
 			Host:   "0.0.0.0:5002",
 		}
+		clientURL := url.URL{
+			Scheme: "http",
+			Host:   "127.0.0.1:5002",
+		}
 
-		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
+		assert.Equal(t, listenURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 
 		assert.Empty(t, config.ListenClientHttpUrls)
@@ -81,12 +85,16 @@ func TestServerConf(t *testing.T) {
 			assert.Equal(t, "data/default-id2", config.Dir)
 		}
 
-		clientURL := url.URL{
+		listenURL := url.URL{
 			Scheme: "http",
 			Host:   "localhost:5002",
 		}
+		clientURL := url.URL{
+			Scheme: "http",
+			Host:   "127.0.0.1:5002",
+		}
 
-		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
+		assert.Equal(t, listenURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 
 		assert.Empty(t, config.ListenClientHttpUrls)
@@ -111,12 +119,16 @@ func TestServerConf(t *testing.T) {
 
 		assert.Equal(t, "id1=http://localhost:5001,id2=http://localhost:5002", config.InitialCluster)
 
-		clientURL := url.URL{
+		listenURL := url.URL{
 			Scheme: "http",
 			Host:   "localhost:5002",
 		}
+		clientURL := url.URL{
+			Scheme: "http",
+			Host:   "127.0.0.1:5002",
+		}
 
-		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
+		assert.Equal(t, listenURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 
 		assert.Empty(t, config.ListenClientHttpUrls)
@@ -141,11 +153,15 @@ func TestServerConf(t *testing.T) {
 
 		assert.Equal(t, "id1=http://hello1:5001,id2=http://hello2:5002", config.InitialCluster)
 
-		clientURL := url.URL{
+		listenURL := url.URL{
 			Scheme: "http",
 			Host:   "0.0.0.0:5002",
 		}
-		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
+		clientURL := url.URL{
+			Scheme: "http",
+			Host:   "127.0.0.1:5002",
+		}
+		assert.Equal(t, listenURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 		assert.Empty(t, config.ListenClientHttpUrls)
 	})
@@ -169,11 +185,15 @@ func TestServerConf(t *testing.T) {
 
 		assert.Equal(t, "id1=http://1.2.3.4:5001,id2=http://1.2.3.4:5002", config.InitialCluster)
 
-		clientURL := url.URL{
+		listenURL := url.URL{
 			Scheme: "http",
 			Host:   "1.2.3.4:5002",
 		}
-		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
+		clientURL := url.URL{
+			Scheme: "http",
+			Host:   "127.0.0.1:5002",
+		}
+		assert.Equal(t, listenURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 		assert.Empty(t, config.ListenClientHttpUrls)
 	})
@@ -197,11 +217,15 @@ func TestServerConf(t *testing.T) {
 
 		assert.Equal(t, "id1=http://1.2.3.4:5001,id2=http://1.2.3.4:5002", config.InitialCluster)
 
-		clientURL := url.URL{
+		listenURL := url.URL{
 			Scheme: "http",
 			Host:   "1.2.3.4:5002",
 		}
-		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
+		clientURL := url.URL{
+			Scheme: "http",
+			Host:   "127.0.0.1:5002",
+		}
+		assert.Equal(t, listenURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 		assert.Empty(t, config.ListenClientHttpUrls)
 	})

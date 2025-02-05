@@ -96,11 +96,11 @@ func New(opts Options) (*Server, error) {
 	}
 
 	cron := cron.New(cron.Options{
-		ID:       opts.EtcdID,
-		Config:   config,
-		Healthz:  opts.Healthz,
-		Host:     &schedulerv1pb.Host{Address: broadcastAddr},
-		Security: opts.Security,
+		ID:      opts.EtcdID,
+		Config:  config,
+		Healthz: opts.Healthz,
+		Host:    &schedulerv1pb.Host{Address: broadcastAddr},
+		Mode:    opts.Mode,
 	})
 
 	var ctrl concurrency.Runner

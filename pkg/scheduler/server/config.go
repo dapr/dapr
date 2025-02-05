@@ -77,9 +77,9 @@ func config(opts Options) (*embed.Config, error) {
 		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
 	}}
 
-	config.AdvertiseClientUrls = []url.URL{{
-		Scheme: scheme,
-		Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
+	config.ListenClientUrls = []url.URL{{
+		Scheme: "http",
+		Host:   "127.0.0.1:" + clientPorts[opts.EtcdID],
 	}}
 
 	switch opts.Mode {
@@ -90,10 +90,6 @@ func config(opts Options) (*embed.Config, error) {
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdIP, peerPort),
-		}}
-		config.ListenClientUrls = []url.URL{{
-			Scheme: scheme,
-			Host:   fmt.Sprintf("%s:%s", etcdIP, clientPorts[opts.EtcdID]),
 		}}
 	default:
 
@@ -108,10 +104,6 @@ func config(opts Options) (*embed.Config, error) {
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
-		}}
-		config.ListenClientUrls = []url.URL{{
-			Scheme: scheme,
-			Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 		}}
 	}
 

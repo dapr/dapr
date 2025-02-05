@@ -15,7 +15,6 @@ package scheduler
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -329,18 +328,9 @@ func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics 
 func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Client {
 	t.Helper()
 
-	var tlsCfg *tls.Config
-	if s.sentry != nil {
-		sech := s.security(t, ctx, "dapr-scheduler")
-		id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
-		require.NoError(t, err)
-		tlsCfg = sech.MTLSClientConfig(id)
-	}
-
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
 		DialTimeout: 40 * time.Second,
-		TLS:         tlsCfg,
 	})
 	require.NoError(t, err)
 
