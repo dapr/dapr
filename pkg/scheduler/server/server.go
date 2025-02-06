@@ -29,6 +29,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
@@ -46,10 +47,10 @@ type Options struct {
 	Port                      int
 	Mode                      modes.DaprMode
 	KubeConfig                *string
-	DataDir                   string
-	EtcdID                    string
-	EtcdInitialPeers          []string
-	EtcdClientPorts           []string
+	EtcdDataDir               string
+	EtcdName                  string
+	EtcdInitialCluster        []string
+	EtcdClientPort            uint64
 	EtcdSpaceQuota            int64
 	EtcdCompactionMode        string
 	EtcdCompactionRetention   string
@@ -66,6 +67,7 @@ type Server struct {
 	sec        security.Handler
 	serializer *serialize.Serializer
 	cron       cron.Interface
+	etcd       etcd.Interface
 	controller concurrency.Runner
 
 	hzAPIServer healthz.Target
@@ -76,11 +78,6 @@ type Server struct {
 }
 
 func New(opts Options) (*Server, error) {
-	config, err := config(opts)
-	if err != nil {
-		return nil, err
-	}
-
 	var broadcastAddr string
 	switch {
 	case opts.OverrideBroadcastHostPort != nil:
@@ -95,12 +92,30 @@ func New(opts Options) (*Server, error) {
 		broadcastAddr = net.JoinHostPort(haddr, strconv.Itoa(opts.Port))
 	}
 
+	etcd, err := etcd.New(etcd.Options{
+		Name:                opts.EtcdName,
+		InitialCluster:      opts.EtcdInitialCluster,
+		ClientPort:          opts.EtcdClientPort,
+		SpaceQuota:          opts.EtcdSpaceQuota,
+		CompactionMode:      opts.EtcdCompactionMode,
+		CompactionRetention: opts.EtcdCompactionRetention,
+		SnapshotCount:       opts.EtcdSnapshotCount,
+		MaxSnapshots:        opts.EtcdMaxSnapshots,
+		MaxWALs:             opts.EtcdMaxWALs,
+		Security:            opts.Security,
+		DataDir:             opts.EtcdDataDir,
+		Healthz:             opts.Healthz,
+		Mode:                opts.Mode,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	cron := cron.New(cron.Options{
-		ID:      opts.EtcdID,
-		Config:  config,
+		ID:      opts.EtcdName,
 		Healthz: opts.Healthz,
 		Host:    &schedulerv1pb.Host{Address: broadcastAddr},
-		Mode:    opts.Mode,
+		Etcd:    etcd,
 	})
 
 	var ctrl concurrency.Runner
@@ -122,6 +137,7 @@ func New(opts Options) (*Server, error) {
 		sec:           opts.Security,
 		controller:    ctrl,
 		cron:          cron,
+		etcd:          etcd,
 		serializer: serialize.New(serialize.Options{
 			Security: opts.Security,
 		}),
@@ -139,6 +155,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	runners := []concurrency.Runner{
 		s.runServer,
+		s.etcd.Run,
 		func(ctx context.Context) error {
 			err := s.cron.Run(ctx)
 			if ctx.Err() != nil {

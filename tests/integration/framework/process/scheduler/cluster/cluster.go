@@ -56,7 +56,7 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 	healthzPorts := make([]int, opts.count)
 	metricsPorts := make([]int, opts.count)
 	initialCluster := make([]string, opts.count)
-	clientPorts := make([]string, opts.count)
+	clientPorts := make([]int, opts.count)
 
 	for i := range ports {
 		uids[i] = "scheduler-" + strconv.Itoa(i)
@@ -64,7 +64,7 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 		healthzPorts[i] = fp.Port(t)
 		metricsPorts[i] = fp.Port(t)
 		initialCluster[i] = fmt.Sprintf("%s=http://127.0.0.1:%d", uids[i], fp.Port(t))
-		clientPorts[i] = fmt.Sprintf("%s=%d", uids[i], fp.Port(t))
+		clientPorts[i] = fp.Port(t)
 	}
 
 	schedulers := make([]*scheduler.Scheduler, opts.count)
@@ -75,7 +75,7 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 			scheduler.WithHealthzPort(healthzPorts[i]),
 			scheduler.WithMetricsPort(metricsPorts[i]),
 			scheduler.WithInitialCluster(strings.Join(initialCluster, ",")),
-			scheduler.WithEtcdClientPorts(clientPorts),
+			scheduler.WithEtcdClientPort(clientPorts[i]),
 		}
 
 		if len(opts.overrideBroadcastHostPorts) > 0 {

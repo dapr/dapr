@@ -1,0 +1,122 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package etcd
+
+import (
+	"context"
+	"fmt"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
+
+	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/kit/logger"
+)
+
+var log = logger.NewLogger("dapr.scheduler.server.etcd")
+
+type Options struct {
+	Name                string
+	InitialCluster      []string
+	ClientPort          uint64
+	SpaceQuota          int64
+	CompactionMode      string
+	CompactionRetention string
+	SnapshotCount       uint64
+	MaxSnapshots        uint
+	MaxWALs             uint
+	Security            security.Handler
+
+	DataDir string
+	Healthz healthz.Healthz
+	Mode    modes.DaprMode
+}
+
+type Interface interface {
+	Run(ctx context.Context) error
+	Client(ctx context.Context) (*clientv3.Client, error)
+}
+
+type etcd struct {
+	mode modes.DaprMode
+
+	client *clientv3.Client
+	config *embed.Config
+
+	readyCh chan struct{}
+	hz      healthz.Target
+}
+
+func New(opts Options) (Interface, error) {
+	config, err := config(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create etcd config: %w", err)
+	}
+
+	return &etcd{
+		hz:      opts.Healthz.AddTarget(),
+		config:  config,
+		readyCh: make(chan struct{}),
+		mode:    opts.Mode,
+	}, nil
+}
+
+func (e *etcd) Run(ctx context.Context) error {
+	defer e.hz.NotReady()
+	log.Info("Starting etcd")
+
+	etcd, err := embed.StartEtcd(e.config)
+	if err != nil {
+		return fmt.Errorf("failed to start embedded etcd: %w", err)
+	}
+	defer etcd.Close()
+
+	e.client, err = clientv3.New(clientv3.Config{
+		Endpoints: []string{e.config.ListenClientUrls[0].Host},
+		Logger:    etcd.GetLogger(),
+	})
+	if err != nil {
+		return err
+	}
+	defer e.client.Close()
+
+	select {
+	case <-etcd.Server.ReadyNotify():
+		log.Info("Etcd server is ready!")
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	e.hz.Ready()
+	close(e.readyCh)
+
+	defer log.Info("Etcd shut down")
+	select {
+	case err := <-etcd.Err():
+		return err
+	case <-ctx.Done():
+		return nil
+	}
+}
+
+func (e *etcd) Client(ctx context.Context) (*clientv3.Client, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-e.readyCh:
+		return e.client, nil
+	}
+}

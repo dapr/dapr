@@ -68,28 +68,22 @@ func (r *reconnect3) Setup(t *testing.T) []framework.Option {
 
 	fp := ports.Reserve(t, 6)
 	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
+	port4, port5, port6 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
 		scheduler.WithInitialCluster(fmt.Sprintf(
 			"scheduler-0=http://127.0.0.1:%d,scheduler-1=http://127.0.0.1:%d,scheduler-2=http://127.0.0.1:%d",
 			port1, port2, port3),
 		),
-		scheduler.WithInitialClusterPorts(port1, port2, port3),
 	}
 
-	clientPorts := []string{
-		"scheduler-0=" + strconv.Itoa(fp.Port(t)),
-		"scheduler-1=" + strconv.Itoa(fp.Port(t)),
-		"scheduler-2=" + strconv.Itoa(fp.Port(t)),
-	}
-
-	r.scheduler1 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...)
-	r.scheduler2 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...)
-	r.scheduler3 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...)
+	r.scheduler1 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPort(port4))...)
+	r.scheduler2 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPort(port5))...)
+	r.scheduler3 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPort(port6))...)
 
 	r.scheduler4 = scheduler.New(t,
 		scheduler.WithID(r.scheduler2.ID()),
-		scheduler.WithEtcdClientPorts(clientPorts),
+		scheduler.WithEtcdClientPort(port5),
 		scheduler.WithInitialCluster(r.scheduler2.InitialCluster()),
 		scheduler.WithDataDir(r.scheduler2.DataDir()),
 		scheduler.WithPort(r.scheduler2.Port()),
@@ -148,11 +142,12 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 
 	r.scheduler4.Run(t, ctx)
 	r.scheduler4.WaitUntilRunning(t, ctx)
+	r.scheduler4.WaitUntilLeadership(t, ctx, 3)
 	t.Cleanup(func() { r.scheduler4.Cleanup(t) })
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()
 		assert.Len(c, r.jobCalledMap, 100)
 		r.lock.Unlock()
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 }
