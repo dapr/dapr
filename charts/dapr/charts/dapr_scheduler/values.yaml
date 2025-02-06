@@ -22,7 +22,6 @@ service:
 ports:
   protocol: TCP
   etcdGRPCClientPort: 2379
-  etcdHTTPClientPort: 2330
   etcdGRPCPeerPort: 2380
 
 ha: false

@@ -27,13 +27,13 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
+	"github.com/dapr/dapr/pkg/actors/locker"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/messages"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/fifo"
@@ -55,6 +55,7 @@ type Options struct {
 	GRPC               *manager.Manager
 	IdlerQueue         *queue.Processor[string, targets.Idlable]
 	SchedulerReminders bool
+	Locker             locker.Interface
 }
 
 type engine struct {
@@ -66,6 +67,7 @@ type engine struct {
 	resiliency resiliency.Provider
 	reminders  reminders.Interface
 	grpc       *manager.Manager
+	locker     locker.Interface
 
 	idlerQueue *queue.Processor[string, targets.Idlable]
 
@@ -83,16 +85,27 @@ func New(opts Options) Interface {
 		grpc:               opts.GRPC,
 		idlerQueue:         opts.IdlerQueue,
 		reminders:          opts.Reminders,
+		locker:             opts.Locker,
 		lock:               fifo.New(),
 		clock:              clock.RealClock{},
 	}
 }
 
 func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	cancel, err := e.locker.LockRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	var res *internalv1pb.InternalInvokeResponse
-	var err error
 	if e.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		res, err = e.callActor(ctx, req)
+		// Don't bubble perminant errors up to the caller to interfere with top level
+		// retries.
+		if _, ok := err.(*backoff.PermanentError); ok {
+			err = errors.Unwrap(err)
+		}
 	} else {
 		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
 		res, err = policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
@@ -104,6 +117,16 @@ func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 }
 
 func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
+	if req.SkipLock {
+		return e.callReminder(ctx, req)
+	} else {
+		cancel, err := e.locker.Lock(req.ActorType, req.ActorID)
+		if err != nil {
+			return err
+		}
+		defer cancel()
+	}
+
 	var err error
 	if e.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
 		err = e.callReminder(ctx, req)
@@ -127,7 +150,7 @@ func (e *engine) CallStream(ctx context.Context, req *internalv1pb.InternalInvok
 }
 
 func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
-	if !req.SkipPlacementLock {
+	if !req.SkipLock {
 		var cancel context.CancelFunc
 		var err error
 		ctx, cancel, err = e.placement.Lock(ctx)
@@ -168,11 +191,20 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 }
 
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	ctx, cancel, err := e.placement.Lock(ctx)
-	if err != nil {
-		return nil, backoff.Permanent(err)
+	// If we are in a reentrancy which is local, skip the placement lock.
+	_, isDaprRemote := req.GetMetadata()["X-Dapr-Remote"]
+	_, isReentrancy := req.GetMetadata()["Dapr-Reentrancy-Id"]
+	_, isAPICall := req.GetMetadata()["Dapr-API-Call"]
+
+	if isAPICall || isDaprRemote || !isReentrancy {
+		var cancel context.CancelFunc
+		var err error
+		ctx, cancel, err = e.placement.Lock(ctx)
+		if err != nil {
+			return nil, backoff.Permanent(err)
+		}
+		defer cancel()
 	}
-	defer cancel()
 
 	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
@@ -183,21 +215,17 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if lar.Local {
-		var res *internalv1pb.InternalInvokeResponse
-		res, err = e.callLocalActor(ctx, req)
+		var resp *internalv1pb.InternalInvokeResponse
+		resp, err = e.callLocalActor(ctx, req)
 		if err != nil {
-			if merr, ok := err.(messages.APIError); ok &&
-				merr.Is(messages.ErrActorMaxStackDepthExceeded) {
-				return res, backoff.Permanent(err)
-			}
-			return res, err
+			return resp, backoff.Permanent(err)
 		}
-		return res, nil
+		return resp, nil
 	}
 
 	// If this is a dapr-dapr call and the actor didn't pass the local check
 	// above, it means it has been moved in the meantime
-	if _, ok := req.GetMetadata()["X-Dapr-Remote"]; ok {
+	if isDaprRemote {
 		return nil, backoff.Permanent(errors.New("remote actor moved"))
 	}
 
@@ -251,16 +279,16 @@ func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 	client := internalv1pb.NewServiceInvocationClient(conn)
 
 	_, err = client.CallActorReminder(ctx, &internalv1pb.Reminder{
-		ActorId:           reminder.ActorID,
-		ActorType:         reminder.ActorType,
-		Name:              reminder.Name,
-		Data:              reminder.Data,
-		Period:            reminder.Period.String(),
-		DueTime:           reminder.DueTime,
-		RegisteredTime:    timestamppb.New(reminder.RegisteredTime),
-		ExpirationTime:    timestamppb.New(reminder.ExpirationTime),
-		IsTimer:           reminder.IsTimer,
-		SkipPlacementLock: reminder.SkipPlacementLock,
+		ActorId:        reminder.ActorID,
+		ActorType:      reminder.ActorType,
+		Name:           reminder.Name,
+		Data:           reminder.Data,
+		Period:         reminder.Period.String(),
+		DueTime:        reminder.DueTime,
+		RegisteredTime: timestamppb.New(reminder.RegisteredTime),
+		ExpirationTime: timestamppb.New(reminder.ExpirationTime),
+		IsTimer:        reminder.IsTimer,
+		SkipLock:       reminder.SkipLock,
 	})
 
 	return err

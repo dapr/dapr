@@ -95,6 +95,8 @@ spec:
             mountPath: {{ .Values.cluster.etcdDataDirPath }}/
           {{- end }}
             readOnly: false
+          - name: dapr-scheduler-writeable-identity
+            mountPath: /tmp
           - name: dapr-trust-bundle
             mountPath: /var/run/secrets/dapr.io/tls
             readOnly: true
@@ -109,8 +111,6 @@ spec:
           - containerPort: 50006
           - containerPort: {{ .Values.ports.etcdGRPCClientPort }}
             name: etcd-client
-          - containerPort: {{ .Values.ports.etcdHTTPClientPort }}
-            name: etcd-httpclient
           - containerPort: {{ .Values.ports.etcdGRPCPeerPort }}
             name: etcd-peer
           {{- if eq .Values.global.prometheus.enabled true }}
@@ -141,10 +141,6 @@ spec:
         - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
         - "--etcd-client-ports"
         - {{ include "dapr_scheduler.etcdclientports" . | toYaml | trim }}
-{{- if .Values.ports.etcdHTTPClientPort}}
-        - "--etcd-client-http-ports"
-        - {{ include "dapr_scheduler.etcdclienthttpports" . | toYaml | trim }}
-{{- end }}
         - "--log-level"
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
@@ -176,7 +172,7 @@ spec:
           capabilities:
             add: ["SYS_PTRACE"]
   {{- else }}
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop: ["ALL"]
   {{- end }}
@@ -209,6 +205,8 @@ spec:
         emptyDir:
           medium: Memory
       {{- end }}
+      - name: dapr-scheduler-writeable-identity
+        emptyDir: {}
       - name: dapr-trust-bundle
         configMap:
           name: dapr-trust-bundle

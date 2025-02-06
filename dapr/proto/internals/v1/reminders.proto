@@ -31,7 +31,7 @@ message Reminder {
   string due_time = 7;
   google.protobuf.Timestamp expiration_time = 8;
   bool is_timer = 9;
-  bool skip_placement_lock = 10;
+  bool skip_lock = 10;
 }
 
 // Reminders is a collection of reminders.

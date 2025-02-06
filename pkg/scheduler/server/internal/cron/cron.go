@@ -23,6 +23,7 @@ import (
 
 	"github.com/diagridio/go-etcd-cron/api"
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -31,6 +32,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
@@ -39,10 +41,11 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.cron")
 
 type Options struct {
-	ID      string
-	Host    *schedulerv1pb.Host
-	Config  *embed.Config
-	Healthz healthz.Healthz
+	ID       string
+	Host     *schedulerv1pb.Host
+	Config   *embed.Config
+	Healthz  healthz.Healthz
+	Security security.Handler
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -71,6 +74,7 @@ type cron struct {
 	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
 	lock            sync.RWMutex
 	currHosts       []*schedulerv1pb.Host
+	security        security.Handler
 
 	readyCh chan struct{}
 	closeCh chan struct{}
@@ -83,6 +87,7 @@ func New(opts Options) Interface {
 		config:          opts.Config,
 		host:            opts.Host,
 		hostBroadcaster: broadcaster.New[[]*schedulerv1pb.Host](),
+		security:        opts.Security,
 		readyCh:         make(chan struct{}),
 		closeCh:         make(chan struct{}),
 		hzETCD:          opts.Healthz.AddTarget(),
@@ -109,14 +114,19 @@ func (c *cron) Run(ctx context.Context) error {
 
 	log.Info("Starting EtcdCron")
 
-	endpoints := make([]string, 0, len(etcd.Clients))
-	for _, peer := range etcd.Clients {
-		endpoints = append(endpoints, peer.Addr().String())
+	id, err := spiffeid.FromSegments(
+		c.security.ControlPlaneTrustDomain(),
+		"ns", c.security.ControlPlaneNamespace(), "dapr-scheduler",
+	)
+	if err != nil {
+		return err
 	}
 
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints: endpoints,
+		Endpoints: []string{c.config.ListenClientUrls[0].Host},
 		Context:   ctx,
+		TLS:       c.security.MTLSClientConfig(id),
+		Logger:    etcd.GetLogger(),
 	})
 	if err != nil {
 		return err
@@ -129,7 +139,6 @@ func (c *cron) Run(ctx context.Context) error {
 		return err
 	}
 
-	// pass in initial cluster endpoints, but with client ports
 	c.etcdcron, err = etcdcron.New(etcdcron.Options{
 		Client:          client,
 		Namespace:       "dapr",
@@ -260,9 +269,6 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 
 func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
 	log.Debugf("Triggering job: %s", req.GetName())
-
-	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
-	defer cancel()
 
 	var meta schedulerv1pb.JobMetadata
 	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {

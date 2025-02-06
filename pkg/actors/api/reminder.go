@@ -29,18 +29,18 @@ import (
 
 // Reminder represents a reminder or timer for a unique actor.
 type Reminder struct {
-	ActorID           string         `json:"actorID,omitempty"`
-	ActorType         string         `json:"actorType,omitempty"`
-	Name              string         `json:"name,omitempty"`
-	Data              *anypb.Any     `json:"data,omitempty"`
-	Period            ReminderPeriod `json:"period,omitempty"`
-	RegisteredTime    time.Time      `json:"registeredTime,omitempty"`
-	DueTime           string         `json:"dueTime,omitempty"` // Exact input value from user
-	ExpirationTime    time.Time      `json:"expirationTime,omitempty"`
-	Callback          string         `json:"callback,omitempty"` // Used by timers only
-	IsTimer           bool           `json:"-"`
-	IsRemote          bool           `json:"-"`
-	SkipPlacementLock bool           `json:"-"`
+	ActorID        string         `json:"actorID,omitempty"`
+	ActorType      string         `json:"actorType,omitempty"`
+	Name           string         `json:"name,omitempty"`
+	Data           *anypb.Any     `json:"data,omitempty"`
+	Period         ReminderPeriod `json:"period,omitempty"`
+	RegisteredTime time.Time      `json:"registeredTime,omitempty"`
+	DueTime        string         `json:"dueTime,omitempty"` // Exact input value from user
+	ExpirationTime time.Time      `json:"expirationTime,omitempty"`
+	Callback       string         `json:"callback,omitempty"` // Used by timers only
+	IsTimer        bool           `json:"-"`
+	IsRemote       bool           `json:"-"`
+	SkipLock       bool           `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.

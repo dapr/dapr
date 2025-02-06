@@ -16,6 +16,8 @@ package universal
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 	"unicode"
 
 	"github.com/google/uuid"
@@ -26,6 +28,7 @@ import (
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/kit/ptr"
 )
@@ -98,16 +101,40 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		req.InstanceID = &iid
 	}
 
-	resp, err := a.workflowEngine.Client().Start(ctx, &req)
+	policyRunner := resiliency.NewRunner[*workflows.StartResponse](ctx,
+		a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries),
+	)
+	resp, err := policyRunner(func(ctx context.Context) (*workflows.StartResponse, error) {
+		return a.workflowEngine.Client().Start(ctx, &req)
+	})
 	if err != nil {
 		err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
+
 	ret := &runtimev1pb.StartWorkflowResponse{
 		InstanceId: resp.InstanceID,
 	}
-	return ret, nil
+
+	for {
+		gresp, err := a.workflowEngine.Client().Get(ctx, &workflows.GetRequest{
+			InstanceID: resp.InstanceID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("workflow started, but failed to get status: %w", err)
+		}
+
+		if gresp.Workflow.RuntimeStatus != "PENDING" {
+			return ret, nil
+		}
+
+		select {
+		case <-time.After(time.Millisecond * 300):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
 
 // TerminateWorkflow is the API handler for terminating a workflow
@@ -134,7 +161,24 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
-	return emptyResponse, nil
+
+	for {
+		gresp, err := a.workflowEngine.Client().Get(ctx, &workflows.GetRequest{
+			InstanceID: in.GetInstanceId(),
+		})
+
+		// Not found error so terminated.
+		if err != nil || gresp.Workflow.RuntimeStatus == "TERMINATED" {
+			//nolint:nilerr
+			return emptyResponse, nil
+		}
+
+		select {
+		case <-time.After(time.Millisecond * 300):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
 
 // RaiseEventWorkflow is the API handler for raising an event to a workflow
@@ -190,7 +234,25 @@ func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWork
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
-	return emptyResponse, nil
+
+	for {
+		gresp, err := a.workflowEngine.Client().Get(ctx, &workflows.GetRequest{
+			InstanceID: in.GetInstanceId(),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("workflow started, but failed to get status: %w", err)
+		}
+
+		if gresp.Workflow.RuntimeStatus == "SUSPENDED" {
+			return emptyResponse, nil
+		}
+
+		select {
+		case <-time.After(time.Millisecond * 300):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
 
 // ResumeWorkflow is the API handler for resuming a workflow
@@ -212,6 +274,7 @@ func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWo
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
+
 	return emptyResponse, nil
 }
 
@@ -240,7 +303,22 @@ func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWork
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
-	return emptyResponse, nil
+
+	for {
+		_, err := a.workflowEngine.Client().Get(ctx, &workflows.GetRequest{
+			InstanceID: in.GetInstanceId(),
+		})
+		if err != nil {
+			//nolint:nilerr
+			return emptyResponse, nil
+		}
+
+		select {
+		case <-time.After(time.Millisecond * 300):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
 
 // GetWorkflowBeta1 is the API handler for getting workflow details

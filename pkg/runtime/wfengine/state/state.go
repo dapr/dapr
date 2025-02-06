@@ -326,7 +326,8 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetInboxLength() {
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
 		if bulkRes[key] == nil {
-			return nil, fmt.Errorf("failed to load inbox state key '%s': not found", key)
+			wfLogger.Warnf("Failed to load inbox state key '%s': not found", key)
+			return nil, nil
 		}
 		wState.Inbox[i] = &protos.HistoryEvent{}
 		if err = proto.Unmarshal(bulkRes[key], wState.Inbox[i]); err != nil {
@@ -336,7 +337,8 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetHistoryLength() {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
 		if bulkRes[key] == nil {
-			return nil, fmt.Errorf("failed to load history state key '%s': not found", key)
+			wfLogger.Warnf("Failed to load history state key '%s': not found", key)
+			return nil, nil
 		}
 		wState.History[i] = &protos.HistoryEvent{}
 		if err = proto.Unmarshal(bulkRes[key], wState.History[i]); err != nil {
