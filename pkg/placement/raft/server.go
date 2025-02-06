@@ -94,10 +94,10 @@ type Options struct {
 }
 
 // New creates Raft server node.
-func New(opts Options) *Server {
-	raftBind := raftAddressForID(opts.ID, opts.Peers)
-	if raftBind == "" {
-		return nil
+func New(opts Options) (*Server, error) {
+	raftBind, err := raftAddressForID(opts.ID, opts.Peers)
+	if err != nil {
+		return nil, err
 	}
 
 	cl := opts.Clock
@@ -121,7 +121,7 @@ func New(opts Options) *Server {
 			minAPILevel:       opts.MinAPILevel,
 			maxAPILevel:       opts.MaxAPILevel,
 		}),
-	}
+	}, nil
 }
 
 func (s *Server) tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr string) (*net.TCPAddr, error) {
@@ -289,9 +289,9 @@ func (s *Server) StartRaft(ctx context.Context) error {
 	close(s.raftReady)
 	s.htarget.Ready()
 
-	logging.Infof("Raft server is starting on %s...", s.raftBind)
+	logging.Infof("Raft server %s started on %s...", s.GetID(), s.GetRaftBind())
 	<-ctx.Done()
-	logging.Info("Raft server is shutting down ...")
+	logging.Infof("Raft server %s is shutting down...", s.GetID())
 
 	closeErr := s.raftTransport.Close()
 	s.lock.RLock()
