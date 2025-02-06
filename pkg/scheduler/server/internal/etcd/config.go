@@ -99,6 +99,11 @@ func config(opts Options) (*embed.Config, error) {
 	config.MaxWalFiles = opts.MaxWALs
 	config.SnapshotCount = opts.SnapshotCount
 
+	if len(urls) == 1 {
+		config.ForceNewCluster = true
+		config.ClusterState = embed.ClusterStateFlagNew
+	}
+
 	return config, nil
 }
 

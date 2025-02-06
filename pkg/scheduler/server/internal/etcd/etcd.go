@@ -87,6 +87,7 @@ func (e *etcd) Run(ctx context.Context) error {
 	e.client, err = clientv3.New(clientv3.Config{
 		Endpoints: []string{e.config.ListenClientUrls[0].Host},
 		Logger:    etcd.GetLogger(),
+		Context:   ctx,
 	})
 	if err != nil {
 		return err
