@@ -30,7 +30,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -1054,8 +1053,8 @@ func (w *workflow) setOrchestrationMetadata(state *wfenginestate.State, rstate *
 		RuntimeStatus:  runtimestate.RuntimeStatus(rstate),
 		CreatedAt:      timestamppb.New(createdAt),
 		LastUpdatedAt:  timestamppb.New(lastUpdated),
-		Input:          wrapperspb.String(input),
-		Output:         wrapperspb.String(output),
+		Input:          input,
+		Output:         output,
 		CustomStatus:   state.CustomStatus,
 		FailureDetails: failureDetuils,
 	}
