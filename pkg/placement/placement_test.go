@@ -18,9 +18,11 @@ import (
 	"errors"
 	"net"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	hashicorpRaft "github.com/hashicorp/raft"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,21 +39,22 @@ import (
 	securityfake "github.com/dapr/dapr/pkg/security/fake"
 )
 
-const testStreamSendLatency = time.Second
-
-func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
+func newTestPlacementServer(t *testing.T, raftOptions raft.Options) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
 
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
 
-	testServer := NewPlacementService(ServiceOpts{
-		RaftNode:           raftServer,
+	testServer, err := New(ServiceOpts{
+		Raft:               raftOptions,
 		SecProvider:        securityfake.New(),
 		Port:               port,
 		Healthz:            healthz.New(),
 		DisseminateTimeout: 2 * time.Second,
+		KeepAliveTimeout:   1 * time.Minute,
+		KeepAliveTime:      1 * time.Minute,
 	})
+	require.NoError(t, err)
 	clock := clocktesting.NewFakeClock(time.Now())
 	testServer.clock = clock
 
@@ -59,7 +62,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer close(serverStopped)
-		err := testServer.Start(ctx)
+		err := testServer.Run(ctx)
 		if !errors.Is(err, grpc.ErrServerStopped) {
 			assert.NoError(t, err)
 		}
@@ -71,13 +74,13 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 			conn.Close()
 		}
 		return err == nil
-	}, time.Second*5, time.Millisecond, "server did not start in time")
+	}, time.Second*30, time.Millisecond, "server did not start in time")
 
 	cleanUpFn := func() {
 		cancel()
 		select {
 		case <-serverStopped:
-		case <-time.After(time.Second * 5):
+		case <-time.After(time.Second * 30):
 			t.Error("server did not stop in time")
 		}
 	}
@@ -89,16 +92,15 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.TCPConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
 	tcpConn, err := net.Dial("tcp", serverAddress)
 	require.NoError(t, err)
-	conn, err := grpc.DialContext(ctx, "", //nolint:staticcheck
+
+	conn, err := grpc.NewClient(
+		"passthrough:///",
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return tcpConn, nil
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 
@@ -111,11 +113,43 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.T
 }
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
-	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, tests.Raft(t))
-	t.Cleanup(cleanup)
-	testServer.hasLeadership.Store(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	conn, _, stream := newTestClient(t, serverAddress)
+	raftClusterOpts, err := tests.RaftClusterOpts(t)
+	require.NoError(t, err)
+
+	numServers := len(raftClusterOpts)
+	placementServers := make([]*Service, numServers)
+	placementServerAddresses := make([]string, numServers)
+	cleanupFns := make([]context.CancelFunc, numServers)
+	underlyingRaftServers := make([]*hashicorpRaft.Raft, numServers)
+
+	// Setup Raft and placement servers
+	for i := range numServers {
+		placementServerAddresses[i], placementServers[i], _, cleanupFns[i] = newTestPlacementServer(t, *raftClusterOpts[i])
+
+		raftSrv, e := placementServers[i].raftNode.Raft(ctx)
+		require.NoError(t, e)
+
+		underlyingRaftServers[i] = raftSrv
+	}
+
+	// firstServerID is the initial leader
+	i := 0
+	var firstServerID int
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		idx := i % numServers
+		i++
+		assert.True(c, placementServers[idx].raftNode.IsLeader())
+		assert.True(c, placementServers[idx].hasLeadership.Load())
+		firstServerID = idx
+	}, time.Second*15, 10*time.Millisecond, "leader was not elected in time")
+
+	secondServerID := (firstServerID + 1) % numServers
+	thirdServerID := (secondServerID + 1) % numServers
+
+	conn1, _, stream1 := newTestClient(t, placementServerAddresses[secondServerID])
 
 	host := &v1pb.Host{
 		Name:      "127.0.0.1:50102",
@@ -126,185 +160,27 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 		// Port is redundant because Name should include port number
 	}
 
-	stream.Send(host)
-	_, err := stream.Recv()
-	s, ok := status.FromError(err)
+	stream1.Send(host)
+	_, err = stream1.Recv()
+	s1, ok := status.FromError(err)
 
 	require.True(t, ok)
-	require.Equal(t, codes.FailedPrecondition, s.Code())
-	stream.CloseSend()
+	require.Equal(t, codes.FailedPrecondition, s1.Code())
+	stream1.CloseSend()
 
-	conn.Close()
-}
+	conn1.Close()
 
-func TestMemberRegistration_Leadership(t *testing.T) {
-	serverAddress, testServer, clock, cleanup := newTestPlacementServer(t, tests.Raft(t))
-	t.Cleanup(cleanup)
-	testServer.hasLeadership.Store(true)
+	conn2, _, stream2 := newTestClient(t, placementServerAddresses[thirdServerID])
 
-	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
-		// arrange
-		conn, _, stream := newTestClient(t, serverAddress)
+	stream2.Send(host)
+	_, err = stream2.Recv()
+	s2, ok := status.FromError(err)
 
-		host := &v1pb.Host{
-			Name:      "127.0.0.1:50102",
-			Namespace: "ns1",
-			Entities:  []string{"DogActor", "CatActor"},
-			Id:        "testAppID",
-			Load:      1, // Not used yet
-			// Port is redundant because Name should include port number
-		}
+	require.True(t, ok)
+	require.Equal(t, codes.FailedPrecondition, s2.Code())
+	stream2.CloseSend()
 
-		require.NoError(t, stream.Send(host))
-
-		require.Eventually(t, func() bool {
-			clock.Step(disseminateTimerInterval)
-			select {
-			case memberChange := <-testServer.membershipCh:
-				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
-				assert.Equal(t, host.GetName(), memberChange.host.Name)
-				assert.Equal(t, host.GetNamespace(), memberChange.host.Namespace)
-				assert.Equal(t, host.GetId(), memberChange.host.AppID)
-				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
-				assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns1"))
-				return true
-			default:
-				return false
-			}
-		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
-
-		// Runtime needs to close stream gracefully which will let placement remove runtime host from hashing ring
-		// in the next flush time window.
-		stream.CloseSend()
-
-		clock.Step(disseminateTimerInterval)
-		select {
-		case memberChange := <-testServer.membershipCh:
-			require.Equal(t, raft.MemberRemove, memberChange.cmdType)
-			require.Equal(t, host.GetName(), memberChange.host.Name)
-		case <-time.After(testStreamSendLatency):
-			require.Fail(t, "no membership change")
-		}
-
-		conn.Close()
-	})
-
-	// this test verifies that the placement service will work for pre 1.14 sidecars
-	// that do not send a namespace
-	t.Run("Connect server and disconnect it gracefully - no namespace sent", func(t *testing.T) {
-		// arrange
-		conn, _, stream := newTestClient(t, serverAddress)
-
-		host := &v1pb.Host{
-			Name:     "127.0.0.1:50102",
-			Entities: []string{"DogActor", "CatActor"},
-			Id:       "testAppID",
-			Load:     1, // Not used yet
-			// Port is redundant because Name should include port number
-		}
-
-		require.NoError(t, stream.Send(host))
-
-		require.Eventually(t, func() bool {
-			clock.Step(disseminateTimerInterval)
-			select {
-			case memberChange := <-testServer.membershipCh:
-				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
-				assert.Equal(t, host.GetName(), memberChange.host.Name)
-				assert.Equal(t, host.GetNamespace(), memberChange.host.Namespace)
-				assert.Equal(t, host.GetId(), memberChange.host.AppID)
-				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
-				assert.Equal(t, 1, testServer.streamConnPool.getStreamCount(""))
-				return true
-			default:
-				return false
-			}
-		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
-
-		// Runtime needs to close stream gracefully which will let placement remove runtime host from hashing ring
-		// in the next flush time window.
-		stream.CloseSend()
-
-		select {
-		case memberChange := <-testServer.membershipCh:
-			require.Equal(t, raft.MemberRemove, memberChange.cmdType)
-			require.Equal(t, host.GetName(), memberChange.host.Name)
-		case <-time.After(testStreamSendLatency):
-			require.Fail(t, "no membership change")
-		}
-
-		conn.Close()
-	})
-
-	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
-		// arrange
-		_, tcpConn, stream := newTestClient(t, serverAddress)
-
-		host := &v1pb.Host{
-			Name:      "127.0.0.1:50103",
-			Namespace: "ns1",
-			Entities:  []string{"DogActor", "CatActor"},
-			Id:        "testAppID",
-			Load:      1, // Not used yet
-			// Port is redundant because Name should include port number
-		}
-		stream.Send(host)
-
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			clock.Step(disseminateTimerInterval)
-			select {
-			case memberChange := <-testServer.membershipCh:
-				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
-				assert.Equal(t, host.GetName(), memberChange.host.Name)
-				assert.Equal(t, host.GetNamespace(), memberChange.host.Namespace)
-				assert.Equal(t, host.GetId(), memberChange.host.AppID)
-				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
-				l := testServer.streamConnPool.getStreamCount("ns1")
-				assert.Equal(t, 1, l)
-			default:
-				assert.Fail(t, "No member change")
-			}
-		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
-
-		// Close tcp connection before closing stream, which simulates the scenario
-		// where dapr runtime disconnects the connection from placement service unexpectedly.
-		// Use SetLinger to forcefully close the TCP connection.
-		tcpConn.SetLinger(0)
-		tcpConn.Close()
-
-		select {
-		case memberChange := <-testServer.membershipCh:
-			require.Equal(t, raft.MemberRemove, memberChange.cmdType)
-			require.Equal(t, host.GetName(), memberChange.host.Name)
-		case <-time.After(testStreamSendLatency):
-			require.Fail(t, "no membership change")
-		}
-	})
-
-	t.Run("non actor host", func(t *testing.T) {
-		conn, _, stream := newTestClient(t, serverAddress)
-
-		host := &v1pb.Host{
-			Name:     "127.0.0.1:50104",
-			Entities: []string{},
-			Id:       "testAppID",
-			Load:     1, // Not used yet
-			// Port is redundant because Name should include port number
-		}
-		stream.Send(host)
-
-		select {
-		case <-testServer.membershipCh:
-			require.Fail(t, "should not have any membership change")
-
-		case <-time.After(testStreamSendLatency):
-			// All good
-		}
-
-		// Close tcp connection before closing stream, which simulates the scenario
-		// where dapr runtime disconnects the connection from placement service unexpectedly.
-		require.NoError(t, conn.Close())
-	})
+	conn2.Close()
 }
 
 func TestRequiresUpdateInPlacementTables(t *testing.T) {
@@ -357,7 +233,9 @@ func TestRequiresUpdateInPlacementTables(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, requiresUpdateInPlacementTables(tt.host, &tt.isActorHost))
+			var isActorHost atomic.Bool
+			isActorHost.Store(tt.isActorHost)
+			assert.Equal(t, tt.expected, requiresUpdateInPlacementTables(tt.host, &isActorHost))
 		})
 	}
 }

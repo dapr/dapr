@@ -95,6 +95,8 @@ spec:
             mountPath: {{ .Values.cluster.etcdDataDirPath }}/
           {{- end }}
             readOnly: false
+          - name: dapr-scheduler-writeable-identity
+            mountPath: /tmp
           - name: dapr-trust-bundle
             mountPath: /var/run/secrets/dapr.io/tls
             readOnly: true
@@ -171,7 +173,7 @@ spec:
           capabilities:
             add: ["SYS_PTRACE"]
   {{- else }}
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop: ["ALL"]
   {{- end }}
@@ -204,6 +206,8 @@ spec:
         emptyDir:
           medium: Memory
       {{- end }}
+      - name: dapr-scheduler-writeable-identity
+        emptyDir: {}
       - name: dapr-trust-bundle
         configMap:
           name: dapr-trust-bundle
