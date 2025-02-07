@@ -143,7 +143,7 @@ func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
 }
 
 func (wfe *engine) Run(ctx context.Context) error {
-	if wfe.actors.RuntimeStatus().RuntimeStatus == runtimev1pb.ActorRuntime_DISABLED {
+	if wfe.actors.RuntimeStatus().GetRuntimeStatus() == runtimev1pb.ActorRuntime_DISABLED {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
