@@ -62,7 +62,7 @@ func TestSidecarConfigSetFromAnnotations(t *testing.T) {
 		assert.Equal(t, "myappid", c.AppID)
 		assert.Equal(t, int32(9876), c.AppPort)
 		assert.Equal(t, int32(6789), c.SidecarMetricsPort)
-		assert.Equal(t, c.PlacementAddress, "")
+		assert.Equal(t, "", c.PlacementAddress)
 
 		// Nullable properties
 		_ = assert.NotNil(t, c.EnableAPILogging) &&
