@@ -110,7 +110,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 
 	// Actor/placement/reminders services
 	// Note that PlacementAddress takes priority over ActorsAddress
-	if c.PlacementAddress != "" {
+	if strings.TrimSpace(c.PlacementAddress) != "" {
 		args = append(args, "--placement-host-address", c.PlacementAddress)
 	} else if c.ActorsService != "" {
 		args = append(args, "--actors-service", c.ActorsService)

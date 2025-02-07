@@ -838,12 +838,12 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 		},
 		{
-			name: "not set when annotation is empty",
+			name: "false when annotation is empty",
 			annotations: map[string]string{
 				annotations.KeyEnableAPILogging: "",
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
-				assert.NotContains(t, strings.Join(container.Args, " "), "--enable-api-logging")
+				assert.Contains(t, container.Args, "--enable-api-logging=false")
 			},
 		},
 	}))
