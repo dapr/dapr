@@ -15,6 +15,7 @@ package etcd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -53,6 +54,7 @@ type Interface interface {
 type etcd struct {
 	mode modes.DaprMode
 
+	etcd   *embed.Etcd
 	client *clientv3.Client
 	config *embed.Config
 
@@ -78,24 +80,22 @@ func (e *etcd) Run(ctx context.Context) error {
 	defer e.hz.NotReady()
 	log.Info("Starting etcd")
 
-	etcd, err := embed.StartEtcd(e.config)
+	var err error
+	e.etcd, err = embed.StartEtcd(e.config)
 	if err != nil {
 		return fmt.Errorf("failed to start embedded etcd: %w", err)
 	}
-	defer etcd.Close()
 
 	e.client, err = clientv3.New(clientv3.Config{
 		Endpoints: []string{e.config.ListenClientUrls[0].Host},
-		Logger:    etcd.GetLogger(),
-		Context:   ctx,
+		Logger:    e.etcd.GetLogger(),
 	})
 	if err != nil {
-		return err
+		return errors.Join(err, e.client.Close())
 	}
-	defer e.client.Close()
 
 	select {
-	case <-etcd.Server.ReadyNotify():
+	case <-e.etcd.Server.ReadyNotify():
 		log.Info("Etcd server is ready!")
 	case <-ctx.Done():
 		return ctx.Err()
@@ -104,9 +104,8 @@ func (e *etcd) Run(ctx context.Context) error {
 	e.hz.Ready()
 	close(e.readyCh)
 
-	defer log.Info("Etcd shut down")
 	select {
-	case err := <-etcd.Err():
+	case err := <-e.etcd.Err():
 		return err
 	case <-ctx.Done():
 		return nil
@@ -120,4 +119,19 @@ func (e *etcd) Client(ctx context.Context) (*clientv3.Client, error) {
 	case <-e.readyCh:
 		return e.client, nil
 	}
+}
+
+func (e *etcd) Close() error {
+	defer log.Info("Etcd shut down")
+
+	var err error
+	if e.client != nil {
+		err = e.client.Close()
+	}
+
+	if e.etcd != nil {
+		e.etcd.Close()
+	}
+
+	return err
 }

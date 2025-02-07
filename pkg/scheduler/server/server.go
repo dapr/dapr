@@ -154,8 +154,8 @@ func (s *Server) Run(ctx context.Context) error {
 	log.Info("Dapr Scheduler is starting...")
 
 	runners := []concurrency.Runner{
-		s.runServer,
 		s.etcd.Run,
+		s.runServer,
 		func(ctx context.Context) error {
 			err := s.cron.Run(ctx)
 			if ctx.Err() != nil {
@@ -177,7 +177,12 @@ func (s *Server) Run(ctx context.Context) error {
 		runners = append(runners, s.controller)
 	}
 
-	return concurrency.NewRunnerManager(runners...).Run(ctx)
+	mngr := concurrency.NewRunnerCloserManager(nil, runners...)
+	if err := mngr.AddCloser(s.etcd); err != nil {
+		return err
+	}
+
+	return mngr.Run(ctx)
 }
 
 func (s *Server) runServer(ctx context.Context) error {
