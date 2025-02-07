@@ -328,13 +328,12 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	rtHealthz := rt.runtimeConfig.healthz.AddTarget()
-
 	rt.runnerCloser = concurrency.NewRunnerCloserManager(gracePeriod,
 		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
+		rt.reloader.Run,
 		rt.actors.Run,
 		rt.wfengine.Run,
-		rt.reloader.Run,
 		rt.jobsManager.Run,
 		func(ctx context.Context) error {
 			start := time.Now()
