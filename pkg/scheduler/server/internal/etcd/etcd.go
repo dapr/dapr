@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -126,6 +127,11 @@ func (e *etcd) Close() error {
 
 	var err error
 	if e.client != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		defer cancel()
+		if _, err = e.client.MemberRemove(ctx, uint64(e.etcd.Server.ID())); err != nil {
+			log.Errorf("Failed to remove member from cluster during shutdown: %s", err)
+		}
 		err = e.client.Close()
 	}
 
