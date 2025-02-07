@@ -16,8 +16,6 @@ package universal
 import (
 	"context"
 	"errors"
-	"fmt"
-	"time"
 	"unicode"
 
 	"github.com/google/uuid"
@@ -113,28 +111,9 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
-	ret := &runtimev1pb.StartWorkflowResponse{
+	return &runtimev1pb.StartWorkflowResponse{
 		InstanceId: resp.InstanceID,
-	}
-
-	for {
-		gresp, err := a.workflowEngine.Client().Get(ctx, &workflows.GetRequest{
-			InstanceID: resp.InstanceID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("workflow started, but failed to get status: %w", err)
-		}
-
-		if gresp.Workflow.RuntimeStatus != "PENDING" {
-			return ret, nil
-		}
-
-		select {
-		case <-time.After(time.Millisecond * 300):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
+	}, nil
 }
 
 // TerminateWorkflow is the API handler for terminating a workflow
@@ -162,23 +141,7 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 		return emptyResponse, err
 	}
 
-	for {
-		gresp, err := a.workflowEngine.Client().Get(ctx, &workflows.GetRequest{
-			InstanceID: in.GetInstanceId(),
-		})
-
-		// Not found error so terminated.
-		if err != nil || gresp.Workflow.RuntimeStatus == "TERMINATED" {
-			//nolint:nilerr
-			return emptyResponse, nil
-		}
-
-		select {
-		case <-time.After(time.Millisecond * 300):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
+	return emptyResponse, nil
 }
 
 // RaiseEventWorkflow is the API handler for raising an event to a workflow
@@ -235,24 +198,7 @@ func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWork
 		return emptyResponse, err
 	}
 
-	for {
-		gresp, err := a.workflowEngine.Client().Get(ctx, &workflows.GetRequest{
-			InstanceID: in.GetInstanceId(),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("workflow started, but failed to get status: %w", err)
-		}
-
-		if gresp.Workflow.RuntimeStatus == "SUSPENDED" {
-			return emptyResponse, nil
-		}
-
-		select {
-		case <-time.After(time.Millisecond * 300):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
+	return emptyResponse, nil
 }
 
 // ResumeWorkflow is the API handler for resuming a workflow
@@ -304,21 +250,7 @@ func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWork
 		return emptyResponse, err
 	}
 
-	for {
-		_, err := a.workflowEngine.Client().Get(ctx, &workflows.GetRequest{
-			InstanceID: in.GetInstanceId(),
-		})
-		if err != nil {
-			//nolint:nilerr
-			return emptyResponse, nil
-		}
-
-		select {
-		case <-time.After(time.Millisecond * 300):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
+	return emptyResponse, nil
 }
 
 // GetWorkflowBeta1 is the API handler for getting workflow details
