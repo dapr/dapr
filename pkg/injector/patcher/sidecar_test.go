@@ -50,17 +50,19 @@ func TestSidecarConfigSetFromAnnotations(t *testing.T) {
 
 		// Set properties of supported kinds: bools, strings, ints
 		c.setFromAnnotations(map[string]string{
-			annotations.KeyEnabled:          "1", // Will be cast using utils.IsTruthy
-			annotations.KeyAppID:            "myappid",
-			annotations.KeyAppPort:          "9876",
-			annotations.KeyMetricsPort:      "6789",  // Override default value
-			annotations.KeyEnableAPILogging: "false", // Nullable property
+			annotations.KeyEnabled:                "1", // Will be cast using utils.IsTruthy
+			annotations.KeyAppID:                  "myappid",
+			annotations.KeyAppPort:                "9876",
+			annotations.KeyMetricsPort:            "6789",  // Override default value
+			annotations.KeyEnableAPILogging:       "false", // Nullable property
+			annotations.KeyPlacementHostAddresses: "",
 		})
 
 		assert.True(t, c.Enabled)
 		assert.Equal(t, "myappid", c.AppID)
 		assert.Equal(t, int32(9876), c.AppPort)
 		assert.Equal(t, int32(6789), c.SidecarMetricsPort)
+		assert.Equal(t, c.PlacementAddress, "")
 
 		// Nullable properties
 		_ = assert.NotNil(t, c.EnableAPILogging) &&

@@ -131,6 +131,7 @@ type internalConfig struct {
 	mode                         modes.DaprMode
 	actorsService                string
 	remindersService             string
+	placementEnabled             bool
 	schedulerAddress             []string
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
@@ -316,6 +317,17 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		healthz:                   c.Healthz,
 		outboundHealthz:           healthz.New(),
 	}
+
+	placementAddrs := strings.Split(strings.TrimPrefix(c.ActorsService, "placement:"), ",")
+	hasValidPlacementAddr := false
+	for _, addr := range placementAddrs {
+		if strings.TrimSpace(addr) != "" {
+			hasValidPlacementAddr = true
+			break
+		}
+	}
+
+	intc.placementEnabled = hasValidPlacementAddr
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
 		intc.standalone.ResourcesPath = []string{c.ComponentsPath}

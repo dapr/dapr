@@ -222,7 +222,7 @@ func newDaprRuntime(ctx context.Context,
 		ID:              runtimeConfig.id,
 		Namespace:       namespace,
 		IsHTTP:          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:   len(runtimeConfig.actorsService) > 0,
+		ActorsEnabled:   runtimeConfig.placementEnabled && len(runtimeConfig.actorsService) > 0,
 		Actors:          actors,
 		Registry:        runtimeConfig.registry,
 		ComponentStore:  compStore,
@@ -328,12 +328,11 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	rtHealthz := rt.runtimeConfig.healthz.AddTarget()
-	rt.runnerCloser = concurrency.NewRunnerCloserManager(gracePeriod,
+
+	runners := []concurrency.Runner{
 		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
 		rt.reloader.Run,
-		rt.actors.Run,
-		rt.wfengine.Run,
 		rt.jobsManager.Run,
 		func(ctx context.Context) error {
 			start := time.Now()
@@ -354,7 +353,13 @@ func newDaprRuntime(ctx context.Context,
 
 			return nil
 		},
-	)
+	}
+
+	if runtimeConfig.placementEnabled {
+		runners = append(runners, rt.actors.Run, rt.wfengine.Run)
+	}
+
+	rt.runnerCloser = concurrency.NewRunnerCloserManager(gracePeriod, runners...)
 
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
@@ -653,8 +658,10 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.initDirectMessaging(a.nameResolver)
 
-	if err := a.initActors(ctx); err != nil {
-		return fmt.Errorf("failed to initialize actors: %w", err)
+	if a.runtimeConfig.placementEnabled {
+		if err := a.initActors(ctx); err != nil {
+			return fmt.Errorf("failed to initialize actors: %w", err)
+		}
 	}
 
 	a.runtimeConfig.outboundHealthz.AddTarget().Ready()
