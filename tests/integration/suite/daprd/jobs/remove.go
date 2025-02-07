@@ -16,7 +16,6 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,23 +41,17 @@ type remove struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
 	triggered atomic.Int64
-
-	etcdPort int
 }
 
 func (r *remove) Setup(t *testing.T) []framework.Option {
 	fp := ports.Reserve(t, 2)
 	port1 := fp.Port(t)
 	port2 := fp.Port(t)
-	r.etcdPort = port2
-	clientPorts := []string{
-		"scheduler-0=" + strconv.Itoa(r.etcdPort),
-	}
+
 	r.scheduler = scheduler.New(t,
 		scheduler.WithID("scheduler-0"),
 		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d", port1)),
-		scheduler.WithInitialClusterPorts(port1),
-		scheduler.WithEtcdClientPorts(clientPorts),
+		scheduler.WithEtcdClientPort(port2),
 	)
 
 	app := app.New(t,

@@ -102,11 +102,11 @@ func Run() {
 				Security: secHandler,
 				Healthz:  healthz,
 
-				DataDir:                 opts.EtcdDataDir,
 				KubeConfig:              opts.KubeConfig,
-				EtcdID:                  opts.ID,
-				EtcdInitialPeers:        opts.EtcdInitialPeers,
-				EtcdClientPorts:         opts.EtcdClientPorts,
+				EtcdDataDir:             opts.EtcdDataDir,
+				EtcdName:                opts.ID,
+				EtcdInitialCluster:      opts.EtcdInitialCluster,
+				EtcdClientPort:          opts.EtcdClientPort,
 				EtcdSpaceQuota:          opts.EtcdSpaceQuota,
 				EtcdCompactionMode:      opts.EtcdCompactionMode,
 				EtcdCompactionRetention: opts.EtcdCompactionRetention,
@@ -122,7 +122,7 @@ func Run() {
 		},
 	).Run(ctx)
 	if err != nil {
-		log.Fatalf("error running scheduler: %v", err)
+		log.Fatalf("Fatal error running scheduler: %v", err)
 	}
 
 	log.Info("Scheduler service shut down gracefully")
