@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
@@ -142,6 +143,13 @@ func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
 }
 
 func (wfe *engine) Run(ctx context.Context) error {
+	if wfe.actors.RuntimeStatus().RuntimeStatus == runtimev1pb.ActorRuntime_DISABLED {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
 	if err := wfe.worker.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow engine: %w", err)

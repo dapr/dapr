@@ -329,9 +329,11 @@ func newDaprRuntime(ctx context.Context,
 
 	rtHealthz := rt.runtimeConfig.healthz.AddTarget()
 
-	runners := []concurrency.Runner{
+	rt.runnerCloser = concurrency.NewRunnerCloserManager(gracePeriod,
 		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
+		rt.actors.Run,
+		rt.wfengine.Run,
 		rt.reloader.Run,
 		rt.jobsManager.Run,
 		func(ctx context.Context) error {
@@ -353,13 +355,7 @@ func newDaprRuntime(ctx context.Context,
 
 			return nil
 		},
-	}
-
-	if runtimeConfig.placementEnabled {
-		runners = append(runners, rt.actors.Run, rt.wfengine.Run)
-	}
-
-	rt.runnerCloser = concurrency.NewRunnerCloserManager(gracePeriod, runners...)
+	)
 
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
@@ -658,10 +654,8 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.initDirectMessaging(a.nameResolver)
 
-	if a.runtimeConfig.placementEnabled {
-		if err := a.initActors(ctx); err != nil {
-			return fmt.Errorf("failed to initialize actors: %w", err)
-		}
+	if err := a.initActors(ctx); err != nil {
+		return fmt.Errorf("failed to initialize actors: %w", err)
 	}
 
 	a.runtimeConfig.outboundHealthz.AddTarget().Ready()
