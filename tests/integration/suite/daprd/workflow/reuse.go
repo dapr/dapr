@@ -72,6 +72,7 @@ func (r *reuse) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.True(t, errs[0] != nil || errs[1] != nil, errs)
+	assert.True(t, errs[0] == nil || errs[1] == nil, errs)
 	if errs[0] != nil {
 		assert.Contains(t, errs[0].Error(), "an active workflow with ID 'foo' already exists")
 	} else {
