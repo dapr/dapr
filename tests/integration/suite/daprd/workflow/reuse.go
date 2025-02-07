@@ -56,6 +56,31 @@ func (r *reuse) Run(t *testing.T, ctx context.Context) {
 
 	client := r.workflow.BackendClient(t, ctx)
 
+	errCh := make(chan error)
+	go func() {
+		_, err := client.ScheduleNewOrchestration(ctx, "reuse", api.WithInstanceID("foo"))
+		errCh <- err
+	}()
+	go func() {
+		_, err := client.ScheduleNewOrchestration(ctx, "reuse", api.WithInstanceID("foo"))
+		errCh <- err
+	}()
+
+	errs := make([]error, 2)
+	for i := range 2 {
+		errs[i] = <-errCh
+	}
+
+	assert.True(t, errs[0] != nil || errs[1] != nil, errs)
+	if errs[0] != nil {
+		assert.Contains(t, errs[0].Error(), "an active workflow with ID 'foo' already exists")
+	} else {
+		assert.Contains(t, errs[1].Error(), "an active workflow with ID 'foo' already exists")
+	}
+
+	_, err := client.WaitForOrchestrationCompletion(ctx, "foo")
+	require.NoError(t, err)
+
 	id, err := client.ScheduleNewOrchestration(ctx, "reuse", api.WithInstanceID("foo"))
 	require.NoError(t, err)
 	_, err = client.ScheduleNewOrchestration(ctx, "reuse", api.WithInstanceID("foo"))
