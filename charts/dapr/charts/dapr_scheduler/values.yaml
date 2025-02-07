@@ -24,8 +24,6 @@ ports:
   etcdGRPCClientPort: 2379
   etcdGRPCPeerPort: 2380
 
-ha: false
-
 cluster:
   etcdDataDirPath: /var/run/data/dapr-scheduler
   etcdDataDirWinPath: C:\\dapr-scheduler

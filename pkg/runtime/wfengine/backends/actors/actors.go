@@ -26,7 +26,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/table"
@@ -261,8 +260,8 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 		RuntimeStatus:  runtimestate.RuntimeStatus(rstate),
 		CreatedAt:      timestamppb.New(createdAt),
 		LastUpdatedAt:  timestamppb.New(lastUpdated),
-		Input:          wrapperspb.String(input),
-		Output:         wrapperspb.String(output),
+		Input:          input,
+		Output:         output,
 		CustomStatus:   state.CustomStatus,
 		FailureDetails: failureDetuils,
 	}, nil
