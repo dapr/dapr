@@ -124,7 +124,7 @@ func (r *Statestore) DrainRebalancedReminders() {
 			reminderKey := rem.Reminder.Key()
 			stop, exists := r.activeReminders.LoadAndDelete(reminderKey)
 			if exists {
-				close(stop.stopCh)
+				//close(stop.stopCh)
 				<-stop.stopped
 			}
 		}
