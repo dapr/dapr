@@ -55,28 +55,22 @@ func (c *cluster) Setup(t *testing.T) []framework.Option {
 
 	fp := ports.Reserve(t, 6)
 	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
+	port4, port5, port6 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
 		scheduler.WithInitialCluster(fmt.Sprintf(
 			"scheduler-0=http://127.0.0.1:%d,scheduler-1=http://127.0.0.1:%d,scheduler-2=http://127.0.0.1:%d",
 			port1, port2, port3),
 		),
-		scheduler.WithInitialClusterPorts(port1, port2, port3),
 	}
 
-	clientPorts := []string{
-		"scheduler-0=" + strconv.Itoa(fp.Port(t)),
-		"scheduler-1=" + strconv.Itoa(fp.Port(t)),
-		"scheduler-2=" + strconv.Itoa(fp.Port(t)),
-	}
-
-	c.scheduler1 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...)
-	c.scheduler2 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...)
-	c.scheduler3 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...)
+	c.scheduler1 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPort(port4))...)
+	c.scheduler2 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPort(port5))...)
+	c.scheduler3 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPort(port6))...)
 
 	c.scheduler4 = scheduler.New(t,
 		scheduler.WithID(c.scheduler2.ID()),
-		scheduler.WithEtcdClientPorts(clientPorts),
+		scheduler.WithEtcdClientPort(port5),
 		scheduler.WithInitialCluster(c.scheduler2.InitialCluster()),
 		scheduler.WithDataDir(c.scheduler2.DataDir()),
 		scheduler.WithPort(c.scheduler2.Port()),

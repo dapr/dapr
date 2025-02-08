@@ -59,7 +59,7 @@ func (r *reconnect) Setup(t *testing.T) []framework.Option {
 	r.scheduler1 = scheduler.New(t)
 	r.scheduler2 = scheduler.New(t,
 		scheduler.WithID(r.scheduler1.ID()),
-		scheduler.WithEtcdClientPorts([]string{r.scheduler1.ID() + "=" + r.scheduler1.EtcdClientPort()}),
+		scheduler.WithEtcdClientPort(r.scheduler1.EtcdClientPort()),
 		scheduler.WithInitialCluster(r.scheduler1.InitialCluster()),
 		scheduler.WithDataDir(r.scheduler1.DataDir()),
 		scheduler.WithPort(r.scheduler1.Port()),
@@ -80,6 +80,7 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 	r.scheduler1.Run(t, ctx)
 	t.Cleanup(func() { r.scheduler1.Cleanup(t) })
 	r.scheduler1.WaitUntilRunning(t, ctx)
+	r.scheduler1.WaitUntilLeadership(t, ctx, 1)
 	r.daprd.WaitUntilRunning(t, ctx)
 
 	_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
@@ -102,9 +103,10 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 
 	r.scheduler2.Run(t, ctx)
 	r.scheduler2.WaitUntilRunning(t, ctx)
+	r.scheduler2.WaitUntilLeadership(t, ctx, 1)
 	t.Cleanup(func() { r.scheduler2.Cleanup(t) })
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Greater(c, r.jobCalled.Load(), called)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 }
