@@ -304,27 +304,33 @@ func TestGetMetricsPort(t *testing.T) {
 
 func TestWrapper(t *testing.T) {
 	deploymentWrapper := getDeployment("test_id", "true")
-	statefulsetWrapper := getStatefulSet("test_id", "true")
+	statefulSetWrapper := getStatefulSet("test_id", "true")
+	daemonSetWrapper := getDaemonSet("test_id", "true")
 	rolloutWrapper := getRollout("test_id", "true")
 
 	t.Run("get match label from wrapper", func(t *testing.T) {
 		assert.Equal(t, "test", deploymentWrapper.GetMatchLabels()["app"])
-		assert.Equal(t, "test", statefulsetWrapper.GetMatchLabels()["app"])
+		assert.Equal(t, "test", statefulSetWrapper.GetMatchLabels()["app"])
+		assert.Equal(t, "test", daemonSetWrapper.GetMatchLabels()["app"])
 		assert.Equal(t, "test", rolloutWrapper.GetMatchLabels()["app"])
 	})
 
 	t.Run("get annotations from wrapper", func(t *testing.T) {
 		assert.Equal(t, "test_id", deploymentWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
-		assert.Equal(t, "test_id", statefulsetWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
+		assert.Equal(t, "test_id", statefulSetWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
+		assert.Equal(t, "test_id", daemonSetWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
 		assert.Equal(t, "test_id", rolloutWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
 	})
 
 	t.Run("get object from wrapper", func(t *testing.T) {
 		assert.Equal(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
-		assert.Equal(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
+		assert.Equal(t, reflect.TypeOf(statefulSetWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
+		assert.Equal(t, reflect.TypeOf(daemonSetWrapper.GetObject()), reflect.TypeOf(&appsv1.DaemonSet{}))
 		assert.Equal(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeOf(&argov1alpha1.Rollout{}))
-		assert.NotEqual(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
+
+		assert.NotEqual(t, reflect.TypeOf(statefulSetWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
 		assert.NotEqual(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
+		assert.NotEqual(t, reflect.TypeOf(daemonSetWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
 		assert.NotEqual(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
 	})
 }
@@ -341,12 +347,9 @@ func TestInit(t *testing.T) {
 
 	t.Run("test init dapr handler", func(t *testing.T) {
 		assert.NotNil(t, handler)
-
 		err := handler.Init(context.Background())
-
 		require.NoError(t, err)
-
-		assert.Len(t, mgr.GetRunnables(), 3)
+		assert.Len(t, mgr.GetRunnables(), 4)
 
 		srv := &corev1.Service{}
 		val := mgr.GetIndexerFunc(&corev1.Service{})(srv)
@@ -372,32 +375,29 @@ func TestInit(t *testing.T) {
 
 	t.Run("test wrapper", func(t *testing.T) {
 		deploymentCtl := mgr.GetRunnables()[0]
-		statefulsetCtl := mgr.GetRunnables()[1]
-		rolloutCtl := mgr.GetRunnables()[2]
+		statefulSetCtl := mgr.GetRunnables()[1]
+		daemonSetCtl := mgr.GetRunnables()[2]
+		rolloutCtl := mgr.GetRunnables()[3]
 
 		// the runnable is sigs.k8s.io/controller-runtime/pkg/internal/controller.Controller
 		reconciler := reflect.Indirect(reflect.ValueOf(deploymentCtl)).FieldByName("Do").Interface().(*Reconciler)
-
 		wrapper := reconciler.newWrapper()
-
 		assert.NotNil(t, wrapper)
-
 		assert.Equal(t, reflect.TypeOf(&appsv1.Deployment{}), reflect.TypeOf(wrapper.GetObject()))
 
-		reconciler = reflect.Indirect(reflect.ValueOf(statefulsetCtl)).FieldByName("Do").Interface().(*Reconciler)
-
+		reconciler = reflect.Indirect(reflect.ValueOf(statefulSetCtl)).FieldByName("Do").Interface().(*Reconciler)
 		wrapper = reconciler.newWrapper()
-
 		assert.NotNil(t, wrapper)
-
 		assert.Equal(t, reflect.TypeOf(&appsv1.StatefulSet{}), reflect.TypeOf(wrapper.GetObject()))
 
-		reconciler = reflect.Indirect(reflect.ValueOf(rolloutCtl)).FieldByName("Do").Interface().(*Reconciler)
-
+		reconciler = reflect.Indirect(reflect.ValueOf(daemonSetCtl)).FieldByName("Do").Interface().(*Reconciler)
 		wrapper = reconciler.newWrapper()
-
 		assert.NotNil(t, wrapper)
+		assert.Equal(t, reflect.TypeOf(&appsv1.DaemonSet{}), reflect.TypeOf(wrapper.GetObject()))
 
+		reconciler = reflect.Indirect(reflect.ValueOf(rolloutCtl)).FieldByName("Do").Interface().(*Reconciler)
+		wrapper = reconciler.newWrapper()
+		assert.NotNil(t, wrapper)
 		assert.Equal(t, reflect.TypeOf(&argov1alpha1.Rollout{}), reflect.TypeOf(wrapper.GetObject()))
 	})
 }
@@ -427,6 +427,10 @@ func getDeployment(appID string, daprEnabled string) ObjectWrapper {
 
 func getStatefulSet(appID string, daprEnabled string) ObjectWrapper {
 	return &StatefulSetWrapper{testobjects.GetStatefulSet(appID, daprEnabled)}
+}
+
+func getDaemonSet(appID string, daprEnabled string) ObjectWrapper {
+	return &DaemonSetWrapper{testobjects.GetDaemonSet(appID, daprEnabled)}
 }
 
 func getRollout(appID string, daprEnabled string) ObjectWrapper {

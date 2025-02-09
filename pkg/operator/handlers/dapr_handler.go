@@ -68,7 +68,7 @@ type Reconciler struct {
 }
 
 // NewDaprHandler returns a new Dapr handler.
-// This is a reconciler that watches all Deployment and StatefulSet resources and ensures that a matching Service resource is deployed to allow Dapr sidecar-to-sidecar communication and access to other ports.
+// This is a reconciler that watches all Deployment, StatefulSet, and DaemonSet resources and ensures that a matching Service resource is deployed to allow Dapr sidecar-to-sidecar communication and access to other ports.
 func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 	return NewDaprHandlerWithOptions(mgr, defaultOptions)
 }
@@ -135,6 +135,23 @@ func (h *DaprHandler) Init(ctx context.Context) error {
 		return err
 	}
 
+	err = ctrl.NewControllerManagedBy(h.mgr).
+		For(&appsv1.DaemonSet{}).
+		Owns(&corev1.Service{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 100,
+		}).
+		Complete(&Reconciler{
+			DaprHandler: h,
+			newWrapper: func() ObjectWrapper {
+				return &DaemonSetWrapper{}
+			},
+		})
+	if err != nil {
+		return err
+	}
+	log.Debugf("daemonSet reconciler enabled")
+
 	if h.argoRolloutServiceReconcilerEnabled {
 		err = ctrl.NewControllerManagedBy(h.mgr).
 			For(&argov1alpha1.Rollout{}).
@@ -160,9 +177,8 @@ func (h *DaprHandler) daprServiceName(appID string) string {
 	return appID + "-dapr"
 }
 
-// Reconcile the expected services for Deployment and StatefulSet resources annotated for Dapr.
+// Reconcile the expected services for Deployment, StatefulSet, and DaemonSet resources annotated for Dapr.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// var wrapper appsv1.Deployment | appsv1.StatefulSet
 	wrapper := r.newWrapper()
 
 	expectedService := false
@@ -357,7 +373,7 @@ func (h *DaprHandler) isReconciled(owner *metaV1.OwnerReference) bool {
 
 	switch owner.APIVersion {
 	case appsv1.SchemeGroupVersion.String():
-		return owner.Kind == "Deployment" || owner.Kind == "StatefulSet"
+		return owner.Kind == "Deployment" || owner.Kind == "StatefulSet" || owner.Kind == "DaemonSet"
 	case argov1alpha1.SchemeGroupVersion.String():
 		return h.argoRolloutServiceReconcilerEnabled && owner.Kind == rollouts.RolloutKind
 	}
