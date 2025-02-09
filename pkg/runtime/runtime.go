@@ -312,8 +312,6 @@ func newDaprRuntime(ctx context.Context,
 		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
 		rt.reloader.Run,
-		rt.schedulerClients.Run,
-		rt.jobsManager.Run,
 		func(ctx context.Context) error {
 			start := time.Now()
 			log.Infof("%s mode configured", rt.runtimeConfig.mode)
@@ -334,6 +332,16 @@ func newDaprRuntime(ctx context.Context,
 			return nil
 		},
 	)
+
+	if runtimeConfig.SchedulerEnabled() {
+		err := rt.runnerCloser.Add(
+			rt.schedulerClients.Run,
+			rt.jobsManager.Run,
+		)
+		if err != nil {
+			log.Errorf("Scheduler enabled, but dapr failed to connect. Unable to use the Jobs API.")
+		}
+	}
 
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
