@@ -54,6 +54,7 @@ func TestDestinationHeaders(t *testing.T) {
 
 func TestCallerAndCalleeHeaders(t *testing.T) {
 	t.Run("caller and callee header present", func(t *testing.T) {
+		callerNamespace := "caller-namespace"
 		callerAppID := "caller-app"
 		calleeAppID := "callee-app"
 		req := invokev1.NewInvokeMethodRequest("GET").
@@ -61,9 +62,11 @@ func TestCallerAndCalleeHeaders(t *testing.T) {
 		defer req.Close()
 
 		dm := &directMessaging{}
-		dm.addCallerAndCalleeAppIDHeaderToMetadata(callerAppID, calleeAppID, req)
+		dm.addCallerAndCalleeAppIDHeaderToMetadata(callerNamespace, callerAppID, calleeAppID, req)
+		actualCallerNamespace := req.Metadata()[invokev1.CallerNamespaceHeader]
 		actualCallerAppID := req.Metadata()[invokev1.CallerIDHeader]
 		actualCalleeAppID := req.Metadata()[invokev1.CalleeIDHeader]
+		assert.Equal(t, callerNamespace, actualCallerNamespace.GetValues()[0])
 		assert.Equal(t, callerAppID, actualCallerAppID.GetValues()[0])
 		assert.Equal(t, calleeAppID, actualCalleeAppID.GetValues()[0])
 	})
