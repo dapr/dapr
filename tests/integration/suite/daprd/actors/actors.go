@@ -25,17 +25,17 @@ import (
 )
 
 func init() {
-	suite.Register(new(actors))
+	suite.Register(new(emptyaddress))
 }
 
-type actors struct {
+type emptyaddress struct {
 	daprdNoPlace          *daprd.Daprd
 	daprdPlaceEmptyAddr   *daprd.Daprd
 	daprdPlaceSpaceAddr   *daprd.Daprd
 	loglineActorsDisabled *logline.LogLine
 }
 
-func (a *actors) Setup(t *testing.T) []framework.Option {
+func (a *emptyaddress) Setup(t *testing.T) []framework.Option {
 	a.loglineActorsDisabled = logline.New(t, logline.WithStdoutLineContains(
 		"Actor runtime disabled",
 	))
@@ -62,7 +62,7 @@ func (a *actors) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (a *actors) Run(t *testing.T, ctx context.Context) {
+func (a *emptyaddress) Run(t *testing.T, ctx context.Context) {
 	a.daprdNoPlace.WaitUntilRunning(t, ctx)
 	a.daprdPlaceSpaceAddr.WaitUntilRunning(t, ctx)
 	a.daprdPlaceEmptyAddr.WaitUntilRunning(t, ctx)
