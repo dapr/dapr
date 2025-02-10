@@ -70,8 +70,9 @@ const (
 	errorInfoHTTPCodeMetadata  = "http.code"
 	errorInfoHTTPErrorMetadata = "http.error_message"
 
-	CallerIDHeader = DaprHeaderPrefix + "caller-app-id"
-	CalleeIDHeader = DaprHeaderPrefix + "callee-app-id"
+	CallerNamespaceHeader = DaprHeaderPrefix + "caller-namespace"
+	CallerIDHeader        = DaprHeaderPrefix + "caller-app-id"
+	CalleeIDHeader        = DaprHeaderPrefix + "callee-app-id"
 )
 
 // BufPool is a pool of *[]byte used by direct messaging (for sending on both the server and client). Their size is fixed at StreamBufferSize.
