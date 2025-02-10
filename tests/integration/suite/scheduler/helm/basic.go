@@ -51,7 +51,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	bs, err := io.ReadAll(b.helm.Stdout(t))
 	require.NoError(t, err)
 	require.NoError(t, yaml.Unmarshal(bs, &sts))
-	require.Equal(t, int32(1), *sts.Spec.Replicas)
+	require.Equal(t, int32(3), *sts.Spec.Replicas)
 	require.NotNil(t, sts.Spec.Template.Spec.Affinity)
 	require.NotNil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
 

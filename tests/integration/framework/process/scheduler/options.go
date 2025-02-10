@@ -23,11 +23,10 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
-	id                  string
-	initialCluster      *string
-	initialClusterPorts []int
-	etcdClientPorts     []string
-	namespace           string
+	id                 string
+	etcdInitialCluster *string
+	etcdClientPort     int
+	namespace          string
 
 	logLevel      string
 	port          int
@@ -63,19 +62,13 @@ func WithID(id string) Option {
 // WithInitialCluster adds the initial etcd cluster peers. This should include http:// in the url.
 func WithInitialCluster(initialCluster string) Option {
 	return func(o *options) {
-		o.initialCluster = &initialCluster
+		o.etcdInitialCluster = &initialCluster
 	}
 }
 
-func WithInitialClusterPorts(ports ...int) Option {
+func WithEtcdClientPort(port int) Option {
 	return func(o *options) {
-		o.initialClusterPorts = ports
-	}
-}
-
-func WithEtcdClientPorts(ports []string) Option {
-	return func(o *options) {
-		o.etcdClientPorts = ports
+		o.etcdClientPort = port
 	}
 }
 
