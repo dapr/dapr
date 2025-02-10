@@ -144,10 +144,8 @@ func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
 
 func (wfe *engine) Run(ctx context.Context) error {
 	if wfe.actors.RuntimeStatus().GetRuntimeStatus() == runtimev1pb.ActorRuntime_DISABLED {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+  <-ctx.Done()
+  return ctx.Error()
 	}
 
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
