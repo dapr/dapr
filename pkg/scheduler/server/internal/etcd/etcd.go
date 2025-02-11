@@ -156,7 +156,7 @@ func (e *etcd) maybeDeleteDataDir() error {
 		return err
 	}
 
-	log.Infof("No existing cluster data flag found, deleting data dir contents: %s", e.config.Dir)
+	log.Infof("No existing cluster data found, deleting data dir contents: %s", e.config.Dir)
 	if err = e.removeContents(); err != nil {
 		return fmt.Errorf("failed to remove data dir contents: %w", err)
 	}
