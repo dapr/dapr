@@ -89,11 +89,7 @@ func (d *disk[T]) Load(context.Context) ([]T, error) {
 	}
 
 	if len(errs) > 0 {
-		wrappedErrs := make([]error, len(errs))
-		for i, err := range errs {
-			wrappedErrs[i] = fmt.Errorf("failed to load %s %s: %v", set.ts[i].Kind(), set.ts[i].LogName(), err)
-		}
-		return nil, errors.Join(wrappedErrs...)
+		return nil, errors.Join(errs...)
 	}
 
 	return filteredManifests, nil

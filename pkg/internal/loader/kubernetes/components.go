@@ -51,7 +51,7 @@ func (c *components) Load(ctx context.Context) ([]compapi.Component, error) {
 		PodName:   c.podName,
 	}, grpcretry.WithMax(operatorMaxRetries), grpcretry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error listing components: %s", err)
 	}
 	comps := resp.GetComponents()
 
