@@ -6,16 +6,13 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package remote
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/failurepolicy"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/migration"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/scheduler"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/serialization"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/lock/call/remote/chain"
 )
