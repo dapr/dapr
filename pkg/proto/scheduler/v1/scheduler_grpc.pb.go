@@ -19,13 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Scheduler_ScheduleJob_FullMethodName    = "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob"
-	Scheduler_GetJob_FullMethodName         = "/dapr.proto.scheduler.v1.Scheduler/GetJob"
-	Scheduler_DeleteJob_FullMethodName      = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
-	Scheduler_WatchJobs_FullMethodName      = "/dapr.proto.scheduler.v1.Scheduler/WatchJobs"
-	Scheduler_ListJobs_FullMethodName       = "/dapr.proto.scheduler.v1.Scheduler/ListJobs"
-	Scheduler_WatchHosts_FullMethodName     = "/dapr.proto.scheduler.v1.Scheduler/WatchHosts"
-	Scheduler_Instance0Ready_FullMethodName = "/dapr.proto.scheduler.v1.Scheduler/Instance0Ready"
+	Scheduler_ScheduleJob_FullMethodName = "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob"
+	Scheduler_GetJob_FullMethodName      = "/dapr.proto.scheduler.v1.Scheduler/GetJob"
+	Scheduler_DeleteJob_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
+	Scheduler_WatchJobs_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/WatchJobs"
+	Scheduler_ListJobs_FullMethodName    = "/dapr.proto.scheduler.v1.Scheduler/ListJobs"
+	Scheduler_WatchHosts_FullMethodName  = "/dapr.proto.scheduler.v1.Scheduler/WatchHosts"
 )
 
 // SchedulerClient is the client API for Scheduler service.
@@ -47,10 +46,6 @@ type SchedulerClient interface {
 	// scheduler hosts so that it can connect to each. Receives an updated list
 	// on leadership changes.
 	WatchHosts(ctx context.Context, in *WatchHostsRequest, opts ...grpc.CallOption) (Scheduler_WatchHostsClient, error)
-	// Instance0Ready is only used in Kubernetes mode. This RPC is served solely
-	// by the dapr-scheduler-server-0 instance to signal to the other instances
-	// that the etcd cluster is ready to join.
-	Instance0Ready(ctx context.Context, in *Instance0ReadyRequest, opts ...grpc.CallOption) (*Instance0ReadyResponse, error)
 }
 
 type schedulerClient struct {
@@ -160,15 +155,6 @@ func (x *schedulerWatchHostsClient) Recv() (*WatchHostsResponse, error) {
 	return m, nil
 }
 
-func (c *schedulerClient) Instance0Ready(ctx context.Context, in *Instance0ReadyRequest, opts ...grpc.CallOption) (*Instance0ReadyResponse, error) {
-	out := new(Instance0ReadyResponse)
-	err := c.cc.Invoke(ctx, Scheduler_Instance0Ready_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // SchedulerServer is the server API for Scheduler service.
 // All implementations should embed UnimplementedSchedulerServer
 // for forward compatibility
@@ -188,10 +174,6 @@ type SchedulerServer interface {
 	// scheduler hosts so that it can connect to each. Receives an updated list
 	// on leadership changes.
 	WatchHosts(*WatchHostsRequest, Scheduler_WatchHostsServer) error
-	// Instance0Ready is only used in Kubernetes mode. This RPC is served solely
-	// by the dapr-scheduler-server-0 instance to signal to the other instances
-	// that the etcd cluster is ready to join.
-	Instance0Ready(context.Context, *Instance0ReadyRequest) (*Instance0ReadyResponse, error)
 }
 
 // UnimplementedSchedulerServer should be embedded to have forward compatible implementations.
@@ -215,9 +197,6 @@ func (UnimplementedSchedulerServer) ListJobs(context.Context, *ListJobsRequest) 
 }
 func (UnimplementedSchedulerServer) WatchHosts(*WatchHostsRequest, Scheduler_WatchHostsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchHosts not implemented")
-}
-func (UnimplementedSchedulerServer) Instance0Ready(context.Context, *Instance0ReadyRequest) (*Instance0ReadyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Instance0Ready not implemented")
 }
 
 // UnsafeSchedulerServer may be embedded to opt out of forward compatibility for this service.
@@ -350,24 +329,6 @@ func (x *schedulerWatchHostsServer) Send(m *WatchHostsResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _Scheduler_Instance0Ready_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Instance0ReadyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SchedulerServer).Instance0Ready(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Scheduler_Instance0Ready_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerServer).Instance0Ready(ctx, req.(*Instance0ReadyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // Scheduler_ServiceDesc is the grpc.ServiceDesc for Scheduler service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -390,10 +351,6 @@ var Scheduler_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListJobs",
 			Handler:    _Scheduler_ListJobs_Handler,
-		},
-		{
-			MethodName: "Instance0Ready",
-			Handler:    _Scheduler_Instance0Ready_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

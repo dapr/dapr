@@ -23,10 +23,6 @@ service Scheduler {
   // scheduler hosts so that it can connect to each. Receives an updated list
   // on leadership changes.
   rpc WatchHosts(WatchHostsRequest) returns (stream WatchHostsResponse) {}
-  // Instance0Ready is only used in Kubernetes mode. This RPC is served solely
-  // by the dapr-scheduler-server-0 instance to signal to the other instances
-  // that the etcd cluster is ready to join.
-  rpc Instance0Ready(Instance0ReadyRequest) returns (Instance0ReadyResponse) {}
 }
 
 message Job {
@@ -240,20 +236,4 @@ message WatchHostsResponse {
 message Host {
   // address is the address of the host.
   string address = 1;
-}
-
-// Instance0ReadyRequest is the message used by non dapr-scheduler-server-0
-// instances to check if the etcd cluster is ready to join.
-message Instance0ReadyRequest {
-  // instance_name is the name of the Scheduler instance.
-  string instance_name = 1;
-}
-
-// Instance0ReadyResponse is the response message from the
-// dapr-scheduler-server-0 instance to signal that the etcd cluster is ready to
-// join.
-message Instance0ReadyResponse {
-  // initial_cluster is the optional string the client should use to join the
-  // etcd cluster.
-  optional string initial_cluster = 1;
 }
