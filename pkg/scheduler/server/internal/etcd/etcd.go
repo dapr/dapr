@@ -30,16 +30,23 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.etcd")
 
 type Options struct {
-	Name                string
-	InitialCluster      []string
-	ClientPort          uint64
-	SpaceQuota          int64
-	CompactionMode      string
-	CompactionRetention string
-	SnapshotCount       uint64
-	MaxSnapshots        uint
-	MaxWALs             uint
-	Security            security.Handler
+	Name                 string
+	InitialCluster       []string
+	ClientPort           uint64
+	SpaceQuota           int64
+	CompactionMode       string
+	CompactionRetention  string
+	SnapshotCount        uint64
+	MaxSnapshots         uint
+	MaxWALs              uint
+	BackendBatchLimit    uint
+	BackendBatchInterval string
+	HeartbeatInterval    uint
+	ElectionInterval     uint
+	DefragThresholdMB    uint
+	Metrics              string
+
+	Security security.Handler
 
 	DataDir string
 	Healthz healthz.Healthz

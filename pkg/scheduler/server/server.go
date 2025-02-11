@@ -57,6 +57,12 @@ type Options struct {
 	EtcdSnapshotCount         uint64
 	EtcdMaxSnapshots          uint
 	EtcdMaxWALs               uint
+	EtcdBackendBatchLimit     uint
+	EtcdBackendBatchInterval  string
+	EtcdHeartbeatInterval     uint
+	EtcdElectionInterval      uint
+	EtcdDefrabThresholdMB     uint
+	EtcdMetrics               string
 }
 
 // Server is the gRPC server for the Scheduler service.
@@ -93,19 +99,25 @@ func New(opts Options) (*Server, error) {
 	}
 
 	etcd, err := etcd.New(etcd.Options{
-		Name:                opts.EtcdName,
-		InitialCluster:      opts.EtcdInitialCluster,
-		ClientPort:          opts.EtcdClientPort,
-		SpaceQuota:          opts.EtcdSpaceQuota,
-		CompactionMode:      opts.EtcdCompactionMode,
-		CompactionRetention: opts.EtcdCompactionRetention,
-		SnapshotCount:       opts.EtcdSnapshotCount,
-		MaxSnapshots:        opts.EtcdMaxSnapshots,
-		MaxWALs:             opts.EtcdMaxWALs,
-		Security:            opts.Security,
-		DataDir:             opts.EtcdDataDir,
-		Healthz:             opts.Healthz,
-		Mode:                opts.Mode,
+		Name:                 opts.EtcdName,
+		InitialCluster:       opts.EtcdInitialCluster,
+		ClientPort:           opts.EtcdClientPort,
+		SpaceQuota:           opts.EtcdSpaceQuota,
+		CompactionMode:       opts.EtcdCompactionMode,
+		CompactionRetention:  opts.EtcdCompactionRetention,
+		SnapshotCount:        opts.EtcdSnapshotCount,
+		MaxSnapshots:         opts.EtcdMaxSnapshots,
+		MaxWALs:              opts.EtcdMaxWALs,
+		BackendBatchLimit:    opts.EtcdBackendBatchLimit,
+		BackendBatchInterval: opts.EtcdBackendBatchInterval,
+		HeartbeatInterval:    opts.EtcdHeartbeatInterval,
+		ElectionInterval:     opts.EtcdElectionInterval,
+		DefragThresholdMB:    opts.EtcdDefrabThresholdMB,
+		Metrics:              opts.EtcdMetrics,
+		Security:             opts.Security,
+		DataDir:              opts.EtcdDataDir,
+		Healthz:              opts.Healthz,
+		Mode:                 opts.Mode,
 	})
 	if err != nil {
 		return nil, err

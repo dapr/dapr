@@ -34,9 +34,15 @@ cluster:
 etcdSpaceQuota: 9.2E
 etcdCompactionMode: periodic
 etcdCompactionRetention: 10m
-etcdSnapshotCount: 10000
+etcdSnapshotCount: 2000
 etcdMaxSnapshots: 5
 etcdMaxWals: 5
+etcdBackendBatchLimit: 5000
+etcdBackendBatchInterval: 50ms
+etcdHeartbeatInterval: 200
+etcdElectionInterval: 1400
+etcdDefragThresholdMB: 100
+etcdMetrics: "basic"
 
 livenessProbe:
   initialDelaySeconds: 10
