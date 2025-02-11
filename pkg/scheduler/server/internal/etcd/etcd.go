@@ -29,10 +29,6 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-const (
-	instance0Name = "dapr-scheduler-server-0"
-)
-
 var log = logger.NewLogger("dapr.scheduler.server.etcd")
 
 type Options struct {
@@ -62,7 +58,6 @@ type etcd struct {
 	etcd   *embed.Etcd
 	client *clientv3.Client
 	config *embed.Config
-	sec    security.Handler
 	hz     healthz.Target
 
 	existingClusterPath string
@@ -79,7 +74,6 @@ func New(opts Options) (Interface, error) {
 		hz:      opts.Healthz.AddTarget(),
 		config:  config,
 		mode:    opts.Mode,
-		sec:     opts.Security,
 		readyCh: make(chan struct{}),
 
 		existingClusterPath: filepath.Join(opts.DataDir, "dapr-scheduler-existing-cluster"),
@@ -169,7 +163,7 @@ func (e *etcd) maybeDeleteDataDir() error {
 
 	log.Infof("Data dir contents removed: %s", e.config.Dir)
 
-	return os.WriteFile(e.existingClusterPath, nil, 0600)
+	return os.WriteFile(e.existingClusterPath, nil, 0o600)
 }
 
 func (e *etcd) removeContents() error {
