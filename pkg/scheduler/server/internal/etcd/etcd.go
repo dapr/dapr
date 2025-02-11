@@ -168,6 +168,9 @@ func (e *etcd) maybeDeleteDataDir() error {
 
 func (e *etcd) removeContents() error {
 	d, err := os.Open(e.config.Dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
