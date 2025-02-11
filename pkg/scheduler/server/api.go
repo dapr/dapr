@@ -20,6 +20,8 @@ import (
 	"strings"
 
 	"github.com/diagridio/go-etcd-cron/api"
+	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -184,6 +186,32 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 // updates the sidecars upon changes.
 func (s *Server) WatchHosts(_ *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
 	return s.cron.HostsWatch(stream)
+}
+
+// InternalInstance0Ready blocks on the 0 instance until the Etcd cluster is
+// ready to join.
+// This RPC should only be called by Scheduler instanes in Kubernetes mode
+// which are not dapr-scheduler-server-0.
+func (s *Server) Instance0Ready(ctx context.Context, req *schedulerv1pb.Instance0ReadyRequest) (*schedulerv1pb.Instance0ReadyResponse, error) {
+	id, ok := grpccredentials.PeerIDFromContext(ctx)
+	if !ok {
+		log.Errorf("Instance0Ready request missing peer ID")
+		return nil, status.Error(codes.PermissionDenied, "no peer ID in context")
+	}
+
+	if err := spiffeid.MatchID(s.sec.ID())(id); err != nil {
+		log.Errorf("Unauthorized request to Instance0Ready from %s, expected: %s: %s", id, s.sec.ID(), err)
+		return nil, status.Error(codes.PermissionDenied, "not allowed")
+	}
+
+	initCluster, err := s.etcd.Instance0Ready(ctx, req.GetInstanceName())
+	if err != nil {
+		return nil, err
+	}
+
+	return &schedulerv1pb.Instance0ReadyResponse{
+		InitialCluster: initCluster,
+	}, nil
 }
 
 //nolint:protogetter
