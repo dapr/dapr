@@ -148,7 +148,7 @@ func (e *etcd) Close() error {
 func (e *etcd) maybeDeleteDataDir() error {
 	_, err := os.Stat(e.existingClusterPath)
 	if err == nil {
-		log.Infof("Found existing cluster data flag, preserving data dir: %s", e.config.Dir)
+		log.Infof("Found existing cluster data, preserving data dir: %s", e.config.Dir)
 		return nil
 	}
 
