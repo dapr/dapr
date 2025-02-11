@@ -185,7 +185,11 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	case req.GetNamespace() == security.CurrentNamespace() && req.GetId() == "dapr-operator":
 		dns = []string{fmt.Sprintf("dapr-webhook.%s.svc", req.GetNamespace())}
 	case req.GetNamespace() == security.CurrentNamespace() && req.GetId() == "dapr-scheduler":
-		dns = []string{fmt.Sprintf("*.dapr-scheduler-server.%s.svc", req.GetNamespace())}
+		dns = []string{
+			fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc", req.GetNamespace()),
+			fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc", req.GetNamespace()),
+			fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc", req.GetNamespace()),
+		}
 	}
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{

@@ -70,7 +70,7 @@ func config(opts Options) (*embed.Config, error) {
 			return nil, err
 		}
 
-		if !slices.Contains(certs[0].DNSNames, fmt.Sprintf("*.dapr-scheduler-server.%s.svc", opts.Security.ControlPlaneNamespace())) {
+		if !slices.Contains(certs[0].DNSNames, info.ServerName) {
 			return nil, fmt.Errorf("peer certificate does not contain the expected DNS name %s", info.ServerName)
 		}
 
