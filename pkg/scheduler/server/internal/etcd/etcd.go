@@ -163,6 +163,9 @@ func (e *etcd) maybeDeleteDataDir() error {
 
 	log.Infof("Data dir contents removed: %s", e.config.Dir)
 
+	if err := os.MkdirAll(e.config.Dir, 0o700); err != nil {
+		return fmt.Errorf("failed to create data dir: %w", err)
+	}
 	return os.WriteFile(e.existingClusterPath, nil, 0o600)
 }
 

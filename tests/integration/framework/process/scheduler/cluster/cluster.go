@@ -59,7 +59,7 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 	clientPorts := make([]int, opts.count)
 
 	for i := range ports {
-		uids[i] = "scheduler-" + strconv.Itoa(i)
+		uids[i] = "dapr-scheduler-server-" + strconv.Itoa(i)
 		ports[i] = fp.Port(t)
 		healthzPorts[i] = fp.Port(t)
 		metricsPorts[i] = fp.Port(t)
@@ -124,8 +124,9 @@ func (c *Cluster) WaitUntilRunning(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
 		resp, err := c.schedulers[0].ETCDClient(t, ctx).Get(ctx, "dapr/leadership", clientv3.WithPrefix())
-		assert.NoError(col, err)
-		assert.Len(col, resp.Kvs, len(c.schedulers))
+		if !assert.NoError(col, err) {
+			_ = assert.NotNil(col, resp) && assert.Len(col, resp.Kvs, len(c.schedulers))
+		}
 	}, 10*time.Second, 10*time.Millisecond)
 }
 
