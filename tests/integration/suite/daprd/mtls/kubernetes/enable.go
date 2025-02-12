@@ -69,7 +69,10 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 		placement.WithSentryAddress(e.sentry.Address()),
 	)
 
-	e.scheduler = scheduler.New(t, scheduler.WithSentry(e.sentry))
+	e.scheduler = scheduler.New(t,
+		scheduler.WithSentry(e.sentry),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
 
 	e.operator = operator.New(t, operator.WithSentry(e.sentry))
 
