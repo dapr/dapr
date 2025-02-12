@@ -42,7 +42,10 @@ type mtls struct {
 
 func (m *mtls) Setup(t *testing.T) []framework.Option {
 	m.sentry = sentry.New(t)
-	m.scheduler = scheduler.New(t, scheduler.WithSentry(m.sentry))
+	m.scheduler = scheduler.New(t,
+		scheduler.WithSentry(m.sentry),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
 
 	return []framework.Option{
 		framework.WithProcesses(m.sentry, m.scheduler),
