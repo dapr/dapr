@@ -75,6 +75,7 @@ spec:
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
+          allowPrivilegeEscalation: false
   {{- if eq .Values.runAsNonRoot true }}
           runAsNonRoot: {{ .Values.runAsNonRoot }}
   {{- else }}
