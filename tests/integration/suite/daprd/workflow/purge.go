@@ -50,7 +50,6 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 	p.workflow.Registry().AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
-
 		return nil, nil
 	})
 
