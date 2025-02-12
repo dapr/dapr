@@ -104,6 +104,11 @@ func config(opts Options) (*embed.Config, error) {
 	default:
 		config.Dir = filepath.Join(opts.DataDir, security.CurrentNamespace()+"-"+opts.Name)
 
+		if opts.Security.MTLSEnabled() {
+			config.AdvertiseClientUrls[0].Scheme = "https"
+			config.ListenPeerUrls[0].Scheme = "https"
+		}
+
 		// If not listening on an IP interface or localhost, replace host name with
 		// 0.0.0.0 to listen on all interfaces.
 		if net.ParseIP(etcdURL.Hostname()) == nil && etcdURL.Hostname() != "localhost" {
