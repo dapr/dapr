@@ -197,8 +197,8 @@ func (b *basicdtclient) Run(t *testing.T, ctx context.Context) {
 				orchestrationIDs = append(orchestrationIDs, string(id)+"_N1_"+strconv.Itoa(i), string(id)+"_N1_"+strconv.Itoa(i)+"_N2")
 			}
 			for _, orchID := range orchestrationIDs {
-				meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
-				assert.NoError(c, err)
+				meta, e := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
+				assert.NoError(c, e)
 				// All orchestrations should be running
 				assert.Equal(c, api.RUNTIME_STATUS_RUNNING.String(), meta.GetRuntimeStatus().String())
 			}
@@ -373,7 +373,7 @@ func getDBRowCount(ctx context.Context, db *sql.DB, tableName string) (int, erro
 	defer cancel()
 
 	var count int
-	err := db.QueryRowContext(queryCtx, fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&count)
+	err := db.QueryRowContext(queryCtx, "SELECT COUNT(*) FROM %s"+tableName).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count rows: %v", err)
 	}
