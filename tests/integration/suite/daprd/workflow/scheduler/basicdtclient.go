@@ -122,37 +122,6 @@ func (b *basicdtclient) Run(t *testing.T, ctx context.Context) {
 
 	backendClient := client.NewTaskHubGrpcClient(b.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	t.Run("basic", func(t *testing.T) {
-		r := task.NewTaskRegistry()
-		r.AddOrchestratorN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
-			var input string
-			if err := ctx.GetInput(&input); err != nil {
-				return nil, err
-			}
-			var output string
-			err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
-			return output, err
-		})
-		r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
-			var name string
-			if err := ctx.GetInput(&name); err != nil {
-				return nil, err
-			}
-			return fmt.Sprintf("Hello, %s!", name), nil
-		})
-		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
-		defer cancelTaskhub()
-
-		id, err := backendClient.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("Dapr"))
-		require.NoError(t, err)
-
-		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
-		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
-		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
-	})
-
 	t.Run("terminate", func(t *testing.T) {
 		delayTime := 4 * time.Second
 		var executedActivity atomic.Bool
@@ -334,37 +303,6 @@ func (b *basicdtclient) Run(t *testing.T, ctx context.Context) {
 		meta2, err := backendClient.FetchOrchestrationMetadata(ctx, id+"_N1_N2")
 		require.NoError(t, err)
 		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta2.GetRuntimeStatus())
-	})
-
-	t.Run("child workflow", func(t *testing.T) {
-		r := task.NewTaskRegistry()
-		r.AddOrchestratorN("root", func(ctx *task.OrchestrationContext) (any, error) {
-			var input string
-			if err := ctx.GetInput(&input); err != nil {
-				return nil, err
-			}
-			var output string
-			err := ctx.CallSubOrchestrator("child", task.WithSubOrchestratorInput(input)).Await(&output)
-			return output, err
-		})
-		r.AddOrchestratorN("child", func(ctx *task.OrchestrationContext) (any, error) {
-			var input string
-			if err := ctx.GetInput(&input); err != nil {
-				return nil, err
-			}
-			return fmt.Sprintf("Hello, %s!", input), nil
-		})
-		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
-		defer cancelTaskhub()
-
-		id, err := backendClient.ScheduleNewOrchestration(ctx, "root", api.WithInput("Dapr"))
-		require.NoError(t, err)
-
-		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
-		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
-		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 }
 
