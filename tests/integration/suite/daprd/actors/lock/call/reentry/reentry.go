@@ -11,9 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package timers
+package reentry
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers/callback"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers/remote"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/lock/call/reentry/max"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/lock/call/reentry/pertype"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/lock/call/reentry/remote"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/lock/call/reentry/self"
 )
