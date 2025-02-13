@@ -41,7 +41,7 @@ type Options struct {
 	SnapshotCount        uint64
 	MaxSnapshots         uint
 	MaxWALs              uint
-	BackendBatchLimit    uint
+	BackendBatchLimit    int
 	BackendBatchInterval string
 	HeartbeatInterval    uint
 	ElectionInterval     uint

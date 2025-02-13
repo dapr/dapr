@@ -57,7 +57,7 @@ type Options struct {
 	EtcdSnapshotCount         uint64
 	EtcdMaxSnapshots          uint
 	EtcdMaxWALs               uint
-	EtcdBackendBatchLimit     uint
+	EtcdBackendBatchLimit     int
 	EtcdBackendBatchInterval  string
 	EtcdHeartbeatInterval     uint
 	EtcdElectionInterval      uint

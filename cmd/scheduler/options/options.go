@@ -57,7 +57,7 @@ type Options struct {
 	EtcdSnapshotCount        uint64
 	EtcdMaxSnapshots         uint
 	EtcdMaxWALs              uint
-	EtcdBackendBatchLimit    uint
+	EtcdBackendBatchLimit    int
 	EtcdBackendBatchInterval string
 	EtcdHeartbeatInterval    uint
 	EtcdElectionInterval     uint
@@ -108,7 +108,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 2000, "Number of committed transactions to trigger a snapshot to disk.")
 	fs.UintVar(&opts.EtcdMaxSnapshots, "etcd-max-snapshots", 5, "Maximum number of snapshot files to retain (0 is unlimited).")
 	fs.UintVar(&opts.EtcdMaxWALs, "etcd-max-wals", 5, "Maximum number of write-ahead logs to retain (0 is unlimited).")
-	fs.UintVar(&opts.EtcdBackendBatchLimit, "etcd-backend-batch-limit", 5000, "Maximum operations before committing the backend transaction.")
+	fs.IntVar(&opts.EtcdBackendBatchLimit, "etcd-backend-batch-limit", 5000, "Maximum operations before committing the backend transaction.")
 	fs.StringVar(&opts.EtcdBackendBatchInterval, "etcd-backend-batch-interval", "50ms", "Maximum time before committing the backend transaction.")
 	fs.UintVar(&opts.EtcdHeartbeatInterval, "etcd-heartbeat-interval", 200, "Number of milliseconds between heartbeat ticks.")
 	fs.UintVar(&opts.EtcdElectionInterval, "etcd-election-interval", 1400, "Number of milliseconds between elections.")
