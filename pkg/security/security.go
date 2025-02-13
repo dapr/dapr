@@ -62,6 +62,7 @@ type Handler interface {
 	WithSVIDContext(context.Context) context.Context
 
 	MTLSEnabled() bool
+	ID() spiffeid.ID
 	WatchTrustAnchors(context.Context, chan<- []byte)
 	IdentityDir() *string
 }
@@ -141,6 +142,7 @@ type security struct {
 
 	trustAnchors trustanchors.Interface
 	spiffe       *spiffe.SPIFFE
+	id           spiffeid.ID
 	mtls         bool
 
 	identityDir      *string
@@ -246,6 +248,11 @@ func (p *provider) Run(ctx context.Context) error {
 			if err := p.sec.spiffe.Ready(ctx); err != nil {
 				return err
 			}
+			id, err := p.sec.spiffe.SVIDSource().GetX509SVID()
+			if err != nil {
+				return err
+			}
+			p.sec.id = id.ID
 			close(p.readyCh)
 			diagnostics.DefaultMonitoring.MTLSInitCompleted()
 			p.htarget.Ready()
@@ -443,4 +450,8 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 
 func (s *security) IdentityDir() *string {
 	return s.identityDir
+}
+
+func (s *security) ID() spiffeid.ID {
+	return s.id
 }
