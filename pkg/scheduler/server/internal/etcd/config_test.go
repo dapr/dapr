@@ -29,16 +29,17 @@ import (
 func TestServerConf(t *testing.T) {
 	t.Run("KubernetesMode", func(t *testing.T) {
 		config, err := config(Options{
-			Security:            fake.New(),
-			Mode:                modes.KubernetesMode,
-			DataDir:             "",
-			Name:                "id2",
-			InitialCluster:      []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
-			ClientPort:          5001,
-			SpaceQuota:          0,
-			CompactionMode:      "",
-			CompactionRetention: "",
-			Healthz:             healthz.New(),
+			Security:             fake.New(),
+			Mode:                 modes.KubernetesMode,
+			DataDir:              "",
+			Name:                 "id2",
+			InitialCluster:       []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
+			ClientPort:           5001,
+			SpaceQuota:           0,
+			CompactionMode:       "",
+			CompactionRetention:  "",
+			BackendBatchInterval: "50ms",
+			Healthz:              healthz.New(),
 		})
 		require.NoError(t, err)
 
@@ -61,16 +62,17 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode", func(t *testing.T) {
 		config, err := config(Options{
-			Security:            fake.New(),
-			Mode:                modes.StandaloneMode,
-			DataDir:             "./data",
-			Name:                "id2",
-			InitialCluster:      []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
-			ClientPort:          5002,
-			SpaceQuota:          0,
-			CompactionMode:      "",
-			CompactionRetention: "",
-			Healthz:             healthz.New(),
+			Security:             fake.New(),
+			Mode:                 modes.StandaloneMode,
+			DataDir:              "./data",
+			Name:                 "id2",
+			InitialCluster:       []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
+			ClientPort:           5002,
+			SpaceQuota:           0,
+			CompactionMode:       "",
+			CompactionRetention:  "",
+			BackendBatchInterval: "50ms",
+			Healthz:              healthz.New(),
 		})
 		require.NoError(t, err)
 
@@ -98,16 +100,17 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode listen on 0.0.0.0 when a host", func(t *testing.T) {
 		config, err := config(Options{
-			Security:            fake.New(),
-			Mode:                modes.StandaloneMode,
-			DataDir:             "./data",
-			Name:                "id2",
-			InitialCluster:      []string{"id1=http://hello1:5001", "id2=http://hello2:5002"},
-			ClientPort:          5002,
-			SpaceQuota:          0,
-			CompactionMode:      "",
-			CompactionRetention: "",
-			Healthz:             healthz.New(),
+			Security:             fake.New(),
+			Mode:                 modes.StandaloneMode,
+			DataDir:              "./data",
+			Name:                 "id2",
+			InitialCluster:       []string{"id1=http://hello1:5001", "id2=http://hello2:5002"},
+			ClientPort:           5002,
+			SpaceQuota:           0,
+			CompactionMode:       "",
+			CompactionRetention:  "",
+			BackendBatchInterval: "50ms",
+			Healthz:              healthz.New(),
 		})
 		require.NoError(t, err)
 
@@ -128,16 +131,17 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode listen on IP when an IP", func(t *testing.T) {
 		config, err := config(Options{
-			Security:            fake.New(),
-			Mode:                modes.StandaloneMode,
-			DataDir:             "./data",
-			Name:                "id2",
-			InitialCluster:      []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
-			ClientPort:          5002,
-			SpaceQuota:          0,
-			CompactionMode:      "",
-			CompactionRetention: "",
-			Healthz:             healthz.New(),
+			Security:             fake.New(),
+			Mode:                 modes.StandaloneMode,
+			DataDir:              "./data",
+			Name:                 "id2",
+			InitialCluster:       []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
+			ClientPort:           5002,
+			SpaceQuota:           0,
+			CompactionMode:       "",
+			CompactionRetention:  "",
+			BackendBatchInterval: "50ms",
+			Healthz:              healthz.New(),
 		})
 		require.NoError(t, err)
 
@@ -158,16 +162,17 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode listen on HTTP IP when an IP", func(t *testing.T) {
 		config, err := config(Options{
-			Security:            fake.New(),
-			Mode:                modes.StandaloneMode,
-			DataDir:             "./data",
-			Name:                "id2",
-			InitialCluster:      []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
-			ClientPort:          5002,
-			SpaceQuota:          0,
-			CompactionMode:      "",
-			CompactionRetention: "",
-			Healthz:             healthz.New(),
+			Security:             fake.New(),
+			Mode:                 modes.StandaloneMode,
+			DataDir:              "./data",
+			Name:                 "id2",
+			InitialCluster:       []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
+			ClientPort:           5002,
+			SpaceQuota:           0,
+			CompactionMode:       "",
+			CompactionRetention:  "",
+			BackendBatchInterval: "50ms",
+			Healthz:              healthz.New(),
 		})
 		require.NoError(t, err)
 

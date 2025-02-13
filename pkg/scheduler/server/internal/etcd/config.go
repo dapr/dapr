@@ -14,6 +14,7 @@ limitations under the License.
 package etcd
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -120,12 +121,27 @@ func config(opts Options) (*embed.Config, error) {
 
 	config.LogLevel = "info"
 
+	backendBatchInterval, err := time.ParseDuration(opts.BackendBatchInterval)
+	if err != nil {
+		return nil, errors.New("failed to parse backend batch interval. Please use a string representing time.Duration")
+	}
+
 	config.QuotaBackendBytes = opts.SpaceQuota
 	config.AutoCompactionMode = opts.CompactionMode
 	config.AutoCompactionRetention = opts.CompactionRetention
 	config.MaxSnapFiles = opts.MaxSnapshots
 	config.MaxWalFiles = opts.MaxWALs
 	config.SnapshotCount = opts.SnapshotCount
+	config.BackendBatchLimit = opts.BackendBatchLimit
+	config.BackendBatchInterval = backendBatchInterval
+	config.ExperimentalBootstrapDefragThresholdMegabytes = opts.DefragThresholdMB
+
+	// Must be set to false to prevent aggressive election ticks where leader changes can happen
+	// before the state is fully synced. This is especially important with higher WAL/snapshot counts
+	// as new leaders might not see previous job triggers, leading to duplicate job executions.
+	config.InitialElectionTickAdvance = false
+
+	config.Metrics = opts.Metrics
 
 	return config, nil
 }
