@@ -70,7 +70,6 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		go client.RaiseEvent(ctx, id, "incr")
 	}
 
-	// TODO: @joshvanl: fix encoding on final completion fetch.
 	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, `100`, meta.GetOutput().GetValue())

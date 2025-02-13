@@ -70,7 +70,7 @@ func Run() {
 		ControlPlaneNamespace:   security.CurrentNamespace(),
 		TrustAnchorsFile:        opts.TrustAnchorsFile,
 		AppID:                   appID,
-		MTLSEnabled:             opts.TLSEnabled,
+		MTLSEnabled:             opts.TLSEnabled || opts.Mode == string(modes.KubernetesMode),
 		Mode:                    modes.DaprMode(opts.Mode),
 		Healthz:                 healthz,
 		WriteIdentityToFile:     &opts.IdentityDirectoryWrite,

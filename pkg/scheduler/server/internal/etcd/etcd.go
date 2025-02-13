@@ -17,6 +17,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -54,19 +56,19 @@ type Options struct {
 }
 
 type Interface interface {
-	Run(ctx context.Context) error
-	Client(ctx context.Context) (*clientv3.Client, error)
+	Run(context.Context) error
+	Client(context.Context) (*clientv3.Client, error)
 }
 
 type etcd struct {
-	mode modes.DaprMode
-
+	mode   modes.DaprMode
 	etcd   *embed.Etcd
 	client *clientv3.Client
 	config *embed.Config
+	hz     healthz.Target
 
-	readyCh chan struct{}
-	hz      healthz.Target
+	existingClusterPath string
+	readyCh             chan struct{}
 }
 
 func New(opts Options) (Interface, error) {
@@ -78,14 +80,20 @@ func New(opts Options) (Interface, error) {
 	return &etcd{
 		hz:      opts.Healthz.AddTarget(),
 		config:  config,
-		readyCh: make(chan struct{}),
 		mode:    opts.Mode,
+		readyCh: make(chan struct{}),
+
+		existingClusterPath: filepath.Join(opts.DataDir, "dapr-scheduler-existing-cluster"),
 	}, nil
 }
 
 func (e *etcd) Run(ctx context.Context) error {
 	defer e.hz.NotReady()
-	log.Info("Starting etcd")
+	log.Info("Starting Etcd provider")
+
+	if err := e.maybeDeleteDataDir(); err != nil {
+		return err
+	}
 
 	var err error
 	e.etcd, err = embed.StartEtcd(e.config)
@@ -101,6 +109,8 @@ func (e *etcd) Run(ctx context.Context) error {
 		return errors.Join(err, e.client.Close())
 	}
 
+	e.hz.Ready()
+
 	select {
 	case <-e.etcd.Server.ReadyNotify():
 		log.Info("Etcd server is ready!")
@@ -108,7 +118,6 @@ func (e *etcd) Run(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	e.hz.Ready()
 	close(e.readyCh)
 
 	select {
@@ -141,4 +150,52 @@ func (e *etcd) Close() error {
 	}
 
 	return err
+}
+
+func (e *etcd) maybeDeleteDataDir() error {
+	_, err := os.Stat(e.existingClusterPath)
+	if err == nil {
+		log.Infof("Found existing cluster data, preserving data dir: %s", e.config.Dir)
+		return nil
+	}
+
+	if !os.IsNotExist(err) {
+		return err
+	}
+
+	log.Infof("No existing cluster data found, deleting data dir contents: %s", e.config.Dir)
+	if err = e.removeContents(); err != nil {
+		return fmt.Errorf("failed to remove data dir contents: %w", err)
+	}
+
+	log.Infof("Data dir contents removed: %s", e.config.Dir)
+
+	if err := os.MkdirAll(e.config.Dir, 0o700); err != nil {
+		return fmt.Errorf("failed to create data dir: %w", err)
+	}
+	return os.WriteFile(e.existingClusterPath, nil, 0o600)
+}
+
+func (e *etcd) removeContents() error {
+	d, err := os.Open(e.config.Dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+
+	names, err := d.Readdirnames(-1)
+	if err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		if err = os.RemoveAll(filepath.Join(e.config.Dir, name)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

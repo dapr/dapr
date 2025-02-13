@@ -19,7 +19,9 @@ import (
 	"math"
 	"net"
 	"net/url"
+	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +31,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/kit/crypto/pem"
 )
 
 func config(opts Options) (*embed.Config, error) {
@@ -40,20 +43,38 @@ func config(opts Options) (*embed.Config, error) {
 	config.ExperimentalWarningApplyDuration = time.Second * 5
 
 	if opts.Security.MTLSEnabled() {
-		hostName := "dapr-scheduler-server." + opts.Security.ControlPlaneNamespace() + ".svc"
 		info := transport.TLSInfo{
 			ClientCertAuth:      true,
 			InsecureSkipVerify:  false,
 			SkipClientSANVerify: false,
-			AllowedHostname:     hostName,
-			EmptyCN:             true,
-			CertFile:            filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
-			KeyFile:             filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
-			ClientCertFile:      filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
-			ClientKeyFile:       filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
-			TrustedCAFile:       filepath.Join(*opts.Security.IdentityDir(), "ca.pem"),
-			ServerName:          hostName,
+			AllowedHostnames: []string{
+				fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc", opts.Security.ControlPlaneNamespace()),
+				fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc", opts.Security.ControlPlaneNamespace()),
+				fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc", opts.Security.ControlPlaneNamespace()),
+			},
+			EmptyCN:        true,
+			CertFile:       filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
+			KeyFile:        filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
+			ClientCertFile: filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
+			ClientKeyFile:  filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
+			TrustedCAFile:  filepath.Join(*opts.Security.IdentityDir(), "ca.pem"),
+			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc", opts.Name, opts.Security.ControlPlaneNamespace()),
 		}
+
+		b, err := os.ReadFile(filepath.Join(*opts.Security.IdentityDir(), "cert.pem"))
+		if err != nil {
+			return nil, err
+		}
+
+		certs, err := pem.DecodePEMCertificatesChain(b)
+		if err != nil {
+			return nil, err
+		}
+
+		if !slices.Contains(certs[0].DNSNames, info.ServerName) {
+			return nil, fmt.Errorf("peer certificate does not contain the expected DNS name %s", info.ServerName)
+		}
+
 		config.ClientTLSInfo = info
 		config.PeerTLSInfo = info
 		config.PeerAutoTLS = true
@@ -79,12 +100,19 @@ func config(opts Options) (*embed.Config, error) {
 	case modes.KubernetesMode:
 		config.Dir = opts.DataDir
 		etcdURL.Host = "0.0.0.0:" + etcdURL.Port()
+		config.AdvertiseClientUrls[0].Scheme = "https"
+		config.ListenPeerUrls[0].Scheme = "https"
 	default:
 		config.Dir = filepath.Join(opts.DataDir, security.CurrentNamespace()+"-"+opts.Name)
 
+		if opts.Security.MTLSEnabled() {
+			config.AdvertiseClientUrls[0].Scheme = "https"
+			config.ListenPeerUrls[0].Scheme = "https"
+		}
+
 		// If not listening on an IP interface or localhost, replace host name with
 		// 0.0.0.0 to listen on all interfaces.
-		if net.ParseIP(etcdURL.Host) == nil && etcdURL.Host != "localhost" {
+		if net.ParseIP(etcdURL.Hostname()) == nil && etcdURL.Hostname() != "localhost" {
 			etcdURL.Host = "0.0.0.0:" + etcdURL.Port()
 		}
 	}
@@ -111,11 +139,6 @@ func config(opts Options) (*embed.Config, error) {
 	config.ExperimentalBootstrapDefragThresholdMegabytes = opts.DefragThresholdMB
 
 	config.Metrics = opts.Metrics
-
-	if len(urls) == 1 {
-		config.ForceNewCluster = true
-		config.ClusterState = embed.ClusterStateFlagNew
-	}
 
 	return config, nil
 }

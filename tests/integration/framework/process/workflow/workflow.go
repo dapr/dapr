@@ -147,3 +147,7 @@ func (w *Workflow) Metrics(t *testing.T, ctx context.Context) map[string]float64
 	t.Helper()
 	return w.daprd.Metrics(t, ctx).All()
 }
+
+func (w *Workflow) DB() *sqlite.SQLite {
+	return w.db
+}
