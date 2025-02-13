@@ -63,7 +63,7 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 
 	var count int
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.GreaterOrEqual(t, count, 1)
+	assert.GreaterOrEqual(t, count, 5)
 
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
