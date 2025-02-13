@@ -37,11 +37,11 @@ type Metrics struct {
 
 func New(t *testing.T, ctx context.Context, url string) *Metrics {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	assert.NoError(t, err)
+	assert.NoError(t, err) //nolint:testifylint
 
 	httpclient := client.HTTP(t)
 	resp, err := httpclient.Do(req)
-	assert.NoError(t, err)
+	assert.NoError(t, err) //nolint:testifylint
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Extract the metrics
