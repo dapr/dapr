@@ -16,6 +16,7 @@ package actors
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -136,9 +137,10 @@ type actors struct {
 // New create a new actors runtime with given config.
 func New(opts Options) Interface {
 	var disabled atomic.Pointer[error]
-	if len(opts.PlacementAddresses) == 0 {
+	if len(opts.PlacementAddresses) == 0 ||
+		(len(opts.PlacementAddresses) == 1 && strings.TrimSpace(opts.PlacementAddresses[0]) == "") {
 		var err error = messages.ErrActorNoPlacement
-		log.Warnf("Actor runtime disabled: %s", err)
+		log.Warnf("Actor runtime disabled: %s. Actors and Workflow APIs will be unavailable", err)
 		disabled.Store(&err)
 	}
 
