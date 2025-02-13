@@ -110,7 +110,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 
 	// Actor/placement/reminders services
 	// Note that PlacementAddress takes priority over ActorsAddress
-	if c.PlacementAddress != "" {
+	if strings.TrimSpace(c.PlacementAddress) != "" {
 		args = append(args, "--placement-host-address", c.PlacementAddress)
 	} else if c.ActorsService != "" {
 		args = append(args, "--actors-service", c.ActorsService)
@@ -273,7 +273,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	// Scheduler address could be empty if scheduler service is disabled
 	// TODO: remove in v1.16 when daprd no longer needs all scheduler pod
 	// addresses for serving.
-	if c.SchedulerAddress != "" {
+	if strings.TrimSpace(c.SchedulerAddress) != "" {
 		env = append(env,
 			corev1.EnvVar{
 				Name:  injectorConsts.SchedulerHostAddressEnvVar,
