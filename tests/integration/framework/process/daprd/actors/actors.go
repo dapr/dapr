@@ -53,7 +53,9 @@ func New(t *testing.T, fopts ...Option) *Actors {
 			sqlite.WithCreateStateTables(),
 		),
 		placement: placement.New(t),
-		scheduler: scheduler.New(t),
+		scheduler: scheduler.New(t,
+			scheduler.WithID("dapr-scheduler-0"),
+		),
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
