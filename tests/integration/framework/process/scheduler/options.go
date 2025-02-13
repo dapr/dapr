@@ -23,10 +23,11 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
-	id                 string
-	etcdInitialCluster *string
-	etcdClientPort     int
-	namespace          string
+	id                       string
+	etcdInitialCluster       *string
+	etcdClientPort           int
+	namespace                string
+	etcdBackendBatchInterval string
 
 	logLevel      string
 	port          int
