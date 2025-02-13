@@ -83,7 +83,7 @@ func TestServerConf(t *testing.T) {
 
 		listenURL := url.URL{
 			Scheme: "http",
-			Host:   "0.0.0.0:5002",
+			Host:   "localhost:5002",
 		}
 		clientURL := url.URL{
 			Scheme: "http",
@@ -145,7 +145,7 @@ func TestServerConf(t *testing.T) {
 
 		listenURL := url.URL{
 			Scheme: "http",
-			Host:   "0.0.0.0:5002",
+			Host:   "1.2.3.4:5002",
 		}
 		clientURL := url.URL{
 			Scheme: "http",
@@ -175,7 +175,7 @@ func TestServerConf(t *testing.T) {
 
 		listenURL := url.URL{
 			Scheme: "http",
-			Host:   "0.0.0.0:5002",
+			Host:   "1.2.3.4:5002",
 		}
 		clientURL := url.URL{
 			Scheme: "http",
