@@ -136,6 +136,11 @@ func config(opts Options) (*embed.Config, error) {
 	config.BackendBatchInterval = backendBatchInterval
 	config.ExperimentalBootstrapDefragThresholdMegabytes = opts.DefragThresholdMB
 
+	// Must be set to false to prevent aggressive election ticks where leader changes can happen
+	// before the state is fully synced. This is especially important with higher WAL/snapshot counts
+	// as new leaders might not see previous job triggers, leading to duplicate job executions.
+	config.InitialElectionTickAdvance = false
+
 	config.Metrics = opts.Metrics
 
 	return config, nil
