@@ -431,8 +431,8 @@ github.com/cockroachdb/datadriven v1.0.2/go.mod h1:a9RdTaap04u637JoCzcUoIcDmvwSU
 github.com/cockroachdb/errors v1.2.4/go.mod h1:rQD95gz6FARkaKkQXUksEje/d9a6wBJoCr5oaCLELYA=
 github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f/go.mod h1:i/u985jwjWRlyHXQbwatDASoW0RMlZ/3i9yJHE2xLkI=
 github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd/go.mod h1:sE/e/2PUdi/liOCUjSTXgM1o87ZssimdTWN964YiIeI=
-github.com/cohesion-org/deepseek-go v1.1.0 h1:ejgX+KWSPZg05qV5YJ22TRygElCmHzZoxJtvLN5DNaY=
-github.com/cohesion-org/deepseek-go v1.1.0/go.mod h1:je2+GYTRsFGimyZNP4hpAcARQ7dcMaidT5YisexH0w0=
+github.com/cohesion-org/deepseek-go v1.2.0 h1:79DY0KOrowTYV65bsi1ZaFXxJTGf2TFeILQku7MA5v4=
+github.com/cohesion-org/deepseek-go v1.2.0/go.mod h1:Mi/tP7IzBoXxDC606CFbJC5Ofk2HCikCayBXweo1RDg=
 github.com/coreos/bbolt v1.3.2/go.mod h1:iRUV2dpdMOn7Bo10OQBFzIJO9kkE559Wcmn+qkEiiKk=
 github.com/coreos/etcd v3.3.13+incompatible/go.mod h1:uF7uidLiAD3TWHmW31ZFd/JWoc32PjwdhPthX9715RE=
 github.com/coreos/go-semver v0.2.0/go.mod h1:nnelYz7RCh+5ahJtPPxZlU+153eP4D4r3EedlOD2RNk=
@@ -466,8 +466,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.15.0-rc.2 h1:bbp4glTGvCHF6/9NIGD6zDRUXol2DaE6C0ql8j0J+GU=
-github.com/dapr/components-contrib v1.15.0-rc.2/go.mod h1:ltXM7mumPNAUA7BO8zCVNUfKJA56HDTelB6Yt6msQHk=
+github.com/dapr/components-contrib v1.15.0-rc.3 h1:i3BUVpJw6mia67+JRprgh73rFmYqD78KC+iiZVlG/lg=
+github.com/dapr/components-contrib v1.15.0-rc.3/go.mod h1:eFF2Jan1kZBjY4vzU1zJ4rz8q9jHwy5BOKhEWLgYi/A=
 github.com/dapr/durabletask-go v0.6.3 h1:WHhSAw1YL4xneK3Jo5nGfmMaJxfFodIIF5q1rpkDDfs=
 github.com/dapr/durabletask-go v0.6.3/go.mod h1:nTZ5fCbJLnZbVdi6Z2YxdDF1OgQZL3LroogGuetrwuA=
 github.com/dapr/kit v0.15.0 h1:446jrEOQV/0rt6FwmoKrifP3vav5+Uh/u38DqU8q+JM=
