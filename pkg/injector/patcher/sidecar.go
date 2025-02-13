@@ -162,8 +162,8 @@ func (c *SidecarConfig) setFromAnnotations(an map[string]string) {
 			continue
 		}
 
-		// Skip annotations that are not defined or which have an empty value
-		if an[key] == "" {
+		// Skip annotations that are not defined, respect user defined "" for fields to disable them
+		if _, exists := an[key]; !exists {
 			continue
 		}
 
