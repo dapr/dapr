@@ -11,7 +11,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.15.0-rc.1.0.20241216170750-aca5116d95c9
+	github.com/dapr/components-contrib v1.15.0-rc.3
 	github.com/dapr/durabletask-go v0.6.3
 	github.com/dapr/kit v0.15.0
 	github.com/diagridio/go-etcd-cron v0.4.1
@@ -197,6 +197,7 @@ require (
 	github.com/cloudwego/kitex v0.5.0 // indirect
 	github.com/cloudwego/netpoll v0.3.2 // indirect
 	github.com/cloudwego/thriftgo v0.3.0 // indirect
+	github.com/cohesion-org/deepseek-go v1.2.0 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/creasty/defaults v1.5.2 // indirect
@@ -304,6 +305,7 @@ require (
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jinzhu/copier v0.3.5 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/jonboulle/clockwork v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect

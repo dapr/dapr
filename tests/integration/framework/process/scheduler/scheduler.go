@@ -84,14 +84,15 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	fp := ports.Reserve(t, 5)
 
 	opts := options{
-		logLevel:       "info",
-		listenAddress:  "127.0.0.1",
-		id:             uids,
-		port:           fp.Port(t),
-		healthzPort:    fp.Port(t),
-		metricsPort:    fp.Port(t),
-		etcdClientPort: fp.Port(t),
-		namespace:      "default",
+		logLevel:                 "info",
+		listenAddress:            "127.0.0.1",
+		id:                       uids,
+		port:                     fp.Port(t),
+		healthzPort:              fp.Port(t),
+		metricsPort:              fp.Port(t),
+		etcdClientPort:           fp.Port(t),
+		namespace:                "default",
+		etcdBackendBatchInterval: "50ms",
 	}
 
 	for _, fopt := range fopts {
@@ -116,6 +117,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		"--etcd-client-port=" + strconv.Itoa(opts.etcdClientPort),
 		"--listen-address=" + opts.listenAddress,
 		"--identity-directory-write=" + filepath.Join(t.TempDir(), "tls"),
+		"--etcd-backend-batch-interval=" + opts.etcdBackendBatchInterval,
 	}
 
 	if opts.sentry != nil {
