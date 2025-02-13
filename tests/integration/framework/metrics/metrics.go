@@ -1,3 +1,16 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package metrics
 
 import (
@@ -8,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/common/expfmt"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework/client"
 )
@@ -24,19 +37,19 @@ type Metrics struct {
 
 func New(t *testing.T, ctx context.Context, url string) *Metrics {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	httpclient := client.HTTP(t)
 	resp, err := httpclient.Do(req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Extract the metrics
 	parser := expfmt.TextParser{}
 
 	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
+	assert.NoError(t, err)
+	assert.NoError(t, resp.Body.Close())
 
 	metrics := make(map[string]float64)
 	for _, mf := range metricFamilies {
