@@ -110,8 +110,8 @@ func New(origArgs []string) (*Options, error) {
 	fs.UintVar(&opts.EtcdMaxWALs, "etcd-max-wals", 10, "Maximum number of write-ahead logs to retain (0 is unlimited).")
 	fs.IntVar(&opts.EtcdBackendBatchLimit, "etcd-backend-batch-limit", 5000, "Maximum operations before committing the backend transaction.")
 	fs.StringVar(&opts.EtcdBackendBatchInterval, "etcd-backend-batch-interval", "50ms", "Maximum time before committing the backend transaction.")
-	fs.UintVar(&opts.EtcdHeartbeatInterval, "etcd-heartbeat-interval", 200, "Number of milliseconds between heartbeat ticks.")
-	fs.UintVar(&opts.EtcdElectionInterval, "etcd-election-interval", 1400, "Number of milliseconds between elections.")
+	fs.UintVar(&opts.EtcdHeartbeatInterval, "etcd-heartbeat-interval", 100, "Number of milliseconds between heartbeat ticks.")
+	fs.UintVar(&opts.EtcdElectionInterval, "etcd-election-interval", 1000, "Number of milliseconds between elections.")
 	fs.UintVar(&opts.EtcdDefragThresholdMB, "etcd-experimental-bootstrap-defrag-threshold-megabytes", 100, "Minimum number of megabytes needed to be freed for etcd to consider running defrag during bootstrap. Needs to be set to non-zero value to take effect.")
 	fs.StringVar(&opts.EtcdMetrics, "etcd-metrics", "basic", "Level of detail for exported metrics, specify ’extensive’ to include histogram metrics.")
 
