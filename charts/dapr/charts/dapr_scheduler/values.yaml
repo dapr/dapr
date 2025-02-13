@@ -39,8 +39,6 @@ etcdMaxSnapshots: 10
 etcdMaxWals: 10
 etcdBackendBatchLimit: 5000
 etcdBackendBatchInterval: 50ms
-etcdHeartbeatInterval: 100
-etcdElectionInterval: 1000
 etcdDefragThresholdMB: 100
 etcdMetrics: "basic"
 

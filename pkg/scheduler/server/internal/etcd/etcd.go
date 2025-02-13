@@ -43,8 +43,6 @@ type Options struct {
 	MaxWALs              uint
 	BackendBatchLimit    int
 	BackendBatchInterval string
-	HeartbeatInterval    uint
-	ElectionInterval     uint
 	DefragThresholdMB    uint
 	Metrics              string
 

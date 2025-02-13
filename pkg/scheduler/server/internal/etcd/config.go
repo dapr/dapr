@@ -134,8 +134,6 @@ func config(opts Options) (*embed.Config, error) {
 	config.SnapshotCount = opts.SnapshotCount
 	config.BackendBatchLimit = opts.BackendBatchLimit
 	config.BackendBatchInterval = backendBatchInterval
-	config.ElectionMs = opts.ElectionInterval
-	config.TickMs = opts.HeartbeatInterval
 	config.ExperimentalBootstrapDefragThresholdMegabytes = opts.DefragThresholdMB
 
 	config.Metrics = opts.Metrics
