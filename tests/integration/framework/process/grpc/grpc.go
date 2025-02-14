@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
@@ -66,7 +66,7 @@ func New(t *testing.T, fopts ...Option) *GRPC {
 
 func (g *GRPC) Port(t *testing.T) int {
 	ln, err := g.listener()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	return ln.Addr().(*net.TCPAddr).Port
 }
 
@@ -108,5 +108,5 @@ func (g *GRPC) Cleanup(t *testing.T) {
 	if errors.Is(err, http.ErrServerClosed) || errors.Is(err, grpc.ErrServerStopped) {
 		err = nil
 	}
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
