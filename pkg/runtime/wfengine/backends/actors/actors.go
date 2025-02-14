@@ -362,7 +362,7 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 }
 
 func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, ch chan<- *backend.OrchestrationMetadata) error {
-	log.Debug("Actor backend streaming OrchestrationRuntimeStatus %s", id)
+	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
 
 	engine, err := abe.actors.Engine(ctx)
 	if err != nil {
