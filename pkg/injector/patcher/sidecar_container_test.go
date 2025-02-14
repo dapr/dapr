@@ -227,7 +227,7 @@ func TestGetProbeHttpHandler(t *testing.T) {
 		},
 	}
 
-	assert.EqualValues(t, expectedHandler, getProbeHTTPHandler(3500, pathElements...))
+	assert.EqualValues(t, expectedHandler, getReadinessProbeHandler(3500, pathElements...))
 }
 
 func TestFormatProbePath(t *testing.T) {
