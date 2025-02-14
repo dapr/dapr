@@ -151,14 +151,14 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
 				url := fmt.Sprintf("http://localhost:%d/v1.0/metadata", port)
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 
 				resp, err := httpClient.Do(req)
-				require.NoError(t, err)
-
+				assert.NoError(t, err)
+				defer resp.Body.Close()
 				body := make(map[string]any)
-				require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-				require.NoError(t, resp.Body.Close())
+				assert.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+				assert.NoError(t, resp.Body.Close())
 				endpoints, ok := body["httpEndpoints"]
 				_ = assert.True(t, ok) && assert.Len(t, endpoints.([]any), 2)
 			}, time.Second*5, time.Millisecond*10)
@@ -203,9 +203,9 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				}
 				resp, err := httpClient.Do(req)
 				require.NoError(t, err)
+				defer resp.Body.Close()
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
-				require.NoError(t, resp.Body.Close())
 				return resp.StatusCode, string(body)
 			}
 
@@ -237,7 +237,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(c, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
 			assert.Contains(c, body, "tls: unknown certificate authority")
 			assert.EventuallyWithT(c, func(ct *assert.CollectT) {
-				assert.True(ct, h.daprd2.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
+				assert.True(ct, h.daprd2.Metrics(ct, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
 			}, 5*time.Second, 100*time.Millisecond)
 		}, h.daprd2)
 	})

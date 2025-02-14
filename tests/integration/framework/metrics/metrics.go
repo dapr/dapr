@@ -18,7 +18,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"testing"
 
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
@@ -35,7 +34,7 @@ type Metrics struct {
 	metrics map[string]float64
 }
 
-func New(t *testing.T, ctx context.Context, url string) *Metrics {
+func New(t assert.TestingT, ctx context.Context, url string) *Metrics {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	assert.NoError(t, err) //nolint:testifylint
 

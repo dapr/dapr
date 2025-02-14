@@ -167,9 +167,7 @@ func (p *Placement) HealthzPort() int {
 }
 
 // Metrics returns a subset of metrics scraped from the metrics endpoint
-func (p *Placement) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
-	t.Helper()
-
+func (p *Placement) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", p.MetricsAddress()))
 }
 

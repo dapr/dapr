@@ -180,6 +180,9 @@ func (s *Scheduler) Run(t *testing.T, ctx context.Context) {
 
 func (s *Scheduler) Cleanup(t *testing.T) {
 	s.cleanupOnce.Do(func() {
+		if s.httpClient != nil {
+			s.httpClient.CloseIdleConnections()
+		}
 		s.exec.Cleanup(t)
 	})
 }
@@ -320,9 +323,7 @@ func (s *Scheduler) MetricsAddress() string {
 }
 
 // Metrics returns a subset of metrics scraped from the metrics endpoint
-func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
-	t.Helper()
-
+func (s *Scheduler) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 

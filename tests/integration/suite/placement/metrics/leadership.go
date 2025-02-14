@@ -63,7 +63,7 @@ func (l *leadership) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		for i := range 3 {
-			metrics := l.placements[i].Metrics(t, ctx)
+			metrics := l.placements[i].Metrics(c, ctx)
 			leaderStatus := metrics.MatchMetric("dapr_placement_leader_status")
 			raftLeaderStatus := metrics.MatchMetric("dapr_placement_raft_leader_status")
 			assert.Len(c, leaderStatus, 1)
