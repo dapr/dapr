@@ -307,8 +307,7 @@ func TestPatching(t *testing.T) {
 				assert.True(t, daprdContainer.VolumeMounts[0].ReadOnly)
 
 				assert.NotNil(t, daprdContainer.LivenessProbe)
-				assert.Equal(t, "/v1.0/healthz", daprdContainer.LivenessProbe.HTTPGet.Path)
-				assert.Equal(t, 3501, daprdContainer.LivenessProbe.HTTPGet.Port.IntValue())
+				assert.Equal(t, 3501, daprdContainer.LivenessProbe.TCPSocket.Port.IntValue())
 
 				// Assertions on added volumes
 				assert.Len(t, pod.Spec.Volumes, 1)
