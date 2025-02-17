@@ -114,10 +114,10 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure starting workflow")
 
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
-			require.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+			assert.NoError(c, err, "failure getting info on workflow")
+			assert.Equalf(c, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Raise an event on the workflow
@@ -138,10 +138,10 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PauseWorkflow/dapr/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure pausing workflow")
 
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
-			require.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Suspended", string(resp), "expected workflow to be Suspended, actual workflow state is: %s", string(resp))
+			assert.NoError(c, err, "failure getting info on workflow")
+			assert.Equalf(c, "Suspended", string(resp), "expected workflow to be Suspended, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Resume the workflow
@@ -154,10 +154,10 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 
 		time.Sleep(5 * time.Second)
 
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
-			require.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+			assert.NoError(c, err, "failure getting info on workflow")
+			assert.Equalf(c, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 	}
 }
@@ -170,10 +170,10 @@ func raiseEventTest(url string, instanceID string) func(t *testing.T) {
 		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure starting workflow")
 
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
-			require.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+			assert.NoError(c, err, "failure getting info on workflow")
+			assert.Equalf(c, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Raise an event on the workflow
@@ -196,10 +196,10 @@ func raiseEventTest(url string, instanceID string) func(t *testing.T) {
 
 		time.Sleep(10 * time.Second)
 
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
-			require.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Completed", string(resp), "expected workflow to be Completed, actual workflow state is: %s", string(resp))
+			assert.NoError(c, err, "failure getting info on workflow")
+			assert.Equalf(c, "Completed", string(resp), "expected workflow to be Completed, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 	}
 }
@@ -213,10 +213,10 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure starting workflow")
 
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
-			require.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+			assert.NoError(c, err, "failure getting info on workflow")
+			assert.Equalf(c, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
 		}, 10*time.Second, 100*time.Millisecond)
 
 		// Raise an event on the workflow
@@ -237,10 +237,10 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/TerminateWorkflow/dapr/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure terminating workflow")
 
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
-			require.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Terminated", string(resp), "expected workflow to be Terminated, actual workflow state is: %s", string(resp))
+			assert.NoError(c, err, "failure getting info on workflow")
+			assert.Equalf(c, "Terminated", string(resp), "expected workflow to be Terminated, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Purge the workflow
@@ -253,10 +253,10 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 
 		assert.Equal(t, instanceID, string(resp))
 
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
-			require.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+			assert.NoError(c, err, "failure getting info on workflow")
+			assert.Equalf(c, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Raise a parallel event on the workflow
@@ -266,10 +266,10 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 		time.Sleep(5 * time.Second)
 
 		// Purge will clear the instance data. There are insufficient triggered events which lead to the failure.
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
-			require.NoError(t, err, "failure getting info on workflow")
-			assert.NotEqualf(t, "Completed", string(resp), "expected workflow not to be Completed, actual workflow state is: %s", string(resp))
+			assert.NoError(c, err, "failure getting info on workflow")
+			assert.NotEqualf(c, "Completed", string(resp), "expected workflow not to be Completed, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 	}
 }

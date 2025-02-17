@@ -78,7 +78,7 @@ func (c *daprconnections) Run(t *testing.T, ctx context.Context) {
 		c.daprdA.WaitUntilRunning(t, ctx)
 		t.Cleanup(func() { c.daprdA.Cleanup(t) })
 		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
-			metrics = c.scheduler.Metrics(t, ctx).All()
+			metrics = c.scheduler.Metrics(ct, ctx).All()
 			assert.Equal(ct, 1, int(metrics["dapr_scheduler_sidecars_connected"]))
 		}, 15*time.Second, 10*time.Millisecond, "daprdA sidecar didn't connect to Scheduler in time")
 
@@ -87,7 +87,7 @@ func (c *daprconnections) Run(t *testing.T, ctx context.Context) {
 		c.daprdB.WaitUntilRunning(t, ctx)
 		t.Cleanup(func() { c.daprdB.Cleanup(t) })
 		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
-			metrics = c.scheduler.Metrics(t, ctx).All()
+			metrics = c.scheduler.Metrics(ct, ctx).All()
 			assert.Equal(ct, 2, int(metrics["dapr_scheduler_sidecars_connected"]))
 		}, 15*time.Second, 10*time.Millisecond, "daprdB sidecar didn't connect to Scheduler in time")
 
@@ -96,21 +96,21 @@ func (c *daprconnections) Run(t *testing.T, ctx context.Context) {
 		c.daprdC.WaitUntilRunning(t, ctx)
 		t.Cleanup(func() { c.daprdC.Cleanup(t) })
 		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
-			metrics = c.scheduler.Metrics(t, ctx).All()
+			metrics = c.scheduler.Metrics(ct, ctx).All()
 			assert.Equal(ct, 3, int(metrics["dapr_scheduler_sidecars_connected"]))
 		}, 15*time.Second, 10*time.Millisecond, "daprdC sidecar didn't connect to Scheduler in time")
 
 		// 2 sidecars connected
 		c.daprdA.Cleanup(t)
 		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
-			metrics = c.scheduler.Metrics(t, ctx).All()
+			metrics = c.scheduler.Metrics(ct, ctx).All()
 			assert.Equal(ct, 2, int(metrics["dapr_scheduler_sidecars_connected"]))
 		}, 15*time.Second, 10*time.Millisecond, "daprdA sidecar didn't disconnect from Scheduler in time")
 
 		// 1 sidecar connected
 		c.daprdB.Cleanup(t)
 		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
-			metrics = c.scheduler.Metrics(t, ctx).All()
+			metrics = c.scheduler.Metrics(ct, ctx).All()
 			assert.Equal(ct, 1, int(metrics["dapr_scheduler_sidecars_connected"]))
 		}, 15*time.Second, 10*time.Millisecond, "daprdB sidecar didn't disconnect from Scheduler in time")
 

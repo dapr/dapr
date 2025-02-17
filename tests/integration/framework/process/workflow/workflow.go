@@ -16,6 +16,7 @@ package workflow
 import (
 	"context"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,6 +39,9 @@ type Workflow struct {
 	place    *placement.Placement
 	sched    *scheduler.Scheduler
 	daprd    *daprd.Daprd
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -96,23 +100,27 @@ spec:
 }
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {
-	w.app.Run(t, ctx)
-	w.db.Run(t, ctx)
-	w.place.Run(t, ctx)
-	if w.sched != nil {
-		w.sched.Run(t, ctx)
-	}
-	w.daprd.Run(t, ctx)
+	w.runOnce.Do(func() {
+		w.app.Run(t, ctx)
+		w.db.Run(t, ctx)
+		w.place.Run(t, ctx)
+		if w.sched != nil {
+			w.sched.Run(t, ctx)
+		}
+		w.daprd.Run(t, ctx)
+	})
 }
 
 func (w *Workflow) Cleanup(t *testing.T) {
-	w.daprd.Cleanup(t)
-	if w.sched != nil {
-		w.sched.Cleanup(t)
-	}
-	w.place.Cleanup(t)
-	w.db.Cleanup(t)
-	w.app.Cleanup(t)
+	w.cleanupOnce.Do(func() {
+		w.daprd.Cleanup(t)
+		if w.sched != nil {
+			w.sched.Cleanup(t)
+		}
+		w.place.Cleanup(t)
+		w.db.Cleanup(t)
+		w.app.Cleanup(t)
+	})
 }
 
 func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {

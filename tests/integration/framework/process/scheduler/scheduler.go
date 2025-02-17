@@ -45,9 +45,9 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/kit/ptr"
@@ -180,6 +180,9 @@ func (s *Scheduler) Run(t *testing.T, ctx context.Context) {
 
 func (s *Scheduler) Cleanup(t *testing.T) {
 	s.cleanupOnce.Do(func() {
+		if s.httpClient != nil {
+			s.httpClient.CloseIdleConnections()
+		}
 		s.exec.Cleanup(t)
 	})
 }
@@ -320,9 +323,7 @@ func (s *Scheduler) MetricsAddress() string {
 }
 
 // Metrics returns a subset of metrics scraped from the metrics endpoint
-func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
-	t.Helper()
-
+func (s *Scheduler) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 

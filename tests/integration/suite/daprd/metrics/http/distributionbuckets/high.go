@@ -77,7 +77,7 @@ func (h *high) Run(t *testing.T, ctx context.Context) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
 		var httpServerLatencyBuckets []float64
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := h.daprd.Metrics(t, ctx).All()
+			metrics := h.daprd.Metrics(c, ctx).All()
 			for k := range metrics {
 				if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
 					bucket := getBucketFromKey(t, k)

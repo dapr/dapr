@@ -38,9 +38,9 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
@@ -60,6 +60,7 @@ type Daprd struct {
 	metricsPort      int
 	profilePort      int
 
+	runOnce     sync.Once
 	cleanupOnce sync.Once
 }
 
@@ -178,12 +179,19 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 }
 
 func (d *Daprd) Run(t *testing.T, ctx context.Context) {
-	d.ports.Free(t)
-	d.exec.Run(t, ctx)
+	d.runOnce.Do(func() {
+		d.ports.Free(t)
+		d.exec.Run(t, ctx)
+	})
 }
 
 func (d *Daprd) Cleanup(t *testing.T) {
-	d.cleanupOnce.Do(func() { d.exec.Cleanup(t) })
+	d.cleanupOnce.Do(func() {
+		if d.httpClient != nil {
+			d.httpClient.CloseIdleConnections()
+		}
+		d.exec.Cleanup(t)
+	})
 }
 
 func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
@@ -328,9 +336,7 @@ func (d *Daprd) ProfilePort() int {
 }
 
 // Metrics Returns a subset of metrics scraped from the metrics endpoint
-func (d *Daprd) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
-	t.Helper()
-
+func (d *Daprd) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
 }
 

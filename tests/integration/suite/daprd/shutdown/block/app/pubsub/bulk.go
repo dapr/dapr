@@ -169,7 +169,7 @@ LOOP:
 	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|status:success|topic:abc", b.daprd.AppID())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics := b.daprd.Metrics(t, ctx).All()
+		metrics := b.daprd.Metrics(c, ctx).All()
 		assert.Equal(c, 1, int(metrics[egressMetric]))
 		assert.Equal(c, 1, int(metrics[ingressMetric]))
 	}, time.Second*10, time.Millisecond*10)
