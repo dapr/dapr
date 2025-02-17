@@ -544,7 +544,7 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 			}
 		}
 	default:
-		if len(a.placementAddresses) == 0 {
+		if len(a.placementAddresses) == 0 || a.disabled.Load() != nil {
 			return &runtimev1pb.ActorRuntime{
 				Placement:     placementDisconnected,
 				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
