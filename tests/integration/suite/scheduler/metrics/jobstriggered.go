@@ -156,7 +156,7 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 				assert.Equal(t, commonv1pb.HTTPExtension_POST, job.GetHttpExtension().GetVerb())
 
 				assert.EventuallyWithT(t, func(c *assert.CollectT) {
-					metrics := j.scheduler.Metrics(t, ctx).All()
+					metrics := j.scheduler.Metrics(c, ctx).All()
 					assert.Equal(c, int(j.jobstriggeredCount.Load()), int(metrics["dapr_scheduler_jobs_triggered_total"]))
 
 					// with duration metrics, the following metrics can be found:

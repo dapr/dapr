@@ -153,7 +153,7 @@ func (e *exec) checkExit(t *testing.T) {
 	t.Logf("waiting for %q process to exit", filepath.Base(e.binPath))
 
 	e.runErrorFn(t, e.cmd.Wait())
-	require.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
+	assert.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
 	assert.Equalf(t, e.exitCode, e.cmd.ProcessState.ExitCode(), "expected exit code to be %d", e.exitCode)
 	t.Logf("%q process exited", filepath.Base(e.binPath))
 }

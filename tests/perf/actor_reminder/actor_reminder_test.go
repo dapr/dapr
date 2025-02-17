@@ -214,7 +214,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			var sts appsv1.StatefulSet
 			err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
 		}, time.Minute, time.Second)
 	})
@@ -366,9 +366,9 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 	start := time.Now()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := utils.HTTPGet(fmt.Sprintf("%s/remindersCount", testAppURL))
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		assert.GreaterOrEqual(c, gotCount, reminderCount*5)
 	}, 100*time.Second, time.Millisecond*100)
 	done = time.Since(start)
@@ -394,7 +394,7 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			var sts appsv1.StatefulSet
 			err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
 		}, time.Minute, time.Second)
 	})
@@ -461,9 +461,9 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	start := time.Now()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := utils.HTTPGet(fmt.Sprintf("%s/remindersCount", testAppURL))
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		assert.GreaterOrEqual(c, gotCount, reminderCountScheduler*5)
 	}, 100*time.Second, time.Millisecond*100)
 	done = time.Since(start)

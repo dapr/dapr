@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,6 +48,9 @@ type Operator struct {
 	metricsPort int
 	healthzPort int
 	namespace   string
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Operator {
@@ -108,12 +112,16 @@ func New(t *testing.T, fopts ...Option) *Operator {
 }
 
 func (o *Operator) Run(t *testing.T, ctx context.Context) {
-	o.ports.Free(t)
-	o.exec.Run(t, ctx)
+	o.runOnce.Do(func() {
+		o.ports.Free(t)
+		o.exec.Run(t, ctx)
+	})
 }
 
 func (o *Operator) Cleanup(t *testing.T) {
-	o.exec.Cleanup(t)
+	o.cleanupOnce.Do(func() {
+		o.exec.Cleanup(t)
+	})
 }
 
 func (o *Operator) WaitUntilRunning(t *testing.T, ctx context.Context) {
