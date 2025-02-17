@@ -78,9 +78,9 @@ func TestServerConf(t *testing.T) {
 
 		assert.Equal(t, "id1=http://localhost:5001,id2=http://localhost:5002", config.InitialCluster)
 		if runtime.GOOS == "windows" {
-			assert.Equal(t, "data\\default-id2", config.Dir)
+			assert.Equal(t, "data\\default-id2/dapr-0.1", config.Dir)
 		} else {
-			assert.Equal(t, "data/default-id2", config.Dir)
+			assert.Equal(t, "data/default-id2/dapr-0.1", config.Dir)
 		}
 
 		listenURL := url.URL{
