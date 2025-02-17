@@ -36,9 +36,9 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
@@ -167,9 +167,7 @@ func (p *Placement) HealthzPort() int {
 }
 
 // Metrics returns a subset of metrics scraped from the metrics endpoint
-func (p *Placement) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
-	t.Helper()
-
+func (p *Placement) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", p.MetricsAddress()))
 }
 

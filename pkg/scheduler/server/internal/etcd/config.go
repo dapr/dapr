@@ -98,12 +98,12 @@ func config(opts Options) (*embed.Config, error) {
 
 	switch opts.Mode {
 	case modes.KubernetesMode:
-		config.Dir = opts.DataDir
+		config.Dir = filepath.Join(opts.DataDir, "dapr-0.1")
 		etcdURL.Host = "0.0.0.0:" + etcdURL.Port()
 		config.AdvertiseClientUrls[0].Scheme = "https"
 		config.ListenPeerUrls[0].Scheme = "https"
 	default:
-		config.Dir = filepath.Join(opts.DataDir, security.CurrentNamespace()+"-"+opts.Name)
+		config.Dir = filepath.Join(opts.DataDir, security.CurrentNamespace()+"-"+opts.Name, "dapr-0.1")
 
 		if opts.Security.MTLSEnabled() {
 			config.AdvertiseClientUrls[0].Scheme = "https"

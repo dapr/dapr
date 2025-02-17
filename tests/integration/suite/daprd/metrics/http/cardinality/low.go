@@ -85,7 +85,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 	t.Run("service invocation", func(t *testing.T) {
 		l.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := l.daprd.Metrics(t, ctx).All()
+			metrics := l.daprd.Metrics(c, ctx).All()
 			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:|status:200"]))
 			assert.Equal(c, 1, int(metrics["dapr_http_client_completed_count|app_id:myapp|method:GET|path:/dapr/config|status:200"]))
 			assert.NotContains(c, metrics, "dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200")
@@ -98,7 +98,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 		l.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore", strings.NewReader(body), "content-type", "application/json")
 		l.daprd.HTTPGet2xx(t, ctx, "/v1.0/state/mystore/myvalue")
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := l.daprd.Metrics(t, ctx).All()
+			metrics := l.daprd.Metrics(c, ctx).All()
 			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:|status:204"]))
 			assert.Equal(c, 2, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:|status:200"]))
 		}, time.Second*5, time.Millisecond*10)
@@ -107,7 +107,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 	t.Run("actor invocation", func(t *testing.T) {
 		l.daprd.HTTPPost2xx(t, ctx, "/v1.0/actors/myactortype/myactorid/method/foo", nil, "content-type", "application/json")
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := l.daprd.Metrics(t, ctx).All()
+			metrics := l.daprd.Metrics(c, ctx).All()
 			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:|status:200"]))
 			assert.NotContains(c, metrics, "method:InvokeActor/myactortype.")
 		}, time.Second*5, time.Millisecond*10)

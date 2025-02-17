@@ -136,7 +136,7 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 	etcdClient := n.scheduler.ETCDClient(t, ctx).KV
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := etcdClient.Get(ctx, "dapr/jobs/", clientv3.WithPrefix())
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		assert.Len(c, resp.Kvs, 2)
 	}, time.Second*20, 10*time.Millisecond)
 
@@ -147,7 +147,7 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := etcdClient.Get(ctx, "dapr/jobs/", clientv3.WithPrefix())
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		assert.Empty(c, resp.Kvs)
 	}, time.Second*10, 10*time.Millisecond)
 }
