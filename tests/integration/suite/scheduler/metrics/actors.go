@@ -106,7 +106,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics = a.scheduler.Metrics(t, ctx).All()
+		metrics = a.scheduler.Metrics(c, ctx).All()
 		assert.Equal(c, 1, int(metrics["dapr_scheduler_jobs_created_total"]))
 	}, time.Second*4, 10*time.Millisecond)
 
