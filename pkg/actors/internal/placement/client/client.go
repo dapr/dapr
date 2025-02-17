@@ -16,7 +16,6 @@ package client
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -26,14 +25,12 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/lock"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
-	"github.com/dapr/dapr/pkg/placement"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
@@ -126,12 +123,13 @@ func (c *Client) Run(ctx context.Context) error {
 		select {
 		case ch := <-c.reconnectCh:
 			c.ready.Store(false)
-			c.lock.LockTable()
+			unlock := c.lock.Lock()
 			connCancel()
 
 			if err := c.table.HaltAll(); err != nil {
-				c.lock.EnsureUnlockTable()
-				return fmt.Errorf("failed to halt all actors: %s", err)
+				unlock()
+				log.Errorf("Error whilst deactivating all actors when shutting down client: %s", err)
+				return nil
 			}
 
 			if ctx.Err() != nil {
@@ -139,11 +137,11 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 
 			connCtx, connCancel = context.WithCancel(ctx)
-			defer connCancel()
 			err := c.connectRoundRobin(connCtx)
 			ch <- err
-			c.lock.EnsureUnlockTable()
+			unlock()
 			if err != nil {
+				connCancel()
 				return err
 			}
 
@@ -152,9 +150,12 @@ func (c *Client) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			c.ready.Store(false)
 			connCancel()
-			c.lock.LockTable()
-			defer c.lock.EnsureUnlockTable()
-			return c.table.HaltAll()
+			unlock := c.lock.Lock()
+			defer unlock()
+			if err := c.table.HaltAll(); err != nil {
+				log.Errorf("Error whilst deactivating all actors when shutting down client: %s", err)
+			}
+			return nil
 		}
 	}
 }
@@ -199,7 +200,6 @@ func (c *Client) connect(ctx context.Context) error {
 		}
 	}
 
-	ctx = metadata.AppendToOutgoingContext(ctx, placement.GRPCContextKeyAcceptVNodes, "false")
 	stream, err := v1pb.NewPlacementClient(c.conn).ReportDaprStatus(ctx)
 	if err != nil {
 		return err

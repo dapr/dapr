@@ -98,7 +98,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 		// Verify metrics
 		metrics := w.daprd.Metrics(t, ctx).All()
@@ -113,7 +113,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 		// Verify metrics
 		metrics := w.daprd.Metrics(t, ctx).All()

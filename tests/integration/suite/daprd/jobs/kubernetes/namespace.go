@@ -86,6 +86,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 		scheduler.WithSentry(sentry),
 		scheduler.WithKubeconfig(n.kubeapi.KubeconfigPath(t)),
 		scheduler.WithMode("kubernetes"),
+		scheduler.WithID("dapr-scheduler-server-0"),
 	)
 
 	operator := operator.New(t,
@@ -132,7 +133,7 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	etcdClient := n.scheduler.ETCDClient(t).KV
+	etcdClient := n.scheduler.ETCDClient(t, ctx).KV
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := etcdClient.Get(ctx, "dapr/jobs/", clientv3.WithPrefix())
 		require.NoError(t, err)

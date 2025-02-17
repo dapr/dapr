@@ -53,7 +53,9 @@ func New(t *testing.T, fopts ...Option) *Actors {
 			sqlite.WithCreateStateTables(),
 		),
 		placement: placement.New(t),
-		scheduler: scheduler.New(t),
+		scheduler: scheduler.New(t,
+			scheduler.WithID("dapr-scheduler-0"),
+		),
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
@@ -96,6 +98,7 @@ func New(t *testing.T, fopts ...Option) *Actors {
 		daprd.WithConfigManifests(t, opts.daprdConfigs...),
 		daprd.WithScheduler(opts.scheduler),
 		daprd.WithResourceFiles(opts.resources...),
+		daprd.WithErrorCodeMetrics(t),
 	}
 
 	return &Actors{

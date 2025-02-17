@@ -20,6 +20,8 @@ import (
 	"strings"
 
 	"github.com/diagridio/go-etcd-cron/api"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
@@ -97,7 +99,7 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 	}
 
 	if job == nil {
-		return nil, fmt.Errorf("job not found: %s", req.GetName())
+		return nil, status.Error(codes.NotFound, "job not found: "+req.GetName())
 	}
 
 	return &schedulerv1pb.GetJobResponse{
@@ -164,7 +166,7 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 		return err
 	}
 
-	if err := s.cron.AddWatch(initial, stream); err != nil {
+	if err := s.cron.JobsWatch(initial, stream); err != nil {
 		return err
 	}
 
@@ -176,6 +178,12 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 	case <-stream.Context().Done():
 		return stream.Context().Err()
 	}
+}
+
+// WatchHosts sends the current set of hosts in the scheduler cluster, and
+// updates the sidecars upon changes.
+func (s *Server) WatchHosts(_ *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
+	return s.cron.HostsWatch(stream)
 }
 
 //nolint:protogetter

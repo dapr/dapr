@@ -284,7 +284,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = state.TransactionalStateOperation(ctx, req)
+	err = state.TransactionalStateOperation(ctx, false, req)
 	if err != nil {
 		if errors.As(err, new(messages.APIError)) {
 			respondWithError(w, err)
@@ -370,6 +370,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Header.Add("Dapr-API-Call", "true")
 	req := internalsv1pb.NewInternalInvokeRequest(method).
 		WithActor(actorType, actorID).
 		WithHTTPExtension(verb, r.URL.RawQuery).

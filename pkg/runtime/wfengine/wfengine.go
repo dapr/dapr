@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
@@ -41,6 +42,8 @@ type Interface interface {
 	Run(context.Context) error
 	RegisterGrpcServer(*grpc.Server)
 	Client() workflows.Workflow
+
+	ActivityActorType() string
 }
 
 type Options struct {
@@ -65,18 +68,15 @@ type engine struct {
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
 
-func New(opts Options) (Interface, error) {
+func New(opts Options) Interface {
 	// If no backend was initialized by the manager, create a backend backed by actors
-	abackend, err := backendactors.New(backendactors.Options{
+	abackend := backendactors.New(backendactors.Options{
 		AppID:              opts.AppID,
 		Namespace:          opts.Namespace,
 		Actors:             opts.Actors,
 		Resiliency:         opts.Resiliency,
 		SchedulerReminders: opts.SchedulerReminders,
 	})
-	if err != nil {
-		return nil, err
-	}
 
 	var activeConns uint64
 	var lock sync.Mutex
@@ -97,6 +97,10 @@ func New(opts Options) (Interface, error) {
 			lock.Lock()
 			defer lock.Unlock()
 
+			if ctx.Err() != nil {
+				ctx = context.Background()
+			}
+
 			activeConns--
 			if activeConns == 0 {
 				log.Debug("Unregistering workflow actors")
@@ -108,17 +112,17 @@ func New(opts Options) (Interface, error) {
 	)
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
-	orchestrationWorker := backend.NewOrchestrationWorker(
+	oworker := backend.NewOrchestrationWorker(
 		abackend,
 		executor,
 		wfBackendLogger,
 		backend.WithMaxParallelism(opts.Spec.GetMaxConcurrentWorkflowInvocations()))
-	activityWorker := backend.NewActivityTaskWorker(
+	aworker := backend.NewActivityTaskWorker(
 		abackend,
 		executor,
 		wfBackendLogger,
 		backend.WithMaxParallelism(opts.Spec.GetMaxConcurrentActivityInvocations()))
-	worker := backend.NewTaskHubWorker(abackend, orchestrationWorker, activityWorker, wfBackendLogger)
+	worker := backend.NewTaskHubWorker(abackend, oworker, aworker, wfBackendLogger)
 
 	return &engine{
 		appID:                opts.AppID,
@@ -131,7 +135,7 @@ func New(opts Options) (Interface, error) {
 			logger: wfBackendLogger,
 			client: backend.NewTaskHubClient(abackend),
 		},
-	}, nil
+	}
 }
 
 func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
@@ -139,6 +143,11 @@ func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
 }
 
 func (wfe *engine) Run(ctx context.Context) error {
+	if wfe.actors.RuntimeStatus().GetRuntimeStatus() == runtimev1pb.ActorRuntime_DISABLED {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
 	if err := wfe.worker.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
@@ -157,4 +166,8 @@ func (wfe *engine) Run(ctx context.Context) error {
 
 func (wfe *engine) Client() workflows.Workflow {
 	return wfe.client
+}
+
+func (wfe *engine) ActivityActorType() string {
+	return wfe.backend.ActivityActorType()
 }

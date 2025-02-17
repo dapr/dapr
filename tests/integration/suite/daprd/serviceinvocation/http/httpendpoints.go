@@ -127,7 +127,9 @@ spec:
 `, srv2.Port(),
 		strings.ReplaceAll(string(pki1.RootCertPEM), "\n", "\\n"),
 		strings.ReplaceAll(string(pki2.LeafCertPEM), "\n", "\\n"),
-		strings.ReplaceAll(string(pki2.LeafPKPEM), "\n", "\\n"))))
+		strings.ReplaceAll(string(pki2.LeafPKPEM), "\n", "\\n"))),
+		procdaprd.WithErrorCodeMetrics(t),
+	)
 	h.appPort = srv1.Port()
 
 	return []framework.Option{
@@ -234,6 +236,9 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 		invokeTests(t, http.StatusInternalServerError, func(c *assert.CollectT, body string) {
 			assert.Contains(c, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
 			assert.Contains(c, body, "tls: unknown certificate authority")
+			assert.Eventually(t, func() bool {
+				return h.daprd2.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE")
+			}, 5*time.Second, 100*time.Millisecond)
 		}, h.daprd2)
 	})
 }

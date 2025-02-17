@@ -118,6 +118,6 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID(resp.GetInstanceId()))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 	}
 }

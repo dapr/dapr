@@ -21,19 +21,21 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/kit/ptr"
 )
 
-// GetWorkflowBeta1 is the API handler for getting workflow details
-func (a *Universal) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
+// GetWorkflow is the API handler for getting workflow details
+func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
 	if _, err := a.ActorEngine(ctx); err != nil {
 		return nil, err
 	}
-
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
@@ -64,12 +66,11 @@ func (a *Universal) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWor
 	return res, nil
 }
 
-// StartWorkflowBeta1 is the API handler for starting a workflow
-func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
+// StartWorkflow is the API handler for starting a workflow
+func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
 	if _, err := a.ActorEngine(ctx); err != nil {
 		return nil, err
 	}
-
 	// The instance ID is optional. If not specified, we generate a random one.
 	if in.GetInstanceId() == "" {
 		randomID, err := uuid.NewRandom()
@@ -90,30 +91,36 @@ func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.Star
 	}
 
 	req := workflows.StartRequest{
-		InstanceID:    in.GetInstanceId(),
 		Options:       in.GetOptions(),
 		WorkflowName:  in.GetWorkflowName(),
-		WorkflowInput: in.GetInput(),
+		WorkflowInput: wrapperspb.String(string(in.GetInput())),
+	}
+	if iid := in.GetInstanceId(); iid != "" {
+		req.InstanceID = &iid
 	}
 
-	resp, err := a.workflowEngine.Client().Start(ctx, &req)
+	policyRunner := resiliency.NewRunner[*workflows.StartResponse](ctx,
+		a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries),
+	)
+	resp, err := policyRunner(func(ctx context.Context) (*workflows.StartResponse, error) {
+		return a.workflowEngine.Client().Start(ctx, &req)
+	})
 	if err != nil {
 		err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
-	ret := &runtimev1pb.StartWorkflowResponse{
+
+	return &runtimev1pb.StartWorkflowResponse{
 		InstanceId: resp.InstanceID,
-	}
-	return ret, nil
+	}, nil
 }
 
-// TerminateWorkflowBeta1 is the API handler for terminating a workflow
-func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
+// TerminateWorkflow is the API handler for terminating a workflow
+func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
 	if _, err := a.ActorEngine(ctx); err != nil {
 		return nil, err
 	}
-
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
@@ -122,7 +129,7 @@ func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 
 	req := &workflows.TerminateRequest{
 		InstanceID: in.GetInstanceId(),
-		Recursive:  true,
+		Recursive:  ptr.Of(true),
 	}
 	if err := a.workflowEngine.Client().Terminate(ctx, req); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
@@ -133,15 +140,15 @@ func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
+
 	return emptyResponse, nil
 }
 
-// RaiseEventWorkflowBeta1 is the API handler for raising an event to a workflow
-func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+// RaiseEventWorkflow is the API handler for raising an event to a workflow
+func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
 	if _, err := a.ActorEngine(ctx); err != nil {
 		return nil, err
 	}
-
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
@@ -157,7 +164,10 @@ func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb
 	req := workflows.RaiseEventRequest{
 		InstanceID: in.GetInstanceId(),
 		EventName:  in.GetEventName(),
-		EventData:  in.GetEventData(),
+	}
+
+	if in.GetEventData() != nil {
+		req.EventData = wrapperspb.String(string(in.GetEventData()))
 	}
 
 	if err := a.workflowEngine.Client().RaiseEvent(ctx, &req); err != nil {
@@ -168,12 +178,11 @@ func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb
 	return emptyResponse, nil
 }
 
-// PauseWorkflowBeta1 is the API handler for pausing a workflow
-func (a *Universal) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
+// PauseWorkflow is the API handler for pausing a workflow
+func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
 	if _, err := a.ActorEngine(ctx); err != nil {
 		return nil, err
 	}
-
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
@@ -188,15 +197,15 @@ func (a *Universal) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.Paus
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
+
 	return emptyResponse, nil
 }
 
-// ResumeWorkflowBeta1 is the API handler for resuming a workflow
-func (a *Universal) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
+// ResumeWorkflow is the API handler for resuming a workflow
+func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
 	if _, err := a.ActorEngine(ctx); err != nil {
 		return nil, err
 	}
-
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
@@ -211,15 +220,15 @@ func (a *Universal) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Res
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
+
 	return emptyResponse, nil
 }
 
-// PurgeWorkflowBeta1 is the API handler for purging a workflow
-func (a *Universal) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
+// PurgeWorkflow is the API handler for purging a workflow
+func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
 	if _, err := a.ActorEngine(ctx); err != nil {
 		return nil, err
 	}
-
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
@@ -228,7 +237,7 @@ func (a *Universal) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Purg
 
 	req := workflows.PurgeRequest{
 		InstanceID: in.GetInstanceId(),
-		Recursive:  true,
+		Recursive:  ptr.Of(true),
 	}
 
 	if err := a.workflowEngine.Client().Purge(ctx, &req); err != nil {
@@ -240,42 +249,85 @@ func (a *Universal) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Purg
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
+
 	return emptyResponse, nil
 }
 
+// GetWorkflowBeta1 is the API handler for getting workflow details
+func (a *Universal) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
+	return a.GetWorkflow(ctx, in)
+}
+
+// StartWorkflowBeta1 is the API handler for starting a workflow
+func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
+	return a.StartWorkflow(ctx, in)
+}
+
+// TerminateWorkflowBeta1 is the API handler for terminating a workflow
+func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
+	return a.TerminateWorkflow(ctx, in)
+}
+
+// RaiseEventWorkflowBeta1 is the API handler for raising an event to a workflow
+func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+	return a.RaiseEventWorkflow(ctx, in)
+}
+
+// PauseWorkflowBeta1 is the API handler for pausing a workflow
+func (a *Universal) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
+	return a.PauseWorkflow(ctx, in)
+}
+
+// ResumeWorkflowBeta1 is the API handler for resuming a workflow
+func (a *Universal) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
+	return a.ResumeWorkflow(ctx, in)
+}
+
+// PurgeWorkflowBeta1 is the API handler for purging a workflow
+func (a *Universal) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
+	return a.PurgeWorkflow(ctx, in)
+}
+
 // GetWorkflowAlpha1 is the API handler for getting workflow details
+// Deprecated: Use GetWorkflow instead.
 func (a *Universal) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	return a.GetWorkflowBeta1(ctx, in)
+	return a.GetWorkflow(ctx, in)
 }
 
 // StartWorkflowAlpha1 is the API handler for starting a workflow
+// Deprecated: Use StartWorkflow instead.
 func (a *Universal) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
-	return a.StartWorkflowBeta1(ctx, in)
+	return a.StartWorkflow(ctx, in)
 }
 
 // TerminateWorkflowAlpha1 is the API handler for terminating a workflow
+// Deprecated: Use TerminateWorkflow instead.
 func (a *Universal) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
-	return a.TerminateWorkflowBeta1(ctx, in)
+	return a.TerminateWorkflow(ctx, in)
 }
 
 // RaiseEventWorkflowAlpha1 is the API handler for raising an event to a workflow
+// Deprecated: Use RaiseEventWorkflow instead.
 func (a *Universal) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
-	return a.RaiseEventWorkflowBeta1(ctx, in)
+	return a.RaiseEventWorkflow(ctx, in)
 }
 
 // PauseWorkflowAlpha1 is the API handler for pausing a workflow
+// Deprecated: Use PauseWorkflow instead.
 func (a *Universal) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
-	return a.PauseWorkflowBeta1(ctx, in)
+	return a.PauseWorkflow(ctx, in)
 }
 
 // ResumeWorkflowAlpha1 is the API handler for resuming a workflow
+// Deprecated: Use ResumeWorkflow instead.
 func (a *Universal) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
-	return a.ResumeWorkflowBeta1(ctx, in)
+	return a.ResumeWorkflow(ctx, in)
 }
 
 // PurgeWorkflowAlpha1 is the API handler for purging a workflow
+// Deprecated: Use PurgeWorkflow instead.
 func (a *Universal) PurgeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
-	return a.PurgeWorkflowBeta1(ctx, in)
+	return a.PurgeWorkflow(ctx, in)
 }
 
 func (a *Universal) validateInstanceID(instanceID string, isCreate bool) error {

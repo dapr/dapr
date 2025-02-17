@@ -16,11 +16,15 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
@@ -65,8 +69,8 @@ const (
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
 
-	defaultMaxWorkflowConcurrentInvocations = 100
-	defaultMaxActivityConcurrentInvocations = 100
+	defaultMaxWorkflowConcurrentInvocations = 1000
+	defaultMaxActivityConcurrentInvocations = 1000
 )
 
 var defaultFeatures = map[Feature]bool{
@@ -247,6 +251,10 @@ type OtelSpec struct {
 	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
 	// Defaults to true
 	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+	// Headers to add to the request
+	Headers string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the request in milliseconds
+	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"` // Defaults to 10000
 }
 
 // GetIsSecure returns true if the connection should be secured.
@@ -552,13 +560,20 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 }
 
 // Update configuration from Otlp Environment Variables, if they exist.
-func SetTracingSpecFromEnv(conf *Configuration) {
+func SetTracingSpecFromEnv(conf *Configuration) error {
 	// If Otel Endpoint is already set, then don't override.
 	if conf.Spec.TracingSpec.Otel.EndpointAddress != "" {
-		return
+		return nil
 	}
 
-	if endpoint := os.Getenv(env.OtlpExporterEndpoint); endpoint != "" {
+	var endpoint string
+	if ep := os.Getenv(env.OtlpExporterTracesEndpoint); ep != "" {
+		endpoint = ep
+	} else if ep := os.Getenv(env.OtlpExporterEndpoint); ep != "" {
+		endpoint = ep
+	}
+
+	if endpoint != "" {
 		// remove "http://" or "https://" from the endpoint
 		endpoint = strings.TrimPrefix(endpoint, "http://")
 		endpoint = strings.TrimPrefix(endpoint, "https://")
@@ -571,7 +586,14 @@ func SetTracingSpecFromEnv(conf *Configuration) {
 
 		// The OTLP attribute allows 'grpc', 'http/protobuf', or 'http/json'.
 		// Dapr setting can only be 'grpc' or 'http'.
-		if protocol := os.Getenv(env.OtlpExporterProtocol); strings.HasPrefix(protocol, "http") {
+		var protocol string
+		if p := os.Getenv(env.OtlpExporterTracesProtocol); p != "" {
+			protocol = p
+		} else if p := os.Getenv(env.OtlpExporterProtocol); p != "" {
+			protocol = p
+		}
+
+		if strings.HasPrefix(protocol, "http") {
 			conf.Spec.TracingSpec.Otel.Protocol = "http"
 		} else {
 			conf.Spec.TracingSpec.Otel.Protocol = "grpc"
@@ -581,6 +603,37 @@ func SetTracingSpecFromEnv(conf *Configuration) {
 			conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(false)
 		}
 	}
+
+	var headers string
+	if h := os.Getenv(env.OtlpExporterTracesHeaders); h != "" {
+		headers = h
+	} else if h := os.Getenv(env.OtlpExporterHeaders); h != "" {
+		headers = h
+	}
+
+	if headers != "" {
+		conf.Spec.TracingSpec.Otel.Headers = headers
+	}
+
+	var timeoutMs int
+	if t := os.Getenv(env.OtlpExporterTracesTimeout); t != "" {
+		ti, err := strconv.Atoi(t)
+		if err != nil {
+			return err
+		}
+		timeoutMs = ti
+	} else if t := os.Getenv(env.OtlpExporterTimeout); t != "" {
+		ti, err := strconv.Atoi(t)
+		if err != nil {
+			return err
+		}
+		timeoutMs = ti
+	}
+
+	if timeoutMs > 0 {
+		conf.Spec.TracingSpec.Otel.Timeout = timeoutMs
+	}
+	return nil
 }
 
 // IsSecretAllowed Check if the secret is allowed to be accessed.
@@ -835,4 +888,68 @@ func (c ConfigurationSpec) String() string {
 		return fmt.Sprintf("Failed to marshal ConfigurationSpec object to YAML: %v", err)
 	}
 	return enc
+}
+
+// StringToHeader converting a string to a map of headers.
+// example: header1=value1,header2=value2
+// For the exact consistent experience of parsing configuration values
+// and due to the function being in the internal package, we cannot use it directly.
+// The function was copied and adapted from OpenTelemetry:
+// https://github.com/open-telemetry/opentelemetry-go/blob/f4e20525957b6b8177175c57bd4ede5ba591f716/internal/shared/otlp/envconfig/envconfig.go.tmpl#L157
+// modified to return an error if the header is not valid.
+func StringToHeader(value string) (map[string]string, error) {
+	headersPairs := strings.Split(value, ",")
+	headers := make(map[string]string)
+
+	for _, header := range headersPairs {
+		n, v, found := strings.Cut(header, "=")
+		if !found {
+			return nil, errors.New("missing '=' parse headers input" + header)
+		}
+
+		trimmedName := strings.TrimSpace(n)
+
+		// Validate the key.
+		if !isValidHeaderKey(trimmedName) {
+			return nil, errors.New("invalid header key" + trimmedName)
+		}
+
+		// Only decode the value.
+		value, err := url.PathUnescape(v)
+		if err != nil {
+			return nil, errors.Join(err, errors.New("escape header value"+v))
+		}
+		trimmedValue := strings.TrimSpace(value)
+
+		headers[trimmedName] = trimmedValue
+	}
+
+	return headers, nil
+}
+
+// For the exact consistent experience of parsing configuration values
+// and due to the function being in the internal package, we cannot use it directly.
+// The function was copied from OpenTelemetry:
+// https://github.com/open-telemetry/opentelemetry-go/blob/f4e20525957b6b8177175c57bd4ede5ba591f716/internal/shared/otlp/envconfig/envconfig.go.tmpl#L198
+func isValidHeaderKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for _, c := range key {
+		if !isTokenChar(c) {
+			return false
+		}
+	}
+	return true
+}
+
+// For the exact consistent experience of parsing configuration values
+// and due to the function being in the internal package, we cannot use it directly.
+// The function was copied from OpenTelemetry:
+// https://github.com/open-telemetry/opentelemetry-go/blob/f4e20525957b6b8177175c57bd4ede5ba591f716/internal/shared/otlp/envconfig/envconfig.go.tmpl#L210C1-L215C2
+func isTokenChar(c rune) bool {
+	return c <= unicode.MaxASCII && (unicode.IsLetter(c) ||
+		unicode.IsDigit(c) ||
+		c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' ||
+		c == '+' || c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~')
 }

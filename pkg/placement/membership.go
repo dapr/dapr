@@ -28,12 +28,6 @@ import (
 	"github.com/dapr/kit/retry"
 )
 
-const (
-	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
-	raftApplyCommandMaxConcurrency = 10
-	GRPCContextKeyAcceptVNodes     = "dapr-accept-vnodes"
-)
-
 // membershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
 func (p *Service) membershipChangeWorker(ctx context.Context) {
@@ -61,7 +55,6 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-
 		case <-faultyHostDetectCh:
 			// This only runs once when the placement service acquires leadership
 			// It loops through all the members in the raft store that have been connected to the
@@ -122,15 +115,10 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 // - applies membership change commands to the raft state
 // - disseminates the latest hashing table to the connected dapr runtimes
 func (p *Service) processMembershipCommands(ctx context.Context) {
-	// logApplyConcurrency is the buffered channel to limit the concurrency
-	// of raft apply command.
-	logApplyConcurrency := make(chan struct{}, raftApplyCommandMaxConcurrency)
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
-
 		case op := <-p.membershipCh:
 			switch op.cmdType {
 			case raft.MemberUpsert, raft.MemberRemove:
@@ -139,52 +127,51 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 				// MemberRemove will be queued by faultHostDetectTimer.
 				// Even if ApplyCommand is failed, both commands will retry
 				// until the state is consistent.
+				func() {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
 
-				logApplyConcurrency <- struct{}{}
-				p.wg.Add(1)
-				go func() {
-					defer p.wg.Done()
-
-					// We lock dissemination to ensure the updates can complete before the table is disseminated.
 					p.disseminateLocks.Lock(op.host.Namespace)
 					defer p.disseminateLocks.Unlock(op.host.Namespace)
 
 					// ApplyCommand returns true only if the command changes the hashing table.
 					updateCount, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
-
 					if raftErr != nil {
 						log.Errorf("fail to apply command: %v", raftErr)
-					} else {
-						numActorTypesInNamespace := p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace)
+						return
+					}
 
-						var lastMemberInNamespace bool
-						if op.cmdType == raft.MemberRemove {
-							lastMemberInNamespace = p.isLastMemberInNamespace(op)
-							p.lastHeartBeat.Delete(op.host.NamespaceAndName())
-							if lastMemberInNamespace {
-								p.handleLastDisconnectedMemberInNamespace(op)
-							}
-						}
+					numActorTypesInNamespace := p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace)
 
-						if updateCount || lastMemberInNamespace {
-							monitoring.RecordActorRuntimesCount(numActorTypesInNamespace, op.host.Namespace)
-						}
-
-						// If the change is removing the last member in the namespace,
-						// we can skip the dissemination, because there are no more
-						// hosts in the namespace to disseminate to
-						if updateCount && !lastMemberInNamespace {
-							c, _ := p.memberUpdateCount.GetOrSet(op.host.Namespace, &atomic.Uint32{})
-							c.Add(1)
-
-							// disseminateNextTime will be updated whenever apply is done, so that
-							// it will keep moving the time to disseminate the table, which will
-							// reduce the unnecessary table dissemination.
-							val, _ := p.disseminateNextTime.GetOrSet(op.host.Namespace, &atomic.Int64{})
-							val.Store(p.clock.Now().Add(p.disseminateTimeout).UnixNano())
+					var lastMemberInNamespace bool
+					if op.cmdType == raft.MemberRemove {
+						lastMemberInNamespace = p.isLastMemberInNamespace(op)
+						p.lastHeartBeat.Delete(op.host.NamespaceAndName())
+						if lastMemberInNamespace {
+							p.handleLastDisconnectedMemberInNamespace(op)
 						}
 					}
-					<-logApplyConcurrency
+
+					if updateCount || lastMemberInNamespace {
+						monitoring.RecordActorRuntimesCount(numActorTypesInNamespace, op.host.Namespace)
+					}
+
+					// If the change is removing the last member in the namespace,
+					// we can skip the dissemination, because there are no more
+					// hosts in the namespace to disseminate to
+					if updateCount && !lastMemberInNamespace {
+						c, _ := p.memberUpdateCount.GetOrSet(op.host.Namespace, &atomic.Uint32{})
+						c.Add(1)
+
+						// disseminateNextTime will be updated whenever apply is done, so that
+						// it will keep moving the time to disseminate the table, which will
+						// reduce the unnecessary table dissemination.
+						val, _ := p.disseminateNextTime.GetOrSet(op.host.Namespace, &atomic.Int64{})
+						val.Store(p.clock.Now().Add(p.disseminateTimeout).UnixNano())
+					}
 				}()
 
 			case raft.TableDisseminate:
@@ -224,6 +211,12 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		return nil
 	}
 
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+
 	p.disseminateLocks.Lock(ns)
 	defer p.disseminateLocks.Unlock(ns)
 
@@ -234,23 +227,10 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		streams = append(streams, *stream)
 	})
 
-	// Check if the cluster has daprd hosts that expect vnodes;
-	// older daprd versions (pre 1.13) do expect them, and newer versions (1.13+) do not.
 	req := &tablesUpdateRequest{
 		hosts: streams,
 	}
-	// Loop through all streams and check what kind of tables to disseminate (with/without vnodes)
-	for _, stream := range streams {
-		if stream.needsVNodes && req.tablesWithVNodes == nil {
-			req.tablesWithVNodes = p.raftNode.FSM().PlacementState(true, ns)
-		}
-		if !stream.needsVNodes && req.tables == nil {
-			req.tables = p.raftNode.FSM().PlacementState(false, ns)
-		}
-		if req.tablesWithVNodes != nil && req.tables != nil {
-			break
-		}
-	}
+	req.tables = p.raftNode.FSM().PlacementState(ns)
 
 	numActorTypesInNamespace := p.raftNode.FSM().State().MemberCountInNamespace(ns)
 	log.Infof(
@@ -275,17 +255,15 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 // It first locks so no further dapr can be taken it. Once placement table is locked
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
-func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequest) error {
-	// TODO: error from disseminationOperation needs to be handled properly.
-	// Otherwise, each Dapr runtime will have inconsistent hashing table.
+func (p *Service) performTablesUpdate(parentCtx context.Context, req *tablesUpdateRequest) error {
 	startedAt := p.clock.Now()
 
 	// Enforce maximum API level
-	if req.tablesWithVNodes != nil || req.tables != nil {
+	if req.tables != nil {
 		req.SetAPILevel(p.minAPILevel, p.maxAPILevel)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(parentCtx, 15*time.Second)
 	defer cancel()
 
 	// Perform each update on all hosts in sequence
@@ -311,14 +289,7 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUp
 
 	for i := range req.hosts {
 		go func(i int) {
-			var tableToSend *v1pb.PlacementTables
-			if req.hosts[i].needsVNodes && req.tablesWithVNodes != nil {
-				tableToSend = req.tablesWithVNodes
-			} else if !req.hosts[i].needsVNodes && req.tables != nil {
-				tableToSend = req.tables
-			}
-
-			errCh <- p.disseminateOperation(ctx, req.hosts[i], operation, tableToSend)
+			errCh <- p.disseminateOperation(ctx, req.hosts[i], operation, req.tables)
 		}(i)
 	}
 
@@ -343,7 +314,7 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 	config := retry.DefaultConfig()
 	config.MaxRetries = 3
 	backoff := config.NewBackOffWithContext(ctx)
-	return retry.NotifyRecover(func() error {
+	err := retry.NotifyRecover(func() error {
 		// Check stream in stream pool, if stream is not available, skip to next.
 		if _, ok := p.streamConnPool.getStream(target.stream); !ok {
 			remoteAddr := "n/a"
@@ -354,13 +325,34 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 			return nil
 		}
 
-		if err := target.stream.Send(o); err != nil {
-			remoteAddr := "n/a"
-			if p, ok := peer.FromContext(target.stream.Context()); ok {
-				remoteAddr = p.Addr.String()
+		sendCtx, sendCancelFn := context.WithTimeout(ctx, 5*time.Second) // Timeout for dissemination to a single host
+		defer sendCancelFn()
+
+		errCh := make(chan error)
+
+		go func() {
+			errCh <- target.stream.Send(o)
+		}()
+
+		select {
+		case <-sendCtx.Done():
+			// This code path is reached when the stream hangs or is slow to respond
+			// This can happen in some environments when the sidecar is not properly shutdown, or
+			// the sidecar is unresponsive, so the stream buffer fills up
+			// In this case, we should not wait for the stream to respond, but instead return an error
+			// and cancel the stream context
+
+			log.Errorf("timeout sending to target %s", target.hostID)
+			return fmt.Errorf("timeout sending to target %s", target.hostID)
+		case err := <-errCh:
+			if err != nil {
+				remoteAddr := "n/a"
+				if p, ok := peer.FromContext(target.stream.Context()); ok {
+					remoteAddr = p.Addr.String()
+				}
+				log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
+				return err
 			}
-			log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
-			return err
 		}
 		return nil
 	},
@@ -368,4 +360,11 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
 		func() { log.Debug("Dissemination successful after failure") },
 	)
+	if err != nil {
+		if target.cancelFn != nil {
+			target.cancelFn()
+		}
+	}
+
+	return err
 }

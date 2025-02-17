@@ -17,14 +17,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
+	"math/rand"
+	"strings"
 	"sync"
-	"sync/atomic"
+	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/cluster"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/dapr/pkg/scheduler/client"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
@@ -36,183 +45,232 @@ type Options struct {
 	AppID     string
 	Actors    actors.Interface
 	Channels  *channels.Channels
-	Clients   *clients.Clients
+	WFEngine  wfengine.Interface
+	Addresses []string
+	Security  security.Handler
+	Healthz   healthz.Healthz
 }
 
-// Manager manages connections to multiple schedulers.
-type Manager struct {
-	clients   *clients.Clients
-	actors    actors.Interface
-	namespace string
-	appID     string
-	channels  *channels.Channels
+// Scheduler manages the connection to the cluster of schedulers.
+type Scheduler struct {
+	addresses []string
+	security  security.Handler
+	htarget   healthz.Target
 
-	lock sync.Mutex
+	cluster *cluster.Cluster
+	clients *clients.Clients
 
-	appCh      chan struct{}
-	appRunning bool
-
-	running atomic.Bool
-	wg      sync.WaitGroup
+	lock     sync.RWMutex
+	readyCh  chan struct{}
+	disabled chan struct{}
 }
 
-func New(opts Options) *Manager {
-	return &Manager{
-		namespace: opts.Namespace,
-		appID:     opts.AppID,
-		actors:    opts.Actors,
-		channels:  opts.Channels,
-		clients:   opts.Clients,
-		appCh:     make(chan struct{}),
+func New(opts Options) *Scheduler {
+	return &Scheduler{
+		addresses: opts.Addresses,
+		security:  opts.Security,
+		cluster: cluster.New(cluster.Options{
+			Namespace: opts.Namespace,
+			AppID:     opts.AppID,
+			Actors:    opts.Actors,
+			Channels:  opts.Channels,
+			WFEngine:  opts.WFEngine,
+		}),
+		htarget:  opts.Healthz.AddTarget(),
+		readyCh:  make(chan struct{}),
+		disabled: make(chan struct{}),
 	}
 }
 
-// Run starts watching for job triggers from all scheduler clients.
-func (m *Manager) Run(ctx context.Context) error {
-	if !m.running.CompareAndSwap(false, true) {
-		return errors.New("scheduler manager is already running")
-	}
-	defer m.wg.Wait()
-
-	var typeUpdateCh <-chan []string = make(chan []string)
-	var actorTypes []string
-	if table, err := m.actors.Table(ctx); err == nil {
-		typeUpdateCh, actorTypes = table.SubscribeToTypeUpdates(ctx)
+func (s *Scheduler) Run(ctx context.Context) error {
+	if len(s.addresses) == 0 ||
+		(len(s.addresses) == 1 && strings.TrimSpace(s.addresses[0]) == "") {
+		s.htarget.Ready()
+		log.Warn("Scheduler disabled, not connecting...")
+		close(s.disabled)
+		<-ctx.Done()
+		return nil
 	}
 
+	var (
+		stream    schedulerv1pb.Scheduler_WatchHostsClient
+		addresses []string
+		err       error
+	)
 	for {
-		m.lock.Lock()
-		appRunning := m.appRunning
-		appCh := m.appCh
-		m.lock.Unlock()
-
-		if !appRunning && len(actorTypes) == 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-appCh:
-			case actorTypes = <-typeUpdateCh:
+		if stream == nil {
+			stream, addresses, err = s.connSchedulerHosts(ctx)
+			if err != nil {
+				log.Errorf("Failed to connect to scheduler host: %s", err)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(time.Second):
+				}
+				continue
 			}
 		}
 
-		m.lock.Lock()
-		appCh = m.appCh
-		appRunning = m.appRunning
-		m.lock.Unlock()
-
-		if !appRunning && len(actorTypes) == 0 {
-			continue
-		}
-
-		lctx, cancel := context.WithCancel(ctx)
-
-		m.wg.Add(1)
-		go func() {
-			select {
-			case <-lctx.Done():
-			case actorTypes = <-typeUpdateCh:
-			case <-appCh:
-			}
-			cancel()
-			m.wg.Done()
-		}()
-
-		err := m.loop(lctx, appRunning, actorTypes)
-		cancel()
-		if cerr := ctx.Err(); cerr != nil {
-			return cerr
-		}
-
-		if err != nil {
-			log.Warnf("Error watching scheduler jobs: %v", err)
-		}
-	}
-}
-
-func (m *Manager) loop(ctx context.Context, appTarget bool, actorTypes []string) error {
-	err := m.watchJobs(ctx, appTarget, actorTypes)
-	if err == nil {
-		return nil
-	}
-
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-
-	if err == io.EOF {
-		log.Warnf("Received EOF, re-establishing connection: %v", err)
-		return nil
-	}
-
-	if errors.Is(err, context.Canceled) {
-		return nil
-	}
-
-	return fmt.Errorf("error watching scheduler jobs: %w", err)
-}
-
-// watchJobs watches for job triggers from all scheduler clients.
-func (m *Manager) watchJobs(ctx context.Context, appTarget bool, actorTypes []string) error {
-	req := &schedulerv1pb.WatchJobsRequest{
-		WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Initial{
-			Initial: &schedulerv1pb.WatchJobsRequestInitial{
-				AppId:     m.appID,
-				Namespace: m.namespace,
+		err = concurrency.NewRunnerManager(
+			func(ctx context.Context) error {
+				return s.connectClients(ctx, addresses)
 			},
-		},
+			func(ctx context.Context) error {
+				if stream == nil {
+					<-ctx.Done()
+					return nil
+				}
+
+				var resp *schedulerv1pb.WatchHostsResponse
+				resp, err = stream.Recv()
+				if err != nil {
+					log.Errorf("Failed to receive scheduler hosts: %s", err)
+					stream.CloseSend()
+					stream = nil
+					//nolint:nilerr
+					return nil
+				}
+				addresses = make([]string, 0, len(resp.GetHosts()))
+				for _, host := range resp.GetHosts() {
+					addresses = append(addresses, host.GetAddress())
+				}
+
+				log.Infof("Received updated scheduler hosts addresses: %v", addresses)
+
+				return nil
+			},
+		).Run(ctx)
+
+		if err != nil || ctx.Err() != nil {
+			return err
+		}
+
+		log.Infof("Attempting to reconnect to schedulers")
 	}
+}
 
-	var acceptJobTypes []schedulerv1pb.JobTargetType
-	if appTarget {
-		acceptJobTypes = append(acceptJobTypes, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_JOB)
-	}
+func (s *Scheduler) connectClients(ctx context.Context, addresses []string) error {
+	s.lock.Lock()
 
-	if len(actorTypes) > 0 {
-		acceptJobTypes = append(acceptJobTypes, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER)
-		req.GetInitial().ActorTypes = actorTypes
-	}
-
-	req.GetInitial().AcceptJobTypes = acceptJobTypes
-
-	clients, err := m.clients.All(ctx)
+	var err error
+	s.clients, err = clients.New(ctx, clients.Options{
+		Addresses: addresses,
+		Security:  s.security,
+	})
 	if err != nil {
 		return err
 	}
 
-	if len(clients) == 0 {
-		log.Debug("No scheduler clients available, not watching jobs")
-		<-ctx.Done()
-		return ctx.Err()
-	}
+	close(s.readyCh)
+	s.htarget.Ready()
+	s.lock.Unlock()
 
-	runners := make([]concurrency.Runner, len(clients))
+	err = s.cluster.RunClients(ctx, s.clients)
 
-	// Accept engine to be nil, and ignore the disabled error.
-	engine, _ := m.actors.Engine(ctx)
-	for i := range clients {
-		runners[i] = (&connector{
-			req:      req,
-			client:   clients[i],
-			channels: m.channels,
-			actors:   engine,
-		}).run
-	}
+	s.lock.Lock()
+	s.readyCh = make(chan struct{})
+	s.htarget.NotReady()
+	s.lock.Unlock()
 
-	return concurrency.NewRunnerManager(runners...).Run(ctx)
+	return err
 }
 
-func (m *Manager) StartApp() {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	m.appRunning = true
-	close(m.appCh)
-	m.appCh = make(chan struct{}, 1)
+func (s *Scheduler) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, error) {
+	var client schedulerv1pb.SchedulerClient
+	if err := s.callWhenReady(ctx, func(ctx context.Context) error {
+		var err error
+		client, err = s.clients.Next()
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
-func (m *Manager) StopApp() {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	m.appRunning = false
-	close(m.appCh)
-	m.appCh = make(chan struct{}, 1)
+func (s *Scheduler) All(ctx context.Context) ([]schedulerv1pb.SchedulerClient, error) {
+	var clients []schedulerv1pb.SchedulerClient
+	if err := s.callWhenReady(ctx, func(ctx context.Context) error {
+		clients = s.clients.All()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return clients, nil
+}
+
+func (s *Scheduler) StartApp(ctx context.Context) {
+	s.cluster.StartApp()
+}
+
+func (s *Scheduler) StopApp(ctx context.Context) {
+	s.cluster.StopApp()
+}
+
+func (s *Scheduler) callWhenReady(ctx context.Context, fn concurrency.Runner) error {
+	for {
+		s.lock.RLock()
+		readyCh := s.readyCh
+		s.lock.RUnlock()
+
+		select {
+		case <-s.disabled:
+			return errors.New("scheduler not enabled")
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-readyCh:
+		}
+
+		// Ensure still ready as there is a race from above.
+		s.lock.RLock()
+		select {
+		case <-s.readyCh:
+			defer s.lock.RUnlock()
+			return fn(ctx)
+		default:
+			s.lock.RUnlock()
+		}
+	}
+}
+
+func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Scheduler_WatchHostsClient, []string, error) {
+	//nolint:gosec
+	i := rand.Intn(len(s.addresses))
+	log.Infof("Attempting to connect to scheduler: %s", s.addresses[i])
+
+	// This is connecting to a DNS A rec which will return health scheduler
+	// hosts.
+	cl, err := client.New(ctx, s.addresses[i], s.security)
+	if err != nil {
+		return nil, nil, fmt.Errorf("scheduler client not initialized for address %s: %s", s.addresses[i], err)
+	}
+
+	stream, err := cl.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			// Ignore unimplemented error code as we are talking to an old server.
+			// TODO: @joshvanl: remove special case in v1.16.
+			return nil, s.addresses, nil
+		}
+
+		return nil, nil, fmt.Errorf("failed to watch scheduler hosts: %s", err)
+	}
+
+	resp, err := stream.Recv()
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			// Ignore unimplemented error code as we are talking to an old server.
+			// TODO: @joshvanl: remove special case in v1.16.
+			return nil, s.addresses, nil
+		}
+		return nil, nil, err
+	}
+
+	addresses := make([]string, 0, len(resp.GetHosts()))
+	for _, host := range resp.GetHosts() {
+		addresses = append(addresses, host.GetAddress())
+	}
+
+	log.Infof("Received scheduler hosts addresses: %v", addresses)
+
+	return stream, addresses, nil
 }

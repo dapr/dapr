@@ -14,6 +14,7 @@ limitations under the License.
 package raft
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -56,6 +57,7 @@ func TestRaftAddressForID(t *testing.T) {
 		in  []PeerInfo
 		id  string
 		out string
+		err error
 	}{
 		{
 			[]PeerInfo{
@@ -64,18 +66,28 @@ func TestRaftAddressForID(t *testing.T) {
 			},
 			"node0",
 			"127.0.0.1:3030",
+			nil,
 		}, {
 			[]PeerInfo{
 				{ID: "node0", Address: "127.0.0.1:3030"},
+				{ID: "node1", Address: "127.0.0.1:3031"},
 			},
-			"node1",
+			"node2",
 			"",
+			errors.New("address for node node2 not found in raft peers [{node0 127.0.0.1:3030} {node1 127.0.0.1:3031}]"),
 		},
 	}
 
 	for _, tt := range raftAddressTests {
 		t.Run(fmt.Sprintf("find %s from %v", tt.id, tt.in), func(t *testing.T) {
-			assert.Equal(t, tt.out, raftAddressForID(tt.id, tt.in))
+			address, err := raftAddressForID(tt.id, tt.in)
+			if tt.err != nil {
+				require.Error(t, err)
+				require.Equal(t, tt.err.Error(), err.Error())
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.out, address)
+			}
 		})
 	}
 }

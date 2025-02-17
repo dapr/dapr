@@ -113,7 +113,8 @@ func findActorAction(resp []byte, actorID string, action string) *actorLogEntry 
 func findNthActorAction(resp []byte, actorID string, action string, position int) *actorLogEntry {
 	skips := position - 1
 	logEntries := parseLogEntries(resp)
-	for _, logEntry := range logEntries {
+	for i := len(logEntries) - 1; i >= 0; i-- {
+		logEntry := logEntries[i]
 		if (logEntry.ActorID == actorID) && (logEntry.Action == action) {
 			if skips == 0 {
 				return &logEntry
@@ -518,6 +519,13 @@ func TestActorFeatures(t *testing.T) {
 		err := tr.Platform.Restart(appName)
 		require.NoError(t, err)
 
+		// Re-establish port forwarding after app restart, likely connection would be lost to pod.
+		// replace externalUrl and Logs URL since the new port will be assigned
+		externalURL = tr.Platform.AcquireAppExternalURL(appName)
+		require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+		logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
+
 		err = backoff.Retry(func() error {
 			time.Sleep(30 * time.Second)
 			resp, errb := httpGet(logsURL)
@@ -779,6 +787,13 @@ func TestActorFeatures(t *testing.T) {
 		require.NoError(t, err, "error getting first hostname")
 
 		tr.Platform.Restart(appName)
+
+		// Re-establish port forwarding after app restart, likely connection would be lost to pod.
+		// replace externalUrl and Logs URL since the new port will be assigned
+		externalURL = tr.Platform.AcquireAppExternalURL(appName)
+		require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+		logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
 
 		newHostname := []byte{}
 		for i := 0; i <= actorInvokeRetriesAfterRestart; i++ {

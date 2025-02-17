@@ -14,30 +14,33 @@ limitations under the License.
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	timeutils "github.com/dapr/kit/time"
 )
 
 // Reminder represents a reminder or timer for a unique actor.
 type Reminder struct {
-	ActorID        string          `json:"actorID,omitempty"`
-	ActorType      string          `json:"actorType,omitempty"`
-	Name           string          `json:"name,omitempty"`
-	Data           json.RawMessage `json:"data,omitempty"`
-	Period         ReminderPeriod  `json:"period,omitempty"`
-	RegisteredTime time.Time       `json:"registeredTime,omitempty"`
-	DueTime        string          `json:"dueTime,omitempty"` // Exact input value from user
-	ExpirationTime time.Time       `json:"expirationTime,omitempty"`
-	Callback       string          `json:"callback,omitempty"` // Used by timers only
-	IsTimer        bool            `json:"-"`
-	IsRemote       bool            `json:"-"`
+	ActorID        string         `json:"actorID,omitempty"`
+	ActorType      string         `json:"actorType,omitempty"`
+	Name           string         `json:"name,omitempty"`
+	Data           *anypb.Any     `json:"data,omitempty"`
+	Period         ReminderPeriod `json:"period,omitempty"`
+	RegisteredTime time.Time      `json:"registeredTime,omitempty"`
+	DueTime        string         `json:"dueTime,omitempty"` // Exact input value from user
+	ExpirationTime time.Time      `json:"expirationTime,omitempty"`
+	Callback       string         `json:"callback,omitempty"` // Used by timers only
+	IsTimer        bool           `json:"-"`
+	IsRemote       bool           `json:"-"`
+	SkipLock       bool           `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.
@@ -108,10 +111,10 @@ func (r *Reminder) MarshalJSON() ([]byte, error) {
 	// Also adds a custom serializer for Period to omit empty strings.
 	// This is for backwards-compatibility and also because we don't need to store precision with less than seconds
 	m := struct {
-		RegisteredTime string           `json:"registeredTime,omitempty"`
-		ExpirationTime string           `json:"expirationTime,omitempty"`
-		Period         string           `json:"period,omitempty"`
-		Data           *json.RawMessage `json:"data,omitempty"`
+		RegisteredTime string          `json:"registeredTime,omitempty"`
+		ExpirationTime string          `json:"expirationTime,omitempty"`
+		Period         string          `json:"period,omitempty"`
+		Data           json.RawMessage `json:"data,omitempty"`
 		*reminderAlias
 	}{
 		reminderAlias: (*reminderAlias)(r),
@@ -125,8 +128,21 @@ func (r *Reminder) MarshalJSON() ([]byte, error) {
 	}
 
 	m.Period = r.Period.String()
-	if len(r.Data) > 0 && !bytes.Equal(r.Data, []byte("null")) {
-		m.Data = &r.Data
+	if r.Data != nil {
+		msg, err := r.Data.UnmarshalNew()
+		if err != nil {
+			return nil, err
+		}
+		switch mm := msg.(type) {
+		case *wrapperspb.BytesValue:
+			m.Data = mm.GetValue()
+		default:
+			d, err := protojson.Marshal(mm)
+			if err != nil {
+				return nil, err
+			}
+			m.Data = json.RawMessage(d)
+		}
 	}
 
 	return json.Marshal(m)
@@ -141,8 +157,9 @@ func (r *Reminder) UnmarshalJSON(data []byte) error {
 
 	// Parse RegisteredTime and ExpirationTime as dates in the RFC3339 format
 	m := &struct {
-		ExpirationTime string `json:"expirationTime"`
-		RegisteredTime string `json:"registeredTime"`
+		ExpirationTime string          `json:"expirationTime"`
+		RegisteredTime string          `json:"registeredTime"`
+		Data           json.RawMessage `json:"data"`
 		*reminderAlias
 	}{
 		reminderAlias: (*reminderAlias)(r),
@@ -150,6 +167,13 @@ func (r *Reminder) UnmarshalJSON(data []byte) error {
 	err := json.Unmarshal(data, &m)
 	if err != nil {
 		return err
+	}
+
+	if len(m.Data) > 0 {
+		r.Data, err = anypb.New(wrapperspb.Bytes(m.Data))
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal data: %w", err)
+		}
 	}
 
 	if m.RegisteredTime != "" {

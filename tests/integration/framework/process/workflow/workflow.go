@@ -48,7 +48,8 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	}
 
 	opts := options{
-		registry: task.NewTaskRegistry(),
+		registry:        task.NewTaskRegistry(),
+		enableScheduler: true,
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
@@ -122,6 +123,10 @@ func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	w.daprd.WaitUntilRunning(t, ctx)
 }
 
+func (w *Workflow) Registry() *task.TaskRegistry {
+	return w.registry
+}
+
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
 	t.Helper()
 	backendClient := client.NewTaskHubGrpcClient(w.daprd.GRPCConn(t, ctx), logger.New(t))
@@ -134,7 +139,15 @@ func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient
 	return w.daprd.GRPCClient(t, ctx)
 }
 
+func (w *Workflow) Dapr() *daprd.Daprd {
+	return w.daprd
+}
+
 func (w *Workflow) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
 	return w.daprd.Metrics(t, ctx).All()
+}
+
+func (w *Workflow) DB() *sqlite.SQLite {
+	return w.db
 }

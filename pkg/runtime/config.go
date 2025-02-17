@@ -226,7 +226,10 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		log.Info("loading default configuration")
 		globalConfig = config.LoadDefaultConfiguration()
 	}
-	config.SetTracingSpecFromEnv(globalConfig)
+	err = config.SetTracingSpecFromEnv(globalConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error setting tracing spec from env: %s", err)
+	}
 
 	globalConfig.SetDefaultFeatures()
 

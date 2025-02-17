@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ type basic struct {
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.daprd = procdaprd.New(t, procdaprd.WithInMemoryActorStateStore("mystore"))
+	b.daprd = procdaprd.New(t, procdaprd.WithInMemoryActorStateStore("mystore"), procdaprd.WithErrorCodeMetrics(t))
 
 	return []framework.Option{
 		framework.WithProcesses(b.daprd),
@@ -54,7 +55,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	httpClient := client.HTTP(t)
 
 	t.Run("bad json", func(t *testing.T) {
-		for _, body := range []string{
+		for i, body := range []string{
 			"",
 			"{}",
 			`foobar`,
@@ -74,6 +75,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
 			assert.Contains(t, string(body), "ERR_MALFORMED_REQUEST")
+			assert.Eventually(t, func() bool {
+				return b.daprd.Metrics(t, ctx).MatchMetricAndSum(float64(i+1), "dapr_error_code_total", "error_code:ERR_MALFORMED_REQUEST")
+			}, 5*time.Second, 100*time.Millisecond)
 		}
 	})
 

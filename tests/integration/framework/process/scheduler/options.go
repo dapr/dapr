@@ -23,12 +23,11 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
-	id                  string
-	replicaCount        uint32
-	initialCluster      string
-	initialClusterPorts []int
-	etcdClientPorts     []string
-	namespace           string
+	id                       string
+	etcdInitialCluster       *string
+	etcdClientPort           int
+	namespace                string
+	etcdBackendBatchInterval string
 
 	logLevel      string
 	port          int
@@ -39,6 +38,8 @@ type options struct {
 	dataDir       *string
 	kubeconfig    *string
 	mode          *string
+
+	overrideBroadcastHostPort *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -59,28 +60,16 @@ func WithID(id string) Option {
 	}
 }
 
-func WithReplicaCount(count uint32) Option {
-	return func(o *options) {
-		o.replicaCount = count
-	}
-}
-
 // WithInitialCluster adds the initial etcd cluster peers. This should include http:// in the url.
 func WithInitialCluster(initialCluster string) Option {
 	return func(o *options) {
-		o.initialCluster = initialCluster
+		o.etcdInitialCluster = &initialCluster
 	}
 }
 
-func WithInitialClusterPorts(ports ...int) Option {
+func WithEtcdClientPort(port int) Option {
 	return func(o *options) {
-		o.initialClusterPorts = ports
-	}
-}
-
-func WithEtcdClientPorts(ports []string) Option {
-	return func(o *options) {
-		o.etcdClientPorts = ports
+		o.etcdClientPort = port
 	}
 }
 
@@ -135,5 +124,11 @@ func WithKubeconfig(kubeconfig string) Option {
 func WithMode(mode string) Option {
 	return func(o *options) {
 		o.mode = &mode
+	}
+}
+
+func WithOverrideBroadcastHostPort(address string) Option {
+	return func(o *options) {
+		o.overrideBroadcastHostPort = &address
 	}
 }

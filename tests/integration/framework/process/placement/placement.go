@@ -16,14 +16,14 @@ package placement
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
-
-	"google.golang.org/grpc/metadata"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -138,8 +138,8 @@ func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := client.Do(req)
-		if assert.NoError(c, err) {
+		resp, respErr := client.Do(req)
+		if assert.NoError(c, respErr) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
@@ -193,7 +193,8 @@ func (p *Placement) CurrentActorsAPILevel() int {
 	return 20 // Defined in pkg/actors/internal/api_level.go
 }
 
-func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host, contextMetadata map[string]string) chan *placementv1pb.PlacementTables {
+// RegisterHost Registers a host with the placement service
+func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(parentCtx, p.Address(),
 		grpc.WithBlock(),
@@ -201,10 +202,6 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 	)
 	require.NoError(t, err)
 	client := placementv1pb.NewPlacementClient(conn)
-
-	for k, v := range contextMetadata {
-		parentCtx = metadata.AppendToOutgoingContext(parentCtx, k, v)
-	}
 
 	var stream placementv1pb.Placement_ReportDaprStatusClient
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -233,7 +230,9 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 		cancel()
 		select {
 		case err := <-doneCh:
-			require.NoError(t, err)
+			if !errors.Is(err, io.EOF) {
+				require.NoError(t, err)
+			}
 		case <-time.After(time.Second * 5):
 			assert.Fail(t, "timeout waiting for stream to close")
 		}
@@ -277,12 +276,6 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 	}()
 
 	return placementUpdateCh
-}
-
-// RegisterHost Registers a host with the placement service using default context metadata
-func (p *Placement) RegisterHost(t *testing.T, ctx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
-	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-accept-vnodes", "false")
-	return p.RegisterHostWithMetadata(t, ctx, msg, nil)
 }
 
 // AssertRegisterHostFails Expect the registration to fail with FailedPrecondition.

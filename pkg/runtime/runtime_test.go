@@ -617,6 +617,7 @@ func TestSetupTracing(t *testing.T) {
 				EndpointAddress: "foo.bar",
 				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
+				Headers:         "header1=value1,header2=value2",
 			},
 		},
 		expectedExporters: []sdktrace.SpanExporter{&otlptrace.Exporter{}},
@@ -630,6 +631,17 @@ func TestSetupTracing(t *testing.T) {
 			},
 		},
 		expectedErr: "invalid protocol tcp provided for Otel endpoint",
+	}, {
+		name: "invalid otel trace exporter headers",
+		tracingConfig: config.TracingSpec{
+			Otel: &config.OtelSpec{
+				EndpointAddress: "foo.bar",
+				IsSecure:        ptr.Of(false),
+				Protocol:        "http",
+				Headers:         "invalidheaders",
+			},
+		},
+		expectedErr: "invalid headers provided for Otel endpoint",
 	}, {
 		name: "stdout trace exporter",
 		tracingConfig: config.TracingSpec{

@@ -23,7 +23,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -63,12 +62,12 @@ type Scheduler struct {
 	healthzPort int
 	metricsPort int
 
-	namespace       string
-	dataDir         string
-	id              string
-	initialCluster  string
-	etcdClientPorts map[string]string
-	sentry          *sentry.Sentry
+	namespace          string
+	dataDir            string
+	id                 string
+	etcdInitialCluster string
+	etcdClientPort     int
+	sentry             *sentry.Sentry
 
 	runOnce     sync.Once
 	cleanupOnce sync.Once
@@ -85,16 +84,15 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	fp := ports.Reserve(t, 5)
 
 	opts := options{
-		logLevel:        "info",
-		listenAddress:   "localhost",
-		id:              uids,
-		replicaCount:    1,
-		port:            fp.Port(t),
-		healthzPort:     fp.Port(t),
-		metricsPort:     fp.Port(t),
-		initialCluster:  uids + "=http://127.0.0.1:" + strconv.Itoa(fp.Port(t)),
-		etcdClientPorts: []string{uids + "=" + strconv.Itoa(fp.Port(t))},
-		namespace:       "default",
+		logLevel:                 "info",
+		listenAddress:            "127.0.0.1",
+		id:                       uids,
+		port:                     fp.Port(t),
+		healthzPort:              fp.Port(t),
+		metricsPort:              fp.Port(t),
+		etcdClientPort:           fp.Port(t),
+		namespace:                "default",
+		etcdBackendBatchInterval: "50ms",
 	}
 
 	for _, fopt := range fopts {
@@ -112,14 +110,14 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
-		"--replica-count=" + strconv.FormatUint(uint64(opts.replicaCount), 10),
 		"--port=" + strconv.Itoa(opts.port),
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
-		"--initial-cluster=" + opts.initialCluster,
 		"--etcd-data-dir=" + dataDir,
-		"--etcd-client-ports=" + strings.Join(opts.etcdClientPorts, ","),
+		"--etcd-client-port=" + strconv.Itoa(opts.etcdClientPort),
 		"--listen-address=" + opts.listenAddress,
+		"--identity-directory-write=" + filepath.Join(t.TempDir(), "tls"),
+		"--etcd-backend-batch-interval=" + opts.etcdBackendBatchInterval,
 	}
 
 	if opts.sentry != nil {
@@ -133,21 +131,24 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		)
 	}
 
+	if opts.etcdInitialCluster == nil {
+		if opts.sentry == nil {
+			opts.etcdInitialCluster = ptr.Of(opts.id + "=http://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
+		} else {
+			opts.etcdInitialCluster = ptr.Of(opts.id + "=https://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
+		}
+	}
+
+	args = append(args, "--etcd-initial-cluster="+*opts.etcdInitialCluster)
+
 	if opts.kubeconfig != nil {
 		args = append(args, "--kubeconfig="+*opts.kubeconfig)
 	}
 	if opts.mode != nil {
 		args = append(args, "--mode="+*opts.mode)
 	}
-
-	clientPorts := make(map[string]string)
-	for _, input := range opts.etcdClientPorts {
-		idAndPort := strings.Split(input, "=")
-		require.Len(t, idAndPort, 2)
-
-		schedulerID := strings.TrimSpace(idAndPort[0])
-		port := strings.TrimSpace(idAndPort[1])
-		clientPorts[schedulerID] = port
+	if opts.overrideBroadcastHostPort != nil {
+		args = append(args, "--override-broadcast-host-port="+*opts.overrideBroadcastHostPort)
 	}
 
 	return &Scheduler{
@@ -156,17 +157,17 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 				"NAMESPACE", opts.namespace,
 			))...,
 		),
-		ports:           fp,
-		httpClient:      client.HTTP(t),
-		id:              opts.id,
-		port:            opts.port,
-		healthzPort:     opts.healthzPort,
-		metricsPort:     opts.metricsPort,
-		initialCluster:  opts.initialCluster,
-		etcdClientPorts: clientPorts,
-		dataDir:         dataDir,
-		sentry:          opts.sentry,
-		namespace:       opts.namespace,
+		ports:              fp,
+		httpClient:         client.HTTP(t),
+		id:                 opts.id,
+		port:               opts.port,
+		healthzPort:        opts.healthzPort,
+		metricsPort:        opts.metricsPort,
+		etcdInitialCluster: *opts.etcdInitialCluster,
+		etcdClientPort:     opts.etcdClientPort,
+		dataDir:            dataDir,
+		sentry:             opts.sentry,
+		namespace:          opts.namespace,
 	}
 }
 
@@ -197,7 +198,16 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		assert.NoError(t, err)
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
 		assert.NoError(t, resp.Body.Close())
-	}, time.Second*10, 10*time.Millisecond)
+	}, time.Second*20, 10*time.Millisecond)
+}
+
+func (s *Scheduler) WaitUntilLeadership(t *testing.T, ctx context.Context, leaders int) {
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		resp, err := s.ETCDClient(t, ctx).Get(ctx, "dapr/leadership", clientv3.WithPrefix())
+		if assert.NoError(col, err) {
+			assert.Len(col, resp.Kvs, leaders)
+		}
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (s *Scheduler) ID() string {
@@ -221,11 +231,11 @@ func (s *Scheduler) MetricsPort() int {
 }
 
 func (s *Scheduler) InitialCluster() string {
-	return s.initialCluster
+	return s.etcdInitialCluster
 }
 
-func (s *Scheduler) EtcdClientPort() string {
-	return s.etcdClientPorts[s.id]
+func (s *Scheduler) EtcdClientPort() int {
+	return s.etcdClientPort
 }
 
 func (s *Scheduler) DataDir() string {
@@ -233,6 +243,8 @@ func (s *Scheduler) DataDir() string {
 }
 
 func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
+	t.Helper()
+
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, s.Address(),
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(math.MaxInt32), grpc.MaxCallRecvMsgSize(math.MaxInt32)),
@@ -249,6 +261,31 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 	t.Helper()
 
 	require.NotNil(t, s.sentry)
+
+	sech := s.security(t, ctx, appID)
+
+	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
+	require.NoError(t, err)
+
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, s.Address(),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32), grpc.MaxCallSendMsgSize(math.MaxInt32)),
+		sech.GRPCDialOptionMTLS(id),
+		grpc.WithBlock(),
+		grpc.WithReturnConnectionError(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return schedulerv1pb.NewSchedulerClient(conn)
+}
+
+func (s *Scheduler) ipPort(port int) string {
+	return "127.0.0.1:" + strconv.Itoa(port)
+}
+
+func (s *Scheduler) security(t *testing.T, ctx context.Context, appID string) security.Handler {
+	t.Helper()
 
 	sec, err := security.New(ctx, security.Options{
 		SentryAddress:           "localhost:" + strconv.Itoa(s.sentry.Port()),
@@ -275,23 +312,7 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 	sech, err := sec.Handler(ctx)
 	require.NoError(t, err)
 
-	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
-	require.NoError(t, err)
-
-	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, s.Address(),
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32), grpc.MaxCallSendMsgSize(math.MaxInt32)),
-		sech.GRPCDialOptionMTLS(id),
-		grpc.WithBlock(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-
-	return schedulerv1pb.NewSchedulerClient(conn)
-}
-
-func (s *Scheduler) ipPort(port int) string {
-	return "127.0.0.1:" + strconv.Itoa(port)
+	return sech
 }
 
 func (s *Scheduler) MetricsAddress() string {
@@ -305,11 +326,11 @@ func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics 
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 
-func (s *Scheduler) ETCDClient(t *testing.T) *clientv3.Client {
+func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Client {
 	t.Helper()
 
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
+		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
 		DialTimeout: 40 * time.Second,
 	})
 	require.NoError(t, err)
@@ -323,7 +344,7 @@ func (s *Scheduler) ETCDClient(t *testing.T) *clientv3.Client {
 
 func (s *Scheduler) EtcdJobs(t *testing.T, ctx context.Context) []*mvccpb.KeyValue {
 	t.Helper()
-	resp, err := s.ETCDClient(t).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	resp, err := s.ETCDClient(t, ctx).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	return resp.Kvs
 }
@@ -470,7 +491,7 @@ func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string
 	t.Helper()
 
 	resp, err := client.Etcd(t, clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
+		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
 		DialTimeout: 40 * time.Second,
 	}).ListAllKeys(ctx, prefix)
 	require.NoError(t, err)

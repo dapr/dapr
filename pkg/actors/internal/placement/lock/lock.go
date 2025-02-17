@@ -14,43 +14,171 @@ limitations under the License.
 package lock
 
 import (
+	"context"
+	"errors"
 	"sync"
+	"time"
 
 	"github.com/dapr/kit/concurrency/fifo"
 )
 
+var errLockClosed = errors.New("placement lock closed")
+
+type hold struct {
+	writeLock bool
+	rctx      context.Context
+	respCh    chan *holdresp
+}
+
+type holdresp struct {
+	rctx   context.Context
+	cancel context.CancelFunc
+}
+
 type Lock struct {
-	tableLock   *fifo.Mutex
-	inTableLock bool
-	lookupLock  sync.RWMutex
+	ch chan *hold
+
+	lock chan struct{}
+
+	wg          sync.WaitGroup
+	rcancelLock sync.Mutex
+	rcancelx    uint64
+	rcancels    map[uint64]context.CancelFunc
+
+	closeCh      chan struct{}
+	shutdownLock *fifo.Mutex
 }
 
 func New() *Lock {
 	return &Lock{
-		tableLock: fifo.New(),
+		lock:         make(chan struct{}, 1),
+		ch:           make(chan *hold, 1),
+		rcancels:     make(map[uint64]context.CancelFunc),
+		closeCh:      make(chan struct{}),
+		shutdownLock: fifo.New(),
 	}
 }
 
-func (l *Lock) LockTable() {
-	l.tableLock.Lock()
-	defer l.tableLock.Unlock()
-	l.lookupLock.Lock()
-	l.inTableLock = true
-}
+func (l *Lock) Run(ctx context.Context) {
+	defer func() {
+		l.rcancelLock.Lock()
+		defer l.rcancelLock.Unlock()
 
-func (l *Lock) EnsureUnlockTable() {
-	l.tableLock.Lock()
-	defer l.tableLock.Unlock()
-	if l.inTableLock {
-		l.inTableLock = false
-		l.lookupLock.Unlock()
+		for _, cancel := range l.rcancels {
+			go cancel()
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		close(l.closeCh)
+	}()
+
+	for {
+		select {
+		case <-l.closeCh:
+			return
+		case h := <-l.ch:
+			l.handleHold(h)
+		}
 	}
 }
 
-func (l *Lock) LockLookup() {
-	l.lookupLock.RLock()
+func (l *Lock) handleHold(h *hold) {
+	l.lock <- struct{}{}
+	l.rcancelLock.Lock()
+
+	if h.writeLock {
+		for _, cancel := range l.rcancels {
+			go cancel()
+		}
+		l.rcancelx = 0
+		l.rcancelLock.Unlock()
+		l.wg.Wait()
+
+		h.respCh <- &holdresp{cancel: func() { <-l.lock }}
+
+		return
+	}
+
+	l.wg.Add(1)
+	var done bool
+	doneCh := make(chan bool)
+	rctx, cancel := context.WithCancelCause(h.rctx)
+	i := l.rcancelx
+
+	rcancel := func() {
+		l.rcancelLock.Lock()
+		if !done {
+			close(doneCh)
+			cancel(errors.New("placement is disseminating"))
+			delete(l.rcancels, i)
+			l.wg.Done()
+			done = true
+		}
+		l.rcancelLock.Unlock()
+	}
+
+	rcancelGrace := func() {
+		select {
+		case <-time.After(2 * time.Second):
+		case <-l.closeCh:
+		case <-doneCh:
+		}
+		rcancel()
+	}
+
+	l.rcancels[i] = rcancelGrace
+	l.rcancelx++
+
+	l.rcancelLock.Unlock()
+
+	h.respCh <- &holdresp{rctx: rctx, cancel: rcancel}
+
+	<-l.lock
 }
 
-func (l *Lock) UnlockLookup() {
-	l.lookupLock.RUnlock()
+func (l *Lock) Lock() context.CancelFunc {
+	h := hold{
+		writeLock: true,
+		respCh:    make(chan *holdresp, 1),
+	}
+
+	select {
+	case <-l.closeCh:
+		l.shutdownLock.Lock()
+		return l.shutdownLock.Unlock
+	case l.ch <- &h:
+	}
+
+	select {
+	case <-l.closeCh:
+		l.shutdownLock.Lock()
+		return l.shutdownLock.Unlock
+	case resp := <-h.respCh:
+		return resp.cancel
+	}
+}
+
+func (l *Lock) RLock(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	h := hold{
+		writeLock: false,
+		rctx:      ctx,
+		respCh:    make(chan *holdresp, 1),
+	}
+
+	select {
+	case <-l.closeCh:
+		return nil, nil, errLockClosed
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	case l.ch <- &h:
+	}
+
+	select {
+	case <-l.closeCh:
+		return nil, nil, errLockClosed
+	case resp := <-h.respCh:
+		return resp.rctx, resp.cancel, nil
+	}
 }

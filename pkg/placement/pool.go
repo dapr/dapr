@@ -14,32 +14,37 @@ limitations under the License.
 package placement
 
 import (
-	"strings"
+	"context"
 	"sync"
 	"sync/atomic"
-
-	"google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
+
+type recvResult struct {
+	host *placementv1pb.Host
+	err  error
+}
 
 type daprdStream struct {
 	id            uint32
 	hostName      string
 	hostID        string
 	hostNamespace string
-	needsVNodes   bool
 	stream        placementv1pb.Placement_ReportDaprStatusServer
+	cancelFn      context.CancelFunc
+	recvCh        chan recvResult
 }
 
-func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_ReportDaprStatusServer) *daprdStream {
+func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_ReportDaprStatusServer, cancel context.CancelFunc) *daprdStream {
 	return &daprdStream{
 		hostID:        host.GetId(),
 		hostName:      host.GetName(),
 		hostNamespace: host.GetNamespace(),
 		stream:        stream,
-		needsVNodes:   hostNeedsVNodes(stream),
+		cancelFn:      cancel,
+		recvCh:        make(chan recvResult, 100), // Buffered to handle incoming messages
 	}
 }
 
@@ -98,6 +103,7 @@ func (s *streamConnPool) delete(stream *daprdStream) {
 		if len(streams) == 0 {
 			delete(s.streams, stream.hostNamespace)
 		}
+		log.Debugf("Deleted stream connection for host %s in namespace %s", stream.hostName, stream.hostNamespace)
 	}
 
 	monitoring.RecordRuntimesCount(len(s.streams[stream.hostNamespace]), stream.hostNamespace)
@@ -131,16 +137,4 @@ func (s *streamConnPool) getStream(stream placementv1pb.Placement_ReportDaprStat
 
 	daprdStream, ok := s.reverseLookup[stream]
 	return daprdStream, ok
-}
-
-func hostNeedsVNodes(stream placementv1pb.Placement_ReportDaprStatusServer) bool {
-	md, ok := metadata.FromIncomingContext(stream.Context())
-	if !ok {
-		// default to older versions that need vnodes
-		return true
-	}
-
-	// Extract apiLevel from metadata
-	vmd := md.Get(GRPCContextKeyAcceptVNodes)
-	return !(len(vmd) > 0 && strings.EqualFold(vmd[0], "false"))
 }

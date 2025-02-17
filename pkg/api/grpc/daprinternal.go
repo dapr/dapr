@@ -35,6 +35,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/kit/concurrency"
 )
 
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
@@ -332,7 +333,42 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 		ExpirationTime: in.GetExpirationTime().AsTime(),
 		IsTimer:        in.GetIsTimer(),
 		IsRemote:       true,
+		SkipLock:       in.GetSkipLock(),
 	})
+}
+
+func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream internalv1pb.ServiceInvocation_CallActorStreamServer) error {
+	engine, err := a.ActorEngine(stream.Context())
+	if err != nil {
+		return err
+	}
+
+	if req.Metadata == nil {
+		req.Metadata = make(map[string]*internalv1pb.ListStringValue)
+	}
+	req.Metadata["X-Dapr-Remote"] = &internalv1pb.ListStringValue{Values: []string{"true"}}
+
+	ch := make(chan *internalv1pb.InternalInvokeResponse)
+
+	return concurrency.NewRunnerManager(
+		func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-a.closeCh:
+					return errors.New("server closed")
+				case val := <-ch:
+					if err := stream.Send(val); err != nil {
+						return err
+					}
+				}
+			}
+		},
+		func(ctx context.Context) error {
+			return engine.CallStream(stream.Context(), req, ch)
+		},
+	).Run(stream.Context())
 }
 
 // Used by CallLocal and CallLocalStream to check the request against the access control list

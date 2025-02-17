@@ -15,9 +15,8 @@ package metrics
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,32 +35,14 @@ func init() {
 
 // errorcodemetrics tests daprd error code metrics for workflows
 type errorcodemetrics struct {
-	daprd  *daprd.Daprd
-	place  *placement.Placement
-	resDir string
+	daprd *daprd.Daprd
+	place *placement.Placement
 }
 
 func (e *errorcodemetrics) Setup(t *testing.T) []framework.Option {
 	e.place = placement.New(t)
 
 	app := app.New(t)
-
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: errorcodemetrics
-spec:
-  metric:
-    enabled: true
-    recordErrorCodes: true
-  metrics:
-    enabled: true
-    recordErrorCodes: true
-`), 0o600))
-
-	e.resDir = t.TempDir()
 
 	e.daprd = daprd.New(t,
 		daprd.WithAppPort(app.Port()),
@@ -70,8 +51,7 @@ spec:
 		daprd.WithPlacementAddresses(e.place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithLogLevel("debug"),
-		daprd.WithConfigs(configFile),
-		daprd.WithResourcesDir(e.resDir),
+		daprd.WithErrorCodeMetrics(t),
 	)
 
 	return []framework.Option{
@@ -84,7 +64,6 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilAppHealth(t, ctx)
 
 	t.Run("gRPC workflow error metrics", func(t *testing.T) {
-		t.Skip("TODO: @joshvanl: reenable")
 		// Try to get a non-existent workflow instance which should trigger "ERR_GET_WORKFLOW"
 		gclient := e.daprd.GRPCClient(t, ctx)
 		for range 2 {
@@ -96,9 +75,9 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Check for metric count and code
-		metrics := e.daprd.Metrics(t, ctx).All()
-		errorMetricName := "dapr_error_code_total|app_id:myapp|category:workflow|error_code:ERR_GET_WORKFLOW"
-		assert.Equal(t, 2, int(metrics[errorMetricName]), "Expected \"ERR_GET_WORKFLOW\" to be recorded")
+		assert.Eventually(t, func() bool {
+			return e.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:workflow", "error_code:ERR_INSTANCE_ID_NOT_FOUND")
+		}, 5*time.Second, 100*time.Millisecond)
 	})
 
 	t.Run("HTTP conversation error metrics", func(t *testing.T) {
@@ -108,8 +87,8 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Check for metric count and code
-		metrics := e.daprd.Metrics(t, ctx).All()
-		errorMetricName := "dapr_error_code_total|app_id:myapp|category:conversation|error_code:ERR_DIRECT_INVOKE"
-		assert.Equal(t, 3, int(metrics[errorMetricName]), "Expected \"ERR_DIRECT_INVOKE\" to be recorded")
+		assert.Eventually(t, func() bool {
+			return e.daprd.Metrics(t, ctx).MatchMetricAndSum(3, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE")
+		}, 5*time.Second, 100*time.Millisecond)
 	})
 }

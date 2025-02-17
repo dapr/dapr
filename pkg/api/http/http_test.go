@@ -43,6 +43,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/workflows"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	enginefake "github.com/dapr/dapr/pkg/actors/engine/fake"
@@ -78,7 +79,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
@@ -1013,7 +1014,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			AppID:          "fakeAPI",
 			Resiliency:     rc,
 			Actors:         actors,
-			WorkflowEngine: wfenginefake.New(),
+			WorkflowEngine: fake.New(),
 		}),
 	}
 
@@ -1242,7 +1243,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return statefake.New().WithTransactionalStateOperationFn(func(context.Context, *actorsapi.TransactionalRequest) error {
+			return statefake.New().WithTransactionalStateOperationFn(func(context.Context, bool, *actorsapi.TransactionalRequest) error {
 				return errors.New("UPSTREAM_ERROR")
 			}), nil
 		})
@@ -1266,7 +1267,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      json.RawMessage("null"),
+			Data:      nil,
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -1292,7 +1293,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      json.RawMessage("null"),
+			Data:      nil,
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -1384,7 +1385,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
 			return remindersfake.New().WithGet(func(context.Context, *actorsapi.GetReminderRequest) (*actorsapi.Reminder, error) {
 				return &actorsapi.Reminder{
-					Data: json.RawMessage("null"),
+					Data: nil,
 				}, nil
 			}), nil
 		})
@@ -1439,7 +1440,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      json.RawMessage("null"),
+			Data:      nil,
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 			Callback:  "",
@@ -1462,7 +1463,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      json.RawMessage("null"),
+			Data:      nil,
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -2437,11 +2438,13 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	})
 }
 
-func TestV1Beta1Workflow(t *testing.T) {
+func TestV1Workflow(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	resiliencyConfig := resiliency.FromConfigurations(logger.NewLogger("workflow.test"), testResiliency)
 	compStore := compstore.New()
+
+	wf := fake.New()
 
 	testAPI := &api{
 		healthz: healthz.New(),
@@ -2449,7 +2452,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 			Logger:         logger.NewLogger("fakeLogger"),
 			CompStore:      compStore,
 			Resiliency:     resiliencyConfig,
-			WorkflowEngine: wfenginefake.New(),
+			WorkflowEngine: wf,
 			Actors:         actorsfake.New(),
 		}),
 	}
@@ -2461,7 +2464,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	/////////////////////
 
 	t.Run("Start with invalid instance ID", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start?instanceID=invalid$ID"
+		apiPath := "v1.0/workflows/dapr/workflowName/start?instanceID=invalid$ID"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
 
@@ -2473,7 +2476,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 	t.Run("Start with too long instance ID", func(t *testing.T) {
 		maxInstanceIDLength := 64
-		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start?instanceID=this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed"
+		apiPath := "v1.0/workflows/dapr/workflowName/start?instanceID=this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
 
@@ -2490,7 +2493,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	t.Run("Get with valid api call", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'get' method implemented to return a dummy response.
-		apiPath := "v1.0-beta1/workflows/dapr/myInstanceID"
+		apiPath := "v1.0/workflows/dapr/myInstanceID"
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -2511,7 +2514,17 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'terminate' method implemented to simply return nil
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate"
+		apiPath := "v1.0/workflows/dapr/instanceID/terminate"
+
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				return &workflows.StateResponse{
+					Workflow: &workflows.WorkflowState{
+						RuntimeStatus: "TERMINATED",
+					},
+				}, nil
+			})
+		})
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2528,7 +2541,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'RaiseEvent' method implemented to simply return nil
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/raiseEvent/fakeEvent"
+		apiPath := "v1.0/workflows/dapr/instanceID/raiseEvent/fakeEvent"
 
 		resp := fakeServer.DoRequest("POST", apiPath, []byte("event payload"), nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2545,7 +2558,17 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'pause' method implemented to simply return nil
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/pause"
+		apiPath := "v1.0/workflows/dapr/instanceID/pause"
+
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				return &workflows.StateResponse{
+					Workflow: &workflows.WorkflowState{
+						RuntimeStatus: "SUSPENDED",
+					},
+				}, nil
+			})
+		})
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2562,7 +2585,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'resume' method implemented to simply return nil
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/resume"
+		apiPath := "v1.0/workflows/dapr/instanceID/resume"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2579,7 +2602,13 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'purge' method implemented to simply return nil
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge"
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				return nil, errors.New("this is an error")
+			})
+		})
+
+		apiPath := "v1.0/workflows/dapr/instanceID/purge"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 

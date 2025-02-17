@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
@@ -28,25 +27,23 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
+	"github.com/dapr/dapr/pkg/actors/locker"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/messages"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/events/queue"
-	"github.com/dapr/kit/logger"
 )
-
-var log = logger.NewLogger("dapr.runtime.actor.engine")
 
 type Interface interface {
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	CallReminder(ctx context.Context, reminder *api.Reminder) error
+	CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error
 }
 
 type Options struct {
@@ -58,6 +55,7 @@ type Options struct {
 	GRPC               *manager.Manager
 	IdlerQueue         *queue.Processor[string, targets.Idlable]
 	SchedulerReminders bool
+	Locker             locker.Interface
 }
 
 type engine struct {
@@ -69,6 +67,7 @@ type engine struct {
 	resiliency resiliency.Provider
 	reminders  reminders.Interface
 	grpc       *manager.Manager
+	locker     locker.Interface
 
 	idlerQueue *queue.Processor[string, targets.Idlable]
 
@@ -86,16 +85,27 @@ func New(opts Options) Interface {
 		grpc:               opts.GRPC,
 		idlerQueue:         opts.IdlerQueue,
 		reminders:          opts.Reminders,
+		locker:             opts.Locker,
 		lock:               fifo.New(),
 		clock:              clock.RealClock{},
 	}
 }
 
 func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	cancel, err := e.locker.LockRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	var res *internalv1pb.InternalInvokeResponse
-	var err error
 	if e.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		res, err = e.callActor(ctx, req)
+		// Don't bubble perminant errors up to the caller to interfere with top level
+		// retries.
+		if _, ok := err.(*backoff.PermanentError); ok {
+			err = errors.Unwrap(err)
+		}
 	} else {
 		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
 		res, err = policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
@@ -107,6 +117,16 @@ func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 }
 
 func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
+	if req.SkipLock {
+		return e.callReminder(ctx, req)
+	} else {
+		cancel, err := e.locker.Lock(req.ActorType, req.ActorID)
+		if err != nil {
+			return err
+		}
+		defer cancel()
+	}
+
 	var err error
 	if e.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
 		err = e.callReminder(ctx, req)
@@ -120,11 +140,25 @@ func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
 	return err
 }
 
+func (e *engine) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+	policyRunner := resiliency.NewRunner[struct{}](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
+	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, e.callStream(ctx, req, stream)
+	})
+
+	return err
+}
+
 func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
-	if err := e.placement.Lock(ctx); err != nil {
-		return err
+	if !req.SkipLock {
+		var cancel context.CancelFunc
+		var err error
+		ctx, cancel, err = e.placement.Lock(ctx)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		defer cancel()
 	}
-	defer e.placement.Unlock()
 
 	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.ActorType,
@@ -153,29 +187,24 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 		err = target.InvokeReminder(ctx, req)
 	}
 
-	// If the reminder was cancelled, delete it.
-	// TODO: Remove when sheduler workflows are one-shot.
-	if e.schedulerReminders && errors.Is(err, actorerrors.ErrReminderCanceled) {
-		log.Debugf("Deleting reminder which was cancelled: %s", req.Key())
-		reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-		defer cancel()
-		if derr := e.reminders.Delete(reqCtx, &api.DeleteReminderRequest{
-			Name:      req.Name,
-			ActorType: req.ActorType,
-			ActorID:   req.ActorID,
-		}); derr != nil {
-			log.Errorf("Error deleting reminder %s: %s", req.Key(), derr)
-		}
-	}
-
 	return backoff.Permanent(err)
 }
 
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	if err := e.placement.Lock(ctx); err != nil {
-		return nil, err
+	// If we are in a reentrancy which is local, skip the placement lock.
+	_, isDaprRemote := req.GetMetadata()["X-Dapr-Remote"]
+	_, isReentrancy := req.GetMetadata()["Dapr-Reentrancy-Id"]
+	_, isAPICall := req.GetMetadata()["Dapr-API-Call"]
+
+	if isAPICall || isDaprRemote || !isReentrancy {
+		var cancel context.CancelFunc
+		var err error
+		ctx, cancel, err = e.placement.Lock(ctx)
+		if err != nil {
+			return nil, backoff.Permanent(err)
+		}
+		defer cancel()
 	}
-	defer e.placement.Unlock()
 
 	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
@@ -186,21 +215,17 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if lar.Local {
-		var res *internalv1pb.InternalInvokeResponse
-		res, err = e.callLocalActor(ctx, req)
+		var resp *internalv1pb.InternalInvokeResponse
+		resp, err = e.callLocalActor(ctx, req)
 		if err != nil {
-			if merr, ok := err.(messages.APIError); ok &&
-				merr.Is(messages.ErrActorMaxStackDepthExceeded) {
-				return res, backoff.Permanent(err)
-			}
-			return res, err
+			return resp, backoff.Permanent(err)
 		}
-		return res, nil
+		return resp, nil
 	}
 
 	// If this is a dapr-dapr call and the actor didn't pass the local check
 	// above, it means it has been moved in the meantime
-	if _, ok := req.GetMetadata()["X-Dapr-Remote"]; ok {
+	if isDaprRemote {
 		return nil, backoff.Permanent(errors.New("remote actor moved"))
 	}
 
@@ -263,6 +288,7 @@ func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 		RegisteredTime: timestamppb.New(reminder.RegisteredTime),
 		ExpirationTime: timestamppb.New(reminder.ExpirationTime),
 		IsTimer:        reminder.IsTimer,
+		SkipLock:       reminder.SkipLock,
 	})
 
 	return err
@@ -275,6 +301,84 @@ func (e *engine) callLocalActor(ctx context.Context, req *internalv1pb.InternalI
 	}
 
 	return target.InvokeMethod(ctx, req)
+}
+
+func (e *engine) callStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+	ctx, pcancel, err := e.placement.Lock(ctx)
+	if err != nil {
+		return backoff.Permanent(err)
+	}
+	defer pcancel()
+
+	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
+		ActorType: req.GetActor().GetActorType(),
+		ActorID:   req.GetActor().GetActorId(),
+	})
+	if err != nil {
+		return err
+	}
+
+	if !lar.Local {
+		// If this is a dapr-dapr call and the actor didn't pass the local check
+		// above, it means it has been moved in the meantime
+		if _, ok := req.GetMetadata()["X-Dapr-Remote"]; ok {
+			return backoff.Permanent(errors.New("remote actor moved"))
+		}
+
+		return e.callRemoteActorStream(ctx, lar, req, stream)
+	}
+
+	if err = e.callLocalActorStream(ctx, req, stream); err != nil {
+		return backoff.Permanent(err)
+	}
+
+	return nil
+}
+
+func (e *engine) callLocalActorStream(ctx context.Context,
+	req *internalv1pb.InternalInvokeRequest,
+	stream chan<- *internalv1pb.InternalInvokeResponse,
+) error {
+	target, err := e.getOrCreateActor(req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	if err != nil {
+		return err
+	}
+
+	return target.InvokeStream(ctx, req, stream)
+}
+
+func (e *engine) callRemoteActorStream(ctx context.Context,
+	lar *api.LookupActorResponse,
+	req *internalv1pb.InternalInvokeRequest,
+	stream chan<- *internalv1pb.InternalInvokeResponse,
+) error {
+	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
+	if err != nil {
+		return err
+	}
+	defer cancel(false)
+
+	span := diagutils.SpanFromContext(ctx)
+	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	client := internalv1pb.NewServiceInvocationClient(conn)
+
+	rstream, err := client.CallActorStream(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	for {
+		resp, err := rstream.Recv()
+		if err != nil {
+			return err
+		}
+
+		select {
+		case stream <- resp:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 func (e *engine) getOrCreateActor(actorType, actorID string) (targets.Interface, error) {

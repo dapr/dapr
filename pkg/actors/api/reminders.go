@@ -14,10 +14,12 @@ limitations under the License.
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 // GetReminderRequest is the request object to get an existing reminder.
@@ -32,11 +34,11 @@ type CreateReminderRequest struct {
 	Name      string
 	ActorType string
 	ActorID   string
-	Data      json.RawMessage `json:"data"`
-	DueTime   string          `json:"dueTime"`
-	Period    string          `json:"period"`
-	TTL       string          `json:"ttl"`
-	IsOneShot bool            `json:"-"`
+	Data      *anypb.Any `json:"data"`
+	DueTime   string     `json:"dueTime"`
+	Period    string     `json:"period"`
+	TTL       string     `json:"ttl"`
+	IsOneShot bool       `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.
@@ -55,11 +57,7 @@ func (req CreateReminderRequest) NewReminder(now time.Time) (reminder *Reminder,
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
 		Name:      req.Name,
-	}
-
-	err = setReminderData(reminder, req.Data, "reminder")
-	if err != nil {
-		return nil, err
+		Data:      req.Data,
 	}
 
 	err = setReminderTimes(reminder, req.DueTime, req.Period, req.TTL, now, "reminder")
@@ -70,16 +68,43 @@ func (req CreateReminderRequest) NewReminder(now time.Time) (reminder *Reminder,
 	return reminder, nil
 }
 
+func (req *CreateReminderRequest) UnmarshalJSON(data []byte) error {
+	type createReminderAlias CreateReminderRequest
+
+	*req = CreateReminderRequest{}
+
+	m := &struct {
+		Data json.RawMessage `json:"data"`
+		*createReminderAlias
+	}{
+		createReminderAlias: (*createReminderAlias)(req),
+	}
+
+	err := json.Unmarshal(data, &m)
+	if err != nil {
+		return err
+	}
+
+	if len(m.Data) > 0 {
+		req.Data, err = anypb.New(wrapperspb.Bytes(m.Data))
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal data: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // CreateTimerRequest is the request object to create a new timer.
 type CreateTimerRequest struct {
 	Name      string
 	ActorType string
 	ActorID   string
-	DueTime   string          `json:"dueTime"`
-	Period    string          `json:"period"`
-	TTL       string          `json:"ttl"`
-	Callback  string          `json:"callback"`
-	Data      json.RawMessage `json:"data"`
+	DueTime   string     `json:"dueTime"`
+	Period    string     `json:"period"`
+	TTL       string     `json:"ttl"`
+	Callback  string     `json:"callback"`
+	Data      *anypb.Any `json:"data"`
 }
 
 // ActorKey returns the key of the actor for this timer.
@@ -99,11 +124,7 @@ func (req CreateTimerRequest) NewReminder(now time.Time) (reminder *Reminder, er
 		ActorType: req.ActorType,
 		Name:      req.Name,
 		Callback:  req.Callback,
-	}
-
-	err = setReminderData(reminder, req.Data, "timer")
-	if err != nil {
-		return nil, err
+		Data:      req.Data,
 	}
 
 	err = setReminderTimes(reminder, req.DueTime, req.Period, req.TTL, now, "timer")
@@ -114,20 +135,28 @@ func (req CreateTimerRequest) NewReminder(now time.Time) (reminder *Reminder, er
 	return reminder, nil
 }
 
-func setReminderData(reminder *Reminder, data json.RawMessage, logMsg string) error {
-	if len(data) == 0 {
-		return nil
+func (req *CreateTimerRequest) UnmarshalJSON(data []byte) error {
+	type createTimerAlias CreateTimerRequest
+
+	*req = CreateTimerRequest{}
+
+	m := &struct {
+		Data json.RawMessage `json:"data"`
+		*createTimerAlias
+	}{
+		createTimerAlias: (*createTimerAlias)(req),
 	}
 
-	// Compact the data before setting it
-	buf := &bytes.Buffer{}
-	err := json.Compact(buf, data)
+	err := json.Unmarshal(data, &m)
 	if err != nil {
-		return fmt.Errorf("failed to compact %s data: %w", logMsg, err)
+		return err
 	}
 
-	if buf.Len() > 0 {
-		reminder.Data = buf.Bytes()
+	if len(m.Data) > 0 {
+		req.Data, err = anypb.New(wrapperspb.Bytes(m.Data))
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal data: %w", err)
+		}
 	}
 
 	return nil

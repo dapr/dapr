@@ -20,6 +20,7 @@ import (
 	nethttp "net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,11 +61,11 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	assert.Equal(t, nethttp.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, `{"errorCode":"ERR_ACTOR_INSTANCE_MISSING","message":"actor instance is missing"}`, string(b))
+	assert.Equal(t, ``, string(b))
 
 	reqBody := `[{"operation":"upsert","request":{"key":"key1","value":"value1"}}]`
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/state", h.app.Daprd().HTTPAddress())
@@ -77,6 +78,9 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, `{"errorCode":"ERR_ACTOR_INSTANCE_MISSING","message":"actor instance is missing"}`, string(b))
+	assert.Eventually(t, func() bool {
+		return h.app.Daprd().Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:actor", "error_code:ERR_ACTOR_INSTANCE_MISSING")
+	}, 5*time.Second, 100*time.Millisecond)
 
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/method/foo", h.app.Daprd().HTTPAddress())
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)

@@ -68,11 +68,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 
 	client := client.HTTP(t)
 
-	body := `{
-"dueTime": "0s",
-"period": "10s",
-"data": "hello"
-}`
+	body := `{"dueTime":"0s","period":"10s","data":"hello"}`
 
 	url := fmt.Sprintf("http://%s/v1.0/actors/abc/foo/timers/foo", h.app.Daprd().HTTPAddress())
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader(body))

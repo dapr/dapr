@@ -19,6 +19,10 @@ service Scheduler {
   rpc WatchJobs(stream WatchJobsRequest) returns (stream WatchJobsResponse) {}
   // ListJobs is used by the daprd sidecar to list all jobs.
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
+  // WatchHosts is used by the daprd sidecar to retrieve the list of active
+  // scheduler hosts so that it can connect to each. Receives an updated list
+  // on leadership changes.
+  rpc WatchHosts(WatchHostsRequest) returns (stream WatchHostsResponse) {}
 }
 
 message Job {
@@ -36,7 +40,6 @@ message Job {
 
   // Job data.
   google.protobuf.Any data = 5;
-
 
   // failure_policy is the optional policy to apply when a job fails to
   // trigger.
@@ -217,4 +220,20 @@ message ListJobsRequest {
 message ListJobsResponse {
   // The list of jobs.
   repeated NamedJob jobs = 1;
+}
+
+// WatchHostsRequest is the message used by the daprd sidecar to connect to the
+// Scheduler and watch for hosts.
+message WatchHostsRequest {}
+
+// WatchHostsResponse is the response message to convey the details of a host.
+message WatchHostsResponse {
+  // hosts is the list of current active scheduler hosts in the cluster.
+  repeated Host hosts = 1;
+}
+
+// Host is the message used to represent a host.
+message Host {
+  // address is the address of the host.
+  string address = 1;
 }

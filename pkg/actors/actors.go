@@ -16,6 +16,7 @@ package actors
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,7 +28,9 @@ import (
 	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
+	"github.com/dapr/dapr/pkg/actors/internal/locker"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
+	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/scheduler"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/statestore"
@@ -65,7 +68,6 @@ type Options struct {
 	HealthEndpoint     string
 	Resiliency         resiliency.Provider
 	Security           security.Handler
-	SchedulerClients   *clients.Clients
 	Healthz            healthz.Healthz
 	CompStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
@@ -73,9 +75,10 @@ type Options struct {
 }
 
 type InitOptions struct {
-	StateStoreName string
-	Hostname       string
-	GRPC           *manager.Manager
+	StateStoreName   string
+	Hostname         string
+	GRPC             *manager.Manager
+	SchedulerClients clients.Clients
 }
 
 // Interface is the main runtime for the actors subsystem.
@@ -104,7 +107,6 @@ type actors struct {
 	healthEndpoint     string
 	resiliency         resiliency.Provider
 	security           security.Handler
-	schedulerClients   *clients.Clients
 	healthz            healthz.Healthz
 	compStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
@@ -135,9 +137,10 @@ type actors struct {
 // New create a new actors runtime with given config.
 func New(opts Options) Interface {
 	var disabled atomic.Pointer[error]
-	if len(opts.PlacementAddresses) == 0 {
+	if len(opts.PlacementAddresses) == 0 ||
+		(len(opts.PlacementAddresses) == 1 && strings.TrimSpace(opts.PlacementAddresses[0]) == "") {
 		var err error = messages.ErrActorNoPlacement
-		log.Warnf("Actor runtime disabled: %s", err)
+		log.Warnf("Actor runtime disabled: %s. Actors and Workflow APIs will be unavailable", err)
 		disabled.Store(&err)
 	}
 
@@ -150,7 +153,6 @@ func New(opts Options) Interface {
 		healthEndpoint:     opts.HealthEndpoint,
 		resiliency:         opts.Resiliency,
 		security:           opts.Security,
-		schedulerClients:   opts.SchedulerClients,
 		compStore:          opts.CompStore,
 		stateTTLEnabled:    opts.StateTTLEnabled,
 		clock:              clock.RealClock{},
@@ -183,8 +185,20 @@ func (a *actors) Init(opts InitOptions) error {
 		a.disabled.Store(&err)
 		return nil
 	}
+
 	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
-	a.table = table.New(table.Options{IdlerQueue: a.idlerQueue})
+
+	rStore := reentrancystore.New()
+
+	locker := locker.New(locker.Options{
+		ConfigStore: rStore,
+	})
+
+	a.table = table.New(table.Options{
+		IdlerQueue:      a.idlerQueue,
+		Locker:          locker,
+		ReentrancyStore: rStore,
+	})
 
 	apiLevel := apilevel.New()
 
@@ -201,7 +215,7 @@ func (a *actors) Init(opts InitOptions) error {
 		a.reminderStore = scheduler.New(scheduler.Options{
 			Namespace:     a.namespace,
 			AppID:         a.appID,
-			Clients:       a.schedulerClients,
+			Clients:       opts.SchedulerClients,
 			StateReminder: a.stateReminders,
 			Table:         a.table,
 			Healthz:       a.healthz,
@@ -239,6 +253,7 @@ func (a *actors) Init(opts InitOptions) error {
 		Resiliency:         a.resiliency,
 		IdlerQueue:         a.idlerQueue,
 		Reminders:          a.reminders,
+		Locker:             locker,
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
@@ -440,10 +455,10 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		}
 
 		factories = append(factories, table.ActorTypeFactory{
-			Type: actorType,
+			Type:       actorType,
+			Reentrancy: reentrancy,
 			Factory: app.Factory(app.Options{
 				ActorType:   actorType,
-				Reentrancy:  reentrancy,
 				AppChannel:  cfg.AppChannel,
 				Resiliency:  a.resiliency,
 				IdleQueue:   a.idlerQueue,
@@ -500,14 +515,18 @@ func (a *actors) WaitForRegisteredHosts(ctx context.Context) error {
 }
 
 func (a *actors) handleIdleActor(target targets.Idlable) {
-	if err := a.placement.Lock(context.Background()); err != nil {
+	// We don't use the placement context here as we are already deactivating the
+	// actor.
+	_, cancel, err := a.placement.Lock(context.Background())
+	if err != nil {
+		log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
 		return
 	}
-	defer a.placement.Unlock()
+	defer cancel()
 
 	log.Debugf("Actor %s is idle, deactivating", target.Key())
 
-	if err := a.table.Halt(context.Background(), target); err != nil {
+	if err := a.table.HaltIdlable(context.Background(), target); err != nil {
 		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
 		return
 	}
