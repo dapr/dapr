@@ -126,7 +126,7 @@ type Processor struct {
 
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
 	pendingComponents          chan componentsapi.Component
-	pendingComponentsWaiting   sync.WaitGroup
+	pendingComponentsWaiting   sync.RWMutex
 	pendingComponentDependents map[string][]componentsapi.Component
 	subErrCh                   chan error
 
