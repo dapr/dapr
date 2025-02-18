@@ -235,6 +235,11 @@ func (c *Client) Recv(ctx context.Context) (*v1pb.PlacementOrder, error) {
 			errors.Is(err, io.EOF) {
 			log.Infof("Placement service is closed, reconnecting...")
 			errCh := make(chan error, 1)
+			select {
+			case <-ctx.Done():
+			case <-time.After(time.Second):
+			}
+
 			c.reconnectCh <- errCh
 
 			select {
