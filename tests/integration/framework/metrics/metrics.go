@@ -40,7 +40,9 @@ func New(t assert.TestingT, ctx context.Context, url string) *Metrics {
 
 	httpclient := client.HTTP(t)
 	resp, err := httpclient.Do(req)
-	assert.NoError(t, err) //nolint:testifylint
+	if !assert.NoError(t, err) { //nolint:testifylint
+		return nil
+	}
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Extract the metrics
