@@ -85,7 +85,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	opts := options{
 		logLevel:                 "info",
-		listenAddress:            "127.0.0.1",
 		id:                       uids,
 		port:                     fp.Port(t),
 		healthzPort:              fp.Port(t),
@@ -115,7 +114,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--etcd-data-dir=" + dataDir,
 		"--etcd-client-port=" + strconv.Itoa(opts.etcdClientPort),
-		"--listen-address=" + opts.listenAddress,
+		"--listen-address=127.0.0.1",
 		"--identity-directory-write=" + filepath.Join(t.TempDir(), "tls"),
 		"--etcd-backend-batch-interval=" + opts.etcdBackendBatchInterval,
 	}

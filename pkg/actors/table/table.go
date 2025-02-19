@@ -311,27 +311,26 @@ func (t *table) HaltAll() error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	errCh := make(chan error)
+	var (
+		wg   sync.WaitGroup
+		errs = slice.New[error]()
+	)
+	wg.Add(t.table.Len())
 	t.table.Range(func(actorKey string, _ targets.Interface) bool {
 		go func(actorKey string) {
+			defer wg.Done()
 			err := t.haltInLock(actorKey)
 			if err != nil {
-				errCh <- fmt.Errorf("failed to deactivate actor '%s': %v", actorKey, err)
+				errs.Append(fmt.Errorf("failed to deactivate actor '%s': %v", actorKey, err))
 				return
 			}
-			errCh <- nil
 		}(actorKey)
 		return true
 	})
 
-	var errs []error
-	for range t.table.Len() {
-		if err := <-errCh; err != nil {
-			errs = append(errs, err)
-		}
-	}
+	wg.Wait()
 
-	return errors.Join(errs...)
+	return errors.Join(errs.Slice()...)
 }
 
 func (t *table) haltInLock(actorKey string) error {
