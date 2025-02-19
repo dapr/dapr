@@ -117,7 +117,6 @@ func (c *Client) Run(ctx context.Context) error {
 
 	c.htarget.Ready()
 	c.ready.Store(true)
-	log.Info("Connected to placement, ready for requests")
 
 	runner := func() *concurrency.RunnerManager {
 		return concurrency.NewRunnerManager(
