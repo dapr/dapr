@@ -529,7 +529,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 	wi.Properties[todo.CallbackChannelProperty] = callback
 	// Setting executionStatus to failed by default to record metrics for non-recoverable errors.
 	executionStatus := diag.StatusFailed
-	if runtimestate.IsCompleted(rs) {
+	if rs != nil && runtimestate.IsCompleted(rs) {
 		// If workflow is already completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
