@@ -335,7 +335,7 @@ func (a *activity) createReliableReminder(ctx context.Context, his *backend.Hist
 
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(ctx context.Context) error {
-	log.Debugf("Activity actor '%s': deactivating", a.actorID)
+	log.Debugf("Activity actor '%s': deactivated", a.actorID)
 	return nil
 }
 
