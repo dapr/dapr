@@ -29,15 +29,14 @@ type options struct {
 	namespace                string
 	etcdBackendBatchInterval string
 
-	logLevel      string
-	port          int
-	healthzPort   int
-	metricsPort   int
-	listenAddress string
-	sentry        *sentry.Sentry
-	dataDir       *string
-	kubeconfig    *string
-	mode          *string
+	logLevel    string
+	port        int
+	healthzPort int
+	metricsPort int
+	sentry      *sentry.Sentry
+	dataDir     *string
+	kubeconfig  *string
+	mode        *string
 
 	overrideBroadcastHostPort *string
 }
@@ -88,12 +87,6 @@ func WithHealthzPort(port int) Option {
 func WithMetricsPort(port int) Option {
 	return func(o *options) {
 		o.metricsPort = port
-	}
-}
-
-func WithListenAddress(address string) Option {
-	return func(o *options) {
-		o.listenAddress = address
 	}
 }
 
