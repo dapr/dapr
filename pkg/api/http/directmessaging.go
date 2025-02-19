@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/api/http/consts"
+	"github.com/dapr/dapr/pkg/api/http/consts"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
@@ -303,7 +304,10 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
 func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string, method string) {
 	if appID := headers.Get(consts.DaprAppIDHeader); appID != "" {
-		return appID, strings.TrimPrefix(path.Clean(reqPath), "/")
+		targetID, method = appID, strings.TrimPrefix(path.Clean(reqPath), "/")
+		// Delete the header as it should not be passed forward with the request and is only used by the Dapr API
+		headers.Del(consts.DaprAppIDHeader)
+		return targetID, method
 	}
 
 	if auth := headers.Get("Authorization"); strings.HasPrefix(auth, "Basic ") {
