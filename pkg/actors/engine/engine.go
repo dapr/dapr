@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
@@ -143,7 +144,12 @@ func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
 func (e *engine) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
 	policyRunner := resiliency.NewRunner[struct{}](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
 	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, e.callStream(ctx, req, stream)
+		err := e.callStream(ctx, req, stream)
+		// Suppress EOF errors as this simply means the stream is closing.
+		if errors.Is(err, io.EOF) {
+			return struct{}{}, nil
+		}
+		return struct{}{}, err
 	})
 
 	return err

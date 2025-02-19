@@ -954,8 +954,8 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 
 // DeactivateActor implements actors.InternalActor
 func (w *workflow) Deactivate(ctx context.Context) error {
-	log.Debugf("Workflow actor '%s': deactivating", w.actorID)
 	w.cleanup()
+	log.Debugf("Workflow actor '%s': deactivated", w.actorID)
 	return nil
 }
 
