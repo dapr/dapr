@@ -123,6 +123,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
+			require.Len(t, resp.Header.Get("dapr-app-id"), 0)
 			return resp.StatusCode, string(body)
 		}
 
