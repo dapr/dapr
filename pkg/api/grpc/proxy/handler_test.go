@@ -43,7 +43,6 @@ import (
 	codec "github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -126,7 +125,7 @@ func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.
 	grpc.SendHeader(ctx, metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	grpc.SetTrailer(ctx, metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
 	// Set Dapr App ID header
-	grpc.SendHeader(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test-app-id"))
+	grpc.SendHeader(ctx, metadata.Pairs(diag.GRPCProxyAppIDKey, "test-app-id"))
 	return &pb.PingResponse{Value: ping.GetValue(), Counter: 42}, nil
 }
 
@@ -239,7 +238,7 @@ func (s *proxyTestSuite) TestPingCarriesServerHeadersAndTrailers() {
 	s.Require().NoError(err, "Ping should succeed without errors")
 	s.Require().Equal("foo", out.GetValue())
 	s.Require().Equal(int32(42), out.GetCounter())
-	s.Require().Len(headerMd.Get(diagnostics.GRPCProxyAppIDKey), 0, "server response headers must not contain the dapr-app-id header")
+	s.Require().Len(headerMd.Get(diag.GRPCProxyAppIDKey), 0, "server response headers must not contain the dapr-app-id header")
 	s.Contains(headerMd, serverHeaderMdKey, "server response headers must contain server data")
 	s.Len(trailerMd, 1, "server response headers must contain server data")
 }
