@@ -237,7 +237,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(c, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
 			assert.Contains(c, body, "tls: unknown certificate authority")
 			assert.EventuallyWithT(c, func(ct *assert.CollectT) {
-				assert.True(ct, h.daprd2.Metrics(ct, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
+				assert.True(ct, h.daprd2.Metrics(ct, ctx).MatchMetricAndSum(t, 1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
 			}, 5*time.Second, 100*time.Millisecond)
 		}, h.daprd2)
 	})
