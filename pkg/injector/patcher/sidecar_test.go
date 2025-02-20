@@ -84,4 +84,31 @@ func TestSidecarConfigSetFromAnnotations(t *testing.T) {
 		assert.Equal(t, int32(0), c.AppPort)
 		assert.Nil(t, c.HTTPMaxRequestSize)
 	})
+
+	t.Run("host addresses with various empty string formats", func(t *testing.T) {
+		testCases := []struct {
+			name  string
+			value string
+		}{
+			{"empty string", ""},
+			{"single-quoted empty string", `'""'`},
+			{"single quotes", `''`},
+			{"double quotes", `""`},
+			{"spaces", "   "},
+			{"quoted spaces", `"   "`},
+			{"single-quoted spaces", `'   '`},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				c := NewSidecarConfig(&corev1.Pod{})
+				c.setFromAnnotations(map[string]string{
+					annotations.KeySchedulerHostAddresses: tc.value,
+					annotations.KeyPlacementHostAddresses: tc.value,
+				})
+				assert.Equal(t, "", c.PlacementAddress, "PlacementAddress should be empty for input: %q", tc.value)
+				assert.Equal(t, "", c.SchedulerAddress, "SchedulerAddress should be empty for input: %q", tc.value)
+			})
+		}
+	})
 }
