@@ -122,7 +122,12 @@ func (m *Metrics) MatchMetric(substrings ...string) []Metric {
 }
 
 // MatchMetricAndSum returns true if the set of metrics has a specific sum
-func (m *Metrics) MatchMetricAndSum(sum float64, substrings ...string) bool {
+func (m *Metrics) MatchMetricAndSum(t assert.TestingT, sum float64, substrings ...string) bool {
+	if m == nil {
+		assert.Fail(t, "Metrics is nil")
+		return false
+	}
+
 	// The set of metrics is determined by all metrics that match the substrings
 	// The sum is the combined total of all the matching metrics' values
 	metrics := m.MatchMetric(substrings...)
