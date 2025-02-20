@@ -84,7 +84,7 @@ func New(opts Options) *Scheduler {
 
 func (s *Scheduler) Run(ctx context.Context) error {
 	if len(s.addresses) == 0 ||
-		(len(s.addresses) == 1 && strings.TrimSpace(s.addresses[0]) == "") {
+		(len(s.addresses) == 1 && strings.TrimSpace(strings.Trim(s.addresses[0], `"'`)) == "") {
 		s.htarget.Ready()
 		log.Warn("Scheduler disabled, not connecting...")
 		close(s.disabled)
