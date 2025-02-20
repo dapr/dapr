@@ -20,15 +20,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dapr/kit/ptr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/dapr/dapr/pkg/config/protocol"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
+	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 type getSidecarContainerOpts struct {
@@ -370,6 +371,23 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 				},
 			},
 		})
+	}
+
+	if c.APITokenSecret != "" {
+		appMetadataTokenHeader := security.GetAppTokenHeader()
+		if appMetadataTokenHeader != "" {
+			container.Env = append(container.Env, corev1.EnvVar{
+				Name: appMetadataTokenHeader,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key: "token",
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: c.APITokenSecret,
+						},
+					},
+				},
+			})
+		}
 	}
 
 	if c.AppTokenSecret != "" {

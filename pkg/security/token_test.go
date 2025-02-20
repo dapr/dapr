@@ -23,8 +23,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/ptr"
+
+	"github.com/dapr/dapr/pkg/security/consts"
 )
 
 func TestAPIToken(t *testing.T) {
@@ -56,6 +57,22 @@ func TestAppToken(t *testing.T) {
 	t.Run("non-existent token", func(t *testing.T) {
 		token := GetAppToken()
 		assert.Equal(t, "", token)
+	})
+}
+
+func TestAppTokenHeader(t *testing.T) {
+	t.Run("existing token header", func(t *testing.T) {
+		/* #nosec */
+		tokenEnvVar := "x-api-key"
+		t.Setenv(consts.AppAPITokenHeaderEnvVar, tokenEnvVar)
+
+		apitokenHeader := GetAppTokenHeader()
+		assert.Equal(t, tokenEnvVar, apitokenHeader)
+	})
+
+	t.Run("non-existent token header", func(t *testing.T) {
+		tokenHeader := GetAppTokenHeader()
+		assert.Equal(t, "", tokenHeader)
 	})
 }
 

@@ -25,7 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/acl"
 	grpcProxy "github.com/dapr/dapr/pkg/api/grpc/proxy"
-	codec "github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
+	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -132,6 +132,11 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		appMetadataToken := security.GetAppToken()
 		if appMetadataToken != "" {
 			md.Set(securityConsts.APITokenHeader, appMetadataToken)
+
+			appMetadataTokenHeader := security.GetAppTokenHeader()
+			if appMetadataTokenHeader != "" {
+				md.Set(appMetadataTokenHeader, appMetadataToken)
+			}
 		}
 
 		outCtx := metadata.NewOutgoingContext(ctx, md.Copy())

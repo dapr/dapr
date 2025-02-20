@@ -304,6 +304,12 @@ func WithAppAPIToken(t *testing.T, token string) Option {
 	))
 }
 
+func WithAppAPITokenHeader(t *testing.T, token string) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"APP_API_TOKEN_HEADER", token,
+	))
+}
+
 func WithDaprAPIToken(t *testing.T, token string) Option {
 	return WithExecOptions(exec.WithEnvVars(t,
 		"DAPR_API_TOKEN", token,
