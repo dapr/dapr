@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cast"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/kit/utils"
 )
@@ -165,6 +166,12 @@ func (c *SidecarConfig) setFromAnnotations(an map[string]string) {
 		// Skip annotations that are not defined, respect user defined "" for fields to disable them
 		if _, exists := an[key]; !exists {
 			continue
+		}
+
+		// Special cleanup for placement and scheduler addresses defined by annotations being empty
+		if key == annotations.KeyPlacementHostAddresses || key == annotations.KeySchedulerHostAddresses {
+			trimmed := strings.TrimSpace(strings.Trim(an[key], `"'`))
+			an[key] = trimmed
 		}
 
 		// Assign the value

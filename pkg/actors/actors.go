@@ -138,7 +138,7 @@ type actors struct {
 func New(opts Options) Interface {
 	var disabled atomic.Pointer[error]
 	if len(opts.PlacementAddresses) == 0 ||
-		(len(opts.PlacementAddresses) == 1 && strings.TrimSpace(opts.PlacementAddresses[0]) == "") {
+		(len(opts.PlacementAddresses) == 1 && strings.TrimSpace(strings.Trim(opts.PlacementAddresses[0], `"'`)) == "") {
 		var err error = messages.ErrActorNoPlacement
 		log.Warnf("Actor runtime disabled: %s. Actors and Workflow APIs will be unavailable", err)
 		disabled.Store(&err)
