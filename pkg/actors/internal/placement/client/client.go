@@ -160,7 +160,8 @@ func (c *Client) Run(ctx context.Context) error {
 
 		cancel()
 		c.ready.Store(false)
-		c.htarget.NotReady()
+		// Re-enable once healthz of daprd is not tired to liveness.
+		// c.htarget.NotReady()
 
 		log.Errorf("Error communicating with placement: %s", err)
 		if ctx.Err() != nil {
