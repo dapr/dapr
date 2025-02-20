@@ -100,6 +100,15 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		}
 	}
 
+	var sched *runtimev1pb.MetadataScheduler
+	if a.scheduler != nil {
+		if addr := a.scheduler.Addresses(); len(addr) > 0 {
+			sched = &runtimev1pb.MetadataScheduler{
+				ConnectedAddresses: addr,
+			}
+		}
+	}
+
 	return &runtimev1pb.GetMetadataResponse{
 		Id:                      a.appID,
 		ExtendedMetadata:        extendedMetadata,
@@ -111,6 +120,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		RuntimeVersion:          buildinfo.Version(),
 		EnabledFeatures:         a.globalConfig.EnabledFeatures(),
 		ActorRuntime:            actorRuntime,
+		Scheduler:               sched,
 	}, nil
 }
 

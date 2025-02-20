@@ -129,6 +129,9 @@ func (c *Client) Run(ctx context.Context) error {
 						if err := c.client.Send(host); err != nil {
 							return err
 						}
+
+						c.htarget.Ready()
+						c.ready.Store(true)
 					}
 				}
 			},
@@ -150,9 +153,6 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 
 	for {
-		c.ready.Store(true)
-		c.htarget.Ready()
-
 		err := runner().Run(ctx)
 		if err == nil {
 			return c.table.HaltAll()

@@ -60,6 +60,8 @@ type Scheduler struct {
 	cluster *cluster.Cluster
 	clients *clients.Clients
 
+	broadcastAddresses []string
+
 	lock     sync.RWMutex
 	readyCh  chan struct{}
 	disabled chan struct{}
@@ -76,9 +78,10 @@ func New(opts Options) *Scheduler {
 			Channels:  opts.Channels,
 			WFEngine:  opts.WFEngine,
 		}),
-		htarget:  opts.Healthz.AddTarget(),
-		readyCh:  make(chan struct{}),
-		disabled: make(chan struct{}),
+		broadcastAddresses: opts.Addresses,
+		htarget:            opts.Healthz.AddTarget(),
+		readyCh:            make(chan struct{}),
+		disabled:           make(chan struct{}),
 	}
 }
 
@@ -161,6 +164,7 @@ func (s *Scheduler) connectClients(ctx context.Context, addresses []string) erro
 		return err
 	}
 
+	s.broadcastAddresses = addresses
 	close(s.readyCh)
 	s.htarget.Ready()
 	s.lock.Unlock()
@@ -196,6 +200,12 @@ func (s *Scheduler) All(ctx context.Context) ([]schedulerv1pb.SchedulerClient, e
 		return nil, err
 	}
 	return clients, nil
+}
+
+func (s *Scheduler) Addresses() []string {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.broadcastAddresses
 }
 
 func (s *Scheduler) StartApp(ctx context.Context) {

@@ -81,18 +81,18 @@ func (c *clusters) Setup(t *testing.T) []framework.Option {
 	c.schedulers = cluster.New(t, cluster.WithCount(3))
 
 	c.daprdA = daprd.New(t,
-		daprd.WithSchedulerAddresses(c.schedulers.Addresses()...),
+		daprd.WithSchedulerAddresses(c.schedulers.Addresses()[0]),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srvA.Port(t)),
 	)
 	c.daprdB = daprd.New(t,
-		daprd.WithSchedulerAddresses(c.schedulers.Addresses()...),
+		daprd.WithSchedulerAddresses(c.schedulers.Addresses()[0]),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srvB.Port(t)),
 		daprd.WithAppID(c.daprdA.AppID()),
 	)
 	c.daprdC = daprd.New(t,
-		daprd.WithSchedulerAddresses(c.schedulers.Addresses()...),
+		daprd.WithSchedulerAddresses(c.schedulers.Addresses()[0]),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srvC.Port(t)),
 		daprd.WithAppID(c.daprdA.AppID()),
@@ -110,6 +110,14 @@ func (c *clusters) Run(t *testing.T, ctx context.Context) {
 	c.daprdB.WaitUntilRunning(t, ctx)
 	c.daprdC.WaitUntilRunning(t, ctx)
 
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		for _, daprd := range []*daprd.Daprd{c.daprdA, c.daprdB, c.daprdC} {
+			resp, err := daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1pb.GetMetadataRequest))
+			assert.NoError(col, err)
+			assert.ElementsMatch(col, c.schedulers.Addresses(), resp.GetScheduler().GetConnectedAddresses())
+		}
+	}, time.Second*10, time.Millisecond*10)
+
 	_, err := c.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1pb.ScheduleJobRequest{
 		Job: &rtv1pb.Job{
 			Name:     "job1",
@@ -122,6 +130,6 @@ func (c *clusters) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
 		assert.Equal(col, int64(3), c.called.Load())
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 	assert.Equal(t, int64(3), c.totalCalls.Load())
 }

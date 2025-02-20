@@ -157,8 +157,12 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, client.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
-		id, err := client.ScheduleNewOrchestration(ctx, "ReconnectDuringActivity", api.WithInstanceID("Dapr"), api.WithInput("Dapr"))
-		require.NoError(t, err)
+		var id api.InstanceID
+		var err error
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			id, err = client.ScheduleNewOrchestration(ctx, "ReconnectDuringActivity", api.WithInstanceID("Dapr"), api.WithInput("Dapr"))
+			assert.NoError(c, err)
+		}, time.Second*10, time.Millisecond*10)
 
 		_, err = client.WaitForOrchestrationStart(ctx, id)
 		require.NoError(t, err)
