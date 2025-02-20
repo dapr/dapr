@@ -56,7 +56,7 @@ type Interface interface {
 	HaltAll() error
 	Halt(ctx context.Context, actorType, actorID string) error
 	HaltIdlable(ctx context.Context, target targets.Idlable) error
-	Drain(fn func(actorType, actorID string) bool)
+	Drain(fn func(actorType, actorID string) bool) error
 	Len() map[string]int
 
 	DeleteFromTable(actorType, actorID string)
@@ -153,26 +153,36 @@ func (t *table) Len() map[string]int {
 	return alen
 }
 
-// Drain drains actors who return true on the given func.
-func (t *table) Drain(fn func(actorType, actorID string) bool) {
+// HaltAll halts all actors currently in the table.
+func (t *table) HaltAll() error {
+	return t.Drain(func(actorType, actorID string) bool {
+		return true
+	})
+}
+
+func (t *table) Drain(fn func(actorType, actorID string) bool) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	var wg sync.WaitGroup
+	var (
+		wg   sync.WaitGroup
+		errs = slice.New[error]()
+	)
+	wg.Add(t.table.Len())
 	t.table.Range(func(actorKey string, _ targets.Interface) bool {
-		wg.Add(1)
 		go func(actorKey string) {
 			defer wg.Done()
 			actorType, actorID := key.ActorTypeAndIDFromKey(actorKey)
 			if fn(actorType, actorID) {
-				t.drain(actorKey, actorType)
+				errs.Append(t.drainSingle(actorKey, actorType))
 			}
 		}(actorKey)
-
 		return true
 	})
 
 	wg.Wait()
+
+	return errors.Join(errs.Slice()...)
 }
 
 func (t *table) IsActorTypeHosted(actorType string) bool {
@@ -301,36 +311,7 @@ func (t *table) DeleteFromTableIn(actor targets.Interface, in time.Duration) {
 }
 
 func (t *table) RemoveIdler(actor targets.Interface) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
 	t.idlerQueue.Dequeue(actor.Key())
-}
-
-// HaltAll halts all actors currently in the table.
-func (t *table) HaltAll() error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	var (
-		wg   sync.WaitGroup
-		errs = slice.New[error]()
-	)
-	wg.Add(t.table.Len())
-	t.table.Range(func(actorKey string, _ targets.Interface) bool {
-		go func(actorKey string) {
-			defer wg.Done()
-			err := t.haltInLock(actorKey)
-			if err != nil {
-				errs.Append(fmt.Errorf("failed to deactivate actor '%s': %v", actorKey, err))
-				return
-			}
-		}(actorKey)
-		return true
-	})
-
-	wg.Wait()
-
-	return errors.Join(errs.Slice()...)
 }
 
 func (t *table) haltInLock(actorKey string) error {
@@ -361,7 +342,7 @@ func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []
 	return ch, t.factories.Keys()
 }
 
-func (t *table) drain(actorKey, actorType string) {
+func (t *table) drainSingle(actorKey, actorType string) error {
 	doDrain := t.drainRebalancedActors
 	if v, ok := t.entityConfigs[actorType]; ok {
 		doDrain = v.DrainRebalancedActors
@@ -377,6 +358,8 @@ func (t *table) drain(actorKey, actorType string) {
 
 	err := t.haltInLock(actorKey)
 	if err != nil {
-		log.Errorf("Failed to deactivate actor '%s': %v", actorKey, err)
+		return fmt.Errorf("failed to deactivate actor '%s': %v", actorKey, err)
 	}
+
+	return nil
 }

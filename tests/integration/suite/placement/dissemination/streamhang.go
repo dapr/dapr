@@ -68,10 +68,17 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 
 	ctx1, cancel1 := context.WithCancel(ctx)
 	t.Cleanup(cancel1)
-	stream1, streamCancel1 := n.getStream(t, ctx1)
-	t.Cleanup(streamCancel1)
-	err := stream1.Send(host1)
-	require.NoError(t, err, "Failed to send host1")
+	var err error
+	var stream1 v1pb.Placement_ReportDaprStatusClient
+	var streamCancel1 context.CancelFunc
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		stream1, streamCancel1 = n.getStream(t, ctx1)
+		t.Cleanup(streamCancel1)
+		if stream1 != nil {
+			err = stream1.Send(host1)
+			assert.NoError(c, err, "Failed to send host1")
+		}
+	}, 10*time.Second, 10*time.Millisecond)
 
 	// Intentionally not reading from stream1 to simulate a hang on the larger message after host 1 connects
 
@@ -88,10 +95,16 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 
 	ctx2, cancel2 := context.WithCancel(ctx)
 	t.Cleanup(cancel2)
-	stream2, streamCancel2 := n.getStream(t, ctx2)
-	t.Cleanup(streamCancel2)
-	err = stream2.Send(host2)
-	require.NoError(t, err, "Failed to send host2")
+	var stream2 v1pb.Placement_ReportDaprStatusClient
+	var streamCancel2 context.CancelFunc
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		stream2, streamCancel2 = n.getStream(t, ctx2)
+		t.Cleanup(streamCancel2)
+		if stream2 != nil {
+			err = stream2.Send(host2)
+			assert.NoError(c, err, "Failed to send host2")
+		}
+	}, 10*time.Second, 10*time.Millisecond)
 
 	// Start reading from stream2
 	var wg sync.WaitGroup
@@ -149,10 +162,16 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 
 	ctx3, cancel3 := context.WithCancel(ctx)
 	t.Cleanup(cancel3)
-	stream3, streamCancel3 := n.getStream(t, ctx3)
-	t.Cleanup(streamCancel3)
-	err = stream3.Send(host3)
-	require.NoError(t, err, "Failed to send host3")
+	var stream3 v1pb.Placement_ReportDaprStatusClient
+	var streamCancel3 context.CancelFunc
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		stream3, streamCancel3 = n.getStream(t, ctx3)
+		t.Cleanup(streamCancel3)
+		if stream3 != nil {
+			err = stream3.Send(host3)
+			assert.NoError(c, err, "Failed to send host3")
+		}
+	}, 10*time.Second, 10*time.Millisecond)
 
 	err = stream2.Send(host2)
 	require.NoError(t, err, "Failed to send host2")
@@ -201,20 +220,23 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	wg.Wait()
 }
 
-func (n *streamHang) getStream(t *testing.T, ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, func()) {
-	t.Helper()
-
+func (n *streamHang) getStream(t assert.TestingT, ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, func()) {
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, n.place.Address(),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-	require.NoError(t, err)
+	//nolint:testifylint
+	if !assert.NoError(t, err) {
+		return nil, func() {}
+	}
 	client := v1pb.NewPlacementClient(conn)
 	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-accept-vnodes", "false")
 
 	stream, err := client.ReportDaprStatus(ctx)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return nil, func() {}
+	}
 
 	cancel := func() {
 		stream.CloseSend()

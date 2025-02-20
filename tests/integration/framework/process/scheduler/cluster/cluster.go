@@ -122,9 +122,9 @@ func (c *Cluster) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		s.WaitUntilRunning(t, ctx)
 	}
 
-	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+	require.EventuallyWithT(t, func(col *assert.CollectT) {
 		resp, err := c.schedulers[0].ETCDClient(t, ctx).Get(ctx, "dapr/leadership", clientv3.WithPrefix())
-		if !assert.NoError(col, err) {
+		if assert.NoError(col, err) {
 			_ = assert.NotNil(col, resp) && assert.Len(col, resp.Kvs, len(c.schedulers))
 		}
 	}, 10*time.Second, 10*time.Millisecond)

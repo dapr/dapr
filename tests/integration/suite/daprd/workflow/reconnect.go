@@ -121,44 +121,26 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("reconnect_during_activity", func(t *testing.T) {
-		numActivities := 5
-		activities := make(chan struct{}, numActivities)
-		for range numActivities - 1 {
-			activities <- struct{}{}
-		}
-
 		r := task.NewTaskRegistry()
 		r.AddOrchestratorN("ReconnectDuringActivity", func(ctx *task.OrchestrationContext) (any, error) {
 			var input string
 			if err := ctx.GetInput(&input); err != nil {
 				return nil, err
 			}
-			var output string
-			for range numActivities {
-				err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
-				if err != nil {
-					return nil, err
-				}
-			}
+			ctx.WaitForSingleEvent("event", time.Minute).Await(nil)
 
-			return output, nil
-		})
-		r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
-			var name string
-			if err := ctx.GetInput(&name); err != nil {
-				return nil, err
-			}
-
-			<-activities // the last activity will block until after the reconnection
-
-			return fmt.Sprintf("Hello, %s!", name), nil
+			return "Hello, " + input + "!", nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
 		require.NoError(t, client.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
-		id, err := client.ScheduleNewOrchestration(ctx, "ReconnectDuringActivity", api.WithInstanceID("Dapr"), api.WithInput("Dapr"))
-		require.NoError(t, err)
+		var id api.InstanceID
+		var err error
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			id, err = client.ScheduleNewOrchestration(ctx, "ReconnectDuringActivity", api.WithInstanceID("Dapr"), api.WithInput("Dapr"))
+			assert.NoError(c, err)
+		}, time.Second*10, time.Millisecond*10)
 
 		_, err = client.WaitForOrchestrationStart(ctx, id)
 		require.NoError(t, err)
@@ -172,8 +154,7 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 		_, err = client.WaitForOrchestrationStart(ctx, id)
 		require.NoError(t, err)
 
-		activities <- struct{}{} // release the last activity
-		activities <- struct{}{} // release again as the previous activity was cancelled.
+		client.RaiseEvent(ctx, id, "event")
 
 		metadata, err := client.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)

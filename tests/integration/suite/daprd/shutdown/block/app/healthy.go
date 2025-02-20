@@ -111,7 +111,7 @@ spec:
 `))
 
 	return []framework.Option{
-		framework.WithProcesses(app, h.logline),
+		framework.WithProcesses(h.logline, app),
 	}
 }
 

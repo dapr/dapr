@@ -19,11 +19,13 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/diagridio/go-etcd-cron/api"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/kit/concurrency/lock"
 	"github.com/dapr/kit/logger"
 )
 
@@ -34,13 +36,14 @@ type Pool struct {
 	cron   api.Interface
 	nsPool map[string]*namespacedPool
 
-	lock    sync.RWMutex
+	lock    *lock.Context
 	wg      sync.WaitGroup
 	closeCh chan struct{}
 	running atomic.Bool
 }
 
 type namespacedPool struct {
+	connID    atomic.Uint64
 	idx       atomic.Uint64
 	appID     map[string][]uint64
 	actorType map[string][]uint64
@@ -59,6 +62,7 @@ func New(cron api.Interface) *Pool {
 		cron:    cron,
 		nsPool:  make(map[string]*namespacedPool),
 		closeCh: make(chan struct{}),
+		lock:    lock.NewContext(),
 	}
 }
 
@@ -75,17 +79,16 @@ func (p *Pool) Run(ctx context.Context) error {
 }
 
 // Add adds a connection to the pool for a given namespace/appID.
-func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
-	p.lock.Lock()
+func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error) {
+	if err := p.lock.Lock(stream.Context()); err != nil {
+		return nil, err
+	}
 	defer p.lock.Unlock()
 
 	var id uint64
 	nsPool, ok := p.nsPool[req.GetNamespace()]
 	if ok {
-		for ok {
-			id++
-			_, ok = nsPool.conns[id]
-		}
+		id = nsPool.connID.Add(1)
 	} else {
 		nsPool = &namespacedPool{
 			appID:     make(map[string][]uint64),
@@ -116,14 +119,23 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 		}
 	}
 
-	cancel, err := p.cron.DeliverablePrefixes(stream.Context(), prefixes...)
+	dcancel, err := p.cron.DeliverablePrefixes(stream.Context(), prefixes...)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	ctx, cancel := context.WithCancel(stream.Context())
+	p.wg.Add(1)
+	context.AfterFunc(ctx, func() {
+		dcancel()
+		p.wg.Done()
+	})
 
 	nsPool.conns[id] = p.newConn(req, stream, id, cancel)
 
-	return nil
+	log.Debugf("Added a Sidecar connection to Scheduler for: %s/%s.", req.GetNamespace(), req.GetAppId())
+
+	return ctx, nil
 }
 
 // Send is a blocking function that sends a job trigger to a correct job
@@ -138,8 +150,8 @@ func (p *Pool) Send(ctx context.Context, job *JobEvent) api.TriggerResponseResul
 }
 
 // remove removes a connection from the pool with the given UUID.
-func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64, cancel context.CancelFunc) {
-	p.lock.Lock()
+func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64) {
+	p.lock.Lock(context.Background())
 	defer p.lock.Unlock()
 
 	nsPool, ok := p.nsPool[req.GetNamespace()]
@@ -200,13 +212,20 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64, can
 	if len(nsPool.appID) == 0 && len(nsPool.actorType) == 0 {
 		delete(p.nsPool, req.GetNamespace())
 	}
-
-	cancel()
 }
 
 // getConn returns a connection from the pool based on the metadata.
 func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, bool) {
-	p.lock.RLock()
+	// If the lock times out we return false that this connection is not
+	// available.
+	// This will result in the job being put on the staging queue, which will be
+	// immediately re-delivered outside the deadlock if we actually have a
+	// connection.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second/4)
+	defer cancel()
+	if err := p.lock.RLock(ctx); err != nil {
+		return nil, false
+	}
 	defer p.lock.RUnlock()
 
 	nsPool, ok := p.nsPool[meta.GetNamespace()]
