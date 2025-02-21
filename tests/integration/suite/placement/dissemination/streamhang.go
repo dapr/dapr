@@ -149,10 +149,16 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 
 	ctx3, cancel3 := context.WithCancel(ctx)
 	t.Cleanup(cancel3)
-	stream3, streamCancel3 := n.getStream(t, ctx3)
-	t.Cleanup(streamCancel3)
-	err = stream3.Send(host3)
-	require.NoError(t, err, "Failed to send host3")
+	var stream3 v1pb.Placement_ReportDaprStatusClient
+	var streamCancel3 context.CancelFunc
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		stream3, streamCancel3 = n.getStream(t, ctx3)
+		t.Cleanup(streamCancel3)
+		if stream3 != nil {
+			err = stream3.Send(host3)
+			assert.NoError(c, err, "Failed to send host3")
+		}
+	}, 10*time.Second, 10*time.Millisecond)
 
 	err = stream2.Send(host2)
 	require.NoError(t, err, "Failed to send host2")
@@ -201,20 +207,22 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	wg.Wait()
 }
 
-func (n *streamHang) getStream(t *testing.T, ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, func()) {
-	t.Helper()
-
+func (n *streamHang) getStream(t assert.TestingT, ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, func()) {
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, n.place.Address(),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return nil, func() {}
+	}
 	client := v1pb.NewPlacementClient(conn)
 	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-accept-vnodes", "false")
 
 	stream, err := client.ReportDaprStatus(ctx)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return nil, func() {}
+	}
 
 	cancel := func() {
 		stream.CloseSend()
