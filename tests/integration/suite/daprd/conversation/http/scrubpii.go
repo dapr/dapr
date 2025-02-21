@@ -64,7 +64,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 	httpClient := client.HTTP(t)
 
 	t.Run("scrub input phone number", func(t *testing.T) {
-		body := `{"inputs":[{"message":"well hello there, my phone number is +2222222222", "scrubPII": true}]}`
+		body := `{"inputs":[{"content":"well hello there, my phone number is +2222222222", "scrubPII": true}]}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 		require.NoError(t, err)
