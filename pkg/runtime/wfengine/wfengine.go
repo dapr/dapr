@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/config"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -54,6 +55,7 @@ type Options struct {
 	BackendManager     processor.WorkflowBackendManager
 	Resiliency         resiliency.Provider
 	SchedulerReminders bool
+	EventSink          workflow.EventSink
 }
 
 type engine struct {
@@ -76,6 +78,7 @@ func New(opts Options) Interface {
 		Actors:             opts.Actors,
 		Resiliency:         opts.Resiliency,
 		SchedulerReminders: opts.SchedulerReminders,
+		EventSink:          opts.EventSink,
 	})
 
 	var activeConns uint64

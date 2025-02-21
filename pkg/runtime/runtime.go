@@ -280,6 +280,7 @@ func newDaprRuntime(ctx context.Context,
 		BackendManager:     processor.WorkflowBackend(),
 		Resiliency:         resiliencyProvider,
 		SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
+		EventSink:          runtimeConfig.workflowEventSink,
 	})
 
 	rt := &DaprRuntime{
