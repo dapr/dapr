@@ -468,8 +468,8 @@ github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuA
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
 github.com/dapr/components-contrib v1.15.0-rc.3 h1:i3BUVpJw6mia67+JRprgh73rFmYqD78KC+iiZVlG/lg=
 github.com/dapr/components-contrib v1.15.0-rc.3/go.mod h1:eFF2Jan1kZBjY4vzU1zJ4rz8q9jHwy5BOKhEWLgYi/A=
-github.com/dapr/durabletask-go v0.6.3 h1:WHhSAw1YL4xneK3Jo5nGfmMaJxfFodIIF5q1rpkDDfs=
-github.com/dapr/durabletask-go v0.6.3/go.mod h1:nTZ5fCbJLnZbVdi6Z2YxdDF1OgQZL3LroogGuetrwuA=
+github.com/dapr/durabletask-go v0.6.4 h1:Mmao3JqcxVTGj87Sy/B5BcURxnr/WS8178xWSdwNjoc=
+github.com/dapr/durabletask-go v0.6.4/go.mod h1:nTZ5fCbJLnZbVdi6Z2YxdDF1OgQZL3LroogGuetrwuA=
 github.com/dapr/kit v0.15.0 h1:446jrEOQV/0rt6FwmoKrifP3vav5+Uh/u38DqU8q+JM=
 github.com/dapr/kit v0.15.0/go.mod h1:HwFsBKEbcyLanWlDZE7u/jnaDCD/tU+n3pkFNUctQNw=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=

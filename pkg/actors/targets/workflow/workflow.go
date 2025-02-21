@@ -53,6 +53,8 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.targets.workflow")
 
+type EventSink func(*backend.OrchestrationMetadata)
+
 type workflow struct {
 	appID             string
 	actorID           string
@@ -90,6 +92,7 @@ type WorkflowOptions struct {
 	Table              table.Interface
 	Scheduler          todo.WorkflowScheduler
 	SchedulerReminders bool
+	EventSink          EventSink
 }
 
 func WorkflowFactory(opts WorkflowOptions) targets.Factory {
@@ -100,7 +103,7 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			reminderInterval = *opts.ReminderInterval
 		}
 
-		return &workflow{
+		w := &workflow{
 			appID:              opts.AppID,
 			actorID:            actorID,
 			actorType:          opts.WorkflowActorType,
@@ -113,6 +116,27 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			schedulerReminders: opts.SchedulerReminders,
 			ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
 			closeCh:            make(chan struct{}),
+		}
+		if opts.EventSink != nil {
+			ch := make(chan *backend.OrchestrationMetadata)
+			go w.runEventSink(ch, opts.EventSink)
+			// We use a Background context since this subscription should be maintained for the entire lifecycle of this workflow actor. The subscription will be shutdown during the actor deactivation.
+			w.ometaBroadcaster.Subscribe(context.Background(), ch)
+		}
+		return w
+	}
+}
+
+func (w *workflow) runEventSink(ch chan *backend.OrchestrationMetadata, cb func(*backend.OrchestrationMetadata)) {
+	for {
+		select {
+		case <-w.closeCh:
+			return
+		case val, ok := <-ch:
+			if !ok {
+				return
+			}
+			cb(val)
 		}
 	}
 }
@@ -237,8 +261,8 @@ func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) e
 			ActivityActorType: w.activityActorType,
 		})
 		w.lock.Lock()
-		w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.History)
-		w.setOrchestrationMetadata(state, w.rstate)
+		w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
+		w.setOrchestrationMetadata(w.rstate)
 		created = true
 		w.lock.Unlock()
 	}
@@ -819,8 +843,8 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 	}
 	// Update cached state
 	w.state = state
-	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.History)
-	w.setOrchestrationMetadata(w.state, w.rstate)
+	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
+	w.setOrchestrationMetadata(w.rstate)
 	w.ometaBroadcaster.Broadcast(w.ometa)
 
 	return state, w.ometa, nil
@@ -850,8 +874,8 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 
 	// Update cached state
 	w.state = state
-	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.History)
-	w.setOrchestrationMetadata(state, w.rstate)
+	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
+	w.setOrchestrationMetadata(w.rstate)
 	w.ometaBroadcaster.Broadcast(w.ometa)
 	return nil
 }
@@ -1040,23 +1064,30 @@ func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.I
 	return nil
 }
 
-func (w *workflow) setOrchestrationMetadata(state *wfenginestate.State, rstate *backend.OrchestrationRuntimeState) {
+func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntimeState) {
 	name, _ := runtimestate.Name(rstate)
 	createdAt, _ := runtimestate.CreatedTime(rstate)
 	lastUpdated, _ := runtimestate.LastUpdatedTime(rstate)
+	completedAt, _ := runtimestate.CompletedTime(rstate)
 	input, _ := runtimestate.Input(rstate)
 	output, _ := runtimestate.Output(rstate)
-	failureDetuils, _ := runtimestate.FailureDetails(rstate)
+	failureDetails, _ := runtimestate.FailureDetails(rstate)
+	var parentInstanceID string
+	if rstate.GetStartEvent() != nil && rstate.GetStartEvent().GetParentInstance() != nil && rstate.GetStartEvent().GetParentInstance().GetOrchestrationInstance() != nil {
+		parentInstanceID = rstate.GetStartEvent().GetParentInstance().GetOrchestrationInstance().GetInstanceId()
+	}
 	w.ometa = &backend.OrchestrationMetadata{
-		InstanceId:     rstate.GetInstanceId(),
-		Name:           name,
-		RuntimeStatus:  runtimestate.RuntimeStatus(rstate),
-		CreatedAt:      timestamppb.New(createdAt),
-		LastUpdatedAt:  timestamppb.New(lastUpdated),
-		Input:          input,
-		Output:         output,
-		CustomStatus:   state.CustomStatus,
-		FailureDetails: failureDetuils,
+		InstanceId:       rstate.GetInstanceId(),
+		Name:             name,
+		RuntimeStatus:    runtimestate.RuntimeStatus(rstate),
+		CreatedAt:        timestamppb.New(createdAt),
+		LastUpdatedAt:    timestamppb.New(lastUpdated),
+		CompletedAt:      timestamppb.New(completedAt),
+		Input:            input,
+		Output:           output,
+		CustomStatus:     rstate.GetCustomStatus(),
+		FailureDetails:   failureDetails,
+		ParentInstanceId: parentInstanceID,
 	}
 }
 
