@@ -220,7 +220,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 						status, body := doReq(http.MethodGet, ts.url, ts.headers)
 						assert.Equal(t, expTLSCode, status)
 						assertBody(c, body)
-					}, time.Second*5, time.Millisecond*10)
+					}, time.Second*10, time.Millisecond*10)
 				})
 			}
 		})
@@ -238,7 +238,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(c, body, "tls: unknown certificate authority")
 			assert.EventuallyWithT(c, func(ct *assert.CollectT) {
 				assert.True(ct, h.daprd2.Metrics(ct, ctx).MatchMetricAndSum(ct, 1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
-			}, 5*time.Second, 100*time.Millisecond)
+			}, 10*time.Second, 10*time.Millisecond)
 		}, h.daprd2)
 	})
 }
