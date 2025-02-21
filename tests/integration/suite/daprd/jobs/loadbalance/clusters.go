@@ -115,6 +115,7 @@ func (c *clusters) Run(t *testing.T, ctx context.Context) {
 			resp, err := daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1pb.GetMetadataRequest))
 			assert.NoError(col, err)
 			assert.ElementsMatch(col, c.schedulers.Addresses(), resp.GetScheduler().GetConnectedAddresses())
+			assert.Len(col, resp.GetScheduler().GetConnectedAddresses(), 3)
 		}
 	}, time.Second*10, time.Millisecond*10)
 

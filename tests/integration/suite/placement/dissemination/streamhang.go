@@ -213,7 +213,7 @@ func (n *streamHang) getStream(t assert.TestingT, ctx context.Context) (v1pb.Pla
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-	//nolint:testify
+	//nolint:testifylint
 	if !assert.NoError(t, err) {
 		return nil, func() {}
 	}
