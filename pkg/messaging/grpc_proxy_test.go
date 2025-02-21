@@ -189,6 +189,7 @@ func TestIntercept(t *testing.T) {
 		})
 
 		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
+		t.Setenv(securityConsts.AppAPITokenHeaderEnvVar, "x-api-token")
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}, securityConsts.APITokenHeader: []string{"oldtoken"}})
 		proxy := p.(*proxy)
@@ -201,6 +202,7 @@ func TestIntercept(t *testing.T) {
 
 		md, _ := metadata.FromOutgoingContext(ctx)
 		assert.Equal(t, "token1", md[securityConsts.APITokenHeader][0])
+		assert.Equal(t, "token1", md["x-api-token"][0])
 	})
 
 	t.Run("proxy to a remote app", func(t *testing.T) {
@@ -222,6 +224,7 @@ func TestIntercept(t *testing.T) {
 		})
 
 		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
+		t.Setenv(securityConsts.AppAPITokenHeaderEnvVar, "x-api-token")
 
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
@@ -237,6 +240,7 @@ func TestIntercept(t *testing.T) {
 		assert.Equal(t, "a", md[invokev1.CallerIDHeader][0])
 		assert.Equal(t, "b", md[invokev1.CalleeIDHeader][0])
 		assert.NotContains(t, md, securityConsts.APITokenHeader)
+		assert.NotContains(t, md, "x-api-token")
 	})
 
 	t.Run("access policies applied", func(t *testing.T) {

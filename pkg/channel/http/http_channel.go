@@ -29,6 +29,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	streamutils "github.com/dapr/kit/streams"
+
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
@@ -43,7 +45,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
-	streamutils "github.com/dapr/kit/streams"
 )
 
 const (
@@ -475,6 +476,11 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 
 	if h.appHeaderToken != "" {
 		channelReq.Header.Set(securityConsts.APITokenHeader, h.appHeaderToken)
+
+		appMetadataTokenHeader := security.GetAppTokenHeader()
+		if appMetadataTokenHeader != "" {
+			channelReq.Header.Set(appMetadataTokenHeader, h.appHeaderToken)
+		}
 	}
 
 	return channelReq, nil
