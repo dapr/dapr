@@ -120,8 +120,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 
 	if opts.sentry != nil {
-		taFile := filepath.Join(t.TempDir(), "ca.pem")
-		require.NoError(t, os.WriteFile(taFile, opts.sentry.CABundle().TrustAnchors, 0o600))
+		taFile := opts.sentry.TrustAnchorsFile(t)
 		args = append(args,
 			"--tls-enabled=true",
 			"--sentry-address="+opts.sentry.Address(),
