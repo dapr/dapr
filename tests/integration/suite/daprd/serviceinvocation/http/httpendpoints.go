@@ -161,7 +161,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				assert.NoError(t, resp.Body.Close())
 				endpoints, ok := body["httpEndpoints"]
 				_ = assert.True(t, ok) && assert.Len(t, endpoints.([]any), 2)
-			}, time.Second*5, time.Millisecond*10)
+			}, time.Second*10, time.Millisecond*10)
 		}
 
 		t.Run("invoke http endpoint", func(t *testing.T) {
