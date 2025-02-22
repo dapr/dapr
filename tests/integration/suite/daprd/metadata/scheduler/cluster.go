@@ -16,7 +16,6 @@ package scheduler
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -50,12 +49,10 @@ func (h *three) Setup(t *testing.T) []framework.Option {
 func (h *three) Run(t *testing.T, ctx context.Context) {
 	h.daprd.WaitUntilRunning(t, ctx)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := h.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		assert.NoError(c, err)
-		assert.ElementsMatch(c, h.cluster.Addresses(), resp.GetScheduler().GetConnectedAddresses())
-		sched := h.daprd.GetMetaScheduler(c, ctx)
-		assert.NotNil(c, sched)
-		assert.ElementsMatch(c, h.cluster.Addresses(), sched.GetConnectedAddresses())
-	}, time.Second*10, time.Millisecond*10)
+	resp, err := h.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, h.cluster.Addresses(), resp.GetScheduler().GetConnectedAddresses())
+	sched := h.daprd.GetMetaScheduler(t, ctx)
+	assert.NotNil(t, sched)
+	assert.ElementsMatch(t, h.cluster.Addresses(), sched.GetConnectedAddresses())
 }
