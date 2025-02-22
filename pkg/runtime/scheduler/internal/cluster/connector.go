@@ -29,6 +29,7 @@ type connector struct {
 	channels *channels.Channels
 	actors   engine.Interface
 	wfengine wfengine.Interface
+	readyCh  chan struct{}
 }
 
 // run starts the scheduler connector. Attempts to re-connect to the Scheduler
@@ -60,6 +61,12 @@ func (c *connector) run(ctx context.Context) error {
 		}
 
 		log.Info("Scheduler stream connected")
+
+		select {
+		case <-c.readyCh:
+		default:
+			close(c.readyCh)
+		}
 
 		err = (&streamer{
 			stream:   stream,

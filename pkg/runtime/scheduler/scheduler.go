@@ -161,15 +161,29 @@ func (s *Scheduler) connectClients(ctx context.Context, addresses []string) erro
 		Security:  s.security,
 	})
 	if err != nil {
+		s.lock.Unlock()
 		return err
 	}
 
 	s.broadcastAddresses = addresses
-	close(s.readyCh)
-	s.htarget.Ready()
+	readyCh := s.readyCh
 	s.lock.Unlock()
 
-	err = s.cluster.RunClients(ctx, s.clients)
+	err = concurrency.NewRunnerManager(
+		func(ctx context.Context) error {
+			return s.cluster.RunClients(ctx, s.clients)
+		},
+		func(ctx context.Context) error {
+			if err = s.cluster.WaitForReady(ctx); err != nil {
+				return err
+			}
+			close(readyCh)
+			s.htarget.Ready()
+
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	).Run(ctx)
 
 	s.lock.Lock()
 	s.readyCh = make(chan struct{})

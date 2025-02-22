@@ -51,6 +51,7 @@ type Cluster struct {
 
 	appCh      chan struct{}
 	appRunning bool
+	readyCh    chan struct{}
 
 	wg sync.WaitGroup
 }
@@ -63,6 +64,7 @@ func New(opts Options) *Cluster {
 		wfengine:  opts.WFEngine,
 		channels:  opts.Channels,
 		appCh:     make(chan struct{}),
+		readyCh:   make(chan struct{}),
 	}
 }
 
@@ -178,18 +180,42 @@ func (c *Cluster) watchJobs(ctx context.Context, clients *clients.Clients, appTa
 		return ctx.Err()
 	}
 
-	runners := make([]concurrency.Runner, len(cls))
+	runners := make([]concurrency.Runner, len(cls)+1)
+	connectors := make([]*connector, len(cls))
 
 	// Accept engine to be nil, and ignore the disabled error.
 	engine, _ := c.actors.Engine(ctx)
 	for i := range cls {
-		runners[i] = (&connector{
+		connectors[i] = &connector{
 			req:      req,
 			client:   cls[i],
 			channels: c.channels,
 			actors:   engine,
 			wfengine: c.wfengine,
-		}).run
+			readyCh:  make(chan struct{}),
+		}
+		runners[i] = connectors[i].run
+	}
+
+	runners[len(cls)] = func(ctx context.Context) error {
+		for _, conn := range connectors {
+			select {
+			case <-conn.readyCh:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+
+		c.lock.Lock()
+		close(c.readyCh)
+		c.lock.Unlock()
+
+		<-ctx.Done()
+
+		c.lock.Lock()
+		c.readyCh = make(chan struct{})
+		c.lock.Unlock()
+		return ctx.Err()
 	}
 
 	return concurrency.NewRunnerManager(runners...).Run(ctx)
@@ -209,4 +235,17 @@ func (c *Cluster) StopApp() {
 	c.appRunning = false
 	close(c.appCh)
 	c.appCh = make(chan struct{}, 1)
+}
+
+func (c *Cluster) WaitForReady(ctx context.Context) error {
+	c.lock.Lock()
+	readyCh := c.readyCh
+	c.lock.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-readyCh:
+		return nil
+	}
 }
