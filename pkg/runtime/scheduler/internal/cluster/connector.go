@@ -41,13 +41,13 @@ func (c *connector) run(ctx context.Context) error {
 		}
 
 		if err != nil {
-			log.Errorf("failed to watch scheduler jobs, retrying: %s", err)
+			log.Errorf("Failed to watch scheduler jobs, retrying: %s", err)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(time.Second):
 			}
-			continue
+			return err
 		}
 
 		if err = stream.Send(c.req); err != nil {
