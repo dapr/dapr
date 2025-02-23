@@ -120,7 +120,11 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 	}
 
 	ctx, cancel := context.WithCancel(stream.Context())
-	context.AfterFunc(ctx, dcancel)
+	p.wg.Add(1)
+	context.AfterFunc(ctx, func() {
+		dcancel()
+		p.wg.Done()
+	})
 
 	nsPool.conns[id] = p.newConn(req, stream, id, cancel)
 

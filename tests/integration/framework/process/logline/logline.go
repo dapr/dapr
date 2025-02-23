@@ -116,13 +116,13 @@ func (l *LogLine) Cleanup(t *testing.T) {
 func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[string]bool, closer io.WriteCloser, reader io.Reader) map[string]bool {
 	t.Helper()
 
-	if len(expLines) == 0 {
-		go io.Copy(io.Discard, reader)
-		return expLines
-	}
-
 	breader := bufio.NewReader(reader)
 	for {
+		if len(expLines) == 0 {
+			go io.Copy(io.Discard, reader)
+			return expLines
+		}
+
 		line, _, err := breader.ReadLine()
 		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
 			break

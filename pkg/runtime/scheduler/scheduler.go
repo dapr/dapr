@@ -276,7 +276,7 @@ func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Sched
 		if status.Code(err) == codes.Unimplemented {
 			// Ignore unimplemented error code as we are talking to an old server.
 			// TODO: @joshvanl: remove special case in v1.16.
-			return nil, s.addresses, nil
+			return nil, slices.Clone(s.addresses), nil
 		}
 
 		return nil, nil, fmt.Errorf("failed to watch scheduler hosts: %s", err)
@@ -287,7 +287,7 @@ func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Sched
 		if status.Code(err) == codes.Unimplemented {
 			// Ignore unimplemented error code as we are talking to an old server.
 			// TODO: @joshvanl: remove special case in v1.16.
-			return nil, s.addresses, nil
+			return nil, slices.Clone(s.addresses), nil
 		}
 		return nil, nil, err
 	}
