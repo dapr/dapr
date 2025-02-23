@@ -357,5 +357,4 @@ func (u *uppercase) doReq(t require.TestingT, ctx context.Context, client *netht
 			assert.Equal(c, "hello", string(body))
 		}
 	}, time.Second*5, time.Millisecond*10)
-
 }
