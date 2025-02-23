@@ -50,8 +50,8 @@ func (p *pause) Run(t *testing.T, ctx context.Context) {
 
 	var count atomic.Int64
 	var waiting atomic.Int64
-	done := make(chan struct{})
-	cont := make(chan struct{})
+	done := make(chan struct{}, 1)
+	cont := make(chan struct{}, 1)
 	p.workflow.Registry().AddOrchestratorN("pauser", func(ctx *task.OrchestrationContext) (any, error) {
 		ctx.CallActivity("abc").Await(nil)
 		ctx.CallActivity("1234").Await(nil)
@@ -90,7 +90,7 @@ func (p *pause) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "ORCHESTRATION_STATUS_SUSPENDED", meta.GetRuntimeStatus().String())
 	assert.Equal(t, int64(1), waiting.Load())
 
-	close(done)
+	done <- struct{}{}
 
 	require.NoError(t, client.ResumeOrchestration(ctx, id, "anothermyreason"))
 	meta, err = client.FetchOrchestrationMetadata(ctx, id)
@@ -101,7 +101,7 @@ func (p *pause) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(2), waiting.Load())
 	}, time.Second*10, time.Millisecond*10)
 
-	close(cont)
+	cont <- struct{}{}
 
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
