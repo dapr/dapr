@@ -59,28 +59,39 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 		jobCh:    make(chan *schedulerv1pb.WatchJobsResponse, 10),
 	}
 
-	p.wg.Add(2)
+	doneCh := make(chan struct{}, 2)
+	p.wg.Add(3)
 
-	doneCh := make(chan struct{})
+	go func() {
+		select {
+		case <-stream.Context().Done():
+		case <-p.closeCh:
+		}
+
+		log.Debugf("Closing connection to %s/%s", req.GetNamespace(), req.GetAppId())
+		cancel()
+		close(conn.closeCh)
+		<-doneCh
+		<-doneCh
+		p.remove(req, id)
+		log.Debugf("Closed and removed connection to %s/%s", req.GetNamespace(), req.GetAppId())
+		p.wg.Done()
+	}()
 
 	go func() {
 		defer func() {
-			cancel()
-			close(conn.closeCh)
-			p.remove(req, id)
+			log.Debugf("Closed send connection to %s/%s", req.GetNamespace(), req.GetAppId())
+			doneCh <- struct{}{}
 			p.wg.Done()
 		}()
+
 		for {
 			select {
 			case job := <-conn.jobCh:
 				if err := stream.Send(job); err != nil {
 					log.Warnf("Error sending job to connection %s/%s: %s", req.GetNamespace(), req.GetAppId(), err)
 				}
-			case <-p.closeCh:
-				return
-			case <-stream.Context().Done():
-				return
-			case <-doneCh:
+			case <-conn.closeCh:
 				return
 			}
 		}
@@ -88,8 +99,8 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 
 	go func() {
 		defer func() {
-			cancel()
-			close(doneCh)
+			log.Debugf("Closed receive connection to %s/%s", req.GetNamespace(), req.GetAppId())
+			doneCh <- struct{}{}
 			p.wg.Done()
 		}()
 
