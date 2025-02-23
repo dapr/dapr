@@ -193,10 +193,12 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 	// Always send the current hosts initially to catch up to broadcast
 	// subscribe.
 	c.lock.RLock()
-	err := stream.Send(&schedulerv1pb.WatchHostsResponse{
-		Hosts: c.currHosts,
-	})
+	hosts := make([]*schedulerv1pb.Host, len(c.currHosts))
+	copy(hosts, c.currHosts)
 	c.lock.RUnlock()
+	err := stream.Send(&schedulerv1pb.WatchHostsResponse{
+		Hosts: hosts,
+	})
 	if err != nil {
 		return err
 	}
