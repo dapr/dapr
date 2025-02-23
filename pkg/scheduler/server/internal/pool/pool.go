@@ -19,6 +19,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/diagridio/go-etcd-cron/api"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -114,7 +115,9 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 		}
 	}
 
-	dcancel, err := p.cron.DeliverablePrefixes(stream.Context(), prefixes...)
+	tctx, tcancel := context.WithTimeout(stream.Context(), time.Second*5)
+	defer tcancel()
+	dcancel, err := p.cron.DeliverablePrefixes(tctx, prefixes...)
 	if err != nil {
 		return nil, err
 	}
