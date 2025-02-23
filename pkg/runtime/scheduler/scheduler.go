@@ -127,12 +127,15 @@ func (s *Scheduler) Run(ctx context.Context) error {
 				var resp *schedulerv1pb.WatchHostsResponse
 				resp, err = stream.Recv()
 				if err != nil {
-					log.Errorf("Failed to receive scheduler hosts: %s", err)
+					if ctx.Err() == nil {
+						log.Errorf("Failed to receive scheduler hosts: %s", err)
+					}
 					stream.CloseSend()
 					stream = nil
 					//nolint:nilerr
 					return nil
 				}
+
 				addresses = make([]string, 0, len(resp.GetHosts()))
 				for _, host := range resp.GetHosts() {
 					addresses = append(addresses, host.GetAddress())

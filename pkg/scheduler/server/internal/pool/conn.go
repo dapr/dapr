@@ -61,6 +61,8 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 
 	p.wg.Add(2)
 
+	doneCh := make(chan struct{})
+
 	go func() {
 		defer func() {
 			p.remove(req, id, cancel)
@@ -77,12 +79,17 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 				return
 			case <-stream.Context().Done():
 				return
+			case <-doneCh:
+				return
 			}
 		}
 	}()
 
 	go func() {
-		defer p.wg.Done()
+		defer func() {
+			close(doneCh)
+			p.wg.Done()
+		}()
 
 		for {
 			resp, err := stream.Recv()
