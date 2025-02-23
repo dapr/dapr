@@ -41,6 +41,7 @@ type Pool struct {
 }
 
 type namespacedPool struct {
+	connID    atomic.Uint64
 	idx       atomic.Uint64
 	appID     map[string][]uint64
 	actorType map[string][]uint64
@@ -82,10 +83,7 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 	var id uint64
 	nsPool, ok := p.nsPool[req.GetNamespace()]
 	if ok {
-		for ok {
-			id++
-			_, ok = nsPool.conns[id]
-		}
+		id = nsPool.connID.Add(1)
 	} else {
 		nsPool = &namespacedPool{
 			appID:     make(map[string][]uint64),
