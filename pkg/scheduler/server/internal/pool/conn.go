@@ -147,7 +147,6 @@ func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) api.Tr
 		if result == schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS {
 			return api.TriggerResponseResult_SUCCESS
 		}
-		return api.TriggerResponseResult_FAILED
 	case <-c.pool.closeCh:
 	case <-c.closeCh:
 	case <-ctx.Done():

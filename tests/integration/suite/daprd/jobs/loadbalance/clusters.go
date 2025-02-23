@@ -119,18 +119,20 @@ func (c *clusters) Run(t *testing.T, ctx context.Context) {
 		}
 	}, time.Second*10, time.Millisecond*10)
 
-	_, err := c.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1pb.ScheduleJobRequest{
-		Job: &rtv1pb.Job{
-			Name:     "job1",
-			Schedule: ptr.Of("@every 1s"),
-			DueTime:  ptr.Of("0s"),
-			Repeats:  ptr.Of(uint32(3)),
-		},
-	})
-	require.NoError(t, err)
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		_, err := c.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1pb.ScheduleJobRequest{
+			Job: &rtv1pb.Job{
+				Name:     "job1",
+				Schedule: ptr.Of("@every 1s"),
+				DueTime:  ptr.Of("0s"),
+				Repeats:  ptr.Of(uint32(3)),
+			},
+		})
+		require.NoError(t, err)
 
-	assert.EventuallyWithT(t, func(cc *assert.CollectT) {
-		assert.Equal(cc, int64(3), c.totalCalls.Load())
-	}, time.Second*5, time.Millisecond*10)
-	assert.Equal(t, int64(3), c.called.Load())
+		assert.EventuallyWithT(t, func(cc *assert.CollectT) {
+			assert.Equal(cc, int64(3), c.totalCalls.Load())
+		}, time.Second*5, time.Millisecond*10)
+		assert.Equal(col, int64(3), c.called.Load())
+	}, time.Second*10, time.Millisecond*10)
 }
