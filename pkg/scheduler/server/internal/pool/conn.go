@@ -81,7 +81,6 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 	go func() {
 		defer func() {
 			log.Debugf("Closed send connection to %s/%s", req.GetNamespace(), req.GetAppId())
-			cancel()
 			doneCh <- struct{}{}
 			p.wg.Done()
 		}()
@@ -102,7 +101,6 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 	go func() {
 		defer func() {
 			log.Debugf("Closed receive connection to %s/%s", req.GetNamespace(), req.GetAppId())
-			cancel()
 			doneCh <- struct{}{}
 			p.wg.Done()
 		}()
@@ -116,9 +114,12 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 
 			isEOF := errors.Is(err, io.EOF)
 			s, ok := status.FromError(err)
-			if !isEOF && (!ok || s.Code() != codes.Canceled) {
-				log.Warnf("Error receiving from connection: %v", err)
+			if isEOF || (ok && s.Code() != codes.Canceled) {
+				return
 			}
+
+			log.Warnf("Error receiving from connection: %v", err)
+			return
 		}
 	}()
 
