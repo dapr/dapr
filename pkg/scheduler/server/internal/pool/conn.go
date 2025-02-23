@@ -65,8 +65,8 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 
 	go func() {
 		defer func() {
-			p.remove(req, id, cancel)
 			close(conn.closeCh)
+			p.remove(req, id, cancel)
 			p.wg.Done()
 		}()
 		for {
