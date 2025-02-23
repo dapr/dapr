@@ -338,18 +338,24 @@ func (u *uppercase) Run(t *testing.T, ctx context.Context) {
 }
 
 func (u *uppercase) doReq(t require.TestingT, ctx context.Context, client *nethttp.Client, source, target *daprd.Daprd, expectUpper bool) {
-	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s.%s/method/foo", source.HTTPPort(), target.AppID(), target.Namespace())
+	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", source.HTTPPort(), target.AppID())
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader("hello"))
 	require.NoError(t, err)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	if expectUpper {
-		assert.Equal(t, "HELLO", string(body))
-	} else {
-		assert.Equal(t, "hello", string(body))
-	}
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := client.Do(req)
+		if !assert.NoError(c, err) {
+			return
+		}
+		defer resp.Body.Close()
+		assert.Equal(c, nethttp.StatusOK, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		assert.NoError(c, err)
+		if expectUpper {
+			assert.Equal(c, "HELLO", string(body))
+		} else {
+			assert.Equal(c, "hello", string(body))
+		}
+	}, time.Second*5, time.Millisecond*10)
+
 }

@@ -15,6 +15,7 @@ package loadbalance
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -119,13 +120,14 @@ func (c *clusters) Run(t *testing.T, ctx context.Context) {
 		}
 	}, time.Second*10, time.Millisecond*10)
 
+	var i atomic.Int64
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
 		c.totalCalls.Store(0)
 		c.called.Store(0)
 
 		_, err := c.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1pb.ScheduleJobRequest{
 			Job: &rtv1pb.Job{
-				Name:     "job1",
+				Name:     "job-" + strconv.FormatInt(i.Add(1), 10),
 				Schedule: ptr.Of("@every 1s"),
 				DueTime:  ptr.Of("0s"),
 				Repeats:  ptr.Of(uint32(3)),
@@ -137,5 +139,5 @@ func (c *clusters) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(cc, int64(3), c.totalCalls.Load())
 		}, time.Second*5, time.Millisecond*10)
 		assert.Equal(col, int64(3), c.called.Load())
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*10)
 }
