@@ -120,6 +120,9 @@ func (c *clusters) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		c.totalCalls.Store(0)
+		c.called.Store(0)
+
 		_, err := c.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1pb.ScheduleJobRequest{
 			Job: &rtv1pb.Job{
 				Name:     "job1",
