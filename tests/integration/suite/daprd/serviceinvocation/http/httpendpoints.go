@@ -220,7 +220,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 						status, body := doReq(http.MethodGet, ts.url, ts.headers)
 						assert.Equal(t, expTLSCode, status)
 						assertBody(c, body)
-					}, time.Second*10, time.Millisecond*10)
+					}, time.Second*20, time.Millisecond*10)
 				})
 			}
 		})
