@@ -76,7 +76,7 @@ func (p *Pool) Run(ctx context.Context) error {
 }
 
 // Add adds a connection to the pool for a given namespace/appID.
-func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
+func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -114,14 +114,19 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 		}
 	}
 
-	cancel, err := p.cron.DeliverablePrefixes(stream.Context(), prefixes...)
+	dcancel, err := p.cron.DeliverablePrefixes(stream.Context(), prefixes...)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	ctx, cancel := context.WithCancel(stream.Context())
+	context.AfterFunc(ctx, dcancel)
 
 	nsPool.conns[id] = p.newConn(req, stream, id, cancel)
 
-	return nil
+	log.Debugf("Added a Sidecar connection to Scheduler for: %s/%s.", req.GetNamespace(), req.GetAppId())
+
+	return ctx, nil
 }
 
 // Send is a blocking function that sends a job trigger to a correct job

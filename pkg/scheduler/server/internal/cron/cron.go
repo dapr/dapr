@@ -55,7 +55,7 @@ type Interface interface {
 	Client(ctx context.Context) (api.Interface, error)
 
 	// JobsWatch adds a watch for jobs to the connection pool.
-	JobsWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error
+	JobsWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error)
 
 	// HostsWatch adds a watch for hosts to the connection pool.
 	HostsWatch(schedulerv1pb.Scheduler_WatchHostsServer) error
@@ -171,12 +171,12 @@ func (c *cron) Client(ctx context.Context) (api.Interface, error) {
 }
 
 // JobsWatch adds a watch for jobs to the connection pool.
-func (c *cron) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
+func (c *cron) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error) {
 	select {
 	case <-c.readyCh:
 		return c.connectionPool.Add(req, stream)
 	case <-stream.Context().Done():
-		return stream.Context().Err()
+		return nil, stream.Context().Err()
 	}
 }
 
