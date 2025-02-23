@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -63,6 +64,7 @@ type activity struct {
 	scheduler          todo.ActivityScheduler
 	reminderInterval   time.Duration
 	schedulerReminders bool
+	closed             atomic.Bool
 }
 
 type ActivityOptions struct {
@@ -129,6 +131,10 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
 func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
+	if a.closed.Load() {
+		return errors.New("activity actor is closed")
+	}
+
 	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
 
 	var state backend.HistoryEvent
@@ -336,6 +342,7 @@ func (a *activity) createReliableReminder(ctx context.Context, his *backend.Hist
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(ctx context.Context) error {
 	log.Debugf("Activity actor '%s': deactivated", a.actorID)
+	a.closed.Store(true)
 	return nil
 }
 

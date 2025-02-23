@@ -96,23 +96,16 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		return nil
 	}
 
-	var (
-		stream    schedulerv1pb.Scheduler_WatchHostsClient
-		addresses []string
-		err       error
-	)
 	for {
-		if stream == nil {
-			stream, addresses, err = s.connSchedulerHosts(ctx)
-			if err != nil {
-				log.Errorf("Failed to connect to scheduler host: %s", err)
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(time.Second):
-				}
-				continue
+		stream, addresses, err := s.connSchedulerHosts(ctx)
+		if err != nil {
+			log.Errorf("Failed to connect to scheduler host: %s", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
 			}
+			continue
 		}
 
 		err = concurrency.NewRunnerManager(
@@ -125,14 +118,14 @@ func (s *Scheduler) Run(ctx context.Context) error {
 					return nil
 				}
 
+				defer stream.CloseSend()
+
 				var resp *schedulerv1pb.WatchHostsResponse
 				resp, err = stream.Recv()
 				if err != nil {
 					if ctx.Err() == nil {
 						log.Errorf("Failed to receive scheduler hosts: %s", err)
 					}
-					stream.CloseSend()
-					stream = nil
 					return nil
 				}
 
