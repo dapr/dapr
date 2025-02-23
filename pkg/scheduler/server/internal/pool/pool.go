@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/lock"
 	"github.com/dapr/kit/logger"
 )
 
@@ -35,7 +36,7 @@ type Pool struct {
 	cron   api.Interface
 	nsPool map[string]*namespacedPool
 
-	lock    sync.RWMutex
+	lock    *lock.Lock
 	wg      sync.WaitGroup
 	closeCh chan struct{}
 	running atomic.Bool
@@ -61,6 +62,7 @@ func New(cron api.Interface) *Pool {
 		cron:    cron,
 		nsPool:  make(map[string]*namespacedPool),
 		closeCh: make(chan struct{}),
+		lock:    lock.New(),
 	}
 }
 
@@ -78,7 +80,9 @@ func (p *Pool) Run(ctx context.Context) error {
 
 // Add adds a connection to the pool for a given namespace/appID.
 func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error) {
-	p.lock.Lock()
+	if err := p.lock.Lock(stream.Context()); err != nil {
+		return nil, err
+	}
 	defer p.lock.Unlock()
 
 	var id uint64
@@ -115,9 +119,7 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 		}
 	}
 
-	tctx, tcancel := context.WithTimeout(stream.Context(), time.Second*5)
-	defer tcancel()
-	dcancel, err := p.cron.DeliverablePrefixes(tctx, prefixes...)
+	dcancel, err := p.cron.DeliverablePrefixes(stream.Context(), prefixes...)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +151,7 @@ func (p *Pool) Send(ctx context.Context, job *JobEvent) api.TriggerResponseResul
 
 // remove removes a connection from the pool with the given UUID.
 func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64) {
-	p.lock.Lock()
+	p.lock.Lock(context.Background())
 	defer p.lock.Unlock()
 
 	nsPool, ok := p.nsPool[req.GetNamespace()]
@@ -214,7 +216,16 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64) {
 
 // getConn returns a connection from the pool based on the metadata.
 func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, bool) {
-	p.lock.RLock()
+	// If the lock times out we return false that this connection is not
+	// available.
+	// This will result in the job being put on the staging queue, which will be
+	// immediately re-delivered outside the deadlock if we actually have a
+	// connection.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	if err := p.lock.RLock(ctx); err != nil {
+		return nil, false
+	}
 	defer p.lock.RUnlock()
 
 	nsPool, ok := p.nsPool[meta.GetNamespace()]
