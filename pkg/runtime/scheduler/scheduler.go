@@ -132,7 +132,6 @@ func (s *Scheduler) Run(ctx context.Context) error {
 					}
 					stream.CloseSend()
 					stream = nil
-					//nolint:nilerr
 					return nil
 				}
 
