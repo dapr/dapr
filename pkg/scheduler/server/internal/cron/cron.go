@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -193,8 +194,7 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 	// Always send the current hosts initially to catch up to broadcast
 	// subscribe.
 	c.lock.RLock()
-	hosts := make([]*schedulerv1pb.Host, len(c.currHosts))
-	copy(hosts, c.currHosts)
+	hosts := slices.Clone(c.currHosts)
 	c.lock.RUnlock()
 	err := stream.Send(&schedulerv1pb.WatchHostsResponse{
 		Hosts: hosts,

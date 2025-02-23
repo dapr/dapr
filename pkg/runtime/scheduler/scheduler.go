@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -116,7 +117,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 
 		err = concurrency.NewRunnerManager(
 			func(ctx context.Context) error {
-				return s.connectClients(ctx, addresses)
+				return s.connectClients(ctx, slices.Clone(addresses))
 			},
 			func(ctx context.Context) error {
 				if stream == nil {
