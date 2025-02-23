@@ -85,7 +85,7 @@ func (h *HTTP) Run(t *testing.T, ctx context.Context) {
 		} else {
 			err = h.server.Serve(h.listener)
 		}
-		if !errors.Is(err, http.ErrServerClosed) {
+		if !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, context.DeadlineExceeded) {
 			h.srvErrCh <- err
 		} else {
 			h.srvErrCh <- nil
