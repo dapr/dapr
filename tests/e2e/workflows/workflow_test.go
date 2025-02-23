@@ -247,6 +247,8 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PurgeWorkflow/dapr/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure purging workflow")
 
+		time.Sleep(time.Second * 5)
+
 		// Start a new workflow with the same instanceID to ensure that it is available
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure starting workflow")
