@@ -136,7 +136,7 @@ func (p *Pool) Send(ctx context.Context, job *JobEvent) api.TriggerResponseResul
 }
 
 // remove removes a connection from the pool with the given UUID.
-func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64, cancel context.CancelFunc) {
+func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -198,8 +198,6 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64, can
 	if len(nsPool.appID) == 0 && len(nsPool.actorType) == 0 {
 		delete(p.nsPool, req.GetNamespace())
 	}
-
-	cancel()
 }
 
 // getConn returns a connection from the pool based on the metadata.
