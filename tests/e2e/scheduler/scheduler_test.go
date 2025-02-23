@@ -173,6 +173,8 @@ func TestJobs(t *testing.T) {
 		t.Log("Done.")
 	})
 
+	time.Sleep(time.Second * 5)
+
 	// create, get, delete jobs
 	t.Run("Schedule, get, delete jobs.", func(t *testing.T) {
 		data := jobData{
