@@ -61,10 +61,13 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 
 	p.wg.Add(3)
 
+	doneCh := make(chan struct{}, 2)
+
 	go func() {
 		select {
 		case <-stream.Context().Done():
 		case <-p.closeCh:
+		case <-doneCh:
 		}
 
 		log.Debugf("Closing connection to %s/%s", req.GetNamespace(), req.GetAppId())
@@ -79,6 +82,7 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 		defer func() {
 			log.Debugf("Closed send connection to %s/%s", req.GetNamespace(), req.GetAppId())
 			cancel()
+			doneCh <- struct{}{}
 			p.wg.Done()
 		}()
 
@@ -99,22 +103,22 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 		defer func() {
 			log.Debugf("Closed receive connection to %s/%s", req.GetNamespace(), req.GetAppId())
 			cancel()
+			doneCh <- struct{}{}
 			p.wg.Done()
 		}()
 
 		for {
 			resp, err := stream.Recv()
+			if err == nil {
+				conn.handleJobProcessed(resp.GetResult())
+				continue
+			}
 
+			isEOF := errors.Is(err, io.EOF)
 			s, ok := status.FromError(err)
-			if (ok && s.Code() == codes.Canceled) || errors.Is(err, io.EOF) {
-				return
-			}
-			if err != nil {
+			if !isEOF && (!ok || s.Code() != codes.Canceled) {
 				log.Warnf("Error receiving from connection: %v", err)
-				return
 			}
-
-			conn.handleJobProcessed(resp.GetResult())
 		}
 	}()
 
