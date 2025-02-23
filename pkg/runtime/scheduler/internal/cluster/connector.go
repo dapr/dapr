@@ -32,58 +32,49 @@ type connector struct {
 	readyCh  chan struct{}
 }
 
-// run starts the scheduler connector. Attempts to re-connect to the Scheduler
-// to WatchJobs on non-terminal errors.
+// run starts the scheduler connector.
 func (c *connector) run(ctx context.Context) error {
-	for {
-		stream, err := c.client.WatchJobs(ctx)
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		if err != nil {
-			log.Errorf("Failed to watch scheduler jobs, retrying: %s", err)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(time.Second):
-			}
-			return err
-		}
-
-		if err = stream.Send(c.req); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-
-			log.Errorf("scheduler stream error, re-connecting: %s", err)
-			return err
-		}
-
-		log.Info("Scheduler stream connected")
-
-		select {
-		case <-c.readyCh:
-		default:
-			close(c.readyCh)
-		}
-
-		err = (&streamer{
-			stream:   stream,
-			resultCh: make(chan *schedulerv1pb.WatchJobsRequest),
-			channels: c.channels,
-			actors:   c.actors,
-			wfengine: c.wfengine,
-		}).run(ctx)
-
-		if err == nil {
-			log.Infof("Scheduler stream disconnected")
-		} else {
-			log.Errorf("Scheduler stream disconnected: %v", err)
-		}
-
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
+	stream, err := c.client.WatchJobs(ctx)
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
+
+	if err != nil {
+		log.Errorf("Failed to watch scheduler jobs, retrying: %s", err)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+		return err
+	}
+
+	if err = stream.Send(c.req); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		log.Errorf("scheduler stream error, re-connecting: %s", err)
+		return err
+	}
+
+	log.Info("Scheduler stream connected")
+
+	close(c.readyCh)
+
+	err = (&streamer{
+		stream:   stream,
+		resultCh: make(chan *schedulerv1pb.WatchJobsRequest),
+		channels: c.channels,
+		actors:   c.actors,
+		wfengine: c.wfengine,
+	}).run(ctx)
+
+	if err == nil {
+		log.Infof("Scheduler stream disconnected")
+	} else {
+		log.Errorf("Scheduler stream disconnected: %v", err)
+	}
+
+	return err
 }

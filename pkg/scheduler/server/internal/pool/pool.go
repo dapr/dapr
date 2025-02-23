@@ -221,7 +221,7 @@ func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, bool) {
 	// This will result in the job being put on the staging queue, which will be
 	// immediately re-delivered outside the deadlock if we actually have a
 	// connection.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second/4)
 	defer cancel()
 	if err := p.lock.RLock(ctx); err != nil {
 		return nil, false
