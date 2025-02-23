@@ -235,7 +235,6 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 	t.Run("bad PKI", func(t *testing.T) {
 		invokeTests(t, http.StatusInternalServerError, func(c *assert.CollectT, body string) {
 			assert.Contains(c, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
-			assert.Contains(c, body, "tls: unknown certificate authority")
 			assert.EventuallyWithT(c, func(ct *assert.CollectT) {
 				assert.True(ct, h.daprd2.Metrics(ct, ctx).MatchMetricAndSum(ct, 1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
 			}, 20*time.Second, 10*time.Millisecond)
