@@ -99,7 +99,7 @@ type placement struct {
 }
 
 func New(opts Options) (Interface, error) {
-	lock := lock.NewOuterCancel(errors.New("placement is disseminating"))
+	lock := lock.NewOuterCancel(errors.New("placement is disseminating"), time.Second*2)
 	client, err := client.New(client.Options{
 		Addresses: opts.Addresses,
 		Security:  opts.Security,
