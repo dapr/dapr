@@ -37,6 +37,8 @@ type Options struct {
 	Actors    actors.Interface
 	Channels  *channels.Channels
 	WFEngine  wfengine.Interface
+
+	SchedulerReminders bool
 }
 
 // Cluster manages connections to multiple schedulers.
@@ -46,6 +48,8 @@ type Cluster struct {
 	appID     string
 	channels  *channels.Channels
 	wfengine  wfengine.Interface
+
+	schedulerReminders bool
 
 	lock sync.Mutex
 
@@ -65,6 +69,8 @@ func New(opts Options) *Cluster {
 		channels:  opts.Channels,
 		appCh:     make(chan struct{}),
 		readyCh:   make(chan struct{}),
+
+		schedulerReminders: opts.SchedulerReminders,
 	}
 }
 
@@ -74,8 +80,13 @@ func (c *Cluster) RunClients(ctx context.Context, clients *clients.Clients) erro
 
 	var typeUpdateCh <-chan []string = make(chan []string)
 	var actorTypes []string
-	if table, err := c.actors.Table(ctx); err == nil {
-		typeUpdateCh, actorTypes = table.SubscribeToTypeUpdates(ctx)
+
+	// Only subscribe to actor types to watch if we are using Scheduler actor
+	// reminders.
+	if c.schedulerReminders {
+		if table, err := c.actors.Table(ctx); err == nil {
+			typeUpdateCh, actorTypes = table.SubscribeToTypeUpdates(ctx)
+		}
 	}
 
 	for {

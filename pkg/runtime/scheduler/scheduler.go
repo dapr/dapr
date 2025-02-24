@@ -42,14 +42,15 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler")
 
 type Options struct {
-	Namespace string
-	AppID     string
-	Actors    actors.Interface
-	Channels  *channels.Channels
-	WFEngine  wfengine.Interface
-	Addresses []string
-	Security  security.Handler
-	Healthz   healthz.Healthz
+	Namespace          string
+	AppID              string
+	Actors             actors.Interface
+	Channels           *channels.Channels
+	WFEngine           wfengine.Interface
+	Addresses          []string
+	Security           security.Handler
+	Healthz            healthz.Healthz
+	SchedulerReminders bool
 }
 
 // Scheduler manages the connection to the cluster of schedulers.
@@ -78,6 +79,8 @@ func New(opts Options) *Scheduler {
 			Actors:    opts.Actors,
 			Channels:  opts.Channels,
 			WFEngine:  opts.WFEngine,
+
+			SchedulerReminders: opts.SchedulerReminders,
 		}),
 		broadcastAddresses: opts.Addresses,
 		htarget:            opts.Healthz.AddTarget(),
