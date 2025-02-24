@@ -120,22 +120,39 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 	}
 
 	ctx, cancel := context.WithCancel(stream.Context())
-
-	nsPool.conns[id] = p.newConn(req, stream, id, cancel)
+	conn := p.newConn(ctx, req, stream, id, cancel)
+	nsPool.conns[id] = conn
 
 	log.Debugf("Marking deliverable prefixes for Sidecar connection: %s/%s: %v.", req.GetNamespace(), req.GetAppId(), prefixes)
 
 	dcancel, err := p.cron.DeliverablePrefixes(ctx, prefixes...)
 	if err != nil {
 		cancel()
+		close(conn.closeCh)
+		p.remove(req, id)
 		return nil, err
 	}
 
 	p.wg.Add(1)
-	context.AfterFunc(ctx, func() {
+	go func() {
+		defer p.wg.Done()
+
+		select {
+		case <-ctx.Done():
+		case <-p.closeCh:
+		}
+
+		log.Debugf("Closing connection to %s/%s", req.GetNamespace(), req.GetAppId())
 		dcancel()
-		p.wg.Done()
-	})
+		cancel()
+		close(conn.closeCh)
+
+		p.lock.Lock(context.Background())
+		p.remove(req, id)
+		p.lock.Unlock()
+
+		log.Debugf("Closed and removed connection to %s/%s", req.GetNamespace(), req.GetAppId())
+	}()
 
 	log.Debugf("Added a Sidecar connection to Scheduler for: %s/%s.", req.GetNamespace(), req.GetAppId())
 
@@ -167,9 +184,6 @@ func (p *Pool) Send(ctx context.Context, job *JobEvent) api.TriggerResponseResul
 
 // remove removes a connection from the pool with the given UUID.
 func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64) {
-	p.lock.Lock(context.Background())
-	defer p.lock.Unlock()
-
 	nsPool, ok := p.nsPool[req.GetNamespace()]
 	if !ok {
 		return

@@ -51,7 +51,12 @@ type conn struct {
 
 // newConn creates a new connection and starts the goroutines to handle sending
 // jobs to the client and receiving job process results from the client.
-func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer, id uint64, cancel context.CancelFunc) *conn {
+func (p *Pool) newConn(ctx context.Context,
+	req *schedulerv1pb.WatchJobsRequestInitial,
+	stream schedulerv1pb.Scheduler_WatchJobsServer,
+	id uint64,
+	cancel context.CancelFunc,
+) *conn {
 	conn := &conn{
 		pool:     p,
 		closeCh:  make(chan struct{}),
@@ -59,29 +64,12 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 		jobCh:    make(chan *schedulerv1pb.WatchJobsResponse, 10),
 	}
 
-	p.wg.Add(3)
-
-	doneCh := make(chan struct{}, 2)
-
-	go func() {
-		select {
-		case <-stream.Context().Done():
-		case <-p.closeCh:
-		case <-doneCh:
-		}
-
-		log.Debugf("Closing connection to %s/%s", req.GetNamespace(), req.GetAppId())
-		cancel()
-		close(conn.closeCh)
-		p.remove(req, id)
-		log.Debugf("Closed and removed connection to %s/%s", req.GetNamespace(), req.GetAppId())
-		p.wg.Done()
-	}()
+	p.wg.Add(2)
 
 	go func() {
 		defer func() {
+			cancel()
 			log.Debugf("Closed send connection to %s/%s", req.GetNamespace(), req.GetAppId())
-			doneCh <- struct{}{}
 			p.wg.Done()
 		}()
 
@@ -92,7 +80,7 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 					log.Warnf("Error sending job to connection %s/%s: %s", req.GetNamespace(), req.GetAppId(), err)
 					return
 				}
-			case <-conn.closeCh:
+			case <-ctx.Done():
 				return
 			}
 		}
@@ -100,8 +88,8 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 
 	go func() {
 		defer func() {
+			cancel()
 			log.Debugf("Closed receive connection to %s/%s", req.GetNamespace(), req.GetAppId())
-			doneCh <- struct{}{}
 			p.wg.Done()
 		}()
 
