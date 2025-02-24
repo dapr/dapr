@@ -424,15 +424,11 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", w.actorID)
 	state.AddToInbox(&e)
 
-	if err := w.saveInternalState(ctx, state); err != nil {
-		return err
-	}
-
 	if _, err := w.createReliableReminder(ctx, "new-event", nil, 0); err != nil {
 		return err
 	}
 
-	return nil
+	return w.saveInternalState(ctx, state)
 }
 
 func (w *workflow) getWorkflowName(oldEvents, newEvents []*backend.HistoryEvent) string {

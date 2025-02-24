@@ -311,8 +311,6 @@ func (t *table) DeleteFromTableIn(actor targets.Interface, in time.Duration) {
 }
 
 func (t *table) RemoveIdler(actor targets.Interface) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
 	t.idlerQueue.Dequeue(actor.Key())
 }
 
