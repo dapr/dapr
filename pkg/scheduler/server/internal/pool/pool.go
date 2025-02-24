@@ -119,19 +119,23 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 		}
 	}
 
-	dcancel, err := p.cron.DeliverablePrefixes(stream.Context(), prefixes...)
+	ctx, cancel := context.WithCancel(stream.Context())
+
+	nsPool.conns[id] = p.newConn(req, stream, id, cancel)
+
+	log.Debugf("Marking deliverable prefixes for Sidecar connection: %s/%s: %v.", req.GetNamespace(), req.GetAppId(), prefixes)
+
+	dcancel, err := p.cron.DeliverablePrefixes(ctx, prefixes...)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(stream.Context())
 	p.wg.Add(1)
 	context.AfterFunc(ctx, func() {
 		dcancel()
 		p.wg.Done()
 	})
-
-	nsPool.conns[id] = p.newConn(req, stream, id, cancel)
 
 	log.Debugf("Added a Sidecar connection to Scheduler for: %s/%s.", req.GetNamespace(), req.GetAppId())
 
@@ -145,6 +149,18 @@ func (p *Pool) Send(ctx context.Context, job *JobEvent) api.TriggerResponseResul
 	if !ok {
 		return api.TriggerResponseResult_UNDELIVERABLE
 	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		select {
+		case <-ctx.Done():
+		case <-p.closeCh:
+		case <-conn.closeCh:
+		}
+		cancel()
+	}()
 
 	return conn.sendWaitForResponse(ctx, job)
 }
