@@ -304,7 +304,7 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 	p.hashTable.Entries = entries
 
 	p.reminders.DrainRebalancedReminders()
-	p.actorTable.Drain(func(actorType, actorID string) bool {
+	err := p.actorTable.Drain(func(actorType, actorID string) bool {
 		lar, err := p.LookupActor(ctx, &api.LookupActorRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
@@ -316,6 +316,9 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 
 		return lar != nil && !p.isActorLocal(lar.Address, p.hostname, p.port)
 	})
+	if err != nil {
+		log.Errorf("Error draining actors: %s", err)
+	}
 
 	log.Infof("Placement tables updated, version: %s", in.GetVersion())
 }

@@ -424,10 +424,15 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", w.actorID)
 	state.AddToInbox(&e)
 
+	if err := w.saveInternalState(ctx, state); err != nil {
+		return err
+	}
+
 	if _, err := w.createReliableReminder(ctx, "new-event", nil, 0); err != nil {
 		return err
 	}
-	return w.saveInternalState(ctx, state)
+
+	return nil
 }
 
 func (w *workflow) getWorkflowName(oldEvents, newEvents []*backend.HistoryEvent) string {
@@ -825,6 +830,8 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 
 	// state is not cached, so try to load it from the state store
 	log.Debugf("Workflow actor '%s': loading workflow state", w.actorID)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
+	defer cancel()
 	astate, err := w.actors.State(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -861,6 +868,9 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 	}
 
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", w.actorID, len(req.Operations))
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
 	astate, err := w.actors.State(ctx)
 	if err != nil {
 		return err
@@ -991,6 +1001,7 @@ func (w *workflow) cleanup() {
 	w.state = nil // A bit of extra caution, shouldn't be necessary
 	w.rstate = nil
 	w.ometa = nil
+
 	if w.closed.CompareAndSwap(false, true) {
 		close(w.closeCh)
 	}
