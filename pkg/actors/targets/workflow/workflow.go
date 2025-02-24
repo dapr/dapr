@@ -404,7 +404,7 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 		return err
 	}
 	// This will do the purging
-	err = w.actorState.TransactionalStateOperation(ctx, true, false, req)
+	err = w.actorState.TransactionalStateOperation(ctx, true, req)
 	if err != nil {
 		return err
 	}
@@ -542,7 +542,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 	for activityActorID, operations := range transactionalRequests {
 		go func(activityActorID string, operations []actorapi.TransactionalOperation) {
 			defer wg.Done()
-			aerr := w.actorState.TransactionalStateOperation(ctx, true, false, &actorapi.TransactionalRequest{
+			aerr := w.actorState.TransactionalStateOperation(ctx, true, &actorapi.TransactionalRequest{
 				ActorType:  w.activityActorType,
 				ActorID:    activityActorID,
 				Operations: operations,
@@ -871,7 +871,7 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", w.actorID, len(req.Operations))
 
-	if err = w.actorState.TransactionalStateOperation(ctx, true, false, req); err != nil {
+	if err = w.actorState.TransactionalStateOperation(ctx, true, req); err != nil {
 		return err
 	}
 
@@ -960,7 +960,7 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 					},
 				}},
 			}
-			if terr := w.actorState.TransactionalStateOperation(ctx, true, false, &req); terr != nil {
+			if terr := w.actorState.TransactionalStateOperation(ctx, true, &req); terr != nil {
 				lock.Lock()
 				errs = append(errs, fmt.Errorf("failed to delete activity state with error: %w", terr))
 				lock.Unlock()

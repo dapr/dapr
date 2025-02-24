@@ -299,7 +299,7 @@ func (a *activity) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 
 func (a *activity) purgeActivityState(ctx context.Context) error {
 	log.Debugf("Activity actor '%s': purging activity state", a.actorID)
-	err := a.state.TransactionalStateOperation(ctx, true, a.schedulerReminders, &actorapi.TransactionalRequest{
+	err := a.state.TransactionalStateOperation(ctx, true, &actorapi.TransactionalRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		Operations: []actorapi.TransactionalOperation{{

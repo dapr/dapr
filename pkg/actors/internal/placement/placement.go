@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,7 +99,7 @@ type placement struct {
 }
 
 func New(opts Options) (Interface, error) {
-	lock := lock.NewOuterCancel()
+	lock := lock.NewOuterCancel(errors.New("placement is disseminating"))
 	client, err := client.New(client.Options{
 		Addresses: opts.Addresses,
 		Security:  opts.Security,
