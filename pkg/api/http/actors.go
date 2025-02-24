@@ -284,7 +284,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = state.TransactionalStateOperation(ctx, false, req)
+	err = state.TransactionalStateOperation(ctx, false, false, req)
 	if err != nil {
 		if errors.As(err, new(messages.APIError)) {
 			respondWithError(w, err)

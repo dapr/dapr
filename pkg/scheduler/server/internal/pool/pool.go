@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/lock"
+	"github.com/dapr/kit/concurrency/lock"
 	"github.com/dapr/kit/logger"
 )
 
@@ -36,7 +36,7 @@ type Pool struct {
 	cron   api.Interface
 	nsPool map[string]*namespacedPool
 
-	lock    *lock.Lock
+	lock    *lock.Context
 	wg      sync.WaitGroup
 	closeCh chan struct{}
 	running atomic.Bool
@@ -62,7 +62,7 @@ func New(cron api.Interface) *Pool {
 		cron:    cron,
 		nsPool:  make(map[string]*namespacedPool),
 		closeCh: make(chan struct{}),
-		lock:    lock.New(),
+		lock:    lock.NewContext(),
 	}
 }
 

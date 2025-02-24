@@ -25,13 +25,13 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 
-	"github.com/dapr/dapr/pkg/actors/internal/placement/lock"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/concurrency/lock"
 	"github.com/dapr/kit/logger"
 )
 
@@ -42,7 +42,7 @@ var log = logger.NewLogger("dapr.runtime.actors.placement.client")
 type Options struct {
 	Addresses   []string
 	Security    security.Handler
-	Lock        *lock.Lock
+	Lock        *lock.OuterCancel
 	Table       table.Interface
 	Healthz     healthz.Healthz
 	InitialHost *v1pb.Host
@@ -55,7 +55,7 @@ type Client struct {
 	htarget      healthz.Target
 
 	table table.Interface
-	lock  *lock.Lock
+	lock  *lock.OuterCancel
 
 	conn      *grpc.ClientConn
 	client    v1pb.Placement_ReportDaprStatusClient

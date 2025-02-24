@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -26,7 +25,10 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -58,13 +60,14 @@ type activity struct {
 	actorType         string
 	workflowActorType string
 
-	actors actors.Interface
-	table  table.Interface
+	table     table.Interface
+	engine    engine.Interface
+	state     state.Interface
+	reminders reminders.Interface
 
 	scheduler          todo.ActivityScheduler
 	reminderInterval   time.Duration
 	schedulerReminders bool
-	closed             atomic.Bool
 }
 
 type ActivityOptions struct {
@@ -74,11 +77,30 @@ type ActivityOptions struct {
 	ReminderInterval   *time.Duration
 	Scheduler          todo.ActivityScheduler
 	Actors             actors.Interface
-	Table              table.Interface
 	SchedulerReminders bool
 }
 
-func ActivityFactory(opts ActivityOptions) targets.Factory {
+func ActivityFactory(ctx context.Context, opts ActivityOptions) (targets.Factory, error) {
+	table, err := opts.Actors.Table(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	engine, err := opts.Actors.Engine(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	state, err := opts.Actors.State(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	reminders, err := opts.Actors.Reminders(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return func(actorID string) targets.Interface {
 		reminderInterval := time.Minute * 1
 
@@ -92,12 +114,14 @@ func ActivityFactory(opts ActivityOptions) targets.Factory {
 			actorType:          opts.ActivityActorType,
 			workflowActorType:  opts.WorkflowActorType,
 			reminderInterval:   reminderInterval,
-			actors:             opts.Actors,
-			table:              opts.Table,
+			table:              table,
+			engine:             engine,
+			state:              state,
+			reminders:          reminders,
 			scheduler:          opts.Scheduler,
 			schedulerReminders: opts.SchedulerReminders,
 		}
-	}
+	}, nil
 }
 
 // InvokeMethod implements actors.InternalActor and schedules the background execution of a workflow activity.
@@ -131,10 +155,6 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
 func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	if a.closed.Load() {
-		return errors.New("activity actor is closed")
-	}
-
 	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
 
 	var state backend.HistoryEvent
@@ -256,12 +276,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		WithData(resultData).
 		WithContentType(invokev1.ProtobufContentType)
 
-	engine, err := a.actors.Engine(ctx)
-	if err != nil {
-		return runCompletedFalse, err
-	}
-
-	_, err = engine.Call(ctx, req)
+	_, err = a.engine.Call(ctx, req)
 	switch {
 	case err != nil:
 		// Returning recoverable error, record metrics
@@ -283,13 +298,8 @@ func (a *activity) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 }
 
 func (a *activity) purgeActivityState(ctx context.Context) error {
-	astate, err := a.actors.State(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get state: %w", err)
-	}
-
 	log.Debugf("Activity actor '%s': purging activity state", a.actorID)
-	err = astate.TransactionalStateOperation(ctx, true, &actorapi.TransactionalRequest{
+	err := a.state.TransactionalStateOperation(ctx, true, a.schedulerReminders, &actorapi.TransactionalRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		Operations: []actorapi.TransactionalOperation{{
@@ -310,11 +320,6 @@ func (a *activity) createReliableReminder(ctx context.Context, his *backend.Hist
 	const reminderName = "run-activity"
 	log.Debugf("Activity actor '%s||%s': creating reminder '%s' for immediate execution", a.actorType, a.actorID, reminderName)
 
-	reminders, err := a.actors.Reminders(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get reminders: %w", err)
-	}
-
 	var period string
 	var oneshot bool
 	if a.schedulerReminders {
@@ -328,7 +333,7 @@ func (a *activity) createReliableReminder(ctx context.Context, his *backend.Hist
 		return err
 	}
 
-	return reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		DueTime:   "0s",
@@ -342,7 +347,6 @@ func (a *activity) createReliableReminder(ctx context.Context, his *backend.Hist
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(ctx context.Context) error {
 	log.Debugf("Activity actor '%s': deactivated", a.actorID)
-	a.closed.Store(true)
 	return nil
 }
 

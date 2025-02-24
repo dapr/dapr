@@ -24,7 +24,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/lock"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -36,6 +35,7 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/concurrency/fifo"
+	"github.com/dapr/kit/concurrency/lock"
 	"github.com/dapr/kit/logger"
 )
 
@@ -80,7 +80,7 @@ type placement struct {
 	hashTable         *hashing.ConsistentHashTables
 	virtualNodesCache *hashing.VirtualNodesCache
 
-	lock          *lock.Lock
+	lock          *lock.OuterCancel
 	lockVersion   atomic.Uint64
 	updateVersion atomic.Uint64
 	operationLock *fifo.Mutex
@@ -98,7 +98,7 @@ type placement struct {
 }
 
 func New(opts Options) (Interface, error) {
-	lock := lock.New()
+	lock := lock.NewOuterCancel()
 	client, err := client.New(client.Options{
 		Addresses: opts.Addresses,
 		Security:  opts.Security,
