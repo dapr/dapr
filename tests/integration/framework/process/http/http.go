@@ -31,10 +31,11 @@ type Option func(*options)
 
 // HTTP is a HTTP server that can be used in integration tests.
 type HTTP struct {
-	listener net.Listener
-	server   *http.Server
-	srvErrCh chan error
-	stopCh   chan struct{}
+	listener      net.Listener
+	server        *http.Server
+	srvErrCh      chan error
+	stopCh        chan struct{}
+	shutdownDelay *time.Duration
 }
 
 func New(t *testing.T, fopts ...Option) *HTTP {
@@ -60,9 +61,10 @@ func New(t *testing.T, fopts ...Option) *HTTP {
 	fp := ports.Reserve(t, 1)
 
 	return &HTTP{
-		listener: fp.Listener(t),
-		srvErrCh: make(chan error, 2),
-		stopCh:   make(chan struct{}),
+		shutdownDelay: opts.cleanupDelay,
+		listener:      fp.Listener(t),
+		srvErrCh:      make(chan error, 2),
+		stopCh:        make(chan struct{}),
 		server: &http.Server{
 			ReadHeaderTimeout: time.Second,
 			Handler:           opts.handler,
@@ -96,7 +98,12 @@ func (h *HTTP) Run(t *testing.T, ctx context.Context) {
 
 	go func() {
 		<-h.stopCh
-		h.srvErrCh <- h.server.Shutdown(ctx)
+		err := h.server.Shutdown(ctx)
+		// Use the delay after the shutdown before moving to the next cleanup
+		if h.shutdownDelay != nil {
+			time.Sleep(*h.shutdownDelay)
+		}
+		h.srvErrCh <- err
 	}()
 }
 

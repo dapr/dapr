@@ -65,6 +65,8 @@ func (s *store) Setup(t *testing.T) []framework.Option {
 }
 
 func (s *store) Run(t *testing.T, ctx context.Context) {
+	s.scheduler.WaitUntilRunning(t, ctx)
+	s.place.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	_, err := s.daprd.GRPCClient(t, ctx).RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
