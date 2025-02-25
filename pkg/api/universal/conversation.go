@@ -61,10 +61,10 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	for _, i := range req.GetInputs() {
-		msg := i.GetMessage()
+		msg := i.GetContent()
 
 		if i.GetScrubPII() {
-			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetMessage()})
+			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetContent()})
 			if sErr != nil {
 				sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
 				a.logger.Debug(sErr)

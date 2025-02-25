@@ -163,7 +163,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		}, g.methodCalled.Slice())
 	}, time.Second*10, time.Millisecond*10)
 
-	g.holdCall <- struct{}{}
+	close(g.holdCall)
 
 	for range 3 {
 		select {

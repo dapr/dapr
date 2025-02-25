@@ -332,7 +332,15 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 
 	var wg sync.WaitGroup
 	for _, t := range ats {
-		vals, _, err := r.getRemindersForActorType(ctx, t, true)
+		var vals []ActorReminderReference
+		err := backoff.Retry(func() error {
+			var err error
+			vals, _, err = r.getRemindersForActorType(ctx, t, true)
+			if err != nil {
+				log.Errorf("Error getting reminders for actor type %s, retrying: %s", t, err)
+			}
+			return err
+		}, backoff.WithContext(backoff.NewConstantBackOff(time.Second/2), ctx))
 		if err != nil {
 			log.Errorf("Error getting reminders for actor type %s: %s", t, err)
 			continue
