@@ -20,7 +20,6 @@ import (
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
 
 	"github.com/dapr/components-contrib/conversation"
-	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -100,7 +99,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		return rResp, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
-	diagnostics.DefaultComponentMonitoring.ConversationInvoked(ctx, req.GetName(), err == nil, elapsed)
+	diag.DefaultComponentMonitoring.ConversationInvoked(ctx, req.GetName(), err == nil, elapsed)
 
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())

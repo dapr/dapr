@@ -123,8 +123,7 @@ func (m *Metrics) MatchMetric(substrings ...string) []Metric {
 
 // MatchMetricAndSum returns true if the set of metrics has a specific sum
 func (m *Metrics) MatchMetricAndSum(t assert.TestingT, sum float64, substrings ...string) bool {
-	if m == nil {
-		assert.Fail(t, "Metrics is nil")
+	if !assert.NotNil(t, m, "Metrics is nil") {
 		return false
 	}
 
