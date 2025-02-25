@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/config"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
@@ -146,7 +145,8 @@ func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
 }
 
 func (wfe *engine) Run(ctx context.Context) error {
-	if wfe.actors.RuntimeStatus().GetRuntimeStatus() == runtimev1pb.ActorRuntime_DISABLED {
+	_, err := wfe.actors.Engine(ctx)
+	if err != nil {
 		<-ctx.Done()
 		return ctx.Err()
 	}
