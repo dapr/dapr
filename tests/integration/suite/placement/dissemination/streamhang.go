@@ -72,7 +72,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	var stream1 v1pb.Placement_ReportDaprStatusClient
 	var streamCancel1 context.CancelFunc
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		stream1, streamCancel1 = n.getStream(t, ctx1)
+		stream1, streamCancel1 = n.getStream(c, ctx1)
 		t.Cleanup(streamCancel1)
 		if stream1 != nil {
 			err = stream1.Send(host1)
@@ -98,7 +98,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	var stream2 v1pb.Placement_ReportDaprStatusClient
 	var streamCancel2 context.CancelFunc
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		stream2, streamCancel2 = n.getStream(t, ctx2)
+		stream2, streamCancel2 = n.getStream(c, ctx2)
 		t.Cleanup(streamCancel2)
 		if stream2 != nil {
 			err = stream2.Send(host2)
@@ -165,7 +165,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	var stream3 v1pb.Placement_ReportDaprStatusClient
 	var streamCancel3 context.CancelFunc
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		stream3, streamCancel3 = n.getStream(t, ctx3)
+		stream3, streamCancel3 = n.getStream(c, ctx3)
 		t.Cleanup(streamCancel3)
 		if stream3 != nil {
 			err = stream3.Send(host3)
