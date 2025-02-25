@@ -345,7 +345,7 @@ func (a *activity) createReliableReminder(ctx context.Context, his *backend.Hist
 }
 
 // DeactivateActor implements actors.InternalActor
-func (a *activity) Deactivate(ctx context.Context) error {
+func (a *activity) Deactivate() error {
 	log.Debugf("Activity actor '%s': deactivated", a.actorID)
 	return nil
 }
@@ -357,4 +357,14 @@ func (a *activity) InvokeStream(context.Context, *internalsv1pb.InternalInvokeRe
 // Key returns the key for this unique actor.
 func (a *activity) Key() string {
 	return a.actorType + actorapi.DaprSeparator + a.actorID
+}
+
+// Type returns the type of actor.
+func (a *activity) Type() string {
+	return a.actorType
+}
+
+// ID returns the ID of the actor.
+func (a *activity) ID() string {
+	return a.actorID
 }

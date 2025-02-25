@@ -233,14 +233,14 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	return nil
 }
 
-func (a *app) Deactivate(ctx context.Context) error {
+func (a *app) Deactivate() error {
 	req := invokev1.NewInvokeMethodRequest("actors/"+a.actorType+"/"+a.actorID).
 		WithActor(a.actorType, a.actorID).
 		WithHTTPExtension(http.MethodDelete, "").
 		WithContentType(invokev1.ProtobufContentType)
 	defer req.Close()
 
-	resp, err := a.appChannel.InvokeMethod(ctx, req, "")
+	resp, err := a.appChannel.InvokeMethod(context.Background(), req, "")
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(a.actorType, "invoke")
 		return err
@@ -263,6 +263,15 @@ func (a *app) Deactivate(ctx context.Context) error {
 // Key returns the key for this unique actor.
 func (a *app) Key() string {
 	return a.actorType + api.DaprSeparator + a.actorID
+}
+
+// Type returns the actor type.
+func (a *app) Type() string {
+	return a.actorType
+}
+
+func (a *app) ID() string {
+	return a.actorID
 }
 
 // ScheduledTime returns the time the actor becomes idle at.

@@ -975,7 +975,7 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 }
 
 // DeactivateActor implements actors.InternalActor
-func (w *workflow) Deactivate(ctx context.Context) error {
+func (w *workflow) Deactivate() error {
 	w.cleanup()
 	log.Debugf("Workflow actor '%s': deactivated", w.actorID)
 	return nil
@@ -1093,4 +1093,14 @@ func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntime
 // Key returns the key for this unique actor.
 func (w *workflow) Key() string {
 	return w.actorType + actorapi.DaprSeparator + w.actorID
+}
+
+// Type returns the type for this unique actor.
+func (w *workflow) Type() string {
+	return w.actorType
+}
+
+// ID returns the ID for this unique actor.
+func (w *workflow) ID() string {
+	return w.actorID
 }

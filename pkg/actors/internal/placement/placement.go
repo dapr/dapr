@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors/targets"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
@@ -305,13 +306,13 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 	p.hashTable.Entries = entries
 
 	p.reminders.DrainRebalancedReminders()
-	err := p.actorTable.Drain(func(actorType, actorID string) bool {
+	err := p.actorTable.Drain(func(target targets.Interface) bool {
 		lar, err := p.LookupActor(ctx, &api.LookupActorRequest{
-			ActorType: actorType,
-			ActorID:   actorID,
+			ActorType: target.Type(),
+			ActorID:   target.ID(),
 		})
 		if err != nil {
-			log.Errorf("failed to lookup actor %s/%s: %s", actorType, actorID, err)
+			log.Errorf("failed to lookup actor %s/%s: %s", target.Type(), target.ID(), err)
 			return true
 		}
 
