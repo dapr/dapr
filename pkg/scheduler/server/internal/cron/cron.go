@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -54,7 +55,7 @@ type Interface interface {
 	Client(ctx context.Context) (api.Interface, error)
 
 	// JobsWatch adds a watch for jobs to the connection pool.
-	JobsWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error
+	JobsWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error)
 
 	// HostsWatch adds a watch for hosts to the connection pool.
 	HostsWatch(schedulerv1pb.Scheduler_WatchHostsServer) error
@@ -170,12 +171,12 @@ func (c *cron) Client(ctx context.Context) (api.Interface, error) {
 }
 
 // JobsWatch adds a watch for jobs to the connection pool.
-func (c *cron) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
+func (c *cron) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error) {
 	select {
 	case <-c.readyCh:
 		return c.connectionPool.Add(req, stream)
 	case <-stream.Context().Done():
-		return stream.Context().Err()
+		return nil, stream.Context().Err()
 	}
 }
 
@@ -193,10 +194,11 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 	// Always send the current hosts initially to catch up to broadcast
 	// subscribe.
 	c.lock.RLock()
-	err := stream.Send(&schedulerv1pb.WatchHostsResponse{
-		Hosts: c.currHosts,
-	})
+	hosts := slices.Clone(c.currHosts)
 	c.lock.RUnlock()
+	err := stream.Send(&schedulerv1pb.WatchHostsResponse{
+		Hosts: hosts,
+	})
 	if err != nil {
 		return err
 	}

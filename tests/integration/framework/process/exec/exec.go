@@ -64,9 +64,9 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 			t.Helper()
 			if runtime.GOOS == "windows" {
 				// Windows returns 1 when we kill the process.
-				require.ErrorContains(t, err, "exit status 1")
+				assert.ErrorContains(t, err, "exit status 1")
 			} else {
-				require.NoError(t, err, "expected %q to run without error", binPath)
+				assert.NoError(t, err, "expected %q to run without error", binPath)
 			}
 		},
 		exitCode: defaultExitCode,
@@ -119,8 +119,8 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 			select {
 			case err := <-pipeErrCh:
 				require.NoError(t, err)
-			case <-ctx.Done():
-				require.Fail(t, "context cancelled before exec pipe closed")
+			case <-time.After(time.Second * 5):
+				assert.Fail(t, "context cancelled before exec pipe closed")
 			}
 		})
 	}

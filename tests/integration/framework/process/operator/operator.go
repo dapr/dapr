@@ -58,7 +58,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 
 	fp := ports.Reserve(t, 4)
 	opts := options{
-		logLevel:              "info",
+		logLevel:              "debug",
 		disableLeaderElection: true,
 		port:                  fp.Port(t),
 		metricsPort:           fp.Port(t),
