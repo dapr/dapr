@@ -43,6 +43,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/api/grpc"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/api/http"
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -146,6 +147,24 @@ func newDaprRuntime(ctx context.Context,
 	accessControlList *config.AccessControlList,
 	resiliencyProvider resiliency.Provider,
 ) (*DaprRuntime, error) {
+	// TODO: @joshvanl: find a solution for this:
+	// We need to register our custom proxy codec in the global registrar, but
+	// only after all gRPC internal codecs have been registered. This is because
+	// we are squatting the conflicted base name "proto" which we use to inject
+	// our custom marshal code. We do this to optionally passthrough proxy data
+	// if the gRPC frame encoding is a message we don't recognise- i.e. a user is
+	// doing a direct message using their own message type.
+	// Since 'd' comes before 'g' in the alphabet and go `init` func execution
+	// order is now sane, we have to register our conflicting base codec as
+	// runtime.
+	// It is also the case that gRPC uses a global variable codec registrar so we
+	// can't build a custom one that we propagate.
+	// The solution is to keep this as is, or find a way to bypass the codec
+	// stack further down the transport layer in a wrapper.
+	// I assume we can use a custom message type to wrap user messages which does
+	// not have a conflicting name with the base codec.
+	codec.Register()
+
 	compStore := compstore.New()
 
 	namespace := security.CurrentNamespace()
