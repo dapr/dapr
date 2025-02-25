@@ -120,7 +120,7 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 			case err := <-pipeErrCh:
 				require.NoError(t, err)
 			case <-ctx.Done():
-				require.Fail(t, "context cancelled before exec pipe closed")
+				assert.Fail(t, "context cancelled before exec pipe closed")
 			}
 		})
 	}

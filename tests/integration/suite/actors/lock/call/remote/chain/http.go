@@ -159,7 +159,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		}, h.methodCalled.Slice())
 	}, time.Second*10, time.Millisecond*10)
 
-	h.holdCall <- struct{}{}
+	close(h.holdCall)
 
 	for range 3 {
 		select {
