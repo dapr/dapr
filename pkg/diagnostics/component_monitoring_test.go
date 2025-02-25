@@ -203,6 +203,7 @@ func TestSecrets(t *testing.T) {
 		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
 	})
 }
+
 func TestConversation(t *testing.T) {
 	t.Run("record conversation count", func(t *testing.T) {
 		c := componentsMetrics()
