@@ -59,6 +59,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 		scheduler.WithSentry(n.sentry),
 		scheduler.WithKubeconfig(n.kubeapi.KubeconfigPath(t)),
 		scheduler.WithMode("kubernetes"),
+		scheduler.WithID("dapr-scheduler-server-0"),
 	)
 
 	return []framework.Option{

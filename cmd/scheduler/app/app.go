@@ -70,7 +70,7 @@ func Run() {
 		ControlPlaneNamespace:   security.CurrentNamespace(),
 		TrustAnchorsFile:        opts.TrustAnchorsFile,
 		AppID:                   appID,
-		MTLSEnabled:             opts.TLSEnabled,
+		MTLSEnabled:             opts.TLSEnabled || opts.Mode == string(modes.KubernetesMode),
 		Mode:                    modes.DaprMode(opts.Mode),
 		Healthz:                 healthz,
 		WriteIdentityToFile:     &opts.IdentityDirectoryWrite,
@@ -102,17 +102,21 @@ func Run() {
 				Security: secHandler,
 				Healthz:  healthz,
 
-				DataDir:                 opts.EtcdDataDir,
-				KubeConfig:              opts.KubeConfig,
-				EtcdID:                  opts.ID,
-				EtcdInitialPeers:        opts.EtcdInitialPeers,
-				EtcdClientPorts:         opts.EtcdClientPorts,
-				EtcdSpaceQuota:          opts.EtcdSpaceQuota,
-				EtcdCompactionMode:      opts.EtcdCompactionMode,
-				EtcdCompactionRetention: opts.EtcdCompactionRetention,
-				EtcdSnapshotCount:       opts.EtcdSnapshotCount,
-				EtcdMaxSnapshots:        opts.EtcdMaxSnapshots,
-				EtcdMaxWALs:             opts.EtcdMaxWALs,
+				KubeConfig:               opts.KubeConfig,
+				EtcdDataDir:              opts.EtcdDataDir,
+				EtcdName:                 opts.ID,
+				EtcdInitialCluster:       opts.EtcdInitialCluster,
+				EtcdClientPort:           opts.EtcdClientPort,
+				EtcdSpaceQuota:           opts.EtcdSpaceQuota,
+				EtcdCompactionMode:       opts.EtcdCompactionMode,
+				EtcdCompactionRetention:  opts.EtcdCompactionRetention,
+				EtcdSnapshotCount:        opts.EtcdSnapshotCount,
+				EtcdMaxSnapshots:         opts.EtcdMaxSnapshots,
+				EtcdMaxWALs:              opts.EtcdMaxWALs,
+				EtcdBackendBatchLimit:    opts.EtcdBackendBatchLimit,
+				EtcdBackendBatchInterval: opts.EtcdBackendBatchInterval,
+				EtcdDefrabThresholdMB:    opts.EtcdDefragThresholdMB,
+				EtcdMetrics:              opts.EtcdMetrics,
 			})
 			if serr != nil {
 				return serr
@@ -122,7 +126,7 @@ func Run() {
 		},
 	).Run(ctx)
 	if err != nil {
-		log.Fatalf("error running scheduler: %v", err)
+		log.Fatalf("Fatal error running scheduler: %v", err)
 	}
 
 	log.Info("Scheduler service shut down gracefully")

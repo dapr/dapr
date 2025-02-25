@@ -137,10 +137,8 @@ spec:
         - "--listen-address=0.0.0.0"
         - "--id"
         - "$(SCHEDULER_ID)"
-        - "--initial-cluster"
-        - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
-        - "--etcd-client-ports"
-        - {{ include "dapr_scheduler.etcdclientports" . | toYaml | trim }}
+        - "--etcd-initial-cluster"
+        - "dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.{{ .Release.Namespace }}.svc:2380,dapr-scheduler-server-1=https://dapr-scheduler-server-1.dapr-scheduler-server.{{ .Release.Namespace }}.svc:2380,dapr-scheduler-server-2=https://dapr-scheduler-server-2.dapr-scheduler-server.{{ .Release.Namespace }}.svc:2380"
         - "--log-level"
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
@@ -153,6 +151,8 @@ spec:
 {{- else }}
         - "--enable-metrics=false"
 {{- end }}
+        - "--etcd-client-port"
+        - "2379"
         - "--etcd-data-dir={{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.etcdDataDirWinPath }}{{- else }}{{ .Values.cluster.etcdDataDirPath }}{{- end }}/{{ .Release.Namespace }}/$(SCHEDULER_ID)"
         - "--etcd-space-quota={{ .Values.etcdSpaceQuota }}"
         - "--etcd-compaction-mode={{ .Values.etcdCompactionMode }}"
@@ -160,6 +160,10 @@ spec:
         - "--etcd-snapshot-count={{ .Values.etcdSnapshotCount }}"
         - "--etcd-max-snapshots={{ .Values.etcdMaxSnapshots }}"
         - "--etcd-max-wals={{ .Values.etcdMaxWals }}"
+        - "--etcd-backend-batch-limit={{ .Values.etcdBackendBatchLimit }}"
+        - "--etcd-backend-batch-interval={{ .Values.etcdBackendBatchInterval }}"
+        - "--etcd-experimental-bootstrap-defrag-threshold-megabytes={{ .Values.etcdDefragThresholdMB }}"
+        - "--etcd-metrics={{ .Values.etcdMetrics }}"
         - "--tls-enabled"
         - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
         - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
@@ -168,6 +172,7 @@ spec:
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+          allowPrivilegeEscalation: false
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add: ["SYS_PTRACE"]

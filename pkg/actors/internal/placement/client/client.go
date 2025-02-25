@@ -16,7 +16,7 @@ package client
 import (
 	"context"
 	"errors"
-	"io"
+	"fmt"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -24,8 +24,6 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/lock"
 	"github.com/dapr/dapr/pkg/actors/table"
@@ -33,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -41,11 +40,12 @@ const grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 var log = logger.NewLogger("dapr.runtime.actors.placement.client")
 
 type Options struct {
-	Addresses []string
-	Security  security.Handler
-	Lock      *lock.Lock
-	Table     table.Interface
-	Healthz   healthz.Healthz
+	Addresses   []string
+	Security    security.Handler
+	Lock        *lock.Lock
+	Table       table.Interface
+	Healthz     healthz.Healthz
+	InitialHost *v1pb.Host
 }
 
 type Client struct {
@@ -54,15 +54,15 @@ type Client struct {
 	addresses    []string
 	htarget      healthz.Target
 
-	table       table.Interface
-	lock        *lock.Lock
-	reconnectCh chan chan error
+	table table.Interface
+	lock  *lock.Lock
 
-	conn   *grpc.ClientConn
-	stream atomic.Pointer[v1pb.Placement_ReportDaprStatusClient]
+	conn      *grpc.ClientConn
+	client    v1pb.Placement_ReportDaprStatusClient
+	sendQueue chan *v1pb.Host
+	recvQueue chan *v1pb.PlacementOrder
 
-	readyCh chan struct{}
-	ready   atomic.Bool
+	ready atomic.Bool
 }
 
 // New creates a new placement client for the given dial opts.
@@ -98,63 +98,84 @@ func New(opts Options) (*Client, error) {
 	}
 
 	return &Client{
-		grpcOpts:    gopts,
-		lock:        opts.Lock,
-		addresses:   addresses,
-		reconnectCh: make(chan chan error, 1),
-		readyCh:     make(chan struct{}),
-		table:       opts.Table,
-		htarget:     opts.Healthz.AddTarget(),
+		lock:      opts.Lock,
+		addresses: addresses,
+		grpcOpts:  gopts,
+		sendQueue: make(chan *v1pb.Host),
+		recvQueue: make(chan *v1pb.PlacementOrder),
+		table:     opts.Table,
+		htarget:   opts.Healthz.AddTarget(),
 	}, nil
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	connCtx, connCancel := context.WithCancel(ctx)
-	if err := c.connectRoundRobin(connCtx); err != nil {
-		connCancel()
+	conctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if err := c.connectRoundRobin(conctx); err != nil {
 		return err
 	}
 
-	c.ready.Store(true)
-	close(c.readyCh)
 	c.htarget.Ready()
+	c.ready.Store(true)
+
+	runner := func() *concurrency.RunnerManager {
+		return concurrency.NewRunnerManager(
+			func(ctx context.Context) error {
+				for {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case host := <-c.sendQueue:
+						if err := c.client.Send(host); err != nil {
+							return err
+						}
+					}
+				}
+			},
+			func(ctx context.Context) error {
+				for {
+					order, err := c.client.Recv()
+					if err != nil {
+						return err
+					}
+
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case c.recvQueue <- order:
+					}
+				}
+			},
+		)
+	}
 
 	for {
+		c.ready.Store(true)
+		c.htarget.Ready()
+
+		err := runner().Run(ctx)
+		if err == nil {
+			return c.table.HaltAll()
+		}
+
+		cancel()
+		c.ready.Store(false)
+		// Re-enable once healthz of daprd is not tired to liveness.
+		// c.htarget.NotReady()
+
+		log.Errorf("Error communicating with placement: %s", err)
+		if ctx.Err() != nil {
+			return c.table.HaltAll()
+		}
+
 		select {
-		case ch := <-c.reconnectCh:
-			c.ready.Store(false)
-			unlock := c.lock.Lock()
-			connCancel()
-
-			if err := c.table.HaltAll(); err != nil {
-				unlock()
-				log.Errorf("Error whilst deactivating all actors when shutting down client: %s", err)
-				return nil
-			}
-
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-
-			connCtx, connCancel = context.WithCancel(ctx)
-			err := c.connectRoundRobin(connCtx)
-			ch <- err
-			unlock()
-			if err != nil {
-				connCancel()
-				return err
-			}
-
-			c.ready.Store(true)
-
+		case <-time.After(time.Second):
 		case <-ctx.Done():
-			c.ready.Store(false)
-			connCancel()
-			unlock := c.lock.Lock()
-			defer unlock()
-			if err := c.table.HaltAll(); err != nil {
-				log.Errorf("Error whilst deactivating all actors when shutting down client: %s", err)
-			}
+		}
+
+		cancel, err = c.handleReconnect(ctx)
+		if err != nil {
+			log.Errorf("Failed to reconnect to placement: %s", err)
 			return nil
 		}
 	}
@@ -162,6 +183,35 @@ func (c *Client) Run(ctx context.Context) error {
 
 func (c *Client) Ready() bool {
 	return c.ready.Load()
+}
+
+func (c *Client) handleReconnect(ctx context.Context) (context.CancelFunc, error) {
+	unlock := c.lock.Lock()
+	defer unlock()
+
+	log.Info("Placement stream disconnected")
+
+	if err := c.table.HaltAll(); err != nil {
+		return nil, fmt.Errorf("error whilst deactivating all actors when shutting down client: %s", err)
+	}
+
+	log.Info("Halted all actors on this host")
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	log.Infof("Reconnecting to placement...")
+
+	ctx, cancel := context.WithCancel(ctx)
+	if err := c.connectRoundRobin(ctx); err != nil {
+		cancel()
+		return nil, err
+	}
+
+	log.Infof("Reconnected to placement")
+
+	return cancel, nil
 }
 
 func (c *Client) connectRoundRobin(ctx context.Context) error {
@@ -186,6 +236,8 @@ func (c *Client) connect(ctx context.Context) error {
 		c.addressIndex++
 	}()
 
+	log.Debugf("Attempting to connect to placement %s", c.addresses[c.addressIndex%len(c.addresses)])
+
 	var err error
 	// If we're trying to connect to the same address, we reuse the existing
 	// connection.
@@ -196,15 +248,25 @@ func (c *Client) connect(ctx context.Context) error {
 		//nolint:staticcheck
 		c.conn, err = grpc.DialContext(ctx, c.addresses[c.addressIndex%len(c.addresses)], c.grpcOpts...)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to dial placement: %s", err)
 		}
 	}
 
-	stream, err := v1pb.NewPlacementClient(c.conn).ReportDaprStatus(ctx)
+	client, err := v1pb.NewPlacementClient(c.conn).ReportDaprStatus(ctx)
 	if err != nil {
+		err = fmt.Errorf("failed to create placement client: %s", err)
+		if strings.Contains(err.Error(), "connect: connection refused") {
+			// reset gRPC connenxt to reset the round robin load balancer state to
+			// ensure we connect to new hosts if all Placement hosts have been
+			// terminated.
+			log.Infof("Resetting gRPC connection to reset round robin load balancer state")
+			c.conn = nil
+		}
+
 		return err
 	}
-	c.stream.Store(&stream)
+
+	c.client = client
 
 	log.Infof("Connected to placement %s", c.addresses[c.addressIndex%len(c.addresses)])
 
@@ -215,41 +277,8 @@ func (c *Client) Recv(ctx context.Context) (*v1pb.PlacementOrder, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-c.readyCh:
-	}
-
-	for {
-		o, err := (*c.stream.Load()).Recv()
-		if err == nil {
-			return o, nil
-		}
-
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-
-		s, ok := status.FromError(err)
-
-		if (ok &&
-			(s.Code() == codes.FailedPrecondition || s.Message() == "placement service is closed")) ||
-			errors.Is(err, io.EOF) {
-			log.Infof("Placement service is closed, reconnecting...")
-			errCh := make(chan error, 1)
-			c.reconnectCh <- errCh
-
-			select {
-			case <-ctx.Done():
-				err = ctx.Err()
-			case err = <-errCh:
-			}
-			if err != nil {
-				return nil, err
-			}
-
-			continue
-		}
-
-		return nil, err
+	case order := <-c.recvQueue:
+		return order, nil
 	}
 }
 
@@ -257,22 +286,8 @@ func (c *Client) Send(ctx context.Context, host *v1pb.Host) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-c.readyCh:
-	}
-
-	for {
-		err := (*c.stream.Load()).Send(host)
-		if err == nil {
-			return nil
-		}
-
-		log.Errorf("Failed to send host report to placement, retrying: %s", err)
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(time.Second):
-		}
+	case c.sendQueue <- host:
+		return nil
 	}
 }
 

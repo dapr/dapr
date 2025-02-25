@@ -139,7 +139,7 @@ spec:
 	close(i.returnPublish)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics := i.daprd.Metrics(t, ctx).All()
+		metrics := i.daprd.Metrics(c, ctx).All()
 		assert.Equal(c, 1, int(metrics[egressMetric]))
 		assert.Equal(c, 1, int(metrics[ingressMetric]))
 	}, time.Second*5, time.Millisecond*10)

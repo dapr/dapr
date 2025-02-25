@@ -23,16 +23,13 @@ import (
 
 	"github.com/diagridio/go-etcd-cron/api"
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
-	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
@@ -41,11 +38,10 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.cron")
 
 type Options struct {
-	ID       string
-	Host     *schedulerv1pb.Host
-	Config   *embed.Config
-	Healthz  healthz.Healthz
-	Security security.Handler
+	ID      string
+	Host    *schedulerv1pb.Host
+	Healthz healthz.Healthz
+	Etcd    etcd.Interface
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -67,70 +63,36 @@ type Interface interface {
 type cron struct {
 	id string
 
-	config          *embed.Config
 	host            *schedulerv1pb.Host
 	connectionPool  *pool.Pool
 	etcdcron        api.Interface
 	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
 	lock            sync.RWMutex
 	currHosts       []*schedulerv1pb.Host
-	security        security.Handler
+	etcd            etcd.Interface
 
 	readyCh chan struct{}
 	closeCh chan struct{}
-	hzETCD  healthz.Target
 }
 
 func New(opts Options) Interface {
 	return &cron{
 		id:              opts.ID,
-		config:          opts.Config,
 		host:            opts.Host,
 		hostBroadcaster: broadcaster.New[[]*schedulerv1pb.Host](),
-		security:        opts.Security,
 		readyCh:         make(chan struct{}),
 		closeCh:         make(chan struct{}),
-		hzETCD:          opts.Healthz.AddTarget(),
+		etcd:            opts.Etcd,
 	}
 }
 
 func (c *cron) Run(ctx context.Context) error {
-	defer c.hzETCD.NotReady()
-
-	log.Info("Starting etcd")
-
-	etcd, err := embed.StartEtcd(c.config)
-	if err != nil {
-		return err
-	}
-	defer etcd.Close()
-
-	select {
-	case <-etcd.Server.ReadyNotify():
-		log.Info("Etcd server is ready!")
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
-	log.Info("Starting EtcdCron")
-
-	id, err := spiffeid.FromSegments(
-		c.security.ControlPlaneTrustDomain(),
-		"ns", c.security.ControlPlaneNamespace(), "dapr-scheduler",
-	)
+	client, err := c.etcd.Client(ctx)
 	if err != nil {
 		return err
 	}
 
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints: []string{c.config.ListenClientUrls[0].Host},
-		Context:   ctx,
-		TLS:       c.security.MTLSClientConfig(id),
-		Logger:    etcd.GetLogger(),
-	})
-	if err != nil {
-		return err
-	}
+	log.Info("Starting Cron")
 
 	watchLeadershipCh := make(chan []*anypb.Any)
 
@@ -153,13 +115,14 @@ func (c *cron) Run(ctx context.Context) error {
 
 	c.connectionPool = pool.New(c.etcdcron)
 
-	c.hzETCD.Ready()
-
 	return concurrency.NewRunnerManager(
 		c.connectionPool.Run,
 		c.etcdcron.Run,
 		func(ctx context.Context) error {
+			defer log.Info("Cron shut down")
+			defer close(c.closeCh)
 			defer c.hostBroadcaster.Close()
+
 			for {
 				select {
 				case <-ctx.Done():
@@ -190,16 +153,6 @@ func (c *cron) Run(ctx context.Context) error {
 					c.hostBroadcaster.Broadcast(hosts)
 					c.lock.Unlock()
 				}
-			}
-		},
-		func(ctx context.Context) error {
-			defer log.Info("EtcdCron shutting down")
-			defer close(c.closeCh)
-			select {
-			case err := <-etcd.Err():
-				return err
-			case <-ctx.Done():
-				return nil
 			}
 		},
 	).Run(ctx)

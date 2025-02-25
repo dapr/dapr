@@ -47,16 +47,20 @@ type Options struct {
 	Mode             string
 	KubeConfig       *string
 
-	ID                      string
-	EtcdInitialPeers        []string
-	EtcdDataDir             string
-	EtcdClientPorts         []string
-	EtcdSpaceQuota          int64
-	EtcdCompactionMode      string
-	EtcdCompactionRetention string
-	EtcdSnapshotCount       uint64
-	EtcdMaxSnapshots        uint
-	EtcdMaxWALs             uint
+	ID                       string
+	EtcdInitialCluster       []string
+	EtcdDataDir              string
+	EtcdClientPort           uint64
+	EtcdSpaceQuota           int64
+	EtcdCompactionMode       string
+	EtcdCompactionRetention  string
+	EtcdSnapshotCount        uint64
+	EtcdMaxSnapshots         uint
+	EtcdMaxWALs              uint
+	EtcdBackendBatchLimit    int
+	EtcdBackendBatchInterval string
+	EtcdDefragThresholdMB    uint
+	EtcdMetrics              string
 
 	IdentityDirectoryWrite string
 
@@ -93,15 +97,19 @@ func New(origArgs []string) (*Options, error) {
 	}
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
-	fs.StringSliceVar(&opts.EtcdInitialPeers, "initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
+	fs.StringSliceVar(&opts.EtcdInitialCluster, "etcd-initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
-	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
+	fs.Uint64Var(&opts.EtcdClientPort, "etcd-client-port", 2379, "Port for etcd client communication")
 	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", "9.2E", "Space quota for etcd")
 	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
 	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "10m", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")
 	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 10000, "Number of committed transactions to trigger a snapshot to disk.")
-	fs.UintVar(&opts.EtcdMaxSnapshots, "etcd-max-snapshots", 5, "Maximum number of snapshot files to retain (0 is unlimited).")
-	fs.UintVar(&opts.EtcdMaxWALs, "etcd-max-wals", 5, "Maximum number of write-ahead logs to retain (0 is unlimited).")
+	fs.UintVar(&opts.EtcdMaxSnapshots, "etcd-max-snapshots", 10, "Maximum number of snapshot files to retain (0 is unlimited).")
+	fs.UintVar(&opts.EtcdMaxWALs, "etcd-max-wals", 10, "Maximum number of write-ahead logs to retain (0 is unlimited).")
+	fs.IntVar(&opts.EtcdBackendBatchLimit, "etcd-backend-batch-limit", 5000, "Maximum operations before committing the backend transaction.")
+	fs.StringVar(&opts.EtcdBackendBatchInterval, "etcd-backend-batch-interval", "50ms", "Maximum time before committing the backend transaction.")
+	fs.UintVar(&opts.EtcdDefragThresholdMB, "etcd-experimental-bootstrap-defrag-threshold-megabytes", 100, "Minimum number of megabytes needed to be freed for etcd to consider running defrag during bootstrap. Needs to be set to non-zero value to take effect.")
+	fs.StringVar(&opts.EtcdMetrics, "etcd-metrics", "basic", "Level of detail for exported metrics, specify ’extensive’ to include histogram metrics.")
 
 	fs.StringVar(&opts.IdentityDirectoryWrite, "identity-directory-write", filepath.Join(os.TempDir(), "secrets/dapr.io/tls"), "Directory to write identity certificate certificate, private key and trust anchors")
 

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,6 +39,9 @@ type Actors struct {
 	place *placement.Placement
 	sched *scheduler.Scheduler
 	daprd *daprd.Daprd
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Actors {
@@ -53,7 +57,9 @@ func New(t *testing.T, fopts ...Option) *Actors {
 			sqlite.WithCreateStateTables(),
 		),
 		placement: placement.New(t),
-		scheduler: scheduler.New(t),
+		scheduler: scheduler.New(t,
+			scheduler.WithID("dapr-scheduler-0"),
+		),
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
@@ -109,19 +115,23 @@ func New(t *testing.T, fopts ...Option) *Actors {
 }
 
 func (a *Actors) Run(t *testing.T, ctx context.Context) {
-	a.app.Run(t, ctx)
-	a.db.Run(t, ctx)
-	a.place.Run(t, ctx)
-	a.sched.Run(t, ctx)
-	a.daprd.Run(t, ctx)
+	a.runOnce.Do(func() {
+		a.app.Run(t, ctx)
+		a.db.Run(t, ctx)
+		a.place.Run(t, ctx)
+		a.sched.Run(t, ctx)
+		a.daprd.Run(t, ctx)
+	})
 }
 
 func (a *Actors) Cleanup(t *testing.T) {
-	a.daprd.Cleanup(t)
-	a.sched.Cleanup(t)
-	a.place.Cleanup(t)
-	a.db.Cleanup(t)
-	a.app.Cleanup(t)
+	a.cleanupOnce.Do(func() {
+		a.daprd.Cleanup(t)
+		a.sched.Cleanup(t)
+		a.place.Cleanup(t)
+		a.db.Cleanup(t)
+		a.app.Cleanup(t)
+	})
 }
 
 func (a *Actors) WaitUntilRunning(t *testing.T, ctx context.Context) {

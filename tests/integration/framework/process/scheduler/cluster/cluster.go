@@ -56,15 +56,15 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 	healthzPorts := make([]int, opts.count)
 	metricsPorts := make([]int, opts.count)
 	initialCluster := make([]string, opts.count)
-	clientPorts := make([]string, opts.count)
+	clientPorts := make([]int, opts.count)
 
 	for i := range ports {
-		uids[i] = "scheduler-" + strconv.Itoa(i)
+		uids[i] = "dapr-scheduler-server-" + strconv.Itoa(i)
 		ports[i] = fp.Port(t)
 		healthzPorts[i] = fp.Port(t)
 		metricsPorts[i] = fp.Port(t)
 		initialCluster[i] = fmt.Sprintf("%s=http://127.0.0.1:%d", uids[i], fp.Port(t))
-		clientPorts[i] = fmt.Sprintf("%s=%d", uids[i], fp.Port(t))
+		clientPorts[i] = fp.Port(t)
 	}
 
 	schedulers := make([]*scheduler.Scheduler, opts.count)
@@ -75,7 +75,8 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 			scheduler.WithHealthzPort(healthzPorts[i]),
 			scheduler.WithMetricsPort(metricsPorts[i]),
 			scheduler.WithInitialCluster(strings.Join(initialCluster, ",")),
-			scheduler.WithEtcdClientPorts(clientPorts),
+			scheduler.WithEtcdClientPort(clientPorts[i]),
+			scheduler.WithID("dapr-scheduler-server-" + strconv.FormatUint(uint64(i), 10)),
 		}
 
 		if len(opts.overrideBroadcastHostPorts) > 0 {
@@ -123,8 +124,9 @@ func (c *Cluster) WaitUntilRunning(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
 		resp, err := c.schedulers[0].ETCDClient(t, ctx).Get(ctx, "dapr/leadership", clientv3.WithPrefix())
-		assert.NoError(col, err)
-		assert.Len(col, resp.Kvs, len(c.schedulers))
+		if !assert.NoError(col, err) {
+			_ = assert.NotNil(col, resp) && assert.Len(col, resp.Kvs, len(c.schedulers))
+		}
 	}, 10*time.Second, 10*time.Millisecond)
 }
 

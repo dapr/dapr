@@ -26,8 +26,10 @@ import (
 type Option func(*options)
 
 type App struct {
-	http        *http.HTTP
-	healthz     *atomic.Bool
+	http    *http.HTTP
+	healthz *atomic.Bool
+
+	runOnce     sync.Once
 	cleanupOnce sync.Once
 }
 
@@ -70,7 +72,9 @@ func New(t *testing.T, fopts ...Option) *App {
 }
 
 func (a *App) Run(t *testing.T, ctx context.Context) {
-	a.http.Run(t, ctx)
+	a.runOnce.Do(func() {
+		a.http.Run(t, ctx)
+	})
 }
 
 func (a *App) Cleanup(t *testing.T) {

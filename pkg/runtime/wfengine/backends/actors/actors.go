@@ -26,7 +26,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/table"
@@ -60,6 +59,7 @@ type Options struct {
 	Actors             actors.Interface
 	Resiliency         resiliency.Provider
 	SchedulerReminders bool
+	EventSink          workflow.EventSink
 }
 
 type Actors struct {
@@ -71,6 +71,7 @@ type Actors struct {
 	resiliency              resiliency.Provider
 	actors                  actors.Interface
 	schedulerReminders      bool
+	eventSink               workflow.EventSink
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -90,6 +91,7 @@ func New(opts Options) *Actors {
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		registeredCh:              make(chan struct{}),
+		eventSink:                 opts.EventSink,
 	}
 }
 
@@ -122,6 +124,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 							}
 						},
 						SchedulerReminders: abe.schedulerReminders,
+						EventSink:          abe.eventSink,
 					}),
 				},
 				{
@@ -246,7 +249,7 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 		return nil, api.ErrInstanceNotFound
 	}
 
-	rstate := runtimestate.NewOrchestrationRuntimeState(string(id), state.History)
+	rstate := runtimestate.NewOrchestrationRuntimeState(string(id), state.CustomStatus, state.History)
 
 	name, _ := runtimestate.Name(rstate)
 	createdAt, _ := runtimestate.CreatedTime(rstate)
@@ -261,9 +264,9 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 		RuntimeStatus:  runtimestate.RuntimeStatus(rstate),
 		CreatedAt:      timestamppb.New(createdAt),
 		LastUpdatedAt:  timestamppb.New(lastUpdated),
-		Input:          wrapperspb.String(input),
-		Output:         wrapperspb.String(output),
-		CustomStatus:   state.CustomStatus,
+		Input:          input,
+		Output:         output,
+		CustomStatus:   rstate.GetCustomStatus(),
 		FailureDetails: failureDetuils,
 	}, nil
 }
@@ -358,12 +361,12 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 	if state == nil {
 		return nil, api.ErrInstanceNotFound
 	}
-	runtimeState := runtimestate.NewOrchestrationRuntimeState(string(owi.InstanceID), state.History)
+	runtimeState := runtimestate.NewOrchestrationRuntimeState(string(owi.InstanceID), state.CustomStatus, state.History)
 	return runtimeState, nil
 }
 
 func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, ch chan<- *backend.OrchestrationMetadata) error {
-	log.Debug("Actor backend streaming OrchestrationRuntimeStatus %s", id)
+	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
 
 	engine, err := abe.actors.Engine(ctx)
 	if err != nil {

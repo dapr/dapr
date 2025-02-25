@@ -36,9 +36,9 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
@@ -74,6 +74,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(port),
 		initialClusterPorts: []int{port},
 		metadataEnabled:     false,
+		namespace:           "default",
 	}
 
 	for _, fopt := range fopts {
@@ -105,9 +106,19 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	if opts.trustAnchorsFile != nil {
 		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
 	}
+	if opts.trustDomain != nil {
+		args = append(args, "--trust-domain="+*opts.trustDomain)
+	}
+	if opts.mode != nil {
+		args = append(args, "--mode="+*opts.mode)
+	}
 
 	return &Placement{
-		exec:                exec.New(t, binary.EnvValue("placement"), args, opts.execOpts...),
+		exec: exec.New(t, binary.EnvValue("placement"), args,
+			append(opts.execOpts, exec.WithEnvVars(t,
+				"NAMESPACE", opts.namespace,
+			))...,
+		),
 		ports:               fp,
 		id:                  opts.id,
 		port:                opts.port,
@@ -167,9 +178,7 @@ func (p *Placement) HealthzPort() int {
 }
 
 // Metrics returns a subset of metrics scraped from the metrics endpoint
-func (p *Placement) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
-	t.Helper()
-
+func (p *Placement) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", p.MetricsAddress()))
 }
 

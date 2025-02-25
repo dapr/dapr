@@ -93,7 +93,7 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { m.daprdA.Cleanup(t) })
 	m.daprdA.WaitUntilRunning(t, ctx)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics := m.place.Metrics(t, ctx)
+		metrics := m.place.Metrics(c, ctx)
 
 		// Namespace 1
 		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
@@ -118,7 +118,7 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 	m.daprdB.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics := m.place.Metrics(t, ctx)
+		metrics := m.place.Metrics(c, ctx)
 
 		// Namespace 1
 		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
@@ -143,7 +143,7 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 	m.daprdC.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics := m.place.Metrics(t, ctx)
+		metrics := m.place.Metrics(c, ctx)
 
 		// Namespace 1
 		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
@@ -171,7 +171,7 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 	m.daprdA.Cleanup(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics := m.place.Metrics(t, ctx)
+		metrics := m.place.Metrics(c, ctx)
 
 		// Namespace 1
 		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
@@ -198,7 +198,7 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 	m.daprdB.Cleanup(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics := m.place.Metrics(t, ctx)
+		metrics := m.place.Metrics(c, ctx)
 
 		// Namespace 1
 		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
@@ -225,7 +225,7 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 	m.daprdC.Cleanup(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics := m.place.Metrics(t, ctx)
+		metrics := m.place.Metrics(c, ctx)
 
 		// Namespace 1
 		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")

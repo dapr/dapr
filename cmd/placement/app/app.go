@@ -99,6 +99,7 @@ func Run() {
 		KeepAliveTime:      opts.KeepAliveTime,
 		KeepAliveTimeout:   opts.KeepAliveTimeout,
 		DisseminateTimeout: opts.DisseminateTimeout,
+		ListenAddress:      opts.PlacementListenAddress,
 	}
 	placementOpts.SetMinAPILevel(opts.MinAPILevel)
 	placementOpts.SetMaxAPILevel(opts.MaxAPILevel)

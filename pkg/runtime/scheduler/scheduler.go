@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -82,8 +83,10 @@ func New(opts Options) *Scheduler {
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {
-	if len(s.addresses) == 0 {
+	if len(s.addresses) == 0 ||
+		(len(s.addresses) == 1 && strings.TrimSpace(strings.Trim(s.addresses[0], `"'`)) == "") {
 		s.htarget.Ready()
+		log.Warn("Scheduler disabled, not connecting...")
 		close(s.disabled)
 		<-ctx.Done()
 		return nil
@@ -254,6 +257,11 @@ func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Sched
 
 	resp, err := stream.Recv()
 	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			// Ignore unimplemented error code as we are talking to an old server.
+			// TODO: @joshvanl: remove special case in v1.16.
+			return nil, s.addresses, nil
+		}
 		return nil, nil, err
 	}
 

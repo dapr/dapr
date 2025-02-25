@@ -247,3 +247,7 @@ func (f *Fake) Run(ctx context.Context) error {
 func (f *Fake) Handler(context.Context) (security.Handler, error) {
 	return f, nil
 }
+
+func (f *Fake) ID() spiffeid.ID {
+	return spiffeid.ID{}
+}
