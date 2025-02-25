@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -41,14 +42,15 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler")
 
 type Options struct {
-	Namespace string
-	AppID     string
-	Actors    actors.Interface
-	Channels  *channels.Channels
-	WFEngine  wfengine.Interface
-	Addresses []string
-	Security  security.Handler
-	Healthz   healthz.Healthz
+	Namespace          string
+	AppID              string
+	Actors             actors.Interface
+	Channels           *channels.Channels
+	WFEngine           wfengine.Interface
+	Addresses          []string
+	Security           security.Handler
+	Healthz            healthz.Healthz
+	SchedulerReminders bool
 }
 
 // Scheduler manages the connection to the cluster of schedulers.
@@ -59,6 +61,8 @@ type Scheduler struct {
 
 	cluster *cluster.Cluster
 	clients *clients.Clients
+
+	broadcastAddresses []string
 
 	lock     sync.RWMutex
 	readyCh  chan struct{}
@@ -75,10 +79,13 @@ func New(opts Options) *Scheduler {
 			Actors:    opts.Actors,
 			Channels:  opts.Channels,
 			WFEngine:  opts.WFEngine,
+
+			SchedulerReminders: opts.SchedulerReminders,
 		}),
-		htarget:  opts.Healthz.AddTarget(),
-		readyCh:  make(chan struct{}),
-		disabled: make(chan struct{}),
+		broadcastAddresses: opts.Addresses,
+		htarget:            opts.Healthz.AddTarget(),
+		readyCh:            make(chan struct{}),
+		disabled:           make(chan struct{}),
 	}
 }
 
@@ -92,28 +99,21 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		return nil
 	}
 
-	var (
-		stream    schedulerv1pb.Scheduler_WatchHostsClient
-		addresses []string
-		err       error
-	)
 	for {
-		if stream == nil {
-			stream, addresses, err = s.connSchedulerHosts(ctx)
-			if err != nil {
-				log.Errorf("Failed to connect to scheduler host: %s", err)
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(time.Second):
-				}
-				continue
+		stream, addresses, err := s.connSchedulerHosts(ctx)
+		if err != nil {
+			log.Errorf("Failed to connect to scheduler host: %s", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
 			}
+			continue
 		}
 
 		err = concurrency.NewRunnerManager(
 			func(ctx context.Context) error {
-				return s.connectClients(ctx, addresses)
+				return s.connectClients(ctx, slices.Clone(addresses))
 			},
 			func(ctx context.Context) error {
 				if stream == nil {
@@ -121,15 +121,17 @@ func (s *Scheduler) Run(ctx context.Context) error {
 					return nil
 				}
 
+				defer stream.CloseSend()
+
 				var resp *schedulerv1pb.WatchHostsResponse
 				resp, err = stream.Recv()
 				if err != nil {
-					log.Errorf("Failed to receive scheduler hosts: %s", err)
-					stream.CloseSend()
-					stream = nil
-					//nolint:nilerr
+					if ctx.Err() == nil {
+						log.Errorf("Failed to receive scheduler hosts: %s", err)
+					}
 					return nil
 				}
+
 				addresses = make([]string, 0, len(resp.GetHosts()))
 				for _, host := range resp.GetHosts() {
 					addresses = append(addresses, host.GetAddress())
@@ -158,14 +160,29 @@ func (s *Scheduler) connectClients(ctx context.Context, addresses []string) erro
 		Security:  s.security,
 	})
 	if err != nil {
+		s.lock.Unlock()
 		return err
 	}
 
-	close(s.readyCh)
-	s.htarget.Ready()
+	s.broadcastAddresses = addresses
+	readyCh := s.readyCh
 	s.lock.Unlock()
 
-	err = s.cluster.RunClients(ctx, s.clients)
+	err = concurrency.NewRunnerManager(
+		func(ctx context.Context) error {
+			return s.cluster.RunClients(ctx, s.clients)
+		},
+		func(ctx context.Context) error {
+			if err = s.cluster.WaitForReady(ctx); err != nil {
+				return err
+			}
+			close(readyCh)
+			s.htarget.Ready()
+
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	).Run(ctx)
 
 	s.lock.Lock()
 	s.readyCh = make(chan struct{})
@@ -196,6 +213,12 @@ func (s *Scheduler) All(ctx context.Context) ([]schedulerv1pb.SchedulerClient, e
 		return nil, err
 	}
 	return clients, nil
+}
+
+func (s *Scheduler) Addresses() []string {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.broadcastAddresses
 }
 
 func (s *Scheduler) StartApp(ctx context.Context) {
@@ -249,7 +272,7 @@ func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Sched
 		if status.Code(err) == codes.Unimplemented {
 			// Ignore unimplemented error code as we are talking to an old server.
 			// TODO: @joshvanl: remove special case in v1.16.
-			return nil, s.addresses, nil
+			return nil, slices.Clone(s.addresses), nil
 		}
 
 		return nil, nil, fmt.Errorf("failed to watch scheduler hosts: %s", err)
@@ -260,7 +283,7 @@ func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Sched
 		if status.Code(err) == codes.Unimplemented {
 			// Ignore unimplemented error code as we are talking to an old server.
 			// TODO: @joshvanl: remove special case in v1.16.
-			return nil, s.addresses, nil
+			return nil, slices.Clone(s.addresses), nil
 		}
 		return nil, nil, err
 	}

@@ -24,7 +24,7 @@ import (
 type Fake struct {
 	runFn        func(context.Context) error
 	clientFn     func(context.Context) (api.Interface, error)
-	jobsWatchFn  func(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error
+	jobsWatchFn  func(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error)
 	hostsWatchFn func(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 }
 
@@ -37,8 +37,8 @@ func New() *Fake {
 		clientFn: func(context.Context) (api.Interface, error) {
 			return nil, nil
 		},
-		jobsWatchFn: func(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error {
-			return nil
+		jobsWatchFn: func(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error) {
+			return context.Background(), nil
 		},
 		hostsWatchFn: func(stream schedulerv1pb.Scheduler_WatchHostsServer) error {
 			return nil
@@ -56,7 +56,7 @@ func (f *Fake) WithClient(fn func(context.Context) (api.Interface, error)) *Fake
 	return f
 }
 
-func (f *Fake) WithJobsWatch(fn func(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error) *Fake {
+func (f *Fake) WithJobsWatch(fn func(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error)) *Fake {
 	f.jobsWatchFn = fn
 	return f
 }
@@ -74,7 +74,7 @@ func (f *Fake) Client(ctx context.Context) (api.Interface, error) {
 	return f.clientFn(ctx)
 }
 
-func (f *Fake) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, srv schedulerv1pb.Scheduler_WatchJobsServer) error {
+func (f *Fake) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, srv schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error) {
 	return f.jobsWatchFn(req, srv)
 }
 

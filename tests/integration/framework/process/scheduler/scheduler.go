@@ -84,7 +84,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	fp := ports.Reserve(t, 5)
 
 	opts := options{
-		logLevel:                 "info",
+		logLevel:                 "debug",
 		id:                       uids,
 		port:                     fp.Port(t),
 		healthzPort:              fp.Port(t),

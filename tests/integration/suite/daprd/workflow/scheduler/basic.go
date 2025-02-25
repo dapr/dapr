@@ -355,10 +355,9 @@ func (b *basic) purgeWorkflow(t *testing.T, ctx context.Context, instanceID stri
 	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
 	if !assert.Equal(t, http.StatusAccepted, resp.StatusCode) {
 		bresp, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		require.Fail(t, string(bresp))
+		assert.Empty(t, string(bresp))
 	}
 }

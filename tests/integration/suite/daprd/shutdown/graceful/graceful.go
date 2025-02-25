@@ -56,7 +56,7 @@ func (g *graceful) Setup(t *testing.T) []framework.Option {
 		daprd.WithExecOptions(exec.WithStdout(logline.Stdout())),
 	)
 	return []framework.Option{
-		framework.WithProcesses(app, logline, g.daprd),
+		framework.WithProcesses(logline, app, g.daprd),
 	}
 }
 
