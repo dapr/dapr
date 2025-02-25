@@ -54,9 +54,8 @@ type Interface interface {
 	UnRegisterActorTypes(actorTypes ...string) error
 	SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string)
 	HaltAll() error
-	Halt(ctx context.Context, actorType, actorID string) error
 	HaltIdlable(ctx context.Context, target targets.Idlable) error
-	Drain(fn func(actorType, actorID string) bool)
+	Drain(fn func(target targets.Interface) bool) error
 	Len() map[string]int
 
 	DeleteFromTable(actorType, actorID string)
@@ -130,8 +129,6 @@ func (t *table) Close() error {
 }
 
 func (t *table) Types() []string {
-	t.lock.RLock()
-	defer t.lock.RUnlock()
 	return t.factories.Keys()
 }
 
@@ -144,35 +141,50 @@ func (t *table) Len() map[string]int {
 		alen[atype] = 0
 	}
 
-	t.table.Range(func(akey string, _ targets.Interface) bool {
-		atype, _ := key.ActorTypeAndIDFromKey(akey)
-		alen[atype]++
+	t.table.Range(func(_ string, target targets.Interface) bool {
+		alen[target.Type()]++
 		return true
 	})
 
 	return alen
 }
 
-// Drain drains actors who return true on the given func.
-func (t *table) Drain(fn func(actorType, actorID string) bool) {
+// HaltAll halts all actors in the table, without respecting the
+// drainRebalancedActors configuration, i.e. immediately deactivating all
+// active actors in the table all at once.
+func (t *table) HaltAll() error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
+	return t.doHaltAll(false, func(targets.Interface) bool { return true })
+}
 
-	var wg sync.WaitGroup
-	t.table.Range(func(actorKey string, _ targets.Interface) bool {
-		wg.Add(1)
-		go func(actorKey string) {
+// Drain will gracefully drain all actors in the table that match the given
+// function, respecting the drainRebalancedActors configuration.
+func (t *table) Drain(fn func(target targets.Interface) bool) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	return t.doHaltAll(true, fn)
+}
+
+func (t *table) doHaltAll(drain bool, fn func(target targets.Interface) bool) error {
+	var (
+		wg   sync.WaitGroup
+		errs = slice.New[error]()
+	)
+	wg.Add(t.table.Len())
+	t.table.Range(func(_ string, target targets.Interface) bool {
+		go func(target targets.Interface) {
 			defer wg.Done()
-			actorType, actorID := key.ActorTypeAndIDFromKey(actorKey)
-			if fn(actorType, actorID) {
-				t.drain(actorKey, actorType)
+			if fn(target) {
+				errs.Append(t.haltSingle(target, drain))
 			}
-		}(actorKey)
-
+		}(target)
 		return true
 	})
 
 	wg.Wait()
+
+	return errors.Join(errs.Slice()...)
 }
 
 func (t *table) IsActorTypeHosted(actorType string) bool {
@@ -243,49 +255,19 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 		t.reentrancyStore.Delete(atype)
 	}
 
-	var (
-		wg   sync.WaitGroup
-		errs = slice.New[error]()
-	)
-
-	t.table.Range(func(actorKey string, target targets.Interface) bool {
-		atype, _ := key.ActorTypeAndIDFromKey(actorKey)
-		if slices.Contains(actorTypes, atype) {
-			wg.Add(1)
-			go func(actorKey string) {
-				defer wg.Done()
-				errs.Append(t.haltInLock(actorKey))
-			}(actorKey)
-		}
-
-		return true
+	err := t.doHaltAll(false, func(target targets.Interface) bool {
+		return slices.Contains(actorTypes, target.Type())
 	})
-
-	wg.Wait()
 
 	t.typeUpdates.Batch(0, t.factories.Keys())
 
-	return errors.Join(errs.Slice()...)
+	return err
 }
 
 func (t *table) HaltIdlable(ctx context.Context, target targets.Idlable) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-	t.idlerQueue.Dequeue(target.Key())
-	t.table.Delete(target.Key())
-	return target.Deactivate(ctx)
-}
-
-func (t *table) Halt(ctx context.Context, actorType, actorID string) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	key := actorType + api.DaprSeparator + actorID
-	target, ok := t.table.LoadAndDelete(key)
-	if ok {
-		log.Debugf("Halting actor '%s'", key)
-		return target.Deactivate(ctx)
-	}
-	return nil
+	return t.haltSingle(target, false)
 }
 
 func (t *table) DeleteFromTable(actorType, actorID string) {
@@ -301,56 +283,7 @@ func (t *table) DeleteFromTableIn(actor targets.Interface, in time.Duration) {
 }
 
 func (t *table) RemoveIdler(actor targets.Interface) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
 	t.idlerQueue.Dequeue(actor.Key())
-}
-
-// HaltAll halts all actors currently in the table.
-func (t *table) HaltAll() error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	var (
-		wg   sync.WaitGroup
-		errs = slice.New[error]()
-	)
-	wg.Add(t.table.Len())
-	t.table.Range(func(actorKey string, _ targets.Interface) bool {
-		go func(actorKey string) {
-			defer wg.Done()
-			err := t.haltInLock(actorKey)
-			if err != nil {
-				errs.Append(fmt.Errorf("failed to deactivate actor '%s': %v", actorKey, err))
-				return
-			}
-		}(actorKey)
-		return true
-	})
-
-	wg.Wait()
-
-	return errors.Join(errs.Slice()...)
-}
-
-func (t *table) haltInLock(actorKey string) error {
-	log.Debugf("Halting actor '%s'", actorKey)
-	t.idlerQueue.Dequeue(actorKey)
-
-	// Remove the actor from the table
-	// This will forbit more state changes
-	target, ok := t.table.LoadAndDelete(actorKey)
-
-	// If nothing was loaded, the actor was probably already deactivated
-	if !ok || target == nil {
-		return nil
-	}
-
-	// This uses a background context as it should be unrelated from the caller's
-	// context.
-	// Once the decision to deactivate an actor has been made, we must go through
-	// with it or we could have an inconsistent state.
-	return target.Deactivate(context.Background())
 }
 
 func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string) {
@@ -361,22 +294,35 @@ func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []
 	return ch, t.factories.Keys()
 }
 
-func (t *table) drain(actorKey, actorType string) {
-	doDrain := t.drainRebalancedActors
-	if v, ok := t.entityConfigs[actorType]; ok {
-		doDrain = v.DrainRebalancedActors
+func (t *table) haltSingle(target targets.Interface, drain bool) error {
+	key := target.Key()
+
+	if drain {
+		drain = t.drainRebalancedActors
+		if v, ok := t.entityConfigs[target.Type()]; ok {
+			drain = v.DrainRebalancedActors
+		}
 	}
 
-	if doDrain {
-		t.locker.CloseUntil(actorKey, t.drainOngoingCallTimeout)
+	if drain {
+		t.locker.CloseUntil(key, t.drainOngoingCallTimeout)
 	} else {
-		t.locker.Close(actorKey)
+		t.locker.Close(key)
 	}
 
-	diag.DefaultMonitoring.ActorRebalanced(actorType)
+	diag.DefaultMonitoring.ActorRebalanced(target.Type())
 
-	err := t.haltInLock(actorKey)
-	if err != nil {
-		log.Errorf("Failed to deactivate actor '%s': %v", actorKey, err)
+	log.Debugf("Halting actor '%s'", key)
+	t.idlerQueue.Dequeue(key)
+
+	// Remove the actor from the table
+	// This will forbit more state changes
+	target, ok := t.table.LoadAndDelete(key)
+
+	// If nothing was loaded, the actor was probably already deactivated
+	if !ok || target == nil {
+		return nil
 	}
+
+	return target.Deactivate()
 }

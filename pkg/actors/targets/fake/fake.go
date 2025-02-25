@@ -17,17 +17,21 @@ import (
 	"context"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 type Fake struct {
-	fnKey            func() string
+	fnKey  func() string
+	fnType func() string
+	fnID   func() string
+
 	fnInvokeMethod   func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	fnInvokeReminder func(context.Context, *api.Reminder) error
 	fnInvokeTimer    func(context.Context, *api.Reminder) error
 	fnInvokeStream   func(context.Context, *internalv1pb.InternalInvokeRequest, chan<- *internalv1pb.InternalInvokeResponse) error
-	fnDeactivate     func(context.Context) error
+	fnDeactivate     func() error
 }
 
 type Hook func(*Fake)
@@ -36,7 +40,13 @@ func New(actorType string, hooks ...func(*Fake)) targets.Factory {
 	return func(actorID string) targets.Interface {
 		f := &Fake{
 			fnKey: func() string {
-				return actorType + "/" + actorID
+				return key.ConstructComposite(actorType, actorID)
+			},
+			fnType: func() string {
+				return actorType
+			},
+			fnID: func() string {
+				return actorID
 			},
 			fnInvokeMethod: func(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 				return nil, nil
@@ -50,7 +60,7 @@ func New(actorType string, hooks ...func(*Fake)) targets.Factory {
 			fnInvokeStream: func(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
 				return nil
 			},
-			fnDeactivate: func(ctx context.Context) error {
+			fnDeactivate: func() error {
 				return nil
 			},
 		}
@@ -88,13 +98,21 @@ func (f *Fake) WithInvokeStream(fn func(context.Context, *internalv1pb.InternalI
 	return f
 }
 
-func (f *Fake) WithDeactivate(fn func(context.Context) error) *Fake {
+func (f *Fake) WithDeactivate(fn func() error) *Fake {
 	f.fnDeactivate = fn
 	return f
 }
 
 func (f *Fake) Key() string {
 	return f.fnKey()
+}
+
+func (f *Fake) Type() string {
+	return f.fnType()
+}
+
+func (f *Fake) ID() string {
+	return f.fnID()
 }
 
 func (f *Fake) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -113,6 +131,6 @@ func (f *Fake) InvokeStream(ctx context.Context, req *internalv1pb.InternalInvok
 	return f.fnInvokeStream(ctx, req, stream)
 }
 
-func (f *Fake) Deactivate(ctx context.Context) error {
-	return f.fnDeactivate(ctx)
+func (f *Fake) Deactivate() error {
+	return f.fnDeactivate()
 }

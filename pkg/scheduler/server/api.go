@@ -166,7 +166,8 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 		return err
 	}
 
-	if err := s.cron.JobsWatch(initial, stream); err != nil {
+	ctx, err := s.cron.JobsWatch(initial, stream)
+	if err != nil {
 		return err
 	}
 
@@ -175,8 +176,8 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 	select {
 	case <-s.closeCh:
 		return errors.New("server is closing")
-	case <-stream.Context().Done():
-		return stream.Context().Err()
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

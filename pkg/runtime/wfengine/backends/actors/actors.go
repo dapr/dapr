@@ -27,6 +27,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/cenkalti/backoff/v4"
+
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
@@ -96,7 +98,58 @@ func New(opts Options) *Actors {
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
+	defer cancel()
+
 	atable, err := abe.actors.Table(ctx)
+	if err != nil {
+		return err
+	}
+
+	workflowFactory, err := workflow.WorkflowFactory(ctx, workflow.WorkflowOptions{
+		AppID:             abe.appID,
+		WorkflowActorType: abe.workflowActorType,
+		ActivityActorType: abe.activityActorType,
+		ReminderInterval:  abe.defaultReminderInterval,
+		Resiliency:        abe.resiliency,
+		Actors:            abe.actors,
+		Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+			select {
+			case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
+				return ctx.Err()
+			case abe.orchestrationWorkItemChan <- wi: // blocks until the engine is ready to process the work item
+				return nil
+			}
+		},
+		SchedulerReminders: abe.schedulerReminders,
+		EventSink:          abe.eventSink,
+	})
+	if err != nil {
+		return err
+	}
+
+	activityFactory, err := workflow.ActivityFactory(ctx, workflow.ActivityOptions{
+		AppID:             abe.appID,
+		ActivityActorType: abe.activityActorType,
+		WorkflowActorType: abe.workflowActorType,
+		ReminderInterval:  abe.defaultReminderInterval,
+		Scheduler: func(ctx context.Context, wi *backend.ActivityWorkItem) error {
+			log.Debugf(
+				"%s: scheduling [%s#%d] activity execution with durabletask engine",
+				wi.InstanceID,
+				wi.NewEvent.GetTaskScheduled().GetName(),
+				wi.NewEvent.GetEventId())
+			select {
+			case <-ctx.Done(): // engine is shutting down
+				return ctx.Err()
+			case abe.activityWorkItemChan <- wi: // blocks until the engine is ready to process the work item
+				return nil
+			}
+		},
+		Actors:             abe.actors,
+		SchedulerReminders: abe.schedulerReminders,
+	})
 	if err != nil {
 		return err
 	}
@@ -105,52 +158,12 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		table.RegisterActorTypeOptions{
 			Factories: []table.ActorTypeFactory{
 				{
-					Type: abe.workflowActorType,
-					Factory: workflow.WorkflowFactory(workflow.WorkflowOptions{
-						AppID:             abe.appID,
-						WorkflowActorType: abe.workflowActorType,
-						ActivityActorType: abe.activityActorType,
-						ReminderInterval:  abe.defaultReminderInterval,
-						Resiliency:        abe.resiliency,
-						Actors:            abe.actors,
-						Table:             atable,
-						Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
-							log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
-							select {
-							case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
-								return ctx.Err()
-							case abe.orchestrationWorkItemChan <- wi: // blocks until the engine is ready to process the work item
-								return nil
-							}
-						},
-						SchedulerReminders: abe.schedulerReminders,
-						EventSink:          abe.eventSink,
-					}),
+					Factory: workflowFactory,
+					Type:    abe.workflowActorType,
 				},
 				{
-					Type: abe.activityActorType,
-					Factory: workflow.ActivityFactory(workflow.ActivityOptions{
-						AppID:             abe.appID,
-						ActivityActorType: abe.activityActorType,
-						WorkflowActorType: abe.workflowActorType,
-						ReminderInterval:  abe.defaultReminderInterval,
-						Scheduler: func(ctx context.Context, wi *backend.ActivityWorkItem) error {
-							log.Debugf(
-								"%s: scheduling [%s#%d] activity execution with durabletask engine",
-								wi.InstanceID,
-								wi.NewEvent.GetTaskScheduled().GetName(),
-								wi.NewEvent.GetEventId())
-							select {
-							case <-ctx.Done(): // engine is shutting down
-								return ctx.Err()
-							case abe.activityWorkItemChan <- wi: // blocks until the engine is ready to process the work item
-								return nil
-							}
-						},
-						Actors:             abe.actors,
-						Table:              atable,
-						SchedulerReminders: abe.schedulerReminders,
-					}),
+					Factory: activityFactory,
+					Type:    abe.activityActorType,
 				},
 			},
 		},
@@ -227,7 +240,15 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		return err
 	}
 
-	_, err = engine.Call(ctx, req)
+	err = backoff.Retry(func() error {
+		_, eerr := engine.Call(ctx, req)
+		status, ok := status.FromError(eerr)
+		if ok && status.Code() == codes.FailedPrecondition {
+			return eerr
+		}
+		return backoff.Permanent(eerr)
+	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
+
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to CREATE workflow, record count and latency metrics.

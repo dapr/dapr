@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,9 +25,9 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/lock"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors/targets"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
@@ -36,6 +37,7 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/concurrency/fifo"
+	"github.com/dapr/kit/concurrency/lock"
 	"github.com/dapr/kit/logger"
 )
 
@@ -80,7 +82,7 @@ type placement struct {
 	hashTable         *hashing.ConsistentHashTables
 	virtualNodesCache *hashing.VirtualNodesCache
 
-	lock          *lock.Lock
+	lock          *lock.OuterCancel
 	lockVersion   atomic.Uint64
 	updateVersion atomic.Uint64
 	operationLock *fifo.Mutex
@@ -98,7 +100,7 @@ type placement struct {
 }
 
 func New(opts Options) (Interface, error) {
-	lock := lock.New()
+	lock := lock.NewOuterCancel(errors.New("placement is disseminating"), time.Second*2)
 	client, err := client.New(client.Options{
 		Addresses: opts.Addresses,
 		Security:  opts.Security,
@@ -304,18 +306,21 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 	p.hashTable.Entries = entries
 
 	p.reminders.DrainRebalancedReminders()
-	p.actorTable.Drain(func(actorType, actorID string) bool {
+	err := p.actorTable.Drain(func(target targets.Interface) bool {
 		lar, err := p.LookupActor(ctx, &api.LookupActorRequest{
-			ActorType: actorType,
-			ActorID:   actorID,
+			ActorType: target.Type(),
+			ActorID:   target.ID(),
 		})
 		if err != nil {
-			log.Errorf("failed to lookup actor %s/%s: %s", actorType, actorID, err)
+			log.Errorf("failed to lookup actor %s/%s: %s", target.Type(), target.ID(), err)
 			return true
 		}
 
 		return lar != nil && !p.isActorLocal(lar.Address, p.hostname, p.port)
 	})
+	if err != nil {
+		log.Errorf("Error draining actors: %s", err)
+	}
 
 	log.Infof("Placement tables updated, version: %s", in.GetVersion())
 }
