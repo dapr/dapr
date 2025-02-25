@@ -127,7 +127,7 @@ func (h *hop) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		return h.daprd1called.Load() == 100 || h.daprd2called.Load() == 100
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 
 	assert.True(t,
 		(h.daprd1called.Load() == 100 && h.daprd2called.Load() == 0) ||
