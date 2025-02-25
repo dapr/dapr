@@ -67,7 +67,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	port := fp.Port(t)
 	opts := options{
 		id:                  uid.String(),
-		logLevel:            "info",
+		logLevel:            "debug",
 		port:                fp.Port(t),
 		healthzPort:         fp.Port(t),
 		metricsPort:         fp.Port(t),

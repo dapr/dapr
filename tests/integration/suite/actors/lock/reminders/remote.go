@@ -43,7 +43,6 @@ type remote struct {
 
 func (r *remote) Setup(t *testing.T) []framework.Option {
 	r.holdCall = make(chan struct{})
-	t.Cleanup(func() { close(r.holdCall) })
 
 	r.called.Store(0)
 
@@ -117,5 +116,5 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(3), r.called.Load())
 	}, time.Second*10, time.Millisecond*10)
-	r.holdCall <- struct{}{}
+	close(r.holdCall)
 }

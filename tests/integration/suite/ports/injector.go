@@ -62,6 +62,6 @@ func (i *injector) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", port))
 			_ = assert.NoError(c, err) && assert.NoError(c, conn.Close())
-		}, time.Second*10, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
+		}, time.Second*10, 10*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}
 }

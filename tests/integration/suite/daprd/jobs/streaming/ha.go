@@ -112,6 +112,14 @@ func (h *ha) Run(t *testing.T, ctx context.Context) {
 	h.daprdB.WaitUntilRunning(t, ctx)
 	h.daprdC.WaitUntilRunning(t, ctx)
 
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		for _, daprd := range []*daprd.Daprd{h.daprdA, h.daprdB, h.daprdC} {
+			resp, err := daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(runtimev1pb.GetMetadataRequest))
+			assert.NoError(c, err)
+			assert.Len(c, resp.GetScheduler().GetConnectedAddresses(), 3)
+		}
+	}, time.Second*10, time.Millisecond*10)
+
 	for i := range 150 {
 		_, err := h.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
