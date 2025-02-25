@@ -130,8 +130,6 @@ func (t *table) Close() error {
 }
 
 func (t *table) Types() []string {
-	t.lock.RLock()
-	defer t.lock.RUnlock()
 	return t.factories.Keys()
 }
 
