@@ -26,8 +26,9 @@ func NewHTTPClient() *http.Client {
 		Timeout: 5 * time.Second,
 	}
 	netTransport := &http.Transport{ //nolint:exhaustivestruct
-		DialContext:         dialer.DialContext,
-		TLSHandshakeTimeout: 5 * time.Second,
+		DialContext:           dialer.DialContext,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 5 * time.Second,
 	}
 
 	return &http.Client{ //nolint:exhaustivestruct
