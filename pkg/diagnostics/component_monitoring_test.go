@@ -203,6 +203,31 @@ func TestSecrets(t *testing.T) {
 		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
 	})
 }
+func TestConversation(t *testing.T) {
+	t.Run("record conversation count", func(t *testing.T) {
+		c := componentsMetrics()
+
+		c.ConversationInvoked(context.Background(), componentName, false, 0)
+
+		viewData, _ := view.RetrieveData("component/conversation/count")
+		v := view.Find("component/conversation/count")
+
+		allTagsPresent(t, v, viewData[0].Tags)
+	})
+
+	t.Run("record conversation latency", func(t *testing.T) {
+		c := componentsMetrics()
+
+		c.ConversationInvoked(context.Background(), componentName, false, 1)
+
+		viewData, _ := view.RetrieveData("component/conversation/latencies")
+		v := view.Find("component/conversation/latencies")
+
+		allTagsPresent(t, v, viewData[0].Tags)
+
+		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
+	})
+}
 
 func TestComponentMetricsInit(t *testing.T) {
 	c := componentsMetrics()

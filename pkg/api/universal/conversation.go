@@ -15,10 +15,13 @@ package universal
 
 import (
 	"context"
+	"time"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
 
 	"github.com/dapr/components-contrib/conversation"
+	"github.com/dapr/dapr/pkg/diagnostics"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -87,6 +90,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	request.Temperature = req.GetTemperature()
 
 	// do call
+	start := time.Now()
 	policyRunner := resiliency.NewRunner[*conversation.ConversationResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(req.GetName(), resiliency.Conversation),
 	)
@@ -95,6 +99,9 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		rResp, rErr := component.Converse(ctx, request)
 		return rResp, rErr
 	})
+	elapsed := diag.ElapsedSince(start)
+	diagnostics.DefaultComponentMonitoring.ConversationInvoked(ctx, req.GetName(), err == nil, elapsed)
+
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
