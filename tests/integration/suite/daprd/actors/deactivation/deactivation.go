@@ -11,11 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reentry
+package deactivation
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry/max"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry/pertype"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry/remote"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry/self"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/deactivation/idle"
 )
