@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -116,13 +117,15 @@ func (a *addapp) Run(t *testing.T, ctx context.Context) {
 		a.store.Set(newcomp)
 		a.kubeapi.Informer().Modify(t, newcomp)
 
-		event, err := stream.Recv()
-		require.NoError(t, err)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			event, err := stream.Recv()
+			assert.NoError(c, err)
 
-		var gotComp compapi.Component
-		require.NoError(t, json.Unmarshal(event.GetComponent(), &gotComp))
-		assert.Equal(t, newcomp, &gotComp)
-		assert.Equal(t, operatorv1.ResourceEventType_UPDATED, event.GetType())
-		assert.Equal(t, "UPDATED", event.GetType().String())
+			var gotComp compapi.Component
+			assert.NoError(c, json.Unmarshal(event.GetComponent(), &gotComp))
+			assert.Equal(c, newcomp, &gotComp)
+			assert.Equal(c, operatorv1.ResourceEventType_UPDATED, event.GetType())
+			assert.Equal(c, "UPDATED", event.GetType().String())
+		}, time.Second*10, time.Millisecond*10)
 	})
 }

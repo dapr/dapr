@@ -51,7 +51,12 @@ type conn struct {
 
 // newConn creates a new connection and starts the goroutines to handle sending
 // jobs to the client and receiving job process results from the client.
-func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer, id uint64, cancel context.CancelFunc) *conn {
+func (p *Pool) newConn(ctx context.Context,
+	req *schedulerv1pb.WatchJobsRequestInitial,
+	stream schedulerv1pb.Scheduler_WatchJobsServer,
+	id uint64,
+	cancel context.CancelFunc,
+) *conn {
 	conn := &conn{
 		pool:     p,
 		closeCh:  make(chan struct{}),
@@ -63,40 +68,46 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 
 	go func() {
 		defer func() {
-			p.remove(req, id, cancel)
-			close(conn.closeCh)
+			cancel()
+			log.Debugf("Closed send connection to %s/%s", req.GetNamespace(), req.GetAppId())
 			p.wg.Done()
 		}()
+
 		for {
 			select {
 			case job := <-conn.jobCh:
 				if err := stream.Send(job); err != nil {
 					log.Warnf("Error sending job to connection %s/%s: %s", req.GetNamespace(), req.GetAppId(), err)
+					return
 				}
-			case <-p.closeCh:
-				return
-			case <-stream.Context().Done():
+			case <-ctx.Done():
 				return
 			}
 		}
 	}()
 
 	go func() {
-		defer p.wg.Done()
+		defer func() {
+			cancel()
+			log.Debugf("Closed receive connection to %s/%s", req.GetNamespace(), req.GetAppId())
+			p.wg.Done()
+		}()
 
 		for {
 			resp, err := stream.Recv()
+			if err == nil {
+				conn.handleJobProcessed(resp.GetResult())
+				continue
+			}
 
+			isEOF := errors.Is(err, io.EOF)
 			s, ok := status.FromError(err)
-			if (ok && s.Code() == codes.Canceled) || errors.Is(err, io.EOF) {
-				return
-			}
-			if err != nil {
-				log.Warnf("Error receiving from connection: %v", err)
+			if stream.Context().Err() != nil || isEOF || (ok && s.Code() != codes.Canceled) {
 				return
 			}
 
-			conn.handleJobProcessed(resp.GetResult())
+			log.Warnf("Error receiving from connection %s/%s: %s", req.GetNamespace(), req.GetAppId(), err)
+			return
 		}
 	}()
 
@@ -140,7 +151,6 @@ func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) api.Tr
 		if result == schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS {
 			return api.TriggerResponseResult_SUCCESS
 		}
-		return api.TriggerResponseResult_FAILED
 	case <-c.pool.closeCh:
 	case <-c.closeCh:
 	case <-ctx.Done():

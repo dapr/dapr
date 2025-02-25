@@ -112,7 +112,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(3), h.called.Load())
 	}, time.Second*10, time.Millisecond*10)
-	h.holdCall <- struct{}{}
+	close(h.holdCall)
 
 	for range 2 {
 		select {
