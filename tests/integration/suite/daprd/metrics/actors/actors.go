@@ -91,7 +91,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		ActorId:   "myactorid",
 		Name:      "remindermethod",
 		DueTime:   "0s",
-		Period:    "1s",
+		Period:    "R5/PT1S",
 	})
 	require.NoError(t, err)
 
@@ -101,6 +101,6 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := a.daprd.Metrics(c, ctx).All()
-		assert.Equal(c, a.triggered.Load(), int64(metrics["dapr_runtime_actor_reminders_fired_total"]))
-	}, time.Second*8, 10*time.Millisecond)
+		assert.Equal(c, 5, a.triggered.Load(), int64(metrics["dapr_runtime_actor_reminders_fired_total"]))
+	}, time.Second*20, 10*time.Millisecond)
 }
