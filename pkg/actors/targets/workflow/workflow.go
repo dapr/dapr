@@ -33,7 +33,10 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -45,6 +48,7 @@ import (
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/events/broadcaster"
@@ -62,8 +66,10 @@ type workflow struct {
 	activityActorType string
 
 	resiliency resiliency.Provider
-	actors     actors.Interface
+	engine     engine.Interface
 	table      table.Interface
+	reminders  reminders.Interface
+	actorState state.Interface
 
 	reminderInterval time.Duration
 
@@ -89,13 +95,32 @@ type WorkflowOptions struct {
 
 	Resiliency         resiliency.Provider
 	Actors             actors.Interface
-	Table              table.Interface
 	Scheduler          todo.WorkflowScheduler
 	SchedulerReminders bool
 	EventSink          EventSink
 }
 
-func WorkflowFactory(opts WorkflowOptions) targets.Factory {
+func WorkflowFactory(ctx context.Context, opts WorkflowOptions) (targets.Factory, error) {
+	table, err := opts.Actors.Table(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	astate, err := opts.Actors.State(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	engine, err := opts.Actors.Engine(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	reminders, err := opts.Actors.Reminders(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return func(actorID string) targets.Interface {
 		reminderInterval := time.Minute * 1
 
@@ -111,8 +136,10 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			scheduler:          opts.Scheduler,
 			reminderInterval:   reminderInterval,
 			resiliency:         opts.Resiliency,
-			actors:             opts.Actors,
-			table:              opts.Table,
+			table:              table,
+			reminders:          reminders,
+			engine:             engine,
+			actorState:         astate,
 			schedulerReminders: opts.SchedulerReminders,
 			ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
 			closeCh:            make(chan struct{}),
@@ -124,7 +151,7 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			w.ometaBroadcaster.Subscribe(context.Background(), ch)
 		}
 		return w
-	}
+	}, nil
 }
 
 func (w *workflow) runEventSink(ch chan *backend.OrchestrationMetadata, cb func(*backend.OrchestrationMetadata)) {
@@ -204,9 +231,6 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 
 	if completed == runCompletedTrue {
 		w.table.DeleteFromTableIn(w, time.Second*10)
-		if w.closed.CompareAndSwap(false, true) {
-			close(w.closeCh)
-		}
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.
@@ -247,28 +271,8 @@ func (w *workflow) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 }
 
 func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) error {
-	// create a new state entry if one doesn't already exist
-	state, _, err := w.loadInternalState(ctx)
-	if err != nil {
-		return err
-	}
-
-	created := false
-	if state == nil {
-		state = wfenginestate.NewState(wfenginestate.Options{
-			AppID:             w.appID,
-			WorkflowActorType: w.actorType,
-			ActivityActorType: w.activityActorType,
-		})
-		w.lock.Lock()
-		w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
-		w.setOrchestrationMetadata(w.rstate)
-		created = true
-		w.lock.Unlock()
-	}
-
 	var createWorkflowInstanceRequest backend.CreateWorkflowInstanceRequest
-	if err = proto.Unmarshal(request, &createWorkflowInstanceRequest); err != nil {
+	if err := proto.Unmarshal(request, &createWorkflowInstanceRequest); err != nil {
 		return fmt.Errorf("failed to unmarshal createWorkflowInstanceRequest: %w", err)
 	}
 	reuseIDPolicy := createWorkflowInstanceRequest.GetPolicy()
@@ -284,8 +288,23 @@ func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) e
 		}
 	}
 
-	// orchestration didn't exist and was just created
-	if created {
+	state, _, err := w.loadInternalState(ctx)
+	if err != nil {
+		return err
+	}
+
+	// orchestration didn't exist
+	// create a new state entry if one doesn't already exist
+	if state == nil {
+		state = wfenginestate.NewState(wfenginestate.Options{
+			AppID:             w.appID,
+			WorkflowActorType: w.actorType,
+			ActivityActorType: w.activityActorType,
+		})
+		w.lock.Lock()
+		w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
+		w.setOrchestrationMetadata(w.rstate, startEvent.GetExecutionStarted())
+		w.lock.Unlock()
 		return w.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 
@@ -378,11 +397,7 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 		return err
 	}
 	// This will do the purging
-	s, err := w.actors.State(ctx)
-	if err != nil {
-		return err
-	}
-	err = s.TransactionalStateOperation(ctx, true, req)
+	err = w.actorState.TransactionalStateOperation(ctx, true, req)
 	if err != nil {
 		return err
 	}
@@ -424,24 +439,29 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", w.actorID)
 	state.AddToInbox(&e)
 
+	if err := w.saveInternalState(ctx, state); err != nil {
+		return err
+	}
+
 	if _, err := w.createReliableReminder(ctx, "new-event", nil, 0); err != nil {
 		return err
 	}
-	return w.saveInternalState(ctx, state)
+
+	return nil
 }
 
-func (w *workflow) getWorkflowName(oldEvents, newEvents []*backend.HistoryEvent) string {
-	for _, e := range oldEvents {
+func (w *workflow) getExecutionStartedEvent(state *wfenginestate.State) *protos.ExecutionStartedEvent {
+	for _, e := range state.History {
 		if es := e.GetExecutionStarted(); es != nil {
-			return es.GetName()
+			return es
 		}
 	}
-	for _, e := range newEvents {
+	for _, e := range state.Inbox {
 		if es := e.GetExecutionStarted(); es != nil {
-			return es.GetName()
+			return es
 		}
 	}
-	return ""
+	return &protos.ExecutionStartedEvent{}
 }
 
 func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (runCompleted, error) {
@@ -507,11 +527,6 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		}
 	}
 
-	astate, err := w.actors.State(ctx)
-	if err != nil {
-		return runCompletedFalse, err
-	}
-
 	var lock sync.Mutex
 	var wg sync.WaitGroup
 	var errs []error
@@ -520,7 +535,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 	for activityActorID, operations := range transactionalRequests {
 		go func(activityActorID string, operations []actorapi.TransactionalOperation) {
 			defer wg.Done()
-			aerr := astate.TransactionalStateOperation(ctx, true, &actorapi.TransactionalRequest{
+			aerr := w.actorState.TransactionalStateOperation(ctx, true, &actorapi.TransactionalRequest{
 				ActorType:  w.activityActorType,
 				ActorID:    activityActorID,
 				Operations: operations,
@@ -558,7 +573,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
 	}
-	workflowName := w.getWorkflowName(state.History, state.Inbox)
+	workflowName := w.getExecutionStartedEvent(state).GetName()
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", w.actorID, wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend
@@ -638,11 +653,6 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		}
 	}
 
-	engine, err := w.actors.Engine(ctx)
-	if err != nil {
-		return runCompletedFalse, err
-	}
-
 	var compl runCompleted
 
 	// Schedule activities
@@ -674,7 +684,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 
 			log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", w.actorID, targetActorID)
 
-			_, eerr := engine.Call(ctx, internalsv1pb.
+			_, eerr := w.engine.Call(ctx, internalsv1pb.
 				NewInternalInvokeRequest("Execute").
 				WithActor(w.activityActorType, targetActorID).
 				WithData(eventData).
@@ -731,7 +741,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 
 				log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", w.actorID, method, msg.GetTargetInstanceID())
 
-				_, eerr := engine.Call(ctx, internalsv1pb.
+				_, eerr := w.engine.Call(ctx, internalsv1pb.
 					NewInternalInvokeRequest(method).
 					WithActor(w.actorType, msg.GetTargetInstanceID()).
 					WithData(requestBytes).
@@ -815,9 +825,6 @@ func (*workflow) recordWorkflowSchedulingLatency(ctx context.Context, esHistoryE
 }
 
 func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.OrchestrationMetadata, error) {
-	w.lock.Lock()
-	defer w.lock.Unlock()
-
 	// See if the state for this actor is already cached in memory
 	if w.state != nil {
 		return w.state, w.ometa, nil
@@ -825,11 +832,7 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 
 	// state is not cached, so try to load it from the state store
 	log.Debugf("Workflow actor '%s': loading workflow state", w.actorID)
-	astate, err := w.actors.State(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	state, err := wfenginestate.LoadWorkflowState(ctx, astate, w.actorID, wfenginestate.Options{
+	state, err := wfenginestate.LoadWorkflowState(ctx, w.actorState, w.actorID, wfenginestate.Options{
 		AppID:             w.appID,
 		WorkflowActorType: w.actorType,
 		ActivityActorType: w.activityActorType,
@@ -842,18 +845,17 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 		return nil, nil, nil
 	}
 	// Update cached state
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	w.state = state
 	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
-	w.setOrchestrationMetadata(w.rstate)
+	w.setOrchestrationMetadata(w.rstate, w.getExecutionStartedEvent(state))
 	w.ometaBroadcaster.Broadcast(w.ometa)
 
 	return state, w.ometa, nil
 }
 
 func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
-	w.lock.Lock()
-	defer w.lock.Unlock()
-
 	// generate and run a state store operation that saves all changes
 	req, err := state.GetSaveRequest(w.actorID)
 	if err != nil {
@@ -861,11 +863,8 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 	}
 
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", w.actorID, len(req.Operations))
-	astate, err := w.actors.State(ctx)
-	if err != nil {
-		return err
-	}
-	if err = astate.TransactionalStateOperation(ctx, true, req); err != nil {
+
+	if err = w.actorState.TransactionalStateOperation(ctx, true, req); err != nil {
 		return err
 	}
 
@@ -873,9 +872,11 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 	state.ResetChangeTracking()
 
 	// Update cached state
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	w.state = state
 	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
-	w.setOrchestrationMetadata(w.rstate)
+	w.setOrchestrationMetadata(w.rstate, w.getExecutionStartedEvent(state))
 	w.ometaBroadcaster.Broadcast(w.ometa)
 	return nil
 }
@@ -889,11 +890,6 @@ func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string
 
 	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", w.activityActorType, w.actorID, reminderName, delay)
-
-	reminders, err := w.actors.Reminders(ctx)
-	if err != nil {
-		return "", err
-	}
 
 	var period string
 	var oneshot bool
@@ -911,7 +907,7 @@ func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string
 		}
 	}
 
-	return reminderName, reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return reminderName, w.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: w.actorType,
 		ActorID:   w.actorID,
 		Data:      adata,
@@ -928,11 +924,6 @@ func getActivityActorID(workflowID string, taskID int32, generation uint64) stri
 }
 
 func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfenginestate.State) error {
-	astate, err := w.actors.State(ctx)
-	if err != nil {
-		return err
-	}
-
 	var lock sync.Mutex
 	var wg sync.WaitGroup
 	var errs []error
@@ -962,7 +953,7 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 					},
 				}},
 			}
-			if terr := astate.TransactionalStateOperation(ctx, true, &req); terr != nil {
+			if terr := w.actorState.TransactionalStateOperation(ctx, true, &req); terr != nil {
 				lock.Lock()
 				errs = append(errs, fmt.Errorf("failed to delete activity state with error: %w", terr))
 				lock.Unlock()
@@ -977,7 +968,7 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 }
 
 // DeactivateActor implements actors.InternalActor
-func (w *workflow) Deactivate(ctx context.Context) error {
+func (w *workflow) Deactivate() error {
 	w.cleanup()
 	log.Debugf("Workflow actor '%s': deactivated", w.actorID)
 	return nil
@@ -991,6 +982,7 @@ func (w *workflow) cleanup() {
 	w.state = nil // A bit of extra caution, shouldn't be necessary
 	w.rstate = nil
 	w.ometa = nil
+
 	if w.closed.CompareAndSwap(false, true) {
 		close(w.closeCh)
 	}
@@ -1001,8 +993,10 @@ func (w *workflow) InvokeStream(ctx context.Context, req *internalsv1pb.Internal
 		return err
 	}
 
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ch := make(chan *backend.OrchestrationMetadata)
-	w.ometaBroadcaster.Subscribe(ctx, ch)
+	w.ometaBroadcaster.Subscribe(subCtx, ch)
 
 	for {
 		select {
@@ -1064,8 +1058,18 @@ func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.I
 	return nil
 }
 
-func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntimeState) {
+func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntimeState, startEvent *protos.ExecutionStartedEvent) {
+	var se *protos.ExecutionStartedEvent = nil
+	if rstate.GetStartEvent() != nil {
+		se = rstate.GetStartEvent()
+	} else if startEvent != nil {
+		se = startEvent
+	}
+
 	name, _ := runtimestate.Name(rstate)
+	if name == "" && se != nil {
+		name = se.GetName()
+	}
 	createdAt, _ := runtimestate.CreatedTime(rstate)
 	lastUpdated, _ := runtimestate.LastUpdatedTime(rstate)
 	completedAt, _ := runtimestate.CompletedTime(rstate)
@@ -1073,8 +1077,8 @@ func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntime
 	output, _ := runtimestate.Output(rstate)
 	failureDetails, _ := runtimestate.FailureDetails(rstate)
 	var parentInstanceID string
-	if rstate.GetStartEvent() != nil && rstate.GetStartEvent().GetParentInstance() != nil && rstate.GetStartEvent().GetParentInstance().GetOrchestrationInstance() != nil {
-		parentInstanceID = rstate.GetStartEvent().GetParentInstance().GetOrchestrationInstance().GetInstanceId()
+	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetOrchestrationInstance() != nil {
+		parentInstanceID = se.GetParentInstance().GetOrchestrationInstance().GetInstanceId()
 	}
 	w.ometa = &backend.OrchestrationMetadata{
 		InstanceId:       rstate.GetInstanceId(),
@@ -1094,4 +1098,14 @@ func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntime
 // Key returns the key for this unique actor.
 func (w *workflow) Key() string {
 	return w.actorType + actorapi.DaprSeparator + w.actorID
+}
+
+// Type returns the type for this unique actor.
+func (w *workflow) Type() string {
+	return w.actorType
+}
+
+// ID returns the ID for this unique actor.
+func (w *workflow) ID() string {
+	return w.actorID
 }

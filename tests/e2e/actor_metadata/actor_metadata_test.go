@@ -40,7 +40,7 @@ const (
 	numHealthChecks              = 60                                   // Number of get calls before starting tests.
 	numActors                    = 100                                  // Number of get calls before starting tests.
 	secondsToCheckReminderResult = 45                                   // How much time to wait to make sure the result is in logs.
-	maxNumPartitions             = 6                                    // Maximum number of partitions.
+	maxNumPartitions             = 4                                    // Maximum number of partitions.
 	actorName                    = "testactormetadata"                  // Actor name
 	actorInvokeURLFormat         = "%s/test/" + actorName + "/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat           = "%s/test/logs"                       // URL to fetch logs from test app.
@@ -113,7 +113,7 @@ func TestMain(m *testing.M) {
 			ImageName:           "e2e-actorfeatures",
 			Replicas:            1,
 			IngressEnabled:      true,
-			Config:              "featureactorreminderscheduler",
+			Config:              "omithealthchecksconfig",
 			DebugLoggingEnabled: true,
 			DaprCPULimit:        "2.0",
 			DaprCPURequest:      "0.1",
@@ -130,7 +130,7 @@ func TestMain(m *testing.M) {
 			ImageName:           "e2e-actorfeatures",
 			Replicas:            1,
 			IngressEnabled:      true,
-			Config:              "featureactorreminderscheduler",
+			Config:              "omithealthchecksconfig",
 			DebugLoggingEnabled: true,
 			DaprCPULimit:        "2.0",
 			DaprCPURequest:      "0.1",

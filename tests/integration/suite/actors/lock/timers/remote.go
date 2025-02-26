@@ -115,5 +115,5 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(3), r.called.Load())
 	}, time.Second*10, time.Millisecond*10)
-	r.holdCall <- struct{}{}
+	close(r.holdCall)
 }

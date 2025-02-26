@@ -350,11 +350,13 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		wState.CustomStatus = &wrapperspb.StringValue{}
 		err = proto.Unmarshal(bulkRes[customStatusKey], wState.CustomStatus)
 		if err != nil {
+			// Fallback to JSON unmarshaling
+			var customStatusValue string
 			// TODO: @famarting: remove in v1.16
-			err = proto.Unmarshal(bulkRes[customStatusKey], wState.CustomStatus)
-			if err != nil {
+			if jerr := json.Unmarshal(bulkRes[customStatusKey], &customStatusValue); jerr != nil {
 				return nil, fmt.Errorf("failed to unmarshal custom status key entry: %w", err)
 			}
+			wState.CustomStatus.Value = customStatusValue
 		}
 	}
 

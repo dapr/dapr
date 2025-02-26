@@ -41,6 +41,7 @@ func (g *get) Setup(t *testing.T) []framework.Option {
 	g.actors = actors.New(t,
 		actors.WithActorTypes("foo"),
 		actors.WithFeatureSchedulerReminders(false),
+		actors.WithActorTypeHandler("foo", func(http.ResponseWriter, *http.Request) {}),
 	)
 
 	return []framework.Option{
