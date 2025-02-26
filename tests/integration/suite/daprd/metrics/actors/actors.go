@@ -15,6 +15,7 @@ package actors
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -101,6 +102,11 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := a.daprd.Metrics(c, ctx).All()
-		assert.Equal(c, 5, int(a.triggered.Load()), int(metrics["dapr_runtime_actor_reminders_fired_total"]))
+		expected := 5
+		actualTriggered := int(a.triggered.Load())
+		actualMetrics := int(metrics["dapr_runtime_actor_reminders_fired_total"])
+
+		assert.Equal(c, expected, actualTriggered, fmt.Sprintf("Triggered count mismatch: expected %d, got %d", expected, actualTriggered))
+		assert.Equal(c, expected, actualMetrics, fmt.Sprintf("Metrics count mismatch: expected %d, got %d", expected, actualMetrics))
 	}, time.Second*20, 10*time.Millisecond)
 }
