@@ -19,7 +19,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dapr/kit/cron"
 	timeutils "github.com/dapr/kit/time"
+)
+
+var cronParser = cron.NewParser(cron.Second |
+	cron.Minute |
+	cron.Hour |
+	cron.Dom |
+	cron.Month |
+	cron.Dow |
+	cron.Descriptor,
 )
 
 // ReminderPeriod contains the parsed period for a reminder.
@@ -56,6 +66,12 @@ func NewEmptyReminderPeriod() ReminderPeriod {
 func NewSchedulerReminderPeriod(val string, repeats uint32) ReminderPeriod {
 	p := NewEmptyReminderPeriod()
 	p.repeats = int(repeats)
+	period, err := cronParser.Parse(val)
+	if err == nil {
+		if c, ok := period.(cron.ConstantDelaySchedule); ok {
+			val = c.Delay.String()
+		}
+	}
 	p.value = val
 
 	return p

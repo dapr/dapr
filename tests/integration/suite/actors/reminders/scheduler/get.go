@@ -78,5 +78,5 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, `{"period":"@every 1s","data":"reminderdata","actorID":"1234","actorType":"foo","dueTime":"1s"}`, strings.TrimSpace(string(b)))
+	assert.Equal(t, `{"period":"1s","data":"reminderdata","actorID":"1234","actorType":"foo","dueTime":"1s"}`, strings.TrimSpace(string(b)))
 }
