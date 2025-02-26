@@ -119,6 +119,15 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 
 	case *schedulerv1pb.JobTargetMetadata_Actor:
 		if err := s.invokeActorReminder(ctx, job); err != nil {
+			// this err is expected if the reminder was triggered once already, the next time it goes to get
+			// triggered by scheduler it sees that it's been canceled and does not invoke the 2nd time. This
+			// more relevant for workflows which currently has a repeat set to 2 since setting it to 1 caused
+			// issues. This will be updated in the future releases, but for now we will see this err. To not
+			// spam users only log if the error is not reminder canceled because this is expected for now.
+			if errors.Is(err, actorerrors.ErrReminderCanceled) {
+				return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
+			}
+
 			// If the actor was hosted on another instance, the error will be a gRPC status error,
 			// so we need to unwrap it and match on the error message
 			if st, ok := status.FromError(err); ok {
