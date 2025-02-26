@@ -101,6 +101,6 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := a.daprd.Metrics(c, ctx).All()
-		assert.GreaterOrEqual(c, a.triggered.Load(), int64(metrics["dapr_runtime_actor_reminders_fired_total"]))
+		assert.Equal(c, a.triggered.Load(), int64(metrics["dapr_runtime_actor_reminders_fired_total"]))
 	}, time.Second*4, 10*time.Millisecond)
 }
