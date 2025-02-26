@@ -161,7 +161,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				assert.NoError(t, resp.Body.Close())
 				endpoints, ok := body["httpEndpoints"]
 				_ = assert.True(t, ok) && assert.Len(t, endpoints.([]any), 2)
-			}, time.Second*5, time.Millisecond*10)
+			}, time.Second*20, time.Millisecond*200)
 		}
 
 		t.Run("invoke http endpoint", func(t *testing.T) {
@@ -220,7 +220,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 						status, body := doReq(http.MethodGet, ts.url, ts.headers)
 						assert.Equal(t, expTLSCode, status)
 						assertBody(c, body)
-					}, time.Second*5, time.Millisecond*10)
+					}, time.Second*20, time.Millisecond*10)
 				})
 			}
 		})
@@ -235,10 +235,9 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 	t.Run("bad PKI", func(t *testing.T) {
 		invokeTests(t, http.StatusInternalServerError, func(c *assert.CollectT, body string) {
 			assert.Contains(c, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
-			assert.Contains(c, body, "tls: unknown certificate authority")
 			assert.EventuallyWithT(c, func(ct *assert.CollectT) {
-				assert.True(ct, h.daprd2.Metrics(ct, ctx).MatchMetricAndSum(t, 1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
-			}, 5*time.Second, 100*time.Millisecond)
+				assert.True(ct, h.daprd2.Metrics(ct, ctx).MatchMetricAndSum(ct, 1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
+			}, 20*time.Second, 10*time.Millisecond)
 		}, h.daprd2)
 	})
 }

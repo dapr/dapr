@@ -144,13 +144,14 @@ func (p *Processor) AddPendingComponent(ctx context.Context, comp componentsapi.
 		return false
 	}
 
-	p.pendingComponentsWaiting.Add(1)
+	p.pendingComponentsWaiting.RLock()
+
 	select {
 	case <-ctx.Done():
-		p.pendingComponentsWaiting.Done()
+		p.pendingComponentsWaiting.RUnlock()
 		return false
 	case <-p.closedCh:
-		p.pendingComponentsWaiting.Done()
+		p.pendingComponentsWaiting.RUnlock()
 		return false
 	case p.pendingComponents <- comp:
 		return true
@@ -177,7 +178,7 @@ func (p *Processor) processComponents(ctx context.Context) error {
 
 	for comp := range p.pendingComponents {
 		err := process(comp)
-		p.pendingComponentsWaiting.Done()
+		p.pendingComponentsWaiting.RUnlock()
 		if err != nil {
 			return err
 		}
@@ -188,7 +189,8 @@ func (p *Processor) processComponents(ctx context.Context) error {
 
 // WaitForEmptyComponentQueue waits for the component queue to be empty.
 func (p *Processor) WaitForEmptyComponentQueue() {
-	p.pendingComponentsWaiting.Wait()
+	p.pendingComponentsWaiting.Lock()
+	defer p.pendingComponentsWaiting.Unlock()
 }
 
 func (p *Processor) processComponentAndDependents(ctx context.Context, comp componentsapi.Component) error {

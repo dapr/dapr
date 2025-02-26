@@ -117,7 +117,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(3), g.called.Load())
 	}, time.Second*10, time.Millisecond*10)
-	g.holdCall <- struct{}{}
+	close(g.holdCall)
 
 	for range 2 {
 		select {

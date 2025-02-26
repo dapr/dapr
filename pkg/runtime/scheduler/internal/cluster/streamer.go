@@ -88,10 +88,12 @@ func (s *streamer) receive(ctx context.Context) error {
 // ensure they are sent unary over the stream- gRPC does not support parallel
 // message sends.
 func (s *streamer) outgoing(ctx context.Context) error {
+	defer s.stream.CloseSend()
+
 	for {
 		select {
 		case <-ctx.Done():
-			return s.stream.CloseSend()
+			return ctx.Err()
 		case <-s.stream.Context().Done():
 			return s.stream.Context().Err()
 		case result := <-s.resultCh:

@@ -150,7 +150,7 @@ func TestJobs(t *testing.T) {
 				for i := 0; i < numJobsPerGoRoutine; i++ {
 					// Call app to schedule job, send job to app
 					log.Printf("Scheduling job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
-					_, err = utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
+					_, err := utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
 					require.NoError(t, err)
 				}
 			}(iteration)
@@ -168,7 +168,7 @@ func TestJobs(t *testing.T) {
 			require.NoError(t, err)
 
 			// Check if the length of triggeredJobs matches the expected length of scheduled jobs
-			assert.Equal(c, numIterations*numJobsPerGoRoutine, len(triggeredJobs))
+			assert.Len(c, triggeredJobs, numIterations*numJobsPerGoRoutine)
 		}, 10*time.Second, 100*time.Millisecond)
 		t.Log("Done.")
 	})
@@ -200,7 +200,7 @@ func TestJobs(t *testing.T) {
 				for i := 0; i < numJobsPerGoRoutine; i++ {
 					// Call app to schedule job, send job to app
 					log.Printf("Scheduling job: testjob-%s-%s", strconv.Itoa(iteration), strconv.Itoa(i))
-					_, err = utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
+					_, err := utils.HTTPPost(fmt.Sprintf(scheduleJobURLFormat, externalURL, strconv.Itoa(iteration), strconv.Itoa(i)), jobBody)
 					require.NoError(t, err)
 				}
 			}(iteration)

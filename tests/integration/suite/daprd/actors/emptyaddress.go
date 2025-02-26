@@ -29,9 +29,16 @@ func init() {
 }
 
 type emptyaddress struct {
-	daprdNoPlace          *daprd.Daprd
-	daprdPlaceEmptyAddr   *daprd.Daprd
-	daprdPlaceSpaceAddr   *daprd.Daprd
+	daprdNoPlace                         *daprd.Daprd
+	daprdPlaceEmptyAddr                  *daprd.Daprd
+	daprdPlaceSpaceAddr                  *daprd.Daprd
+	daprdPlaceExtraSpaceAddr             *daprd.Daprd
+	daprdPlaceSingleQuoteAddr            *daprd.Daprd
+	daprdPlaceSingleQuoteExtraSpaceAddr  *daprd.Daprd
+	daprdPlaceSingleQuoteEmtpyStringAddr *daprd.Daprd
+	daprdPlaceDoubleQuoteAddr            *daprd.Daprd
+	daprdPlaceDoubleQuoteSpaceAddr       *daprd.Daprd
+
 	loglineActorsDisabled *logline.LogLine
 }
 
@@ -57,15 +64,60 @@ func (a *emptyaddress) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 	)
 
+	a.daprdPlaceExtraSpaceAddr = daprd.New(t,
+		daprd.WithPlacementAddresses("       "),
+		daprd.WithExecOptions(exec.WithStdout(a.loglineActorsDisabled.Stdout())),
+		daprd.WithInMemoryActorStateStore("mystore"),
+	)
+
+	a.daprdPlaceSingleQuoteAddr = daprd.New(t,
+		daprd.WithPlacementAddresses("''"),
+		daprd.WithExecOptions(exec.WithStdout(a.loglineActorsDisabled.Stdout())),
+		daprd.WithInMemoryActorStateStore("mystore"),
+	)
+
+	a.daprdPlaceSingleQuoteExtraSpaceAddr = daprd.New(t,
+		daprd.WithPlacementAddresses("'      '"),
+		daprd.WithExecOptions(exec.WithStdout(a.loglineActorsDisabled.Stdout())),
+		daprd.WithInMemoryActorStateStore("mystore"),
+	)
+
+	a.daprdPlaceSingleQuoteEmtpyStringAddr = daprd.New(t,
+		daprd.WithPlacementAddresses(`'""'`),
+		daprd.WithExecOptions(exec.WithStdout(a.loglineActorsDisabled.Stdout())),
+		daprd.WithInMemoryActorStateStore("mystore"),
+	)
+
+	a.daprdPlaceDoubleQuoteAddr = daprd.New(t,
+		daprd.WithPlacementAddresses(`""`),
+		daprd.WithExecOptions(exec.WithStdout(a.loglineActorsDisabled.Stdout())),
+		daprd.WithInMemoryActorStateStore("mystore"),
+	)
+
+	a.daprdPlaceDoubleQuoteSpaceAddr = daprd.New(t,
+		daprd.WithPlacementAddresses(`"   "`),
+		daprd.WithExecOptions(exec.WithStdout(a.loglineActorsDisabled.Stdout())),
+		daprd.WithInMemoryActorStateStore("mystore"),
+	)
+
 	return []framework.Option{
-		framework.WithProcesses(a.loglineActorsDisabled, a.daprdNoPlace, a.daprdPlaceEmptyAddr, a.daprdPlaceSpaceAddr),
+		framework.WithProcesses(a.loglineActorsDisabled, a.daprdNoPlace, a.daprdPlaceEmptyAddr,
+			a.daprdPlaceSpaceAddr, a.daprdPlaceExtraSpaceAddr, a.daprdPlaceSingleQuoteAddr,
+			a.daprdPlaceSingleQuoteExtraSpaceAddr, a.daprdPlaceSingleQuoteEmtpyStringAddr,
+			a.daprdPlaceDoubleQuoteAddr, a.daprdPlaceDoubleQuoteSpaceAddr),
 	}
 }
 
 func (a *emptyaddress) Run(t *testing.T, ctx context.Context) {
 	a.daprdNoPlace.WaitUntilRunning(t, ctx)
 	a.daprdPlaceSpaceAddr.WaitUntilRunning(t, ctx)
+	a.daprdPlaceExtraSpaceAddr.WaitUntilRunning(t, ctx)
 	a.daprdPlaceEmptyAddr.WaitUntilRunning(t, ctx)
+	a.daprdPlaceSingleQuoteAddr.WaitUntilRunning(t, ctx)
+	a.daprdPlaceSingleQuoteExtraSpaceAddr.WaitUntilRunning(t, ctx)
+	a.daprdPlaceSingleQuoteEmtpyStringAddr.WaitUntilRunning(t, ctx)
+	a.daprdPlaceDoubleQuoteAddr.WaitUntilRunning(t, ctx)
+	a.daprdPlaceDoubleQuoteSpaceAddr.WaitUntilRunning(t, ctx)
 
 	a.loglineActorsDisabled.EventuallyFoundAll(t)
 }

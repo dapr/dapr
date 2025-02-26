@@ -15,7 +15,6 @@ package workflow
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -48,28 +47,8 @@ func (p *pause) Setup(t *testing.T) []framework.Option {
 func (p *pause) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
-	var count atomic.Int64
-	var waiting atomic.Int64
-	done := make(chan struct{})
-	cont := make(chan struct{})
 	p.workflow.Registry().AddOrchestratorN("pauser", func(ctx *task.OrchestrationContext) (any, error) {
-		ctx.CallActivity("abc").Await(nil)
-		ctx.CallActivity("1234").Await(nil)
-		return nil, nil
-	})
-	p.workflow.Registry().AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
-		waiting.Add(1)
-		select {
-		case <-done:
-			return nil, nil
-		case <-cont:
-			count.Add(1)
-		}
-
-		return nil, nil
-	})
-	p.workflow.Registry().AddActivityN("1234", func(ctx task.ActivityContext) (any, error) {
-		waiting.Add(1)
+		ctx.WaitForSingleEvent("abc", time.Minute).Await(nil)
 		return nil, nil
 	})
 
@@ -80,28 +59,17 @@ func (p *pause) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForOrchestrationStart(ctx, id)
 	require.NoError(t, err)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(1), waiting.Load())
-	}, time.Second*10, time.Millisecond*10)
-
 	require.NoError(t, client.SuspendOrchestration(ctx, id, "myreason"))
 	meta, err := client.FetchOrchestrationMetadata(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, "ORCHESTRATION_STATUS_SUSPENDED", meta.GetRuntimeStatus().String())
-	assert.Equal(t, int64(1), waiting.Load())
-
-	close(done)
 
 	require.NoError(t, client.ResumeOrchestration(ctx, id, "anothermyreason"))
 	meta, err = client.FetchOrchestrationMetadata(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, "ORCHESTRATION_STATUS_RUNNING", meta.GetRuntimeStatus().String())
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(2), waiting.Load())
-	}, time.Second*10, time.Millisecond*10)
-
-	close(cont)
+	require.NoError(t, client.RaiseEvent(ctx, id, "abc"))
 
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)

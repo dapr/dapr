@@ -108,11 +108,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(1), stage.Load())
 	}, time.Second*3, time.Millisecond*10)
 
-	get, err := gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
-		InstanceId:        "my-custom-instance-id",
-		WorkflowComponent: "dapr",
-	})
-	require.NoError(t, err)
+	var get *rtv1.GetWorkflowResponse
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		get, err = gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
 			InstanceId:        "my-custom-instance-id",
