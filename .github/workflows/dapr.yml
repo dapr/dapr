@@ -262,7 +262,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    needs: [unit-tests, integration-tests, lint-slow]
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
