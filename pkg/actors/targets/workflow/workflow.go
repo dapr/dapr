@@ -231,9 +231,6 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 
 	if completed == runCompletedTrue {
 		w.table.DeleteFromTableIn(w, time.Second*10)
-		if w.closed.CompareAndSwap(false, true) {
-			close(w.closeCh)
-		}
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.
@@ -996,8 +993,10 @@ func (w *workflow) InvokeStream(ctx context.Context, req *internalsv1pb.Internal
 		return err
 	}
 
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ch := make(chan *backend.OrchestrationMetadata)
-	w.ometaBroadcaster.Subscribe(ctx, ch)
+	w.ometaBroadcaster.Subscribe(subCtx, ch)
 
 	for {
 		select {
