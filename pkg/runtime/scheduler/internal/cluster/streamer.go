@@ -20,13 +20,13 @@ import (
 	"io"
 	"sync"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
