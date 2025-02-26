@@ -468,6 +468,8 @@ github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuA
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
 github.com/dapr/components-contrib v1.15.0-rc.4 h1:BumXS5qYzC15sLg6K6IbtaacYAYjIYur529h/UrmNWY=
 github.com/dapr/components-contrib v1.15.0-rc.4/go.mod h1:eFF2Jan1kZBjY4vzU1zJ4rz8q9jHwy5BOKhEWLgYi/A=
+github.com/dapr/components-contrib v1.15.0 h1:nuGBNdIZwF843yK7Jk/pv9OFyoFW1nTmCK20xJuMez8=
+github.com/dapr/components-contrib v1.15.0/go.mod h1:sHISM0TKv+WwYGUAKFyjypY6urwzA//socTJ8kCFCa0=
 github.com/dapr/durabletask-go v0.6.5 h1:aWcxMfYudojpgRjJRdUr7yyZ7rGcvLtWXUuA4cGHBR0=
 github.com/dapr/durabletask-go v0.6.5/go.mod h1:nTZ5fCbJLnZbVdi6Z2YxdDF1OgQZL3LroogGuetrwuA=
 github.com/dapr/kit v0.15.1 h1:WInC8IBveslveCBE2DDeaXh62Si4Wr2Fdv2yJ/7hrDQ=
