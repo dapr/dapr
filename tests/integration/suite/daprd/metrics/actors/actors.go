@@ -15,7 +15,6 @@ package actors
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -92,21 +91,15 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		ActorId:   "myactorid",
 		Name:      "remindermethod",
 		DueTime:   "0s",
-		Period:    "R5/PT1S",
+		Period:    "R1/PT1S",
 	})
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, a.triggered.Load(), int64(1))
+		assert.Equal(c, a.triggered.Load(), int64(1))
 	}, 30*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greater or equal 1, actual value %d", a.triggered.Load())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics := a.daprd.Metrics(c, ctx).All()
-		expected := 5
-		actualTriggered := int(a.triggered.Load())
-		actualMetrics := int(metrics["dapr_runtime_actor_reminders_fired_total"])
-
-		assert.Equal(c, expected, actualTriggered, fmt.Sprintf("Triggered count mismatch: expected %d, got %d", expected, actualTriggered))
-		assert.Equal(c, expected, actualMetrics, fmt.Sprintf("Metrics count mismatch: expected %d, got %d", expected, actualMetrics))
+		a.daprd.Metrics(c, ctx).MatchMetricAndSum(c, 1, "dapr_runtime_actor_reminders_fired_total")
 	}, time.Second*20, 10*time.Millisecond)
 }
