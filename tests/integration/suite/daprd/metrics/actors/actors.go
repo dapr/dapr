@@ -97,9 +97,9 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, a.triggered.Load(), int64(1))
-	}, 30*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greater or equal 1, actual value %d", a.triggered.Load())
+	}, 5*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greater or equal 1, actual value %d", a.triggered.Load())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		a.daprd.Metrics(c, ctx).MatchMetricAndSum(c, 1, "dapr_runtime_actor_reminders_fired_total")
-	}, time.Second*20, 10*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond)
 }
