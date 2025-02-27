@@ -96,7 +96,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, a.triggered.Load(), int64(1))
+		assert.Equal(c, int64(1), a.triggered.Load())
 	}, 5*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greater or equal 1, actual value %d", a.triggered.Load())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
