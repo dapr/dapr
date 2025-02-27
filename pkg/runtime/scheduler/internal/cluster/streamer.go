@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
@@ -190,11 +191,16 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 
 	actor := job.GetMetadata().GetTarget().GetActor()
 
-	return s.actors.CallReminder(ctx, &api.Reminder{
+	err := s.actors.CallReminder(ctx, &api.Reminder{
 		Name:      job.GetName(),
 		ActorType: actor.GetType(),
 		ActorID:   actor.GetId(),
 		Data:      job.GetData(),
 		SkipLock:  actor.GetType() == s.wfengine.ActivityActorType(),
 	})
+	diag.DefaultMonitoring.ActorReminderFired(actor.GetType(), err == nil)
+	if err != nil {
+		return err
+	}
+	return nil
 }
