@@ -105,6 +105,10 @@ func New(t *testing.T, fopts ...Option) *Actors {
 		daprd.WithErrorCodeMetrics(t),
 	}
 
+	if opts.maxBodySize != nil {
+		dopts = append(dopts, daprd.WithMaxBodySize(*opts.maxBodySize))
+	}
+
 	return &Actors{
 		app:   app,
 		db:    opts.db,

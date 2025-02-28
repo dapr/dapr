@@ -71,7 +71,8 @@ type Options struct {
 	Healthz            healthz.Healthz
 	CompStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
-	StateTTLEnabled bool
+	StateTTLEnabled    bool
+	MaxRequestBodySize int
 }
 
 type InitOptions struct {
@@ -110,7 +111,8 @@ type actors struct {
 	healthz            healthz.Healthz
 	compStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
-	stateTTLEnabled bool
+	stateTTLEnabled    bool
+	maxRequestBodySize int
 
 	reminders      reminders.Interface
 	table          table.Interface
@@ -162,6 +164,7 @@ func New(opts Options) Interface {
 		closedCh:           make(chan struct{}),
 		initDoneCh:         make(chan struct{}),
 		registerDoneCh:     make(chan struct{}),
+		maxRequestBodySize: opts.MaxRequestBodySize,
 	}
 }
 
@@ -254,6 +257,7 @@ func (a *actors) Init(opts InitOptions) error {
 		IdlerQueue:         a.idlerQueue,
 		Reminders:          a.reminders,
 		Locker:             locker,
+		MaxRequestBodySize: a.maxRequestBodySize,
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
