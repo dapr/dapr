@@ -200,3 +200,35 @@ func Test_ringid(t *testing.T) {
 		}
 	}
 }
+
+func Test_header(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with header", func(t *testing.T) {
+		l := newLock(lockOptions{
+			reentrancyEnabled: true,
+			maxStackDepth:     10,
+		})
+		t.Cleanup(l.close)
+
+		req := internalv1pb.NewInternalInvokeRequest("foo")
+		cancel, err := l.lockRequest(req)
+		require.NoError(t, err)
+		t.Cleanup(cancel)
+		assert.NotEmpty(t, req.GetMetadata()["Dapr-Reentrancy-Id"])
+	})
+
+	t.Run("without header", func(t *testing.T) {
+		l := newLock(lockOptions{
+			reentrancyEnabled: false,
+			maxStackDepth:     10,
+		})
+		t.Cleanup(l.close)
+
+		req := internalv1pb.NewInternalInvokeRequest("foo")
+		cancel, err := l.lockRequest(req)
+		require.NoError(t, err)
+		t.Cleanup(cancel)
+		assert.Empty(t, req.GetMetadata()["Dapr-Reentrancy-Id"])
+	})
+}
