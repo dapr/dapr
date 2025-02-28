@@ -64,6 +64,7 @@ type options struct {
 	blockShutdownDuration   *string
 	controlPlaneTrustDomain *string
 	schedulerAddresses      []string
+	maxBodySize             *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -344,5 +345,11 @@ spec:
 	return func(o *options) {
 		WithConfigs(configFile)(o)
 		WithResourcesDir(tempDir)(o)
+	}
+}
+
+func WithMaxBodySize(size string) Option {
+	return func(o *options) {
+		o.maxBodySize = &size
 	}
 }

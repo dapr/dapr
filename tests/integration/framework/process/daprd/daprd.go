@@ -154,6 +154,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.controlPlaneTrustDomain != nil {
 		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
 	}
+	if opts.maxBodySize != nil {
+		args = append(args, "--max-body-size="+*opts.maxBodySize)
+	}
 
 	ns := "default"
 	if opts.namespace != nil {
