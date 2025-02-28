@@ -77,7 +77,7 @@ type engine struct {
 	lock  *fifo.Mutex
 	clock clock.Clock
 
-	actorCallOpts actorCallOptions
+	callOptions []grpc.CallOption
 }
 
 type actorCallOptions struct {
@@ -97,8 +97,9 @@ func New(opts Options) Interface {
 		locker:             opts.Locker,
 		lock:               fifo.New(),
 		clock:              clock.RealClock{},
-		actorCallOpts: actorCallOptions{
-			maxRequestBodySize: opts.MaxRequestBodySize,
+		callOptions: []grpc.CallOption{
+			grpc.MaxCallRecvMsgSize(opts.MaxRequestBodySize),
+			grpc.MaxCallSendMsgSize(opts.MaxRequestBodySize),
 		},
 	}
 }
@@ -277,12 +278,7 @@ func (e *engine) callRemoteActor(ctx context.Context, lar *api.LookupActorRespon
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	client := internalv1pb.NewServiceInvocationClient(conn)
 
-	opts := []grpc.CallOption{
-		grpc.MaxCallRecvMsgSize(e.actorCallOpts.maxRequestBodySize),
-		grpc.MaxCallSendMsgSize(e.actorCallOpts.maxRequestBodySize),
-	}
-
-	res, err := client.CallActor(ctx, req, opts...)
+	res, err := client.CallActor(ctx, req, e.callOptions...)
 	if err != nil {
 		return nil, err
 	}
