@@ -20,6 +20,7 @@ import (
 	"io"
 
 	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -57,6 +58,7 @@ type Options struct {
 	IdlerQueue         *queue.Processor[string, targets.Idlable]
 	SchedulerReminders bool
 	Locker             locker.Interface
+	MaxRequestBodySize int
 }
 
 type engine struct {
@@ -74,6 +76,12 @@ type engine struct {
 
 	lock  *fifo.Mutex
 	clock clock.Clock
+
+	actorCallOpts actorCallOptions
+}
+
+type actorCallOptions struct {
+	maxRequestBodySize int
 }
 
 func New(opts Options) Interface {
@@ -89,6 +97,9 @@ func New(opts Options) Interface {
 		locker:             opts.Locker,
 		lock:               fifo.New(),
 		clock:              clock.RealClock{},
+		actorCallOpts: actorCallOptions{
+			maxRequestBodySize: opts.MaxRequestBodySize,
+		},
 	}
 }
 
@@ -266,7 +277,12 @@ func (e *engine) callRemoteActor(ctx context.Context, lar *api.LookupActorRespon
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	client := internalv1pb.NewServiceInvocationClient(conn)
 
-	res, err := client.CallActor(ctx, req)
+	opts := []grpc.CallOption{
+		grpc.MaxCallRecvMsgSize(e.actorCallOpts.maxRequestBodySize),
+		grpc.MaxCallSendMsgSize(e.actorCallOpts.maxRequestBodySize),
+	}
+
+	res, err := client.CallActor(ctx, req, opts...)
 	if err != nil {
 		return nil, err
 	}

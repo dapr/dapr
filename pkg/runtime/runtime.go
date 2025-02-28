@@ -235,6 +235,7 @@ func newDaprRuntime(ctx context.Context,
 		Healthz:            runtimeConfig.healthz,
 		CompStore:          compStore,
 		StateTTLEnabled:    globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+		MaxRequestBodySize: runtimeConfig.maxRequestBodySize,
 	})
 
 	processor := processor.New(processor.Options{
