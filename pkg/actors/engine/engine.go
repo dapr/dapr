@@ -80,10 +80,6 @@ type engine struct {
 	callOptions []grpc.CallOption
 }
 
-type actorCallOptions struct {
-	maxRequestBodySize int
-}
-
 func New(opts Options) Interface {
 	return &engine{
 		namespace:          opts.Namespace,
