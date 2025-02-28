@@ -68,9 +68,9 @@ var (
 	ErrMalformedRequest = APIError{"failed deserializing HTTP body: %v", errorcodes.CommonMalformedRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
 
 	// DirectMessaging.
-	ErrDirectInvoke         = APIError{"failed to invoke, id: %s, err: %v", errorcodes.ConversationDirectInvoke, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrDirectInvokeNoAppID  = APIError{"failed getting app id either from the URL path or the header dapr-app-id", errorcodes.ConversationDirectInvoke, http.StatusNotFound, grpcCodes.NotFound}
-	ErrDirectInvokeNotReady = APIError{"invoke API is not ready", errorcodes.ConversationDirectInvoke, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrDirectInvoke         = APIError{"failed to invoke, id: %s, err: %v", errorcodes.ServiceInvocationDirectInvoke, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrDirectInvokeNoAppID  = APIError{"failed getting app id either from the URL path or the header dapr-app-id", errorcodes.ServiceInvocationDirectInvoke, http.StatusNotFound, grpcCodes.NotFound}
+	ErrDirectInvokeNotReady = APIError{"invoke API is not ready", errorcodes.ServiceInvocationDirectInvoke, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Healthz.
 	ErrHealthNotReady         = APIError{"dapr is not ready", errorcodes.HealthNotReady, http.StatusInternalServerError, grpcCodes.Internal}
@@ -93,6 +93,7 @@ var (
 	// Actor.
 	ErrActorReminderOpActorNotHosted = APIError{"operations on actor reminders are only possible on hosted actor types", errorcodes.ActorReminderNonHosted, http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrActorRuntimeNotFound          = APIError{`the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: "true" in your state store component file?`, errorcodes.ActorRuntimeNotFound, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorNoAppChannel             = APIError{"app channel is not initialized", errorcodes.ErrActorNoAppChannel, http.StatusBadRequest, grpcCodes.Unavailable}
 	ErrActorInstanceMissing          = APIError{"actor instance is missing", errorcodes.ActorInstanceMissing, http.StatusBadRequest, grpcCodes.Internal}
 	ErrActorInvoke                   = APIError{"error invoke actor method: %s", errorcodes.ActorInvokeMethod, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorStateGet                 = APIError{"error getting actor state: %s", errorcodes.ActorStateGet, http.StatusInternalServerError, grpcCodes.Internal}
@@ -101,7 +102,11 @@ var (
 	ErrActorReminderGet              = APIError{"error getting actor reminder: %s", errorcodes.ActorReminderGet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderDelete           = APIError{"error deleting actor reminder: %s", errorcodes.ActorReminderDelete, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorTimerCreate              = APIError{"error creating actor timer: %s", errorcodes.ActorTimerCreate, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrActorTimerDelete              = APIError{"error deleting actor timer: %s", errorcodes.ActorTimerDelete, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorMaxStackDepthExceeded    = APIError{"maximum stack depth exceeded", errorcodes.ErrActorMaxStackDepthExceeded, http.StatusInternalServerError, grpcCodes.ResourceExhausted}
+	ErrActorNoPlacement              = APIError{"placement service is not configured", errorcodes.ErrActorNoPlacement, http.StatusBadRequest, grpcCodes.Unavailable}
+	ErrActorRuntimeClosed            = APIError{"actor runtime is closed", errorcodes.ErrActorRuntimeClosed, http.StatusServiceUnavailable, grpcCodes.Unavailable}
+	ErrActorNamespaceRequired        = APIError{"actors must have a namespace configured when running in Kubernetes mode", errorcodes.ErrActorNamespaceRequired, http.StatusPreconditionFailed, grpcCodes.FailedPrecondition}
+	ErrActorNoAddress                = APIError{"did not find address for actor", errorcodes.ErrActorNoAddress, http.StatusNotFound, grpcCodes.FailedPrecondition}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", errorcodes.LockStoreNotConfigured, http.StatusInternalServerError, grpcCodes.FailedPrecondition}

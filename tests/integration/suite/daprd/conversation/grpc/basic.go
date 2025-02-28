@@ -63,7 +63,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message: "well hello there",
+					Content: "well hello there",
 				},
 			},
 		})

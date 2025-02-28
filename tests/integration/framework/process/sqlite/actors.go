@@ -36,7 +36,7 @@ type ActorReminder struct {
 	RegisteredTime time.Time
 	ExpirationTime time.Time
 	Period         string
-	Data           string
+	Data           any
 	ActorID        string
 	ActorType      string
 	Name           string

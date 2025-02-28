@@ -24,6 +24,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/pkg/sentry/config"
@@ -83,7 +84,7 @@ type ca struct {
 
 func New(ctx context.Context, conf config.Config) (Signer, error) {
 	var castore store
-	if config.IsKubernetesHosted() {
+	if conf.Mode == modes.KubernetesMode {
 		log.Info("Using kubernetes secret store for trust bundle storage")
 
 		client, err := kubernetes.NewForConfig(utils.GetConfig())

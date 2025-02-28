@@ -49,9 +49,9 @@ func (s *StateStoreError) NotFound(appID string) error {
 			http.StatusBadRequest,
 			msg,
 			errorcodes.StateStoreNotFound.Code,
-			string(errorcodes.CategoryState),
+			string(errorcodes.StateStoreNotFound.Category),
 		),
-		errors.CodeNotFound,
+		errorcodes.StateStoreNotFound.GrpcCode,
 		meta,
 	)
 }
@@ -69,9 +69,9 @@ func (s *StateStoreError) NotConfigured(appID string) error {
 			http.StatusInternalServerError,
 			msg,
 			errorcodes.StateStoreNotConfigured.Code,
-			string(errorcodes.CategoryState),
+			string(errorcodes.StateStoreNotConfigured.Category),
 		),
-		errors.CodeNotConfigured,
+		errorcodes.StateStoreNotConfigured.GrpcCode,
 		meta,
 	)
 }
@@ -82,10 +82,10 @@ func (s *StateStoreError) InvalidKeyName(key string, msg string) error {
 			codes.InvalidArgument,
 			http.StatusBadRequest,
 			msg,
-			errorcodes.CommonMalformedRequest.Code,
-			string(errorcodes.CategoryState),
+			errorcodes.StateMalformedRequest.Code,
+			string(errorcodes.StateMalformedRequest.Category),
 		).WithFieldViolation(key, msg),
-		errors.CodeIllegalKey,
+		errorcodes.StateMalformedRequest.GrpcCode,
 		nil,
 	)
 }
@@ -98,10 +98,10 @@ func (s *StateStoreError) TransactionsNotSupported() error {
 			codes.Unimplemented,
 			http.StatusInternalServerError,
 			fmt.Sprintf("state store %s doesn't support transactions", s.name),
-			errorcodes.StateStoreNotSupported.Code, // TODO: @elena-kolevska this misleading and also used for different things ("query unsupported"); it should be removed in the next major version
-			string(errorcodes.CategoryState),
+			errorcodes.StateStoreTransactionsNotSupported.Code,
+			string(errorcodes.StateStoreTransactionsNotSupported.Category),
 		).WithHelpLink("https://docs.dapr.io/reference/components-reference/supported-state-stores/", "Check the list of state stores and the features they support"),
-		"TRANSACTIONS_NOT_SUPPORTED",
+		errorcodes.StateStoreTransactionsNotSupported.GrpcCode,
 		nil,
 	)
 }
@@ -113,9 +113,9 @@ func (s *StateStoreError) TooManyTransactionalOps(count int, max int) error {
 			http.StatusBadRequest,
 			fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", count, max),
 			errorcodes.StateStoreTooManyTransactions.Code,
-			string(errorcodes.CategoryState),
+			string(errorcodes.StateStoreTooManyTransactions.Category),
 		),
-		"TOO_MANY_TRANSACTIONS",
+		errorcodes.StateStoreTooManyTransactions.GrpcCode,
 		map[string]string{
 			"currentOpsTransaction": strconv.Itoa(count),
 			"maxOpsPerTransaction":  strconv.Itoa(max),
@@ -131,10 +131,10 @@ func (s *StateStoreError) QueryUnsupported() error {
 			codes.Internal,
 			http.StatusInternalServerError,
 			"state store does not support querying",
-			errorcodes.StateStoreNotSupported.Code,
-			string(errorcodes.CategoryState),
+			errorcodes.StateStoreQueryNotSupported.Code,
+			string(errorcodes.StateStoreQueryNotSupported.Category),
 		),
-		"QUERYING_"+errors.CodeNotSupported,
+		errorcodes.StateStoreQueryNotSupported.GrpcCode,
 		nil,
 	)
 }
@@ -146,9 +146,9 @@ func (s *StateStoreError) QueryFailed(detail string) error {
 			http.StatusInternalServerError,
 			fmt.Sprintf("state store %s query failed: %s", s.name, detail),
 			errorcodes.StateQuery.Code,
-			string(errorcodes.CategoryState),
+			string(errorcodes.StateQuery.Category),
 		),
-		errors.CodePostfixQueryFailed,
+		errorcodes.StateQuery.GrpcCode,
 		nil,
 	)
 }
@@ -157,8 +157,7 @@ func (s *StateStoreError) build(err *errors.ErrorBuilder, errCode string, metada
 	if !s.skipResourceInfo {
 		err = err.WithResourceInfo("state", s.name, "", "")
 	}
-	compErrCode := errors.CodePrefixStateStore + errCode
 	return err.
-		WithErrorInfo(compErrCode, metadata).
+		WithErrorInfo(errCode, metadata).
 		Build()
 }

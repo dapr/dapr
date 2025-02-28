@@ -1,0 +1,133 @@
+diff --git a/tests/integration/suite/actors/healthz/endpoint/noapp.go b/tests/integration/suite/actors/healthz/endpoint/noapp.go
+index 3e01c9490..3f9eed4c5 100644
+--- a/tests/integration/suite/actors/healthz/endpoint/noapp.go
++++ b/tests/integration/suite/actors/healthz/endpoint/noapp.go
+@@ -77,6 +77,7 @@ func (n *noapp) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithAppProtocol("http"),
+ 		daprd.WithAppPort(srv.Port()),
+ 		daprd.WithAppHealthCheck(false),
++
+ 	)
+ 
+ 	return []framework.Option{
+@@ -102,8 +103,8 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
+ 
+ 	select {
+ 	case <-n.healthzCalled:
+-	case <-time.After(time.Second * 15):
+-		t.Fatal("timed out waiting for healthz call")
++		t.Fatal("unexpected healthz called")
++	default:
+ 	}
+ 
+ 	client := client.HTTP(t)
+diff --git a/tests/integration/suite/actors/healthz/endpoint/path.go b/tests/integration/suite/actors/healthz/endpoint/path.go
+index b7186c5fe..80625dc6e 100644
+--- a/tests/integration/suite/actors/healthz/endpoint/path.go
++++ b/tests/integration/suite/actors/healthz/endpoint/path.go
+@@ -41,25 +41,18 @@ func init() {
+ type path struct {
+ 	daprd         *daprd.Daprd
+ 	place         *placement.Placement
+-	healthzCalled chan struct{}
+ 	customHealthz chan struct{}
+ 	rootCalled    atomic.Bool
+ }
+ 
+ func (p *path) Setup(t *testing.T) []framework.Option {
+-	p.healthzCalled = make(chan struct{})
+ 	p.customHealthz = make(chan struct{})
+ 
+-	var honce, conce sync.Once
++	var conce sync.Once
+ 	srv := prochttp.New(t,
+ 		prochttp.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+ 			w.Write([]byte(`{"entities": ["myactortype"]}`))
+ 		}),
+-		prochttp.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+-			honce.Do(func() {
+-				close(p.healthzCalled)
+-			})
+-		}),
+ 		prochttp.WithHandlerFunc("/customhealthz", func(w http.ResponseWriter, r *http.Request) {
+ 			conce.Do(func() {
+ 				close(p.customHealthz)
+@@ -68,6 +61,7 @@ func (p *path) Setup(t *testing.T) []framework.Option {
+ 		prochttp.WithHandlerFunc(pathMethodFoo, func(w http.ResponseWriter, r *http.Request) {
+ 			w.Write([]byte(`OK`))
+ 		}),
++		prochttp.WithHandlerFunc("/actors/myactortype/myactorid", func(w http.ResponseWriter, r *http.Request) {}),
+ 		prochttp.WithHandlerFunc("/", func(w http.ResponseWriter, r *http.Request) {
+ 			p.rootCalled.Store(true)
+ 			w.WriteHeader(http.StatusInternalServerError)
+@@ -97,7 +91,6 @@ func (p *path) Run(t *testing.T, ctx context.Context) {
+ 
+ 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+ 		meta, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+-		//nolint:testifylint
+ 		assert.NoError(c, err)
+ 		assert.True(c, meta.GetActorRuntime().GetHostReady())
+ 		assert.Len(c, meta.GetActorRuntime().GetActiveActors(), 1)
+@@ -111,12 +104,6 @@ func (p *path) Run(t *testing.T, ctx context.Context) {
+ 		assert.Fail(t, "timed out waiting for healthz call")
+ 	}
+ 
+-	select {
+-	case <-p.healthzCalled:
+-	case <-time.After(time.Second * 15):
+-		assert.Fail(t, "/healthz endpoint should still have been called for actor health check")
+-	}
+-
+ 	client := client.HTTP(t)
+ 
+ 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fooActorURL(p.daprd), nil)
+diff --git a/tests/integration/suite/actors/healthz/initerror.go b/tests/integration/suite/actors/healthz/initerror.go
+index 6f3fa6276..a95d65f4d 100644
+--- a/tests/integration/suite/actors/healthz/initerror.go
++++ b/tests/integration/suite/actors/healthz/initerror.go
+@@ -76,6 +76,7 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(i.place.Address()),
+ 		daprd.WithAppPort(srv.Port()),
++		daprd.WithAppHealthCheck(true),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/actors/metadata/disabled.go b/tests/integration/suite/actors/metadata/disabled.go
+index 5ca476c7e..57198b2cf 100644
+--- a/tests/integration/suite/actors/metadata/disabled.go
++++ b/tests/integration/suite/actors/metadata/disabled.go
+@@ -67,7 +67,7 @@ func (m *disabled) Run(t *testing.T, ctx context.Context) {
+ 		res := getMetadata(t, ctx, client, m.daprd.HTTPPort())
+ 		assert.Equal(t, "DISABLED", res.ActorRuntime.RuntimeStatus)
+ 		assert.False(t, res.ActorRuntime.HostReady)
+-		assert.Empty(t, res.ActorRuntime.Placement)
++		assert.Equal(t, "placement: disconnected", res.ActorRuntime.Placement)
+ 		assert.Empty(t, res.ActorRuntime.ActiveActors)
+ 	}, 10*time.Second, 10*time.Millisecond)
+ }
+diff --git a/tests/integration/suite/actors/http/ttl.go b/tests/integration/suite/actors/http/ttl.go
+index a82973d11..95633e711 100644
+--- a/tests/integration/suite/actors/http/ttl.go
++++ b/tests/integration/suite/actors/http/ttl.go
+@@ -83,6 +83,7 @@ spec:
+ 		daprd.WithConfigs(configFile),
+ 		daprd.WithPlacementAddresses(l.place.Address()),
+ 		daprd.WithAppPort(srv.Port()),
++		daprd.WithAppHealthCheck(true),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/daprd/resources/dapr.go b/tests/integration/suite/daprd/resources/dapr.go
+index 7ac79495a..23d17bf37 100644
+--- a/tests/integration/suite/daprd/resources/dapr.go
++++ b/tests/integration/suite/daprd/resources/dapr.go
+@@ -38,7 +38,7 @@ func (d *dapr) Setup(t *testing.T) []framework.Option {
+ 	d.logline = logline.New(t,
+ 		logline.WithStdoutLineContains(
+ 			"Component loaded: dapr (state.in-memory/v1)",
+-			"Workflow engine initialized.",
++			"Workflow engine started",
+ 		),
+ 	)
+ 

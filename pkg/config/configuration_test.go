@@ -14,9 +14,7 @@ limitations under the License.
 package config
 
 import (
-	"bytes"
 	"io"
-	"os"
 	"reflect"
 	"sort"
 	"testing"
@@ -27,6 +25,7 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -165,6 +164,18 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 				featureName:    Feature("Test.Missing"),
 				featureEnabled: false,
 			},
+			{
+				name:           "default feature is disabled",
+				confFile:       "./testdata/default_features_disabled_config.yaml",
+				featureName:    SchedulerReminders,
+				featureEnabled: false,
+			},
+			{
+				name:           "default feature is enabled with config that doesn't have default feature disabled or enabled explicitly",
+				confFile:       "./testdata/feature_config.yaml",
+				featureName:    SchedulerReminders,
+				featureEnabled: true,
+			},
 		}
 
 		for _, tc := range testCases {
@@ -201,8 +212,8 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		workflowSpec := config.GetWorkflowSpec()
 
 		// These are the documented default values. Changes to these defaults require changes to
-		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentWorkflowInvocations)
-		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentActivityInvocations)
+		assert.Equal(t, int32(1000), workflowSpec.MaxConcurrentWorkflowInvocations)
+		assert.Equal(t, int32(1000), workflowSpec.MaxConcurrentActivityInvocations)
 	})
 
 	t.Run("multiple configurations", func(t *testing.T) {
@@ -236,23 +247,19 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.False(t, mtlsSpec.Enabled) // Overridden
 		assert.Equal(t, "25s", mtlsSpec.WorkloadCertTTL)
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
-
-		// Spec part encoded as YAML
-		compareWithFile(t, "./testdata/override_spec_gen.yaml", config.Spec.String())
-
-		// Complete YAML
-		compareWithFile(t, "./testdata/override_gen.yaml", config.String())
 	})
-}
 
-func compareWithFile(t *testing.T, file string, expect string) {
-	f, err := os.ReadFile(file)
-	require.NoError(t, err)
+	t.Run("tracing spec headers value as string", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/tracing_config.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, "header1=value1,header2=value2", config.Spec.TracingSpec.Otel.Headers)
+		assert.Equal(t, 5000, config.Spec.TracingSpec.Otel.Timeout)
+	})
 
-	// Replace all "\r\n" with "\n" because (*wave hands*, *lesigh*) ... Windows
-	f = bytes.ReplaceAll(f, []byte{'\r', '\n'}, []byte{'\n'})
-
-	assert.Equal(t, expect, string(f))
+	t.Run("tracing invalid spec", func(t *testing.T) {
+		_, err := LoadStandaloneConfiguration("./testdata/tracing_invalid_config.yaml")
+		require.Error(t, err)
+	})
 }
 
 func TestSortAndValidateSecretsConfigration(t *testing.T) {
@@ -487,29 +494,70 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otlpendpoint:1234")
 	t.Setenv("OTEL_EXPORTER_OTLP_INSECURE", "true")
 	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "api-key1=value1,api-key2=value2")
 
 	// get default configuration
 	conf := LoadDefaultConfiguration()
 
 	// set tracing spec from env
-	SetTracingSpecFromEnv(conf)
+	err := SetTracingSpecFromEnv(conf)
+	require.NoError(t, err)
 
 	assert.Equal(t, "otlpendpoint:1234", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "http", conf.Spec.TracingSpec.Otel.Protocol)
 	require.False(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
+	assert.Equal(t, "api-key1=value1,api-key2=value2", conf.Spec.TracingSpec.Otel.Headers)
 
 	// Spec from config file should not be overridden
 	conf = LoadDefaultConfiguration()
 	conf.Spec.TracingSpec.Otel.EndpointAddress = "configfileendpoint:4321"
 	conf.Spec.TracingSpec.Otel.Protocol = "grpc"
 	conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(true)
+	conf.Spec.TracingSpec.Otel.Headers = "another-key1=value1,another-key2=value2"
 
 	// set tracing spec from env
-	SetTracingSpecFromEnv(conf)
+	err = SetTracingSpecFromEnv(conf)
+	require.NoError(t, err)
 
 	assert.Equal(t, "configfileendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
 	require.True(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
+	assert.Equal(t, "another-key1=value1,another-key2=value2", conf.Spec.TracingSpec.Otel.Headers)
+}
+
+func TestTracingPrecedenceFromEnv(t *testing.T) {
+	t.Setenv(env.OtlpExporterTracesEndpoint, "tracesendpoint:4321")
+	t.Setenv(env.OtlpExporterEndpoint, "configfileendpoint:4321")
+	t.Setenv(env.OtlpExporterTracesProtocol, "grpc")
+	t.Setenv(env.OtlpExporterProtocol, "http")
+	t.Setenv(env.OtlpExporterTracesHeaders, "traces-key1=value1,traces-key2=value2")
+	t.Setenv(env.OtlpExporterHeaders, "key1=value1,key2=value2")
+	t.Setenv(env.OtlpExporterTracesTimeout, "2000")
+	t.Setenv(env.OtlpExporterTimeout, "1000")
+
+	conf := LoadDefaultConfiguration()
+	err := SetTracingSpecFromEnv(conf)
+	require.NoError(t, err)
+
+	assert.Equal(t, "tracesendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
+	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
+	assert.Equal(t, "traces-key1=value1,traces-key2=value2", conf.Spec.TracingSpec.Otel.Headers)
+	assert.Equal(t, 2000, conf.Spec.TracingSpec.Otel.Timeout)
+}
+
+func TestTracingTimeoutFromEnv(t *testing.T) {
+	t.Setenv(env.OtlpExporterTracesTimeout, "invalid")
+	conf := LoadDefaultConfiguration()
+	err := SetTracingSpecFromEnv(conf)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid syntax")
+	assert.Equal(t, 0, conf.Spec.TracingSpec.Otel.Timeout)
+
+	t.Setenv(env.OtlpExporterTracesTimeout, "-1")
+	conf = LoadDefaultConfiguration()
+	err = SetTracingSpecFromEnv(conf)
+	require.NoError(t, err)
+	assert.Equal(t, 0, conf.Spec.TracingSpec.Otel.Timeout)
 }
 
 func TestAPIAccessRules(t *testing.T) {

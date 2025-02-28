@@ -37,10 +37,13 @@ type options struct {
 	initialClusterPorts []int
 	tlsEnabled          bool
 	sentryAddress       *string
+	trustDomain         *string
 	trustAnchorsFile    *string
 	maxAPILevel         *int
 	minAPILevel         *int
 	metadataEnabled     bool
+	mode                *string
+	namespace           string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -102,6 +105,7 @@ func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 		o.tlsEnabled = true
 		o.sentryAddress = ptr.Of(sentry.Address())
 		o.trustAnchorsFile = ptr.Of(sentry.TrustAnchorsFile(t))
+		o.trustDomain = ptr.Of(sentry.TrustDomain(t))
 	}
 }
 
@@ -132,5 +136,17 @@ func WithMinAPILevel(val int) Option {
 func WithMetadataEnabled(enabled bool) Option {
 	return func(o *options) {
 		o.metadataEnabled = enabled
+	}
+}
+
+func WithMode(mode string) Option {
+	return func(o *options) {
+		o.mode = &mode
+	}
+}
+
+func WithNamespace(namespace string) Option {
+	return func(o *options) {
+		o.namespace = namespace
 	}
 }

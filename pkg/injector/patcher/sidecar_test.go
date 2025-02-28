@@ -50,17 +50,19 @@ func TestSidecarConfigSetFromAnnotations(t *testing.T) {
 
 		// Set properties of supported kinds: bools, strings, ints
 		c.setFromAnnotations(map[string]string{
-			annotations.KeyEnabled:          "1", // Will be cast using utils.IsTruthy
-			annotations.KeyAppID:            "myappid",
-			annotations.KeyAppPort:          "9876",
-			annotations.KeyMetricsPort:      "6789",  // Override default value
-			annotations.KeyEnableAPILogging: "false", // Nullable property
+			annotations.KeyEnabled:                "1", // Will be cast using utils.IsTruthy
+			annotations.KeyAppID:                  "myappid",
+			annotations.KeyAppPort:                "9876",
+			annotations.KeyMetricsPort:            "6789",  // Override default value
+			annotations.KeyEnableAPILogging:       "false", // Nullable property
+			annotations.KeyPlacementHostAddresses: "",
 		})
 
 		assert.True(t, c.Enabled)
 		assert.Equal(t, "myappid", c.AppID)
 		assert.Equal(t, int32(9876), c.AppPort)
 		assert.Equal(t, int32(6789), c.SidecarMetricsPort)
+		assert.Equal(t, "", c.PlacementAddress)
 
 		// Nullable properties
 		_ = assert.NotNil(t, c.EnableAPILogging) &&
@@ -81,5 +83,32 @@ func TestSidecarConfigSetFromAnnotations(t *testing.T) {
 
 		assert.Equal(t, int32(0), c.AppPort)
 		assert.Nil(t, c.HTTPMaxRequestSize)
+	})
+
+	t.Run("host addresses with various empty string formats", func(t *testing.T) {
+		testCases := []struct {
+			name  string
+			value string
+		}{
+			{"empty string", ""},
+			{"single-quoted empty string", `'""'`},
+			{"single quotes", `''`},
+			{"double quotes", `""`},
+			{"spaces", "   "},
+			{"quoted spaces", `"   "`},
+			{"single-quoted spaces", `'   '`},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				c := NewSidecarConfig(&corev1.Pod{})
+				c.setFromAnnotations(map[string]string{
+					annotations.KeySchedulerHostAddresses: tc.value,
+					annotations.KeyPlacementHostAddresses: tc.value,
+				})
+				assert.Equal(t, "", c.PlacementAddress, "PlacementAddress should be empty for input: %q", tc.value)
+				assert.Equal(t, "", c.SchedulerAddress, "SchedulerAddress should be empty for input: %q", tc.value)
+			})
+		}
 	})
 }

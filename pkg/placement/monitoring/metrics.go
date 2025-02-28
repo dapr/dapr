@@ -25,6 +25,8 @@ import (
 )
 
 var (
+	noKeys = []tag.Key{}
+
 	runtimesTotal = stats.Int64(
 		"placement/runtimes_total",
 		"The total number of runtimes reported to placement service.",
@@ -37,6 +39,16 @@ var (
 	actorHeartbeatTimestamp = stats.Int64(
 		"placement/actor_heartbeat_timestamp",
 		"The actor's heartbeat timestamp (in seconds) was last reported to the placement service.",
+		stats.UnitDimensionless)
+
+	leaderStatus = stats.Int64(
+		"placement/leader_status",
+		"Placement server leadership status (1 for leader, 0 for not leader).",
+		stats.UnitDimensionless)
+
+	raftLeaderStatus = stats.Int64(
+		"placement/raft_leader_status",
+		"Raft server leadership status (1 for leader, 0 for not leader).",
 		stats.UnitDimensionless)
 
 	// Metrics tags
@@ -56,7 +68,7 @@ func RecordRuntimesCount(count int, ns string) {
 	)
 }
 
-// RecordActorRuntimesCount records the number of valid actor runtimes.
+// RecordActorRuntimesCount records the number of actor-hosting runtimes.
 func RecordActorRuntimesCount(count int, ns string) {
 	stats.RecordWithTags(
 		context.Background(),
@@ -73,13 +85,42 @@ func RecordActorHeartbeat(appID, actorType, host, namespace, pod string, heartbe
 		actorHeartbeatTimestamp.M(heartbeatTime.Unix()))
 }
 
+// RecordPlacementLeaderStatus records the leader status of the placement server.
+func RecordPlacementLeaderStatus(isLeader bool) {
+	status := int64(0)
+	if isLeader {
+		status = 1
+	}
+	stats.Record(
+		context.Background(),
+		leaderStatus.M(status),
+	)
+}
+
+// RecordRaftPlacementLeaderStatus records the leader status of the raft server.
+func RecordRaftPlacementLeaderStatus(isLeader bool) {
+	status := int64(0)
+	if isLeader {
+		status = 1
+	}
+	stats.Record(
+		context.Background(),
+		raftLeaderStatus.M(status),
+	)
+}
+
 // InitMetrics initialize the placement service metrics.
 func InitMetrics() error {
 	err := view.Register(
 		diagUtils.NewMeasureView(runtimesTotal, []tag.Key{namespaceKey}, view.LastValue()),
 		diagUtils.NewMeasureView(actorRuntimesTotal, []tag.Key{namespaceKey}, view.LastValue()),
 		diagUtils.NewMeasureView(actorHeartbeatTimestamp, []tag.Key{appIDKey, actorTypeKey, hostNameKey, namespaceKey, podNameKey}, view.LastValue()),
+		diagUtils.NewMeasureView(leaderStatus, noKeys, view.LastValue()),
+		diagUtils.NewMeasureView(raftLeaderStatus, noKeys, view.LastValue()),
 	)
+
+	RecordPlacementLeaderStatus(false)
+	RecordRaftPlacementLeaderStatus(false)
 
 	return err
 }

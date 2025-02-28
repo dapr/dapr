@@ -54,13 +54,17 @@ type Handler interface {
 	NetListenerID(net.Listener, spiffeid.ID) net.Listener
 	NetDialerID(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 
+	MTLSClientConfig(spiffeid.ID) *tls.Config
+
 	ControlPlaneTrustDomain() spiffeid.TrustDomain
 	ControlPlaneNamespace() string
 	CurrentTrustAnchors(context.Context) ([]byte, error)
 	WithSVIDContext(context.Context) context.Context
 
 	MTLSEnabled() bool
+	ID() spiffeid.ID
 	WatchTrustAnchors(context.Context, chan<- []byte)
+	IdentityDir() *string
 }
 
 // Provider is the security provider.
@@ -102,6 +106,10 @@ type Options struct {
 	// from. Default to an implementation requesting from Sentry.
 	OverrideCertRequestFn spiffe.RequestSVIDFn
 
+	// OverrideTrustAnchors is used to override where trust anchors are requested
+	// from.
+	OverrideTrustAnchors trustanchors.Interface
+
 	// Mode is the operation mode of this security instance (self-hosted or
 	// Kubernetes).
 	Mode modes.DaprMode
@@ -112,6 +120,12 @@ type Options struct {
 
 	// Healthz is used to signal the health of the security provider.
 	Healthz healthz.Healthz
+
+	// WriteIdentityToFile is used to write the identity private key and
+	// certificate chain to file. The certificate chain and private key will be
+	// written to the `tls.cert` and `tls.key` files respectively in the given
+	// directory.
+	WriteIdentityToFile *string
 }
 
 type provider struct {
@@ -128,7 +142,11 @@ type security struct {
 
 	trustAnchors trustanchors.Interface
 	spiffe       *spiffe.SPIFFE
+	id           spiffeid.ID
 	mtls         bool
+
+	identityDir      *string
+	trustAnchorsFile *string
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {
@@ -149,25 +167,28 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	var spf *spiffe.SPIFFE
 	var trustAnchors trustanchors.Interface
 	if opts.MTLSEnabled || opts.Mode == modes.KubernetesMode {
-		if len(opts.TrustAnchors) > 0 && opts.TrustAnchorsFile != nil {
-			return nil, errors.New("trust anchors cannot be specified in both TrustAnchors and TrustAnchorsFile")
-		}
-
-		if len(opts.TrustAnchors) == 0 && opts.TrustAnchorsFile == nil {
-			return nil, errors.New("trust anchors are required")
-		}
-
-		switch {
-		case len(opts.TrustAnchors) > 0:
-			trustAnchors, err = trustanchors.FromStatic(opts.TrustAnchors)
-			if err != nil {
-				return nil, err
+		trustAnchors = opts.OverrideTrustAnchors
+		if trustAnchors == nil {
+			if len(opts.TrustAnchors) > 0 && opts.TrustAnchorsFile != nil {
+				return nil, errors.New("trust anchors cannot be specified in both TrustAnchors and TrustAnchorsFile")
 			}
-		case opts.TrustAnchorsFile != nil:
-			trustAnchors = trustanchors.FromFile(trustanchors.OptionsFile{
-				Log:  log,
-				Path: *opts.TrustAnchorsFile,
-			})
+
+			if len(opts.TrustAnchors) == 0 && opts.TrustAnchorsFile == nil {
+				return nil, errors.New("trust anchors are required")
+			}
+
+			switch {
+			case len(opts.TrustAnchors) > 0:
+				trustAnchors, err = trustanchors.FromStatic(opts.TrustAnchors)
+				if err != nil {
+					return nil, err
+				}
+			case opts.TrustAnchorsFile != nil:
+				trustAnchors = trustanchors.FromFile(trustanchors.OptionsFile{
+					Log:  log,
+					Path: *opts.TrustAnchorsFile,
+				})
+			}
 		}
 
 		var reqFn spiffe.RequestSVIDFn
@@ -179,7 +200,12 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 				return nil, err
 			}
 		}
-		spf = spiffe.New(spiffe.Options{Log: log, RequestSVIDFn: reqFn})
+		spf = spiffe.New(spiffe.Options{
+			Log:                 log,
+			RequestSVIDFn:       reqFn,
+			WriteIdentityToFile: opts.WriteIdentityToFile,
+			TrustAnchors:        trustAnchors,
+		})
 	} else {
 		log.Warn("mTLS is disabled. Skipping certificate request and tls validation")
 	}
@@ -193,6 +219,8 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			mtls:                    opts.MTLSEnabled,
 			controlPlaneTrustDomain: cptd,
 			controlPlaneNamespace:   opts.ControlPlaneNamespace,
+			identityDir:             opts.WriteIdentityToFile,
+			trustAnchorsFile:        opts.TrustAnchorsFile,
 		},
 	}, nil
 }
@@ -220,6 +248,11 @@ func (p *provider) Run(ctx context.Context) error {
 			if err := p.sec.spiffe.Ready(ctx); err != nil {
 				return err
 			}
+			id, err := p.sec.spiffe.SVIDSource().GetX509SVID()
+			if err != nil {
+				return err
+			}
+			p.sec.id = id.ID
 			close(p.readyCh)
 			diagnostics.DefaultMonitoring.MTLSInitCompleted()
 			p.htarget.Ready()
@@ -364,6 +397,15 @@ func (s *security) MTLSEnabled() bool {
 	return s.mtls
 }
 
+// MTLSClientConfig returns a mTLS client config
+func (s *security) MTLSClientConfig(id spiffeid.ID) *tls.Config {
+	if !s.mtls {
+		return nil
+	}
+
+	return tlsconfig.MTLSClientConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id))
+}
+
 // CurrentNamespace returns the namespace of this workload.
 func CurrentNamespace() string {
 	namespace, ok := os.LookupEnv("NAMESPACE")
@@ -404,4 +446,12 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 	}
 
 	return spiffecontext.With(ctx, s.spiffe)
+}
+
+func (s *security) IdentityDir() *string {
+	return s.identityDir
+}
+
+func (s *security) ID() spiffeid.ID {
+	return s.id
 }

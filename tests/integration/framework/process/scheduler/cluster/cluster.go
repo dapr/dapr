@@ -20,8 +20,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
@@ -42,6 +45,9 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 	}
 
 	require.Positive(t, opts.count, "count must be positive")
+	if len(opts.overrideBroadcastHostPorts) > 0 {
+		require.Len(t, opts.overrideBroadcastHostPorts, int(opts.count), "overrideBroadcastHostPorts must have the same length as count")
+	}
 
 	fp := ports.Reserve(t, int(opts.count)*5)
 
@@ -50,28 +56,36 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 	healthzPorts := make([]int, opts.count)
 	metricsPorts := make([]int, opts.count)
 	initialCluster := make([]string, opts.count)
-	clientPorts := make([]string, opts.count)
+	clientPorts := make([]int, opts.count)
 
 	for i := range ports {
-		uids[i] = "scheduler-" + strconv.Itoa(i)
+		uids[i] = "dapr-scheduler-server-" + strconv.Itoa(i)
 		ports[i] = fp.Port(t)
 		healthzPorts[i] = fp.Port(t)
 		metricsPorts[i] = fp.Port(t)
 		initialCluster[i] = fmt.Sprintf("%s=http://127.0.0.1:%d", uids[i], fp.Port(t))
-		clientPorts[i] = fmt.Sprintf("%s=%d", uids[i], fp.Port(t))
+		clientPorts[i] = fp.Port(t)
 	}
 
 	schedulers := make([]*scheduler.Scheduler, opts.count)
 	for i := range opts.count {
-		schedulers[i] = scheduler.New(t,
+		sopts := []scheduler.Option{
 			scheduler.WithID(uids[i]),
 			scheduler.WithPort(ports[i]),
 			scheduler.WithHealthzPort(healthzPorts[i]),
 			scheduler.WithMetricsPort(metricsPorts[i]),
 			scheduler.WithInitialCluster(strings.Join(initialCluster, ",")),
-			scheduler.WithEtcdClientPorts(clientPorts),
-			scheduler.WithReplicaCount(opts.count),
-		)
+			scheduler.WithEtcdClientPort(clientPorts[i]),
+			scheduler.WithID("dapr-scheduler-server-" + strconv.FormatUint(uint64(i), 10)),
+		}
+
+		if len(opts.overrideBroadcastHostPorts) > 0 {
+			sopts = append(sopts,
+				scheduler.WithOverrideBroadcastHostPort(opts.overrideBroadcastHostPorts[i]),
+			)
+		}
+
+		schedulers[i] = scheduler.New(t, sopts...)
 	}
 
 	return &Cluster{
@@ -107,6 +121,13 @@ func (c *Cluster) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	for _, s := range c.schedulers {
 		s.WaitUntilRunning(t, ctx)
 	}
+
+	require.EventuallyWithT(t, func(col *assert.CollectT) {
+		resp, err := c.schedulers[0].ETCDClient(t, ctx).Get(ctx, "dapr/leadership", clientv3.WithPrefix())
+		if assert.NoError(col, err) {
+			_ = assert.NotNil(col, resp) && assert.Len(col, resp.Kvs, len(c.schedulers))
+		}
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (c *Cluster) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {

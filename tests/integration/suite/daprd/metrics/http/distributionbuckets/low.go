@@ -80,7 +80,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 		var httpServerLatencyBuckets []float64
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			httpServerLatencyBuckets = nil
-			for k := range l.daprd.Metrics(t, ctx) {
+			for k := range l.daprd.Metrics(c, ctx).All() {
 				if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
 					bucket := getBucketFromKey(t, k)
 					httpServerLatencyBuckets = append(httpServerLatencyBuckets, bucket)

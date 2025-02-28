@@ -61,7 +61,10 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
 
-	e.scheduler = scheduler.New(t, scheduler.WithSentry(e.sentry))
+	e.scheduler = scheduler.New(t,
+		scheduler.WithSentry(e.sentry),
+		scheduler.WithID("dapr-scheduler-server-0"),
+	)
 
 	e.placement = placement.New(t,
 		placement.WithEnableTLS(true),

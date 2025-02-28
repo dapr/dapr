@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
@@ -92,7 +93,10 @@ spec:
 		)
 	}
 
-	c.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(files...))
+	c.daprd = procdaprd.New(t,
+		procdaprd.WithResourceFiles(files...),
+		procdaprd.WithErrorCodeMetrics(t),
+	)
 
 	return []framework.Option{
 		framework.WithProcesses(c.daprd),
@@ -122,4 +126,28 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(t, string(respBody), "secret key1 not found")
 		})
 	}
+
+	// TODO: @jake-engelberg: parallel tests run during cleanup, can't check metrics within that
+	t.Run("metrics", func(t *testing.T) {
+		for i, secretStoreName := range c.secretStoreNames {
+			if i > 10 {
+				break
+			}
+
+			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/key1", c.daprd.HTTPPort(), url.QueryEscape(secretStoreName))
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
+			require.NoError(t, err)
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+			respBody, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			assert.Contains(t, string(respBody), "ERR_SECRET_GET")
+			assert.Contains(t, string(respBody), "secret key1 not found")
+			assert.Eventually(t, func() bool {
+				return c.daprd.Metrics(t, ctx).MatchMetricAndSum(t, float64(i+1), "dapr_error_code_total", "category:secret", "error_code:ERR_SECRET_GET")
+			}, 5*time.Second, 100*time.Millisecond)
+		}
+	})
 }

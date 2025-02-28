@@ -102,7 +102,7 @@ func TestRecordErrorCode(t *testing.T) {
 			} else if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.CryptoKey.Code}) {
 				assert.Equal(t, int64(2), metric.Data.(*view.CountData).Value)
 				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: string(errorcodes.CategoryCrypto)}))
-			} else if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.PubsubNotFound.Code}) {
+			} else if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.PubSubNotFound.Code}) {
 				assert.Equal(t, int64(1), metric.Data.(*view.CountData).Value)
 				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: string(errorcodes.CategoryPubsub)}))
 			}

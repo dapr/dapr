@@ -17,11 +17,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
-	"github.com/microsoft/durabletask-go/api"
-	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/client"
-	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -29,7 +26,12 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
@@ -38,11 +40,14 @@ func init() {
 
 // workflow tests daprd metrics for workflows
 type workflow struct {
-	daprd *daprd.Daprd
-	place *placement.Placement
+	daprd     *daprd.Daprd
+	place     *placement.Placement
+	scheduler *scheduler.Scheduler
 }
 
 func (w *workflow) Setup(t *testing.T) []framework.Option {
+	w.scheduler = scheduler.New(t)
+
 	w.place = placement.New(t)
 
 	app := app.New(t)
@@ -53,14 +58,16 @@ func (w *workflow) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppID("myapp"),
 		daprd.WithPlacementAddresses(w.place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithSchedulerAddresses(w.scheduler.Address()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(w.place, app, w.daprd),
+		framework.WithProcesses(w.place, w.scheduler, app, w.daprd),
 	}
 }
 
 func (w *workflow) Run(t *testing.T, ctx context.Context) {
+	w.scheduler.WaitUntilRunning(t, ctx)
 	w.place.WaitUntilRunning(t, ctx)
 	w.daprd.WaitUntilRunning(t, ctx)
 
@@ -92,27 +99,31 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 		// Verify metrics
-		metrics := w.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
-		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
-		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_success|app_id:myapp|namespace:|status:success"]))
-		assert.GreaterOrEqual(t, 1, int(metrics["dapr_runtime_workflow_execution_latency|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
-		assert.GreaterOrEqual(t, 1, int(metrics["dapr_runtime_workflow_scheduling_latency|app_id:myapp|namespace:|workflow_name:workflow"]))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := w.daprd.Metrics(c, ctx).All()
+			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
+			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
+			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_success|app_id:myapp|namespace:|status:success"]))
+			assert.GreaterOrEqual(c, 1, int(metrics["dapr_runtime_workflow_execution_latency|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
+			assert.GreaterOrEqual(c, 1, int(metrics["dapr_runtime_workflow_scheduling_latency|app_id:myapp|namespace:|workflow_name:workflow"]))
+		}, time.Second*5, time.Millisecond*10)
 	})
 	t.Run("failed workflow execution", func(t *testing.T) {
 		id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_failure"))
 		require.NoError(t, err)
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 		// Verify metrics
-		metrics := w.daprd.Metrics(t, ctx)
-		assert.Equal(t, 2, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
-		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:failed|workflow_name:workflow"]))
-		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_failure|app_id:myapp|namespace:|status:failed"]))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := w.daprd.Metrics(c, ctx).All()
+			assert.Equal(c, 2, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
+			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:failed|workflow_name:workflow"]))
+			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_failure|app_id:myapp|namespace:|status:failed"]))
+		}, time.Second*5, time.Millisecond*10)
 	})
 }

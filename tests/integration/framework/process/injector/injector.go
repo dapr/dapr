@@ -54,7 +54,7 @@ func New(t *testing.T, fopts ...Option) *Injector {
 
 	fp := ports.Reserve(t, 3)
 	opts := options{
-		logLevel:      "info",
+		logLevel:      "debug",
 		enableMetrics: true,
 		port:          fp.Port(t),
 		metricsPort:   fp.Port(t),

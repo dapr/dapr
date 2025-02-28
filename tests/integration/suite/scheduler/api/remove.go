@@ -16,7 +16,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -37,8 +36,6 @@ func init() {
 
 type remove struct {
 	scheduler *scheduler.Scheduler
-
-	etcdPort int
 }
 
 func (r *remove) Setup(t *testing.T) []framework.Option {
@@ -46,16 +43,10 @@ func (r *remove) Setup(t *testing.T) []framework.Option {
 	port1 := fp.Port(t)
 	port2 := fp.Port(t)
 
-	r.etcdPort = port2
-
-	clientPorts := []string{
-		"scheduler-0=" + strconv.Itoa(r.etcdPort),
-	}
 	r.scheduler = scheduler.New(t,
 		scheduler.WithID("scheduler-0"),
 		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d", port1)),
-		scheduler.WithInitialClusterPorts(port1),
-		scheduler.WithEtcdClientPorts(clientPorts),
+		scheduler.WithEtcdClientPort(port2),
 	)
 
 	fp.Free(t)

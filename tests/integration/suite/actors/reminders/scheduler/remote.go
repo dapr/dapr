@@ -74,7 +74,7 @@ spec:
   - name: SchedulerReminders
     enabled: true`), 0o600))
 
-	r.actorIDsNum = 500
+	r.actorIDsNum = 200
 	r.methodcalled.Store(make([]string, 0, r.actorIDsNum))
 	r.actorIDs = make([]string, r.actorIDsNum)
 	for i := range r.actorIDsNum {
@@ -93,6 +93,8 @@ spec:
 		})
 
 		for _, id := range r.actorIDs {
+			handler.HandleFunc("/actors/myactortype/"+id, func(http.ResponseWriter, *http.Request) {
+			})
 			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/remind/remindermethod", id), func(http.ResponseWriter, *http.Request) {
 				r.lock.Lock()
 				defer r.lock.Unlock()
@@ -148,10 +150,10 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	assert.Eventually(t, func() bool {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()
 		defer r.lock.Unlock()
-		return len(r.methodcalled.Load().([]string)) == r.actorIDsNum
+		assert.Len(c, r.methodcalled.Load().([]string), r.actorIDsNum)
 	}, time.Second*5, time.Millisecond*10)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {

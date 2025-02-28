@@ -15,6 +15,7 @@ package app
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -30,6 +31,9 @@ type Option func(*options)
 // App is a wrapper around a grpc.Server that implements a Dapr App.
 type App struct {
 	grpc *procgrpc.GRPC
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *App {
@@ -65,11 +69,15 @@ func New(t *testing.T, fopts ...Option) *App {
 }
 
 func (a *App) Run(t *testing.T, ctx context.Context) {
-	a.grpc.Run(t, ctx)
+	a.runOnce.Do(func() {
+		a.grpc.Run(t, ctx)
+	})
 }
 
 func (a *App) Cleanup(t *testing.T) {
-	a.grpc.Cleanup(t)
+	a.cleanupOnce.Do(func() {
+		a.grpc.Cleanup(t)
+	})
 }
 
 func (a *App) Port(t *testing.T) int {

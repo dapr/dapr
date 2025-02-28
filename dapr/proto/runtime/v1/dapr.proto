@@ -694,7 +694,14 @@ message GetMetadataResponse {
   string runtime_version = 8 [json_name = "runtimeVersion"];
   repeated string enabled_features = 9 [json_name = "enabledFeatures"];
   ActorRuntime actor_runtime = 10 [json_name = "actorRuntime"];
-  //TODO: Cassie: probably add scheduler runtime status
+  optional MetadataScheduler scheduler = 11 [json_name = "scheduler"];
+}
+
+// MetadataScheduler is a message that contains the list of addresses of the
+// scheduler connections.
+message MetadataScheduler {
+  // connected_addresses the list of addresses of the scheduler connections.
+  repeated string connected_addresses = 1;
 }
 
 message ActorRuntime {
@@ -1319,8 +1326,8 @@ message ConversationRequest {
 }
 
 message ConversationInput {
-  // The message to send to the llm
-  string message = 1;
+  // The content to send to the llm
+  string content = 1;
 
   // The role to set for the message
   optional string role = 2;

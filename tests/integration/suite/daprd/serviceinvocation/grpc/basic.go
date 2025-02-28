@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -125,14 +126,23 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
-			resp, err := rtv1.NewDaprClient(conn).InvokeService(ctx, &rtv1.InvokeServiceRequest{
-				Id: hostID,
-				Message: &commonv1.InvokeRequest{
-					Method:        "foo",
-					HttpExtension: &commonv1.HTTPExtension{Verb: verb},
-				},
-			})
-			require.NoError(t, err)
+			var resp *commonv1.InvokeResponse
+			for {
+				resp, err = rtv1.NewDaprClient(conn).InvokeService(ctx, &rtv1.InvokeServiceRequest{
+					Id: hostID,
+					Message: &commonv1.InvokeRequest{
+						Method:        "foo",
+						HttpExtension: &commonv1.HTTPExtension{Verb: verb},
+					},
+				})
+				// DNS issue.
+				if err != nil && strings.HasSuffix(err.Error(),
+					"err: failed to exit idle mode: passthrough: received empty target in Build()") {
+					continue
+				}
+				require.NoError(t, err)
+				break
+			}
 
 			return resp.GetData().GetValue(), resp.GetContentType()
 		}

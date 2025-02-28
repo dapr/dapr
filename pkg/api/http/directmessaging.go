@@ -279,14 +279,14 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		if len(codeErr.headers) > 0 && !headersSet {
 			invokev1.InternalMetadataToHTTPHeader(r.Context(), codeErr.headers, w.Header().Add)
 		}
-		respondWithHTTPRawResponse(w, UniversalHTTPRawResponse{
+		respondWithHTTPRawResponseAndRecordError(w, UniversalHTTPRawResponse{
 			Body:        codeErr.msg,
 			ContentType: codeErr.contentType,
 			StatusCode:  codeErr.statusCode,
-		}, codeErr.statusCode)
+		}, codeErr.statusCode, messages.ErrDirectInvoke)
 		return
 	case errors.As(err, &invokeErr):
-		respondWithData(w, invokeErr.statusCode, invokeErr.msg)
+		respondWithDataAndRecordError(w, invokeErr.statusCode, invokeErr.msg, messages.ErrDirectInvoke)
 		return
 	default:
 		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, err))

@@ -74,7 +74,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
 				StoreName: "mystore", Key: "key1",
 			})
-			require.NoError(c, err)
+			assert.NoError(c, err)
 			assert.Empty(c, resp.GetData())
 		}, 5*time.Second, 10*time.Millisecond)
 	})

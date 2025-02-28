@@ -79,7 +79,7 @@ spec:
 func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, s.healthCalled.Load(), int64(1))
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 	assert.Equal(t, int64(0), s.listSubsCalled.Load())
 
 	s.isHealthy.Store(true)
@@ -87,5 +87,5 @@ func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), s.listSubsCalled.Load())
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 }

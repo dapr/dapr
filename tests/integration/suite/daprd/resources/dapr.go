@@ -21,6 +21,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -31,6 +32,7 @@ func init() {
 // dapr ensures that a component with the name `dapr` can be loaded.
 type dapr struct {
 	daprd   *daprd.Daprd
+	place   *placement.Placement
 	logline *logline.LogLine
 }
 
@@ -38,12 +40,17 @@ func (d *dapr) Setup(t *testing.T) []framework.Option {
 	d.logline = logline.New(t,
 		logline.WithStdoutLineContains(
 			"Component loaded: dapr (state.in-memory/v1)",
-			"Workflow engine initialized.",
+			"Workflow engine started",
 		),
 	)
 
-	d.daprd = daprd.New(t, daprd.WithResourceFiles(
-		`apiVersion: dapr.io/v1alpha1
+	d.place = placement.New(t)
+
+	d.daprd = daprd.New(t,
+		daprd.WithPlacementAddresses(d.place.Address()),
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithResourceFiles(
+			`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: dapr
@@ -56,10 +63,13 @@ spec:
 		),
 	)
 	return []framework.Option{
-		framework.WithProcesses(d.logline, d.daprd),
+		framework.WithProcesses(d.logline, d.place, d.daprd),
 	}
 }
 
 func (d *dapr) Run(t *testing.T, ctx context.Context) {
+	d.place.WaitUntilRunning(t, ctx)
+	d.daprd.WaitUntilRunning(t, ctx)
+
 	d.logline.EventuallyFoundAll(t)
 }

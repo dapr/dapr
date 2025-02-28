@@ -34,11 +34,11 @@ func TestReplicationFactor(t *testing.T) {
 		factors := []int64{1, 100, 1000, 10000}
 
 		for _, f := range factors {
-			h := NewConsistentHash(f)
-			for _, n := range nodes {
-				s := h.Add(n, n, 1)
-				assert.False(t, s)
+			loadMap := make(map[string]*Host, len(nodes))
+			for _, node := range nodes {
+				loadMap[node] = NewHost(node, node, 0, 1)
 			}
+			h := NewFromExisting(loadMap, f, NewVirtualNodesCache())
 
 			k1 := map[string]string{}
 

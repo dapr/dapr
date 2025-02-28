@@ -100,7 +100,7 @@ func (a *annotations) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("default", func(t *testing.T) {
 		svcs := helm.UnmarshalStdout[corev1.Service](t, a.base)
-		assert.Len(t, svcs, 6)
+		assert.Len(t, svcs, 7)
 		for _, svc := range svcs {
 			if svc.Name == "dapr-webhook" {
 				assert.Empty(t, svc.Annotations, svc.Name)
@@ -173,9 +173,19 @@ func (a *annotations) Run(t *testing.T, ctx context.Context) {
 					"123": "456",
 				},
 			},
+			{
+				name: "dapr-scheduler-server-a",
+				annotations: map[string]string{
+					"foo":                  "scheduler",
+					"123":                  "456",
+					"prometheus.io/path":   "/",
+					"prometheus.io/port":   "9090",
+					"prometheus.io/scrape": "true",
+				},
+			},
 		}
 		svcs := helm.UnmarshalStdout[corev1.Service](t, a.withCustom)
-		assert.Len(t, svcs, 6)
+		assert.Len(t, svcs, 7)
 		got := make([]nameAnnotations, 0, len(svcs))
 		for _, svc := range svcs {
 			got = append(got, nameAnnotations{
@@ -230,10 +240,17 @@ func (a *annotations) Run(t *testing.T, ctx context.Context) {
 					"123": "456",
 				},
 			},
+			{
+				name: "dapr-scheduler-server-a",
+				annotations: map[string]string{
+					"foo": "scheduler",
+					"123": "456",
+				},
+			},
 		}
 
 		svcs := helm.UnmarshalStdout[corev1.Service](t, a.withCustomNoProm)
-		assert.Len(t, svcs, 6)
+		assert.Len(t, svcs, 7)
 		got := make([]nameAnnotations, 0, len(svcs))
 		for _, svc := range svcs {
 			got = append(got, nameAnnotations{
@@ -270,10 +287,14 @@ func (a *annotations) Run(t *testing.T, ctx context.Context) {
 				name:        "dapr-webhook",
 				annotations: nil,
 			},
+			{
+				name:        "dapr-scheduler-server-a",
+				annotations: nil,
+			},
 		}
 
 		svcs := helm.UnmarshalStdout[corev1.Service](t, a.withNoProm)
-		assert.Len(t, svcs, 6)
+		assert.Len(t, svcs, 7)
 		got := make([]nameAnnotations, 0, len(svcs))
 		for _, svc := range svcs {
 			got = append(got, nameAnnotations{

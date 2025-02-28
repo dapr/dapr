@@ -198,7 +198,9 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		o, err := stream.Recv()
-		require.NoError(t, err)
+		if !assert.NoError(c, err) {
+			return
+		}
 		assert.Equal(c, "update", o.GetOperation())
 		if assert.NotNil(c, o.GetTables()) {
 			assert.Len(c, o.GetTables().GetEntries(), 2)
