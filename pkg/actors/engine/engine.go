@@ -212,10 +212,9 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	// If we are in a reentrancy which is local, skip the placement lock.
 	_, isDaprRemote := req.GetMetadata()["X-Dapr-Remote"]
-	_, isReentrancy := req.GetMetadata()["Dapr-Reentrancy-Id"]
 	_, isAPICall := req.GetMetadata()["Dapr-API-Call"]
 
-	if isAPICall || isDaprRemote || !isReentrancy {
+	if isAPICall || isDaprRemote {
 		var cancel context.CancelFunc
 		var err error
 		ctx, cancel, err = e.placement.Lock(ctx)

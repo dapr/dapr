@@ -31,6 +31,8 @@ import (
 
 var ErrLockClosed = errors.New("actor lock is closed")
 
+const headerReentrancyID = "Dapr-Reentrancy-Id"
+
 type lockOptions struct {
 	actorType         string
 	reentrancyEnabled bool
@@ -229,11 +231,11 @@ func newInflight(id string) *inflight {
 }
 
 func (l *lock) idFromRequest(req *internalv1pb.InternalInvokeRequest) (string, bool) {
-	if req == nil {
+	if !l.reentrancyEnabled || req == nil {
 		return uuid.New().String(), false
 	}
 
-	if md := req.GetMetadata()["Dapr-Reentrancy-Id"]; md != nil && len(md.GetValues()) > 0 {
+	if md := req.GetMetadata()[headerReentrancyID]; md != nil && len(md.GetValues()) > 0 {
 		return md.GetValues()[0], true
 	}
 
@@ -241,7 +243,7 @@ func (l *lock) idFromRequest(req *internalv1pb.InternalInvokeRequest) (string, b
 	if req.Metadata == nil {
 		req.Metadata = make(map[string]*internalv1pb.ListStringValue)
 	}
-	req.Metadata["Dapr-Reentrancy-Id"] = &internalv1pb.ListStringValue{
+	req.Metadata[headerReentrancyID] = &internalv1pb.ListStringValue{
 		Values: []string{id},
 	}
 
