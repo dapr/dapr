@@ -15,6 +15,7 @@ package nostate
 
 import (
 	"context"
+	"fmt"
 	nethttp "net/http"
 	"sync/atomic"
 	"testing"
@@ -24,6 +25,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -94,22 +96,13 @@ func (p *noActorState) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), p.invocationCount.Load())
 
-	//hclient := client.HTTP(t)
-	//url := fmt.Sprintf("http://%s/v1.0/actors/testActor/test1/method/test", p.clientApp.Daprd().HTTPAddress())
-	//req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
-	//require.NoError(t, err)
-	//resp, err := hclient.Do(req)
-	//require.NoError(t, err)
-	//require.NoError(t, resp.Body.Close())
-	//assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
-	//assert.Equal(t, int64(2), p.invocationCount.Load())
-
-	// client app is healthy
-	//healthURL := fmt.Sprintf("http://%s/v1.0/healthz", p.clientApp.Daprd().HTTPAddress())
-	//req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, healthURL, nil)
-	//require.NoError(t, err)
-	//resp, err = hclient.Do(req)
-	//require.NoError(t, err)
-	//require.NoError(t, resp.Body.Close())
-	//assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	hclient := client.HTTP(t)
+	url := fmt.Sprintf("http://%s/v1.0/actors/testActor/test1/method/test", p.clientApp.Daprd().HTTPAddress())
+	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
+	require.NoError(t, err)
+	resp, err := hclient.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	assert.Equal(t, int64(2), p.invocationCount.Load())
 }
