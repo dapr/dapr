@@ -34,11 +34,13 @@ import (
 )
 
 type Actors struct {
-	app   *app.App
-	db    *sqlite.SQLite
-	place *placement.Placement
-	sched *scheduler.Scheduler
-	daprd *daprd.Daprd
+	app              *app.App
+	db               *sqlite.SQLite
+	place            *placement.Placement
+	sched            *scheduler.Scheduler
+	daprd            *daprd.Daprd
+	enableActorState bool
+	daprOpts         []daprd.Option
 
 	runOnce     sync.Once
 	cleanupOnce sync.Once
@@ -52,17 +54,20 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	}
 
 	opts := options{
-		db: sqlite.New(t,
-			sqlite.WithActorStateStore(true),
-			sqlite.WithCreateStateTables(),
-		),
-		placement: placement.New(t),
+		enableActorState: true, // default to true, allow user override tho
+		placement:        placement.New(t),
 		scheduler: scheduler.New(t,
 			scheduler.WithID("dapr-scheduler-0"),
 		),
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
+	}
+	if opts.enableActorState {
+		opts.db = sqlite.New(t,
+			sqlite.WithActorStateStore(true),
+			sqlite.WithCreateStateTables(),
+		)
 	}
 
 	handlers := make([]app.Option, 0, len(opts.actorTypeHandlers))
@@ -98,11 +103,21 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	dopts := []daprd.Option{
 		daprd.WithAppPort(app.Port()),
 		daprd.WithPlacementAddresses(opts.placement.Address()),
-		daprd.WithResourceFiles(opts.db.GetComponent(t)),
-		daprd.WithConfigManifests(t, opts.daprdConfigs...),
 		daprd.WithScheduler(opts.scheduler),
 		daprd.WithResourceFiles(opts.resources...),
 		daprd.WithErrorCodeMetrics(t),
+		daprd.WithLogLevel("debug"),
+	}
+
+	if opts.enableActorState && opts.db != nil {
+		dopts = append(dopts,
+			daprd.WithResourceFiles(opts.db.GetComponent(t)),
+			daprd.WithConfigManifests(t, opts.daprdConfigs...),
+		)
+	}
+
+	if len(opts.daprdOpts) > 0 {
+		dopts = append(dopts, opts.daprdOpts...)
 	}
 
 	if opts.maxBodySize != nil {
@@ -121,7 +136,9 @@ func New(t *testing.T, fopts ...Option) *Actors {
 func (a *Actors) Run(t *testing.T, ctx context.Context) {
 	a.runOnce.Do(func() {
 		a.app.Run(t, ctx)
-		a.db.Run(t, ctx)
+		if a.db != nil {
+			a.db.Run(t, ctx)
+		}
 		a.place.Run(t, ctx)
 		a.sched.Run(t, ctx)
 		a.daprd.Run(t, ctx)
@@ -133,7 +150,9 @@ func (a *Actors) Cleanup(t *testing.T) {
 		a.daprd.Cleanup(t)
 		a.sched.Cleanup(t)
 		a.place.Cleanup(t)
-		a.db.Cleanup(t)
+		if a.db != nil {
+			a.db.Cleanup(t)
+		}
 		a.app.Cleanup(t)
 	})
 }

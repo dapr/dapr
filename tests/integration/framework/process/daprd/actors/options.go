@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
@@ -40,6 +41,8 @@ type options struct {
 	entityConfig      []entityConfig
 	resources         []string
 	maxBodySize       *string
+	enableActorState  bool
+	daprdOpts         []daprd.Option
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -145,5 +148,17 @@ func WithResources(resources ...string) Option {
 func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
+	}
+}
+
+func WithActorStateStore(enabled bool) Option {
+	return func(o *options) {
+		o.enableActorState = enabled
+	}
+}
+
+func WithDaprdOptions(opts ...daprd.Option) Option {
+	return func(o *options) {
+		o.daprdOpts = append(o.daprdOpts, opts...)
 	}
 }

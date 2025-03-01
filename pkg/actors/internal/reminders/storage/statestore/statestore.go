@@ -203,9 +203,11 @@ func (r *Statestore) Create(ctx context.Context, req *api.CreateReminderRequest)
 }
 
 func (r *Statestore) Close() error {
-	if r.closed.CompareAndSwap(false, true) {
-		// Close the runningCh
-		close(r.runningCh)
+	if r != nil {
+		if r.closed.CompareAndSwap(false, true) {
+			// Close the runningCh
+			close(r.runningCh)
+		}
 	}
 	return nil
 }
