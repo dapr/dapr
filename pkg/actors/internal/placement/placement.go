@@ -305,7 +305,10 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 	p.hashTable.Version = in.GetVersion()
 	p.hashTable.Entries = entries
 
-	p.reminders.DrainRebalancedReminders()
+	if p.reminders != nil {
+		p.reminders.DrainRebalancedReminders()
+	}
+
 	err := p.actorTable.Drain(func(target targets.Interface) bool {
 		lar, err := p.LookupActor(ctx, &api.LookupActorRequest{
 			ActorType: target.Type(),
@@ -337,13 +340,15 @@ func (p *placement) handleUnlockOperation(ctx context.Context) {
 	}
 
 	if found {
-		p.reminders.OnPlacementTablesUpdated(ctx, func(ctx context.Context, req *api.LookupActorRequest) bool {
-			if ctx.Err() != nil {
-				return false
-			}
-			lar, err := p.LookupActor(ctx, req)
-			return err == nil && lar.Local
-		})
+		if p.reminders != nil {
+			p.reminders.OnPlacementTablesUpdated(ctx, func(ctx context.Context, req *api.LookupActorRequest) bool {
+				if ctx.Err() != nil {
+					return false
+				}
+				lar, err := p.LookupActor(ctx, req)
+				return err == nil && lar.Local
+			})
+		}
 
 		if p.isReady.CompareAndSwap(false, true) {
 			close(p.readyCh)
