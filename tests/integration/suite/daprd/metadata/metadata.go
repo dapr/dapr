@@ -14,5 +14,6 @@ limitations under the License.
 package metadata
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metadata/actors"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metadata/scheduler"
 )
