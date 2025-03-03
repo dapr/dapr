@@ -175,20 +175,6 @@ func (a *actors) Init(opts InitOptions) error {
 		return nil
 	}
 
-	storeS, ok := a.compStore.GetStateStore(opts.StateStoreName)
-	if !ok {
-		var err error = messages.ErrActorRuntimeNotFound
-		a.disabled.Store(&err)
-		return nil
-	}
-
-	store, ok := storeS.(actorstate.Backend)
-	if !ok || !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
-		var err error = messages.ErrActorRuntimeNotFound
-		a.disabled.Store(&err)
-		return nil
-	}
-
 	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
 
 	rStore := reentrancystore.New()
@@ -205,23 +191,12 @@ func (a *actors) Init(opts InitOptions) error {
 
 	apiLevel := apilevel.New()
 
-	a.stateReminders = statestore.New(statestore.Options{
-		Resiliency: a.resiliency,
-		StateStore: store,
-		Table:      a.table,
-		StoreName:  opts.StateStoreName,
-		APILevel:   apiLevel,
-	})
+	storeEnabled := a.buildStateStore(opts, apiLevel)
 
-	a.reminderStore = a.stateReminders
-	if a.schedulerReminders {
-		a.reminderStore = scheduler.New(scheduler.Options{
-			Namespace:     a.namespace,
-			AppID:         a.appID,
-			Clients:       opts.SchedulerClients,
-			StateReminder: a.stateReminders,
-			Table:         a.table,
-			Healthz:       a.healthz,
+	if a.reminderStore != nil {
+		a.reminders = reminders.New(reminders.Options{
+			Storage: a.reminderStore,
+			Table:   a.table,
 		})
 	}
 
@@ -242,10 +217,17 @@ func (a *actors) Init(opts InitOptions) error {
 		return err
 	}
 
-	a.reminders = reminders.New(reminders.Options{
-		Storage: a.reminderStore,
-		Table:   a.table,
-	})
+	if storeEnabled {
+		a.state = actorstate.New(actorstate.Options{
+			AppID:           a.appID,
+			StoreName:       opts.StateStoreName,
+			CompStore:       a.compStore,
+			Resiliency:      a.resiliency,
+			StateTTLEnabled: a.stateTTLEnabled,
+			Table:           a.table,
+			Placement:       a.placement,
+		})
+	}
 
 	a.engine = engine.New(engine.Options{
 		Namespace:          a.namespace,
@@ -268,17 +250,9 @@ func (a *actors) Init(opts InitOptions) error {
 		Table:   a.table,
 	})
 
-	a.stateReminders.SetEngine(a.engine)
-
-	a.state = actorstate.New(actorstate.Options{
-		AppID:           a.appID,
-		StoreName:       opts.StateStoreName,
-		CompStore:       a.compStore,
-		Resiliency:      a.resiliency,
-		StateTTLEnabled: a.stateTTLEnabled,
-		Table:           a.table,
-		Placement:       a.placement,
-	})
+	if a.stateReminders != nil {
+		a.stateReminders.SetEngine(a.engine)
+	}
 
 	return nil
 }
@@ -306,10 +280,15 @@ func (a *actors) Run(ctx context.Context) error {
 
 	mngr := concurrency.NewRunnerCloserManager(nil,
 		func(ctx context.Context) error {
-			select {
-			case <-a.registerDoneCh:
-			case <-ctx.Done():
-				return ctx.Err()
+			// Only wait for host registration before starting the placement client,
+			// since registering Actor host types is dependent on the Actor state
+			// store being configured.
+			if a.state != nil {
+				select {
+				case <-a.registerDoneCh:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 			}
 			return a.placement.Run(ctx)
 		},
@@ -322,12 +301,19 @@ func (a *actors) Run(ctx context.Context) error {
 
 	if err := mngr.AddCloser(
 		a.table,
-		a.stateReminders,
-		a.reminderStore,
 		a.timerStorage,
 		a.idlerQueue,
 	); err != nil {
 		return err
+	}
+
+	if a.stateReminders != nil {
+		if err := mngr.AddCloser(
+			a.stateReminders,
+			a.reminderStore,
+		); err != nil {
+			return err
+		}
 	}
 
 	defer log.Info("Actor runtime stopped")
@@ -471,10 +457,12 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		})
 	}
 
-	a.stateReminders.SetEntityConfigsRemindersStoragePartitions(
-		entityConfigs,
-		cfg.RemindersStoragePartitions,
-	)
+	if a.stateReminders != nil {
+		a.stateReminders.SetEntityConfigsRemindersStoragePartitions(
+			entityConfigs,
+			cfg.RemindersStoragePartitions,
+		)
+	}
 
 	log.Infof("Registering hosted actors: %v", cfg.HostedActorTypes)
 	a.table.RegisterActorTypes(table.RegisterActorTypeOptions{
@@ -588,6 +576,47 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 		Placement:     statusMessage,
 		HostReady:     hostReady,
 	}
+}
+
+func (a *actors) buildStateStore(opts InitOptions, apiLevel *apilevel.APILevel) bool {
+	storeS, ok := a.compStore.GetStateStore(opts.StateStoreName)
+	if !ok {
+		log.Info("Actor state store not configured - actor hosting disabled, but invocation enabled")
+		return false
+	}
+
+	store, ok := storeS.(actorstate.Backend)
+	if !ok {
+		log.Warn("Actor state management disabled")
+		return false
+	}
+
+	if !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
+		log.Warnf("Actor state store %s does not support required features: %s, %s", opts.StateStoreName, state.FeatureETag, state.FeatureTransactional)
+		return false
+	}
+
+	a.stateReminders = statestore.New(statestore.Options{
+		Resiliency: a.resiliency,
+		StateStore: store,
+		Table:      a.table,
+		StoreName:  opts.StateStoreName,
+		APILevel:   apiLevel,
+	})
+
+	a.reminderStore = a.stateReminders
+	if a.schedulerReminders {
+		a.reminderStore = scheduler.New(scheduler.Options{
+			Namespace:     a.namespace,
+			AppID:         a.appID,
+			Clients:       opts.SchedulerClients,
+			StateReminder: a.stateReminders,
+			Table:         a.table,
+			Healthz:       a.healthz,
+		})
+	}
+
+	return true
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters
