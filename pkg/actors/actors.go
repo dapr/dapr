@@ -193,18 +193,6 @@ func (a *actors) Init(opts InitOptions) error {
 
 	storeEnabled := a.buildStateStore(opts, apiLevel)
 
-	a.reminderStore = a.stateReminders
-	if a.schedulerReminders {
-		a.reminderStore = scheduler.New(scheduler.Options{
-			Namespace:     a.namespace,
-			AppID:         a.appID,
-			Clients:       opts.SchedulerClients,
-			StateReminder: a.stateReminders,
-			Table:         a.table,
-			Healthz:       a.healthz,
-		})
-	}
-
 	if a.reminderStore != nil {
 		a.reminders = reminders.New(reminders.Options{
 			Storage: a.reminderStore,
@@ -615,6 +603,18 @@ func (a *actors) buildStateStore(opts InitOptions, apiLevel *apilevel.APILevel) 
 		StoreName:  opts.StateStoreName,
 		APILevel:   apiLevel,
 	})
+
+	a.reminderStore = a.stateReminders
+	if a.schedulerReminders {
+		a.reminderStore = scheduler.New(scheduler.Options{
+			Namespace:     a.namespace,
+			AppID:         a.appID,
+			Clients:       opts.SchedulerClients,
+			StateReminder: a.stateReminders,
+			Table:         a.table,
+			Healthz:       a.healthz,
+		})
+	}
 
 	return true
 }
