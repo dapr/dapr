@@ -83,7 +83,7 @@ func TestMain(m *testing.M) {
 				DaprEnabled:         true,
 				DebugLoggingEnabled: true,
 				ImageName:           "e2e-actorreentrancy",
-				Config:              "omithealthchecksconfig",
+				Config:              "featureactorreminderscheduler",
 				Replicas:            1,
 				IngressEnabled:      true,
 				MetricsEnabled:      true,
@@ -137,7 +137,7 @@ func TestActorReentrancy(t *testing.T) {
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, "hi", "method", "helloMethod"), body)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			assert.Equal(t, 200, status)
 		}, 15*time.Second, 200*time.Millisecond)
 	})

@@ -22,86 +22,63 @@ import (
 	kiterrors "github.com/dapr/kit/errors"
 )
 
-const (
-	CodePrefixScheduler               = "SCHEDULER_" // TODO(Cassie): move this to kit eventually
-	InFixJob            ReasonSegment = "JOB_"
-	InFixAppID          ReasonSegment = "APPID_"
-	InFixGet            ReasonSegment = "GET_"
-	InFixList           ReasonSegment = "LIST_"
-	InFixDelete         ReasonSegment = "DELETE_"
-	InFixSchedule       ReasonSegment = "SCHEDULE_"
-	PostFixRepeats      ReasonSegment = "REPEATS"
-	PostFixJob          ReasonSegment = "JOB"
-	PostFixJobs         ReasonSegment = "JOBS"
-
-	MsgScheduleJob = "failed to schedule job"
-	MsgGetJob      = "failed to get job"
-	MsgListJobs    = "failed to list jobs"
-	MsgDeleteJob   = "failed to delete job"
-)
-
 func SchedulerURLName(metadata map[string]string) error {
-	compErrCode := string(CodePrefixScheduler + InFixJob + PostFixName)
 	message := "Set the job name in the url only"
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
 		"",
-		string(errorcodes.CategoryJob),
+		string(errorcodes.SchedulerJobName.Category),
 	).
-		WithErrorInfo(compErrCode, metadata).
+		WithErrorInfo(errorcodes.SchedulerJobName.Code, metadata).
 		Build()
 }
 
 func SchedulerScheduleJob(metadata map[string]string, err error) error {
-	compErrCode := string(CodePrefixScheduler + InFixSchedule + PostFixJob)
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		MsgScheduleJob+" due to: "+err.Error(),
+		"failed to schedule job due to: "+err.Error(),
 		"",
-		string(errorcodes.CategoryJob),
+		string(errorcodes.SchedulerScheduleJob.Category),
 	).
-		WithErrorInfo(compErrCode, metadata).
+		WithErrorInfo(errorcodes.SchedulerScheduleJob.Code, metadata).
 		Build()
 }
 
 func SchedulerGetJob(metadata map[string]string, err error) error {
-	compErrCode := string(CodePrefixScheduler + InFixGet + PostFixJob)
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		MsgGetJob+" due to: "+err.Error(),
+		"failed to get job due to: "+err.Error(),
 		"",
-		string(errorcodes.CategoryJob),
+		string(errorcodes.SchedulerGetJob.Category),
 	).
-		WithErrorInfo(compErrCode, metadata).
+		WithErrorInfo(errorcodes.SchedulerGetJob.Code, metadata).
 		Build()
 }
 
 func SchedulerListJobs(metadata map[string]string, err error) error {
-	compErrCode := string(CodePrefixScheduler + InFixList + PostFixJobs)
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		MsgListJobs+" due to: "+err.Error(),
+		"failed to list jobs due to: "+err.Error(),
 		"",
-		string(errorcodes.CategoryJob),
+		string(errorcodes.SchedulerListJobs.Category),
 	).
-		WithErrorInfo(compErrCode, metadata).
+		WithErrorInfo(errorcodes.SchedulerListJobs.Code, metadata).
 		Build()
 }
 
 func SchedulerDeleteJob(metadata map[string]string, err error) error {
-	compErrCode := string(CodePrefixScheduler + InFixDelete + PostFixJob)
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
-		MsgDeleteJob+" due to: "+err.Error(),
+		"failed to delete job due to: "+err.Error(),
 		"",
-		string(errorcodes.CategoryJob),
+		string(errorcodes.SchedulerDeleteJob.Category),
 	).
-		WithErrorInfo(compErrCode, metadata).
+		WithErrorInfo(errorcodes.SchedulerDeleteJob.Code, metadata).
 		Build()
 }

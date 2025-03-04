@@ -16,10 +16,9 @@ package workflow
 import (
 	"context"
 	"runtime"
+	"sync"
 	"testing"
 
-	"github.com/microsoft/durabletask-go/client"
-	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/require"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -29,6 +28,8 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 )
 
 type Workflow struct {
@@ -38,6 +39,9 @@ type Workflow struct {
 	place    *placement.Placement
 	sched    *scheduler.Scheduler
 	daprd    *daprd.Daprd
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -48,7 +52,8 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	}
 
 	opts := options{
-		registry: task.NewTaskRegistry(),
+		registry:        task.NewTaskRegistry(),
+		enableScheduler: true,
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
@@ -95,23 +100,27 @@ spec:
 }
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {
-	w.app.Run(t, ctx)
-	w.db.Run(t, ctx)
-	w.place.Run(t, ctx)
-	if w.sched != nil {
-		w.sched.Run(t, ctx)
-	}
-	w.daprd.Run(t, ctx)
+	w.runOnce.Do(func() {
+		w.app.Run(t, ctx)
+		w.db.Run(t, ctx)
+		w.place.Run(t, ctx)
+		if w.sched != nil {
+			w.sched.Run(t, ctx)
+		}
+		w.daprd.Run(t, ctx)
+	})
 }
 
 func (w *Workflow) Cleanup(t *testing.T) {
-	w.daprd.Cleanup(t)
-	if w.sched != nil {
-		w.sched.Cleanup(t)
-	}
-	w.place.Cleanup(t)
-	w.db.Cleanup(t)
-	w.app.Cleanup(t)
+	w.cleanupOnce.Do(func() {
+		w.daprd.Cleanup(t)
+		if w.sched != nil {
+			w.sched.Cleanup(t)
+		}
+		w.place.Cleanup(t)
+		w.db.Cleanup(t)
+		w.app.Cleanup(t)
+	})
 }
 
 func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -120,6 +129,10 @@ func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		w.sched.WaitUntilRunning(t, ctx)
 	}
 	w.daprd.WaitUntilRunning(t, ctx)
+}
+
+func (w *Workflow) Registry() *task.TaskRegistry {
+	return w.registry
 }
 
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
@@ -134,7 +147,15 @@ func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient
 	return w.daprd.GRPCClient(t, ctx)
 }
 
+func (w *Workflow) Dapr() *daprd.Daprd {
+	return w.daprd
+}
+
 func (w *Workflow) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
-	return w.daprd.Metrics(t, ctx)
+	return w.daprd.Metrics(t, ctx).All()
+}
+
+func (w *Workflow) DB() *sqlite.SQLite {
+	return w.db
 }

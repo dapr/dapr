@@ -104,7 +104,7 @@ spec:
 `, c.cryptoDir1)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
 		}, time.Second*5, time.Millisecond*10)
 
@@ -133,7 +133,7 @@ spec:
 `, c.cryptoDir2)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*10)
 
@@ -173,7 +173,7 @@ spec:
 `, c.cryptoDir2)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*10)
 
@@ -206,7 +206,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{Name: "crypto1", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{Name: "crypto3", Type: "crypto.dapr.localstorage", Version: "v1"},
@@ -226,7 +226,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(c.resDir, "1.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*10)
 		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "2.yaml"), []byte(`
@@ -241,7 +241,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{
 					Name: "crypto1", Type: "state.in-memory", Version: "v1",
@@ -271,7 +271,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*10)
 

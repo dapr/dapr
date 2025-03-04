@@ -105,6 +105,12 @@ func respondWithEmpty(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// respondWithHTTPRawResponseAndRecordError is equivalent to respondWithHTTPRawResponse but also wraps in error code recording
+func respondWithHTTPRawResponseAndRecordError(w http.ResponseWriter, m UniversalHTTPRawResponse, statusCode int, err error) {
+	diagnostics.RecordErrorCode(err)
+	respondWithHTTPRawResponse(w, m, statusCode)
+}
+
 func respondWithHTTPRawResponse(w http.ResponseWriter, m UniversalHTTPRawResponse, statusCode int) {
 	if m.StatusCode > 0 {
 		statusCode = m.StatusCode

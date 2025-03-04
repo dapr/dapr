@@ -156,7 +156,7 @@ spec:
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*10)
 		g.expectBindings(t, []bindingPair{
@@ -196,7 +196,7 @@ spec:
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*10)
 		g.expectBindings(t, []bindingPair{
@@ -223,7 +223,7 @@ spec:
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*10)
 		g.registered[0].Store(false)
@@ -238,7 +238,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(g.resDir, "2.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Empty(c, resp.GetRegisteredComponents())
 		}, time.Second*5, time.Millisecond*10)
 		g.registered[1].Store(false)
