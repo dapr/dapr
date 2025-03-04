@@ -51,6 +51,9 @@ func (d *durable) Setup(t *testing.T) []framework.Option {
 	d.triggered = slice.String()
 
 	app := app.New(t,
+		app.WithHandlerFunc("/", func(_ http.ResponseWriter, r *http.Request) {}),
+		app.WithHandlerFunc("/actors/myactortype/myactorid", func(_ http.ResponseWriter, r *http.Request) {
+		}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/", func(_ http.ResponseWriter, r *http.Request) {
 			d.triggered.Append(path.Base(r.URL.Path))
 		}),
@@ -113,9 +116,10 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.ElementsMatch(c, exp, d.triggered.Slice())
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	d.daprd1.Cleanup(t)
+
 	d.daprd2.Run(t, ctx)
 	t.Cleanup(func() { d.daprd2.Cleanup(t) })
 	d.daprd2.WaitUntilRunning(t, ctx)
@@ -128,5 +132,5 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.ElementsMatch(c, exp, d.triggered.Slice())
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 }

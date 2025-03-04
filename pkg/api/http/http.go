@@ -452,7 +452,7 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 	}
 
 	if err != nil {
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err), errorcodes.ConversationInvokeOutputBinding, nethttp.StatusInternalServerError)
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err), errorcodes.BindingInvokeOutputBinding, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
 		log.Debug(resp)
 		return

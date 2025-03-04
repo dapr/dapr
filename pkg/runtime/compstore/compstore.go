@@ -16,7 +16,7 @@ package compstore
 import (
 	"sync"
 
-	"github.com/microsoft/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"

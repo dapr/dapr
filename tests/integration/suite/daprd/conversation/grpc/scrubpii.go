@@ -64,7 +64,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message:  "well hello there, my phone number is +2222222222",
+					Content:  "well hello there, my phone number is +2222222222",
 					ScrubPII: &scrubInput,
 				},
 			},
@@ -80,7 +80,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message:  "well hello there, my phone number is +4422222222",
+					Content:  "well hello there, my phone number is +4422222222",
 					ScrubPII: &scrubInput,
 				},
 			},
@@ -97,7 +97,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message:  "well hello there, my email is test@test.com",
+					Content:  "well hello there, my email is test@test.com",
 					ScrubPII: &scrubInput,
 				},
 			},
@@ -114,7 +114,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message:  "well hello there from 10.8.9.1",
+					Content:  "well hello there from 10.8.9.1",
 					ScrubPII: &scrubInput,
 				},
 			},
@@ -131,10 +131,10 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message: "well hello there from 10.8.9.1",
+					Content: "well hello there from 10.8.9.1",
 				},
 				{
-					Message: "well hello there, my email is test@test.com",
+					Content: "well hello there, my email is test@test.com",
 				},
 			},
 			ScrubPII: &scrubOutput,
@@ -153,7 +153,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message:  "well hello there",
+					Content:  "well hello there",
 					ScrubPII: &scrubOutput,
 				},
 			},
