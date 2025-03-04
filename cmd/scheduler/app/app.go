@@ -70,9 +70,10 @@ func Run() {
 		ControlPlaneNamespace:   security.CurrentNamespace(),
 		TrustAnchorsFile:        opts.TrustAnchorsFile,
 		AppID:                   appID,
-		MTLSEnabled:             opts.TLSEnabled,
+		MTLSEnabled:             opts.TLSEnabled || opts.Mode == string(modes.KubernetesMode),
 		Mode:                    modes.DaprMode(opts.Mode),
 		Healthz:                 healthz,
+		WriteIdentityToFile:     &opts.IdentityDirectoryWrite,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -93,26 +94,29 @@ func Run() {
 			}
 
 			server, serr := server.New(server.Options{
-				Port:          opts.Port,
-				ListenAddress: opts.ListenAddress,
-				Mode:          modes.DaprMode(opts.Mode),
-				Security:      secHandler,
-				Healthz:       healthz,
+				Port:                      opts.Port,
+				ListenAddress:             opts.ListenAddress,
+				OverrideBroadcastHostPort: opts.OverrideBroadcastHostPort,
 
-				DataDir:                 opts.EtcdDataDir,
-				ReplicaCount:            opts.ReplicaCount,
-				ReplicaID:               opts.ReplicaID,
-				KubeConfig:              opts.KubeConfig,
-				EtcdID:                  opts.ID,
-				EtcdInitialPeers:        opts.EtcdInitialPeers,
-				EtcdClientPorts:         opts.EtcdClientPorts,
-				EtcdSpaceQuota:          opts.EtcdSpaceQuota,
-				EtcdCompactionMode:      opts.EtcdCompactionMode,
-				EtcdCompactionRetention: opts.EtcdCompactionRetention,
-				EtcdClientHTTPPorts:     opts.EtcdClientHTTPPorts,
-				EtcdSnapshotCount:       opts.EtcdSnapshotCount,
-				EtcdMaxSnapshots:        opts.EtcdMaxSnapshots,
-				EtcdMaxWALs:             opts.EtcdMaxWALs,
+				Mode:     modes.DaprMode(opts.Mode),
+				Security: secHandler,
+				Healthz:  healthz,
+
+				KubeConfig:               opts.KubeConfig,
+				EtcdDataDir:              opts.EtcdDataDir,
+				EtcdName:                 opts.ID,
+				EtcdInitialCluster:       opts.EtcdInitialCluster,
+				EtcdClientPort:           opts.EtcdClientPort,
+				EtcdSpaceQuota:           opts.EtcdSpaceQuota,
+				EtcdCompactionMode:       opts.EtcdCompactionMode,
+				EtcdCompactionRetention:  opts.EtcdCompactionRetention,
+				EtcdSnapshotCount:        opts.EtcdSnapshotCount,
+				EtcdMaxSnapshots:         opts.EtcdMaxSnapshots,
+				EtcdMaxWALs:              opts.EtcdMaxWALs,
+				EtcdBackendBatchLimit:    opts.EtcdBackendBatchLimit,
+				EtcdBackendBatchInterval: opts.EtcdBackendBatchInterval,
+				EtcdDefrabThresholdMB:    opts.EtcdDefragThresholdMB,
+				EtcdMetrics:              opts.EtcdMetrics,
 			})
 			if serr != nil {
 				return serr
@@ -122,7 +126,7 @@ func Run() {
 		},
 	).Run(ctx)
 	if err != nil {
-		log.Fatalf("error running scheduler: %v", err)
+		log.Fatalf("Fatal error running scheduler: %v", err)
 	}
 
 	log.Info("Scheduler service shut down gracefully")

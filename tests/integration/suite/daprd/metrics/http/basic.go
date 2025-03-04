@@ -63,7 +63,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	t.Run("service invocation", func(t *testing.T) {
 		b.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := b.daprd.Metrics(t, ctx)
+			metrics := b.daprd.Metrics(c, ctx).All()
 			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
 		}, time.Second*3, time.Millisecond*10)
 	})
@@ -74,8 +74,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		b.daprd.HTTPGet2xx(t, ctx, "/v1.0/state/mystore/myvalue")
 
-		metrics := b.daprd.Metrics(t, ctx)
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := b.daprd.Metrics(c, ctx).All()
 			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:/v1.0/state/mystore|status:204"]))
 			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/state/mystore|status:200"]))
 		}, time.Second*3, time.Millisecond*10)

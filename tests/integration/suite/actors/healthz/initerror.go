@@ -76,6 +76,7 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(i.place.Address()),
 		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppHealthCheck(true),
 	)
 
 	return []framework.Option{
@@ -129,8 +130,9 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 
 	meta, err = i.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
-	if assert.Len(t, meta.GetActorRuntime().GetActiveActors(), 1) {
-		assert.Equal(t, "myactortype", meta.GetActorRuntime().GetActiveActors()[0].GetType())
-	}
+
+	assert.ElementsMatch(t, []*rtv1.ActiveActorsCount{
+		{Type: "myactortype", Count: 1},
+	}, meta.GetActorRuntime().GetActiveActors())
 	assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 }

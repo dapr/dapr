@@ -17,6 +17,7 @@ import (
 	"context"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -95,8 +96,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			assert.NotNil(t, resp)
 			require.NoError(t, err)
 
-			metrics := b.scheduler.Metrics(t, ctx)
-			assert.Equal(t, i, int(metrics["dapr_scheduler_jobs_created_total"]))
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
+				metrics := b.scheduler.Metrics(c, ctx).All()
+				assert.Equal(c, i, int(metrics["dapr_scheduler_jobs_created_total"]))
+			}, time.Second*3, time.Millisecond*10)
 		}
 	})
 }

@@ -2,6 +2,51 @@
 kind: Service
 apiVersion: v1
 metadata:
+  name: dapr-scheduler-server-a
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dapr-scheduler-server
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+{{- if or .Values.service.annotations .Values.global.prometheus.enabled }}
+  annotations:
+    {{- if .Values.global.prometheus.enabled }}
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+    prometheus.io/path: "/"
+    {{- end }}
+  {{- if .Values.service.annotations }}
+  {{- .Values.service.annotations | toYaml | nindent 4 }}
+  {{- end }}
+  {{- end }}
+spec:
+  selector:
+    app: dapr-scheduler-server
+  # scheduler must be able to resolve pod address to join initial cluster peers
+  # before POD is ready
+  publishNotReadyAddresses: true
+  ports:
+  - name: api
+    port: 443
+    targetPort: 50006
+  - name: etcd-client
+    port: {{ .Values.ports.etcdGRPCClientPort }}
+  - name: etcd-peer
+    port: {{ .Values.ports.etcdGRPCPeerPort }}
+  {{- if eq .Values.global.prometheus.enabled true }}
+  - name: metrics
+    port: {{ .Values.global.prometheus.port }}
+    targetPort: {{ .Values.global.prometheus.port }}
+    protocol: TCP
+  {{- end}}
+  type: ClusterIP
+{{- end }}
+---
+{{- if (eq .Values.global.scheduler.enabled true) }}
+kind: Service
+apiVersion: v1
+metadata:
   name: dapr-scheduler-server
   namespace: {{ .Release.Namespace }}
   labels:
@@ -31,8 +76,6 @@ spec:
     port: 50006
   - name: etcd-client
     port: {{ .Values.ports.etcdGRPCClientPort }}
-  - name: etcd-httpclient
-    port: {{ .Values.ports.etcdHTTPClientPort }}
   - name: etcd-peer
     port: {{ .Values.ports.etcdGRPCPeerPort }}
   {{- if eq .Values.global.prometheus.enabled true }}

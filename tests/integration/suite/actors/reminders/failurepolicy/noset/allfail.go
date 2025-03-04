@@ -26,7 +26,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
 )
@@ -43,19 +42,19 @@ type allfail struct {
 func (a *allfail) Setup(t *testing.T) []framework.Option {
 	a.triggered = slice.String()
 
-	scheduler := scheduler.New(t)
 	a.actors = actors.New(t,
-		actors.WithScheduler(scheduler),
-		actors.WithFeatureSchedulerReminders(true),
 		actors.WithActorTypes("helloworld"),
 		actors.WithActorTypeHandler("helloworld", func(w http.ResponseWriter, req *http.Request) {
+			if req.Method == http.MethodDelete {
+				return
+			}
 			a.triggered.Append(path.Base(req.URL.Path))
 			w.WriteHeader(http.StatusInternalServerError)
 		}),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(scheduler, a.actors),
+		framework.WithProcesses(a.actors),
 	}
 }
 
@@ -66,7 +65,7 @@ func (a *allfail) Run(t *testing.T, ctx context.Context) {
 		ActorType: "helloworld",
 		ActorId:   "1234",
 		Name:      "test",
-		DueTime:   "0s",
+		DueTime:   "1s",
 	})
 	require.NoError(t, err)
 

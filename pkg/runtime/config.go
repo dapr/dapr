@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/acl"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
@@ -114,6 +115,7 @@ type Config struct {
 	Registry                      *registry.Options
 	Security                      security.Handler
 	Healthz                       healthz.Healthz
+	WorkflowEventSink             workflow.EventSink
 }
 
 type internalConfig struct {
@@ -149,10 +151,7 @@ type internalConfig struct {
 	metricsExporter              metrics.Exporter
 	healthz                      healthz.Healthz
 	outboundHealthz              healthz.Healthz
-}
-
-func (i internalConfig) ActorsEnabled() bool {
-	return i.actorsService != ""
+	workflowEventSink            workflow.EventSink
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -230,7 +229,12 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		log.Info("loading default configuration")
 		globalConfig = config.LoadDefaultConfiguration()
 	}
-	config.SetTracingSpecFromEnv(globalConfig)
+	err = config.SetTracingSpecFromEnv(globalConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error setting tracing spec from env: %s", err)
+	}
+
+	globalConfig.SetDefaultFeatures()
 
 	globalConfig.LoadFeatures()
 	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {
@@ -314,6 +318,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
 		healthz:                   c.Healthz,
 		outboundHealthz:           healthz.New(),
+		workflowEventSink:         c.WorkflowEventSink,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
