@@ -48,6 +48,7 @@ func (a *actors) Setup(t *testing.T) []framework.Option {
 	a.scheduler = scheduler.New(t)
 
 	app := app.New(t,
+		app.WithHandlerFunc("/actors/myactortype/myactorid", func(http.ResponseWriter, *http.Request) {}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/remindermethod", func(http.ResponseWriter, *http.Request) {
 			a.triggered.Add(1)
 		}),
@@ -92,7 +93,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		assert.Empty(c, a.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))
 	}, time.Second*10, 10*time.Millisecond)
 
-	metrics := a.scheduler.Metrics(t, ctx)
+	metrics := a.scheduler.Metrics(t, ctx).All()
 	assert.Equal(t, 0, int(metrics["dapr_scheduler_jobs_created_total"]))
 
 	_, err := grpcClient.RegisterActorReminder(ctx, &runtimev1pb.RegisterActorReminderRequest{
@@ -105,7 +106,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics = a.scheduler.Metrics(t, ctx)
+		metrics = a.scheduler.Metrics(c, ctx).All()
 		assert.Equal(c, 1, int(metrics["dapr_scheduler_jobs_created_total"]))
 	}, time.Second*4, 10*time.Millisecond)
 

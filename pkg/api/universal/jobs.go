@@ -61,15 +61,15 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 	}
 
 	if job == nil {
-		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty), errorcodes.CategoryJob)
+		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Job", errMetadata, errorcodes.SchedulerEmpty)
 	}
 
 	if job.GetName() == "" || strings.Contains(job.GetName(), "|") {
-		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errorcodes.CategoryJob)
+		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Name", errMetadata, errorcodes.SchedulerJobNameEmpty)
 	}
 
 	if job.Schedule == nil && job.DueTime == nil {
-		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty), errorcodes.CategoryJob)
+		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Schedule", errMetadata, errorcodes.SchedulerScheduleEmpty)
 	}
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
@@ -96,7 +96,7 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	client, err := a.schedulerClients.Next(ctx)
+	client, err := a.scheduler.Next(ctx)
 	if err != nil {
 		a.logger.Errorf("Error getting scheduler client: %s", err)
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
@@ -119,7 +119,7 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 
 	if inReq.GetName() == "" {
 		a.logger.Error("Job name is empty.")
-		return &runtimev1pb.DeleteJobResponse{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errorcodes.CategoryJob)
+		return &runtimev1pb.DeleteJobResponse{}, apierrors.Empty("Name", errMetadata, errorcodes.SchedulerJobNameEmpty)
 	}
 
 	internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
@@ -138,7 +138,7 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	client, err := a.schedulerClients.Next(ctx)
+	client, err := a.scheduler.Next(ctx)
 	if err != nil {
 		a.logger.Errorf("Error getting scheduler client: %s", err)
 		return &runtimev1pb.DeleteJobResponse{}, apierrors.SchedulerDeleteJob(errMetadata, err)
@@ -161,7 +161,7 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 
 	if inReq.GetName() == "" {
 		a.logger.Error("Job name is empty.")
-		return new(runtimev1pb.GetJobResponse), apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errorcodes.CategoryJob)
+		return new(runtimev1pb.GetJobResponse), apierrors.Empty("Name", errMetadata, errorcodes.SchedulerJobNameEmpty)
 	}
 
 	internalGetJobReq := &schedulerv1pb.GetJobRequest{
@@ -180,7 +180,7 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	client, err := a.schedulerClients.Next(ctx)
+	client, err := a.scheduler.Next(ctx)
 	if err != nil {
 		a.logger.Errorf("Error getting scheduler client: %s", err)
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)

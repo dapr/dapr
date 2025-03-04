@@ -114,6 +114,9 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 		allSchedulerAddresses := patcher.ServiceScheduler.AddressAllInstances(
 			i.schedulerReplicaCount, i.config.Namespace, i.config.KubeClusterDomain)
 		sidecar.SchedulerAddress = strings.Join(allSchedulerAddresses, ",")
+		if len(allSchedulerAddresses) > 0 {
+			sidecar.SchedulerAddressDNSA = fmt.Sprintf("dapr-scheduler-server-a.%s.svc.%s:443", i.controlPlaneNamespace, i.config.KubeClusterDomain)
+		}
 	}
 
 	// Default value for the sidecar image, which can be overridden by annotations

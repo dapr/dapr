@@ -88,25 +88,8 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	comps := []kube.ComponentDescription{}
-	if backend == "sqlite" {
-		comps = getSqliteBackendComp(comps, backend)
-	}
-
-	tr = runner.NewTestRunner("workflow_test", testApps, comps, nil)
+	tr = runner.NewTestRunner("workflow_test", testApps, []kube.ComponentDescription{}, nil)
 	os.Exit(tr.Start(m))
-}
-
-func getSqliteBackendComp(comps []kube.ComponentDescription, backend string) []kube.ComponentDescription {
-	comps = append(comps, kube.ComponentDescription{
-		Name:     "sqlitebackend",
-		TypeName: "workflowbackend.sqlite",
-		MetaData: map[string]kube.MetadataValue{
-			"connectionString": {Raw: `""`},
-		},
-		Scopes: []string{appNamePrefix + backend},
-	})
-	return comps
 }
 
 func runk6test(t *testing.T, config K6RunConfig) *loadtest.K6RunnerMetricsSummary {
