@@ -52,6 +52,8 @@ func (d *data) Setup(t *testing.T) []framework.Option {
 	d.db = sqlite.New(t, sqlite.WithActorStateStore(true))
 	d.app = app.New(t,
 		app.WithConfig(`{"entities": ["myactortype"]}`),
+		app.WithHandlerFunc("/actors/myactortype/myactorid", func(_ http.ResponseWriter, r *http.Request) {
+		}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/myreminder", func(_ http.ResponseWriter, r *http.Request) {
 			b, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)
@@ -75,8 +77,7 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 		daprd.WithAppPort(d.app.Port()),
 	}
 
-	daprd1 := daprd.New(t, opts...)
-	daprd2 := daprd.New(t, append(opts,
+	daprd1 := daprd.New(t, append(opts,
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -85,8 +86,9 @@ metadata:
 spec:
   features:
   - name: SchedulerReminders
-    enabled: true
+    enabled: false
 `))...)
+	daprd2 := daprd.New(t, opts...)
 
 	t.Cleanup(func() { daprd1.Cleanup(t) })
 	daprd1.Run(t, ctx)

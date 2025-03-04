@@ -34,7 +34,6 @@ type HTTP struct {
 	listener net.Listener
 	server   *http.Server
 	srvErrCh chan error
-	stopCh   chan struct{}
 }
 
 func New(t *testing.T, fopts ...Option) *HTTP {
@@ -61,8 +60,7 @@ func New(t *testing.T, fopts ...Option) *HTTP {
 
 	return &HTTP{
 		listener: fp.Listener(t),
-		srvErrCh: make(chan error, 2),
-		stopCh:   make(chan struct{}),
+		srvErrCh: make(chan error, 1),
 		server: &http.Server{
 			ReadHeaderTimeout: time.Second,
 			Handler:           opts.handler,
@@ -87,22 +85,16 @@ func (h *HTTP) Run(t *testing.T, ctx context.Context) {
 		} else {
 			err = h.server.Serve(h.listener)
 		}
-		if !errors.Is(err, http.ErrServerClosed) {
+		if !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, context.DeadlineExceeded) {
 			h.srvErrCh <- err
 		} else {
 			h.srvErrCh <- nil
 		}
 	}()
-
-	go func() {
-		<-h.stopCh
-		h.srvErrCh <- h.server.Shutdown(ctx)
-	}()
 }
 
 func (h *HTTP) Cleanup(t *testing.T) {
-	close(h.stopCh)
-	for range 2 {
-		require.NoError(t, <-h.srvErrCh)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	require.NoError(t, errors.Join(h.server.Shutdown(ctx), <-h.srvErrCh))
 }

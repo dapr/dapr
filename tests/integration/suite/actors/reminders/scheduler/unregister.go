@@ -62,6 +62,7 @@ spec:
 
 	app := app.New(t,
 		app.WithConfig(`{"entities": ["myactortype"]}`),
+		app.WithHandlerFunc("/actors/myactortype/myactorid", func(http.ResponseWriter, *http.Request) {}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/xyz",
 			func(_ http.ResponseWriter, r *http.Request) { u.methodcalled.Add(1) }),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/foo", func(http.ResponseWriter, *http.Request) {}),
@@ -100,8 +101,8 @@ func (u *unregister) Run(t *testing.T, ctx context.Context) {
 		})
 		if err != nil {
 			st, ok := status.FromError(err)
-			require.True(c, ok, "expected a gRPC status error, got %v", err)
-			require.Equal(c, codes.Unavailable, st.Code(), "the only allowed error is 'Unavailable', but got %v", err)
+			assert.True(c, ok, "expected a gRPC status error, got %v", err)
+			assert.Equal(c, codes.Unavailable, st.Code(), "the only allowed error is 'Unavailable', but got %v", err)
 		}
 	}, time.Second*10, time.Millisecond*10)
 
