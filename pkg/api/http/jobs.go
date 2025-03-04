@@ -75,7 +75,7 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 				// Users should set the name in the url, and not in the url and body
 				name := strings.TrimSpace(chi.URLParam(r, nameParam))
 				if len(name) == 0 {
-					apierrors.Empty("Job", map[string]string{"appID": a.universal.AppID()}, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty), errorcodes.CategoryJob)
+					apierrors.Empty("Job", map[string]string{"appID": a.universal.AppID()}, errorcodes.SchedulerEmpty)
 				}
 				if in.GetName() != "" {
 					return nil, apierrors.SchedulerURLName(map[string]string{"appID": a.universal.AppID()})

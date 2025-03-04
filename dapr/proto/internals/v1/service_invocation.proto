@@ -53,6 +53,10 @@ service ServiceInvocation {
   // - When the sender has completed sending the data, it MUST call `CloseSend` on the stream.
   // The caller and callee must send at least one message in the stream. If only 1 message is sent in each direction, that message must contain both a `request`/`response` (the `payload` may be empty).
   rpc CallLocalStream (stream InternalInvokeRequestStream) returns (stream InternalInvokeResponseStream) {}
+
+  // CallActorStream is used to invoke actor method with request and streaming
+  // response.
+  rpc CallActorStream (InternalInvokeRequest) returns (stream InternalInvokeResponse) {}
 }
 
 // Actor represents actor using actor_type and actor_id

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strconv"
 	"sync/atomic"
 
 	"google.golang.org/grpc"
@@ -28,8 +29,10 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
@@ -37,25 +40,27 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
-	Healthz                 healthz.Healthz
-	Security                security.Handler
-	ListenAddress           string
-	Port                    int
-	Mode                    modes.DaprMode
-	KubeConfig              *string
-	ReplicaCount            uint32
-	ReplicaID               uint32
-	DataDir                 string
-	EtcdID                  string
-	EtcdInitialPeers        []string
-	EtcdClientPorts         []string
-	EtcdClientHTTPPorts     []string
-	EtcdSpaceQuota          int64
-	EtcdCompactionMode      string
-	EtcdCompactionRetention string
-	EtcdSnapshotCount       uint64
-	EtcdMaxSnapshots        uint
-	EtcdMaxWALs             uint
+	Healthz                   healthz.Healthz
+	Security                  security.Handler
+	ListenAddress             string
+	OverrideBroadcastHostPort *string
+	Port                      int
+	Mode                      modes.DaprMode
+	KubeConfig                *string
+	EtcdDataDir               string
+	EtcdName                  string
+	EtcdInitialCluster        []string
+	EtcdClientPort            uint64
+	EtcdSpaceQuota            int64
+	EtcdCompactionMode        string
+	EtcdCompactionRetention   string
+	EtcdSnapshotCount         uint64
+	EtcdMaxSnapshots          uint
+	EtcdMaxWALs               uint
+	EtcdBackendBatchLimit     int
+	EtcdBackendBatchInterval  string
+	EtcdDefrabThresholdMB     uint
+	EtcdMetrics               string
 }
 
 // Server is the gRPC server for the Scheduler service.
@@ -66,6 +71,7 @@ type Server struct {
 	sec        security.Handler
 	serializer *serialize.Serializer
 	cron       cron.Interface
+	etcd       etcd.Interface
 	controller concurrency.Runner
 
 	hzAPIServer healthz.Target
@@ -76,16 +82,48 @@ type Server struct {
 }
 
 func New(opts Options) (*Server, error) {
-	config, err := config(opts)
+	var broadcastAddr string
+	switch {
+	case opts.OverrideBroadcastHostPort != nil:
+		broadcastAddr = *opts.OverrideBroadcastHostPort
+	case utils.IsLocalhost(opts.ListenAddress):
+		broadcastAddr = net.JoinHostPort(opts.ListenAddress, strconv.Itoa(opts.Port))
+	default:
+		haddr, err := utils.GetHostAddress()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get host address: %w", err)
+		}
+		broadcastAddr = net.JoinHostPort(haddr, strconv.Itoa(opts.Port))
+	}
+
+	etcd, err := etcd.New(etcd.Options{
+		Name:                 opts.EtcdName,
+		InitialCluster:       opts.EtcdInitialCluster,
+		ClientPort:           opts.EtcdClientPort,
+		SpaceQuota:           opts.EtcdSpaceQuota,
+		CompactionMode:       opts.EtcdCompactionMode,
+		CompactionRetention:  opts.EtcdCompactionRetention,
+		SnapshotCount:        opts.EtcdSnapshotCount,
+		MaxSnapshots:         opts.EtcdMaxSnapshots,
+		MaxWALs:              opts.EtcdMaxWALs,
+		BackendBatchLimit:    opts.EtcdBackendBatchLimit,
+		BackendBatchInterval: opts.EtcdBackendBatchInterval,
+		DefragThresholdMB:    opts.EtcdDefrabThresholdMB,
+		Metrics:              opts.EtcdMetrics,
+		Security:             opts.Security,
+		DataDir:              opts.EtcdDataDir,
+		Healthz:              opts.Healthz,
+		Mode:                 opts.Mode,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	cron := cron.New(cron.Options{
-		ReplicaCount: opts.ReplicaCount,
-		ReplicaID:    opts.ReplicaID,
-		Config:       config,
-		Healthz:      opts.Healthz,
+		ID:      opts.EtcdName,
+		Healthz: opts.Healthz,
+		Host:    &schedulerv1pb.Host{Address: broadcastAddr},
+		Etcd:    etcd,
 	})
 
 	var ctrl concurrency.Runner
@@ -107,6 +145,7 @@ func New(opts Options) (*Server, error) {
 		sec:           opts.Security,
 		controller:    ctrl,
 		cron:          cron,
+		etcd:          etcd,
 		serializer: serialize.New(serialize.Options{
 			Security: opts.Security,
 		}),
@@ -123,8 +162,18 @@ func (s *Server) Run(ctx context.Context) error {
 	log.Info("Dapr Scheduler is starting...")
 
 	runners := []concurrency.Runner{
+		s.etcd.Run,
 		s.runServer,
-		s.cron.Run,
+		func(ctx context.Context) error {
+			err := s.cron.Run(ctx)
+			if ctx.Err() != nil {
+				if err != nil {
+					log.Errorf("Error running scheduler cron: %s", err)
+				}
+				return ctx.Err()
+			}
+			return err
+		},
 		func(ctx context.Context) error {
 			<-ctx.Done()
 			close(s.closeCh)
@@ -136,7 +185,12 @@ func (s *Server) Run(ctx context.Context) error {
 		runners = append(runners, s.controller)
 	}
 
-	return concurrency.NewRunnerManager(runners...).Run(ctx)
+	mngr := concurrency.NewRunnerCloserManager(nil, runners...)
+	if err := mngr.AddCloser(s.etcd); err != nil {
+		return err
+	}
+
+	return mngr.Run(ctx)
 }
 
 func (s *Server) runServer(ctx context.Context) error {

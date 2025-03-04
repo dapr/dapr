@@ -46,8 +46,7 @@ type remove struct {
 	scheduler *scheduler.Scheduler
 	triggered atomic.Int64
 
-	daprd    *daprd.Daprd
-	etcdPort int
+	daprd *daprd.Daprd
 }
 
 func (r *remove) Setup(t *testing.T) []framework.Option {
@@ -65,18 +64,15 @@ spec:
 	fp := ports.Reserve(t, 2)
 	port1 := fp.Port(t)
 	port2 := fp.Port(t)
-	r.etcdPort = port2
-	clientPorts := []string{
-		"scheduler-0=" + strconv.Itoa(r.etcdPort),
-	}
 	r.scheduler = scheduler.New(t,
 		scheduler.WithID("scheduler-0"),
 		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d", port1)),
-		scheduler.WithInitialClusterPorts(port1),
-		scheduler.WithEtcdClientPorts(clientPorts),
+		scheduler.WithEtcdClientPort(port2),
 	)
 
 	app := app.New(t,
+		app.WithHandlerFunc("/actors/myactortype/myactorid", func(http.ResponseWriter, *http.Request) {
+		}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/remindermethod", func(http.ResponseWriter, *http.Request) {
 			r.triggered.Add(1)
 		}),

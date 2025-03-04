@@ -41,9 +41,11 @@ type data struct {
 func (d *data) Setup(t *testing.T) []framework.Option {
 	d.got = make(chan string, 1)
 	d.actors = actors.New(t,
-		actors.WithFeatureSchedulerReminders(true),
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(_ http.ResponseWriter, req *http.Request) {
+			if req.Method == http.MethodDelete {
+				return
+			}
 			got, err := io.ReadAll(req.Body)
 			assert.NoError(t, err)
 			d.got <- string(got)

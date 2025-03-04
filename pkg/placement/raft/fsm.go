@@ -66,9 +66,7 @@ func (c *FSM) State() *DaprHostMemberState {
 }
 
 // PlacementState returns the current placement tables.
-// the withVirtualNodes parameter is here for backwards compatibility and should be removed in 1.15
-// TODO in v1.15 remove the withVirtualNodes parameter
-func (c *FSM) PlacementState(withVirtualNodes bool, namespace string) *v1pb.PlacementTables {
+func (c *FSM) PlacementState(namespace string) *v1pb.PlacementTables {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()
 
@@ -79,8 +77,6 @@ func (c *FSM) PlacementState(withVirtualNodes bool, namespace string) *v1pb.Plac
 		ReplicationFactor: c.config.replicationFactor,
 	}
 
-	totalHostSize := 0
-	totalSortedSet := 0
 	totalLoadMap := 0
 
 	entries, err := c.state.hashingTableMap(namespace)
@@ -91,23 +87,12 @@ func (c *FSM) PlacementState(withVirtualNodes bool, namespace string) *v1pb.Plac
 		var table v1pb.PlacementTable
 		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
 			sortedSetLen := 0
-			if withVirtualNodes {
-				sortedSetLen = len(sortedSet)
-			}
 
 			table = v1pb.PlacementTable{
 				Hosts:     make(map[uint64]string),
 				SortedSet: make([]uint64, sortedSetLen),
 				TotalLoad: totalLoad,
 				LoadMap:   make(map[string]*v1pb.Host),
-			}
-
-			if withVirtualNodes {
-				for lk, lv := range hosts {
-					table.GetHosts()[lk] = lv
-				}
-
-				copy(table.GetSortedSet(), sortedSet)
 			}
 
 			for lk, lv := range loadMap {
@@ -123,18 +108,10 @@ func (c *FSM) PlacementState(withVirtualNodes bool, namespace string) *v1pb.Plac
 
 		newTable.Entries[k] = &table
 
-		if withVirtualNodes {
-			totalHostSize += len(table.GetHosts())
-			totalSortedSet += len(table.GetSortedSet())
-		}
 		totalLoadMap += len(table.GetLoadMap())
 	}
 
-	if withVirtualNodes {
-		logging.Debugf("PlacementTable Size, Hosts: %d, SortedSet: %d, LoadMap: %d", totalHostSize, totalSortedSet, totalLoadMap)
-	} else {
-		logging.Debugf("PlacementTable LoadMapCount=%d ApiLevel=%d ReplicationFactor=%d", totalLoadMap, newTable.GetApiLevel(), newTable.GetReplicationFactor())
-	}
+	logging.Debugf("PlacementTable LoadMapCount=%d ApiLevel=%d ReplicationFactor=%d", totalLoadMap, newTable.GetApiLevel(), newTable.GetReplicationFactor())
 
 	return newTable
 }

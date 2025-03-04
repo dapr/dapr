@@ -27,7 +27,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
 )
@@ -46,10 +45,7 @@ func (f *failfirst) Setup(t *testing.T) []framework.Option {
 	f.triggered = slice.String()
 	f.respErr.Store(true)
 
-	scheduler := scheduler.New(t)
 	f.actors = actors.New(t,
-		actors.WithScheduler(scheduler),
-		actors.WithFeatureSchedulerReminders(true),
 		actors.WithActorTypes("helloworld"),
 		actors.WithActorTypeHandler("helloworld", func(w http.ResponseWriter, req *http.Request) {
 			defer f.triggered.Append(path.Base(req.URL.Path))
@@ -60,7 +56,7 @@ func (f *failfirst) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(scheduler, f.actors),
+		framework.WithProcesses(f.actors),
 	}
 }
 
@@ -76,15 +72,16 @@ func (f *failfirst) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"test"}, f.triggered.Slice())
+		assert.GreaterOrEqual(c, f.triggered.Len(), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	f.respErr.Store(false)
+	count := f.triggered.Len()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"test", "test"}, f.triggered.Slice())
+		assert.Equal(c, f.triggered.Len(), count+1)
 	}, time.Second*10, time.Millisecond*10)
 
 	time.Sleep(time.Second * 2)
-	assert.ElementsMatch(t, []string{"test", "test"}, f.triggered.Slice())
+	assert.Equal(t, f.triggered.Len(), count+1)
 }

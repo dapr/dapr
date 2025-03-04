@@ -54,7 +54,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: schedulerreminders
+ name: schedulerreminders
 spec:
   features:
   - name: SchedulerReminders
@@ -66,6 +66,8 @@ spec:
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
+	})
+	handler.HandleFunc("/actors/myactortype/myactorid", func(w http.ResponseWriter, r *http.Request) {
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/remindermethod", func(w http.ResponseWriter, r *http.Request) {
 		b.methodcalled.Add(1)

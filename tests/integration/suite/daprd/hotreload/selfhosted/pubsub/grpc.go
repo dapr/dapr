@@ -123,7 +123,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*10)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
@@ -151,7 +151,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*10)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
@@ -172,7 +172,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*10)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
@@ -184,7 +184,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(g.resDir, "1.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
 		}, time.Second*5, time.Millisecond*10)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
@@ -196,7 +196,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(g.resDir, "2.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Empty(c, resp.GetRegisteredComponents())
 		}, time.Second*5, time.Millisecond*10)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
@@ -217,7 +217,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
 		}, time.Second*5, time.Millisecond*10)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")

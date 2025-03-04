@@ -18,7 +18,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/yaml"
@@ -52,18 +51,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	bs, err := io.ReadAll(b.helm.Stdout(t))
 	require.NoError(t, err)
 	require.NoError(t, yaml.Unmarshal(bs, &sts))
-	require.Equal(t, int32(1), *sts.Spec.Replicas)
+	require.Equal(t, int32(3), *sts.Spec.Replicas)
 	require.NotNil(t, sts.Spec.Template.Spec.Affinity)
-	require.Nil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
+	require.NotNil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
 
 	require.NotEmpty(t, sts.Spec.Template.Spec.Containers)
-	var found bool
-	for i, arg := range sts.Spec.Template.Spec.Containers[0].Args {
-		if arg == "--replica-count" {
-			found = true
-			require.Greater(t, len(sts.Spec.Template.Spec.Containers[0].Args), i+1)
-			assert.Equal(t, "1", sts.Spec.Template.Spec.Containers[0].Args[i+1])
-		}
-	}
-	assert.True(t, found, "arg --replica-count not found in %v", sts.Spec.Template.Spec.Containers[0].Args)
 }

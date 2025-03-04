@@ -22,10 +22,7 @@ service:
 ports:
   protocol: TCP
   etcdGRPCClientPort: 2379
-  etcdHTTPClientPort: 2330
   etcdGRPCPeerPort: 2380
-
-ha: false
 
 cluster:
   etcdDataDirPath: /var/run/data/dapr-scheduler
@@ -34,12 +31,16 @@ cluster:
   storageSize: 1Gi
   inMemoryStorage: false
 
-etcdSpaceQuota: 1Gi
+etcdSpaceQuota: 9.2E
 etcdCompactionMode: periodic
 etcdCompactionRetention: 10m
 etcdSnapshotCount: 10000
-etcdMaxSnapshots: 5
-etcdMaxWals: 5
+etcdMaxSnapshots: 10
+etcdMaxWals: 10
+etcdBackendBatchLimit: 5000
+etcdBackendBatchInterval: 50ms
+etcdDefragThresholdMB: 100
+etcdMetrics: "basic"
 
 livenessProbe:
   initialDelaySeconds: 10

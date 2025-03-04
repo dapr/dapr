@@ -16,6 +16,7 @@ package actors
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -32,6 +33,13 @@ type options struct {
 	scheduler         *scheduler.Scheduler
 	daprdConfigs      []string
 	actorTypeHandlers map[string]http.HandlerFunc
+	handlers          map[string]http.HandlerFunc
+	reentry           *bool
+	reentryMaxDepth   *uint32
+	actorIdleTimeout  *time.Duration
+	entityConfig      []entityConfig
+	resources         []string
+	maxBodySize       *string
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -80,5 +88,62 @@ func WithActorTypeHandler(actorType string, handler http.HandlerFunc) Option {
 			o.actorTypeHandlers = make(map[string]http.HandlerFunc)
 		}
 		o.actorTypeHandlers[actorType] = handler
+	}
+}
+
+func WithHandler(pattern string, handler http.HandlerFunc) Option {
+	return func(o *options) {
+		if o.handlers == nil {
+			o.handlers = make(map[string]http.HandlerFunc)
+		}
+		o.handlers[pattern] = handler
+	}
+}
+
+func WithPeerActor(actor *Actors) Option {
+	return func(o *options) {
+		WithDB(actor.DB())(o)
+		WithPlacement(actor.Placement())(o)
+		WithScheduler(actor.Scheduler())(o)
+	}
+}
+
+func WithReentry(enabled bool) Option {
+	return func(o *options) {
+		o.reentry = &enabled
+	}
+}
+
+func WithReentryMaxDepth(maxDepth uint32) Option {
+	return func(o *options) {
+		o.reentryMaxDepth = &maxDepth
+	}
+}
+
+func WithActorIdleTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.actorIdleTimeout = &timeout
+	}
+}
+
+func WithEntityConfig(opts ...EntityConfig) Option {
+	return func(o *options) {
+		var e entityConfig
+		for _, opt := range opts {
+			opt(&e)
+		}
+		o.entityConfig = append(o.entityConfig, e)
+	}
+}
+
+func WithResources(resources ...string) Option {
+	return func(o *options) {
+		o.resources = append(o.resources, resources...)
+	}
+}
+
+func WithMaxBodySize(size string) Option {
+	return func(o *options) {
+		o.maxBodySize = &size
 	}
 }
