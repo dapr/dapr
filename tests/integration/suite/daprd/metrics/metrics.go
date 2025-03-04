@@ -14,6 +14,7 @@ limitations under the License.
 package metrics
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/actors"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/grpc"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/http"
 )

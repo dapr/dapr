@@ -24,7 +24,7 @@ type GHWorkflow struct {
 				GOVER           string `yaml:"GOVER"`
 				GOLANGCILINTVER string `yaml:"GOLANGCILINT_VER"`
 			} `yaml:"env"`
-		} `yaml:"lint"`
+		} `yaml:"lint-slow"`
 	} `yaml:"jobs"`
 }
 

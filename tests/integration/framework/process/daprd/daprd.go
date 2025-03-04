@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -39,6 +38,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
@@ -60,6 +60,7 @@ type Daprd struct {
 	metricsPort      int
 	profilePort      int
 
+	runOnce     sync.Once
 	cleanupOnce sync.Once
 }
 
@@ -79,7 +80,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       fp.Port(t),
 		metricsPort:      fp.Port(t),
 		profilePort:      fp.Port(t),
-		logLevel:         "info",
+		logLevel:         "debug",
 		mode:             "standalone",
 	}
 
@@ -126,10 +127,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	for _, dir := range opts.resourceDirs {
 		args = append(args, "--resources-path="+dir)
 	}
-	if len(opts.configs) > 0 {
-		for _, c := range opts.configs {
-			args = append(args, "--config="+c)
-		}
+	for _, c := range opts.configs {
+		args = append(args, "--config="+c)
 	}
 	if len(opts.placementAddresses) > 0 {
 		args = append(args, "--placement-host-address="+strings.Join(opts.placementAddresses, ","))
@@ -154,6 +153,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 	if opts.controlPlaneTrustDomain != nil {
 		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
+	}
+	if opts.maxBodySize != nil {
+		args = append(args, "--max-body-size="+*opts.maxBodySize)
 	}
 
 	ns := "default"
@@ -180,12 +182,19 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 }
 
 func (d *Daprd) Run(t *testing.T, ctx context.Context) {
-	d.ports.Free(t)
-	d.exec.Run(t, ctx)
+	d.runOnce.Do(func() {
+		d.ports.Free(t)
+		d.exec.Run(t, ctx)
+	})
 }
 
 func (d *Daprd) Cleanup(t *testing.T) {
-	d.cleanupOnce.Do(func() { d.exec.Cleanup(t) })
+	d.cleanupOnce.Do(func() {
+		if d.httpClient != nil {
+			d.httpClient.CloseIdleConnections()
+		}
+		d.exec.Cleanup(t)
+	})
 }
 
 func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
@@ -201,17 +210,18 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	client := client.HTTP(t)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.Do(req)
-		if err != nil {
-			return false
+		if assert.NoError(c, err) {
+			defer resp.Body.Close()
+			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
 		}
-		defer resp.Body.Close()
-		return http.StatusNoContent == resp.StatusCode
-	}, 30*time.Second, 10*time.Millisecond)
+	}, 20*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
@@ -329,56 +339,12 @@ func (d *Daprd) ProfilePort() int {
 }
 
 // Metrics Returns a subset of metrics scraped from the metrics endpoint
-func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
-	t.Helper()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()), nil)
-	require.NoError(t, err)
-
-	resp, err := d.httpClient.Do(req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Extract the metrics
-	parser := expfmt.TextParser{}
-	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-
-	metrics := make(map[string]float64)
-	for _, mf := range metricFamilies {
-		for _, m := range mf.GetMetric() {
-			metricName := mf.GetName()
-			labels := ""
-			for _, l := range m.GetLabel() {
-				labels += "|" + l.GetName() + ":" + l.GetValue()
-			}
-			if counter := m.GetCounter(); counter != nil {
-				metrics[metricName+labels] = counter.GetValue()
-				continue
-			}
-			if gauge := m.GetGauge(); gauge != nil {
-				metrics[metricName+labels] = gauge.GetValue()
-				continue
-			}
-			h := m.GetHistogram()
-			if h == nil {
-				continue
-			}
-			for _, b := range h.GetBucket() {
-				bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.FormatUint(uint64(b.GetUpperBound()), 10)
-				metrics[bucketKey] = float64(b.GetCumulativeCount())
-			}
-			metrics[metricName+"_count"+labels] = float64(h.GetSampleCount())
-			metrics[metricName+"_sum"+labels] = h.GetSampleSum()
-		}
-	}
-
-	return metrics
+func (d *Daprd) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
+	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
 }
 
 func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float64 {
-	return d.Metrics(t, ctx)["process_resident_memory_bytes"] * 1e-6
+	return d.Metrics(t, ctx).All()["process_resident_memory_bytes"] * 1e-6
 }
 
 func (d *Daprd) HTTPGet(t assert.TestingT, ctx context.Context, path string, expectedCode int) {
@@ -448,11 +414,21 @@ func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*
 	return d.meta(t, ctx).HTTPEndpoints
 }
 
+func (d *Daprd) GetMetaScheduler(t assert.TestingT, ctx context.Context) *rtv1.MetadataScheduler {
+	return d.meta(t, ctx).Scheduler
+}
+
+func (d *Daprd) GetMetaActorRuntime(t assert.TestingT, ctx context.Context) *MetadataActorRuntime {
+	return d.meta(t, ctx).ActorRuntime
+}
+
 // metaResponse is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
 type metaResponse struct {
 	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
 	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
 	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
+	Scheduler            *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
+	ActorRuntime         *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
@@ -468,6 +444,18 @@ type MetadataResponsePubsubSubscription struct {
 type MetadataResponsePubsubSubscriptionRule struct {
 	Match string `json:"match,omitempty"`
 	Path  string `json:"path,omitempty"`
+}
+
+type MetadataActorRuntime struct {
+	RuntimeStatus string                             `json:"runtimeStatus"`
+	HostReady     bool                               `json:"hostReady"`
+	Placement     string                             `json:"placement"`
+	ActiveActors  []*MetadataActorRuntimeActiveActor `json:"activeActors"`
+}
+
+type MetadataActorRuntimeActiveActor struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
 }
 
 func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {

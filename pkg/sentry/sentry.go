@@ -79,6 +79,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 		TrustAnchors:            camngr.TrustAnchors(),
 		MTLSEnabled:             true,
 		Healthz:                 opts.Healthz,
+		Mode:                    opts.Config.Mode,
 		// Override the request source to our in memory CA since _we_ are sentry!
 		OverrideCertRequestFn: func(ctx context.Context, csrDER []byte) ([]*x509.Certificate, error) {
 			csr, csrErr := x509.ParseCertificateRequest(csrDER)
@@ -114,6 +115,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 			DefaultValidator: opts.Config.DefaultValidator,
 			CA:               camngr,
 			Healthz:          opts.Healthz,
+			ListenAddress:    opts.Config.ListenAddress,
 		}).Start,
 	)
 	for name, val := range vals {

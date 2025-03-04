@@ -38,6 +38,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -58,6 +59,7 @@ type rebalancing struct {
 	place              *placement.Placement
 	activeActors       []atomic.Bool
 	doubleActivationCh chan string
+	scheduler          *scheduler.Scheduler
 }
 
 func (i *rebalancing) Setup(t *testing.T) []framework.Option {
@@ -74,6 +76,8 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 	// Init placement
 	i.place = placement.New(t)
 
+	i.scheduler = scheduler.New(t)
+
 	// Init two instances of daprd, each with its own server
 	for j := range 2 {
 		i.handler[j] = &httpServer{
@@ -84,18 +88,21 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 		i.daprd[j] = daprd.New(t,
 			daprd.WithResourceFiles(i.db.GetComponent(t)),
 			daprd.WithPlacementAddresses(i.place.Address()),
+			daprd.WithSchedulerAddresses(i.scheduler.Address()),
 			daprd.WithAppPort(i.srv[j].Port()),
 			// Daprd is super noisy in debug mode when connecting to placement.
 			daprd.WithLogLevel("info"),
+			daprd.WithAppHealthCheck(true),
 		)
 	}
 
 	return []framework.Option{
-		framework.WithProcesses(i.db, i.place, i.srv[0], i.srv[1], i.daprd[0], i.daprd[1]),
+		framework.WithProcesses(i.db, i.place, i.scheduler, i.srv[0], i.srv[1], i.daprd[0], i.daprd[1]),
 	}
 }
 
 func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
+	i.scheduler.WaitUntilRunning(t, ctx)
 	i.place.WaitUntilRunning(t, ctx)
 
 	// Wait for daprd to be ready

@@ -77,6 +77,10 @@ func (x *GetSecretRequest) AppendSpanAttributes(rpcMethod string, m map[string]s
 	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.SecretBuildingBlockType
 }
 
+func (x *ConversationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	m[diagConsts.RPCSystemSpanAttributeKey] = x.GetName()
+}
+
 func (*DeleteJobRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
@@ -202,8 +206,5 @@ func (*UnregisterActorTimerRequest) AppendSpanAttributes(rpcMethod string, m map
 	// TODO
 }
 func (*UnsubscribeConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
-	// TODO
-}
-func (*ConversationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }

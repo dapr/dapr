@@ -101,7 +101,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var resp *rtv1.GetMetadataResponse
 		resp, err = client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		assert.Len(c, resp.GetRegisteredComponents(), 1)
 	}, time.Second*5, time.Millisecond*10)
 

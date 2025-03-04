@@ -23,12 +23,17 @@ import (
 	kiterrors "github.com/dapr/kit/errors"
 )
 
-const (
-	InFixName     ReasonSegment = "NAME_"
-	InFixNegative ReasonSegment = "NEGATIVE_"
-	PostFixName   ReasonSegment = "NAME"
-	PostFixEmpty  ReasonSegment = "EMPTY"
-)
+func Basic(grpcCode codes.Code, httpCode int, errorCode errorcodes.ErrorCode, msg string) error {
+	return kiterrors.NewBuilder(
+		grpcCode,
+		httpCode,
+		msg,
+		"",
+		string(errorCode.Category),
+	).
+		WithErrorInfo(errorCode.Code, nil).
+		Build()
+}
 
 func NotFound(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string, category errorcodes.Category) error {
 	message := fmt.Sprintf("%s %s is not found", componentType, name)
@@ -44,42 +49,15 @@ func NotFound(name string, componentType string, metadata map[string]string, grp
 		Build()
 }
 
-func NotConfigured(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string, category errorcodes.Category) error {
-	message := componentType + " " + name + " is not configured"
-
-	return kiterrors.NewBuilder(
-		grpcCode,
-		httpCode,
-		message,
-		legacyTag,
-		string(category),
-	).
-		WithErrorInfo(reason, metadata).
-		Build()
-}
-
-func Empty(name string, metadata map[string]string, reason string, category errorcodes.Category) error {
+func Empty(name string, metadata map[string]string, errorCode errorcodes.ErrorCode) error {
 	message := name + " is empty"
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
 		"",
-		string(category),
+		string(errorCode.Category),
 	).
-		WithErrorInfo(reason, metadata).
-		Build()
-}
-
-func IncorrectNegative(name string, metadata map[string]string, reason string, category errorcodes.Category) error {
-	message := name + " cannot be negative"
-	return kiterrors.NewBuilder(
-		codes.InvalidArgument,
-		http.StatusBadRequest,
-		message,
-		"",
-		string(category),
-	).
-		WithErrorInfo(reason, metadata).
+		WithErrorInfo(errorCode.Code, metadata).
 		Build()
 }

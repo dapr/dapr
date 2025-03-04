@@ -14,6 +14,7 @@ limitations under the License.
 package daprd
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/binding"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload"
@@ -30,6 +31,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resiliency"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resources"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/secret"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown"

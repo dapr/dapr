@@ -70,9 +70,6 @@ func New(t *testing.T, fopts ...Option) *SQLite {
 		fopt(&opts)
 	}
 
-	// Create a SQLite database in the test's temporary directory
-	t.Logf("Storing SQLite database at %s", opts.dbPath)
-
 	return &SQLite{
 		dbPath:            opts.dbPath,
 		name:              opts.name,
@@ -85,6 +82,8 @@ func New(t *testing.T, fopts ...Option) *SQLite {
 }
 
 func (s *SQLite) Run(t *testing.T, ctx context.Context) {
+	t.Logf("Storing SQLite database at %s", s.dbPath)
+
 	s.runOnce.Do(func() {
 		for _, migration := range s.migrations {
 			_, err := s.GetConnection(t).ExecContext(ctx, migration(s.tableName))

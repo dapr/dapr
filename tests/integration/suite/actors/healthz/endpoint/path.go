@@ -41,24 +41,17 @@ func init() {
 type path struct {
 	daprd         *daprd.Daprd
 	place         *placement.Placement
-	healthzCalled chan struct{}
 	customHealthz chan struct{}
 	rootCalled    atomic.Bool
 }
 
 func (p *path) Setup(t *testing.T) []framework.Option {
-	p.healthzCalled = make(chan struct{})
 	p.customHealthz = make(chan struct{})
 
-	var honce, conce sync.Once
+	var conce sync.Once
 	srv := prochttp.New(t,
 		prochttp.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"entities": ["myactortype"]}`))
-		}),
-		prochttp.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-			honce.Do(func() {
-				close(p.healthzCalled)
-			})
 		}),
 		prochttp.WithHandlerFunc("/customhealthz", func(w http.ResponseWriter, r *http.Request) {
 			conce.Do(func() {
@@ -68,6 +61,7 @@ func (p *path) Setup(t *testing.T) []framework.Option {
 		prochttp.WithHandlerFunc(pathMethodFoo, func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`OK`))
 		}),
+		prochttp.WithHandlerFunc("/actors/myactortype/myactorid", func(w http.ResponseWriter, r *http.Request) {}),
 		prochttp.WithHandlerFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			p.rootCalled.Store(true)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -108,12 +102,6 @@ func (p *path) Run(t *testing.T, ctx context.Context) {
 	case <-p.customHealthz:
 	case <-time.After(time.Second * 15):
 		assert.Fail(t, "timed out waiting for healthz call")
-	}
-
-	select {
-	case <-p.healthzCalled:
-	case <-time.After(time.Second * 15):
-		assert.Fail(t, "/healthz endpoint should still have been called for actor health check")
 	}
 
 	client := client.HTTP(t)

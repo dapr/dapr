@@ -15,11 +15,14 @@ package actors
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -36,6 +39,9 @@ type Actors struct {
 	place *placement.Placement
 	sched *scheduler.Scheduler
 	daprd *daprd.Daprd
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Actors {
@@ -51,7 +57,9 @@ func New(t *testing.T, fopts ...Option) *Actors {
 			sqlite.WithCreateStateTables(),
 		),
 		placement: placement.New(t),
-		scheduler: scheduler.New(t),
+		scheduler: scheduler.New(t,
+			scheduler.WithID("dapr-scheduler-0"),
+		),
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
@@ -61,12 +69,31 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	for atype, handler := range opts.actorTypeHandlers {
 		handlers = append(handlers, app.WithHandlerFunc("/actors/"+atype+"/", handler))
 	}
+	for pattern, handler := range opts.handlers {
+		handlers = append(handlers, app.WithHandlerFunc(pattern, handler))
+	}
 
-	app := app.New(t,
-		append(handlers,
-			app.WithConfig(fmt.Sprintf(`{"entities": [%s]}`, strings.Join(opts.types, ","))),
-		)...,
-	)
+	config := fmt.Sprintf(`{"entities": [%s]`, strings.Join(opts.types, ","))
+	if opts.reentryMaxDepth != nil {
+		require.NotNil(t, opts.reentry)
+		config += fmt.Sprintf(`,"reentrancy":{"enabled":%t,"maxStackDepth":%d}`, *opts.reentry, *opts.reentryMaxDepth)
+	} else if opts.reentry != nil {
+		config += fmt.Sprintf(`,"reentrancy":{"enabled":%t}`, *opts.reentry)
+	}
+
+	if opts.actorIdleTimeout != nil {
+		config += fmt.Sprintf(`,"actorIdleTimeout":"%s"`, *opts.actorIdleTimeout)
+	}
+
+	if len(opts.entityConfig) > 0 {
+		b, err := json.Marshal(opts.entityConfig)
+		require.NoError(t, err)
+		config += `,"entitiesConfig":` + string(b)
+	}
+
+	config += "}"
+
+	app := app.New(t, append(handlers, app.WithConfig(config))...)
 
 	dopts := []daprd.Option{
 		daprd.WithAppPort(app.Port()),
@@ -74,6 +101,12 @@ func New(t *testing.T, fopts ...Option) *Actors {
 		daprd.WithResourceFiles(opts.db.GetComponent(t)),
 		daprd.WithConfigManifests(t, opts.daprdConfigs...),
 		daprd.WithScheduler(opts.scheduler),
+		daprd.WithResourceFiles(opts.resources...),
+		daprd.WithErrorCodeMetrics(t),
+	}
+
+	if opts.maxBodySize != nil {
+		dopts = append(dopts, daprd.WithMaxBodySize(*opts.maxBodySize))
 	}
 
 	return &Actors{
@@ -86,19 +119,23 @@ func New(t *testing.T, fopts ...Option) *Actors {
 }
 
 func (a *Actors) Run(t *testing.T, ctx context.Context) {
-	a.app.Run(t, ctx)
-	a.db.Run(t, ctx)
-	a.place.Run(t, ctx)
-	a.sched.Run(t, ctx)
-	a.daprd.Run(t, ctx)
+	a.runOnce.Do(func() {
+		a.app.Run(t, ctx)
+		a.db.Run(t, ctx)
+		a.place.Run(t, ctx)
+		a.sched.Run(t, ctx)
+		a.daprd.Run(t, ctx)
+	})
 }
 
 func (a *Actors) Cleanup(t *testing.T) {
-	a.daprd.Cleanup(t)
-	a.sched.Cleanup(t)
-	a.place.Cleanup(t)
-	a.db.Cleanup(t)
-	a.app.Cleanup(t)
+	a.cleanupOnce.Do(func() {
+		a.daprd.Cleanup(t)
+		a.sched.Cleanup(t)
+		a.place.Cleanup(t)
+		a.db.Cleanup(t)
+		a.app.Cleanup(t)
+	})
 }
 
 func (a *Actors) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -119,7 +156,7 @@ func (a *Actors) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
 
 func (a *Actors) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
-	return a.daprd.Metrics(t, ctx)
+	return a.daprd.Metrics(t, ctx).All()
 }
 
 func (a *Actors) Placement() *placement.Placement {
@@ -128,6 +165,10 @@ func (a *Actors) Placement() *placement.Placement {
 
 func (a *Actors) Scheduler() *scheduler.Scheduler {
 	return a.sched
+}
+
+func (a *Actors) Daprd() *daprd.Daprd {
+	return a.daprd
 }
 
 func (a *Actors) AppID() string {

@@ -136,17 +136,17 @@ func Test_Start(t *testing.T) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			curr, err := prov.sec.trustAnchors.CurrentTrustAnchors(ctx)
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Equal(c, root1, curr)
 		}, time.Second, time.Millisecond)
 
 		assert.Eventually(t, func() bool {
 			// We put the write file inside this assert loop since we have to wait
 			// for the fsnotify go rountine to warm up.
-			require.NoError(t, os.WriteFile(tdFile, root2, 0o600))
+			assert.NoError(t, os.WriteFile(tdFile, root2, 0o600))
 
 			curr, err := prov.sec.trustAnchors.CurrentTrustAnchors(ctx)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			return bytes.Equal(root2, curr)
 		}, time.Second*5, time.Millisecond*750)
 

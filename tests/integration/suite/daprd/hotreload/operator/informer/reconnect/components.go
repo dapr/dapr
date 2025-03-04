@@ -119,6 +119,9 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 
 func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator1.Run(t, ctx)
+	t.Cleanup(func() {
+		c.operator1.Cleanup(t)
+	})
 	c.operator1.WaitUntilRunning(t, ctx)
 	c.daprd1.WaitUntilRunning(t, ctx)
 	c.daprd2.WaitUntilRunning(t, ctx)
@@ -140,6 +143,9 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.store.Set()
 	c.kubeapi.Informer().Delete(t, &comp)
 	c.operator2.Run(t, ctx)
+	t.Cleanup(func() {
+		c.operator2.Cleanup(t)
+	})
 	c.operator2.WaitUntilRunning(t, ctx)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -151,6 +157,9 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.store.Add(&comp)
 	c.kubeapi.Informer().Add(t, &comp)
 	c.operator3.Run(t, ctx)
+	t.Cleanup(func() {
+		c.operator3.Cleanup(t)
+	})
 	c.operator3.WaitUntilRunning(t, ctx)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Len(t, c.daprd1.GetMetaRegisteredComponents(t, ctx), 1)

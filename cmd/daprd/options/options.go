@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/cors"
+	injectorconsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"
@@ -252,9 +253,15 @@ func New(origArgs []string) (*Options, error) {
 	}
 
 	if !fs.Changed("scheduler-host-address") {
-		addr, ok := os.LookupEnv(consts.SchedulerHostAddressEnvVar)
+		// TODO: remove env var lookup in v1.16
+		addr, ok := os.LookupEnv(injectorconsts.SchedulerHostAddressDNSAEnvVar)
 		if ok {
 			opts.SchedulerAddress = strings.Split(addr, ",")
+		} else {
+			addr, ok := os.LookupEnv(injectorconsts.SchedulerHostAddressEnvVar)
+			if ok {
+				opts.SchedulerAddress = strings.Split(addr, ",")
+			}
 		}
 	}
 

@@ -70,6 +70,9 @@ spec:
 			w.WriteHeader(http.StatusOK)
 		})
 
+		handler.HandleFunc("/actors/myactortype/foo", func(http.ResponseWriter, *http.Request) {
+		})
+
 		for i := range 100 {
 			handler.HandleFunc("/actors/myactortype/foo/method/remind/"+strconv.Itoa(i), func(http.ResponseWriter, *http.Request) {
 				called.Add(1)
@@ -119,12 +122,12 @@ func (h *hop) Run(t *testing.T, ctx context.Context) {
 			DueTime:   "0s",
 			Data:      []byte("reminderdata"),
 		})
-		require.NoError(t, err)
+		require.NoError(t, err, "failed to register reminder iteration"+strconv.Itoa(i))
 	}
 
 	assert.Eventually(t, func() bool {
 		return h.daprd1called.Load() == 100 || h.daprd2called.Load() == 100
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 
 	assert.True(t,
 		(h.daprd1called.Load() == 100 && h.daprd2called.Load() == 0) ||

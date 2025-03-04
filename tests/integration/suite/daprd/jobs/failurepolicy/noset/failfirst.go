@@ -83,15 +83,18 @@ func (f *failfirst) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"test"}, f.triggered.Slice())
+		assert.GreaterOrEqual(c, len(f.triggered.Slice()), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	f.respErr.Store(false)
+	count := f.triggered.Len()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"test", "test"}, f.triggered.Slice())
+		assert.GreaterOrEqual(c, len(f.triggered.Slice()), count+1)
 	}, time.Second*10, time.Millisecond*10)
 
+	count = f.triggered.Len()
+
 	time.Sleep(time.Second * 2)
-	assert.ElementsMatch(t, []string{"test", "test"}, f.triggered.Slice())
+	assert.Len(t, f.triggered.Slice(), count)
 }

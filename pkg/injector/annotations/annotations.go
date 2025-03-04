@@ -35,6 +35,7 @@ const (
 	KeyEnableDebug                      = "dapr.io/enable-debug"
 	KeyDebugPort                        = "dapr.io/debug-port"
 	KeyEnv                              = "dapr.io/env"
+	KeyEnvFromSecret                    = "dapr.io/env-from-secret" //nolint:gosec
 	KeyAPIGRPCPort                      = "dapr.io/grpc-port"
 	KeyInternalGRPCPort                 = "dapr.io/internal-grpc-port"
 	KeyCPURequest                       = "dapr.io/sidecar-cpu-request"

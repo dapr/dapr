@@ -20,7 +20,6 @@ import (
 	"errors"
 	"io"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,8 +41,8 @@ type LogLine struct {
 	got               bytes.Buffer
 
 	outCheck chan map[string]bool
-	closeCh  chan struct{}
 	done     atomic.Int32
+	doneCh   chan struct{}
 }
 
 func New(t *testing.T, fopts ...Option) *LogLine {
@@ -76,17 +75,23 @@ func New(t *testing.T, fopts ...Option) *LogLine {
 		stderrExp:          stderrWriter,
 		stderrLinContains:  stderrLineContains,
 		outCheck:           make(chan map[string]bool),
-		closeCh:            make(chan struct{}),
+		doneCh:             make(chan struct{}),
 	}
 }
 
 func (l *LogLine) Run(t *testing.T, ctx context.Context) {
 	go func() {
 		res := l.checkOut(t, ctx, l.stdoutLineContains, l.stdoutExp, l.stdout)
+		if l.done.Add(1) == 2 {
+			close(l.doneCh)
+		}
 		l.outCheck <- res
 	}()
 	go func() {
 		res := l.checkOut(t, ctx, l.stderrLinContains, l.stderrExp, l.stderr)
+		if l.done.Add(1) == 2 {
+			close(l.doneCh)
+		}
 		l.outCheck <- res
 	}()
 }
@@ -96,7 +101,11 @@ func (l *LogLine) FoundAll() bool {
 }
 
 func (l *LogLine) Cleanup(t *testing.T) {
-	close(l.closeCh)
+	select {
+	case <-l.doneCh:
+	case <-time.After(time.Second * 10):
+		assert.Fail(t, "timeout waiting for log line check to complete")
+	}
 	for range 2 {
 		for expLine := range <-l.outCheck {
 			assert.Fail(t, "expected to log line: "+expLine, l.got.String())
@@ -107,26 +116,11 @@ func (l *LogLine) Cleanup(t *testing.T) {
 func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[string]bool, closer io.WriteCloser, reader io.Reader) map[string]bool {
 	t.Helper()
 
-	if len(expLines) == 0 {
-		go io.Copy(io.Discard, reader)
-		l.done.Add(1)
-		return expLines
-	}
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			closer.Close()
-		case <-l.closeCh:
-		}
-	}()
-
-	var once sync.Once
-
 	breader := bufio.NewReader(reader)
 	for {
 		if len(expLines) == 0 {
-			once.Do(func() { l.done.Add(1) })
+			go io.Copy(io.Discard, reader)
+			return expLines
 		}
 
 		line, _, err := breader.ReadLine()

@@ -67,7 +67,7 @@ type Options struct {
 	MetricSpec     config.MetricSpec
 	APISpec        config.APISpec
 	Proxy          messaging.Proxy
-	WorkflowEngine *wfengine.WorkflowEngine
+	WorkflowEngine wfengine.Interface
 	Healthz        healthz.Healthz
 }
 
@@ -94,7 +94,7 @@ type server struct {
 	authToken      string
 	apiSpec        config.APISpec
 	proxy          messaging.Proxy
-	workflowEngine *wfengine.WorkflowEngine
+	workflowEngine wfengine.Interface
 	sec            security.Handler
 	wg             sync.WaitGroup
 	htarget        healthz.Target
@@ -239,10 +239,8 @@ func (s *server) StartNonBlocking() error {
 			internalv1pb.RegisterServiceInvocationServer(server, s.api)
 		} else if s.kind == apiServer {
 			runtimev1pb.RegisterDaprServer(server, s.api)
-			if s.workflowEngine != nil {
-				s.logger.Infof("Registering workflow engine for gRPC endpoint: %s", listener.Addr())
-				s.workflowEngine.RegisterGrpcServer(server)
-			}
+			s.logger.Infof("Registering workflow engine for gRPC endpoint: %s", listener.Addr())
+			s.workflowEngine.RegisterGrpcServer(server)
 		}
 
 		s.wg.Add(1)

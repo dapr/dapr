@@ -144,14 +144,14 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 
 	egressMetric := fmt.Sprintf("dapr_component_pubsub_egress_count|app_id:%s|component:pubsub|namespace:|success:true|topic:a", i.daprd.AppID())
 	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:pubsub|namespace:|process_status:success|status:success|topic:a", i.daprd.AppID())
-	metrics := i.daprd.Metrics(t, ctx)
+	metrics := i.daprd.Metrics(t, ctx).All()
 	assert.Equal(t, 1, int(metrics[egressMetric]))
 	assert.Equal(t, 0, int(metrics[ingressMetric]))
 
 	close(i.returnPublish)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		metrics := i.daprd.Metrics(t, ctx)
+		metrics := i.daprd.Metrics(c, ctx).All()
 		assert.Equal(c, 1, int(metrics[egressMetric]))
 		assert.Equal(c, 1, int(metrics[ingressMetric]))
 	}, time.Second*5, time.Millisecond*10)

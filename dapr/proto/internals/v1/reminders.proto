@@ -16,6 +16,7 @@ syntax = "proto3";
 package dapr.proto.internals.v1;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1;internals";
 
@@ -24,11 +25,13 @@ message Reminder {
   string actor_id = 1;
   string actor_type = 2;
   string name = 3;
-  bytes data = 4;
+  google.protobuf.Any data = 4;
   string period = 5;
   google.protobuf.Timestamp registered_time = 6;
   string due_time = 7;
   google.protobuf.Timestamp expiration_time = 8;
+  bool is_timer = 9;
+  bool skip_lock = 10;
 }
 
 // Reminders is a collection of reminders.

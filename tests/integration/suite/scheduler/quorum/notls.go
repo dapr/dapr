@@ -49,22 +49,19 @@ type notls struct {
 func (n *notls) Setup(t *testing.T) []framework.Option {
 	fp := ports.Reserve(t, 6)
 	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
+	port4, port5, port6 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://127.0.0.1:%d,scheduler-1=http://127.0.0.1:%d,scheduler-2=http://127.0.0.1:%d", port1, port2, port3)),
-		scheduler.WithInitialClusterPorts(port1, port2, port3),
-		scheduler.WithReplicaCount(3),
+		scheduler.WithInitialCluster(fmt.Sprintf(
+			"scheduler-0=http://127.0.0.1:%d,scheduler-1=http://127.0.0.1:%d,scheduler-2=http://127.0.0.1:%d",
+			port1, port2, port3),
+		),
 	}
 
-	clientPorts := []string{
-		"scheduler-0=" + strconv.Itoa(fp.Port(t)),
-		"scheduler-1=" + strconv.Itoa(fp.Port(t)),
-		"scheduler-2=" + strconv.Itoa(fp.Port(t)),
-	}
 	n.schedulers = []*scheduler.Scheduler{
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPort(port4))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPort(port5))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPort(port6))...),
 	}
 
 	fp.Free(t)
@@ -158,9 +155,9 @@ func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb
 	require.True(t, found, "job's key not found: '%s'", jobName)
 }
 
-func getEtcdKeys(t *testing.T, port string) []*mvccpb.KeyValue {
+func getEtcdKeys(t *testing.T, port int) []*mvccpb.KeyValue {
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:" + port},
+		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(port)},
 		DialTimeout: 40 * time.Second,
 	})
 	require.NoError(t, err)

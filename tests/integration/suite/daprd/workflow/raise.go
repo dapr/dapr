@@ -19,10 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/microsoft/durabletask-go/api"
-	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/client"
-	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -31,7 +27,12 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
@@ -40,24 +41,30 @@ func init() {
 
 type raise struct {
 	daprd *daprd.Daprd
+	place *placement.Placement
+	sched *scheduler.Scheduler
 }
 
 func (r *raise) Setup(t *testing.T) []framework.Option {
 	app := app.New(t)
-	place := placement.New(t)
+	r.place = placement.New(t)
+	r.sched = scheduler.New(t)
 
 	r.daprd = daprd.New(t,
 		daprd.WithAppPort(app.Port()),
-		daprd.WithPlacementAddresses(place.Address()),
+		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
+		daprd.WithSchedulerAddresses(r.sched.Address()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(place, app, r.daprd),
+		framework.WithProcesses(r.place, r.sched, app, r.daprd),
 	}
 }
 
 func (r *raise) Run(t *testing.T, ctx context.Context) {
+	r.sched.WaitUntilRunning(t, ctx)
+	r.place.WaitUntilRunning(t, ctx)
 	r.daprd.WaitUntilRunning(t, ctx)
 
 	gclient := r.daprd.GRPCClient(t, ctx)
@@ -97,12 +104,15 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(1), stage.Load())
 	}, time.Second*3, time.Millisecond*10)
 
-	get, err := gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
-		InstanceId:        "my-custom-instance-id",
-		WorkflowComponent: "dapr",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "RUNNING", get.GetRuntimeStatus())
+	var get *rtv1.GetWorkflowResponse
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		get, err = gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
+			InstanceId:        "my-custom-instance-id",
+			WorkflowComponent: "dapr",
+		})
+		assert.NoError(c, err)
+		assert.Equal(c, "RUNNING", get.GetRuntimeStatus())
+	}, time.Second*5, time.Millisecond*10)
 
 	_, err = gclient.PauseWorkflowBeta1(ctx, &rtv1.PauseWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
@@ -110,12 +120,14 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	get, err = gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
-		InstanceId:        "my-custom-instance-id",
-		WorkflowComponent: "dapr",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "SUSPENDED", get.GetRuntimeStatus())
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		get, err = gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
+			InstanceId:        "my-custom-instance-id",
+			WorkflowComponent: "dapr",
+		})
+		assert.NoError(c, err)
+		assert.Equal(c, "SUSPENDED", get.GetRuntimeStatus())
+	}, time.Second*5, time.Millisecond*10)
 
 	_, err = gclient.ResumeWorkflowBeta1(ctx, &rtv1.ResumeWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
@@ -128,7 +140,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 			InstanceId:        "my-custom-instance-id",
 			WorkflowComponent: "dapr",
 		})
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		assert.Equal(c, "RUNNING", get.GetRuntimeStatus())
 	}, time.Second*5, time.Millisecond*10)
 
@@ -145,7 +157,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 
 	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID("my-custom-instance-id"))
 	require.NoError(t, err)
-	assert.True(t, metadata.IsComplete())
+	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 	_, err = gclient.PurgeWorkflowBeta1(ctx, &rtv1.PurgeWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",

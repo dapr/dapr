@@ -199,10 +199,11 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		httpEndpointInformerHealthz: htargets[3],
 		subInformerHealthz:          htargets[4],
 		apiServer: api.NewAPIServer(api.Options{
-			Client:   mgr.GetClient(),
-			Cache:    mgr.GetCache(),
-			Security: secProvider,
-			Port:     opts.APIPort,
+			Client:        mgr.GetClient(),
+			Cache:         mgr.GetCache(),
+			Security:      secProvider,
+			Port:          opts.APIPort,
+			ListenAddress: opts.APIListenAddress,
 		}),
 	}, nil
 }

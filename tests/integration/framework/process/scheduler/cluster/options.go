@@ -17,10 +17,18 @@ type Option func(*options)
 
 type options struct {
 	count uint32
+
+	overrideBroadcastHostPorts []string
 }
 
 func WithCount(count uint32) Option {
 	return func(o *options) {
 		o.count = count
+	}
+}
+
+func WithOverrideBroadcastHostPorts(addresses ...string) Option {
+	return func(o *options) {
+		o.overrideBroadcastHostPorts = append(o.overrideBroadcastHostPorts, addresses...)
 	}
 }

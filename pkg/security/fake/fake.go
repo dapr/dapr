@@ -36,6 +36,7 @@ type Fake struct {
 	tlsServerConfigMTLSFn               func(spiffeid.TrustDomain) (*tls.Config, error)
 	tlsServerConfigNoClientAuthFn       func() *tls.Config
 	tlsServerConfigNoClientAuthOptionFn func(*tls.Config)
+	mtlsClientConfigFn                  func(spiffeid.ID) *tls.Config
 	netListenerIDFn                     func(net.Listener, spiffeid.ID) net.Listener
 	netDialerIDFn                       func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 
@@ -71,6 +72,9 @@ func New() *Fake {
 		},
 		grpcServerOptionNoClientAuthFn: func() grpc.ServerOption {
 			return grpc.Creds(nil)
+		},
+		mtlsClientConfigFn: func(spiffeid.ID) *tls.Config {
+			return new(tls.Config)
 		},
 		currentTrustAnchorsFn: func(context.Context) ([]byte, error) {
 			return []byte{}, nil
@@ -211,8 +215,16 @@ func (f *Fake) WithSVIDContext(ctx context.Context) context.Context {
 	return ctx
 }
 
+func (f *Fake) IdentityDir() *string {
+	return nil
+}
+
 func (f *Fake) GRPCDialOption(id spiffeid.ID) grpc.DialOption {
 	return f.grpcDialOptionFn(id)
+}
+
+func (f *Fake) MTLSClientConfig(id spiffeid.ID) *tls.Config {
+	return f.mtlsClientConfigFn(id)
 }
 
 func (f *Fake) NetListenerID(l net.Listener, id spiffeid.ID) net.Listener {
@@ -234,4 +246,8 @@ func (f *Fake) Run(ctx context.Context) error {
 
 func (f *Fake) Handler(context.Context) (security.Handler, error) {
 	return f, nil
+}
+
+func (f *Fake) ID() spiffeid.ID {
+	return spiffeid.ID{}
 }

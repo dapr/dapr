@@ -19,10 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/microsoft/durabletask-go/api"
-	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/client"
-	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -33,6 +29,10 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
@@ -108,11 +108,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(1), stage.Load())
 	}, time.Second*3, time.Millisecond*10)
 
-	get, err := gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
-		InstanceId:        "my-custom-instance-id",
-		WorkflowComponent: "dapr",
-	})
-	require.NoError(t, err)
+	var get *rtv1.GetWorkflowResponse
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		get, err = gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
 			InstanceId:        "my-custom-instance-id",
@@ -165,7 +161,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 
 	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID("my-custom-instance-id"))
 	require.NoError(t, err)
-	assert.True(t, metadata.IsComplete())
+	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 	_, err = gclient.PurgeWorkflowBeta1(ctx, &rtv1.PurgeWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",

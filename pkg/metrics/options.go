@@ -95,3 +95,7 @@ func (f *FlagOptions) Enabled() bool {
 func (f *FlagOptions) Port() string {
 	return f.port
 }
+
+func (f *FlagOptions) ListenAddress() string {
+	return f.listenAddress
+}

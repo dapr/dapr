@@ -1,0 +1,179 @@
+diff --git a/tests/integration/suite/actors/reminders/basic.go b/tests/integration/suite/actors/reminders/basic.go
+index 1a0cfdb30..a05cf9e69 100644
+--- a/tests/integration/suite/actors/reminders/basic.go
++++ b/tests/integration/suite/actors/reminders/basic.go
+@@ -73,6 +73,17 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(b.place.Address()),
+ 		daprd.WithAppPort(srv.Port()),
++		daprd.WithConfigManifests(t, `
++apiVersion: dapr.io/v1alpha1
++kind: Configuration
++metadata:
++  name: schedulerreminders
++spec:
++  features:
++  - name: SchedulerReminders
++    enabled: false
++`),
++		daprd.WithAppHealthCheck(true),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/actors/reminders/duetime.go b/tests/integration/suite/actors/reminders/duetime.go
+index 7a7880e9a..e7b7a9c5e 100644
+--- a/tests/integration/suite/actors/reminders/duetime.go
++++ b/tests/integration/suite/actors/reminders/duetime.go
+@@ -71,6 +71,17 @@ func (d *duetime) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(d.place.Address()),
+ 		daprd.WithAppPort(srv.Port()),
++		daprd.WithConfigManifests(t, `
++apiVersion: dapr.io/v1alpha1
++kind: Configuration
++metadata:
++  name: schedulerreminders
++spec:
++  features:
++  - name: SchedulerReminders
++    enabled: false
++`),
++		daprd.WithAppHealthCheck(true),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/actors/reminders/rebalancing.go b/tests/integration/suite/actors/reminders/rebalancing.go
+index 1b6e1b2da..d8c43628e 100644
+--- a/tests/integration/suite/actors/reminders/rebalancing.go
++++ b/tests/integration/suite/actors/reminders/rebalancing.go
+@@ -87,6 +87,17 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
+ 			daprd.WithAppPort(i.srv[j].Port()),
+ 			// Daprd is super noisy in debug mode when connecting to placement.
+ 			daprd.WithLogLevel("info"),
++			daprd.WithConfigManifests(t, `
++apiVersion: dapr.io/v1alpha1
++kind: Configuration
++metadata:
++  name: schedulerreminders
++spec:
++  features:
++  - name: SchedulerReminders
++    enabled: false
++`),
++			daprd.WithAppHealthCheck(true),
+ 		)
+ 	}
+ 
+diff --git a/tests/integration/suite/actors/reminders/serialization/default.go b/tests/integration/suite/actors/reminders/serialization/default.go
+index 6c313567c..0f5ebc2df 100644
+--- a/tests/integration/suite/actors/reminders/serialization/default.go
++++ b/tests/integration/suite/actors/reminders/serialization/default.go
+@@ -62,6 +62,17 @@ func (d *defaultS) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithResourceFiles(d.db.GetComponent(t)),
+ 		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(d.place.Port())),
+ 		daprd.WithAppPort(d.srv.Port()),
++		daprd.WithConfigManifests(t, `
++apiVersion: dapr.io/v1alpha1
++kind: Configuration
++metadata:
++  name: schedulerreminders
++spec:
++  features:
++  - name: SchedulerReminders
++    enabled: false
++`),
++		daprd.WithAppHealthCheck(true),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/actors/reminders/serialization/json.go b/tests/integration/suite/actors/reminders/serialization/json.go
+index f74199975..abf86b627 100644
+--- a/tests/integration/suite/actors/reminders/serialization/json.go
++++ b/tests/integration/suite/actors/reminders/serialization/json.go
+@@ -69,6 +69,17 @@ func (j *jsonFormat) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithResourceFiles(j.db.GetComponent(t)),
+ 		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(j.place.Port())),
+ 		daprd.WithAppPort(j.srv.Port()),
++		daprd.WithConfigManifests(t, `
++apiVersion: dapr.io/v1alpha1
++kind: Configuration
++metadata:
++  name: schedulerreminders
++spec:
++  features:
++  - name: SchedulerReminders
++    enabled: false
++`),
++		daprd.WithAppHealthCheck(true),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/actors/reminders/serialization/protobuf.go b/tests/integration/suite/actors/reminders/serialization/protobuf.go
+index 1c65720a8..6c21b53fa 100644
+--- a/tests/integration/suite/actors/reminders/serialization/protobuf.go
++++ b/tests/integration/suite/actors/reminders/serialization/protobuf.go
+@@ -77,6 +77,17 @@ INSERT INTO state VALUES
+ 		daprd.WithResourceFiles(p.db.GetComponent(t)),
+ 		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(p.place.Port())),
+ 		daprd.WithAppPort(p.srv.Port()),
++		daprd.WithConfigManifests(t, `
++apiVersion: dapr.io/v1alpha1
++kind: Configuration
++metadata:
++  name: schedulerreminders
++spec:
++  features:
++  - name: SchedulerReminders
++    enabled: false
++`),
++		daprd.WithAppHealthCheck(true),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/daprd/metrics/workflow.go b/tests/integration/suite/daprd/metrics/workflow.go
+index 23233babe..b6a5e93f6 100644
+--- a/tests/integration/suite/daprd/metrics/workflow.go
++++ b/tests/integration/suite/daprd/metrics/workflow.go
+@@ -29,6 +29,7 @@ import (
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
++	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+ 	"github.com/dapr/dapr/tests/integration/suite"
+ )
+ 
+@@ -38,12 +39,14 @@ func init() {
+ 
+ // workflow tests daprd metrics for workflows
+ type workflow struct {
+-	daprd *daprd.Daprd
+-	place *placement.Placement
++	daprd     *daprd.Daprd
++	place     *placement.Placement
++	scheduler *scheduler.Scheduler
+ }
+ 
+ func (w *workflow) Setup(t *testing.T) []framework.Option {
+ 	w.place = placement.New(t)
++	w.scheduler = scheduler.New(t)
+ 
+ 	app := app.New(t)
+ 
+@@ -53,14 +56,16 @@ func (w *workflow) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithAppID("myapp"),
+ 		daprd.WithPlacementAddresses(w.place.Address()),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
++		daprd.WithSchedulerAddresses(w.scheduler.Address()),
+ 	)
+ 
+ 	return []framework.Option{
+-		framework.WithProcesses(w.place, app, w.daprd),
++		framework.WithProcesses(w.place, w.scheduler, app, w.daprd),
+ 	}
+ }
+ 
+ func (w *workflow) Run(t *testing.T, ctx context.Context) {
++	w.scheduler.WaitUntilRunning(t, ctx)
+ 	w.place.WaitUntilRunning(t, ctx)
+ 	w.daprd.WaitUntilRunning(t, ctx)
+ 

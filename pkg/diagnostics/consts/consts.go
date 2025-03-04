@@ -34,6 +34,7 @@ const (
 	MessagingDestinationSpanAttributeKey = string(semconv.MessagingDestinationNameKey)
 	GrpcServiceSpanAttributeKey          = string(semconv.RPCServiceKey)
 	NetPeerNameSpanAttributeKey          = string(semconv.NetPeerNameKey)
+	RPCSystemSpanAttributeKey            = string(semconv.RPCSystemKey)
 
 	DaprAPISpanAttributeKey           = "dapr.api"
 	DaprAPIStatusCodeSpanAttributeKey = "dapr.status_code"

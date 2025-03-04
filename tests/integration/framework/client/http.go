@@ -15,24 +15,27 @@ package client
 
 import (
 	"net/http"
-	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // HTTP returns a Go http.Client which has a default timeout of 10 seconds,
 // and separate connection pool to the default allowing tests to be properly
 // isolated when running in parallel.
 // The returned client will call CloseIdleConnections on test cleanup.
-func HTTP(t *testing.T) *http.Client {
+func HTTP(t assert.TestingT) *http.Client {
 	return HTTPWithTimeout(t, time.Second*10)
 }
 
-func HTTPWithTimeout(t *testing.T, timeout time.Duration) *http.Client {
+func HTTPWithTimeout(t assert.TestingT, timeout time.Duration) *http.Client {
 	client := &http.Client{
 		Timeout:   timeout,
 		Transport: http.DefaultTransport.(*http.Transport).Clone(),
 	}
 
-	t.Cleanup(client.CloseIdleConnections)
+	if tt, ok := t.(interface{ Cleanup(func()) }); ok {
+		tt.Cleanup(client.CloseIdleConnections)
+	}
 	return client
 }

@@ -17,6 +17,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -73,6 +74,8 @@ func RunIntegrationTests(t *testing.T) {
 	})
 
 	for _, tcase := range focusedTests {
+		tcase.Case = reflect.New(reflect.TypeOf(tcase.Case).Elem()).Interface().(suite.Case)
+
 		t.Run(tcase.Name(), func(t *testing.T) {
 			if *parallelFlag {
 				t.Parallel()

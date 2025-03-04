@@ -15,30 +15,34 @@ package cron
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/diagridio/go-etcd-cron/api"
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/server/v3/embed"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.scheduler.server.cron")
 
 type Options struct {
-	ReplicaCount uint32
-	ReplicaID    uint32
-	Config       *embed.Config
-	Healthz      healthz.Healthz
+	ID      string
+	Host    *schedulerv1pb.Host
+	Healthz healthz.Healthz
+	Etcd    etcd.Interface
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -50,91 +54,106 @@ type Interface interface {
 	// framework and database. Blocks until Etcd and the Cron library are ready.
 	Client(ctx context.Context) (api.Interface, error)
 
-	// AddWatch adds a watch for jobs to the connection pool.
-	AddWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error
+	// JobsWatch adds a watch for jobs to the connection pool.
+	JobsWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error)
+
+	// HostsWatch adds a watch for hosts to the connection pool.
+	HostsWatch(schedulerv1pb.Scheduler_WatchHostsServer) error
 }
 
 type cron struct {
-	replicaCount uint32
-	replicaID    uint32
+	id string
 
-	config         *embed.Config
-	connectionPool *pool.Pool
-	etcdcron       api.Interface
+	host            *schedulerv1pb.Host
+	connectionPool  *pool.Pool
+	etcdcron        api.Interface
+	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
+	lock            sync.RWMutex
+	currHosts       []*schedulerv1pb.Host
+	etcd            etcd.Interface
 
 	readyCh chan struct{}
-	hzETCD  healthz.Target
+	closeCh chan struct{}
 }
 
 func New(opts Options) Interface {
 	return &cron{
-		replicaCount: opts.ReplicaCount,
-		replicaID:    opts.ReplicaID,
-		config:       opts.Config,
-		readyCh:      make(chan struct{}),
-		hzETCD:       opts.Healthz.AddTarget(),
+		id:              opts.ID,
+		host:            opts.Host,
+		hostBroadcaster: broadcaster.New[[]*schedulerv1pb.Host](),
+		readyCh:         make(chan struct{}),
+		closeCh:         make(chan struct{}),
+		etcd:            opts.Etcd,
 	}
 }
 
 func (c *cron) Run(ctx context.Context) error {
-	defer c.hzETCD.NotReady()
-
-	log.Info("Starting etcd")
-
-	etcd, err := embed.StartEtcd(c.config)
-	if err != nil {
-		return err
-	}
-	defer etcd.Close()
-
-	select {
-	case <-etcd.Server.ReadyNotify():
-		log.Info("Etcd server is ready!")
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
-	log.Info("Starting EtcdCron")
-
-	endpoints := make([]string, 0, len(etcd.Clients))
-	for _, peer := range etcd.Clients {
-		endpoints = append(endpoints, peer.Addr().String())
-	}
-
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints: endpoints,
-	})
+	client, err := c.etcd.Client(ctx)
 	if err != nil {
 		return err
 	}
 
-	// pass in initial cluster endpoints, but with client ports
+	log.Info("Starting Cron")
+
+	watchLeadershipCh := make(chan []*anypb.Any)
+
+	hostAny, err := anypb.New(c.host)
+	if err != nil {
+		return err
+	}
+
 	c.etcdcron, err = etcdcron.New(etcdcron.Options{
-		Client:         client,
-		Namespace:      "dapr",
-		PartitionID:    c.replicaID,
-		PartitionTotal: c.replicaCount,
-		TriggerFn:      c.triggerJob,
+		Client:          client,
+		Namespace:       "dapr",
+		ID:              c.id,
+		TriggerFn:       c.triggerJob,
+		ReplicaData:     hostAny,
+		WatchLeadership: watchLeadershipCh,
 	})
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
 	}
 
 	c.connectionPool = pool.New(c.etcdcron)
-	close(c.readyCh)
-
-	c.hzETCD.Ready()
 
 	return concurrency.NewRunnerManager(
 		c.connectionPool.Run,
 		c.etcdcron.Run,
 		func(ctx context.Context) error {
-			defer log.Info("EtcdCron shutting down")
-			select {
-			case err := <-etcd.Err():
-				return err
-			case <-ctx.Done():
-				return nil
+			defer log.Info("Cron shut down")
+			defer close(c.closeCh)
+			defer c.hostBroadcaster.Close()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case anyhosts, ok := <-watchLeadershipCh:
+					if !ok {
+						return nil
+					}
+
+					hosts := make([]*schedulerv1pb.Host, len(anyhosts))
+					for i, anyhost := range anyhosts {
+						var host schedulerv1pb.Host
+						if err := anyhost.UnmarshalTo(&host); err != nil {
+							return err
+						}
+						hosts[i] = &host
+					}
+
+					c.lock.Lock()
+					c.currHosts = hosts
+
+					select {
+					case <-c.readyCh:
+					default:
+						close(c.readyCh)
+					}
+
+					c.hostBroadcaster.Broadcast(hosts)
+					c.lock.Unlock()
+				}
 			}
 		},
 	).Run(ctx)
@@ -151,21 +170,60 @@ func (c *cron) Client(ctx context.Context) (api.Interface, error) {
 	}
 }
 
-// AddWatch adds a watch for jobs to the connection pool.
-func (c *cron) AddWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
+// JobsWatch adds a watch for jobs to the connection pool.
+func (c *cron) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error) {
 	select {
 	case <-c.readyCh:
 		return c.connectionPool.Add(req, stream)
 	case <-stream.Context().Done():
+		return nil, stream.Context().Err()
+	}
+}
+
+// HostsWatch adds a watch for hosts to the connection pool.
+func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error {
+	select {
+	case <-c.readyCh:
+	case <-stream.Context().Done():
 		return stream.Context().Err()
+	}
+
+	watchHostsCh := make(chan []*schedulerv1pb.Host)
+	c.hostBroadcaster.Subscribe(stream.Context(), watchHostsCh)
+
+	// Always send the current hosts initially to catch up to broadcast
+	// subscribe.
+	c.lock.RLock()
+	hosts := slices.Clone(c.currHosts)
+	c.lock.RUnlock()
+	err := stream.Send(&schedulerv1pb.WatchHostsResponse{
+		Hosts: hosts,
+	})
+	if err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case <-c.closeCh:
+			return errors.New("cron closed")
+		case hosts, ok := <-watchHostsCh:
+			if !ok {
+				return nil
+			}
+			if err := stream.Send(&schedulerv1pb.WatchHostsResponse{
+				Hosts: hosts,
+			}); err != nil {
+				return err
+			}
+		}
 	}
 }
 
 func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
 	log.Debugf("Triggering job: %s", req.GetName())
-
-	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
-	defer cancel()
 
 	var meta schedulerv1pb.JobMetadata
 	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {

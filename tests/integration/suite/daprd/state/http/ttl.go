@@ -87,10 +87,10 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	t.Run("ensure key is deleted after ttl", func(t *testing.T) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, postURL+"/key1", nil)
-			require.NoError(c, err)
+			assert.NoError(c, err)
 			resp, err := client.Do(req)
-			require.NoError(c, err)
-			require.NoError(t, resp.Body.Close())
+			assert.NoError(c, err)
+			assert.NoError(c, resp.Body.Close())
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
 		}, 5*time.Second, 10*time.Millisecond)
 	})

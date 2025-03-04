@@ -63,9 +63,6 @@ func (n *noop) Run(t *testing.T, ctx context.Context) {
 		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithSchedulerAddresses(n.scheduler.Address()),
 		daprd.WithAppPort(n.app.Port()),
-	}
-
-	daprd1 := daprd.New(t, append(opts,
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -75,7 +72,10 @@ spec:
   features:
   - name: SchedulerReminders
     enabled: false
-`))...)
+`),
+	}
+
+	daprd1 := daprd.New(t, opts...)
 	daprd2 := daprd.New(t, opts...)
 
 	daprd1.Run(t, ctx)
@@ -91,14 +91,14 @@ spec:
 		Ttl:       "10000s",
 	})
 	require.NoError(t, err)
-	resp, err := n.scheduler.ETCDClient(t).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	resp, err := n.scheduler.ETCDClient(t, ctx).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	assert.Empty(t, resp.Kvs)
 	daprd1.Cleanup(t)
 
 	daprd2.Run(t, ctx)
 	daprd2.WaitUntilRunning(t, ctx)
-	resp, err = n.scheduler.ETCDClient(t).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	resp, err = n.scheduler.ETCDClient(t, ctx).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	assert.Empty(t, resp.Kvs)
 	daprd2.Cleanup(t)

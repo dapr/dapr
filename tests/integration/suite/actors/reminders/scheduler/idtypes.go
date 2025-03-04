@@ -109,6 +109,8 @@ spec:
 
 				appOpts = append(appOpts,
 					app.WithHandlerFunc(
+						fmt.Sprintf("/actors/%s/%s", typeuid.String(), iduid.String()), func(http.ResponseWriter, *http.Request) {}),
+					app.WithHandlerFunc(
 						fmt.Sprintf("/actors/%s/%s/method/remind/", typeuid.String(), iduid.String()),
 						func(http.ResponseWriter, *http.Request) {
 							i.lock.Lock()
@@ -141,8 +143,8 @@ spec:
 			daprd.WithAppPort(app.Port()),
 		)
 
-		procs[2+x*2] = i.daprds[x]
-		procs[2+x*2+1] = app
+		procs[2+x*2] = app
+		procs[2+x*2+1] = i.daprds[x]
 	}
 
 	return []framework.Option{

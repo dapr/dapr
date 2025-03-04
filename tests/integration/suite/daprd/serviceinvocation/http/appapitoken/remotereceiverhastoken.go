@@ -16,6 +16,7 @@ package appapitoken
 import (
 	"context"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,9 +37,10 @@ func init() {
 }
 
 type remotereceiverhastoken struct {
-	daprd1 *daprd.Daprd
-	daprd2 *daprd.Daprd
-	ch     chan http.Header
+	daprd1  *daprd.Daprd
+	daprd2  *daprd.Daprd
+	ch      chan http.Header
+	cleanup sync.Once
 }
 
 func (r *remotereceiverhastoken) Setup(t *testing.T) []framework.Option {
@@ -54,7 +56,11 @@ func (r *remotereceiverhastoken) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppAPIToken(t, "abc"),
 		daprd.WithAppPort(app.Port()),
 	)
-
+	t.Cleanup(func() {
+		r.cleanup.Do(func() {
+			close(r.ch)
+		})
+	})
 	return []framework.Option{
 		framework.WithProcesses(app, r.daprd1, r.daprd2),
 	}

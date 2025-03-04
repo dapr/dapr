@@ -20,13 +20,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/components-contrib/workflows"
-	"github.com/dapr/dapr/pkg/config"
+	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/wfengine"
-	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	"github.com/dapr/kit/logger"
 )
 
@@ -35,12 +33,8 @@ const (
 	fakeInstanceID    = "fake-instance-ID__123"
 )
 
-func TestStartWorkflowBeta1API(t *testing.T) {
+func TestStartWorkflowAPI(t *testing.T) {
 	fakeWorkflowName := "fakeWorkflow"
-
-	fakeWorkflows := map[string]workflows.Workflow{
-		fakeComponentName: &daprt.MockWorkflow{},
-	}
 
 	testCases := []struct {
 		testName          string
@@ -49,20 +43,6 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 		instanceID        string
 		expectedError     error
 	}{
-		{
-			testName:          "No workflow component provided in start request",
-			workflowComponent: "",
-			workflowName:      fakeWorkflowName,
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
-		},
-		{
-			testName:          "workflow component does not exist in start request",
-			workflowComponent: "fakeWorkflowNotExist",
-			workflowName:      fakeWorkflowName,
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrWorkflowComponentDoesNotExist.WithFormat("fakeWorkflowNotExist"),
-		},
 		{
 			testName:          "No workflow name provided in start request",
 			workflowComponent: fakeComponentName,
@@ -85,13 +65,6 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 			expectedError:     messages.ErrInstanceIDTooLong.WithFormat(64),
 		},
 		{
-			testName:          "Start for this instance throws error",
-			workflowComponent: fakeComponentName,
-			workflowName:      fakeWorkflowName,
-			instanceID:        daprt.ErrorInstanceID,
-			expectedError:     messages.ErrStartWorkflow.WithFormat(fakeWorkflowName, daprt.ErrFakeWorkflowComponentError),
-		},
-		{
 			testName:          "No instance ID provided in start request",
 			workflowComponent: fakeComponentName,
 			workflowName:      fakeWorkflowName,
@@ -105,20 +78,21 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 		},
 	}
 
-	compStore := compstore.New()
-	for name, wf := range fakeWorkflows {
-		compStore.AddWorkflow(name, wf)
-	}
-
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
-		resiliency:     resiliency.New(nil),
-		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		logger:     logger.NewLogger("test"),
+		resiliency: resiliency.New(nil),
+		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				return &workflows.StateResponse{
+					Workflow: &workflows.WorkflowState{
+						RuntimeStatus: "RUNNING",
+					},
+				}, nil
+			})
+		}),
+		actors: actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -127,7 +101,7 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 				InstanceId:        tt.instanceID,
 				WorkflowName:      tt.workflowName,
 			}
-			_, err := fakeAPI.StartWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.StartWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -138,11 +112,7 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 	}
 }
 
-func TestGetWorkflowBeta1API(t *testing.T) {
-	fakeWorkflows := map[string]workflows.Workflow{
-		fakeComponentName: &daprt.MockWorkflow{},
-	}
-
+func TestGetWorkflowAPI(t *testing.T) {
 	testCases := []struct {
 		testName          string
 		workflowComponent string
@@ -150,28 +120,10 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 		expectedError     error
 	}{
 		{
-			testName:          "No workflow component provided in get request",
-			workflowComponent: "",
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
-		},
-		{
-			testName:          "workflow component does not exist in get request",
-			workflowComponent: "fakeWorkflowNotExist",
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrWorkflowComponentDoesNotExist.WithFormat("fakeWorkflowNotExist"),
-		},
-		{
 			testName:          "No instance ID provided in get request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
 			expectedError:     messages.ErrMissingOrEmptyInstance,
-		},
-		{
-			testName:          "Get for this instance throws error",
-			workflowComponent: fakeComponentName,
-			instanceID:        daprt.ErrorInstanceID,
-			expectedError:     messages.ErrWorkflowGetResponse.WithFormat(daprt.ErrorInstanceID, daprt.ErrFakeWorkflowComponentError),
 		},
 		{
 			testName:          "All is well in get request",
@@ -180,20 +132,13 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 		},
 	}
 
-	compStore := compstore.New()
-	for name, wf := range fakeWorkflows {
-		compStore.AddWorkflow(name, wf)
-	}
-
 	// Setup universal dapr API
 	fakeAPI := &Universal{
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
-		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		workflowEngine: fake.New(),
+		actors:         actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -201,7 +146,7 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.GetWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.GetWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -212,11 +157,7 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 	}
 }
 
-func TestTerminateWorkflowBeta1API(t *testing.T) {
-	fakeWorkflows := map[string]workflows.Workflow{
-		fakeComponentName: &daprt.MockWorkflow{},
-	}
-
+func TestTerminateWorkflowAPI(t *testing.T) {
 	testCases := []struct {
 		testName          string
 		workflowComponent string
@@ -224,28 +165,10 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 		expectedError     error
 	}{
 		{
-			testName:          "No workflow component provided in terminate request",
-			workflowComponent: "",
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
-		},
-		{
-			testName:          "workflow component does not exist in terminate request",
-			workflowComponent: "fakeWorkflowNotExist",
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrWorkflowComponentDoesNotExist.WithFormat("fakeWorkflowNotExist"),
-		},
-		{
 			testName:          "No instance ID provided in terminate request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
 			expectedError:     messages.ErrMissingOrEmptyInstance,
-		},
-		{
-			testName:          "Terminate for this instance throws error",
-			workflowComponent: fakeComponentName,
-			instanceID:        daprt.ErrorInstanceID,
-			expectedError:     messages.ErrTerminateWorkflow.WithFormat(daprt.ErrorInstanceID, daprt.ErrFakeWorkflowComponentError),
 		},
 		{
 			testName:          "All is well in terminate request",
@@ -254,20 +177,21 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 		},
 	}
 
-	compStore := compstore.New()
-	for name, wf := range fakeWorkflows {
-		compStore.AddWorkflow(name, wf)
-	}
-
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
-		resiliency:     resiliency.New(nil),
-		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		logger:     logger.NewLogger("test"),
+		resiliency: resiliency.New(nil),
+		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				return &workflows.StateResponse{
+					Workflow: &workflows.WorkflowState{
+						RuntimeStatus: "TERMINATED",
+					},
+				}, nil
+			})
+		}),
+		actors: actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -275,7 +199,7 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.TerminateWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.TerminateWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -286,12 +210,8 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 	}
 }
 
-func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
+func TestRaiseEventWorkflowApi(t *testing.T) {
 	fakeEventName := "fake_event_name"
-
-	fakeWorkflows := map[string]workflows.Workflow{
-		fakeComponentName: &daprt.MockWorkflow{},
-	}
 
 	testCases := []struct {
 		testName          string
@@ -300,20 +220,6 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 		eventName         string
 		expectedError     error
 	}{
-		{
-			testName:          "No workflow component provided in raise event request",
-			workflowComponent: "",
-			instanceID:        fakeInstanceID,
-			eventName:         fakeEventName,
-			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
-		},
-		{
-			testName:          "workflow component does not exist in raise event request",
-			workflowComponent: "fakeWorkflowNotExist",
-			instanceID:        fakeInstanceID,
-			eventName:         fakeEventName,
-			expectedError:     messages.ErrWorkflowComponentDoesNotExist.WithFormat("fakeWorkflowNotExist"),
-		},
 		{
 			testName:          "No instance ID provided in raise event request",
 			workflowComponent: fakeComponentName,
@@ -329,13 +235,6 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 			expectedError:     messages.ErrMissingWorkflowEventName,
 		},
 		{
-			testName:          "Raise event for this instance throws error",
-			workflowComponent: fakeComponentName,
-			instanceID:        daprt.ErrorInstanceID,
-			eventName:         fakeEventName,
-			expectedError:     messages.ErrRaiseEventWorkflow.WithFormat(daprt.ErrorInstanceID, daprt.ErrFakeWorkflowComponentError),
-		},
-		{
 			testName:          "All is well in raise event request",
 			workflowComponent: fakeComponentName,
 			instanceID:        fakeInstanceID,
@@ -343,20 +242,13 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 		},
 	}
 
-	compStore := compstore.New()
-	for name, wf := range fakeWorkflows {
-		compStore.AddWorkflow(name, wf)
-	}
-
 	// Setup universal dapr API
 	fakeAPI := &Universal{
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
-		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		workflowEngine: fake.New(),
+		actors:         actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -366,7 +258,7 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 				EventName:         tt.eventName,
 				EventData:         []byte("fake_input"),
 			}
-			_, err := fakeAPI.RaiseEventWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.RaiseEventWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -377,11 +269,7 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 	}
 }
 
-func TestPauseWorkflowBeta1Api(t *testing.T) {
-	fakeWorkflows := map[string]workflows.Workflow{
-		fakeComponentName: &daprt.MockWorkflow{},
-	}
-
+func TestPauseWorkflowApi(t *testing.T) {
 	testCases := []struct {
 		testName          string
 		workflowComponent string
@@ -389,28 +277,10 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 		expectedError     error
 	}{
 		{
-			testName:          "No workflow component provided in pause request",
-			workflowComponent: "",
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
-		},
-		{
-			testName:          "workflow component does not exist in pause request",
-			workflowComponent: "fakeWorkflowNotExist",
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrWorkflowComponentDoesNotExist.WithFormat("fakeWorkflowNotExist"),
-		},
-		{
 			testName:          "No instance ID provided in pause request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
 			expectedError:     messages.ErrMissingOrEmptyInstance,
-		},
-		{
-			testName:          "Pause for this instance throws error",
-			workflowComponent: fakeComponentName,
-			instanceID:        daprt.ErrorInstanceID,
-			expectedError:     messages.ErrPauseWorkflow.WithFormat(daprt.ErrorInstanceID, daprt.ErrFakeWorkflowComponentError),
 		},
 		{
 			testName:          "All is well in pause request",
@@ -419,20 +289,21 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 		},
 	}
 
-	compStore := compstore.New()
-	for name, wf := range fakeWorkflows {
-		compStore.AddWorkflow(name, wf)
-	}
-
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
-		resiliency:     resiliency.New(nil),
-		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		logger:     logger.NewLogger("test"),
+		resiliency: resiliency.New(nil),
+		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				return &workflows.StateResponse{
+					Workflow: &workflows.WorkflowState{
+						RuntimeStatus: "SUSPENDED",
+					},
+				}, nil
+			})
+		}),
+		actors: actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -440,7 +311,7 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.PauseWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.PauseWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -451,11 +322,7 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 	}
 }
 
-func TestResumeWorkflowBeta1Api(t *testing.T) {
-	fakeWorkflows := map[string]workflows.Workflow{
-		fakeComponentName: &daprt.MockWorkflow{},
-	}
-
+func TestResumeWorkflowApi(t *testing.T) {
 	testCases := []struct {
 		testName          string
 		workflowComponent string
@@ -463,28 +330,10 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 		expectedError     error
 	}{
 		{
-			testName:          "No workflow component provided in resume request",
-			workflowComponent: "",
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrNoOrMissingWorkflowComponent,
-		},
-		{
-			testName:          "workflow component does not exist in resume request",
-			workflowComponent: "fakeWorkflowNotExist",
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrWorkflowComponentDoesNotExist.WithFormat("fakeWorkflowNotExist"),
-		},
-		{
 			testName:          "No instance ID provided in resume request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
 			expectedError:     messages.ErrMissingOrEmptyInstance,
-		},
-		{
-			testName:          "Resume for this instance throws error",
-			workflowComponent: fakeComponentName,
-			instanceID:        daprt.ErrorInstanceID,
-			expectedError:     messages.ErrResumeWorkflow.WithFormat(daprt.ErrorInstanceID, daprt.ErrFakeWorkflowComponentError),
 		},
 		{
 			testName:          "All is well in resume request",
@@ -493,20 +342,13 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 		},
 	}
 
-	compStore := compstore.New()
-	for name, wf := range fakeWorkflows {
-		compStore.AddWorkflow(name, wf)
-	}
-
 	// Setup universal dapr API
 	fakeAPI := &Universal{
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
-		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		workflowEngine: fake.New(),
+		actors:         actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -514,7 +356,7 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.ResumeWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.ResumeWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -523,11 +365,4 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 			}
 		})
 	}
-}
-
-func getWorkflowEngine() *wfengine.WorkflowEngine {
-	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
-	wfengine := wfengine.NewWorkflowEngine("testAppID", spec, nil)
-	wfengine.SetWorkflowEngineReadyDone()
-	return wfengine
 }

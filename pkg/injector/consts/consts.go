@@ -45,6 +45,12 @@ const (
 	ComponentsUDSDefaultFolder     = "/tmp/dapr-components-sockets"
 	SchedulerHostAddressEnvVar     = "DAPR_SCHEDULER_HOST_ADDRESS"
 
+	// Unlike the above, this env var contains a single DNS record which returns
+	// the IP address of all scheduler hosts. Above is kept for backwards
+	// compatibility. In v1.16, scheduler env vars should be removed entirely, in
+	// favour of --scheduler-host-address.
+	SchedulerHostAddressDNSAEnvVar = "DAPR_SCHEDULER_HOST_ADDRESS_DNS_A"
+
 	ModeKubernetes = modes.KubernetesMode // KubernetesMode is a Kubernetes Dapr mode.
 	ModeStandalone = modes.StandaloneMode // StandaloneMode is a Standalone Dapr mode.
 )

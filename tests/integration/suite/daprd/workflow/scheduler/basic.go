@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,10 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/microsoft/durabletask-go/api"
-	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/client"
-	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/status"
@@ -44,6 +41,10 @@ import (
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
@@ -145,8 +146,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		id := api.InstanceID(b.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
-		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 
 	t.Run("terminate", func(t *testing.T) {
@@ -185,7 +186,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
 
 		// Wait long enough to ensure all orchestrations have started (but not longer than the timer delay)
-		assert.Eventually(t, func() bool {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			// List of all orchestrations created
 			orchestrationIDs := []string{string(id)}
 			for i := range 5 {
@@ -193,14 +194,11 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			}
 			for _, orchID := range orchestrationIDs {
 				meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
-				require.NoError(t, err)
+				assert.NoError(c, err)
 				// All orchestrations should be running
-				if meta.RuntimeStatus != api.RUNTIME_STATUS_RUNNING {
-					return false
-				}
+				assert.Equal(c, api.RUNTIME_STATUS_RUNNING.String(), meta.GetRuntimeStatus().String())
 			}
-			return true
-		}, 3*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 
 		// Terminate the root orchestration
 		b.terminateWorkflow(t, ctx, string(id))
@@ -208,7 +206,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		// Wait for the root orchestration to complete and verify its terminated status
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
-		require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.RuntimeStatus)
+		require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.GetRuntimeStatus())
 
 		// Wait for all N2 suborchestrations to complete
 		orchIDs := []string{}
@@ -247,7 +245,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
-		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.GetRuntimeStatus())
 
 		// Purge the root orchestration
 		b.purgeWorkflow(t, ctx, string(id))
@@ -289,12 +287,14 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		id := api.InstanceID(b.startWorkflow(ctx, t, "root", "Dapr"))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
-		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 }
 
 func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, input string) string {
+	t.Helper()
+
 	// use http client to start the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", b.daprd.HTTPPort(), name)
 	data, err := json.Marshal(input)
@@ -307,7 +307,11 @@ func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, in
 	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+	if !assert.Equal(t, http.StatusAccepted, resp.StatusCode) {
+		bresp, berr := io.ReadAll(resp.Body)
+		require.NoError(t, berr)
+		require.Fail(t, string(bresp))
+	}
 	var response struct {
 		InstanceID string `json:"instanceID"`
 	}
@@ -319,6 +323,8 @@ func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, in
 
 // terminate workflow
 func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID string) {
+	t.Helper()
+
 	// use http client to terminate the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", b.daprd.HTTPPort(), instanceID)
 	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -328,11 +334,18 @@ func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID 
 	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
+	if !assert.Equal(t, http.StatusAccepted, resp.StatusCode) {
+		bresp, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Fail(t, string(bresp))
+	}
 }
 
 // purge workflow
 func (b *basic) purgeWorkflow(t *testing.T, ctx context.Context, instanceID string) {
+	t.Helper()
+
 	// use http client to purge the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", b.daprd.HTTPPort(), instanceID)
 	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -342,5 +355,9 @@ func (b *basic) purgeWorkflow(t *testing.T, ctx context.Context, instanceID stri
 	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+	if !assert.Equal(t, http.StatusAccepted, resp.StatusCode) {
+		bresp, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Empty(t, string(bresp))
+	}
 }

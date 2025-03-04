@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cast"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/kit/utils"
 )
@@ -57,6 +58,7 @@ type SidecarConfig struct {
 	SentrySPIFFEID              string
 	SidecarHTTPPort             int32 `default:"3500"`
 	SidecarPublicPort           int32 `default:"3501"`
+	SchedulerAddressDNSA        string
 
 	Enabled                             bool    `annotation:"dapr.io/enabled"`
 	AppPort                             int32   `annotation:"dapr.io/app-port"`
@@ -75,6 +77,7 @@ type SidecarConfig struct {
 	EnableDebug                         bool    `annotation:"dapr.io/enable-debug" default:"false"`
 	SidecarDebugPort                    int32   `annotation:"dapr.io/debug-port" default:"40000"`
 	Env                                 string  `annotation:"dapr.io/env"`
+	EnvFromSecret                       string  `annotation:"dapr.io/env-from-secret"`
 	SidecarAPIGRPCPort                  int32   `annotation:"dapr.io/grpc-port" default:"50001"`
 	SidecarInternalGRPCPort             int32   `annotation:"dapr.io/internal-grpc-port" default:"50002"`
 	SidecarCPURequest                   string  `annotation:"dapr.io/sidecar-cpu-request"`
@@ -160,9 +163,15 @@ func (c *SidecarConfig) setFromAnnotations(an map[string]string) {
 			continue
 		}
 
-		// Skip annotations that are not defined or which have an empty value
-		if an[key] == "" {
+		// Skip annotations that are not defined, respect user defined "" for fields to disable them
+		if _, exists := an[key]; !exists {
 			continue
+		}
+
+		// Special cleanup for placement and scheduler addresses defined by annotations being empty
+		if key == annotations.KeyPlacementHostAddresses || key == annotations.KeySchedulerHostAddresses {
+			trimmed := strings.TrimSpace(strings.Trim(an[key], `"'`))
+			an[key] = trimmed
 		}
 
 		// Assign the value

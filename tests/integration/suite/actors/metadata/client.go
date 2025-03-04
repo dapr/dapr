@@ -70,7 +70,7 @@ func (m *client) Setup(t *testing.T) []framework.Option {
 func (m *client) Run(t *testing.T, ctx context.Context) {
 	// Test an app that is an actor client (no actor state store configured)
 	// 1. Assert that status is "INITIALIZING" before /dapr/config is called
-	// 2. After init is done, status is "RUNNING", hostReady is "false", placement reports a connection, and hosted actors are empty
+	// 2. After init is done, status is "RUNNING", hostReady is "true", placement reports connection status, and no active actors
 
 	m.place.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilTCPReady(t, ctx)
@@ -90,7 +90,7 @@ func (m *client) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		res := getMetadata(t, ctx, client, m.daprd.HTTPPort())
 		assert.Equal(t, "RUNNING", res.ActorRuntime.RuntimeStatus)
-		assert.False(t, res.ActorRuntime.HostReady)
+		assert.True(t, res.ActorRuntime.HostReady)
 		assert.Equal(t, "placement: connected", res.ActorRuntime.Placement)
 		assert.Empty(t, res.ActorRuntime.ActiveActors, 0)
 	}, 10*time.Second, 10*time.Millisecond)
