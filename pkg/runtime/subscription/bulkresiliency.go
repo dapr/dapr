@@ -15,8 +15,7 @@ package subscription
 
 import (
 	"context"
-
-	"golang.org/x/exp/maps"
+	"maps"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
