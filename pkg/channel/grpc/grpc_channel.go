@@ -166,6 +166,11 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	if g.appMetadataToken != "" {
 		md.Set(securityConsts.APITokenHeader, g.appMetadataToken)
+
+		appMetadataTokenHeader := security.GetAppTokenHeader()
+		if appMetadataTokenHeader != "" {
+			md.Set(appMetadataTokenHeader, g.appMetadataToken)
+		}
 	}
 
 	// Prepare gRPC Metadata
