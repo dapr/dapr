@@ -15,5 +15,6 @@ package timers
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers/callback"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers/period"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers/remote"
 )

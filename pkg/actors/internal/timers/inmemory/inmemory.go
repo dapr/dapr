@@ -73,11 +73,9 @@ func (i *inmemory) processorExecuteFn(reminder *api.Reminder) {
 	err := i.engine.CallReminder(context.TODO(), reminder)
 	diag.DefaultMonitoring.ActorTimerFired(reminder.ActorType, err == nil)
 	if err != nil {
+		// Successful and non-successful executions are treated as the same in
+		// terms of ticking forward, so we log the error and continue.
 		log.Errorf("Error executing timer: %s", err)
-		if i.activeTimers.CompareAndDelete(reminder.Key(), reminder) {
-			i.updateActiveTimersCount(reminder.ActorType, -1)
-		}
-		return
 	}
 
 	// If TickExecuted returns true, it means the timer has no more repetitions left

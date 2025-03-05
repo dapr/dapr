@@ -168,6 +168,8 @@ func (p *Pool) Send(ctx context.Context, job *JobEvent) api.TriggerResponseResul
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
