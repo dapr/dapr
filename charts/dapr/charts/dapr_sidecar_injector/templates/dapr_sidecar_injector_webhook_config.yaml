@@ -27,6 +27,7 @@ webhooks:
     - CREATE
   failurePolicy: {{ .Values.webhookFailurePolicy}}
   sideEffects: None
+  timeoutSeconds: {{ .Values.webhookTimeoutSeconds }}
   admissionReviewVersions: ["v1", "v1beta1"]
   {{- if .Values.namespaceSelector }}
   namespaceSelector: {{- .Values.namespaceSelector | toYaml | nindent 4 }}
