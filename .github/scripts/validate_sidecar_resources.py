@@ -47,7 +47,7 @@ def get_memory_info(process):
         return resident_memory
     except psutil.NoSuchProcess:
         return None
-    
+
 def get_goroutine_count():
     try:
         response = requests.get('http://localhost:9090/metrics')
@@ -87,7 +87,7 @@ def run_sidecar(executable, app_id):
             memory_data.append(memory)
         if goroutine_count is not None:
             goroutine_data.append(goroutine_count)
-            
+
     # Kill the process
     kill_process(background_process)
 
@@ -99,7 +99,7 @@ def run_sidecar(executable, app_id):
 
 def test_diff(arr_old, arr_new, label, test='ttest'):
     # Output mean and median for memory utilization
-    
+
     p25_new, p50_new, p75_new = np.percentile(arr_new, [25, 50, 75])
     p25_old, p50_old, p75_old = np.percentile(arr_old, [25, 50, 75])
 
@@ -146,7 +146,7 @@ def size_diff(old_binary, new_binary):
 
     print(f"Passed! Did not find significant increase in file size: was {old_size} KB, now {new_size} KB.")
     return False
-    
+
 
 def getenv(key, default):
     v = os.getenv(key)
