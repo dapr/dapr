@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -26,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -118,12 +120,17 @@ func (e *etcd) Run(ctx context.Context) error {
 
 	close(e.readyCh)
 
-	select {
-	case err := <-e.etcd.Err():
-		return err
-	case <-ctx.Done():
-		return nil
-	}
+	return concurrency.NewRunnerManager(
+		e.runDefrag,
+		func(ctx context.Context) error {
+			select {
+			case err := <-e.etcd.Err():
+				return err
+			case <-ctx.Done():
+				return nil
+			}
+		},
+	).Run(ctx)
 }
 
 func (e *etcd) Client(ctx context.Context) (*clientv3.Client, error) {
@@ -132,6 +139,38 @@ func (e *etcd) Client(ctx context.Context) (*clientv3.Client, error) {
 		return nil, ctx.Err()
 	case <-e.readyCh:
 		return e.client, nil
+	}
+}
+
+func (e *etcd) runDefrag(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Minute):
+			log.Debug("Checking if Etcd needs Defragmentation")
+			resp, err := e.client.Maintenance.Status(ctx, e.config.ListenClientUrls[0].Host)
+			if err != nil {
+				return err
+			}
+
+			dbSize := fmt.Sprintf("%.2fM", float64(resp.DbSize)/(1024*1024))
+			dbSizeInUse := fmt.Sprintf("%.2fM", float64(resp.DbSizeInUse)/(1024*1024))
+
+			if resp.DbSize < resp.DbSizeInUse*2 {
+				log.Debugf("Defragmenting not needed (dbSize: %s, dbSizeInUse: %s)", dbSize, dbSizeInUse)
+				break
+			}
+
+			log.Infof("Defragmenting Etcd (dbSize: %s, dbSizeInUse: %s)", dbSize, dbSizeInUse)
+			start := time.Now()
+			_, err = e.client.Maintenance.Defragment(ctx, e.config.ListenClientUrls[0].Host)
+			if err != nil {
+				return err
+			}
+
+			log.Infof("Defragmentation completed in %s", time.Since(start))
+		}
 	}
 }
 
