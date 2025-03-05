@@ -1,8 +1,9 @@
-
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.2
   name: subscriptions.dapr.io
   labels:
     app.kubernetes.io/part-of: "dapr"
@@ -20,6 +21,12 @@ spec:
       conversionReviewVersions:
       - v1
       - v2alpha1
+  names:
+    kind: Subscription
+    listKind: SubscriptionList
+    plural: subscriptions
+    singular: subscription
+  scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
@@ -27,14 +34,19 @@ spec:
         description: Subscription describes an pub/sub event subscription.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -45,30 +57,33 @@ spec:
           spec:
             description: SubscriptionSpec is the spec for an event subscription.
             properties:
+              bulkSubscribe:
+                description: BulkSubscribe encapsulates the bulk subscription configuration
+                  for a topic.
+                properties:
+                  enabled:
+                    type: boolean
+                  maxAwaitDurationMs:
+                    format: int32
+                    type: integer
+                  maxMessagesCount:
+                    format: int32
+                    type: integer
+                required:
+                - enabled
+                type: object
+              deadLetterTopic:
+                type: string
+              metadata:
+                additionalProperties:
+                  type: string
+                type: object
               pubsubname:
                 type: string
               route:
                 type: string
               topic:
                 type: string
-              deadLetterTopic:
-                type: string
-              bulkSubscribe:
-                description: Represents bulk subscribe properties
-                properties:
-                  enabled:
-                    type: boolean
-                  maxMessagesCount:
-                    type: integer
-                  maxAwaitDurationMs:
-                    type: integer
-                required:
-                  - enabled
-                type: object
-              metadata:
-                additionalProperties:
-                  type: string
-                type: object
             required:
             - pubsubname
             - route
@@ -83,14 +98,19 @@ spec:
         description: Subscription describes an pub/sub event subscription.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -101,6 +121,24 @@ spec:
           spec:
             description: SubscriptionSpec is the spec for an event subscription.
             properties:
+              bulkSubscribe:
+                description: The option to enable bulk subscription for this topic.
+                properties:
+                  enabled:
+                    type: boolean
+                  maxAwaitDurationMs:
+                    format: int32
+                    type: integer
+                  maxMessagesCount:
+                    format: int32
+                    type: integer
+                required:
+                - enabled
+                type: object
+              deadLetterTopic:
+                description: The optional dead letter queue for this topic to send
+                  events to.
+                type: string
               metadata:
                 additionalProperties:
                   type: string
@@ -113,20 +151,22 @@ spec:
                 description: The Routes configuration for this topic.
                 properties:
                   default:
+                    description: The default path for this topic.
                     type: string
                   rules:
                     description: The list of rules for this topic.
                     items:
-                      description: Rule is used to specify the condition for sending
+                      description: |-
+                        Rule is used to specify the condition for sending
                         a message to a specific path.
                       properties:
                         match:
-                          description: The optional CEL expression used to match the
-                            event. If the match is not specified, then the route is
-                            considered the default. The rules are tested in the order
-                            specified, so they should be define from most-to-least
-                            specific. The default route should appear last in the
-                            list.
+                          description: |-
+                            The optional CEL expression used to match the event.
+                            If the match is not specified, then the route is considered
+                            the default. The rules are tested in the order specified,
+                            so they should be define from most-to-least specific.
+                            The default route should appear last in the list.
                           type: string
                         path:
                           description: The path for events that match this rule.
@@ -140,21 +180,6 @@ spec:
               topic:
                 description: The topic name to subscribe to.
                 type: string
-              deadLetterTopic:
-                description: The optional dead letter queue for this topic to send events to.
-                type: string
-              bulkSubscribe:
-                description: Represents bulk subscribe properties
-                properties:
-                  enabled:
-                    type: boolean
-                  maxMessagesCount:
-                    type: integer
-                  maxAwaitDurationMs:
-                    type: integer
-                required:
-                  - enabled
-                type: object
             required:
             - pubsubname
             - routes
@@ -163,12 +188,3 @@ spec:
         type: object
     served: true
     storage: true
-  names:
-    kind: Subscription
-    listKind: SubscriptionList
-    plural: subscriptions
-    singular: subscription
-    categories:
-    - all
-    - dapr
-  scope: Namespaced

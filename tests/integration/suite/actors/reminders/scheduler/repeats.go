@@ -67,6 +67,8 @@ spec:
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+	handler.HandleFunc("/actors/myactortype/myactorid", func(http.ResponseWriter, *http.Request) {
+	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/pt", func(http.ResponseWriter, *http.Request) {
 		r.called.Append("pt")
 	})
