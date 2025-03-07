@@ -83,7 +83,7 @@ func newLock(opts lockOptions) *lock {
 		reqCh:             make(chan *req),
 		maxStackDepth:     maxStackDepth,
 		reentrancyEnabled: opts.reentrancyEnabled,
-		inflights:         ring.NewBuffered[inflight](1, 64),
+		inflights:         ring.NewBuffered[inflight](2, 8),
 		lock:              fifo.New(),
 		closeCh:           make(chan struct{}),
 	}

@@ -401,7 +401,7 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 	if err != nil {
 		return err
 	}
-	w.table.DeleteFromTable(w.actorType, w.actorID)
+	w.table.DeleteFromTableIn(w, 0)
 	w.cleanup()
 	return nil
 }
