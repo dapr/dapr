@@ -15,14 +15,14 @@ package config
 
 import (
 	"io"
+	"maps"
 	"reflect"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
-	"golang.org/x/exp/maps"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
@@ -365,8 +365,8 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 				require.Error(t, err, "expected validation to fail")
 			} else if tc.config.Spec.Secrets != nil {
 				for _, scope := range tc.config.Spec.Secrets.Scopes {
-					assert.True(t, sort.StringsAreSorted(scope.AllowedSecrets), "expected sorted slice")
-					assert.True(t, sort.StringsAreSorted(scope.DeniedSecrets), "expected sorted slice")
+					assert.True(t, slices.IsSorted(scope.AllowedSecrets), "expected sorted slice")
+					assert.True(t, slices.IsSorted(scope.DeniedSecrets), "expected sorted slice")
 				}
 			}
 		})
@@ -485,8 +485,8 @@ func TestFeatureEnabled(t *testing.T) {
 	// We sort the values before comparing because order isn't guaranteed (and doesn't matter)
 	actual := config.EnabledFeatures()
 	expect := append([]string{"testEnabled"}, buildinfo.Features()...)
-	sort.Strings(actual)
-	sort.Strings(expect)
+	slices.Sort(actual)
+	slices.Sort(expect)
 	assert.EqualValues(t, actual, expect)
 }
 
@@ -577,10 +577,10 @@ func TestAPIAccessRules(t *testing.T) {
 
 	apiSpec := config.Spec.APISpec
 
-	assert.Equal(t, []string{"v1/foo"}, maps.Keys(apiSpec.Allowed.GetRulesByProtocol(APIAccessRuleProtocolHTTP)))
-	assert.Equal(t, []string{"v1alpha1/MyMethod"}, maps.Keys(apiSpec.Allowed.GetRulesByProtocol(APIAccessRuleProtocolGRPC)))
-	assert.Equal(t, []string{"v1/bar"}, maps.Keys(apiSpec.Denied.GetRulesByProtocol(APIAccessRuleProtocolHTTP)))
-	assert.Empty(t, maps.Keys(apiSpec.Denied.GetRulesByProtocol(APIAccessRuleProtocolGRPC)))
+	assert.Equal(t, []string{"v1/foo"}, slices.Collect(maps.Keys(apiSpec.Allowed.GetRulesByProtocol(APIAccessRuleProtocolHTTP))))
+	assert.Equal(t, []string{"v1alpha1/MyMethod"}, slices.Collect(maps.Keys(apiSpec.Allowed.GetRulesByProtocol(APIAccessRuleProtocolGRPC))))
+	assert.Equal(t, []string{"v1/bar"}, slices.Collect(maps.Keys(apiSpec.Denied.GetRulesByProtocol(APIAccessRuleProtocolHTTP))))
+	assert.Empty(t, slices.Collect(maps.Keys(apiSpec.Denied.GetRulesByProtocol(APIAccessRuleProtocolGRPC))))
 }
 
 func TestSortMetrics(t *testing.T) {
