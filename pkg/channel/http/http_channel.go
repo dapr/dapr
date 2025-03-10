@@ -159,7 +159,7 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	}
 
 	// If the request is for an internal endpoint, do not allow it if the app health status is not successful
-	if h.baseAddress != "" && appID == "" && h.appHealth != nil && h.appHealth.GetStatus() != apphealth.AppStatusHealthy {
+	if h.baseAddress != "" && appID == "" && h.appHealth != nil && !h.appHealth.GetStatus().IsHealthy {
 		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
 
@@ -308,11 +308,7 @@ func (h *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
 	channelReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.baseAddress+h.appHealthCheckPath, nil)
 	if err != nil {
 		reason := fmt.Sprintf("Failed to create request: %v", err)
-		return &apphealth.Status{
-			State:    apphealth.AppStatusUnhealthy,
-			TimeUnix: time.Now().Unix(),
-			Reason:   &reason,
-		}, nil
+		return apphealth.NewStatus(false, &reason), nil
 	}
 
 	diag.DefaultHTTPMonitoring.AppHealthProbeStarted(ctx)
@@ -328,11 +324,7 @@ func (h *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
 		diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), elapsedMs)
 
 		reason := fmt.Sprintf("Network error: %v", err)
-		return &apphealth.Status{
-			State:    apphealth.AppStatusUnhealthy,
-			TimeUnix: time.Now().Unix(),
-			Reason:   &reason,
-		}, nil
+		return apphealth.NewStatus(false, &reason), nil
 	}
 
 	// Drain before closing
@@ -343,19 +335,11 @@ func (h *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
 	diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(channelResp.StatusCode), elapsedMs)
 
 	if status {
-		return &apphealth.Status{
-			State:    apphealth.AppStatusHealthy,
-			TimeUnix: time.Now().Unix(),
-			Reason:   nil,
-		}, nil
+		return apphealth.NewStatus(true, nil), nil
 	}
 
 	reason := fmt.Sprintf("Health check failed with status code: %d", channelResp.StatusCode)
-	return &apphealth.Status{
-		State:    apphealth.AppStatusUnhealthy,
-		TimeUnix: time.Now().Unix(),
-		Reason:   &reason,
-	}, nil
+	return apphealth.NewStatus(false, &reason), nil
 }
 
 func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {

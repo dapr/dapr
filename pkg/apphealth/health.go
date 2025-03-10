@@ -171,13 +171,14 @@ func (h *AppHealth) ReportHealth(status *Status) {
 }
 
 // GetStatus returns the status of the app's health
-func (h *AppHealth) GetStatus() uint8 {
+func (h *AppHealth) GetStatus() *Status {
 	fc := h.failureCount.Load()
 	if fc >= h.config.Threshold {
-		return AppStatusUnhealthy
+		reason := fmt.Sprintf("App health check failed %d times", fc)
+		return NewStatus(false, &reason)
 	}
 
-	return AppStatusHealthy
+	return NewStatus(true, nil)
 }
 
 // Performs a health probe.
@@ -189,16 +190,12 @@ func (h *AppHealth) doProbe(parentCtx context.Context) {
 	status, err := h.probeFn(ctx)
 	if err != nil {
 		reason := fmt.Sprintf("Probe error: %v", err)
-		h.setResult(parentCtx, &Status{
-			State:    AppStatusUnhealthy,
-			TimeUnix: h.clock.Now().Unix(),
-			Reason:   &reason,
-		})
+		h.setResult(parentCtx, NewStatus(false, &reason))
 		log.Errorf("App health probe could not complete with error: %v", err)
 		return
 	}
 
-	log.Debug("App health probe successful: " + strconv.FormatBool(status.IsHealthy()))
+	log.Debug("App health probe successful: " + strconv.FormatBool(status.IsHealthy))
 	h.setResult(parentCtx, status)
 }
 
@@ -231,7 +228,7 @@ func (h *AppHealth) ratelimitReports() bool {
 func (h *AppHealth) setResult(ctx context.Context, status *Status) {
 	h.lastReport.Store(h.clock.Now().UnixMicro())
 
-	if status.IsHealthy() {
+	if status.IsHealthy {
 		// Reset the failure count
 		// If the previous value was >= threshold, we need to report a health change
 		prev := h.failureCount.Swap(0)
