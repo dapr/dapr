@@ -54,7 +54,12 @@ func GetSentryToken(allowKubernetes bool) (token string, validator sentryv1pb.Si
 		if path == "" {
 			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, errors.New("environmental variable DAPR_SENTRY_TOKEN_FILE is set with an empty value")
 		}
-		return GetSentryTokenFromFile(path)
+		token, validator, err = GetSentryTokenFromFile(path)
+		if allowKubernetes {
+			log.Debugf("forcing to use kubernetes validator")
+			validator = sentryv1pb.SignCertificateRequest_KUBERNETES
+		}
+		return token, validator, err
 	}
 
 	if allowKubernetes {
