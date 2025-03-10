@@ -58,7 +58,6 @@ type Interface interface {
 	Drain(fn func(target targets.Interface) bool) error
 	Len() map[string]int
 
-	DeleteFromTable(actorType, actorID string)
 	DeleteFromTableIn(actor targets.Interface, in time.Duration)
 	RemoveIdler(actor targets.Interface)
 }
@@ -270,15 +269,7 @@ func (t *table) HaltIdlable(ctx context.Context, target targets.Idlable) error {
 	return t.haltSingle(target, false)
 }
 
-func (t *table) DeleteFromTable(actorType, actorID string) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	t.table.Delete(actorType + api.DaprSeparator + actorID)
-}
-
 func (t *table) DeleteFromTableIn(actor targets.Interface, in time.Duration) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
 	t.idlerQueue.Enqueue(idler.New(actor, in))
 }
 
@@ -296,6 +287,7 @@ func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []
 
 func (t *table) haltSingle(target targets.Interface, drain bool) error {
 	key := target.Key()
+	defer t.locker.Close(key)
 
 	if drain {
 		drain = t.drainRebalancedActors
@@ -323,6 +315,5 @@ func (t *table) haltSingle(target targets.Interface, drain bool) error {
 	if !ok || target == nil {
 		return nil
 	}
-
 	return target.Deactivate()
 }
