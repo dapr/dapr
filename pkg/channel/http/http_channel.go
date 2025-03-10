@@ -304,10 +304,15 @@ func (h *Channel) SetAppHealth(ah *apphealth.AppHealth) {
 }
 
 // HealthProbe performs a health probe.
-func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
+func (h *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
 	channelReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.baseAddress+h.appHealthCheckPath, nil)
 	if err != nil {
-		return false, err
+		reason := fmt.Sprintf("Failed to create request: %v", err)
+		return &apphealth.Status{
+			State:    apphealth.AppStatusUnhealthy,
+			TimeUnix: time.Now().Unix(),
+			Reason:   &reason,
+		}, nil
 	}
 
 	diag.DefaultHTTPMonitoring.AppHealthProbeStarted(ctx)
@@ -321,8 +326,13 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 		// Errors here are network-level errors, so we are not returning them as errors
 		// Instead, we just return a failed probe
 		diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), elapsedMs)
-		//nolint:nilerr
-		return false, nil
+
+		reason := fmt.Sprintf("Network error: %v", err)
+		return &apphealth.Status{
+			State:    apphealth.AppStatusUnhealthy,
+			TimeUnix: time.Now().Unix(),
+			Reason:   &reason,
+		}, nil
 	}
 
 	// Drain before closing
@@ -332,7 +342,20 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 	status := channelResp.StatusCode >= 200 && channelResp.StatusCode < 300
 	diag.DefaultHTTPMonitoring.AppHealthProbeCompleted(ctx, strconv.Itoa(channelResp.StatusCode), elapsedMs)
 
-	return status, nil
+	if status {
+		return &apphealth.Status{
+			State:    apphealth.AppStatusHealthy,
+			TimeUnix: time.Now().Unix(),
+			Reason:   nil,
+		}, nil
+	}
+
+	reason := fmt.Sprintf("Health check failed with status code: %d", channelResp.StatusCode)
+	return &apphealth.Status{
+		State:    apphealth.AppStatusUnhealthy,
+		TimeUnix: time.Now().Unix(),
+		Reason:   &reason,
+	}, nil
 }
 
 func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {

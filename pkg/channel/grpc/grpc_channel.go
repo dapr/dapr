@@ -19,6 +19,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -217,15 +218,27 @@ var emptyPbPool = sync.Pool{
 }
 
 // HealthProbe performs a health probe.
-func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
+func (g *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
 	// We use the low-level method here so we can avoid allocating multiple &emptypb.Empty and use the pool
 	in := emptyPbPool.Get()
 	defer emptyPbPool.Put(in)
 	out := emptyPbPool.Get()
 	defer emptyPbPool.Put(out)
 	err := g.conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", in, out)
+	if err != nil {
+		reason := fmt.Sprintf("Health check failed: %v", err)
+		return &apphealth.Status{
+			State:    apphealth.AppStatusUnhealthy,
+			TimeUnix: time.Now().Unix(),
+			Reason:   &reason,
+		}, nil
+	}
 
-	return err == nil, err
+	return &apphealth.Status{
+		State:    apphealth.AppStatusHealthy,
+		TimeUnix: time.Now().Unix(),
+		Reason:   nil,
+	}, nil
 }
 
 // SetAppHealth sets the apphealth.AppHealth object.

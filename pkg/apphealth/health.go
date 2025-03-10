@@ -16,23 +16,15 @@ package apphealth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/logger"
-)
-
-const (
-	AppStatusUnhealthy uint8 = 0
-	AppStatusHealthy   uint8 = 1
-
-	// reportMinInterval is the minimum interval between health reports.
-	reportMinInterval = time.Second
 )
 
 var log = logger.NewLogger("dapr.apphealth")
@@ -42,7 +34,7 @@ type AppHealth struct {
 	config       config.AppHealthConfig
 	probeFn      ProbeFunction
 	changeCb     ChangeCallback
-	report       chan uint8
+	report       chan *Status
 	failureCount atomic.Int32
 	queue        chan struct{}
 
@@ -58,17 +50,17 @@ type AppHealth struct {
 // ProbeFunction is the signature of the function that performs health probes.
 // Health probe functions return errors only in case of internal errors.
 // Network errors are considered probe failures, and should return nil as errors.
-type ProbeFunction func(context.Context) (bool, error)
+type ProbeFunction func(context.Context) (*Status, error)
 
 // ChangeCallback is the signature of the callback that is invoked when the app's health status changes.
-type ChangeCallback func(ctx context.Context, status uint8)
+type ChangeCallback func(ctx context.Context, status *Status)
 
 // New creates a new AppHealth object.
 func New(config config.AppHealthConfig, probeFn ProbeFunction) *AppHealth {
 	a := &AppHealth{
 		config:  config,
 		probeFn: probeFn,
-		report:  make(chan uint8, 1),
+		report:  make(chan *Status, 1),
 		queue:   make(chan struct{}, 1),
 		clock:   &clock.RealClock{},
 		closeCh: make(chan struct{}),
@@ -130,7 +122,7 @@ func (h *AppHealth) StartProbes(ctx context.Context) error {
 				return
 			case status := <-h.report:
 				log.Debug("Received health status report")
-				h.setResult(ctx, status == AppStatusHealthy)
+				h.setResult(ctx, status)
 			case <-ch:
 				log.Debug("Probing app health")
 				h.Enqueue()
@@ -157,7 +149,7 @@ func (h *AppHealth) Enqueue() {
 }
 
 // ReportHealth is used by the runtime to report a health signal from the app.
-func (h *AppHealth) ReportHealth(status uint8) {
+func (h *AppHealth) ReportHealth(status *Status) {
 	// If the user wants health probes only, short-circuit here
 	if h.config.ProbeOnly {
 		return
@@ -194,15 +186,20 @@ func (h *AppHealth) doProbe(parentCtx context.Context) {
 	ctx, cancel := context.WithTimeout(parentCtx, h.config.ProbeTimeout)
 	defer cancel()
 
-	successful, err := h.probeFn(ctx)
+	status, err := h.probeFn(ctx)
 	if err != nil {
-		h.setResult(parentCtx, false)
+		reason := fmt.Sprintf("Probe error: %v", err)
+		h.setResult(parentCtx, &Status{
+			State:    AppStatusUnhealthy,
+			TimeUnix: h.clock.Now().Unix(),
+			Reason:   &reason,
+		})
 		log.Errorf("App health probe could not complete with error: %v", err)
 		return
 	}
 
-	log.Debug("App health probe successful: " + strconv.FormatBool(successful))
-	h.setResult(parentCtx, successful)
+	log.Debug("App health probe successful: " + strconv.FormatBool(status.IsHealthy()))
+	h.setResult(parentCtx, status)
 }
 
 // Returns true if the health report can be saved. Only 1 report per second at most is allowed.
@@ -231,10 +228,10 @@ func (h *AppHealth) ratelimitReports() bool {
 	return swapped
 }
 
-func (h *AppHealth) setResult(ctx context.Context, successful bool) {
+func (h *AppHealth) setResult(ctx context.Context, status *Status) {
 	h.lastReport.Store(h.clock.Now().UnixMicro())
 
-	if successful {
+	if status.IsHealthy() {
 		// Reset the failure count
 		// If the previous value was >= threshold, we need to report a health change
 		prev := h.failureCount.Swap(0)
@@ -244,7 +241,7 @@ func (h *AppHealth) setResult(ctx context.Context, successful bool) {
 				h.wg.Add(1)
 				go func() {
 					defer h.wg.Done()
-					h.changeCb(ctx, AppStatusHealthy)
+					h.changeCb(ctx, status)
 				}()
 			}
 		}
@@ -260,12 +257,16 @@ func (h *AppHealth) setResult(ctx context.Context, successful bool) {
 		h.failureCount.Store(h.config.Threshold + 1)
 	} else if failures == h.config.Threshold {
 		// If we're here, we just passed the threshold right now
-		log.Warn("App entered un-healthy status")
+		if status.Reason != nil {
+			log.Warn("App entered un-healthy status: %s", *status.Reason)
+		} else {
+			log.Warn("App entered un-healthy status")
+		}
 		if h.changeCb != nil {
 			h.wg.Add(1)
 			go func() {
 				defer h.wg.Done()
-				h.changeCb(ctx, AppStatusUnhealthy)
+				h.changeCb(ctx, status)
 			}()
 		}
 	}
