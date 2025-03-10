@@ -710,7 +710,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		a.appHealth.Enqueue()
 	} else {
 		// If there's no health check, mark the app as healthy right away so subscriptions can start
-		a.appHealthChanged(ctx, apphealth.DefaultStatus())
+		a.appHealthChanged(ctx, apphealth.NewStatus(true, nil))
 	}
 
 	return nil
@@ -750,7 +750,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 	a.appHealthLock.Lock()
 	defer a.appHealthLock.Unlock()
 
-	if status.IsHealthy() {
+	if status.IsHealthy {
 		select {
 		case <-a.isAppHealthy:
 			a.isAppHealthy = make(chan struct{})
