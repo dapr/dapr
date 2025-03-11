@@ -226,7 +226,7 @@ func (g *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
 	err := g.conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", in, out)
 	if err != nil {
 		reason := fmt.Sprintf("Health check failed: %v", err)
-		return apphealth.NewStatus(false, &reason), nil
+		return apphealth.NewStatus(false, &reason), err
 	}
 
 	return apphealth.NewStatus(true, nil), nil
