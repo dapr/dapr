@@ -59,7 +59,7 @@ func TestAppHealth_setResult(t *testing.T) {
 			if i == threshold-1 {
 				select {
 				case v := <-statusChange:
-					assert.Equal(t, false, v.IsHealthy)
+					assert.False(t, v.IsHealthy)
 				case <-time.After(100 * time.Millisecond):
 					t.Error("did not get a status change before deadline")
 				}
@@ -80,7 +80,7 @@ func TestAppHealth_setResult(t *testing.T) {
 	h.setResult(context.Background(), NewStatus(true, nil))
 	select {
 	case v := <-statusChange:
-		assert.Equal(t, true, v.IsHealthy)
+		assert.True(t, v.IsHealthy)
 	case <-time.After(100 * time.Millisecond):
 		t.Error("did not get a status change before deadline")
 	}
@@ -102,7 +102,7 @@ func TestAppHealth_setResult(t *testing.T) {
 
 	select {
 	case v := <-statusChange:
-		assert.Equal(t, false, v.IsHealthy)
+		assert.False(t, v.IsHealthy)
 	case <-time.After(50 * time.Millisecond):
 		t.Error("did not get a status change before deadline")
 	}
