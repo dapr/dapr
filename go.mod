@@ -502,3 +502,5 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+replace github.com/dapr/components-contrib => ../dapr-components-contrib
