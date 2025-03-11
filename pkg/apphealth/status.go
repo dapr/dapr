@@ -32,7 +32,7 @@ type Status struct {
 // because if there's no health check, then we mark the app as healthy right away so subscriptions can start.
 func NewStatus(isHealthy bool, reason *string) *Status {
 	return &Status{
-		IsHealthy: true,
+		IsHealthy: isHealthy,
 		TimeUnix:  time.Now().Unix(),
 		Reason:    reason,
 	}
