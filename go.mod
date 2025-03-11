@@ -11,7 +11,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.15.0
+	github.com/ManuInNZ/dapr-components-contrib v1.15.0.20250309213759-9cdea70fdf6bbf14f8bb6dba1eaea723a72f4eb6
 	github.com/dapr/durabletask-go v0.6.5
 	github.com/dapr/kit v0.15.1
 	github.com/diagridio/go-etcd-cron v0.4.4
@@ -503,4 +503,4 @@ replace (
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
 
-replace github.com/dapr/components-contrib => github.com/ManuInNZ/dapr-components-contrib v1.15.0-9cdea70fdf6bbf14f8bb6dba1eaea723a72f4eb6
+
