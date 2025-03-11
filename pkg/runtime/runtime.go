@@ -796,7 +796,6 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 		}
 
 		a.jobsManager.StartApp(ctx)
-
 	} else {
 		select {
 		case <-a.isAppHealthy:
