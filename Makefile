@@ -398,8 +398,8 @@ test-integration-parallel: test-deps
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.61.0 , otherwise you might encounter errors.
-# You can download version v1.61.0 at https://github.com/golangci/golangci-lint/releases/tag/v1.61.0
+# Please use golangci-lint version v1.64.6 , otherwise you might encounter errors.
+# You can download version v1.64.6 at https://github.com/golangci/golangci-lint/releases/tag/v1.64.6
 .PHONY: lint
 lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
@@ -421,7 +421,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.23.1; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.24.1; cd -
 endef
 
 # Generate modtidy target action for each go.mod file

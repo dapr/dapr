@@ -269,7 +269,6 @@ linters:
     - lll
     - unparam
     - wsl
-    - gomnd
     - testpackage
     - nestif
     - nlreturn
@@ -306,7 +305,5 @@ linters:
     - tagalign
     - mnd
     - canonicalheader
-    - exportloopref
-    - execinquery
     - err113
     - fatcontext
