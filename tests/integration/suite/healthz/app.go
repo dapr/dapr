@@ -125,7 +125,7 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, 10*time.Millisecond, "expected dapr to report app healthy again after recovery")
 
 	// multiple health state transitions
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		// Set to unhealthy
 		a.healthy.Store(false)
 		assert.Eventually(t, func() bool {
