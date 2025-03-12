@@ -36,6 +36,7 @@ issues:
     - ^pkg.*client.*clientset.*versioned.*
     - ^pkg.*client.*informers.*externalversions.*
     - ^pkg.*proto.*
+    - pkg/proto
 
 # output configuration options
 output:

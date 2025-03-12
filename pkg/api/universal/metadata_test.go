@@ -14,7 +14,6 @@ limitations under the License.
 package universal
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -110,7 +109,7 @@ func TestGetMetadata(t *testing.T) {
 				globalConfig:        &config.Configuration{},
 			}
 
-			response, err := fakeAPI.GetMetadata(context.Background(), &runtimev1pb.GetMetadataRequest{})
+			response, err := fakeAPI.GetMetadata(t.Context(), &runtimev1pb.GetMetadataRequest{})
 			require.NoError(t, err, "Expected no error")
 
 			bytes, err := json.Marshal(response)
@@ -141,7 +140,7 @@ func TestSetMetadata(t *testing.T) {
 		appID: "fakeAPI",
 	}
 
-	_, err := fakeAPI.SetMetadata(context.Background(), &runtimev1pb.SetMetadataRequest{
+	_, err := fakeAPI.SetMetadata(t.Context(), &runtimev1pb.SetMetadataRequest{
 		Key:   "testKey",
 		Value: "testValue",
 	})

@@ -35,7 +35,7 @@ func TestAppHealth_setResult(t *testing.T) {
 	}, nil)
 
 	// Set the initial state to healthy
-	h.setResult(context.Background(), true)
+	h.setResult(t.Context(), true)
 
 	statusChange := make(chan uint8, 1)
 	unexpectedStatusChanges := atomic.Int32{}
@@ -55,7 +55,7 @@ func TestAppHealth_setResult(t *testing.T) {
 			if i == threshold-1 {
 				<-statusChange // Allow the channel to be written into
 			}
-			h.setResult(context.Background(), false)
+			h.setResult(t.Context(), false)
 			if i == threshold-1 {
 				select {
 				case v := <-statusChange:
@@ -77,7 +77,7 @@ func TestAppHealth_setResult(t *testing.T) {
 
 	// First success should bring the app back to healthy
 	<-statusChange // Allow the channel to be written into
-	h.setResult(context.Background(), true)
+	h.setResult(t.Context(), true)
 	select {
 	case v := <-statusChange:
 		assert.Equal(t, AppStatusHealthy, v)
@@ -93,7 +93,7 @@ func TestAppHealth_setResult(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			for range threshold + 5 {
-				h.setResult(context.Background(), false)
+				h.setResult(t.Context(), false)
 			}
 			wg.Done()
 		}()
@@ -114,7 +114,7 @@ func TestAppHealth_setResult(t *testing.T) {
 	h.failureCount.Store(int32(math.MaxInt32 - 2))
 	statusChange <- 255 // Fill the channel again
 	for range 5 {
-		h.setResult(context.Background(), false)
+		h.setResult(t.Context(), false)
 	}
 	assert.Empty(t, unexpectedStatusChanges.Load())
 	assert.Equal(t, threshold+3, h.failureCount.Load())
@@ -172,7 +172,7 @@ func TestAppHealth_ratelimitReports(t *testing.T) {
 
 func Test_StartProbes(t *testing.T) {
 	t.Run("closing context should return", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
 		done := make(chan struct{})
@@ -203,7 +203,7 @@ func Test_StartProbes(t *testing.T) {
 	})
 
 	t.Run("calling StartProbes after it has already closed should error", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
 		h := New(config.AppHealthConfig{
@@ -229,7 +229,7 @@ func Test_StartProbes(t *testing.T) {
 	})
 
 	t.Run("should return after closed", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
 		h := New(config.AppHealthConfig{
@@ -260,7 +260,7 @@ func Test_StartProbes(t *testing.T) {
 	})
 
 	t.Run("should call app probe function after interval", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 
 		var probeCalls atomic.Int64
