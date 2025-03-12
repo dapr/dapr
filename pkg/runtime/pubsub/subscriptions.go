@@ -96,10 +96,16 @@ type (
 	}
 )
 
-func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log logger.Logger, r resiliency.Provider) ([]Subscription, error) {
+func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log logger.Logger, r resiliency.Provider, appID string) ([]Subscription, error) {
 	req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
 		WithHTTPExtension(http.MethodGet, "").
 		WithContentType(invokev1.JSONContentType)
+
+	if appID != "" {
+		req = req.WithMetadata(map[string][]string{
+			"dapr-app-id": {appID},
+		})
+	}
 	defer req.Close()
 
 	policyDef := r.BuiltInPolicy(resiliency.BuiltInInitializationRetries)

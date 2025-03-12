@@ -204,7 +204,7 @@ func Test_initProgramaticSubscriptions(t *testing.T) {
 			AppID:      TestRuntimeConfigID,
 			Channels:   new(channels.Channels),
 		})
-		require.NoError(t, subs.initProgramaticSubscriptions(context.Background()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(context.Background()))
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
 	})
 
@@ -219,7 +219,7 @@ func Test_initProgramaticSubscriptions(t *testing.T) {
 			AppID:      TestRuntimeConfigID,
 			Channels:   new(channels.Channels),
 		})
-		require.NoError(t, subs.initProgramaticSubscriptions(context.Background()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(context.Background()))
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
 	})
 
@@ -254,9 +254,9 @@ func Test_initProgramaticSubscriptions(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("context.backgroundCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
 
-		require.NoError(t, subs.initProgramaticSubscriptions(context.Background()))
-		require.NoError(t, subs.initProgramaticSubscriptions(context.Background()))
-		require.NoError(t, subs.initProgramaticSubscriptions(context.Background()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(context.Background()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(context.Background()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(context.Background()))
 		assert.Len(t, compStore.ListProgramaticSubscriptions(), 1)
 	})
 }
