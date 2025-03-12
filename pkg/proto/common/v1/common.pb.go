@@ -19,8 +19,8 @@
 package common
 
 import (
-	reflect "reflect"
-	sync "sync"
+	"reflect"
+	"sync"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
