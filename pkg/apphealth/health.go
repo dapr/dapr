@@ -195,8 +195,14 @@ func (h *AppHealth) doProbe(parentCtx context.Context) {
 		return
 	}
 
-	log.Debug("App health probe successful: " + strconv.FormatBool(status.IsHealthy))
-	h.setResult(parentCtx, status)
+	// Only report if the status has changed
+	currentStatus := h.GetStatus()
+	if currentStatus.IsHealthy != status.IsHealthy {
+		log.Debug("App health probe detected status change - health probe successful: " + strconv.FormatBool(status.IsHealthy))
+		h.setResult(parentCtx, status)
+	} else {
+		log.Debug("App health probe status is unchanged - health probe successful: %v", strconv.FormatBool(status.IsHealthy))
+	}
 }
 
 // Returns true if the health report can be saved. Only 1 report per second at most is allowed.
@@ -245,17 +251,19 @@ func (h *AppHealth) setResult(ctx context.Context, status *Status) {
 		return
 	}
 
-	// Count the failure
-	failures := h.failureCount.Add(1)
+	// Increment failure count atomically and get the new value
+	newFailures := h.failureCount.Add(1)
 
-	// First, check if we've overflown
-	if failures < 0 {
-		// Reset to the threshold + 1
-		h.failureCount.Store(h.config.Threshold + 1)
-	} else if failures == h.config.Threshold {
-		// If we're here, we just passed the threshold right now
+	// Handle overflow
+	if newFailures < 0 {
+		newFailures = h.config.Threshold + 1
+		h.failureCount.Store(newFailures)
+	}
+
+	// Notify when crossing threshold
+	if newFailures == h.config.Threshold {
 		if status.Reason != nil {
-			log.Warn("App entered un-healthy status: %s", *status.Reason)
+			log.Warn("App entered un-healthy status: " + *status.Reason)
 		} else {
 			log.Warn("App entered un-healthy status")
 		}
