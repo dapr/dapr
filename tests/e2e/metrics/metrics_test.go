@@ -194,7 +194,7 @@ func testMetricDisabled(t *testing.T, app string, res *http.Response) {
 
 func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) (foundMetric bool) {
 	rfmt := expfmt.ResponseFormat(res.Header)
-	require.NotEqual(t, rfmt, expfmt.TypeUnknown)
+	require.NotEqual(t, rfmt.FormatType(), expfmt.TypeUnknown)
 
 	decoder := expfmt.NewDecoder(res.Body, rfmt)
 
@@ -276,7 +276,7 @@ func testGRPCMetrics(t *testing.T, app string, res *http.Response) {
 	require.NotNil(t, res)
 
 	rfmt := expfmt.ResponseFormat(res.Header)
-	require.NotEqual(t, rfmt, expfmt.TypeUnknown)
+	require.NotEqual(t, rfmt.FormatType(), expfmt.TypeUnknown)
 
 	decoder := expfmt.NewDecoder(res.Body, rfmt)
 
