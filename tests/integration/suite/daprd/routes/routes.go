@@ -33,7 +33,7 @@ func init() {
 	suite.Register(new(routes))
 }
 
-const daprAppIdHeader = "Dapr-App-Id"
+const daprAppIDHeader = "Dapr-App-Id"
 
 type routes struct {
 	daprd                      *daprd.Daprd
@@ -47,10 +47,10 @@ func (r *routes) Setup(t *testing.T) []framework.Option {
 
 	appOpts = append(appOpts,
 		app.WithHandlerFunc("/dapr/subscribe", func(w http.ResponseWriter, req *http.Request) {
-			r.daprSubscribeHeaderPresent.Store(ptr.Of(req.Header.Get(daprAppIdHeader)))
+			r.daprSubscribeHeaderPresent.Store(ptr.Of(req.Header.Get(daprAppIDHeader)))
 		}),
 		app.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, req *http.Request) {
-			r.daprConfigHeaderPresent.Store(ptr.Of(req.Header.Get(daprAppIdHeader)))
+			r.daprConfigHeaderPresent.Store(ptr.Of(req.Header.Get(daprAppIDHeader)))
 		}))
 
 	r.app = app.New(t, appOpts...)
