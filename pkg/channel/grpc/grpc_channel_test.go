@@ -75,7 +75,7 @@ func TestMain(m *testing.M) {
 }
 
 func createConnection(t *testing.T) *grpc.ClientConn {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	conn, err := grpc.DialContext(ctx, "localhost:9998", //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(), //nolint:staticcheck
@@ -100,7 +100,7 @@ func TestInvokeMethod(t *testing.T) {
 		appMetadataToken:   "token1",
 		maxRequestBodySize: 4 << 20,
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("successful request", func(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("method").
@@ -146,7 +146,7 @@ func TestHealthProbe(t *testing.T) {
 		appMetadataToken:   "token1",
 		maxRequestBodySize: 4 << 20,
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	var (
 		status *apphealth.Status

@@ -158,7 +158,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 
-		assert.Equal(t, `{"errorCode":"ERR_BAD_REQUEST","message":"invalid request: unexpected message"}`, string(respBody))
+		assert.JSONEq(t, `{"errorCode":"ERR_BAD_REQUEST","message":"invalid request: unexpected message"}`, string(respBody))
 	})
 
 	t.Run("Handler returns nil", func(t *testing.T) {

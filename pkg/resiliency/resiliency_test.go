@@ -173,7 +173,7 @@ func getOperatorClient(address string) operatorv1pb.OperatorClient {
 }
 
 func TestPoliciesForTargets(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	configs := LoadLocalResiliency(log, "default", "./testdata")
 	assert.Len(t, configs, 1)
 	r := FromConfigurations(log, configs...)
@@ -670,7 +670,7 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 	r := FromConfigurations(log, config)
 
 	// Targeted App
-	policy := NewRunner[any](context.Background(),
+	policy := NewRunner[any](t.Context(),
 		r.EndpointPolicy("testApp", "localhost"),
 	)
 	count := atomic.Int64{}
@@ -691,7 +691,7 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 	}, 2) // actorType is not a known target, so we get 1 retry + original call as default circuit breaker trips (consecutiveFailures > 1)
 
 	// One last one for ActorPostLock which just includes timeouts.
-	policy = NewRunner[any](context.Background(),
+	policy = NewRunner[any](t.Context(),
 		r.ActorPostLockPolicy("actorType", "actorID"),
 	)
 	count.Store(0)
@@ -714,7 +714,7 @@ func concurrentPolicyExec(t *testing.T, policyDefFn func(idx int) *PolicyDefinit
 		go func(i int) {
 			defer wg.Done()
 			// Not defined
-			policy := NewRunner[any](context.Background(), policyDefFn(i))
+			policy := NewRunner[any](t.Context(), policyDefFn(i))
 			count := atomic.Int64{}
 			count.Store(0)
 			policy(func(ctx context.Context) (any, error) {

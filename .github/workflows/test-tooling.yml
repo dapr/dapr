@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
     env:
-      GOLANGCILINT_VER: "v1.61.0" # Make sure to bump /.build-tools/check-lint-version/main_test.go
+      GOLANGCILINT_VER: "v1.64.6" # Make sure to bump /.build-tools/check-lint-version/main_test.go
 
     steps:
       - name: Checkout
