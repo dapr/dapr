@@ -26,12 +26,27 @@ import (
 )
 
 func TestGetInjectorConfig(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-namespace")
+	t.Setenv("SIDECAR_IMAGE", "daprd-test-image")
+
+	t.Run("respect globally disabling placement", func(t *testing.T) {
+		t.Setenv("ACTORS_ENABLED", "false")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.False(t, cfg.parsedActorsEnabled)
+		assert.Equal(t, "false", cfg.ActorsEnabled)
+	})
+	t.Run("default placement is enabled", func(t *testing.T) {
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.Empty(t, cfg.ActorsEnabled)
+		assert.True(t, cfg.parsedActorsEnabled)
+	})
+
 	t.Run("with kube cluster domain env", func(t *testing.T) {
 		t.Setenv("TLS_CERT_FILE", "test-cert-file")
 		t.Setenv("TLS_KEY_FILE", "test-key-file")
-		t.Setenv("SIDECAR_IMAGE", "daprd-test-image")
 		t.Setenv("SIDECAR_IMAGE_PULL_POLICY", "Always")
-		t.Setenv("NAMESPACE", "test-namespace")
 		t.Setenv("KUBE_CLUSTER_DOMAIN", "cluster.local")
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS", "test1:test-service-account1,test2:test-service-account2")
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES", "namespace:test-service-account1,namespace2*:test-service-account2")
@@ -49,9 +64,7 @@ func TestGetInjectorConfig(t *testing.T) {
 	t.Run("not set kube cluster domain env", func(t *testing.T) {
 		t.Setenv("TLS_CERT_FILE", "test-cert-file")
 		t.Setenv("TLS_KEY_FILE", "test-key-file")
-		t.Setenv("SIDECAR_IMAGE", "daprd-test-image")
 		t.Setenv("SIDECAR_IMAGE_PULL_POLICY", "IfNotPresent")
-		t.Setenv("NAMESPACE", "test-namespace")
 		t.Setenv("KUBE_CLUSTER_DOMAIN", "")
 
 		cfg, err := GetConfig()
@@ -65,8 +78,6 @@ func TestGetInjectorConfig(t *testing.T) {
 	t.Run("sidecar run options not set", func(t *testing.T) {
 		t.Setenv("TLS_CERT_FILE", "test-cert-file")
 		t.Setenv("TLS_KEY_FILE", "test-key-file")
-		t.Setenv("SIDECAR_IMAGE", "daprd-test-image")
-		t.Setenv("NAMESPACE", "test-namespace")
 
 		// Default values are true
 		t.Setenv("SIDECAR_RUN_AS_NON_ROOT", "")
