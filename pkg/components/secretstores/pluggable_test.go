@@ -130,7 +130,7 @@ func TestComponentCalls(t *testing.T) {
 		}()
 
 		secretStore := fromConnector(testLogger, connector)
-		err = secretStore.Init(context.Background(), secretstores.Metadata{
+		err = secretStore.Init(t.Context(), secretstores.Metadata{
 			Base: contribMetadata.Base{},
 		})
 		require.NoError(t, err)
@@ -162,7 +162,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		resp, err := secretStore.GetSecret(context.Background(), secretstores.GetSecretRequest{
+		resp, err := secretStore.GetSecret(t.Context(), secretstores.GetSecretRequest{
 			Name: key,
 		})
 		assert.Equal(t, int64(1), svc.getSecretCalled.Load())
@@ -183,7 +183,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		resp, err := gSecretStores.BulkGetSecret(context.Background(), secretstores.BulkGetSecretRequest{})
+		resp, err := gSecretStores.BulkGetSecret(t.Context(), secretstores.BulkGetSecretRequest{})
 		assert.Equal(t, int64(1), svc.bulkGetSecretCalled.Load())
 		str := err.Error()
 		assert.Equal(t, err.Error(), str)

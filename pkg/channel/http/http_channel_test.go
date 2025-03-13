@@ -14,7 +14,6 @@ limitations under the License.
 package http
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -143,7 +142,7 @@ func (t *testUppercaseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 	var th http.Handler = &testStatusCodeHandler{Code: http.StatusOK}
 	server := httptest.NewServer(th)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("pipeline should be called when handlers are not empty", func(t *testing.T) {
 		called := 0
@@ -403,7 +402,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 
 func TestInvokeMethodHeaders(t *testing.T) {
 	th := &testHeadersHandler{}
-	ctx := context.Background()
+	ctx := t.Context()
 	server := httptest.NewServer(th)
 	defer server.Close()
 
@@ -467,7 +466,7 @@ func TestInvokeMethodHeaders(t *testing.T) {
 
 func TestInvokeMethod(t *testing.T) {
 	th := &testQueryStringHandler{t: t, serverURL: ""}
-	ctx := context.Background()
+	ctx := t.Context()
 	server := httptest.NewServer(th)
 	defer server.Close()
 
@@ -523,7 +522,7 @@ func TestInvokeMethod(t *testing.T) {
 }
 
 func TestInvokeMethodMaxConcurrency(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	t.Run("single concurrency", func(t *testing.T) {
 		handler := testConcurrencyHandler{
 			maxCalls:     1,
@@ -638,7 +637,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 }
 
 func TestInvokeWithHeaders(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	testServer := httptest.NewServer(&testHandlerHeaders{})
 	c := Channel{
 		baseAddress: testServer.URL,
@@ -673,7 +672,7 @@ func TestInvokeWithHeaders(t *testing.T) {
 }
 
 func TestContentType(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("no default content type", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
@@ -754,7 +753,7 @@ func TestContentType(t *testing.T) {
 }
 
 func TestContentLength(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	handler := &testHandlerHeaders{}
 	testServer := httptest.NewServer(handler)
@@ -788,7 +787,7 @@ func TestContentLength(t *testing.T) {
 
 func TestAppToken(t *testing.T) {
 	t.Run("token present", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
 		c := Channel{
 			baseAddress:    testServer.URL,
@@ -820,7 +819,7 @@ func TestAppToken(t *testing.T) {
 	})
 
 	t.Run("token not present", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
 		c := Channel{
 			baseAddress: testServer.URL,
@@ -852,7 +851,7 @@ func TestAppToken(t *testing.T) {
 }
 
 func TestHealthProbe(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	h := &testStatusCodeHandler{}
 	testServer := httptest.NewServer(h)
 	c := Channel{
@@ -887,7 +886,7 @@ func TestHealthProbe(t *testing.T) {
 }
 
 func TestNoInvalidTraceContext(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	handler := &testHandlerHeaders{}
 	testServer := httptest.NewServer(handler)

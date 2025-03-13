@@ -105,7 +105,7 @@ func TestReminderPeriodJSON(t *testing.T) {
 		out := &bytes.Buffer{}
 		err = json.Compact(out, got)
 		require.NoError(t, err)
-		assert.Equal(t, wantJSON, out.String())
+		assert.JSONEq(t, wantJSON, out.String())
 
 		// Unmarshal
 		dec := ReminderPeriod{}

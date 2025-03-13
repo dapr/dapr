@@ -101,7 +101,7 @@ func TestSetTelemetryFn(t *testing.T) {
 	})
 
 	proxy := p.(*proxy)
-	ctx := metadata.NewOutgoingContext(context.TODO(), metadata.MD{"a": []string{"b"}})
+	ctx := metadata.NewOutgoingContext(t.Context(), metadata.MD{"a": []string{"b"}})
 	ctx = proxy.telemetryFn(ctx)
 
 	md, _ := metadata.FromOutgoingContext(ctx)
@@ -138,7 +138,7 @@ func TestIntercept(t *testing.T) {
 			}, nil
 		})
 
-		ctx := metadata.NewOutgoingContext(context.TODO(), metadata.MD{"a": []string{"b"}})
+		ctx := metadata.NewOutgoingContext(t.Context(), metadata.MD{"a": []string{"b"}})
 		proxy := p.(*proxy)
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
@@ -164,7 +164,7 @@ func TestIntercept(t *testing.T) {
 			}, nil
 		})
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
 		_, _, _, _, err := proxy.intercept(ctx, "/test")
 
@@ -190,7 +190,7 @@ func TestIntercept(t *testing.T) {
 
 		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}, securityConsts.APITokenHeader: []string{"oldtoken"}})
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}, securityConsts.APITokenHeader: []string{"oldtoken"}})
 		proxy := p.(*proxy)
 		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
@@ -223,7 +223,7 @@ func TestIntercept(t *testing.T) {
 
 		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
 		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
@@ -263,7 +263,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
@@ -284,7 +284,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)

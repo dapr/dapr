@@ -19,7 +19,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -75,7 +74,7 @@ func TestUserDefinedMetadata(t *testing.T) {
 		"no-attr":            []string{"value3"},
 	}
 
-	testCtx := grpcMetadata.NewIncomingContext(context.Background(), md)
+	testCtx := grpcMetadata.NewIncomingContext(t.Context(), md)
 	metadata.SetMetadataInContextUnary(testCtx, nil, nil, func(ctx context.Context, req any) (any, error) {
 		testCtx = ctx
 		return nil, nil
@@ -90,7 +89,7 @@ func TestUserDefinedMetadata(t *testing.T) {
 
 func TestSpanContextToGRPCMetadata(t *testing.T) {
 	t.Run("empty span context", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		newCtx := SpanContextToGRPCMetadata(ctx, trace.SpanContext{})
 
 		assert.Equal(t, ctx, newCtx)
@@ -103,7 +102,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp),
 	)
-	defer func() { _ = tp.Shutdown(context.Background()) }()
+	defer func() { _ = tp.Shutdown(t.Context()) }()
 	otel.SetTracerProvider(tp)
 
 	interceptor := GRPCTraceUnaryServerInterceptor("fakeAppID", config.TracingSpec{SamplingRate: "1"})
@@ -113,7 +112,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 	testTraceBinary := diagUtils.BinaryFromSpanContext(testSpanContext)
 
 	t.Run("grpc-trace-bin is given", func(t *testing.T) {
-		ctx := grpcMetadata.NewIncomingContext(context.Background(), grpcMetadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
 		fakeInfo := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
@@ -154,7 +153,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 			return nil, errors.New("fake error")
 		}
 
-		interceptor(context.Background(), fakeReq, fakeInfo, assertHandler)
+		interceptor(t.Context(), fakeReq, fakeInfo, assertHandler)
 
 		sc := span.SpanContext()
 		traceID := sc.TraceID()
@@ -178,11 +177,11 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 			return nil, errors.New("fake error")
 		}
 
-		interceptor(context.Background(), fakeReq, fakeInfo, assertHandler)
+		interceptor(t.Context(), fakeReq, fakeInfo, assertHandler)
 
 		sc := span.SpanContext()
 		spanString := fmt.Sprintf("%v", span)
-		assert.True(t, strings.Contains(spanString, "CallLocal/targetID/method1"))
+		assert.Contains(t, spanString, "CallLocal/targetID/method1")
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
 		assert.NotEmpty(t, hex.EncodeToString(traceID[:]))
@@ -201,7 +200,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 		)
 		oldTracerProvider := otel.GetTracerProvider()
 		defer func() {
-			_ = tp.Shutdown(context.Background())
+			_ = tp.Shutdown(t.Context())
 			// reset tracer provider to older one once the test completes
 			otel.SetTracerProvider(oldTracerProvider)
 		}()
@@ -222,11 +221,11 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 			return nil, status.Error(codes.Internal, errors.New("fake status error").Error())
 		}
 
-		interceptor(context.Background(), fakeReq, fakeInfo, assertHandler)
+		interceptor(t.Context(), fakeReq, fakeInfo, assertHandler)
 
 		sc := span.SpanContext()
 		spanString := fmt.Sprintf("%v", span)
-		assert.True(t, strings.Contains(spanString, "CallLocal/targetID/method1"))
+		assert.Contains(t, spanString, "CallLocal/targetID/method1")
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
 		assert.NotEmpty(t, hex.EncodeToString(traceID[:]))
@@ -240,7 +239,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp),
 	)
-	defer func() { _ = tp.Shutdown(context.Background()) }()
+	defer func() { _ = tp.Shutdown(t.Context()) }()
 	otel.SetTracerProvider(tp)
 
 	interceptor := GRPCTraceStreamServerInterceptor("test", config.TracingSpec{SamplingRate: "1"})
@@ -268,7 +267,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 				FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 			}
 
-			ctx := grpcMetadata.NewIncomingContext(context.Background(), grpcMetadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
+			ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
 			ctx, _ = metadata.SetMetadataInTapHandle(ctx, nil)
 
 			var span trace.Span
@@ -326,7 +325,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 				FullMethod: "/dapr.proto.internals.v1.ServiceInvocation/CallLocal",
 			}
 
-			ctx := grpcMetadata.NewIncomingContext(context.Background(), grpcMetadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
+			ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
 			ctx, _ = metadata.SetMetadataInTapHandle(ctx, nil)
 
 			var span trace.Span
@@ -384,7 +383,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 				GRPCProxyAppIDKey: "myapp",
 				"grpc-trace-bin":  string(testTraceBinary),
 			})
-			ctx := grpcMetadata.NewIncomingContext(context.Background(), md)
+			ctx := grpcMetadata.NewIncomingContext(t.Context(), md)
 			ctx, _ = metadata.SetMetadataInTapHandle(ctx, nil)
 
 			var span trace.Span
@@ -411,7 +410,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			md := grpcMetadata.New(map[string]string{
 				GRPCProxyAppIDKey: "myapp",
 			})
-			ctx := grpcMetadata.NewIncomingContext(context.Background(), md)
+			ctx := grpcMetadata.NewIncomingContext(t.Context(), md)
 			ctx, _ = metadata.SetMetadataInTapHandle(ctx, nil)
 
 			var span trace.Span

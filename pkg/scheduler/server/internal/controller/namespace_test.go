@@ -88,7 +88,7 @@ func Test_Reconcile(t *testing.T) {
 				nsReader: nsReaderBuilder.Build(),
 			}
 
-			result, err := nsctrl.Reconcile(context.Background(), req)
+			result, err := nsctrl.Reconcile(t.Context(), req)
 			assert.Equal(t, ctrl.Result{}, result)
 			assert.Equal(t, test.expErr, err)
 			assert.ElementsMatch(t, test.expDeletePrefixes, prefixCalled)

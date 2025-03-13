@@ -51,7 +51,7 @@ func TestOnce(t *testing.T) {
 	}
 
 	t.Run("Run", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// First call should succeed
 		onceProc.Run(t, ctx)
