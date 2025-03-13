@@ -164,7 +164,7 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 
 	completed, err := a.executeActivity(ctx, reminder.Name, &state)
 	if completed == runCompletedTrue {
-		a.table.DeleteFromTable(a.actorType, a.actorID)
+		a.table.DeleteFromTableIn(a, 0)
 	}
 
 	// Returning nil signals that we want the execution to be retried in the next period interval

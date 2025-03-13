@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,7 +25,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"

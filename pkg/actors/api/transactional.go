@@ -16,9 +16,9 @@ package api
 import (
 	"errors"
 	"fmt"
+	"maps"
 
 	"github.com/mitchellh/mapstructure"
-	"golang.org/x/exp/maps"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/config"
