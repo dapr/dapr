@@ -765,6 +765,9 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 				log.Warnf("Failed to complete app init: %s ", err)
 			}
 			a.appHealthReady = nil
+		} else {
+			// Load app configuration (for actors) every time app status becomes healthy
+			a.loadAppConfiguration(ctx)
 		}
 
 		if a.channels.AppChannel() != nil {
