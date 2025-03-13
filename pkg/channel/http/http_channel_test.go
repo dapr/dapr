@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -862,27 +863,27 @@ func TestHealthProbe(t *testing.T) {
 	}
 
 	var (
-		success bool
-		err     error
+		status *apphealth.Status
+		err    error
 	)
 
 	// OK response
-	success, err = c.HealthProbe(ctx)
+	status, err = c.HealthProbe(ctx)
 	require.NoError(t, err)
-	assert.True(t, success)
+	assert.True(t, status.IsHealthy)
 
 	// Non-2xx status code
 	h.Code = 500
-	success, err = c.HealthProbe(ctx)
+	status, err = c.HealthProbe(ctx)
 	require.NoError(t, err)
-	assert.False(t, success)
+	assert.False(t, status.IsHealthy)
 
 	// Stopped server
 	// Should still return no error, but a failed probe
 	testServer.Close()
-	success, err = c.HealthProbe(ctx)
+	status, err = c.HealthProbe(ctx)
 	require.NoError(t, err)
-	assert.False(t, success)
+	assert.False(t, status.IsHealthy)
 }
 
 func TestNoInvalidTraceContext(t *testing.T) {
