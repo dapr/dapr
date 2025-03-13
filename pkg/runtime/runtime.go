@@ -1298,8 +1298,12 @@ func (a *DaprRuntime) loadAppConfiguration(ctx context.Context) {
 		return
 	}
 
+	log.Debugf("loading application configuration")
 	appConfig, err := a.channels.AppChannel().GetAppConfig(ctx, a.runtimeConfig.id)
 	if err != nil {
+		log.Warnf("unable to load application configuration, no hosted actors will be registered: %v", err)
+		// reset the app config
+		a.appConfig = config.ApplicationConfig{}
 		return
 	}
 
