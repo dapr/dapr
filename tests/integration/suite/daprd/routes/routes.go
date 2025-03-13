@@ -20,24 +20,26 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
 	suite.Register(new(routes))
 }
 
+const daprAppIdHeader = "Dapr-App-Id"
+
 type routes struct {
-	daprd                      *procdaprd.Daprd
+	daprd                      *daprd.Daprd
 	app                        *app.App
-	daprSubscribeHeaderPresent atomic.Bool
-	daprConfigHeaderPresent    atomic.Bool
-	daprAppID                  string
+	daprSubscribeHeaderPresent atomic.Pointer[string]
+	daprConfigHeaderPresent    atomic.Pointer[string]
 }
 
 func (r *routes) Setup(t *testing.T) []framework.Option {
@@ -45,35 +47,17 @@ func (r *routes) Setup(t *testing.T) []framework.Option {
 
 	appOpts = append(appOpts,
 		app.WithHandlerFunc("/dapr/subscribe", func(w http.ResponseWriter, req *http.Request) {
-			get := req.Header.Get("Dapr-App-Id")
-			if get == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-
-			if get == r.daprAppID {
-				r.daprSubscribeHeaderPresent.CompareAndSwap(false, true)
-			}
+			r.daprSubscribeHeaderPresent.Store(ptr.Of(req.Header.Get(daprAppIdHeader)))
 		}),
 		app.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, req *http.Request) {
-			get := req.Header.Get("Dapr-App-Id")
-			if get == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-
-			if get == r.daprAppID {
-				r.daprConfigHeaderPresent.CompareAndSwap(false, true)
-			}
+			r.daprConfigHeaderPresent.Store(ptr.Of(req.Header.Get(daprAppIdHeader)))
 		}))
 
-	r.daprAppID = uuid.NewString()
 	r.app = app.New(t, appOpts...)
-	r.daprd = procdaprd.New(t,
-		procdaprd.WithAppID(r.daprAppID),
-		procdaprd.WithAppPort(r.app.Port()),
-		procdaprd.WithAppProtocol("http"),
-		procdaprd.WithResourceFiles(`apiVersion: dapr.io/v1alpha1
+	r.daprd = daprd.New(t,
+		daprd.WithAppPort(r.app.Port()),
+		daprd.WithAppProtocol("http"),
+		daprd.WithResourceFiles(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: mypub
@@ -90,9 +74,12 @@ spec:
 
 func (r *routes) Run(t *testing.T, ctx context.Context) {
 	r.daprd.WaitUntilRunning(t, ctx)
-	r.app.Run(t, ctx)
-	t.Cleanup(func() { r.app.Cleanup(t) })
 
-	assert.True(t, r.daprSubscribeHeaderPresent.Load(), "dapr subscribe header not present")
-	assert.True(t, r.daprConfigHeaderPresent.Load(), "dapr config header not present")
+	daprSubscribeHeader := r.daprSubscribeHeaderPresent.Load()
+	require.NotNil(t, daprSubscribeHeader)
+	assert.Equal(t, r.daprd.AppID(), *daprSubscribeHeader)
+
+	daprConfigHeader := r.daprConfigHeaderPresent.Load()
+	require.NotNil(t, daprConfigHeader)
+	assert.Equal(t, r.daprd.AppID(), *daprConfigHeader)
 }
