@@ -60,7 +60,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 			assert.Regexp(t, "/actors/abc/.+/method/timer/foo", r.URL.Path)
 			b, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)
-			assert.Equal(t, `{"data":"hello","callback":"","dueTime":"0s","period":"1s"}`, string(b))
+			assert.JSONEq(t, `{"data":"hello","callback":"","dueTime":"0s","period":"1s"}`, string(b))
 			h.timer1.Add(1)
 		}),
 	)
@@ -82,7 +82,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 			assert.Regexp(t, "/actors/abc/.+/method/timer/foo", r.URL.Path)
 			b, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)
-			assert.Equal(t, `{"data":"hello","callback":"","dueTime":"0s","period":"1s"}`, string(b))
+			assert.JSONEq(t, `{"data":"hello","callback":"","dueTime":"0s","period":"1s"}`, string(b))
 			h.timer2.Add(1)
 		}),
 	)

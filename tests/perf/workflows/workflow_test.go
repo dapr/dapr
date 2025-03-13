@@ -17,7 +17,6 @@ limitations under the License.
 package workflows
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -159,12 +158,12 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 					cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
 					require.NoError(t, err)
 					var pod corev1.Pod
-					err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+					err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
 					require.NoError(t, err)
-					err = cl.Delete(context.Background(), &pod)
+					err = cl.Delete(t.Context(), &pod)
 					require.NoError(t, err)
 					assert.EventuallyWithT(t, func(c *assert.CollectT) {
-						err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+						err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
 						if assert.NoError(c, err) {
 							assert.Equal(c, corev1.PodRunning, pod.Status.Phase)
 						}

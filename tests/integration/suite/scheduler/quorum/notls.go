@@ -163,7 +163,7 @@ func getEtcdKeys(t *testing.T, port int) []*mvccpb.KeyValue {
 	require.NoError(t, err)
 	defer client.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	// Get keys with prefix

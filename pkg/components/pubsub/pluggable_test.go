@@ -149,7 +149,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 			}()
 
 			ps := fromConnector(testLogger, connector)
-			err = ps.Init(context.Background(), pubsub.Metadata{
+			err = ps.Init(t.Context(), pubsub.Metadata{
 				Base: contribMetadata.Base{},
 			})
 
@@ -181,7 +181,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = ps.Publish(context.Background(), &pubsub.PublishRequest{
+		err = ps.Publish(t.Context(), &pubsub.PublishRequest{
 			Topic: fakeTopic,
 		})
 
@@ -202,7 +202,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = ps.Publish(context.Background(), &pubsub.PublishRequest{
+		err = ps.Publish(t.Context(), &pubsub.PublishRequest{
 			Topic: fakeTopic,
 		})
 
@@ -265,7 +265,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		handleErrors <- errors.New("fake-error")
 		close(handleErrors)
 
-		err = ps.Subscribe(context.Background(), pubsub.SubscribeRequest{
+		err = ps.Subscribe(t.Context(), pubsub.SubscribeRequest{
 			Topic: fakeTopic,
 		}, func(_ context.Context, m *pubsub.NewMessage) error {
 			handleCalled.Add(1)

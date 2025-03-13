@@ -77,7 +77,7 @@ func Test_Disk(t *testing.T) {
 	require.NoError(t, err)
 
 	errCh := make(chan error)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	go func() {
 		errCh <- d.Run(ctx)
 	}()
@@ -88,7 +88,7 @@ func Test_Disk(t *testing.T) {
 
 	assert.Empty(t, store.ListComponents())
 
-	conn, err := d.Components().Stream(context.Background())
+	conn, err := d.Components().Stream(t.Context())
 	require.NoError(t, err)
 
 	err = os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
@@ -154,7 +154,7 @@ func Test_Stream(t *testing.T) {
 		})
 
 		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(func() {
 			cancel()
 			require.NoError(t, <-errCh)
@@ -171,7 +171,7 @@ func Test_Stream(t *testing.T) {
 
 		batcher.Batch(0, struct{}{})
 
-		conn, err := r.Stream(context.Background())
+		conn, err := r.Stream(t.Context())
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
@@ -237,7 +237,7 @@ func Test_Stream(t *testing.T) {
 		})
 
 		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(func() {
 			cancel()
 			require.NoError(t, <-errCh)
@@ -254,7 +254,7 @@ func Test_Stream(t *testing.T) {
 
 		batcher.Batch(0, struct{}{})
 
-		conn, err := r.Stream(context.Background())
+		conn, err := r.Stream(t.Context())
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
@@ -321,7 +321,7 @@ func Test_Stream(t *testing.T) {
 		})
 
 		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(func() {
 			cancel()
 			require.NoError(t, <-errCh)
@@ -338,7 +338,7 @@ func Test_Stream(t *testing.T) {
 
 		batcher.Batch(0, struct{}{})
 
-		conn, err := r.Stream(context.Background())
+		conn, err := r.Stream(t.Context())
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]

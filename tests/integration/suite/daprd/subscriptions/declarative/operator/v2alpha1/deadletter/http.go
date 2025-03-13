@@ -136,5 +136,5 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	resp := h.sub.Receive(t, ctx)
 	assert.Equal(t, "/b", resp.Route)
 	assert.Equal(t, "a", resp.Extensions()["topic"])
-	assert.Equal(t, `{"status": "completed"}`, string(resp.Data()))
+	assert.JSONEq(t, `{"status": "completed"}`, string(resp.Data()))
 }
