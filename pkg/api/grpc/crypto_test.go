@@ -15,7 +15,6 @@ package grpc
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -58,7 +57,7 @@ func TestCryptoAlpha1(t *testing.T) {
 	t.Run("data and options in single chunk", func(t *testing.T) {
 		var enc []byte
 		t.Run("encrypt", func(t *testing.T) {
-			stream, err := client.EncryptAlpha1(context.Background())
+			stream, err := client.EncryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -80,7 +79,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		})
 
 		t.Run("decrypt", func(t *testing.T) {
-			stream, err := client.DecryptAlpha1(context.Background())
+			stream, err := client.DecryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -103,7 +102,7 @@ func TestCryptoAlpha1(t *testing.T) {
 	t.Run("one data chunk", func(t *testing.T) {
 		var enc []byte
 		t.Run("encrypt", func(t *testing.T) {
-			stream, err := client.EncryptAlpha1(context.Background())
+			stream, err := client.EncryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -127,7 +126,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		})
 
 		t.Run("decrypt", func(t *testing.T) {
-			stream, err := client.DecryptAlpha1(context.Background())
+			stream, err := client.DecryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -152,7 +151,7 @@ func TestCryptoAlpha1(t *testing.T) {
 	t.Run("multiple data chunks", func(t *testing.T) {
 		var enc []byte
 		t.Run("encrypt", func(t *testing.T) {
-			stream, err := client.EncryptAlpha1(context.Background())
+			stream, err := client.EncryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -182,7 +181,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		})
 
 		t.Run("decrypt - whole header in first chunk", func(t *testing.T) {
-			stream, err := client.DecryptAlpha1(context.Background())
+			stream, err := client.DecryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -211,7 +210,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		})
 
 		t.Run("decrypt - header split in multiple chunks", func(t *testing.T) {
-			stream, err := client.DecryptAlpha1(context.Background())
+			stream, err := client.DecryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			defer stream.CloseSend()
@@ -253,7 +252,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		_, err := io.ReadFull(rand.Reader, largeData)
 		require.NoError(t, err)
 
-		stream, err := client.EncryptAlpha1(context.Background())
+		stream, err := client.EncryptAlpha1(t.Context())
 		require.NoError(t, err)
 		defer stream.CloseSend()
 		send := []runtimev1pb.CryptoRequests{
@@ -276,7 +275,7 @@ func TestCryptoAlpha1(t *testing.T) {
 	})
 
 	t.Run("decrypt without header", func(t *testing.T) {
-		stream, err := client.DecryptAlpha1(context.Background())
+		stream, err := client.DecryptAlpha1(t.Context())
 		require.NoError(t, err)
 		defer stream.CloseSend()
 		send := []runtimev1pb.CryptoRequests{
@@ -297,7 +296,7 @@ func TestCryptoAlpha1(t *testing.T) {
 
 	t.Run("invalid sequence number", func(t *testing.T) {
 		t.Run("encrypt", func(t *testing.T) {
-			stream, err := client.EncryptAlpha1(context.Background())
+			stream, err := client.EncryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -319,7 +318,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		})
 
 		t.Run("decrypt", func(t *testing.T) {
-			stream, err := client.DecryptAlpha1(context.Background())
+			stream, err := client.DecryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -341,7 +340,7 @@ func TestCryptoAlpha1(t *testing.T) {
 
 	t.Run("options in non-leading message", func(t *testing.T) {
 		t.Run("encrypt", func(t *testing.T) {
-			stream, err := client.EncryptAlpha1(context.Background())
+			stream, err := client.EncryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -370,7 +369,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		})
 
 		t.Run("decrypt", func(t *testing.T) {
-			stream, err := client.DecryptAlpha1(context.Background())
+			stream, err := client.DecryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -397,7 +396,7 @@ func TestCryptoAlpha1(t *testing.T) {
 
 	t.Run("encrypt without required options", func(t *testing.T) {
 		t.Run("missing options", func(t *testing.T) {
-			stream, err := client.EncryptAlpha1(context.Background())
+			stream, err := client.EncryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -411,7 +410,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		})
 
 		t.Run("missing component name", func(t *testing.T) {
-			stream, err := client.EncryptAlpha1(context.Background())
+			stream, err := client.EncryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -429,7 +428,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		})
 
 		t.Run("missing key name", func(t *testing.T) {
-			stream, err := client.EncryptAlpha1(context.Background())
+			stream, err := client.EncryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -447,7 +446,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		})
 
 		t.Run("missing algorithm", func(t *testing.T) {
-			stream, err := client.EncryptAlpha1(context.Background())
+			stream, err := client.EncryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -467,7 +466,7 @@ func TestCryptoAlpha1(t *testing.T) {
 
 	t.Run("decrypt without required options", func(t *testing.T) {
 		t.Run("missing options", func(t *testing.T) {
-			stream, err := client.DecryptAlpha1(context.Background())
+			stream, err := client.DecryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -481,7 +480,7 @@ func TestCryptoAlpha1(t *testing.T) {
 		})
 
 		t.Run("missing component name", func(t *testing.T) {
-			stream, err := client.DecryptAlpha1(context.Background())
+			stream, err := client.DecryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 			send := []runtimev1pb.CryptoRequests{
@@ -500,7 +499,7 @@ func TestCryptoAlpha1(t *testing.T) {
 	t.Run("time out while waiting for first chunk", func(t *testing.T) {
 		t.Run("encrypt", func(t *testing.T) {
 			start := time.Now()
-			stream, err := client.EncryptAlpha1(context.Background())
+			stream, err := client.EncryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 
@@ -512,7 +511,7 @@ func TestCryptoAlpha1(t *testing.T) {
 
 		t.Run("decrypt", func(t *testing.T) {
 			start := time.Now()
-			stream, err := client.DecryptAlpha1(context.Background())
+			stream, err := client.DecryptAlpha1(t.Context())
 			require.NoError(t, err)
 			defer stream.CloseSend()
 

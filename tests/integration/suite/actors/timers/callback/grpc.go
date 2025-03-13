@@ -51,7 +51,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 			assert.Equal(t, "/actors/abc/foo/method/timer/foo", r.URL.Path)
 			b, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)
-			assert.Equal(t, `{"data":"aGVsbG8=","callback":"mycallback","dueTime":"0s","period":"10s"}`, string(b))
+			assert.JSONEq(t, `{"data":"aGVsbG8=","callback":"mycallback","dueTime":"0s","period":"10s"}`, string(b))
 			g.called.Add(1)
 			w.WriteHeader(nethttp.StatusOK)
 		}),
