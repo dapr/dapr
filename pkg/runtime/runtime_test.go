@@ -1895,7 +1895,7 @@ func TestBlockShutdownBindings(t *testing.T) {
 
 		fakeClock := clocktesting.NewFakeClock(time.Now())
 		rt.clock = fakeClock
-		rt.appHealthChanged(t.Context(), apphealth.AppStatusHealthy)
+		rt.appHealthChanged(t.Context(), apphealth.NewStatus(true, nil))
 
 		rt.runtimeConfig.blockShutdownDuration = ptr.Of(time.Millisecond * 100)
 		rt.runtimeConfig.gracefulShutdownDuration = 3 * time.Second
@@ -1930,7 +1930,7 @@ func TestBlockShutdownBindings(t *testing.T) {
 
 		fakeClock := clocktesting.NewFakeClock(time.Now())
 		rt.clock = fakeClock
-		rt.appHealthChanged(t.Context(), apphealth.AppStatusHealthy)
+		rt.appHealthChanged(t.Context(), apphealth.NewStatus(true, nil))
 
 		rt.runtimeConfig.blockShutdownDuration = ptr.Of(time.Millisecond * 100)
 		rt.runtimeConfig.gracefulShutdownDuration = 3 * time.Second
@@ -1949,7 +1949,7 @@ func TestBlockShutdownBindings(t *testing.T) {
 			assert.Fail(t, "expected not to return until block timeout is reached")
 		}
 
-		rt.appHealthChanged(t.Context(), apphealth.AppStatusUnhealthy)
+		rt.appHealthChanged(t.Context(), apphealth.NewStatus(false, nil))
 
 		select {
 		case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
@@ -2015,7 +2015,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		errCh <- rt.Run(ctx)
 	}()
 
-	rt.appHealthChanged(t.Context(), apphealth.AppStatusHealthy)
+	rt.appHealthChanged(t.Context(), apphealth.NewStatus(true, nil))
 
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
