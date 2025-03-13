@@ -118,7 +118,7 @@ func TestReminderProperties(t *testing.T) {
 		require.Equal(t, -1, r.RepeatsLeft())
 		require.Equal(t, -1, r.Period.repeats)
 
-		for i := 0; i <= 3; i++ {
+		for i := range 4 {
 			nextTick, active := r.NextTick()
 			require.Equal(t, time1.Add((2*time.Second)*time.Duration(i)), nextTick)
 
@@ -207,7 +207,7 @@ func TestReminderJSON(t *testing.T) {
 		// Marshal
 		enc, err := json.Marshal(dec)
 		require.NoError(t, err)
-		require.Equal(t, payload, string(enc))
+		require.JSONEq(t, payload, string(enc))
 	})
 
 	t.Run("failed to unmarshal", func(t *testing.T) {

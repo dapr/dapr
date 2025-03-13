@@ -14,7 +14,6 @@ limitations under the License.
 package binding_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -54,7 +53,7 @@ func TestInitBindings(t *testing.T) {
 		c := compapi.Component{}
 		c.ObjectMeta.Name = "testInputBinding"
 		c.Spec.Type = "bindings.testInputBinding"
-		err := proc.Init(context.TODO(), c)
+		err := proc.Init(t.Context(), c)
 		require.NoError(t, err)
 	})
 
@@ -77,7 +76,7 @@ func TestInitBindings(t *testing.T) {
 		c := compapi.Component{}
 		c.ObjectMeta.Name = "testOutputBinding"
 		c.Spec.Type = "bindings.testOutputBinding"
-		err := proc.Init(context.TODO(), c)
+		err := proc.Init(t.Context(), c)
 		require.NoError(t, err)
 	})
 
@@ -108,13 +107,13 @@ func TestInitBindings(t *testing.T) {
 		input := compapi.Component{}
 		input.ObjectMeta.Name = "testinput"
 		input.Spec.Type = "bindings.testinput"
-		err := proc.Init(context.TODO(), input)
+		err := proc.Init(t.Context(), input)
 		require.NoError(t, err)
 
 		output := compapi.Component{}
 		output.ObjectMeta.Name = "testoutput"
 		output.Spec.Type = "bindings.testoutput"
-		err = proc.Init(context.TODO(), output)
+		err = proc.Init(t.Context(), output)
 		require.NoError(t, err)
 	})
 
@@ -134,7 +133,7 @@ func TestInitBindings(t *testing.T) {
 		c := compapi.Component{}
 		c.ObjectMeta.Name = "testNotExistBinding"
 		c.Spec.Type = "bindings.testNotExistBinding"
-		err := proc.Init(context.TODO(), c)
+		err := proc.Init(t.Context(), c)
 		require.Error(t, err)
 	})
 }

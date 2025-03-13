@@ -47,7 +47,7 @@ func TestMetricsExporter(t *testing.T) {
 			Healthz: healthz.New(),
 		})
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		errCh := make(chan error)
 		go func() {
 			errCh <- e.Start(ctx)

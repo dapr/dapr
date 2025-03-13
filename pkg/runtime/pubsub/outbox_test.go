@@ -255,7 +255,7 @@ func TestPublishInternal(t *testing.T) {
 			},
 		})
 
-		_, err := o.PublishInternal(context.Background(), "test", []state.TransactionalStateOperation{
+		_, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:   "key",
 				Value: "test",
@@ -307,7 +307,7 @@ func TestPublishInternal(t *testing.T) {
 			},
 		})
 
-		_, err := o.PublishInternal(context.Background(), "test", []state.TransactionalStateOperation{
+		_, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:      "key",
 				Value:    "test",
@@ -361,7 +361,7 @@ func TestPublishInternal(t *testing.T) {
 		})
 
 		contentType := ""
-		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+		_, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:         "key",
 				Value:       "test",
@@ -431,7 +431,7 @@ func TestPublishInternal(t *testing.T) {
 		require.NoError(t, err)
 
 		contentType := "application/json"
-		_, err = o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+		_, err = o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:         "key",
 				Value:       string(b),
@@ -496,7 +496,7 @@ func TestPublishInternal(t *testing.T) {
 		b, err := json.Marshal(&j)
 		require.NoError(t, err)
 
-		_, err = o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+		_, err = o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:      "key",
 				Value:    string(b),
@@ -569,7 +569,7 @@ func TestPublishInternal(t *testing.T) {
 		jp, err := json.Marshal(&projection)
 		require.NoError(t, err)
 
-		_, err = o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+		_, err = o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:   "key",
 				Value: string(b),
@@ -587,7 +587,7 @@ func TestPublishInternal(t *testing.T) {
 	t.Run("missing state store", func(t *testing.T) {
 		o := newTestOutbox(nil).(*outboxImpl)
 
-		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+		_, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:   "key",
 				Value: "test",
@@ -628,7 +628,7 @@ func TestPublishInternal(t *testing.T) {
 			},
 		})
 
-		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{}, "testapp", "", "")
+		_, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{}, "testapp", "", "")
 
 		require.NoError(t, err)
 	})
@@ -664,7 +664,7 @@ func TestPublishInternal(t *testing.T) {
 			},
 		})
 
-		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+		_, err := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:   "1",
 				Value: "hello",
@@ -756,12 +756,12 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		})
 
 		const appID = "test"
-		err := o.SubscribeToInternalTopics(context.Background(), appID)
+		err := o.SubscribeToInternalTopics(t.Context(), appID)
 		require.NoError(t, err)
 
 		errCh := make(chan error, 1)
 		go func() {
-			trs, pErr := o.PublishInternal(context.Background(), "test", []state.TransactionalStateOperation{
+			trs, pErr := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 				state.SetRequest{
 					Key:      "1",
 					Value:    "hello",
@@ -839,10 +839,10 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		}
 
 		const appID = "test"
-		err := o.SubscribeToInternalTopics(context.Background(), appID)
+		err := o.SubscribeToInternalTopics(t.Context(), appID)
 		require.NoError(t, err)
 
-		trs, pErr := o.PublishInternal(context.Background(), "test", []state.TransactionalStateOperation{
+		trs, pErr := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:   "1",
 				Value: "hello",
@@ -910,12 +910,12 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		})
 
 		const appID = "test"
-		err := o.SubscribeToInternalTopics(context.Background(), appID)
+		err := o.SubscribeToInternalTopics(t.Context(), appID)
 		require.NoError(t, err)
 
 		errCh := make(chan error, 1)
 		go func() {
-			trs, pErr := o.PublishInternal(context.Background(), "test", []state.TransactionalStateOperation{
+			trs, pErr := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 				state.SetRequest{
 					Key:   "1",
 					Value: "hello",
@@ -1036,12 +1036,12 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		})
 
 		const appID = "test"
-		err := o.SubscribeToInternalTopics(context.Background(), appID)
+		err := o.SubscribeToInternalTopics(t.Context(), appID)
 		require.NoError(t, err)
 
 		errCh := make(chan error, 1)
 		go func() {
-			trs, pErr := o.PublishInternal(context.Background(), "test", []state.TransactionalStateOperation{
+			trs, pErr := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 				state.SetRequest{
 					Key:   "1",
 					Value: "hello",
