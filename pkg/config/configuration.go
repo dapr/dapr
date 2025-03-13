@@ -78,6 +78,8 @@ var defaultFeatures = map[Feature]bool{
 }
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
+//
+//nolint:recvcheck
 type Configuration struct {
 	metav1.TypeMeta `json:",inline" yaml:",inline"`
 	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata

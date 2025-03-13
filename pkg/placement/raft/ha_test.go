@@ -277,6 +277,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-ch
 	})
 	require.NoError(t, err)
 
+	//nolint:usetesting
 	ctx, cancel := context.WithCancel(context.Background())
 
 	stopped := make(chan struct{})

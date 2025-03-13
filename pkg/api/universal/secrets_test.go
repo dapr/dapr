@@ -14,7 +14,6 @@ limitations under the License.
 package universal
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -41,13 +40,13 @@ func TestSecretStoreNotConfigured(t *testing.T) {
 
 	// act
 	t.Run("GetSecret", func(t *testing.T) {
-		_, err := fakeAPI.GetSecret(context.Background(), &runtimev1pb.GetSecretRequest{})
+		_, err := fakeAPI.GetSecret(t.Context(), &runtimev1pb.GetSecretRequest{})
 		require.Error(t, err)
 		require.ErrorIs(t, err, messages.ErrSecretStoreNotConfigured)
 	})
 
 	t.Run("GetBulkSecret", func(t *testing.T) {
-		_, err := fakeAPI.GetBulkSecret(context.Background(), &runtimev1pb.GetBulkSecretRequest{})
+		_, err := fakeAPI.GetBulkSecret(t.Context(), &runtimev1pb.GetBulkSecretRequest{})
 		require.Error(t, err)
 		require.ErrorIs(t, err, messages.ErrSecretStoreNotConfigured)
 	})
@@ -175,7 +174,7 @@ func TestGetSecret(t *testing.T) {
 				StoreName: tt.storeName,
 				Key:       tt.key,
 			}
-			resp, err := fakeAPI.GetSecret(context.Background(), req)
+			resp, err := fakeAPI.GetSecret(t.Context(), req)
 
 			if !tt.errorExcepted {
 				require.NoError(t, err, "Expected no error")
@@ -239,7 +238,7 @@ func TestGetBulkSecret(t *testing.T) {
 			req := &runtimev1pb.GetBulkSecretRequest{
 				StoreName: tt.storeName,
 			}
-			resp, err := fakeAPI.GetBulkSecret(context.Background(), req)
+			resp, err := fakeAPI.GetBulkSecret(t.Context(), req)
 
 			if !tt.errorExcepted {
 				require.NoError(t, err, "Expected no error")
@@ -273,7 +272,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 	// act
 	t.Run("Get secret - retries on initial failure with resiliency", func(t *testing.T) {
-		_, err := fakeAPI.GetSecret(context.Background(), &runtimev1pb.GetSecretRequest{
+		_, err := fakeAPI.GetSecret(t.Context(), &runtimev1pb.GetSecretRequest{
 			StoreName: "failSecret",
 			Key:       "key",
 		})
@@ -285,7 +284,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 	t.Run("Get secret - timeout before request ends", func(t *testing.T) {
 		// Store sleeps for 30 seconds, let's make sure our timeout takes less time than that.
 		start := time.Now()
-		_, err := fakeAPI.GetSecret(context.Background(), &runtimev1pb.GetSecretRequest{
+		_, err := fakeAPI.GetSecret(t.Context(), &runtimev1pb.GetSecretRequest{
 			StoreName: "failSecret",
 			Key:       "timeout",
 		})
@@ -297,7 +296,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("Get bulk secret - retries on initial failure with resiliency", func(t *testing.T) {
-		_, err := fakeAPI.GetBulkSecret(context.Background(), &runtimev1pb.GetBulkSecretRequest{
+		_, err := fakeAPI.GetBulkSecret(t.Context(), &runtimev1pb.GetBulkSecretRequest{
 			StoreName: "failSecret",
 			Metadata:  map[string]string{"key": "bulk"},
 		})
@@ -308,7 +307,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 	t.Run("Get bulk secret - timeout before request ends", func(t *testing.T) {
 		start := time.Now()
-		_, err := fakeAPI.GetBulkSecret(context.Background(), &runtimev1pb.GetBulkSecretRequest{
+		_, err := fakeAPI.GetBulkSecret(t.Context(), &runtimev1pb.GetBulkSecretRequest{
 			StoreName: "failSecret",
 			Metadata:  map[string]string{"key": "bulkTimeout"},
 		})

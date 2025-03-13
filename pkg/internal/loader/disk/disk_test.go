@@ -14,7 +14,6 @@ limitations under the License.
 package disk
 
 import (
-	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -52,7 +51,7 @@ spec:
     value: value2
 `
 		require.NoError(t, os.WriteFile(filepath.Join(tmp, filename), []byte(yaml), fs.FileMode(0o600)))
-		components, err := request.Load(context.Background())
+		components, err := request.Load(t.Context())
 		require.NoError(t, err)
 		assert.Len(t, components, 1)
 	})
@@ -71,7 +70,7 @@ kind: Component
 metadata:
 name: statestore`
 		require.NoError(t, os.WriteFile(filepath.Join(tmp, filename), []byte(yaml), fs.FileMode(0o600)))
-		components, err := request.Load(context.Background())
+		components, err := request.Load(t.Context())
 		require.NoError(t, err)
 		assert.Empty(t, components)
 	})
@@ -81,7 +80,7 @@ name: statestore`
 			Paths: []string{"test-path-no-exists"},
 		})
 
-		components, err := request.Load(context.Background())
+		components, err := request.Load(t.Context())
 		require.Error(t, err)
 		assert.Empty(t, components)
 	})
@@ -230,7 +229,7 @@ metadata:
 					Paths: []string{tmp},
 					AppID: "myappid",
 				})
-				components, err := loader.Load(context.Background())
+				components, err := loader.Load(t.Context())
 				assert.Equal(t, test.expErr, err != nil, "%v", err)
 				assert.Equal(t, test.expComps, components)
 			})

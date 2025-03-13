@@ -44,7 +44,7 @@ func TestSpanFromContext(t *testing.T) {
 	})
 
 	t.Run("not nil span for context", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		exp := newOtelFakeExporter()
 		tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp))
 		tracer := tp.Tracer("dapr-diagnostics-utils-tests")
@@ -60,7 +60,7 @@ func TestSpanFromContext(t *testing.T) {
 	})
 
 	t.Run("nil span for context", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		exp := newOtelFakeExporter()
 		_ = sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp))
 		newCtx := trace.ContextWithSpan(ctx, nil)
@@ -72,7 +72,7 @@ func TestSpanFromContext(t *testing.T) {
 	})
 
 	t.Run("nil", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		exp := newOtelFakeExporter()
 		_ = sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp))
 		newCtx := trace.ContextWithSpan(ctx, nil)
