@@ -104,7 +104,6 @@ const (
 	pubsubnameparam          = "pubsubname"
 	traceparentHeader        = "traceparent"
 	tracestateHeader         = "tracestate"
-	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 

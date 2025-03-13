@@ -29,6 +29,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/dapr/dapr/pkg/api/http/consts"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
@@ -110,7 +111,7 @@ func (h *Channel) GetAppConfig(ctx context.Context, appID string) (*config.Appli
 		WithHTTPExtension(http.MethodGet, "").
 		WithContentType(invokev1.JSONContentType).
 		WithMetadata(map[string][]string{
-			"dapr-app-id": {appID},
+			consts.DaprAppIDHeader: {appID},
 		})
 	defer req.Close()
 

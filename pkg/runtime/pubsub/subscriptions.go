@@ -20,6 +20,7 @@ import (
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/api/http/consts"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -103,7 +104,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 
 	if appID != "" {
 		req = req.WithMetadata(map[string][]string{
-			"dapr-app-id": {appID},
+			consts.DaprAppIDHeader: {appID},
 		})
 	}
 	defer req.Close()
