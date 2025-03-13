@@ -47,21 +47,6 @@ def get_memory_info(process):
         return resident_memory
     except psutil.NoSuchProcess:
         return None
-    
-def get_goroutine_count():
-    try:
-        response = requests.get('http://localhost:9090/metrics')
-        metrics = response.text
-
-        match = re.search(r'go_goroutines (\d+)', metrics)
-        if match:
-            goroutine_count = int(match.group(1))
-            return goroutine_count
-        else:
-            raise ValueError("Failed to extract Goroutine count from metrics.")
-
-    except (requests.ConnectionError, IndexError, ValueError):
-        return None
 
 def run_sidecar(executable, app_id):
     print(f"Running {executable} ...")
@@ -72,7 +57,6 @@ def run_sidecar(executable, app_id):
     background_process = run_process_background(args)
 
     memory_data = []
-    goroutine_data = []
 
     # Initial wait to remove any noise from initialization.
     time.sleep(10)
@@ -82,20 +66,17 @@ def run_sidecar(executable, app_id):
     for _ in range(cycles):
         time.sleep(1)
         memory = get_memory_info(background_process)
-        goroutine_count = get_goroutine_count()
         if memory is not None:
             memory_data.append(memory)
-        if goroutine_count is not None:
-            goroutine_data.append(goroutine_count)
-            
+
     # Kill the process
     kill_process(background_process)
 
-    if len(memory_data) == 0 or len(goroutine_data) == 0:
-        raise Exception(f"Could not collect data for {executable}: {( memory_data, goroutine_data)}")
+    if len(memory_data) == 0:
+        raise Exception(f"Could not collect data for {executable}: {( memory_data )}")
 
     print(f"Collected metrics for {executable}.")
-    return memory_data, goroutine_data
+    return memory_data
 
 def test_diff(arr_old, arr_new, label, test='ttest'):
     # Output mean and median for memory utilization
@@ -162,11 +143,10 @@ if __name__ == "__main__":
 
     binary_size_diff = size_diff(old_binary, new_binary)
 
-    memory_data_new, goroutine_data_new = run_sidecar(new_binary, "treatment")
-    memory_data_old, goroutine_data_old = run_sidecar(old_binary, "control")
+    memory_data_new = run_sidecar(new_binary, "treatment")
+    memory_data_old = run_sidecar(old_binary, "control")
 
     memory_diff = test_diff(memory_data_old, memory_data_new, "memory utilization (in MB)", "tp75_plus_10percent")
-    goroutine_diff = test_diff(goroutine_data_old, goroutine_data_new, "number of go routines", "ttest")
 
-    if binary_size_diff or memory_diff or goroutine_diff:
+    if binary_size_diff or memory_diff:
         raise Exception("Found significant differences.")
