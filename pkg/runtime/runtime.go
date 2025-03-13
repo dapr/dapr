@@ -691,7 +691,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.appHealthReady = a.appHealthReadyInit
 	if a.runtimeConfig.appConnectionConfig.HealthCheck != nil && a.channels.AppChannel() != nil {
 		// We can't just pass "a.channels.HealthProbe" because appChannel may be re-created
-		a.appHealth = apphealth.New(*a.runtimeConfig.appConnectionConfig.HealthCheck, func(ctx context.Context) (bool, error) {
+		a.appHealth = apphealth.New(*a.runtimeConfig.appConnectionConfig.HealthCheck, func(ctx context.Context) (*apphealth.Status, error) {
 			return a.channels.AppChannel().HealthProbe(ctx)
 		})
 		if err := a.runnerCloser.AddCloser(a.appHealth); err != nil {
@@ -710,7 +710,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		a.appHealth.Enqueue()
 	} else {
 		// If there's no health check, mark the app as healthy right away so subscriptions can start
-		a.appHealthChanged(ctx, apphealth.AppStatusHealthy)
+		a.appHealthChanged(ctx, apphealth.NewStatus(true, nil))
 	}
 
 	return nil
@@ -746,12 +746,11 @@ func (a *DaprRuntime) initPluggableComponents(ctx context.Context) {
 
 // Sets the status of the app to healthy or un-healthy
 // Callback for apphealth when the detected status changed
-func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
+func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.Status) {
 	a.appHealthLock.Lock()
 	defer a.appHealthLock.Unlock()
 
-	switch status {
-	case apphealth.AppStatusHealthy:
+	if status.IsHealthy {
 		select {
 		case <-a.isAppHealthy:
 			a.isAppHealthy = make(chan struct{})
@@ -797,8 +796,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		}
 
 		a.jobsManager.StartApp(ctx)
-
-	case apphealth.AppStatusUnhealthy:
+	} else {
 		select {
 		case <-a.isAppHealthy:
 		default:

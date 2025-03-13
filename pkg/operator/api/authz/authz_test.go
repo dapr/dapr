@@ -14,7 +14,6 @@ limitations under the License.
 package authz
 
 import (
-	"context"
 	"testing"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
@@ -33,7 +32,7 @@ func Test_Request(t *testing.T) {
 	pki := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
 
 	t.Run("no auth context should error", func(t *testing.T) {
-		id, err := Request(context.Background(), "ns1")
+		id, err := Request(t.Context(), "ns1")
 		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 		assert.Nil(t, id)
