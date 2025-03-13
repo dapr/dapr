@@ -106,7 +106,7 @@ const (
 
 func TestNewRuntime(t *testing.T) {
 	// act
-	r, err := newDaprRuntime(context.Background(), nil, &internalConfig{
+	r, err := newDaprRuntime(t.Context(), nil, &internalConfig{
 		mode: modes.StandaloneMode,
 		metricsExporter: metrics.New(metrics.Options{
 			Log:       log,
@@ -152,7 +152,7 @@ func TestDoProcessComponent(t *testing.T) {
 		// setup
 		ctrl := gomock.NewController(t)
 		mockLockStore := daprt.NewMockStore(ctrl)
-		mockLockStore.EXPECT().InitLockStore(context.Background(), gomock.Any()).Return(assert.AnError)
+		mockLockStore.EXPECT().InitLockStore(t.Context(), gomock.Any()).Return(assert.AnError)
 
 		rt.runtimeConfig.registry.Locks().RegisterComponent(
 			func(_ logger.Logger) lock.Store {
@@ -162,7 +162,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.processor.Init(context.Background(), lockComponent)
+		err := rt.processor.Init(t.Context(), lockComponent)
 
 		// assert
 		require.Error(t, err, "expected an error")
@@ -185,7 +185,7 @@ func TestDoProcessComponent(t *testing.T) {
 		lockComponentV3.Spec.Version = "v3"
 
 		// act
-		err := rt.processor.Init(context.Background(), lockComponentV3)
+		err := rt.processor.Init(t.Context(), lockComponentV3)
 
 		// assert
 		require.Error(t, err, "expected an error")
@@ -196,7 +196,7 @@ func TestDoProcessComponent(t *testing.T) {
 		// setup
 		ctrl := gomock.NewController(t)
 		mockLockStore := daprt.NewMockStore(ctrl)
-		mockLockStore.EXPECT().InitLockStore(context.Background(), gomock.Any()).Return(nil)
+		mockLockStore.EXPECT().InitLockStore(t.Context(), gomock.Any()).Return(nil)
 
 		rt.runtimeConfig.registry.Locks().RegisterComponent(
 			func(_ logger.Logger) lock.Store {
@@ -215,7 +215,7 @@ func TestDoProcessComponent(t *testing.T) {
 			},
 		}
 		// act
-		err := rt.processor.Init(context.Background(), lockComponentWithWrongStrategy)
+		err := rt.processor.Init(t.Context(), lockComponentWithWrongStrategy)
 		// assert
 		require.Error(t, err)
 	})
@@ -224,7 +224,7 @@ func TestDoProcessComponent(t *testing.T) {
 		// setup
 		ctrl := gomock.NewController(t)
 		mockLockStore := daprt.NewMockStore(ctrl)
-		mockLockStore.EXPECT().InitLockStore(context.Background(), gomock.Any()).Return(nil)
+		mockLockStore.EXPECT().InitLockStore(t.Context(), gomock.Any()).Return(nil)
 
 		rt.runtimeConfig.registry.Locks().RegisterComponent(
 			func(_ logger.Logger) lock.Store {
@@ -234,7 +234,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.processor.Init(context.Background(), lockComponent)
+		err := rt.processor.Init(t.Context(), lockComponent)
 		// assert
 		require.NoError(t, err, "unexpected error")
 		// get modified key
@@ -263,7 +263,7 @@ func TestDoProcessComponent(t *testing.T) {
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
 
 		// act
-		err := rt.processor.Init(context.Background(), pubsubComponent)
+		err := rt.processor.Init(t.Context(), pubsubComponent)
 
 		// assert
 		require.Error(t, err, "expected an error")
@@ -272,7 +272,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 	t.Run("test invalid category component", func(t *testing.T) {
 		// act
-		err := rt.processor.Init(context.Background(), componentsV1alpha1.Component{
+		err := rt.processor.Init(t.Context(), componentsV1alpha1.Component{
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type: "invalid",
 			},
@@ -301,8 +301,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			"kubernetesMock",
 		)
 
-		go rt.processor.Process(context.Background())
-		rt.processor.AddPendingComponent(context.Background(), componentsV1alpha1.Component{
+		go rt.processor.Process(t.Context())
+		rt.processor.AddPendingComponent(t.Context(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -311,7 +311,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(context.Background())
+		rt.flushOutstandingComponents(t.Context())
 		assert.True(t, wasCalled)
 
 		// Make sure that the goroutine was restarted and can flush a second time
@@ -323,7 +323,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			"kubernetesMock2",
 		)
 
-		rt.processor.AddPendingComponent(context.Background(), componentsV1alpha1.Component{
+		rt.processor.AddPendingComponent(t.Context(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock2",
 			},
@@ -332,7 +332,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(context.Background())
+		rt.flushOutstandingComponents(t.Context())
 		assert.True(t, wasCalled)
 	})
 	t.Run("flushOutstandingComponents blocks for components with outstanding dependanices", func(t *testing.T) {
@@ -376,8 +376,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			"kubernetesMockGrandChild",
 		)
 
-		go rt.processor.Process(context.Background())
-		rt.processor.AddPendingComponent(context.Background(), componentsV1alpha1.Component{
+		go rt.processor.Process(t.Context())
+		rt.processor.AddPendingComponent(t.Context(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMockGrandChild",
 			},
@@ -398,7 +398,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				SecretStore: "kubernetesMockChild",
 			},
 		})
-		rt.processor.AddPendingComponent(context.Background(), componentsV1alpha1.Component{
+		rt.processor.AddPendingComponent(t.Context(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMockChild",
 			},
@@ -419,7 +419,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				SecretStore: "kubernetesMock",
 			},
 		})
-		rt.processor.AddPendingComponent(context.Background(), componentsV1alpha1.Component{
+		rt.processor.AddPendingComponent(t.Context(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -428,7 +428,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(context.Background())
+		rt.flushOutstandingComponents(t.Context())
 		assert.True(t, wasCalled)
 		assert.True(t, wasCalledChild)
 		assert.True(t, wasCalledGrandChild)
@@ -479,7 +479,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "anotherResolver", nil)
 
 		// act
-		err = rt.initNameResolution(context.Background())
+		err = rt.initNameResolution(t.Context())
 
 		// assert
 		require.Error(t, err)
@@ -499,7 +499,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "someResolver", nil)
 
 		// act
-		err = rt.initNameResolution(context.Background())
+		err = rt.initNameResolution(t.Context())
 
 		// assert
 		require.NoError(t, err, "expected no error")
@@ -517,7 +517,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "mdns", nil)
 
 		// act
-		err = rt.initNameResolution(context.Background())
+		err = rt.initNameResolution(t.Context())
 
 		// assert
 		require.NoError(t, err, "expected no error")
@@ -535,7 +535,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "mdns", nil)
 
 		// act
-		err = rt.initNameResolution(context.Background())
+		err = rt.initNameResolution(t.Context())
 
 		// assert
 		require.NoError(t, err, "expected no error")
@@ -553,7 +553,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "kubernetes", nil)
 
 		// act
-		err = rt.initNameResolution(context.Background())
+		err = rt.initNameResolution(t.Context())
 
 		// assert
 		require.NoError(t, err, "expected no error")
@@ -571,7 +571,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "kubernetes", nil)
 
 		// act
-		err = rt.initNameResolution(context.Background())
+		err = rt.initNameResolution(t.Context())
 
 		// assert
 		require.NoError(t, err, "expected no error")
@@ -676,7 +676,7 @@ func TestSetupTracing(t *testing.T) {
 			// Setup tracing with the fake tracer provider  store to confirm
 			// the right exporter was registered.
 			tpStore := newFakeTracerProviderStore()
-			if err := rt.setupTracing(context.Background(), rt.hostAddress, tpStore); tc.expectedErr != "" {
+			if err := rt.setupTracing(t.Context(), rt.hostAddress, tpStore); tc.expectedErr != "" {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				require.NoError(t, err)
@@ -693,7 +693,7 @@ func TestSetupTracing(t *testing.T) {
 			// We have no way to validate the result, but we can at least
 			// confirm that nothing blows up.
 			if tc.expectedErr == "" {
-				rt.setupTracing(context.Background(), rt.hostAddress, newOpentelemetryTracerProviderStore())
+				rt.setupTracing(t.Context(), rt.hostAddress, newOpentelemetryTracerProviderStore())
 			}
 		})
 	}
@@ -751,7 +751,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		defer close(testOk)
 		go func() {
 			// If the test fails, this call blocks forever, eventually causing a timeout
-			rt.appendBuiltinSecretStore(context.Background())
+			rt.appendBuiltinSecretStore(t.Context())
 			testOk <- struct{}{}
 		}()
 		select {
@@ -783,8 +783,8 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 }
 
 func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
-	go rt.processor.Process(context.Background())
-	rt.appendBuiltinSecretStore(context.Background())
+	go rt.processor.Process(t.Context())
+	rt.appendBuiltinSecretStore(t.Context())
 	assert.Eventually(t, func() bool {
 		_, ok := rt.compStore.GetComponent(secretstoresLoader.BuiltinKubernetesSecretStore)
 		return ok
@@ -800,7 +800,7 @@ func NewTestDaprRuntime(t *testing.T, mode modes.DaprMode) (*DaprRuntime, error)
 func NewTestDaprRuntimeWithID(t *testing.T, mode modes.DaprMode, id string) (*DaprRuntime, error) {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, string(protocol.HTTPProtocol), 1024)
 	testRuntimeConfig.id = id
-	rt, err := newDaprRuntime(context.Background(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	if err != nil {
 		return nil, err
 	}
@@ -812,7 +812,7 @@ func NewTestDaprRuntimeWithID(t *testing.T, mode modes.DaprMode, id string) (*Da
 
 func NewTestDaprRuntimeWithProtocol(t *testing.T, mode modes.DaprMode, protocol string, appPort int) (*DaprRuntime, error) {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, protocol, appPort)
-	rt, err := newDaprRuntime(context.Background(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	if err != nil {
 		return nil, err
 	}
@@ -896,7 +896,7 @@ func TestInitActors(t *testing.T) {
 		r.namespace = ""
 		r.runtimeConfig.mTLSEnabled = true
 
-		err = r.initActors(context.TODO())
+		err = r.initActors(t.Context())
 		require.Error(t, err)
 	})
 
@@ -922,7 +922,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("placement enable = false", func(t *testing.T) {
-		r, err := newDaprRuntime(context.Background(), testSecurity(t), &internalConfig{
+		r, err := newDaprRuntime(t.Context(), testSecurity(t), &internalConfig{
 			metricsExporter: metrics.New(metrics.Options{
 				Log:       log,
 				Namespace: metrics.DefaultMetricNamespace,
@@ -936,12 +936,12 @@ func TestInitActors(t *testing.T) {
 		defer stopRuntime(t, r)
 		r.channels.Refresh()
 
-		err = r.initActors(context.TODO())
+		err = r.initActors(t.Context())
 		require.NoError(t, err)
 	})
 
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
-		r, err := newDaprRuntime(context.Background(), testSecurity(t), &internalConfig{
+		r, err := newDaprRuntime(t.Context(), testSecurity(t), &internalConfig{
 			metricsExporter: metrics.New(metrics.Options{
 				Log:       log,
 				Namespace: metrics.DefaultMetricNamespace,
@@ -960,7 +960,7 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
-		r, err := newDaprRuntime(context.Background(), testSecurity(t), &internalConfig{
+		r, err := newDaprRuntime(t.Context(), testSecurity(t), &internalConfig{
 			metricsExporter: metrics.New(metrics.Options{
 				Log:       log,
 				Namespace: metrics.DefaultMetricNamespace,
@@ -977,7 +977,7 @@ func TestInitActors(t *testing.T) {
 		name, ok := r.processor.State().ActorStateStoreName()
 		assert.False(t, ok)
 		assert.Equal(t, "", name)
-		err = r.initActors(context.TODO())
+		err = r.initActors(t.Context())
 		require.NoError(t, err)
 	})
 }
@@ -1052,7 +1052,7 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 			mockAppChannel.On("GetAppConfig").Return(&configResp, nil)
 
-			r.loadAppConfiguration(context.Background())
+			r.loadAppConfiguration(t.Context())
 
 			assert.NotNil(t, r.appConfig)
 
@@ -1190,13 +1190,13 @@ func TestCloseWithErrors(t *testing.T) {
 
 	errCh := make(chan error)
 	go func() {
-		errCh <- rt.Run(context.Background())
+		errCh <- rt.Run(t.Context())
 	}()
 
-	rt.processor.AddPendingComponent(context.Background(), mockOutputBindingComponent)
-	rt.processor.AddPendingComponent(context.Background(), mockPubSubComponent)
-	rt.processor.AddPendingComponent(context.Background(), mockStateComponent)
-	rt.processor.AddPendingComponent(context.Background(), mockSecretsComponent)
+	rt.processor.AddPendingComponent(t.Context(), mockOutputBindingComponent)
+	rt.processor.AddPendingComponent(t.Context(), mockPubSubComponent)
+	rt.processor.AddPendingComponent(t.Context(), mockStateComponent)
+	rt.processor.AddPendingComponent(t.Context(), mockSecretsComponent)
 
 	err = rt.runnerCloser.Close()
 	require.Error(t, err)
@@ -1227,7 +1227,7 @@ func TestComponentsCallback(t *testing.T) {
 	var callbackInvoked atomic.Bool
 
 	cfg := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, "http", port)
-	rt, err := newDaprRuntime(context.Background(), testSecurity(t), cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt, err := newDaprRuntime(t.Context(), testSecurity(t), cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	require.NoError(t, err)
 	rt.runtimeConfig.registry = registry.New(registry.NewOptions().WithComponentsCallback(func(components registry.ComponentRegistry) error {
 		callbackInvoked.Store(true)
@@ -1236,7 +1236,7 @@ func TestComponentsCallback(t *testing.T) {
 	}))
 
 	errCh := make(chan error)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
@@ -1282,7 +1282,7 @@ func TestGRPCProxy(t *testing.T) {
 		"mdns", // for standalone mode
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error)
 	go func() {
 		errCh <- rt.Run(ctx)
@@ -1301,7 +1301,7 @@ func TestGRPCProxy(t *testing.T) {
 	req := &pb.PingRequest{Value: "foo"}
 
 	t.Run("proxy single streaming request", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second*5)
 		defer cancel()
 		stream, err := pingStreamClient(ctx, internalPort)
 		require.NoError(t, err)
@@ -1315,12 +1315,12 @@ func TestGRPCProxy(t *testing.T) {
 	})
 
 	t.Run("proxy concurrent streaming requests", func(t *testing.T) {
-		ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		ctx1, cancel := context.WithTimeout(t.Context(), time.Second*5)
 		defer cancel()
 		stream1, err := pingStreamClient(ctx1, internalPort)
 		require.NoError(t, err)
 
-		ctx2, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx2, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
 		stream2, err := pingStreamClient(ctx2, internalPort)
 		require.NoError(t, err)
@@ -1373,7 +1373,7 @@ spec:
 `), 0o600))
 
 		// Use a background context since this is not closed by the test.
-		ctx := context.Background()
+		ctx := t.Context()
 		errCh := make(chan error)
 		go func() {
 			errCh <- rt.Run(ctx)
@@ -1454,7 +1454,7 @@ spec:
 `), 0o600))
 
 		// Use a background context since this is not closed by the test.
-		ctx := context.Background()
+		ctx := t.Context()
 		errCh := make(chan error)
 		go func() {
 			errCh <- rt.Run(ctx)
@@ -1537,7 +1537,7 @@ spec:
 `), 0o600))
 
 		// Use a background context since this is not closed by the test.
-		ctx := context.Background()
+		ctx := t.Context()
 		errCh := make(chan error)
 		go func() {
 			errCh <- rt.Run(ctx)
@@ -1607,7 +1607,7 @@ spec:
 `), 0o600))
 
 		// Use a background context since this is not closed by the test.
-		ctx := context.Background()
+		ctx := t.Context()
 		errCh := make(chan error)
 		go func() {
 			errCh <- rt.Run(ctx)
@@ -1676,7 +1676,7 @@ spec:
 `), 0o600))
 
 		// Use a background context since this is not closed by the test.
-		ctx := context.Background()
+		ctx := t.Context()
 		errCh := make(chan error)
 		go func() {
 			errCh <- rt.Run(ctx)
@@ -1758,11 +1758,11 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	cSecretStore.ObjectMeta.Name = mockSecretStoreName
 	cSecretStore.Spec.Type = "secretstores.mockSecretStore"
 
-	require.NoError(t, rt.processor.Init(context.Background(), cin))
-	require.NoError(t, rt.processor.Init(context.Background(), cout))
-	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
-	require.NoError(t, rt.processor.Init(context.Background(), cStateStore))
-	require.NoError(t, rt.processor.Init(context.Background(), cSecretStore))
+	require.NoError(t, rt.processor.Init(t.Context(), cin))
+	require.NoError(t, rt.processor.Init(t.Context(), cout))
+	require.NoError(t, rt.processor.Init(t.Context(), cPubSub))
+	require.NoError(t, rt.processor.Init(t.Context(), cStateStore))
+	require.NoError(t, rt.processor.Init(t.Context(), cSecretStore))
 
 	capabilities := rt.getComponentsCapabilitesMap()
 	assert.Len(t, capabilities, 5,
@@ -1848,7 +1848,7 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error)
 	go func() {
 		errCh <- rt.Run(ctx)
@@ -1874,8 +1874,8 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	cout := componentsV1alpha1.Component{}
 	cout.ObjectMeta.Name = "testOutputBinding"
 	cout.Spec.Type = "bindings.testOutputBinding"
-	require.NoError(t, rt.processor.Init(context.Background(), cin))
-	require.NoError(t, rt.processor.Init(context.Background(), cout))
+	require.NoError(t, rt.processor.Init(t.Context(), cin))
+	require.NoError(t, rt.processor.Init(t.Context(), cout))
 	assert.Len(t, rt.compStore.ListInputBindings(), 1)
 	assert.Len(t, rt.compStore.ListOutputBindings(), 1)
 
@@ -1895,12 +1895,12 @@ func TestBlockShutdownBindings(t *testing.T) {
 
 		fakeClock := clocktesting.NewFakeClock(time.Now())
 		rt.clock = fakeClock
-		rt.appHealthChanged(context.Background(), apphealth.AppStatusHealthy)
+		rt.appHealthChanged(t.Context(), apphealth.AppStatusHealthy)
 
 		rt.runtimeConfig.blockShutdownDuration = ptr.Of(time.Millisecond * 100)
 		rt.runtimeConfig.gracefulShutdownDuration = 3 * time.Second
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		errCh := make(chan error)
 		go func() {
 			errCh <- rt.Run(ctx)
@@ -1930,12 +1930,12 @@ func TestBlockShutdownBindings(t *testing.T) {
 
 		fakeClock := clocktesting.NewFakeClock(time.Now())
 		rt.clock = fakeClock
-		rt.appHealthChanged(context.Background(), apphealth.AppStatusHealthy)
+		rt.appHealthChanged(t.Context(), apphealth.AppStatusHealthy)
 
 		rt.runtimeConfig.blockShutdownDuration = ptr.Of(time.Millisecond * 100)
 		rt.runtimeConfig.gracefulShutdownDuration = 3 * time.Second
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		errCh := make(chan error)
 		go func() {
 			errCh <- rt.Run(ctx)
@@ -1949,7 +1949,7 @@ func TestBlockShutdownBindings(t *testing.T) {
 			assert.Fail(t, "expected not to return until block timeout is reached")
 		}
 
-		rt.appHealthChanged(context.Background(), apphealth.AppStatusUnhealthy)
+		rt.appHealthChanged(t.Context(), apphealth.AppStatusUnhealthy)
 
 		select {
 		case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
@@ -2007,15 +2007,15 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		Security:       rt.sec,
 	})
 
-	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
+	require.NoError(t, rt.processor.Init(t.Context(), cPubSub))
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error)
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
 
-	rt.appHealthChanged(context.Background(), apphealth.AppStatusHealthy)
+	rt.appHealthChanged(t.Context(), apphealth.AppStatusHealthy)
 
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
@@ -2071,7 +2071,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	rt.namespace = "test"
 	rt.runtimeConfig.appConnectionConfig.Port = -1
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error)
 	go func() {
 		errCh <- rt.Run(ctx)
@@ -2084,7 +2084,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	}
 
 	// act
-	err = rt.processor.Init(context.Background(), mockStateComponent)
+	err = rt.processor.Init(t.Context(), mockStateComponent)
 
 	// assert
 	require.NoError(t, err, "expected no error")
@@ -2150,11 +2150,11 @@ func TestTraceShutdown(t *testing.T) {
 	}
 	rt.hostAddress = "localhost:3000"
 	tpStore := newOpentelemetryTracerProviderStore()
-	require.NoError(t, rt.setupTracing(context.Background(), rt.hostAddress, tpStore))
+	require.NoError(t, rt.setupTracing(t.Context(), rt.hostAddress, tpStore))
 	assert.NotNil(t, rt.tracerProvider)
 
 	errCh := make(chan error)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
@@ -2172,7 +2172,7 @@ func TestTraceShutdown(t *testing.T) {
 }
 
 func testSecurity(t *testing.T) security.Handler {
-	secP, err := security.New(context.Background(), security.Options{
+	secP, err := security.New(t.Context(), security.Options{
 		TrustAnchors:            []byte("test"),
 		AppID:                   "test",
 		ControlPlaneTrustDomain: "test.example.com",
@@ -2184,10 +2184,10 @@ func testSecurity(t *testing.T) security.Handler {
 		Healthz: healthz.New(),
 	})
 	require.NoError(t, err)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	go secP.Run(ctx)
-	sec, err := secP.Handler(context.Background())
+	sec, err := secP.Handler(t.Context())
 	require.NoError(t, err)
 
 	return sec

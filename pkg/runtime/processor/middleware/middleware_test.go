@@ -14,7 +14,6 @@ limitations under the License.
 package middleware
 
 import (
-	"context"
 	nethttp "net/http"
 	"testing"
 
@@ -45,7 +44,7 @@ func TestInit(t *testing.T) {
 			HTTP: http.New(),
 		})
 
-		err := m.Init(context.Background(), compapi.Component{
+		err := m.Init(t.Context(), compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
@@ -76,7 +75,7 @@ func TestInit(t *testing.T) {
 			}
 		}, "mock")
 
-		err := m.Init(context.Background(), compapi.Component{
+		err := m.Init(t.Context(), compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
@@ -107,7 +106,7 @@ func TestInit(t *testing.T) {
 			}
 		}, "mock")
 
-		err := m.Init(context.Background(), compapi.Component{
+		err := m.Init(t.Context(), compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
@@ -135,7 +134,7 @@ func TestInit(t *testing.T) {
 			}
 		}, "notmock")
 
-		err := m.Init(context.Background(), compapi.Component{
+		err := m.Init(t.Context(), compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
@@ -189,7 +188,7 @@ func TestInit(t *testing.T) {
 		assert.Equal(t, 1, rootCalled)
 		assert.Equal(t, 0, middlewareCalled)
 
-		err := m.Init(context.Background(), compapi.Component{
+		err := m.Init(t.Context(), compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
@@ -241,11 +240,11 @@ func TestInit(t *testing.T) {
 			}
 		}, "mock")
 
-		require.NoError(t, m.Init(context.Background(), compapi.Component{
+		require.NoError(t, m.Init(t.Context(), compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "test1"},
 			Spec:       compapi.ComponentSpec{Type: "middleware.http.mock", Version: "v1"},
 		}))
-		require.NoError(t, m.Init(context.Background(), compapi.Component{
+		require.NoError(t, m.Init(t.Context(), compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "test2"},
 			Spec:       compapi.ComponentSpec{Type: "middleware.http.mock", Version: "v1"},
 		}))

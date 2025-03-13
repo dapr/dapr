@@ -32,6 +32,8 @@ const (
 //+kubebuilder:object:root=true
 
 // Component describes an Dapr component type.
+//
+//nolint:recvcheck
 type Component struct {
 	metav1.TypeMeta `json:",inline"`
 	//+optional

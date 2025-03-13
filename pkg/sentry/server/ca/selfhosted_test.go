@@ -14,7 +14,6 @@ limitations under the License.
 package ca
 
 import (
-	"context"
 	"crypto/x509"
 	"os"
 	"path/filepath"
@@ -50,7 +49,7 @@ func TestSelhosted_store(t *testing.T) {
 			},
 		}
 
-		require.NoError(t, s.store(context.Background(), Bundle{
+		require.NoError(t, s.store(t.Context(), Bundle{
 			TrustAnchors: []byte("root"),
 			IssChainPEM:  []byte("issuer"),
 			IssKeyPEM:    []byte("key"),
@@ -178,7 +177,7 @@ func TestSelfhosted_get(t *testing.T) {
 				require.NoError(t, os.WriteFile(keyFile, *test.key, writePerm))
 			}
 
-			got, ok, err := s.get(context.Background())
+			got, ok, err := s.get(t.Context())
 			assert.Equal(t, test.expBundle, got)
 			assert.Equal(t, test.expOk, ok)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)

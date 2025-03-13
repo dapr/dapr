@@ -14,7 +14,6 @@ limitations under the License.
 package grpc
 
 import (
-	"context"
 	"errors"
 	"io"
 	"testing"
@@ -50,7 +49,7 @@ func TestCallLocal(t *testing.T) {
 		request := invokev1.NewInvokeMethodRequest("method")
 		defer request.Close()
 
-		_, err := client.CallLocal(context.Background(), request.Proto())
+		_, err := client.CallLocal(t.Context(), request.Proto())
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 
@@ -72,7 +71,7 @@ func TestCallLocal(t *testing.T) {
 			Message: nil,
 		}
 
-		_, err := client.CallLocal(context.Background(), request)
+		_, err := client.CallLocal(t.Context(), request)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
@@ -97,7 +96,7 @@ func TestCallLocal(t *testing.T) {
 		request := invokev1.NewInvokeMethodRequest("method")
 		defer request.Close()
 
-		_, err := client.CallLocal(context.Background(), request.Proto())
+		_, err := client.CallLocal(t.Context(), request.Proto())
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }
@@ -116,7 +115,7 @@ func TestCallLocalStream(t *testing.T) {
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		st, err := client.CallLocalStream(context.Background())
+		st, err := client.CallLocalStream(t.Context())
 		require.NoError(t, err)
 
 		request := invokev1.NewInvokeMethodRequest("method")
@@ -146,7 +145,7 @@ func TestCallLocalStream(t *testing.T) {
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		st, err := client.CallLocalStream(context.Background())
+		st, err := client.CallLocalStream(t.Context())
 		require.NoError(t, err)
 
 		err = st.Send(&internalv1pb.InternalInvokeRequestStream{
@@ -183,7 +182,7 @@ func TestCallLocalStream(t *testing.T) {
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		st, err := client.CallLocalStream(context.Background())
+		st, err := client.CallLocalStream(t.Context())
 		require.NoError(t, err)
 
 		request := invokev1.NewInvokeMethodRequest("method").
@@ -221,7 +220,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	request := invokev1.NewInvokeMethodRequest("method")
 	defer request.Close()
 
-	resp, err := client.CallLocal(context.Background(), request.Proto())
+	resp, err := client.CallLocal(t.Context(), request.Proto())
 	require.NoError(t, err)
 	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with app call")
 }
@@ -239,7 +238,7 @@ func TestCallActorWithTracing(t *testing.T) {
 		WithActor("test-actor", "actor-1")
 	defer request.Close()
 
-	resp, err := client.CallActor(context.Background(), request.Proto())
+	resp, err := client.CallActor(t.Context(), request.Proto())
 	require.NoError(t, err)
 	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with actor call")
 }

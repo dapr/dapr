@@ -93,7 +93,7 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 	newCtx := func() context.Context {
 		chiCtx := chi.NewRouteContext()
 		chiCtx.URLParams.Add("testparam", "foo%20bar")
-		return context.WithValue(context.Background(), chi.RouteCtxKey, chiCtx)
+		return context.WithValue(t.Context(), chi.RouteCtxKey, chiCtx)
 	}
 
 	t.Run("unescapeRequestParametersHandler is added as middleware if the endpoint includes Parameters in its path", func(t *testing.T) {
