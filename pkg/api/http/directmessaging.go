@@ -307,7 +307,7 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 	if auth := headers.Get("Authorization"); strings.HasPrefix(auth, "Basic ") {
 		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
-			if len(pair) == 2 && pair[0] == consts.DaprAppIDHeader {
+			if len(pair) == 2 && strings.EqualFold(pair[0], consts.DaprAppIDHeader) {
 				return pair[1], strings.TrimPrefix(path.Clean(reqPath), "/")
 			}
 		}
