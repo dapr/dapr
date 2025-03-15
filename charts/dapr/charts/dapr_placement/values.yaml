@@ -57,6 +57,8 @@ debug:
   initialDelaySeconds: 30000
 
 runAsNonRoot: true
+fsGroup: 65532
+
 resources: {}
 
 extraEnvVars: {}
