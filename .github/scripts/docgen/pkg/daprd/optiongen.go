@@ -2,14 +2,13 @@ package daprd
 
 import (
 	"errors"
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"strings"
 )
 
-type Flag struct {
+type FlagInfo struct {
 	Description        string
 	DefaultValue       string
 	Deprecated         bool
@@ -21,14 +20,14 @@ func ParseDefault(importPath, value string) (*string, error) {
 }
 
 // ParseFlags for a given filepath will return a map of flags with their respective metadata
-func ParseFlags(filePath string) (*map[string]Flag, error) {
+func ParseFlags(filePath string) (*map[string]FlagInfo, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filePath, nil, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	flags := make(map[string]Flag)
+	flags := make(map[string]FlagInfo)
 
 	ast.Inspect(file, func(n ast.Node) bool {
 		callExpr, ok := n.(*ast.CallExpr)
@@ -75,11 +74,10 @@ func ParseFlags(filePath string) (*map[string]Flag, error) {
 
 		flagName := getStringValue(callExpr.Args[1])
 		defaultValue := getStringValueRaw(callExpr.Args[2], file.Scope)
-		fmt.Println(callExpr.Args[2])
 		description := getStringValue(callExpr.Args[3])
 
 		if flagName != "" {
-			flags[flagName] = Flag{
+			flags[flagName] = FlagInfo{
 				Description:        description,
 				DefaultValue:       defaultValue,
 				Deprecated:         flags[flagName].Deprecated,
@@ -90,7 +88,6 @@ func ParseFlags(filePath string) (*map[string]Flag, error) {
 		return true
 	})
 
-	fmt.Println("flags found:", len(flags))
 	return &flags, nil
 }
 
