@@ -72,7 +72,7 @@ func TestFlushMessages(t *testing.T) {
 					return nil, nil
 				}
 
-				flushMessages(context.Background(), "topic", tc.messages, tc.msgCbMap, handler)
+				flushMessages(t.Context(), "topic", tc.messages, tc.msgCbMap, handler)
 				assert.Equal(t, tc.expectedHandlerInvoked, handlerInvoked)
 			})
 		}
@@ -141,7 +141,7 @@ func TestFlushMessages(t *testing.T) {
 					"3": func(err error) { invokedCallbacks["3"] = err },
 				}
 
-				flushMessages(context.Background(), "topic", messages, msgCbMap, handler)
+				flushMessages(t.Context(), "topic", messages, msgCbMap, handler)
 
 				for id, err := range invokedCallbacks {
 					if _, ok := tc.entryIdErrMap[id]; ok {

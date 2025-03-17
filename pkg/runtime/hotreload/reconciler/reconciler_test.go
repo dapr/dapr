@@ -54,7 +54,7 @@ func Test_Run(t *testing.T) {
 		r.clock = fakeClock
 
 		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		go func() {
 			errCh <- r.Run(ctx)
 		}()
@@ -111,7 +111,7 @@ func Test_Run(t *testing.T) {
 		r.manager = mngr
 
 		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		go func() {
 			errCh <- r.Run(ctx)
 		}()
@@ -208,7 +208,7 @@ func Test_Run(t *testing.T) {
 		r.manager = mngr
 
 		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		go func() {
 			errCh <- r.Run(ctx)
 		}()
@@ -317,7 +317,7 @@ func Test_reconcile(t *testing.T) {
 		recDone := make(chan struct{})
 		go func() {
 			defer close(recDone)
-			r.reconcile(context.Background(), &differ.Result[componentsapi.Component]{
+			r.reconcile(t.Context(), &differ.Result[componentsapi.Component]{
 				Deleted: deleted,
 				Updated: updated,
 				Created: created,
@@ -385,21 +385,21 @@ func Test_handleEvent(t *testing.T) {
 	assert.Equal(t, 0, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(context.Background(), &loader.Event[componentsapi.Component]{
+	r.handleEvent(t.Context(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_CREATED,
 		Resource: comp1,
 	})
 	assert.Equal(t, 1, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(context.Background(), &loader.Event[componentsapi.Component]{
+	r.handleEvent(t.Context(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_UPDATED,
 		Resource: comp1,
 	})
 	assert.Equal(t, 2, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(context.Background(), &loader.Event[componentsapi.Component]{
+	r.handleEvent(t.Context(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_DELETED,
 		Resource: comp1,
 	})

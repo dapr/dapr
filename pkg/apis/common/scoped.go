@@ -22,7 +22,7 @@ type Scoped struct {
 }
 
 // IsAppScoped returns true if the appID is allowed in the scopes for the resource.
-func (s Scoped) IsAppScoped(appID string) bool {
+func (s *Scoped) IsAppScoped(appID string) bool {
 	if len(s.Scopes) == 0 {
 		// If there are no scopes, then every app is allowed
 		return true

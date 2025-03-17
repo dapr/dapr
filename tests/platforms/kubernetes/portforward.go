@@ -75,7 +75,7 @@ func (p *PodPortForwarder) Connect(name string, targetPorts ...int) ([]int, erro
 	config := p.client.GetClientConfig()
 
 	ports := make([]int, 0, len(targetPorts))
-	for range len(targetPorts) {
+	for range targetPorts {
 		p, perr := freeport.GetFreePort()
 		if perr != nil {
 			return nil, perr

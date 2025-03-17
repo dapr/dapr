@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
+	"github.com/dapr/dapr/pkg/apphealth"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -74,7 +75,7 @@ func TestMain(m *testing.M) {
 }
 
 func createConnection(t *testing.T) *grpc.ClientConn {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	conn, err := grpc.DialContext(ctx, "localhost:9998", //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(), //nolint:staticcheck
@@ -99,7 +100,7 @@ func TestInvokeMethod(t *testing.T) {
 		appMetadataToken:   "token1",
 		maxRequestBodySize: 4 << 20,
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("successful request", func(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("method").
@@ -145,29 +146,29 @@ func TestHealthProbe(t *testing.T) {
 		appMetadataToken:   "token1",
 		maxRequestBodySize: 4 << 20,
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	var (
-		success bool
-		err     error
+		status *apphealth.Status
+		err    error
 	)
 
 	// OK response
-	success, err = c.HealthProbe(ctx)
+	status, err = c.HealthProbe(ctx)
 	require.NoError(t, err)
-	assert.True(t, success)
+	assert.True(t, status.IsHealthy)
 
 	// Non-2xx status code
 	mockServer.Error = errors.New("test failure")
-	success, err = c.HealthProbe(ctx)
+	status, err = c.HealthProbe(ctx)
 	require.Error(t, err)
-	assert.False(t, success)
+	assert.False(t, status.IsHealthy)
 
 	// Closed connection
 	closeConnection(t, conn)
-	success, err = c.HealthProbe(ctx)
+	status, err = c.HealthProbe(ctx)
 	require.Error(t, err)
-	assert.False(t, success)
+	assert.False(t, status.IsHealthy)
 }
 
 func TestCreateLocalChannelWithBaseAddress(t *testing.T) {

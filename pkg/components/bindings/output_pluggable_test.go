@@ -127,7 +127,7 @@ func TestOutputBindingCalls(t *testing.T) {
 			}()
 
 			conn := outputFromConnector(testLogger, connector)
-			err = conn.Init(context.Background(), bindings.Metadata{
+			err = conn.Init(t.Context(), bindings.Metadata{
 				Base: contribMetadata.Base{},
 			})
 
@@ -171,7 +171,7 @@ func TestOutputBindingCalls(t *testing.T) {
 		defer cleanup()
 		require.NoError(t, err)
 
-		resp, err := outputSvc.Invoke(context.Background(), &bindings.InvokeRequest{
+		resp, err := outputSvc.Invoke(t.Context(), &bindings.InvokeRequest{
 			Data:      fakeDataReq,
 			Metadata:  fakeMetadata,
 			Operation: fakeOp,
@@ -194,7 +194,7 @@ func TestOutputBindingCalls(t *testing.T) {
 		defer cleanup()
 		require.NoError(t, err)
 
-		_, err = outputSvc.Invoke(context.Background(), &bindings.InvokeRequest{})
+		_, err = outputSvc.Invoke(t.Context(), &bindings.InvokeRequest{})
 
 		require.Error(t, err)
 		assert.Equal(t, int64(1), srv.invokeCalled.Load())

@@ -476,7 +476,7 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 
 		setupMetrics(s)
 
-		ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
+		ctx := metadata.NewOutgoingContext(t.Context(), metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
 
 		_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: message})
 		require.Error(t, err, "Ping should fail due to timeouts")
@@ -515,7 +515,7 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 			go func(i int) {
 				for j := range numOperations {
 					pingMsg := fmt.Sprintf("%d:%d", i, j)
-					ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
+					ctx := metadata.NewOutgoingContext(t.Context(), metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
 					res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: pingMsg})
 					require.NoErrorf(t, err, "Ping should succeed for operation %d:%d", i, j)
 					require.NotNilf(t, res, "Response should not be nil for operation %d:%d", i, j)
@@ -581,7 +581,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 
 	s.T().Run("retries are not allowed", func(t *testing.T) {
 		// We're purposely not setting dapr-stream=true in this context because we want to simulate the failure when the RPC is not marked as streaming
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 		defer cancel()
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 			diag.GRPCProxyAppIDKey, "test",
@@ -616,7 +616,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 	})
 
 	s.T().Run("timeouts do not apply after initial handshake", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 		defer cancel()
 
 		setupMetrics(s)
@@ -667,7 +667,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 			s.service.simulateConnectionFailures.Store(0)
 		}()
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 		defer cancel()
 
 		setupMetrics(s)

@@ -79,14 +79,11 @@ func (a *app) Setup(t *testing.T) []framework.Option {
 func (a *app) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
-	a.healthy.Store(true)
-
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", a.daprd.HTTPPort(), a.daprd.AppID())
-
-	a.healthy.Store(true)
-
 	httpClient := client.HTTP(t)
 
+	// initial healthy state
+	a.healthy.Store(true)
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
@@ -100,19 +97,60 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 		return resp.StatusCode == http.StatusOK && string(body) == "GET /myfunc"
 	}, time.Second*5, 10*time.Millisecond, "expected dapr to report app healthy when /foo returns 200")
 
+	// transition to unhealthy state
 	a.healthy.Store(false)
-
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
-
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
-
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusInternalServerError &&
 			strings.Contains(string(body), "app is not in a healthy state")
 	}, time.Second*20, 10*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
+
+	// recovery back to healthy state
+	a.healthy.Store(true)
+	assert.Eventually(t, func() bool {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode == http.StatusOK && string(body) == "GET /myfunc"
+	}, time.Second*20, 10*time.Millisecond, "expected dapr to report app healthy again after recovery")
+
+	// multiple health state transitions
+	for i := range 3 {
+		// Set to unhealthy
+		a.healthy.Store(false)
+		assert.Eventually(t, func() bool {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			return resp.StatusCode == http.StatusInternalServerError &&
+				strings.Contains(string(body), "app is not in a healthy state")
+		}, time.Second*20, 10*time.Millisecond, "expected dapr to detect unhealthy state in cycle %d", i)
+
+		// set back to healthy
+		a.healthy.Store(true)
+		assert.Eventually(t, func() bool {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			return resp.StatusCode == http.StatusOK && string(body) == "GET /myfunc"
+		}, time.Second*20, 10*time.Millisecond, "expected dapr to detect healthy state in cycle %d", i)
+	}
 }

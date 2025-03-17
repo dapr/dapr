@@ -14,7 +14,6 @@ limitations under the License.
 package state_test
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"testing"
@@ -95,7 +94,7 @@ func TestInitState(t *testing.T) {
 		initMockStateStoreForRegistry(reg, "noerror", primaryKey, nil)
 
 		// act
-		err := proc.Init(context.TODO(), mockStateComponent("noerror"))
+		err := proc.Init(t.Context(), mockStateComponent("noerror"))
 
 		// assert
 		require.NoError(t, err, "expected no error")
@@ -106,7 +105,7 @@ func TestInitState(t *testing.T) {
 		initMockStateStoreForRegistry(reg, "error", primaryKey, assert.AnError)
 
 		// act
-		err := proc.Init(context.TODO(), mockStateComponent("error"))
+		err := proc.Init(t.Context(), mockStateComponent("error"))
 
 		// assert
 		require.Error(t, err, "expected error")
@@ -118,7 +117,7 @@ func TestInitState(t *testing.T) {
 		initMockStateStoreForRegistry(reg, "noencryption", primaryKey, nil)
 
 		// act
-		err := proc.Init(context.TODO(), mockStateComponent("noencryption"))
+		err := proc.Init(t.Context(), mockStateComponent("noencryption"))
 		ok := encryption.EncryptedStateStore("noencryption")
 
 		// assert
@@ -132,7 +131,7 @@ func TestInitState(t *testing.T) {
 
 		compStore.AddSecretStore("mockSecretStore", &mock.SecretStore{})
 
-		err := proc.Init(context.TODO(), mockStateComponent("encryption"))
+		err := proc.Init(t.Context(), mockStateComponent("encryption"))
 		ok := encryption.EncryptedStateStore("encryption")
 
 		// assert

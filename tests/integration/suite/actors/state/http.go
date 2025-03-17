@@ -77,7 +77,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	b, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, `{"errorCode":"ERR_ACTOR_INSTANCE_MISSING","message":"actor instance is missing"}`, string(b))
+	assert.JSONEq(t, `{"errorCode":"ERR_ACTOR_INSTANCE_MISSING","message":"actor instance is missing"}`, string(b))
 	assert.Eventually(t, func() bool {
 		return h.app.Daprd().Metrics(t, ctx).MatchMetricAndSum(t, 1, "dapr_error_code_total", "category:actor", "error_code:ERR_ACTOR_INSTANCE_MISSING")
 	}, 5*time.Second, 100*time.Millisecond)

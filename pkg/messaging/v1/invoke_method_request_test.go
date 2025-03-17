@@ -488,11 +488,11 @@ func TestWithDataObject(t *testing.T) {
 
 	gotEnc, err := json.Marshal(got)
 	require.NoError(t, err)
-	assert.Equal(t, []byte(expectJSON), compactJSON(t, gotEnc))
+	assert.JSONEq(t, expectJSON, string(compactJSON(t, gotEnc)))
 
 	data, err := req.RawDataFull()
 	require.NoError(t, err)
-	assert.Equal(t, []byte(expectJSON), compactJSON(t, data))
+	assert.JSONEq(t, expectJSON, string(compactJSON(t, data)))
 }
 
 func TestRequestReplayable(t *testing.T) {

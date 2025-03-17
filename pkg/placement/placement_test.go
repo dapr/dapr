@@ -59,7 +59,7 @@ func newTestPlacementServer(t *testing.T, raftOptions raft.Options) (string, *Se
 	testServer.clock = clock
 
 	serverStopped := make(chan struct{})
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	go func() {
 		defer close(serverStopped)
 		err := testServer.Run(ctx)
@@ -106,14 +106,14 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.T
 
 	client := v1pb.NewPlacementClient(conn)
 
-	stream, err := client.ReportDaprStatus(context.Background())
+	stream, err := client.ReportDaprStatus(t.Context())
 	require.NoError(t, err)
 
 	return conn, tcpConn.(*net.TCPConn), stream
 }
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	raftClusterOpts, err := tests.RaftClusterOpts(t)

@@ -38,7 +38,7 @@ func Test_loop(t *testing.T) {
 			appCh:   make(chan *Event[compapi.Component]),
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		go func() {
 			h.loop(ctx)
 			close(done)
@@ -62,7 +62,7 @@ func Test_loop(t *testing.T) {
 		}
 
 		go func() {
-			h.loop(context.Background())
+			h.loop(t.Context())
 			close(done)
 		}()
 
@@ -93,7 +93,7 @@ func Test_loop(t *testing.T) {
 		}
 
 		go func() {
-			h.loop(context.Background())
+			h.loop(t.Context())
 			close(done)
 		}()
 

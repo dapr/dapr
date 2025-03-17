@@ -7,6 +7,6 @@ on:
       - main
 
 jobs:
-  lint:
+  lint-slow:
     env:
       GOLANGCILINT_VER: "123.123.123" 

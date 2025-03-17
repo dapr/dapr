@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"reflect"
 	"testing"
 
@@ -96,20 +95,20 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 func TestDaprService(t *testing.T) {
 	t.Run("invalid empty app id", func(t *testing.T) {
 		d := getDeployment("", "true")
-		err := getTestDaprHandler().ensureDaprServicePresent(context.TODO(), "default", d)
+		err := getTestDaprHandler().ensureDaprServicePresent(t.Context(), "default", d)
 		require.Error(t, err)
 	})
 
 	t.Run("invalid char app id", func(t *testing.T) {
 		d := getDeployment("myapp@", "true")
-		err := getTestDaprHandler().ensureDaprServicePresent(context.TODO(), "default", d)
+		err := getTestDaprHandler().ensureDaprServicePresent(t.Context(), "default", d)
 		require.Error(t, err)
 	})
 }
 
 func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
-	ctx := context.Background()
+	ctx := t.Context()
 	myDaprService := types.NamespacedName{
 		Namespace: "test",
 		Name:      "test",
@@ -136,7 +135,7 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 
 func TestCreateDaprServiceAppIDAndPortsOverride(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
-	ctx := context.Background()
+	ctx := t.Context()
 	myDaprService := types.NamespacedName{
 		Namespace: "test",
 		Name:      "test",
@@ -165,7 +164,7 @@ func TestPatchDaprService(t *testing.T) {
 	cli := fake.NewClientBuilder().WithScheme(s).Build()
 	testDaprHandler.Client = cli
 
-	ctx := context.Background()
+	ctx := t.Context()
 	myDaprService := types.NamespacedName{
 		Namespace: "test",
 		Name:      "test",
@@ -342,7 +341,7 @@ func TestInit(t *testing.T) {
 	t.Run("test init dapr handler", func(t *testing.T) {
 		assert.NotNil(t, handler)
 
-		err := handler.Init(context.Background())
+		err := handler.Init(t.Context())
 
 		require.NoError(t, err)
 

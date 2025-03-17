@@ -79,5 +79,5 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, `{"period":"1s","data":"reminderdata","dueTime":"1s"}`, strings.TrimSpace(string(b)))
+	assert.JSONEq(t, `{"period":"1s","data":"reminderdata","dueTime":"1s"}`, strings.TrimSpace(string(b)))
 }

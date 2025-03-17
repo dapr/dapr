@@ -14,7 +14,6 @@ limitations under the License.
 package pubsub
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -97,7 +96,7 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 			}
 			bulkPublisher := NewDefaultBulkPublisher(mockPubSub)
 
-			res, err := bulkPublisher.BulkPublish(context.Background(), req)
+			res, err := bulkPublisher.BulkPublish(t.Context(), req)
 
 			// Check if the bulk publish method returns an error.
 			if tc.nErrors > 0 {

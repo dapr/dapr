@@ -71,7 +71,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		WithCustomHTTPMetadata(testPubSubMessage.Metadata)
 	defer fakeReq.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	comp := inmemory.New(log)
 	require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
@@ -99,7 +99,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.Error(t, err)
@@ -158,7 +158,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		assert.Equal(t, runtimePubsub.ErrMessageDropped, err)
@@ -178,7 +178,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.Error(t, err)
@@ -196,7 +196,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.NoError(t, err)
@@ -214,7 +214,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 		Path:       "topic1",
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	comp := inmemory.New(log)
 	require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
@@ -283,7 +283,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 			}
 			ps.grpc.SetAppClientConn(&mockClientConn)
 
-			err := ps.publishMessageGRPC(context.Background(), testPubSubMessage)
+			err := ps.publishMessageGRPC(t.Context(), testPubSubMessage)
 			if tc.ExpectError {
 				require.Error(t, err)
 			} else {
@@ -316,7 +316,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		WithCustomHTTPMetadata(testPubSubMessage.Metadata)
 	defer fakeReq.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	comp := inmemory.New(log)
 	require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
@@ -344,7 +344,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.NoError(t, err)
@@ -387,7 +387,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReqNoTraceID).Return(fakeResp, nil)
 
 		// act
-		err = ps.publishMessageHTTP(context.Background(), message)
+		err = ps.publishMessageHTTP(t.Context(), message)
 
 		// assert
 		require.NoError(t, err)
@@ -407,7 +407,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.NoError(t, err)
@@ -427,7 +427,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.NoError(t, err)
@@ -447,7 +447,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		var cloudEvent map[string]interface{}
@@ -470,7 +470,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		assert.Equal(t, runtimePubsub.ErrMessageDropped, err)
@@ -490,7 +490,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.Error(t, err, "expected error on unknown status")
@@ -510,7 +510,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.NoError(t, err, "expected no error on empty status")
@@ -530,7 +530,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.NoError(t, err, "expected no error on unknown status")
@@ -545,7 +545,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(nil, invokeError)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		expectedError := fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", rterrors.NewRetriable(invokeError))
@@ -565,7 +565,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		require.NoError(t, err, "expected error to be nil")
@@ -584,7 +584,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+		err := ps.publishMessageHTTP(t.Context(), testPubSubMessage)
 
 		// assert
 		var cloudEvent map[string]interface{}
@@ -743,7 +743,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			port, err := freeport.GetFreePort()
 			require.NoError(t, err)
 
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			t.Cleanup(cancel)
 			comp := inmemory.New(log)
 			require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
@@ -793,7 +793,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			ps.grpc = grpc
 
 			// act
-			err = ps.publishMessageGRPC(context.Background(), tc.message)
+			err = ps.publishMessageGRPC(t.Context(), tc.message)
 
 			// assert
 			if tc.expectedError != nil {
@@ -808,7 +808,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 func TestTracingOnNewPublishedMessage(t *testing.T) {
 	t.Run("succeeded to publish message with TraceParent in metadata", func(t *testing.T) {
 		comp := &mockSubscribePubSub{}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		resp := contribpubsub.AppResponse{
 			Status: contribpubsub.Success,
@@ -847,7 +847,7 @@ func TestTracingOnNewPublishedMessage(t *testing.T) {
 			traceparent := "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01"
 			traceid := "00-80e1afed08e019fc1110464cfa66635c-7a085853722dc6d2-01"
 			tracestate := "abc=xyz"
-			err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
+			err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 				PubsubName: "testpubsub",
 				Topic:      "topic0",
 				Data:       []byte(`{"orderId":"1"}`),

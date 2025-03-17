@@ -14,7 +14,6 @@ limitations under the License.
 package informer
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -46,7 +45,7 @@ func Test_WatchUpdates(t *testing.T) {
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 		assert.Nil(t, appCh)
 
-		appCh, err = i.WatchUpdates(context.Background(), "ns2")
+		appCh, err = i.WatchUpdates(t.Context(), "ns2")
 		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 		assert.Nil(t, appCh)
@@ -65,7 +64,7 @@ func Test_WatchUpdates(t *testing.T) {
 		appCh2, err := i.WatchUpdates(pki.ClientGRPCCtx(t), "ns1")
 		require.NoError(t, err)
 
-		i.handleEvent(context.Background(),
+		i.handleEvent(t.Context(),
 			&compapi.Component{
 				ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: "ns1"},
 			},
@@ -80,7 +79,7 @@ func Test_WatchUpdates(t *testing.T) {
 			assert.Equal(c, 1, int(i.batchID.Load()))
 		}, 5*time.Second, 100*time.Millisecond)
 
-		i.handleEvent(context.Background(),
+		i.handleEvent(t.Context(),
 			&compapi.Component{
 				ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: "ns1"},
 				Spec:       compapi.ComponentSpec{Type: "bindings.redis"},
@@ -96,7 +95,7 @@ func Test_WatchUpdates(t *testing.T) {
 			assert.Equal(c, 2, int(i.batchID.Load()))
 		}, 5*time.Second, 100*time.Millisecond)
 
-		i.handleEvent(context.Background(),
+		i.handleEvent(t.Context(),
 			nil,
 			&compapi.Component{
 				ObjectMeta: metav1.ObjectMeta{Name: "comp2", Namespace: "ns1"},

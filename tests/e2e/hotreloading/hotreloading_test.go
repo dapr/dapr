@@ -17,7 +17,6 @@ limitations under the License.
 package hotreloading_tests
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -76,7 +75,7 @@ func TestState(t *testing.T) {
 	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	externalURL := tr.Platform.AcquireAppExternalURL("hotreloading-state")
 	// Wait for app to be available.

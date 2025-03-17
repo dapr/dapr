@@ -115,7 +115,7 @@ func TestGRPCConnector(t *testing.T) {
 
 		assert.Contains(t, acceptedStatus, connector.conn.GetState())
 		assert.Equal(t, 1, fakeFactoryCalled)
-		require.NoError(t, connector.conn.Invoke(context.Background(), fmt.Sprintf("/%s/%s", fakeSvcName, fakeMethodName), structpb.NewNullValue(), structpb.NewNullValue()))
+		require.NoError(t, connector.conn.Invoke(t.Context(), fmt.Sprintf("/%s/%s", fakeSvcName, fakeMethodName), structpb.NewNullValue(), structpb.NewNullValue()))
 		assert.Equal(t, 1, handlerCalled)
 	})
 
@@ -173,7 +173,7 @@ func TestGRPCConnector(t *testing.T) {
 		require.NoError(t, connector.Dial(""))
 		defer connector.Close()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
 
 		assert.True(t, connector.conn.WaitForStateChange(ctx, connectivity.Idle))

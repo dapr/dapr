@@ -55,7 +55,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	setupEach := func(t *testing.T) context.CancelFunc {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		var cancelServer context.CancelFunc
 
 		serverAddress, testServer, clock, cancelServer = newTestPlacementServer(t, *raftOpts)
@@ -513,7 +513,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 
 	mockMessage := &v1pb.PlacementTables{Version: "demo"}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	var start time.Time

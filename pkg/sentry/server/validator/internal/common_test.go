@@ -14,7 +14,6 @@ limitations under the License.
 package internal
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -93,7 +92,7 @@ func TestValidate(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			td, err := Validate(context.Background(), test.req)
+			td, err := Validate(t.Context(), test.req)
 			assert.Equal(t, test.expTD, td)
 			assert.Equal(t, test.expErr, err)
 		})

@@ -39,7 +39,7 @@ func BenchmarkHTTPMiddlewareLowCardinalityNoPathMatching(b *testing.B) {
 	}))
 
 	// act
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
 		handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 	}
@@ -56,7 +56,7 @@ func BenchmarkHTTPMiddlewareHighCardinalityNoPathMatching(b *testing.B) {
 	}))
 
 	// act
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
 		handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 	}
@@ -75,7 +75,7 @@ func BenchmarkHTTPMiddlewareLowCardinalityWithPathMatching(b *testing.B) {
 	}))
 
 	// act
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
 		handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 	}
@@ -92,7 +92,7 @@ func BenchmarkHTTPMiddlewareHighCardinalityWithPathMatching(b *testing.B) {
 	}))
 
 	// act
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
 		handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 	}

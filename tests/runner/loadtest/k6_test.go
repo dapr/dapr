@@ -157,7 +157,7 @@ func TestK6(t *testing.T) {
 	)
 	t.Run("With-ish parameters should configure k6 tester", func(t *testing.T) {
 		const envVarKey, envVarValue, fakeImg, parallelism, fakeName = "key", "value", "img", 3, "name"
-		fakeCtx := context.TODO()
+		fakeCtx := t.Context()
 		tester := NewK6(
 			script,
 			WithCtx(fakeCtx),

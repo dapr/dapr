@@ -59,7 +59,7 @@ func TestGetActorState(t *testing.T) {
 		client := runtimev1pb.NewDaprClient(clientConn)
 
 		// act
-		res, err := client.GetActorState(context.Background(), &runtimev1pb.GetActorStateRequest{
+		res, err := client.GetActorState(t.Context(), &runtimev1pb.GetActorStateRequest{
 			ActorId:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
@@ -101,7 +101,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 
 		// act
 		res, err := client.ExecuteActorStateTransaction(
-			context.Background(),
+			t.Context(),
 			&runtimev1pb.ExecuteActorStateTransactionRequest{
 				ActorId:   "fakeActorID",
 				ActorType: "fakeActorType",

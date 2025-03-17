@@ -108,7 +108,7 @@ func TestEnvOrElse(t *testing.T) {
 		const elseValue, fakeEnVar, fakeEnvVarValue = "fakeValue", "envVarThatExists", "envVarValue"
 		defer os.Unsetenv(fakeEnVar)
 
-		require.NoError(t, os.Setenv(fakeEnVar, fakeEnvVarValue))
+		t.Setenv(fakeEnVar, fakeEnvVarValue)
 		assert.Equal(t, fakeEnvVarValue, GetEnvOrElse(fakeEnVar, elseValue))
 	})
 }
@@ -272,7 +272,7 @@ func BenchmarkFilter(b *testing.B) {
 		return n < 50
 	}
 
-	for n := 0; n < b.N; n++ {
+	for range b.N {
 		Filter(vals, filterFn)
 	}
 }

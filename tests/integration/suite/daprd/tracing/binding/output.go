@@ -108,7 +108,7 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("traceparent header provided", func(t *testing.T) {
 		// invoke binding
-		ctx := context.Background()
+		ctx := t.Context()
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/http-binding-traceparent", b.daprd.HTTPPort())
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader("{\"operation\":\"get\"}"))
 		require.NoError(t, err)

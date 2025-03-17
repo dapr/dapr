@@ -82,7 +82,7 @@ func createMockPods(n, daprized, injected, daprdPresent int) (pods []*corev1.Pod
 }
 
 func TestDaprWatchdog_listPods(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	rl := ratelimit.NewUnlimited()
 
 	t.Run("injectorNotPresent", func(t *testing.T) {
@@ -235,7 +235,7 @@ func Test_patchPodLabel(t *testing.T) {
 	for _, tc := range tests {
 		ctlClient := fake.NewClientBuilder().WithObjects(tc.pod).Build()
 		t.Run(tc.name, func(t *testing.T) {
-			if err := patchPodLabel(context.TODO(), ctlClient, tc.pod); (err != nil) != tc.wantErr {
+			if err := patchPodLabel(t.Context(), ctlClient, tc.pod); (err != nil) != tc.wantErr {
 				t.Fatalf("patchPodLabel() error = %v, wantErr %v", err, tc.wantErr)
 			}
 			if !tc.wantErr {
@@ -247,7 +247,7 @@ func Test_patchPodLabel(t *testing.T) {
 
 func TestDaprWatchdog_Start(t *testing.T) {
 	// simple test of start
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancelled := false
 	defer func() {
 		if !cancelled {

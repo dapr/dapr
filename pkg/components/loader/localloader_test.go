@@ -14,7 +14,6 @@ limitations under the License.
 package loader
 
 import (
-	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -36,7 +35,7 @@ spec:
 `), fs.FileMode(0o600)))
 
 		loader := NewLocalLoader("", []string{tmp})
-		components, err := loader.Load(context.Background())
+		components, err := loader.Load(t.Context())
 		require.NoError(t, err)
 		require.Len(t, components, 1)
 		require.Equal(t, "statestore", components[0].Name)
@@ -55,14 +54,14 @@ spec:
 `), fs.FileMode(0o600)))
 
 		loader := NewLocalLoader("", []string{tmp})
-		components, err := loader.Load(context.Background())
+		components, err := loader.Load(t.Context())
 		require.NoError(t, err)
 		require.Empty(t, components)
 	})
 
 	t.Run("Test Non Existent Directory", func(t *testing.T) {
 		loader := NewLocalLoader("", []string{"/non-existent-directory"})
-		_, err := loader.Load(context.Background())
+		_, err := loader.Load(t.Context())
 		require.Error(t, err)
 	})
 }
@@ -80,7 +79,7 @@ spec:
 `), fs.FileMode(0o600)))
 
 		loader := NewLocalLoader("", []string{tmp})
-		err := loader.Validate(context.Background())
+		err := loader.Validate(t.Context())
 		require.NoError(t, err)
 	})
 
@@ -97,13 +96,13 @@ spec:
 `), fs.FileMode(0o600)))
 
 		loader := NewLocalLoader("", []string{tmp})
-		err := loader.Validate(context.Background())
+		err := loader.Validate(t.Context())
 		require.NoError(t, err)
 	})
 
 	t.Run("Test Validate Non Existent Directory", func(t *testing.T) {
 		loader := NewLocalLoader("", []string{"/non-existent-directory"})
-		err := loader.Validate(context.Background())
+		err := loader.Validate(t.Context())
 		require.Error(t, err)
 	})
 }

@@ -267,7 +267,7 @@ func TestRun(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			port, err := freeport.GetFreePort()
 			require.NoError(t, err)
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			opts := Options{
 				Port:     port,
 				Security: test.sec,

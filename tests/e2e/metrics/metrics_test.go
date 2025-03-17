@@ -17,7 +17,6 @@ limitations under the License.
 package metrics_e2e
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -260,7 +259,7 @@ func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
 	client := pb.NewDaprClient(conn)
 
 	for i := 0; i < n; i++ {
-		_, err = client.SaveState(context.Background(), &pb.SaveStateRequest{
+		_, err = client.SaveState(t.Context(), &pb.SaveStateRequest{
 			StoreName: "statestore",
 			States: []*commonv1pb.StateItem{
 				{

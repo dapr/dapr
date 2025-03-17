@@ -30,6 +30,8 @@ type GetReminderRequest struct {
 }
 
 // CreateReminderRequest is the request object to create a new reminder.
+//
+//nolint:recvcheck
 type CreateReminderRequest struct {
 	Name      string
 	ActorType string
@@ -96,6 +98,8 @@ func (req *CreateReminderRequest) UnmarshalJSON(data []byte) error {
 }
 
 // CreateTimerRequest is the request object to create a new timer.
+//
+//nolint:recvcheck
 type CreateTimerRequest struct {
 	Name      string
 	ActorType string

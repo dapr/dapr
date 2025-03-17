@@ -15,7 +15,6 @@ package loadtest
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"net/http"
 	"testing"
@@ -59,7 +58,7 @@ func TestK6Client(t *testing.T) {
 			called++
 			assert.Equal(t, "DELETE", r.Method)
 		})
-		require.NoError(t, k6.Delete(context.Background(), k6Name, metav1.DeleteOptions{}))
+		require.NoError(t, k6.Delete(t.Context(), k6Name, metav1.DeleteOptions{}))
 		assert.Equal(t, 1, called)
 	})
 	t.Run("Get should call rest GET", func(t *testing.T) {
@@ -68,7 +67,7 @@ func TestK6Client(t *testing.T) {
 			called++
 			assert.Equal(t, "GET", r.Method)
 		})
-		_, err = k6.Get(context.Background(), k6Name)
+		_, err = k6.Get(t.Context(), k6Name)
 		require.NoError(t, err)
 		assert.Equal(t, 1, called)
 	})
@@ -78,7 +77,7 @@ func TestK6Client(t *testing.T) {
 			called++
 			assert.Equal(t, "POST", r.Method)
 		})
-		_, err = k6.Create(context.Background(), &v1.K6{})
+		_, err = k6.Create(t.Context(), &v1.K6{})
 		require.NoError(t, err)
 		assert.Equal(t, 1, called)
 	})
@@ -88,7 +87,7 @@ func TestK6Client(t *testing.T) {
 			called++
 			assert.Equal(t, "GET", r.Method)
 		})
-		_, err = k6.List(context.Background(), metav1.ListOptions{})
+		_, err = k6.List(t.Context(), metav1.ListOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, 1, called)
 	})

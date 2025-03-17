@@ -1233,7 +1233,7 @@ func TestValidate(t *testing.T) {
 			client := clientfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(kobjs...).Build()
 
 			if test.config != nil {
-				require.NoError(t, client.Create(context.Background(), test.config))
+				require.NoError(t, client.Create(t.Context(), test.config))
 			}
 
 			k := &kubernetes{
@@ -1245,7 +1245,7 @@ func TestValidate(t *testing.T) {
 				ready:          func(_ context.Context) bool { return true },
 			}
 
-			td, err := k.Validate(context.Background(), test.req)
+			td, err := k.Validate(t.Context(), test.req)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expTD, td)
 		})

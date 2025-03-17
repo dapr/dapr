@@ -28,6 +28,8 @@ import (
 )
 
 // Reminder represents a reminder or timer for a unique actor.
+//
+//nolint:recvcheck
 type Reminder struct {
 	ActorID        string         `json:"actorID,omitempty"`
 	ActorType      string         `json:"actorType,omitempty"`

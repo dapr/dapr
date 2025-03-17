@@ -1,7 +1,6 @@
 package diagnostics
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -26,8 +25,8 @@ func TestPubSub(t *testing.T) {
 	t.Run("record drop by app or sidecar", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubIngressEvent(context.Background(), componentName, "drop", "success", "A", 1)
-		c.PubsubIngressEvent(context.Background(), componentName, "drop", "drop", "A", 1)
+		c.PubsubIngressEvent(t.Context(), componentName, "drop", "success", "A", 1)
+		c.PubsubIngressEvent(t.Context(), componentName, "drop", "drop", "A", 1)
 
 		viewData, _ := view.RetrieveData("component/pubsub_ingress/count")
 		v := view.Find("component/pubsub_ingress/count")
@@ -42,7 +41,7 @@ func TestPubSub(t *testing.T) {
 	t.Run("record ingress count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubIngressEvent(context.Background(), componentName, "retry", "retry", "A", 0)
+		c.PubsubIngressEvent(t.Context(), componentName, "retry", "retry", "A", 0)
 
 		viewData, _ := view.RetrieveData("component/pubsub_ingress/count")
 		v := view.Find("component/pubsub_ingress/count")
@@ -53,7 +52,7 @@ func TestPubSub(t *testing.T) {
 	t.Run("record ingress latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubIngressEvent(context.Background(), componentName, "retry", "", "A", 1)
+		c.PubsubIngressEvent(t.Context(), componentName, "retry", "", "A", 1)
 
 		viewData, _ := view.RetrieveData("component/pubsub_ingress/latencies")
 		v := view.Find("component/pubsub_ingress/latencies")
@@ -66,7 +65,7 @@ func TestPubSub(t *testing.T) {
 	t.Run("record egress latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubEgressEvent(context.Background(), componentName, "A", true, 1)
+		c.PubsubEgressEvent(t.Context(), componentName, "A", true, 1)
 
 		viewData, _ := view.RetrieveData("component/pubsub_egress/latencies")
 		v := view.Find("component/pubsub_egress/latencies")
@@ -81,7 +80,7 @@ func TestBindings(t *testing.T) {
 	t.Run("record input binding count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.InputBindingEvent(context.Background(), componentName, false, 0)
+		c.InputBindingEvent(t.Context(), componentName, false, 0)
 
 		viewData, _ := view.RetrieveData("component/input_binding/count")
 		v := view.Find("component/input_binding/count")
@@ -92,7 +91,7 @@ func TestBindings(t *testing.T) {
 	t.Run("record input binding latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.InputBindingEvent(context.Background(), componentName, false, 1)
+		c.InputBindingEvent(t.Context(), componentName, false, 1)
 
 		viewData, _ := view.RetrieveData("component/input_binding/latencies")
 		v := view.Find("component/input_binding/count")
@@ -105,7 +104,7 @@ func TestBindings(t *testing.T) {
 	t.Run("record output binding count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.OutputBindingEvent(context.Background(), componentName, "set", false, 0)
+		c.OutputBindingEvent(t.Context(), componentName, "set", false, 0)
 
 		viewData, _ := view.RetrieveData("component/output_binding/count")
 		v := view.Find("component/input_binding/count")
@@ -116,7 +115,7 @@ func TestBindings(t *testing.T) {
 	t.Run("record output binding latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.OutputBindingEvent(context.Background(), componentName, "set", false, 1)
+		c.OutputBindingEvent(t.Context(), componentName, "set", false, 1)
 
 		viewData, _ := view.RetrieveData("component/output_binding/latencies")
 		v := view.Find("component/output_binding/latencies")
@@ -131,7 +130,7 @@ func TestState(t *testing.T) {
 	t.Run("record state count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.StateInvoked(context.Background(), componentName, "get", false, 0)
+		c.StateInvoked(t.Context(), componentName, "get", false, 0)
 
 		viewData, _ := view.RetrieveData("component/state/count")
 		v := view.Find("component/state/count")
@@ -142,7 +141,7 @@ func TestState(t *testing.T) {
 	t.Run("record state latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.StateInvoked(context.Background(), componentName, "get", false, 1)
+		c.StateInvoked(t.Context(), componentName, "get", false, 1)
 
 		viewData, _ := view.RetrieveData("component/state/latencies")
 		v := view.Find("component/state/latencies")
@@ -156,7 +155,7 @@ func TestConfiguration(t *testing.T) {
 	t.Run("record configuration count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.ConfigurationInvoked(context.Background(), componentName, "get", false, 0)
+		c.ConfigurationInvoked(t.Context(), componentName, "get", false, 0)
 
 		viewData, _ := view.RetrieveData("component/configuration/count")
 		v := view.Find("component/configuration/count")
@@ -167,7 +166,7 @@ func TestConfiguration(t *testing.T) {
 	t.Run("record configuration latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.ConfigurationInvoked(context.Background(), componentName, "get", false, 1)
+		c.ConfigurationInvoked(t.Context(), componentName, "get", false, 1)
 
 		viewData, _ := view.RetrieveData("component/configuration/latencies")
 		v := view.Find("component/configuration/latencies")
@@ -182,7 +181,7 @@ func TestSecrets(t *testing.T) {
 	t.Run("record secret count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.SecretInvoked(context.Background(), componentName, "get", false, 0)
+		c.SecretInvoked(t.Context(), componentName, "get", false, 0)
 
 		viewData, _ := view.RetrieveData("component/secret/count")
 		v := view.Find("component/secret/count")
@@ -193,7 +192,7 @@ func TestSecrets(t *testing.T) {
 	t.Run("record secret latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.SecretInvoked(context.Background(), componentName, "get", false, 1)
+		c.SecretInvoked(t.Context(), componentName, "get", false, 1)
 
 		viewData, _ := view.RetrieveData("component/secret/latencies")
 		v := view.Find("component/secret/latencies")
@@ -208,7 +207,7 @@ func TestConversation(t *testing.T) {
 	t.Run("record conversation count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.ConversationInvoked(context.Background(), componentName, false, 0)
+		c.ConversationInvoked(t.Context(), componentName, false, 0)
 
 		viewData, _ := view.RetrieveData("component/conversation/count")
 		v := view.Find("component/conversation/count")
@@ -219,7 +218,7 @@ func TestConversation(t *testing.T) {
 	t.Run("record conversation latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.ConversationInvoked(context.Background(), componentName, false, 1)
+		c.ConversationInvoked(t.Context(), componentName, false, 1)
 
 		viewData, _ := view.RetrieveData("component/conversation/latencies")
 		v := view.Find("component/conversation/latencies")

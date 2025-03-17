@@ -124,7 +124,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 
 		// assert cb execution,activation,and current state counts
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			mtc := d.daprdClient.Metrics(c, context.Background()).All()
+			mtc := d.daprdClient.Metrics(c, ctx).All()
 			assert.InDelta(c, float64(4), mtc["dapr_resiliency_count|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"], 0)
 			assert.InDelta(c, float64(0), mtc["dapr_resiliency_activations_total|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:open|target:app_server"], 0)
 			assert.InDelta(c, float64(1), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"], 0)
@@ -158,7 +158,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 
 		// assert cb execution,activation,and current state counts
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			mtc := d.daprdClient.Metrics(c, context.Background()).All()
+			mtc := d.daprdClient.Metrics(c, ctx).All()
 			assert.InDelta(c, float64(7), mtc["dapr_resiliency_count|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"], 0)
 			assert.InDelta(c, float64(1), mtc["dapr_resiliency_activations_total|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:open|target:app_server"], 0)
 			assert.InDelta(c, float64(1), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:open|target:app_server"], 0)
@@ -177,7 +177,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 
 		// make sure gauge is half open
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			mtc := d.daprdClient.Metrics(c, context.Background()).All()
+			mtc := d.daprdClient.Metrics(c, ctx).All()
 			assert.InDelta(c, float64(0), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:open|target:app_server"], 0)
 			assert.InDelta(c, float64(1), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:half-open|target:app_server"], 0)
 		}, time.Second*4, 10*time.Millisecond)
@@ -192,7 +192,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 
 		// make sure gauge is closed
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			mtc := d.daprdClient.Metrics(c, context.Background()).All()
+			mtc := d.daprdClient.Metrics(c, ctx).All()
 			assert.InDelta(c, float64(0), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:half-open|target:app_server"], 0)
 			assert.InDelta(c, float64(1), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"], 0)
 		}, time.Second*4, 10*time.Millisecond)

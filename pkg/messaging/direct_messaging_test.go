@@ -194,7 +194,7 @@ func TestInvokeRemote(t *testing.T) {
 			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
 		defer request.Close()
 
-		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		res, _, err := messaging.invokeRemote(t.Context(), "app1", "namespace1", "addr1", request)
 		require.NoError(t, err)
 
 		pd, err := res.ProtoWithData()
@@ -214,7 +214,7 @@ func TestInvokeRemote(t *testing.T) {
 			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
 		defer request.Close()
 
-		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		res, _, err := messaging.invokeRemote(t.Context(), "app1", "namespace1", "addr1", request)
 		require.NoError(t, err)
 
 		pd, err := res.ProtoWithData()
@@ -239,7 +239,7 @@ func TestInvokeRemote(t *testing.T) {
 			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
 		defer request.Close()
 
-		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		res, _, err := messaging.invokeRemote(t.Context(), "app1", "namespace1", "addr1", request)
 		require.NoError(t, err)
 
 		pd, err := res.ProtoWithData()
@@ -257,7 +257,7 @@ func TestInvokeRemote(t *testing.T) {
 			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
 		defer request.Close()
 
-		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		res, _, err := messaging.invokeRemote(t.Context(), "app1", "namespace1", "addr1", request)
 		require.Error(t, err)
 		assert.Equal(t, fmt.Sprintf(streamingUnsupportedErr, "app1"), err.Error())
 		assert.Nil(t, res)
@@ -273,7 +273,7 @@ func TestInvokeRemote(t *testing.T) {
 			WithReplay(true)
 		defer request.Close()
 
-		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		res, _, err := messaging.invokeRemote(t.Context(), "app1", "namespace1", "addr1", request)
 		require.NoError(t, err)
 
 		pd, err := res.ProtoWithData()
@@ -297,7 +297,7 @@ func TestInvokeRemote(t *testing.T) {
 			WithMetadata(map[string][]string{invokev1.DestinationIDHeader: {"app1"}})
 		defer request.Close()
 
-		res, _, err := messaging.invokeRemote(context.Background(), "app1", "namespace1", "addr1", request)
+		res, _, err := messaging.invokeRemote(t.Context(), "app1", "namespace1", "addr1", request)
 		require.NoError(t, err)
 
 		pd, err := res.ProtoWithData()
@@ -475,7 +475,7 @@ func TestInvokeRemoteUnaryForHTTPEndpoint(t *testing.T) {
 			channels: (new(channels.Channels)).WithEndpointChannels(map[string]channel.HTTPEndpointAppChannel{"abc": &mockChannel{}}),
 		}
 
-		_, err := d.invokeRemoteUnaryForHTTPEndpoint(context.Background(), nil, "abc")
+		_, err := d.invokeRemoteUnaryForHTTPEndpoint(t.Context(), nil, "abc")
 		require.NoError(t, err)
 	})
 
@@ -484,7 +484,7 @@ func TestInvokeRemoteUnaryForHTTPEndpoint(t *testing.T) {
 			channels: new(channels.Channels),
 		}
 
-		_, err := d.invokeRemoteUnaryForHTTPEndpoint(context.Background(), nil, "abc")
+		_, err := d.invokeRemoteUnaryForHTTPEndpoint(t.Context(), nil, "abc")
 		require.Error(t, err)
 	})
 }

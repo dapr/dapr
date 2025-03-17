@@ -129,7 +129,7 @@ func TestStartReadingFromBindings(t *testing.T) {
 		m := &rtmock.Binding{}
 
 		b.compStore.AddInputBinding("test", m)
-		err := b.StartReadingFromBindings(context.Background())
+		err := b.StartReadingFromBindings(t.Context())
 
 		require.NoError(t, err)
 		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
@@ -171,14 +171,14 @@ func TestStartReadingFromBindings(t *testing.T) {
 			},
 		}))
 		require.NoError(t, b.compStore.CommitPendingComponent())
-		err := b.StartReadingFromBindings(context.Background())
+		err := b.StartReadingFromBindings(t.Context())
 		require.NoError(t, err)
 		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
 	})
 }
 
 func TestGetSubscribedBindingsGRPC(t *testing.T) {
-	secP, err := security.New(context.Background(), security.Options{
+	secP, err := security.New(t.Context(), security.Options{
 		TrustAnchors:            []byte("test"),
 		AppID:                   "test",
 		ControlPlaneTrustDomain: "test.example.com",
@@ -190,8 +190,8 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 		Healthz: healthz.New(),
 	})
 	require.NoError(t, err)
-	go secP.Run(context.Background())
-	sec, err := secP.Handler(context.Background())
+	go secP.Run(t.Context())
+	sec, err := secP.Handler(t.Context())
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -228,7 +228,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			})
 			defer grpcServer.Stop()
 			// act
-			resp, _ := b.getSubscribedBindingsGRPC(context.Background())
+			resp, _ := b.getSubscribedBindingsGRPC(t.Context())
 
 			// assert
 			assert.Equal(t, tc.expectedResponse, resp, "expected response to match")
@@ -272,7 +272,7 @@ func TestReadInputBindings(t *testing.T) {
 		b.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
 		mockBinding := rtmock.Binding{}
-		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		ch := make(chan bool, 1)
 		mockBinding.ReadErrorCh = ch
 		b.readFromBinding(ctx, testInputBindingName, &mockBinding)
@@ -318,7 +318,7 @@ func TestReadInputBindings(t *testing.T) {
 		b.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
 		mockBinding := rtmock.Binding{}
-		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		ch := make(chan bool, 1)
 		mockBinding.ReadErrorCh = ch
 		b.readFromBinding(ctx, testInputBindingName, &mockBinding)
@@ -364,7 +364,7 @@ func TestReadInputBindings(t *testing.T) {
 		b.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
 		mockBinding := rtmock.Binding{Metadata: map[string]string{"bindings": "input"}}
-		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		ch := make(chan bool, 1)
 		mockBinding.ReadErrorCh = ch
 		b.readFromBinding(ctx, testInputBindingName, &mockBinding)
@@ -390,7 +390,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockBinding.SetOnReadCloseCh(closeCh)
 		mockBinding.On("Read", mock.MatchedBy(daprt.MatchContextInterface), mock.Anything).Return(nil).Once()
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		b.readFromBinding(ctx, testInputBindingName, mockBinding)
 		time.Sleep(80 * time.Millisecond)
 		cancel()
@@ -416,7 +416,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 		})
 		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
-		_, err := b.SendToOutputBinding(context.Background(), "mockBinding", &bindings.InvokeRequest{
+		_, err := b.SendToOutputBinding(t.Context(), "mockBinding", &bindings.InvokeRequest{
 			Data: []byte(""),
 		})
 		require.Error(t, err)
@@ -435,7 +435,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 
 		b.compStore.AddOutputBinding("mockBinding", &rtmock.Binding{})
 
-		_, err := b.SendToOutputBinding(context.Background(), "mockBinding", &bindings.InvokeRequest{
+		_, err := b.SendToOutputBinding(t.Context(), "mockBinding", &bindings.InvokeRequest{
 			Data:      []byte(""),
 			Operation: bindings.CreateOperation,
 		})
@@ -454,7 +454,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 
 		b.compStore.AddOutputBinding("mockBinding", &rtmock.Binding{})
 
-		_, err := b.SendToOutputBinding(context.Background(), "mockBinding", &bindings.InvokeRequest{
+		_, err := b.SendToOutputBinding(t.Context(), "mockBinding", &bindings.InvokeRequest{
 			Data:      []byte(""),
 			Operation: bindings.GetOperation,
 		})
@@ -476,7 +476,7 @@ func TestBindingTracingHttp(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
 		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
-		_, err := b.sendBindingEventToApp(context.Background(), "mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
+		_, err := b.sendBindingEventToApp(t.Context(), "mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
 		require.NoError(t, err)
 		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
 		assert.Len(t, mockAppChannel.Calls, 1)
@@ -490,7 +490,7 @@ func TestBindingTracingHttp(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(204, "OK", nil), nil)
 		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
-		_, err := b.sendBindingEventToApp(context.Background(), "mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
+		_, err := b.sendBindingEventToApp(t.Context(), "mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
 		require.NoError(t, err)
 		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
 		assert.Len(t, mockAppChannel.Calls, 1)
@@ -504,7 +504,7 @@ func TestBindingTracingHttp(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
 		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
-		_, err := b.sendBindingEventToApp(context.Background(), "mockBinding", []byte(""), map[string]string{"traceparent": "I am not a traceparent"})
+		_, err := b.sendBindingEventToApp(t.Context(), "mockBinding", []byte(""), map[string]string{"traceparent": "I am not a traceparent"})
 		require.NoError(t, err)
 		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
 		assert.Len(t, mockAppChannel.Calls, 1)
@@ -560,7 +560,7 @@ func TestBindingResiliency(t *testing.T) {
 	output := componentsV1alpha1.Component{}
 	output.ObjectMeta.Name = "failOutput"
 	output.Spec.Type = "bindings.failingoutput"
-	err := b.Init(context.TODO(), output)
+	err := b.Init(t.Context(), output)
 	require.NoError(t, err)
 
 	t.Run("output binding retries on failure with resiliency", func(t *testing.T) {
@@ -568,7 +568,7 @@ func TestBindingResiliency(t *testing.T) {
 			Data:      []byte("outputFailingKey"),
 			Operation: "create",
 		}
-		_, err := b.SendToOutputBinding(context.Background(), "failOutput", req)
+		_, err := b.SendToOutputBinding(t.Context(), "failOutput", req)
 
 		require.NoError(t, err)
 		assert.Equal(t, 2, failingBinding.Failure.CallCount("outputFailingKey"))
@@ -580,7 +580,7 @@ func TestBindingResiliency(t *testing.T) {
 			Operation: "create",
 		}
 		start := time.Now()
-		_, err := b.SendToOutputBinding(context.Background(), "failOutput", req)
+		_, err := b.SendToOutputBinding(t.Context(), "failOutput", req)
 		end := time.Now()
 
 		require.Error(t, err)
@@ -589,7 +589,7 @@ func TestBindingResiliency(t *testing.T) {
 	})
 
 	t.Run("input binding retries on failure with resiliency", func(t *testing.T) {
-		_, err := b.sendBindingEventToApp(context.Background(), "failingInputBinding", []byte("inputFailingKey"), map[string]string{})
+		_, err := b.sendBindingEventToApp(t.Context(), "failingInputBinding", []byte("inputFailingKey"), map[string]string{})
 
 		require.NoError(t, err)
 		assert.Equal(t, 2, failingChannel.Failure.CallCount("inputFailingKey"))
@@ -597,7 +597,7 @@ func TestBindingResiliency(t *testing.T) {
 
 	t.Run("input binding times out with resiliency", func(t *testing.T) {
 		start := time.Now()
-		_, err := b.sendBindingEventToApp(context.Background(), "failingInputBinding", []byte("inputTimeoutKey"), map[string]string{})
+		_, err := b.sendBindingEventToApp(t.Context(), "failingInputBinding", []byte("inputTimeoutKey"), map[string]string{})
 		end := time.Now()
 
 		require.Error(t, err)

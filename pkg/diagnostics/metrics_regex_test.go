@@ -1,7 +1,6 @@
 package diagnostics
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,7 +50,7 @@ func TestRegexRulesSingle(t *testing.T) {
 			view.Unregister(view.Find(statName))
 		})
 
-		stats.RecordWithTags(context.Background(),
+		stats.RecordWithTags(t.Context(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123"),
 			testStat.M(1))
 
@@ -74,7 +73,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		s := newGRPCMetrics()
 		s.Init("test", nil)
 
-		stats.RecordWithTags(context.Background(),
+		stats.RecordWithTags(t.Context(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/siths/123"),
 			testStat.M(1))
 
@@ -97,10 +96,10 @@ func TestRegexRulesSingle(t *testing.T) {
 		s := newGRPCMetrics()
 		s.Init("test", nil)
 
-		stats.RecordWithTags(context.Background(),
+		stats.RecordWithTags(t.Context(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123"),
 			testStat.M(1))
-		stats.RecordWithTags(context.Background(),
+		stats.RecordWithTags(t.Context(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/lightsabers/123"),
 			testStat.M(1))
 

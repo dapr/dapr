@@ -32,6 +32,8 @@ const (
 
 // HTTPEndpoint describes a Dapr HTTPEndpoint type for external service invocation.
 // This endpoint can be external to Dapr, or external to the environment.
+//
+//nolint:recvcheck
 type HTTPEndpoint struct {
 	metav1.TypeMeta `json:",inline"`
 	//+optional

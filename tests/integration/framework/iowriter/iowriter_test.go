@@ -34,15 +34,15 @@ func (m *mockLogger) Log(args ...any) {
 	m.msgs = append(m.msgs, args[0].(string))
 }
 
-func (m mockLogger) Name() string {
+func (m *mockLogger) Name() string {
 	return "TestLogger"
 }
 
-func (m mockLogger) Cleanup(fn func()) {
+func (m *mockLogger) Cleanup(fn func()) {
 	m.t.Cleanup(fn)
 }
 
-func (m mockLogger) Failed() bool {
+func (m *mockLogger) Failed() bool {
 	return m.failed
 }
 

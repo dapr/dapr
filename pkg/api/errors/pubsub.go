@@ -75,7 +75,7 @@ func (p *PubSubError) withTopicError(topic string, err error) *PubSubMetadataErr
 	}
 }
 
-func (p PubSubError) PublishMessage(topic string, err error) error {
+func (p *PubSubError) PublishMessage(topic string, err error) error {
 	return p.withTopicError(topic, err).build(
 		codes.Internal,
 		http.StatusInternalServerError,
@@ -96,7 +96,7 @@ func (p *PubSubError) PublishForbidden(topic, appID string, err error) error {
 // TestNotFound is specifically for the error we are expecting for the api_tests. The not found
 // expected error codes are different than the existing ones for PubSubNotFound, hence
 // why this one is needed
-func (p PubSubError) TestNotFound(topic string, err error) error {
+func (p *PubSubError) TestNotFound(topic string, err error) error {
 	return p.withTopicError(topic, err).build(
 		codes.NotFound,
 		http.StatusBadRequest,

@@ -101,7 +101,7 @@ func TestStartWorkflowAPI(t *testing.T) {
 				InstanceId:        tt.instanceID,
 				WorkflowName:      tt.workflowName,
 			}
-			_, err := fakeAPI.StartWorkflow(context.Background(), req)
+			_, err := fakeAPI.StartWorkflow(t.Context(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestGetWorkflowAPI(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.GetWorkflow(context.Background(), req)
+			_, err := fakeAPI.GetWorkflow(t.Context(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.TerminateWorkflow(context.Background(), req)
+			_, err := fakeAPI.TerminateWorkflow(t.Context(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -258,7 +258,7 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 				EventName:         tt.eventName,
 				EventData:         []byte("fake_input"),
 			}
-			_, err := fakeAPI.RaiseEventWorkflow(context.Background(), req)
+			_, err := fakeAPI.RaiseEventWorkflow(t.Context(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -311,7 +311,7 @@ func TestPauseWorkflowApi(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.PauseWorkflow(context.Background(), req)
+			_, err := fakeAPI.PauseWorkflow(t.Context(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -356,7 +356,7 @@ func TestResumeWorkflowApi(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.ResumeWorkflow(context.Background(), req)
+			_, err := fakeAPI.ResumeWorkflow(t.Context(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)

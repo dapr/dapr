@@ -40,7 +40,7 @@ func Test_generic(t *testing.T) {
 		)
 
 		require.NoError(t, r.close())
-		ch, err := r.Stream(context.Background())
+		ch, err := r.Stream(t.Context())
 		assert.Nil(t, ch)
 		require.ErrorContains(t, err, "stream is closed")
 	})
@@ -53,7 +53,7 @@ func Test_generic(t *testing.T) {
 			streamer,
 		)
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
 		streamer.establishFn = func(context.Context, operatorpb.OperatorClient, string, string) error {
@@ -78,7 +78,7 @@ func Test_generic(t *testing.T) {
 			return <-recCh, nil
 		}
 
-		ch, err := r.Stream(context.Background())
+		ch, err := r.Stream(t.Context())
 		assert.NotNil(t, ch)
 		require.NoError(t, err)
 
@@ -131,7 +131,7 @@ func Test_generic(t *testing.T) {
 			return nil, errors.New("recv error")
 		}
 
-		conn, err := r.Stream(context.Background())
+		conn, err := r.Stream(t.Context())
 		require.NoError(t, err)
 
 		select {

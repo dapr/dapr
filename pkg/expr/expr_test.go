@@ -60,7 +60,7 @@ func BenchmarkEval(b *testing.B) {
 		},
 	}
 	var r interface{}
-	for n := 0; n < b.N; n++ {
+	for range b.N {
 		r, _ = e.Eval(data)
 	}
 	result = r

@@ -120,7 +120,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp),
 	)
-	defer func() { _ = tp.Shutdown(context.Background()) }()
+	defer func() { _ = tp.Shutdown(t.Context()) }()
 	otel.SetTracerProvider(tp)
 
 	t.Run("traceparent is provided and sampling is enabled", func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 		}
 		parent := trace.NewSpanContext(scConfig)
 
-		ctx := context.Background()
+		ctx := t.Context()
 
 		_, gotSp := StartInternalCallbackSpan(ctx, "testSpanName", parent, traceSpec)
 		sc := gotSp.SpanContext()
@@ -153,7 +153,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 		}
 		parent := trace.NewSpanContext(scConfig)
 
-		ctx := context.Background()
+		ctx := t.Context()
 
 		ctx, gotSp := StartInternalCallbackSpan(ctx, "testSpanName", parent, traceSpec)
 		assert.Nil(t, gotSp)
@@ -221,9 +221,9 @@ func runTraces(t *testing.T, testName string, numTraces int, samplingRate string
 	sampledCount := 0
 
 	for range numTraces {
-		ctx := context.Background()
+		ctx := t.Context()
 		if hasParentSpanContext {
-			traceID, _ := idg.NewIDs(context.Background())
+			traceID, _ := idg.NewIDs(t.Context())
 			scConfig := trace.SpanContextConfig{
 				TraceID:    traceID,
 				SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
@@ -368,7 +368,7 @@ func defaultIDGenerator() IDGenerator {
 func TestTraceIDAndStateFromSpan(t *testing.T) {
 	t.Run("non-empty span, id and state are not empty", func(t *testing.T) {
 		idg := defaultIDGenerator()
-		traceID, _ := idg.NewIDs(context.Background())
+		traceID, _ := idg.NewIDs(t.Context())
 		scConfig := trace.SpanContextConfig{
 			TraceID:    traceID,
 			SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
@@ -380,7 +380,7 @@ func TestTraceIDAndStateFromSpan(t *testing.T) {
 		scConfig.TraceState = ts
 		parent := trace.NewSpanContext(scConfig)
 
-		ctx := context.Background()
+		ctx := t.Context()
 		ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
 		_, span := tracer.Start(ctx, "testTraceSpan", trace.WithSpanKind(trace.SpanKindClient))
 
@@ -391,7 +391,7 @@ func TestTraceIDAndStateFromSpan(t *testing.T) {
 	})
 
 	t.Run("empty span, id and state are empty", func(t *testing.T) {
-		span := trace.SpanFromContext(context.Background())
+		span := trace.SpanFromContext(t.Context())
 		id, state := TraceIDAndStateFromSpan(span)
 		assert.Empty(t, id)
 		assert.Empty(t, state)

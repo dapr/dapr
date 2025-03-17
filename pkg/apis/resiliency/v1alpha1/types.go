@@ -34,7 +34,7 @@ type Resiliency struct {
 }
 
 // String implements fmt.Stringer and is used for debugging. It returns the policy object encoded as JSON.
-func (r Resiliency) String() string {
+func (r *Resiliency) String() string {
 	b, _ := json.Marshal(r)
 	return string(b)
 }

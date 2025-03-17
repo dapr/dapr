@@ -3907,11 +3907,11 @@ type fakeConfigurationStore struct {
 	counter int
 }
 
-func (c fakeConfigurationStore) Ping() error {
+func (c *fakeConfigurationStore) Ping() error {
 	return nil
 }
 
-func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
+func (c *fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
 	if len(req.Keys) == 0 {
 		return &configuration.GetResponse{
 			Items: map[string]*configuration.Item{
@@ -3974,8 +3974,8 @@ func (c fakeConfigurationStore) Get(ctx context.Context, req *configuration.GetR
 	return nil, errors.New("get key error: value not found")
 }
 
-func (c fakeConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
-	c.counter = 0 //nolint:staticcheck
+func (c *fakeConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
+	c.counter = 0
 	return nil
 }
 
@@ -3992,7 +3992,7 @@ func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configura
 
 type fakeLockStore struct{}
 
-func (l fakeLockStore) Ping() error {
+func (l *fakeLockStore) Ping() error {
 	return nil
 }
 
@@ -4427,11 +4427,11 @@ func matchContextInterface(v any) bool {
 	return ok
 }
 
-func (c fakeConfigurationStore) Close() error {
+func (c *fakeConfigurationStore) Close() error {
 	return nil
 }
 
-func (l fakeLockStore) Close() error {
+func (l *fakeLockStore) Close() error {
 	return nil
 }
 

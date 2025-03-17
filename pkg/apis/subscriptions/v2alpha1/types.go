@@ -32,6 +32,8 @@ const (
 // +kubebuilder:storageversion
 
 // Subscription describes an pub/sub event subscription.
+//
+//nolint:recvcheck
 type Subscription struct {
 	metav1.TypeMeta `json:",inline"`
 	// +optional

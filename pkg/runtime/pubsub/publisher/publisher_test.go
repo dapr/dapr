@@ -46,7 +46,7 @@ func TestPublish(t *testing.T) {
 
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
-		res, err := ps.BulkPublish(context.Background(), &contribpubsub.BulkPublishRequest{
+		res, err := ps.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
 			Metadata:   md,
@@ -64,7 +64,7 @@ func TestPublish(t *testing.T) {
 		assert.Empty(t, res.FailedEntries)
 
 		compStore.AddPubSub(TestSecondPubsubName, &rtpubsub.PubsubItem{Component: &mockPublishPubSub{}})
-		res, err = ps.BulkPublish(context.Background(), &contribpubsub.BulkPublishRequest{
+		res, err = ps.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
 			Entries: []contribpubsub.BulkMessageEntry{
@@ -100,7 +100,7 @@ func TestPublish(t *testing.T) {
 
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
-		res, err := ps.BulkPublish(context.Background(), &contribpubsub.BulkPublishRequest{
+		res, err := ps.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
 			Metadata:   md,
@@ -122,7 +122,7 @@ func TestPublish(t *testing.T) {
 			ProtectedTopics:   []string{"topic1"},
 			ScopedPublishings: []string{"topic1"},
 		})
-		res, err = ps.BulkPublish(context.Background(), &contribpubsub.BulkPublishRequest{
+		res, err = ps.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
 			Entries: []contribpubsub.BulkMessageEntry{
@@ -157,7 +157,7 @@ func TestPublish(t *testing.T) {
 
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
-		res, err := ps.BulkPublish(context.Background(), &contribpubsub.BulkPublishRequest{
+		res, err := ps.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic5",
 			Metadata:   md,
@@ -177,7 +177,7 @@ func TestPublish(t *testing.T) {
 			Component:     &mockPublishPubSub{},
 			AllowedTopics: []string{"topic1"},
 		})
-		res, err = ps.BulkPublish(context.Background(), &contribpubsub.BulkPublishRequest{
+		res, err = ps.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
 			Metadata:   md,
@@ -208,7 +208,7 @@ func TestPublish(t *testing.T) {
 
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
-		res, err := ps.BulkPublish(context.Background(), &contribpubsub.BulkPublishRequest{
+		res, err := ps.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic1",
 			Metadata:   md,
@@ -228,7 +228,7 @@ func TestPublish(t *testing.T) {
 			Component:       &mockPublishPubSub{},
 			ProtectedTopics: []string{"topic1"},
 		})
-		res, err = ps.BulkPublish(context.Background(), &contribpubsub.BulkPublishRequest{
+		res, err = ps.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
 			Metadata:   md,
@@ -259,7 +259,7 @@ func TestPublish(t *testing.T) {
 			GetPubSubFn: compStore.GetPubSub,
 		})
 
-		err := ps.Publish(context.Background(), &contribpubsub.PublishRequest{
+		err := ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
 			Metadata:   md,
@@ -270,7 +270,7 @@ func TestPublish(t *testing.T) {
 		compStore.AddPubSub(TestSecondPubsubName, &rtpubsub.PubsubItem{
 			Component: &mockPublishPubSub{},
 		})
-		err = ps.Publish(context.Background(), &contribpubsub.PublishRequest{
+		err = ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
 		})
@@ -291,7 +291,7 @@ func TestPublish(t *testing.T) {
 
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
-		err := ps.Publish(context.Background(), &contribpubsub.PublishRequest{
+		err := ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
 			Metadata:   md,
@@ -303,7 +303,7 @@ func TestPublish(t *testing.T) {
 			ProtectedTopics:   []string{"topic1"},
 			ScopedPublishings: []string{"topic1"},
 		})
-		err = ps.Publish(context.Background(), &contribpubsub.PublishRequest{
+		err = ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
 		})
@@ -325,7 +325,7 @@ func TestPublish(t *testing.T) {
 			Component:     &mockPublishPubSub{},
 			AllowedTopics: []string{"topic1"},
 		})
-		err := ps.Publish(context.Background(), &contribpubsub.PublishRequest{
+		err := ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic5",
 		})
@@ -335,7 +335,7 @@ func TestPublish(t *testing.T) {
 			Component:     &mockPublishPubSub{},
 			AllowedTopics: []string{"topic1"},
 		})
-		err = ps.Publish(context.Background(), &contribpubsub.PublishRequest{
+		err = ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
 		})
@@ -357,7 +357,7 @@ func TestPublish(t *testing.T) {
 			Component:       &mockPublishPubSub{},
 			ProtectedTopics: []string{"topic1"},
 		})
-		err := ps.Publish(context.Background(), &contribpubsub.PublishRequest{
+		err := ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic1",
 		})
@@ -367,7 +367,7 @@ func TestPublish(t *testing.T) {
 			Component:       &mockPublishPubSub{},
 			ProtectedTopics: []string{"topic1"},
 		})
-		err = ps.Publish(context.Background(), &contribpubsub.PublishRequest{
+		err = ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
 		})
@@ -388,7 +388,7 @@ func TestNamespacedPublisher(t *testing.T) {
 		Namespace:   "ns1",
 	})
 
-	err := ps.Publish(context.Background(), &contribpubsub.PublishRequest{
+	err := ps.Publish(t.Context(), &contribpubsub.PublishRequest{
 		PubsubName: TestPubsubName,
 		Topic:      "topic0",
 	})
@@ -462,7 +462,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 			PubsubName: "failPubsub",
 			Topic:      "failingTopic",
 		}
-		err := ps.Publish(context.Background(), req)
+		err := ps.Publish(t.Context(), req)
 
 		require.NoError(t, err)
 		assert.Equal(t, 2, failingPubsub.Failure.CallCount("failingTopic"))
@@ -495,7 +495,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		}
 
 		start := time.Now()
-		err := ps.Publish(context.Background(), req)
+		err := ps.Publish(t.Context(), req)
 		end := time.Now()
 
 		require.Error(t, err)

@@ -14,7 +14,6 @@ limitations under the License.
 package ca
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -33,7 +32,7 @@ import (
 
 func TestNew(t *testing.T) {
 	t.Run("if no existing bundle exist, new should generate a new bundle", func(t *testing.T) {
-		os.Setenv("NAMESPACE", "dapr-test")
+		t.Setenv("NAMESPACE", "dapr-test")
 		t.Cleanup(func() {
 			os.Unsetenv("NAMESPACE")
 		})
@@ -50,7 +49,7 @@ func TestNew(t *testing.T) {
 			Mode:           modes.StandaloneMode,
 		}
 
-		_, err := New(context.Background(), config)
+		_, err := New(t.Context(), config)
 		require.NoError(t, err)
 
 		require.FileExists(t, rootCertPath)
@@ -110,7 +109,7 @@ func TestNew(t *testing.T) {
 		require.NoError(t, os.WriteFile(issuerCertPath, issuerFileContents, 0o600))
 		require.NoError(t, os.WriteFile(issuerKeyPath, issuerKeyFileContents, 0o600))
 
-		caImp, err := New(context.Background(), config)
+		caImp, err := New(t.Context(), config)
 		require.NoError(t, err)
 
 		rootCert, err := os.ReadFile(rootCertPath)
@@ -161,13 +160,13 @@ func TestSignIdentity(t *testing.T) {
 		require.NoError(t, os.WriteFile(issuerCertPath, issuerFileContents, 0o600))
 		require.NoError(t, os.WriteFile(issuerKeyPath, issuerKeyFileContents, 0o600))
 
-		ca, err := New(context.Background(), config)
+		ca, err := New(t.Context(), config)
 		require.NoError(t, err)
 
 		clientPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		require.NoError(t, err)
 
-		clientCert, err := ca.SignIdentity(context.Background(), &SignRequest{
+		clientCert, err := ca.SignIdentity(t.Context(), &SignRequest{
 			PublicKey:          clientPK.Public(),
 			SignatureAlgorithm: x509.ECDSAWithSHA256,
 			TrustDomain:        "example.test.dapr.io",

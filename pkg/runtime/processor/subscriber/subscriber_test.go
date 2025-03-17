@@ -14,7 +14,6 @@ limitations under the License.
 package subscriber
 
 import (
-	"context"
 	"encoding/json"
 	"slices"
 	"sync/atomic"
@@ -57,9 +56,9 @@ func TestSubscriptionLifecycle(t *testing.T) {
 	mockPubSub1.On("unsubscribed", "topic1").Return(nil)
 	mockPubSub2.On("unsubscribed", "topic2").Return(nil)
 	mockPubSub3.On("unsubscribed", "topic3").Return(nil)
-	require.NoError(t, mockPubSub1.Init(context.Background(), contribpubsub.Metadata{}))
-	require.NoError(t, mockPubSub2.Init(context.Background(), contribpubsub.Metadata{}))
-	require.NoError(t, mockPubSub3.Init(context.Background(), contribpubsub.Metadata{}))
+	require.NoError(t, mockPubSub1.Init(t.Context(), contribpubsub.Metadata{}))
+	require.NoError(t, mockPubSub2.Init(t.Context(), contribpubsub.Metadata{}))
+	require.NoError(t, mockPubSub3.Init(t.Context(), contribpubsub.Metadata{}))
 
 	compStore := compstore.New()
 	compStore.AddPubSub("mockPubSub1", &rtpubsub.PubsubItem{
@@ -204,7 +203,7 @@ func Test_initProgramaticSubscriptions(t *testing.T) {
 			AppID:      TestRuntimeConfigID,
 			Channels:   new(channels.Channels),
 		})
-		require.NoError(t, subs.initProgramaticSubscriptions(context.Background()))
+		require.NoError(t, subs.initProgramaticSubscriptions(t.Context()))
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
 	})
 
@@ -219,7 +218,7 @@ func Test_initProgramaticSubscriptions(t *testing.T) {
 			AppID:      TestRuntimeConfigID,
 			Channels:   new(channels.Channels),
 		})
-		require.NoError(t, subs.initProgramaticSubscriptions(context.Background()))
+		require.NoError(t, subs.initProgramaticSubscriptions(t.Context()))
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
 	})
 
@@ -252,11 +251,11 @@ func Test_initProgramaticSubscriptions(t *testing.T) {
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("context.backgroundCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.cancelCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
 
-		require.NoError(t, subs.initProgramaticSubscriptions(context.Background()))
-		require.NoError(t, subs.initProgramaticSubscriptions(context.Background()))
-		require.NoError(t, subs.initProgramaticSubscriptions(context.Background()))
+		require.NoError(t, subs.initProgramaticSubscriptions(t.Context()))
+		require.NoError(t, subs.initProgramaticSubscriptions(t.Context()))
+		require.NoError(t, subs.initProgramaticSubscriptions(t.Context()))
 		assert.Len(t, compStore.ListProgramaticSubscriptions(), 1)
 	})
 }
@@ -278,9 +277,9 @@ func TestReloadPubSub(t *testing.T) {
 	mockPubSub1.On("unsubscribed", "topic4").Return(nil)
 	mockPubSub2.On("unsubscribed", "topic5").Return(nil)
 	mockPubSub3.On("unsubscribed", "topic6").Return(nil)
-	require.NoError(t, mockPubSub1.Init(context.Background(), contribpubsub.Metadata{}))
-	require.NoError(t, mockPubSub2.Init(context.Background(), contribpubsub.Metadata{}))
-	require.NoError(t, mockPubSub3.Init(context.Background(), contribpubsub.Metadata{}))
+	require.NoError(t, mockPubSub1.Init(t.Context(), contribpubsub.Metadata{}))
+	require.NoError(t, mockPubSub2.Init(t.Context(), contribpubsub.Metadata{}))
+	require.NoError(t, mockPubSub3.Init(t.Context(), contribpubsub.Metadata{}))
 
 	compStore := compstore.New()
 	compStore.AddPubSub("mockPubSub1", &rtpubsub.PubsubItem{

@@ -34,7 +34,7 @@ func TestShutdownEndpoint(t *testing.T) {
 	}
 
 	t.Run("Shutdown successfully", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		_, err := fakeAPI.Shutdown(ctx, &runtimev1pb.ShutdownRequest{})
 		cancel()
 		require.NoError(t, err, "Expected no error")
