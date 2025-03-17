@@ -3,6 +3,7 @@ module github.com/dapr/dapr/.github/scripts/docgen
 go 1.24.1
 
 replace github.com/dapr/dapr => ../../..
+
 require github.com/dapr/dapr v0.0.0-00010101000000-000000000000
 
 require (
@@ -34,7 +35,7 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/tidwall/transform v0.0.0-20201103190739-32f242e2dbde // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/net v0.36.0 // indirect
 	golang.org/x/oauth2 v0.24.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/term v0.29.0 // indirect
