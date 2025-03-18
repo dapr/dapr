@@ -265,6 +265,12 @@ func (s *server) Close() error {
 		close(s.closeCh)
 	}
 
+	if s.api != nil {
+		if err := s.api.Close(); err != nil {
+			return err
+		}
+	}
+
 	s.wg.Add(len(s.servers))
 	for _, server := range s.servers {
 		// This calls `Close()` on the underlying listener.
@@ -272,12 +278,6 @@ func (s *server) Close() error {
 			defer s.wg.Done()
 			server.GracefulStop()
 		}(server)
-	}
-
-	if s.api != nil {
-		if err := s.api.Close(); err != nil {
-			return err
-		}
 	}
 
 	return nil

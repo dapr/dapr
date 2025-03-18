@@ -101,7 +101,7 @@ func TestClose(t *testing.T) {
 			CompStore:      compstore.New(),
 			Actors:         fake.New(),
 			WorkflowEngine: wfenginefake.New(),
-		}), closeCh: make(chan struct{})}
+		})}
 		server := NewAPIServer(Options{
 			API:            a,
 			Config:         serverConfig,
@@ -131,7 +131,7 @@ func TestClose(t *testing.T) {
 			CompStore:      compstore.New(),
 			Actors:         fake.New(),
 			WorkflowEngine: wfenginefake.New(),
-		}), closeCh: make(chan struct{})}
+		})}
 		server := NewAPIServer(Options{
 			API:            a,
 			Config:         serverConfig,
