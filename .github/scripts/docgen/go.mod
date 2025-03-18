@@ -4,7 +4,7 @@ go 1.24.1
 
 replace github.com/dapr/dapr => ../../..
 
-require github.com/dapr/dapr v0.0.0-00010101000000-000000000000
+require github.com/dapr/dapr v1.999.0
 
 require (
 	github.com/dapr/kit v0.15.1 // indirect
