@@ -36,11 +36,12 @@ func CombineFlagsAndAnnotations(flags *map[string]daprd.FlagInfo, annotations []
 
 	for k, v := range *flags {
 		rows = append(rows, row{
-			Daprd:        k,
-			Annotation:   "",
-			Deprecated:   v.Deprecated,
-			DefaultValue: v.DefaultValue,
-			Description:  v.Description,
+			Daprd:              k,
+			Annotation:         "",
+			Deprecated:         v.Deprecated,
+			DeprecationMessage: v.DeprecationMessage,
+			DefaultValue:       v.DefaultValue,
+			Description:        v.Description,
 		})
 	}
 
@@ -51,11 +52,12 @@ func CombineFlagsAndAnnotations(flags *map[string]daprd.FlagInfo, annotations []
 		index := existsInRows(rows, a)
 		if index == -1 {
 			rows = append(rows, row{
-				Daprd:        "",
-				Annotation:   a.Name,
-				Deprecated:   a.Deprecated,
-				DefaultValue: a.DefaultVal,
-				Description:  a.Description,
+				Daprd:              "",
+				Annotation:         a.Name,
+				Deprecated:         a.Deprecated,
+				DeprecationMessage: "", // TODO: @mikeee implement annotation deprecation messages
+				DefaultValue:       a.DefaultVal,
+				Description:        a.Description,
 			})
 		} else {
 			rows[index].Annotation = a.Name
@@ -67,6 +69,9 @@ func CombineFlagsAndAnnotations(flags *map[string]daprd.FlagInfo, annotations []
 			}
 			if rows[index].Description == "" {
 				rows[index].Description = a.Description
+			}
+			if rows[index].DeprecationMessage == "" {
+				rows[index].DeprecationMessage = "" // TODO: @mikeee implement annotation deprecation messages
 			}
 
 		}
@@ -108,14 +113,7 @@ func GenerateAllTable(rows []row) []string {
 			description = fmt.Sprintf("**DEPRECATED** %s <br> %s", r.DeprecationMessage, description)
 		}
 
-		var line string
-		switch r.Deprecated {
-		case true:
-			line = fmt.Sprintf("| %s | %s | %s | **DEPRECATED** %s <br> %s |\n", daprd, annotation, defaultValue,
-				description)
-		case false:
-			line = fmt.Sprintf("| %s | %s | %s | %s |\n", daprd, annotation, defaultValue, description)
-		}
+		line := fmt.Sprintf("| %s | %s | %s | %s |\n", daprd, annotation, defaultValue, description)
 
 		lines = append(lines, line)
 	}
