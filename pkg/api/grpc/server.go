@@ -22,7 +22,6 @@ import (
 	"net"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -98,7 +97,6 @@ type server struct {
 	sec            security.Handler
 	wg             sync.WaitGroup
 	htarget        healthz.Target
-	closed         atomic.Bool
 }
 
 var (

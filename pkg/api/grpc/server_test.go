@@ -97,11 +97,12 @@ func TestClose(t *testing.T) {
 			ReadBufferSize:     4 << 10,
 			EnableAPILogging:   true,
 		}
-		a := &api{Universal: universal.New(universal.Options{
-			CompStore:      compstore.New(),
-			Actors:         fake.New(),
-			WorkflowEngine: wfenginefake.New(),
-		}),
+		a := &api{
+			Universal: universal.New(universal.Options{
+				CompStore:      compstore.New(),
+				Actors:         fake.New(),
+				WorkflowEngine: wfenginefake.New(),
+			}),
 			closeCh: make(chan struct{}),
 		}
 		server := NewAPIServer(Options{
@@ -129,11 +130,12 @@ func TestClose(t *testing.T) {
 			ReadBufferSize:     4 << 10,
 			EnableAPILogging:   false,
 		}
-		a := &api{Universal: universal.New(universal.Options{
-			CompStore:      compstore.New(),
-			Actors:         fake.New(),
-			WorkflowEngine: wfenginefake.New(),
-		}),
+		a := &api{
+			Universal: universal.New(universal.Options{
+				CompStore:      compstore.New(),
+				Actors:         fake.New(),
+				WorkflowEngine: wfenginefake.New(),
+			}),
 			closeCh: make(chan struct{}),
 		}
 		server := NewAPIServer(Options{
