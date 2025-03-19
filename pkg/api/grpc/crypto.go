@@ -133,18 +133,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 	// Create a pipe to send the data to encrypt
 	inReader, inWriter := io.Pipe()
 
-	ctx, cancel := context.WithCancel(stream.Context())
-	defer cancel()
-
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		select {
-		case <-ctx.Done():
-		case <-a.closeCh:
-			cancel()
-		}
-	}()
+	ctx := stream.Context()
 
 	// Process the data coming from the stream
 	a.wg.Add(1)

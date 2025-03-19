@@ -65,6 +65,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 	conn := &conn{
 		stream:           stream,
 		publishResponses: make(map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1),
+		closeCh:          make(chan struct{}),
 	}
 	s.subscribers[key] = conn
 
@@ -77,35 +78,54 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 		s.lock.Unlock()
 	}()
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	for {
-		resp, err := stream.Recv()
+	errCh := make(chan error, 2)
 
-		s, ok := status.FromError(err)
-
-		if (ok && s.Code() == codes.Canceled) ||
-			errors.Is(err, context.Canceled) ||
-			errors.Is(err, io.EOF) {
-			log.Infof("Unsubscribed from pubsub '%s' topic '%s'", req.GetPubsubName(), req.GetTopic())
-			return err
+	go func() {
+		select {
+		case <-conn.closeCh:
+		case <-stream.Context().Done():
 		}
+		errCh <- nil
+	}()
 
-		if err != nil {
-			log.Errorf("error receiving message from client stream: %s", err)
-			return err
-		}
+	go func() {
+		for {
+			resp, err := stream.Recv()
 
-		eventResp := resp.GetEventProcessed()
-		if eventResp == nil {
-			return errors.New("duplicate initial request received")
+			s, ok := status.FromError(err)
+
+			if (ok && s.Code() == codes.Canceled) ||
+				errors.Is(err, context.Canceled) ||
+				errors.Is(err, io.EOF) {
+				log.Infof("Unsubscribed from pubsub '%s' topic '%s'", req.GetPubsubName(), req.GetTopic())
+				errCh <- err
+				return
+			}
+
+			if err != nil {
+				log.Errorf("error receiving message from client stream: %s", err)
+				errCh <- err
+				return
+			}
+
+			eventResp := resp.GetEventProcessed()
+			if eventResp == nil {
+				errCh <- errors.New("duplicate initial request received")
+				return
+			}
+
+			conn.notifyPublishResponse(eventResp)
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			conn.notifyPublishResponse(stream.Context(), eventResp)
-		}()
-	}
+	}()
+
+	// TODO: @joshvanl: add global wait group here to wait during shutdown.
+	err := <-errCh
+	go func() {
+		if eerr := <-errCh; eerr != nil {
+			log.Errorf("Error subscribing to pubsub '%s' topic '%s': %s", req.GetPubsubName(), req.GetTopic(), eerr)
+		}
+	}()
+	return err
 }
 
 func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage) error {
@@ -179,4 +199,15 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 
 func (s *streamer) StreamerKey(pubsub, topic string) string {
 	return "___" + pubsub + "||" + topic
+}
+
+func (s *streamer) Close(key string) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	if conn, ok := s.subscribers[key]; ok {
+		if conn.closed.CompareAndSwap(false, true) {
+			close(conn.closeCh)
+		}
+	}
 }

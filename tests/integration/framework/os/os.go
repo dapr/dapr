@@ -11,8 +11,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package graceful
+package os
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/graceful/invocation"
+	"runtime"
+	"testing"
 )
+
+func SkipWindows(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on windows which relies on unix process signals")
+	}
+}
