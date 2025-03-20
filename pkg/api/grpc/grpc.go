@@ -521,6 +521,9 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 			// not to overwrite the existing metadata
 			if _, exist := req.Metadata[sanitizedKey]; !exist {
 				req.Metadata[sanitizedKey] = val[0]
+			} else if key == diag.TraceparentHeader || key == diag.TracestateHeader {
+				// If the key is traceparent or tracestate, we allow overwrite the existing metadata.
+				req.Metadata[sanitizedKey] = val[0]
 			}
 		}
 	}
