@@ -518,11 +518,9 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
-			// not to overwrite the existing metadata
-			if _, exist := req.Metadata[sanitizedKey]; !exist {
-				req.Metadata[sanitizedKey] = val[0]
-			} else if key == diag.TraceparentHeader || key == diag.TracestateHeader {
-				// If the key is traceparent or tracestate, we allow overwrite the existing metadata.
+			// Not to overwrite the existing metadata
+			// But if the key is traceparent or tracestate, we allow overwrite the existing metadata.
+			if _, exist := req.Metadata[sanitizedKey]; !exist || (key == diag.TraceparentHeader || key == diag.TracestateHeader) {
 				req.Metadata[sanitizedKey] = val[0]
 			}
 		}
