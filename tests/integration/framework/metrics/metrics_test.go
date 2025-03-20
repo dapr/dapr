@@ -14,7 +14,6 @@ limitations under the License.
 package metrics
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -42,7 +41,7 @@ func TestNew(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	metrics := New(t, context.Background(), ts.URL)
+	metrics := New(t, t.Context(), ts.URL)
 	metricsMap := metrics.All()
 
 	require.NotNil(t, metricsMap)

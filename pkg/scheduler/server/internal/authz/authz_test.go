@@ -58,7 +58,7 @@ func Test_Metadata(t *testing.T) {
 			nonMTlSCode: ptr.Of(codes.InvalidArgument),
 		},
 		"no auth context should error": {
-			ctx: context.Background(),
+			ctx: t.Context(),
 			meta: &schedulerv1pb.JobMetadata{
 				AppId:     "app1",
 				Namespace: "ns1",
@@ -144,7 +144,7 @@ func Test_Initial(t *testing.T) {
 			nonMTlSCode: ptr.Of(codes.InvalidArgument),
 		},
 		"no auth context should error": {
-			ctx: context.Background(),
+			ctx: t.Context(),
 			initial: &schedulerv1pb.WatchJobsRequestInitial{
 				AppId:     "app1",
 				Namespace: "ns1",

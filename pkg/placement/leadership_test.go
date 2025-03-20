@@ -60,7 +60,7 @@ func TestCleanupHeartBeats(t *testing.T) {
 }
 
 func TestMonitorLeadership(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	raftClusterOpts, err := tests.RaftClusterOpts(t)
 
 	require.NoError(t, err)

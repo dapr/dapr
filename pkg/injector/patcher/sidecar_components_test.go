@@ -228,7 +228,7 @@ func TestComponentsPatch(t *testing.T) {
 			patch, volumeMount := c.componentsPatchOps(componentContainers, Injectable(test.appID, test.componentsList))
 			patchJSON, _ := json.Marshal(patch)
 			expPatchJSON, _ := json.Marshal(test.expPatch)
-			assert.Equal(t, string(expPatchJSON), string(patchJSON))
+			assert.JSONEq(t, string(expPatchJSON), string(patchJSON))
 			assert.Equal(t, test.expMount, volumeMount)
 		})
 	}

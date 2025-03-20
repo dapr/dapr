@@ -27,6 +27,8 @@ import (
 )
 
 // Config represents configuration options for the Dapr Sidecar Injector webhook server.
+//
+//nolint:recvcheck
 type Config struct {
 	SidecarImage                      string `envconfig:"SIDECAR_IMAGE" required:"true"`
 	SidecarImagePullPolicy            string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`

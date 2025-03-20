@@ -14,7 +14,6 @@ limitations under the License.
 package kubernetes
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -75,7 +74,7 @@ func TestDeployApp(t *testing.T) {
 
 	// assert
 	deploymentClient := client.Deployments(testNamespace)
-	deployment, _ := deploymentClient.Get(context.TODO(), testApp.AppName, metav1.GetOptions{})
+	deployment, _ := deploymentClient.Get(t.Context(), testApp.AppName, metav1.GetOptions{})
 	assert.NotNil(t, deployment)
 	assert.Equal(t, testApp.AppName, deployment.ObjectMeta.Name)
 	assert.Equal(t, testNamespace, deployment.ObjectMeta.Namespace)
@@ -367,7 +366,7 @@ func TestCreateIngressService(t *testing.T) {
 		require.NoError(t, err)
 		// assert
 		serviceClient := client.Services(testNamespace)
-		obj, _ := serviceClient.Get(context.TODO(), testApp.AppName, metav1.GetOptions{})
+		obj, _ := serviceClient.Get(t.Context(), testApp.AppName, metav1.GetOptions{})
 		assert.NotNil(t, obj)
 		assert.Equal(t, testApp.AppName, obj.ObjectMeta.Name)
 		assert.Equal(t, testNamespace, obj.ObjectMeta.Namespace)
@@ -383,7 +382,7 @@ func TestCreateIngressService(t *testing.T) {
 		require.NoError(t, err)
 		// assert
 		serviceClient := client.Services(testNamespace)
-		obj, _ := serviceClient.Get(context.TODO(), testApp.AppName, metav1.GetOptions{})
+		obj, _ := serviceClient.Get(t.Context(), testApp.AppName, metav1.GetOptions{})
 		assert.NotNil(t, obj)
 		assert.Equal(t, testApp.AppName, obj.ObjectMeta.Name)
 		assert.Equal(t, testNamespace, obj.ObjectMeta.Namespace)

@@ -37,6 +37,7 @@ const (
 	EnvKeysEnvVar = "DAPR_ENV_KEYS"
 
 	// SentryTokenFileEnvVar is the environment variable for the Sentry token file.
+	// when running in kubernetes mode this environment variable enforces the kubernetes validator, if running in selfhosted mode the JWKs validator is used.
 	//nolint:gosec
 	SentryTokenFileEnvVar = "DAPR_SENTRY_TOKEN_FILE"
 

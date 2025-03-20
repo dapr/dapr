@@ -54,7 +54,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 			assert.Equal(t, "/actors/abc/foo/method/timer/foo", r.URL.Path)
 			b, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)
-			assert.Equal(t, `{"data":"hello","callback":"","dueTime":"0s","period":"10s"}`, string(b))
+			assert.JSONEq(t, `{"data":"hello","callback":"","dueTime":"0s","period":"10s"}`, string(b))
 		}),
 	)
 
