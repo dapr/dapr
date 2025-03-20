@@ -2676,7 +2676,7 @@ func TestInvokeBinding(t *testing.T) {
 	_, err = client.InvokeBinding(t.Context(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
-	ctx := grpcMetadata.AppendToOutgoingContext(t.Context(), "traceparent", "Test")
+	ctx := grpcMetadata.AppendToOutgoingContext(t.Context(), "traceparent", "Test", "userMetadata", "overwrited", "additional", "val2")
 	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -2684,6 +2684,8 @@ func TestInvokeBinding(t *testing.T) {
 	assert.Equal(t, "Test", resp.GetMetadata()["traceparent"])
 	assert.Contains(t, resp.GetMetadata(), "userMetadata")
 	assert.Equal(t, "val1", resp.GetMetadata()["userMetadata"])
+	assert.Contains(t, resp.GetMetadata(), "additional")
+	assert.Equal(t, "val2", resp.GetMetadata()["additional"])
 }
 
 func TestTransactionStateStoreNotConfigured(t *testing.T) {
