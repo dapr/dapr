@@ -518,7 +518,10 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
-			req.Metadata[sanitizedKey] = val[0]
+			// not to overwrite the existing metadata
+			if _, exist := req.Metadata[sanitizedKey]; !exist {
+				req.Metadata[sanitizedKey] = val[0]
+			}
 		}
 	}
 
