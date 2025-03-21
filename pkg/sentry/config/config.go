@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -74,8 +73,8 @@ type Config struct {
 
 // FromConfigName returns a Sentry configuration based on a configuration spec.
 // A default configuration is loaded in case of an error.
-func FromConfigName(configName string) (conf Config, err error) {
-	if IsKubernetesHosted() {
+func FromConfigName(configName, mode string) (conf Config, err error) {
+	if mode == string(modes.KubernetesMode) {
 		conf, err = getKubernetesConfig(configName)
 	} else {
 		conf, err = getSelfhostedConfig(configName)
@@ -87,10 +86,6 @@ func FromConfigName(configName string) (conf Config, err error) {
 	}
 
 	return conf, err
-}
-
-func IsKubernetesHosted() bool {
-	return os.Getenv(kubernetesServiceHostEnvVar) != ""
 }
 
 func getDefaultConfig() Config {
@@ -105,7 +100,7 @@ func getDefaultConfig() Config {
 
 func getKubernetesConfig(configName string) (Config, error) {
 	defaultConfig := getDefaultConfig()
-
+	defaultConfig.Mode = modes.KubernetesMode
 	kubeConf := utils.GetConfig()
 	daprClient, err := scheme.NewForConfig(kubeConf)
 	if err != nil {
@@ -147,6 +142,7 @@ func getKubernetesConfig(configName string) (Config, error) {
 
 func getSelfhostedConfig(configName string) (Config, error) {
 	defaultConfig := getDefaultConfig()
+	defaultConfig.Mode = modes.StandaloneMode
 	daprConfig, err := daprGlobalConfig.LoadStandaloneConfiguration(configName)
 	if err != nil {
 		return defaultConfig, err
@@ -189,7 +185,7 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 	// In Kubernetes mode, we always allow the built-in "kubernetes" validator
 	// In self-hosted mode, the built-in "insecure" validator is enabled only if no other validator is configured
 	conf.Validators = map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string{}
-	if IsKubernetesHosted() {
+	if conf.Mode == modes.KubernetesMode {
 		conf.DefaultValidator = sentryv1pb.SignCertificateRequest_KUBERNETES
 		conf.Validators[sentryv1pb.SignCertificateRequest_KUBERNETES] = map[string]string{}
 	}
@@ -212,7 +208,7 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 
 			conf.Validators[sentryv1pb.SignCertificateRequest_TokenValidator(val)] = v.OptionsMap()
 		}
-	} else if !IsKubernetesHosted() {
+	} else if conf.Mode == modes.StandaloneMode {
 		conf.DefaultValidator = sentryv1pb.SignCertificateRequest_INSECURE
 		conf.Validators[sentryv1pb.SignCertificateRequest_INSECURE] = map[string]string{}
 	}

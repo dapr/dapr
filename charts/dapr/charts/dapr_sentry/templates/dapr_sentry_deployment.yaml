@@ -165,7 +165,7 @@ spec:
         - "--"
 {{- end }}
         - "--mode"
-        - "kubernetes"
+        - "{{ .Values.mode | default "kubernetes" }}"
         - "--log-level"
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
