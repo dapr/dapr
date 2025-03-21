@@ -96,7 +96,7 @@ func Run() {
 		watchDirs = append(watchDirs, dir)
 	}
 
-	cfg, err := config.FromConfigName(opts.ConfigName)
+	cfg, err := config.FromConfigName(opts.ConfigName, opts.Mode)
 	if err != nil {
 		log.Fatal(err)
 	}

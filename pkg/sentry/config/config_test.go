@@ -20,13 +20,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	daprDaprConfig "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/modes"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
 
 func TestConfig(t *testing.T) {
 	t.Run("valid FromConfig, empty config name", func(t *testing.T) {
 		defaultConfig := getDefaultConfig()
-		c, _ := FromConfigName("")
+		c, _ := FromConfigName("", string(modes.KubernetesMode))
 
 		assert.Equal(t, defaultConfig, c)
 	})
@@ -72,6 +73,17 @@ func TestConfig(t *testing.T) {
 			// Setting this env var makes Sentry think we're running on Kubernetes
 			t.Setenv(kubernetesServiceHostEnvVar, "TEST")
 
+			t.Run("default kubernetes", func(t *testing.T) {
+				cfg := getDefaultConfig()
+				cfg.Mode = modes.KubernetesMode
+				conf, err := parseConfiguration(cfg, &daprConfig)
+				require.NoError(t, err)
+
+				require.Len(t, conf.Validators, 1)
+				require.NotNil(t, conf.Validators[sentryv1pb.SignCertificateRequest_KUBERNETES])
+				require.Equal(t, sentryv1pb.SignCertificateRequest_KUBERNETES, conf.DefaultValidator)
+			})
+
 			t.Run("no additional validators", func(t *testing.T) {
 				daprConfig.Spec.MTLSSpec.TokenValidators = nil
 
@@ -102,6 +114,17 @@ func TestConfig(t *testing.T) {
 		t.Run("self-hosted mode", func(t *testing.T) {
 			// Deleting this env var to empty makes Sentry think we're running on self-hosted mode
 			t.Setenv(kubernetesServiceHostEnvVar, "")
+
+			t.Run("default self-hosted", func(t *testing.T) {
+				cfg := getDefaultConfig()
+				cfg.Mode = modes.StandaloneMode
+				conf, err := parseConfiguration(cfg, &daprConfig)
+				require.NoError(t, err)
+
+				require.Len(t, conf.Validators, 1)
+				require.NotNil(t, conf.Validators[sentryv1pb.SignCertificateRequest_INSECURE])
+				require.Equal(t, sentryv1pb.SignCertificateRequest_INSECURE, conf.DefaultValidator)
+			})
 
 			t.Run("no additional validators", func(t *testing.T) {
 				daprConfig.Spec.MTLSSpec.TokenValidators = nil
