@@ -108,17 +108,17 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		require.NoError(c, err)
+		assert.NoError(c, err)
 		assert.Len(c, resp.GetRegisteredComponents(), 1)
 	}, time.Second*5, time.Millisecond*10)
 
 	called := a.healthCalled.Load()
 	require.Eventually(t, func() bool { return a.healthCalled.Load() > called }, time.Second*5, time.Millisecond*10)
-	assert.Eventually(t, func() bool {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		defer resp.Body.Close()
-		return resp.StatusCode == http.StatusInternalServerError
+		assert.Equal(c, http.StatusInternalServerError, resp.StatusCode)
 	}, time.Second*5, 10*time.Millisecond)
 
 	time.Sleep(time.Second * 2)
@@ -126,11 +126,11 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 
 	a.appHealthy.Store(true)
 
-	assert.Eventually(t, func() bool {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.HTTP(t).Do(req)
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		defer resp.Body.Close()
-		return resp.StatusCode == http.StatusOK
+		assert.Equal(c, http.StatusOK, resp.StatusCode)
 	}, time.Second*5, 10*time.Millisecond)
 
 	assert.Eventually(t, func() bool {
@@ -139,12 +139,12 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 
 	// Should stop calling binding when app becomes unhealthy
 	a.appHealthy.Store(false)
-	assert.Eventually(t, func() bool {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
+		assert.NoError(c, err)
 		defer resp.Body.Close()
-		return resp.StatusCode == http.StatusInternalServerError
-	}, time.Second*5, 10*time.Millisecond)
+		assert.Equal(c, http.StatusInternalServerError, resp.StatusCode)
+	}, time.Second*10, 10*time.Millisecond)
 	called = a.bindingCalled.Load()
 	time.Sleep(time.Second * 2)
 	assert.Equal(t, called, a.bindingCalled.Load())

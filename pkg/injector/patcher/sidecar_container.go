@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -109,7 +110,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 
 	// Actor/placement/reminders services
 	// Note that PlacementAddress takes priority over ActorsAddress
-	if c.PlacementAddress != "" {
+	if strings.TrimSpace(c.PlacementAddress) != "" {
 		args = append(args, "--placement-host-address", c.PlacementAddress)
 	} else if c.ActorsService != "" {
 		args = append(args, "--actors-service", c.ActorsService)
@@ -228,7 +229,8 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	}
 
 	// Create the container object
-	probeHTTPHandler := getProbeHTTPHandler(c.SidecarPublicPort, injectorConsts.APIVersionV1, injectorConsts.SidecarHealthzPath)
+	readinessProbeHandler := getReadinessProbeHandler(c.SidecarPublicPort, injectorConsts.APIVersionV1, injectorConsts.SidecarHealthzPath)
+	livenessProbeHandler := getLivenessProbeHandler(c.SidecarPublicPort)
 	env := []corev1.EnvVar{
 		{
 			Name:  "NAMESPACE",
@@ -270,11 +272,17 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	}
 
 	// Scheduler address could be empty if scheduler service is disabled
-	if c.SchedulerAddress != "" {
+	// TODO: remove in v1.16 when daprd no longer needs all scheduler pod
+	// addresses for serving.
+	if strings.TrimSpace(c.SchedulerAddress) != "" {
 		env = append(env,
 			corev1.EnvVar{
 				Name:  injectorConsts.SchedulerHostAddressEnvVar,
 				Value: c.SchedulerAddress,
+			},
+			corev1.EnvVar{
+				Name:  injectorConsts.SchedulerHostAddressDNSAEnvVar,
+				Value: c.SchedulerAddressDNSA,
 			},
 		)
 	}
@@ -289,14 +297,14 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		Env:             env,
 		VolumeMounts:    opts.VolumeMounts,
 		ReadinessProbe: &corev1.Probe{
-			ProbeHandler:        probeHTTPHandler,
+			ProbeHandler:        readinessProbeHandler,
 			InitialDelaySeconds: c.SidecarReadinessProbeDelaySeconds,
 			TimeoutSeconds:      c.SidecarReadinessProbeTimeoutSeconds,
 			PeriodSeconds:       c.SidecarReadinessProbePeriodSeconds,
 			FailureThreshold:    c.SidecarReadinessProbeThreshold,
 		},
 		LivenessProbe: &corev1.Probe{
-			ProbeHandler:        probeHTTPHandler,
+			ProbeHandler:        livenessProbeHandler,
 			InitialDelaySeconds: c.SidecarLivenessProbeDelaySeconds,
 			TimeoutSeconds:      c.SidecarLivenessProbeTimeoutSeconds,
 			PeriodSeconds:       c.SidecarLivenessProbePeriodSeconds,
@@ -320,9 +328,18 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	containerEnvKeys, containerEnv := c.getEnv()
 	if len(containerEnv) > 0 {
 		container.Env = append(container.Env, containerEnv...)
+	}
+
+	containerEnvFromKeys, containerEnvFrom := c.getEnvFromSecret()
+	if len(containerEnvFrom) > 0 {
+		container.Env = append(container.Env, containerEnvFrom...)
+	}
+
+	envKeys := slices.Concat(containerEnvKeys, containerEnvFromKeys)
+	if len(envKeys) > 0 {
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  securityConsts.EnvKeysEnvVar,
-			Value: strings.Join(containerEnvKeys, " "),
+			Value: strings.Join(envKeys, " "),
 		})
 	}
 
@@ -450,34 +467,83 @@ var envRegexp = regexp.MustCompile(`(?m)(,)\s*[a-zA-Z\_][a-zA-Z0-9\_]*=`)
 
 // getEnv returns the EnvVar slice from the Env annotation.
 func (c *SidecarConfig) getEnv() (envKeys []string, envVars []corev1.EnvVar) {
-	if c.Env == "" {
+	return parseEnvVars(c.Env, false)
+}
+
+func (c *SidecarConfig) getEnvFromSecret() (envKeys []string, envVars []corev1.EnvVar) {
+	return parseEnvVars(c.EnvFromSecret, true)
+}
+
+func parseEnvVars(envString string, fromSecret bool) (envKeys []string, envVars []corev1.EnvVar) {
+	if envString == "" {
 		return []string{}, []corev1.EnvVar{}
 	}
 
-	indexes := envRegexp.FindAllStringIndex(c.Env, -1)
-	lastEnd := len(c.Env)
+	indexes := envRegexp.FindAllStringIndex(envString, -1)
+	lastEnd := len(envString)
 	parts := make([]string, len(indexes)+1)
 	for i := len(indexes) - 1; i >= 0; i-- {
-		parts[i+1] = strings.TrimSpace(c.Env[indexes[i][0]+1 : lastEnd])
+		parts[i+1] = strings.TrimSpace(envString[indexes[i][0]+1 : lastEnd])
 		lastEnd = indexes[i][0]
 	}
-	parts[0] = c.Env[0:lastEnd]
+	parts[0] = envString[0:lastEnd]
 
 	envKeys = make([]string, 0, len(parts))
 	envVars = make([]corev1.EnvVar, 0, len(parts))
+
 	for _, s := range parts {
 		pairs := strings.Split(strings.TrimSpace(s), "=")
 		if len(pairs) != 2 {
 			continue
 		}
-		envKeys = append(envKeys, pairs[0])
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  pairs[0],
-			Value: pairs[1],
-		})
+		envKey := pairs[0]
+		envValue := pairs[1]
+		envKeys = append(envKeys, envKey)
+
+		if fromSecret {
+			secretSource := createSecretSource(envValue)
+			if secretSource != nil {
+				envVars = append(envVars, corev1.EnvVar{
+					Name:      envKey,
+					ValueFrom: secretSource,
+				})
+			}
+		} else {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  envKey,
+				Value: envValue,
+			})
+		}
 	}
 
 	return envKeys, envVars
+}
+
+func createSecretSource(value string) *corev1.EnvVarSource {
+	cleanValue := strings.TrimSpace(value)
+
+	if strings.Contains(cleanValue, ":") {
+		nameKeyPair := strings.Split(cleanValue, ":")
+		if len(nameKeyPair) != 2 {
+			return nil
+		}
+		return &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: strings.TrimSpace(nameKeyPair[0]),
+				},
+				Key: strings.TrimSpace(nameKeyPair[1]),
+			},
+		}
+	}
+	return &corev1.EnvVarSource{
+		SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: cleanValue,
+			},
+			Key: cleanValue,
+		},
+	}
 }
 
 func (c *SidecarConfig) GetAppProtocol() string {
@@ -509,10 +575,18 @@ func (c *SidecarConfig) GetAppProtocol() string {
 	}
 }
 
-func getProbeHTTPHandler(port int32, pathElements ...string) corev1.ProbeHandler {
+func getReadinessProbeHandler(port int32, pathElements ...string) corev1.ProbeHandler {
 	return corev1.ProbeHandler{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: formatProbePath(pathElements...),
+			Port: intstr.IntOrString{IntVal: port},
+		},
+	}
+}
+
+func getLivenessProbeHandler(port int32) corev1.ProbeHandler {
+	return corev1.ProbeHandler{
+		TCPSocket: &corev1.TCPSocketAction{
 			Port: intstr.IntOrString{IntVal: port},
 		},
 	}

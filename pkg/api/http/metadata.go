@@ -72,6 +72,8 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 					HTTPEndpoints:        out.GetHttpEndpoints(),
 					RuntimeVersion:       out.GetRuntimeVersion(),
 					EnabledFeatures:      out.GetEnabledFeatures(),
+					//nolint:protogetter
+					Scheduler: out.Scheduler,
 				}
 
 				// Copy the app connection properties into a custom struct
@@ -168,6 +170,7 @@ type metadataResponse struct {
 	HTTPEndpoints           []*runtimev1pb.MetadataHTTPEndpoint     `json:"httpEndpoints,omitempty"`
 	AppConnectionProperties metadataResponseAppConnectionProperties `json:"appConnectionProperties,omitempty"`
 	ActorRuntime            metadataActorRuntime                    `json:"actorRuntime,omitempty"`
+	Scheduler               *runtimev1pb.MetadataScheduler          `json:"scheduler,omitempty"`
 }
 
 type metadataActorRuntime struct {

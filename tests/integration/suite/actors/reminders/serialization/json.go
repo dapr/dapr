@@ -69,6 +69,17 @@ func (j *jsonFormat) Setup(t *testing.T) []framework.Option {
 		daprd.WithResourceFiles(j.db.GetComponent(t)),
 		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(j.place.Port())),
 		daprd.WithAppPort(j.srv.Port()),
+		daprd.WithConfigManifests(t, `
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: schedulerreminders
+spec:
+  features:
+  - name: SchedulerReminders
+    enabled: false
+`),
+		daprd.WithAppHealthCheck(true),
 	)
 
 	return []framework.Option{

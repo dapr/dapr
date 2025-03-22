@@ -16,10 +16,14 @@ limitations under the License.
 package universal
 
 import (
+	"context"
 	"sync"
-	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/state"
+	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -33,15 +37,15 @@ type Options struct {
 	Namespace                   string
 	Logger                      logger.Logger
 	Resiliency                  resiliency.Provider
-	Actors                      actors.ActorRuntime
 	CompStore                   *compstore.ComponentStore
 	ShutdownFn                  func()
 	GetComponentsCapabilitiesFn func() map[string][]string
 	ExtendedMetadata            map[string]string
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
-	WorkflowEngine              *wfengine.WorkflowEngine
-	SchedulerClients            *clients.Clients
+	Scheduler                   clients.Clients
+	Actors                      actors.Interface
+	WorkflowEngine              wfengine.Interface
 }
 
 // Universal contains the implementation of gRPC APIs that are also used by the HTTP server.
@@ -50,20 +54,17 @@ type Universal struct {
 	namespace                   string
 	logger                      logger.Logger
 	resiliency                  resiliency.Provider
-	actors                      actors.ActorRuntime
 	compStore                   *compstore.ComponentStore
 	shutdownFn                  func()
 	getComponentsCapabilitiesFn func() map[string][]string
 	extendedMetadata            map[string]string
 	appConnectionConfig         config.AppConnectionConfig
 	globalConfig                *config.Configuration
-	workflowEngine              *wfengine.WorkflowEngine
-	schedulerClients            *clients.Clients
+	workflowEngine              wfengine.Interface
+	scheduler                   clients.Clients
 
 	extendedMetadataLock sync.RWMutex
-	actorsLock           sync.RWMutex
-	actorsReady          atomic.Bool
-	actorsReadyCh        chan struct{}
+	actors               actors.Interface
 }
 
 func New(opts Options) *Universal {
@@ -72,16 +73,15 @@ func New(opts Options) *Universal {
 		namespace:                   opts.Namespace,
 		logger:                      opts.Logger,
 		resiliency:                  opts.Resiliency,
-		actors:                      opts.Actors,
 		compStore:                   opts.CompStore,
 		shutdownFn:                  opts.ShutdownFn,
 		getComponentsCapabilitiesFn: opts.GetComponentsCapabilitiesFn,
 		extendedMetadata:            opts.ExtendedMetadata,
 		appConnectionConfig:         opts.AppConnectionConfig,
 		globalConfig:                opts.GlobalConfig,
+		scheduler:                   opts.Scheduler,
+		actors:                      opts.Actors,
 		workflowEngine:              opts.WorkflowEngine,
-		actorsReadyCh:               make(chan struct{}),
-		schedulerClients:            opts.SchedulerClients,
 	}
 }
 
@@ -97,22 +97,38 @@ func (a *Universal) Resiliency() resiliency.Provider {
 	return a.resiliency
 }
 
-func (a *Universal) Actors() actors.ActorRuntime {
-	a.actorsLock.RLock()
-	defer a.actorsLock.RUnlock()
-	return a.actors
-}
-
-func (a *Universal) SetActorRuntime(actor actors.ActorRuntime) {
-	a.actorsLock.Lock()
-	defer a.actorsLock.Unlock()
-	a.actors = actor
-}
-
 func (a *Universal) CompStore() *compstore.ComponentStore {
 	return a.compStore
 }
 
 func (a *Universal) AppConnectionConfig() config.AppConnectionConfig {
 	return a.appConnectionConfig
+}
+
+func (a *Universal) ActorEngine(ctx context.Context) (engine.Interface, error) {
+	if err := a.actors.WaitForRegisteredHosts(ctx); err != nil {
+		return nil, err
+	}
+	return a.actors.Engine(ctx)
+}
+
+func (a *Universal) ActorState(ctx context.Context) (state.Interface, error) {
+	if err := a.actors.WaitForRegisteredHosts(ctx); err != nil {
+		return nil, err
+	}
+	return a.actors.State(ctx)
+}
+
+func (a *Universal) ActorTimers(ctx context.Context) (timers.Interface, error) {
+	if err := a.actors.WaitForRegisteredHosts(ctx); err != nil {
+		return nil, err
+	}
+	return a.actors.Timers(ctx)
+}
+
+func (a *Universal) ActorReminders(ctx context.Context) (reminders.Interface, error) {
+	if err := a.actors.WaitForRegisteredHosts(ctx); err != nil {
+		return nil, err
+	}
+	return a.actors.Reminders(ctx)
 }

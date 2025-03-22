@@ -75,13 +75,12 @@ func (p *PubSubError) withTopicError(topic string, err error) *PubSubMetadataErr
 	}
 }
 
-func (p PubSubError) PublishMessage(topic string, err error) error {
+func (p *PubSubError) PublishMessage(topic string, err error) error {
 	return p.withTopicError(topic, err).build(
 		codes.Internal,
 		http.StatusInternalServerError,
 		fmt.Sprintf("error when publishing to topic %s in pubsub %s: %s", topic, p.name, err),
 		errorcodes.PubsubPublishMessage,
-		"PUBLISH_MESSAGE",
 	)
 }
 
@@ -91,20 +90,18 @@ func (p *PubSubError) PublishForbidden(topic, appID string, err error) error {
 		http.StatusForbidden,
 		fmt.Sprintf("topic %s is not allowed for app id %s", topic, appID),
 		errorcodes.PubsubForbidden,
-		"FORBIDDEN",
 	)
 }
 
-// This is specifically for the error we are expecting for the api_tests. The not found
+// TestNotFound is specifically for the error we are expecting for the api_tests. The not found
 // expected error codes are different than the existing ones for PubSubNotFound, hence
 // why this one is needed
-func (p PubSubError) TestNotFound(topic string, err error) error {
+func (p *PubSubError) TestNotFound(topic string, err error) error {
 	return p.withTopicError(topic, err).build(
 		codes.NotFound,
 		http.StatusBadRequest,
 		fmt.Sprintf("pubsub '%s' not found", p.name),
-		errorcodes.PubsubNotFound,
-		"TEST_NOT_FOUND",
+		errorcodes.PubSubTestNotFound,
 	)
 }
 
@@ -114,8 +111,7 @@ func (p *PubSubMetadataError) NotFound() error {
 		codes.InvalidArgument,
 		http.StatusNotFound,
 		fmt.Sprintf("%s %s is not found", metadata.PubSubType, p.p.name),
-		errorcodes.PubsubNotFound,
-		errors.CodeNotFound,
+		errorcodes.PubSubNotFound,
 	)
 }
 
@@ -125,8 +121,7 @@ func (p *PubSubMetadataError) NotConfigured() error {
 		codes.FailedPrecondition,
 		http.StatusBadRequest,
 		fmt.Sprintf("%s %s is not configured", metadata.PubSubType, p.p.name),
-		errorcodes.PubsubNotConfigured,
-		errors.CodeNotConfigured,
+		errorcodes.PubSubNotConfigured,
 	)
 }
 
@@ -142,8 +137,7 @@ func (p *PubSubMetadataError) NameEmpty() error {
 		codes.InvalidArgument,
 		http.StatusNotFound,
 		"pubsub name is empty",
-		errorcodes.PubsubEmpty,
-		"NAME_EMPTY",
+		errorcodes.PubSubEmpty,
 	)
 }
 
@@ -152,8 +146,7 @@ func (p *PubSubMetadataError) TopicEmpty() error {
 		codes.InvalidArgument,
 		http.StatusNotFound,
 		"topic is empty in pubsub "+p.p.name,
-		errorcodes.PubsubTopicNameEmpty,
-		"TOPIC_NAME_EMPTY",
+		errorcodes.PubSubTopicNameEmpty,
 	)
 }
 
@@ -162,8 +155,7 @@ func (p *PubSubMetadataError) DeserializeError(err error) error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		fmt.Sprintf("failed deserializing metadata. Error: %s", err),
-		errorcodes.PubsubRequestMetadata,
-		"METADATA_DESERIALIZATION",
+		errorcodes.PubSubRequestMetadata,
 	)
 }
 
@@ -172,8 +164,7 @@ func (p *PubSubMetadataError) CloudEventCreation() error {
 		codes.InvalidArgument,
 		http.StatusInternalServerError,
 		"cannot create cloudevent",
-		errorcodes.PubsubCloudEventsSer,
-		"CLOUD_EVENT_CREATION",
+		errorcodes.PubSubCloudEventsSer,
 	)
 }
 
@@ -186,8 +177,7 @@ func (p *PubSubTopicError) MarshalEnvelope() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		msg,
-		errorcodes.PubsubEventsSer,
-		"MARSHAL_ENVELOPE",
+		errorcodes.PubSubEventsSerEnvelope,
 	)
 }
 
@@ -201,8 +191,7 @@ func (p *PubSubTopicError) MarshalEvents() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
-		errorcodes.PubsubEventsSer,
-		"MARSHAL_EVENTS",
+		errorcodes.PubSubEventsMarshalEvents,
 	)
 }
 
@@ -217,18 +206,17 @@ func (p *PubSubTopicError) UnmarshalEvents(err error) error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
-		errorcodes.PubsubEventsSer,
-		"UNMARSHAL_EVENTS",
+		errorcodes.PubSubEventsUnmarshalEvents,
 	)
 }
 
-func (p *PubSubMetadataError) build(grpcCode codes.Code, httpCode int, msg string, tag errorcodes.ErrorCode, errCode string) error {
+func (p *PubSubMetadataError) build(grpcCode codes.Code, httpCode int, msg string, tag errorcodes.ErrorCode) error {
 	err := errors.NewBuilder(grpcCode, httpCode, msg, tag.Code, string(tag.Category))
 	if !p.skipResourceInfo {
 		err = err.WithResourceInfo(string(metadata.PubSubType), p.p.name, "", msg)
 	}
 	return err.WithErrorInfo(
-		errors.CodePrefixPubSub+errCode,
+		tag.GrpcCode,
 		p.metadata,
 	).Build()
 }

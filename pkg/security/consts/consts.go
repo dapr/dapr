@@ -34,6 +34,7 @@ const (
 	EnvKeysEnvVar = "DAPR_ENV_KEYS"
 
 	// SentryTokenFileEnvVar is the environment variable for the Sentry token file.
+	// when running in kubernetes mode this environment variable enforces the kubernetes validator, if running in selfhosted mode the JWKs validator is used.
 	//nolint:gosec
 	SentryTokenFileEnvVar = "DAPR_SENTRY_TOKEN_FILE"
 
@@ -51,7 +52,4 @@ const (
 
 	// ControlPlaneDefaultTrustAnchorsPath is the default path where the trust anchors are placed for control plane services.
 	ControlPlaneDefaultTrustAnchorsPath = "/var/run/secrets/dapr.io/tls/ca.crt"
-
-	// SchedulerAddressEnvVar is the env var for the scheduler addresses
-	SchedulerHostAddressEnvVar = "DAPR_SCHEDULER_HOST_ADDRESS"
 )

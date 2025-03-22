@@ -17,7 +17,6 @@ limitations under the License.
 package workflows
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -88,25 +87,8 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	comps := []kube.ComponentDescription{}
-	if backend == "sqlite" {
-		comps = getSqliteBackendComp(comps, backend)
-	}
-
-	tr = runner.NewTestRunner("workflow_test", testApps, comps, nil)
+	tr = runner.NewTestRunner("workflow_test", testApps, []kube.ComponentDescription{}, nil)
 	os.Exit(tr.Start(m))
-}
-
-func getSqliteBackendComp(comps []kube.ComponentDescription, backend string) []kube.ComponentDescription {
-	comps = append(comps, kube.ComponentDescription{
-		Name:     "sqlitebackend",
-		TypeName: "workflowbackend.sqlite",
-		MetaData: map[string]kube.MetadataValue{
-			"connectionString": {Raw: `""`},
-		},
-		Scopes: []string{appNamePrefix + backend},
-	})
-	return comps
 }
 
 func runk6test(t *testing.T, config K6RunConfig) *loadtest.K6RunnerMetricsSummary {
@@ -176,12 +158,12 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 					cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
 					require.NoError(t, err)
 					var pod corev1.Pod
-					err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+					err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
 					require.NoError(t, err)
-					err = cl.Delete(context.Background(), &pod)
+					err = cl.Delete(t.Context(), &pod)
 					require.NoError(t, err)
 					assert.EventuallyWithT(t, func(c *assert.CollectT) {
-						err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+						err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
 						if assert.NoError(c, err) {
 							assert.Equal(c, corev1.PodRunning, pod.Status.Phase)
 						}

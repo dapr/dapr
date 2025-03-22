@@ -130,7 +130,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 	t.Run("bulk Subscribe Message for raw payload", func(t *testing.T) {
 		comp := &mockSubscribePubSub{}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		resp := contribpubsub.AppBulkResponse{AppResponses: []contribpubsub.AppBulkResponseEntry{{
 			EntryId: "0",
@@ -166,7 +166,7 @@ func TestBulkSubscribe(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(ps.Stop)
 
-		err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
+		err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Data:       []byte(`{"orderId":"1"}`),
@@ -182,7 +182,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 	t.Run("bulk Subscribe Message for cloud event", func(t *testing.T) {
 		comp := &mockSubscribePubSub{}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		resp := contribpubsub.AppBulkResponse{AppResponses: []contribpubsub.AppBulkResponseEntry{{
 			EntryId: "0",
@@ -219,7 +219,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		order := `{"data":{"orderId":1},"datacontenttype":"application/json","id":"8b540b03-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
 
-		err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
+		err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Data:       []byte(order),
@@ -237,7 +237,7 @@ func TestBulkSubscribe(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		resp := contribpubsub.AppBulkResponse{AppResponses: []contribpubsub.AppBulkResponseEntry{
 			{EntryId: "1111111a", Status: contribpubsub.Success},
@@ -273,7 +273,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr := getBulkMessageEntries(2)
 
-		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -298,7 +298,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr = getBulkMessageEntries(3)
 
-		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -325,7 +325,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr = getBulkMessageEntries(4)
 
-		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -350,7 +350,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel3.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("Mock error"))
 		msgArr = getBulkMessageEntries(1)
 
-		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -371,7 +371,7 @@ func TestBulkSubscribe(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		resp := contribpubsub.AppBulkResponse{AppResponses: []contribpubsub.AppBulkResponseEntry{
 			{EntryId: "1111111a", Status: contribpubsub.Success},
@@ -412,7 +412,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr := getBulkMessageEntries(2)
 
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -433,7 +433,7 @@ func TestBulkSubscribe(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -494,7 +494,7 @@ func TestBulkSubscribe(t *testing.T) {
 		t.Cleanup(ps.Stop)
 
 		msgArr := getBulkMessageEntries(10)
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -536,7 +536,7 @@ func TestBulkSubscribe(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -578,7 +578,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders")).Return(respInvoke1, nil)
 
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -610,7 +610,7 @@ func TestBulkSubscribe(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -657,7 +657,7 @@ func TestBulkSubscribe(t *testing.T) {
 			matchDaprRequestMethod("orders"),
 		).Return(respInvoke1, nil)
 
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -688,7 +688,7 @@ func TestBulkSubscribe(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
@@ -733,7 +733,7 @@ func TestBulkSubscribe(t *testing.T) {
 			matchDaprRequestMethod("orders"),
 		).Return(respInvoke1, nil)
 
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -771,7 +771,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		nbei1 := contribpubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(`{"orderId":"1"}`)}
 		nbei2 := contribpubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(`{"orderId":"2"}`)}
@@ -836,7 +836,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(ps.Stop)
 
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -859,7 +859,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		mockServer.BulkResponsePerPath = nil
 		mockServer.Error = status.Error(codes.Unimplemented, "method not implemented")
-		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -869,7 +869,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, assertItemExistsOnce(comp.GetBulkResponse().Statuses, "1111111a", "2222222b"))
 
 		mockServer.Error = status.Error(codes.Unknown, "unknown error")
-		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -887,7 +887,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		rule1, err := runtimePubsub.CreateRoutingRule(`event.type == "type1"`, orders1)
 		require.NoError(t, err)
@@ -976,7 +976,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(ps.Stop)
 
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1012,7 +1012,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		msgArr := getBulkMessageEntries(4)
 		msgArr[0].EntryId = ""
@@ -1071,7 +1071,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(ps.Stop)
 
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1098,7 +1098,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		msgArr := getBulkMessageEntries(5)
 		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 5)
@@ -1168,7 +1168,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(ps.Stop)
 
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1196,7 +1196,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		msgArr := getBulkMessageEntries(5)
 		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 5)
@@ -1260,7 +1260,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(ps.Stop)
 
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1284,7 +1284,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
@@ -1337,7 +1337,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(ps.Stop)
 
-		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1562,7 +1562,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		// Mock send message to app returns error.
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1598,7 +1598,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(ps.Stop)
 
-		err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
+		err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
 			Topic:      "topic0",
 			Data:       []byte(`{"id":"1"}`),
@@ -1611,7 +1611,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 
 	t.Run("use dead letter with resiliency", func(t *testing.T) {
 		comp := &mockSubscribePubSub{}
-		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
 		// Mock send message to app returns error.
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1646,7 +1646,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(ps.Stop)
 
-		err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
+		err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
 			Topic:      "topic0",
 			Data:       []byte(`{"id":"1"}`),

@@ -14,7 +14,6 @@ limitations under the License.
 package ca
 
 import (
-	"context"
 	"crypto/x509"
 	"testing"
 
@@ -258,7 +257,7 @@ func TestKube_get(t *testing.T) {
 				namespace: "dapr-system-test",
 			}
 
-			bundle, ok, err := k.get(context.Background())
+			bundle, ok, err := k.get(t.Context())
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expOK, ok, "ok")
 			assert.Equal(t, test.expBundle, bundle)

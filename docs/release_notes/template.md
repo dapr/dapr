@@ -21,6 +21,8 @@ Thanks to everyone who made this release possible!
 
 $dapr_contributors
 
++++++ Include contributions and acknowledgements to individuals/organisations involved in the release effort e.g. comprehensive testing. This is not automated +++++
+
 ## New in this release
 
 $dapr_changes

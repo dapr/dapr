@@ -33,7 +33,7 @@ const (
 type AppChannel interface {
 	GetAppConfig(ctx context.Context, appID string) (*config.ApplicationConfig, error)
 	InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error)
-	HealthProbe(ctx context.Context) (bool, error)
+	HealthProbe(ctx context.Context) (*apphealth.Status, error)
 	SetAppHealth(ah *apphealth.AppHealth)
 	TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error)
 }

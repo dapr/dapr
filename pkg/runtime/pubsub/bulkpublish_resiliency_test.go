@@ -110,7 +110,7 @@ func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.
 }
 
 func TestApplyBulkPublishResiliency(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	pubsubName := "test-pubsub"
 	bulkMessageEntries := []contribPubsub.BulkMessageEntry{
 		{
