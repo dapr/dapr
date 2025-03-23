@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.23.6
+go 1.24.1
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -11,7 +11,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/ManuInNZ/dapr-components-contrib v1.15.0.20250309213759-9cdea70fdf6bbf14f8bb6dba1eaea723a72f4eb6
+	github.com/dapr/components-contrib v1.15.1-0.20250323163817-47947d8770b9
 	github.com/dapr/durabletask-go v0.6.5
 	github.com/dapr/kit v0.15.1
 	github.com/diagridio/go-etcd-cron v0.4.4
@@ -186,7 +186,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chebyrash/promise v0.0.0-20230709133807-42ec49ba1459 // indirect
-	github.com/choleraehyq/pid v0.0.19 // indirect
+	github.com/choleraehyq/pid v0.0.20 // indirect
 	github.com/clbanning/mxj/v2 v2.5.6 // indirect
 	github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.14.0 // indirect
 	github.com/cloudwego/fastpb v0.0.4-0.20230131074846-6fc453d58b96 // indirect
@@ -502,5 +502,3 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-
