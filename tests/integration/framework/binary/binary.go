@@ -155,6 +155,8 @@ func build(t *testing.T, name string, opts options) {
 		assert.NoError(t, ioout.Close())
 		assert.NoError(t, ioerr.Close())
 
+		// TODO: @joshvanl: check if we can use `t.Setenv`
+		//nolint:usetesting
 		assert.NoError(t, os.Setenv(EnvKey(name), binPath))
 	} else {
 		t.Logf("%q set, using %q pre-built binary", EnvKey(name), EnvValue(name))

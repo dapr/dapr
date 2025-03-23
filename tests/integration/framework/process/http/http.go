@@ -94,6 +94,7 @@ func (h *HTTP) Run(t *testing.T, ctx context.Context) {
 }
 
 func (h *HTTP) Cleanup(t *testing.T) {
+	//nolint:usetesting
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	require.NoError(t, errors.Join(h.server.Shutdown(ctx), <-h.srvErrCh))

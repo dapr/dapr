@@ -37,7 +37,7 @@ type NameValuePair struct {
 }
 
 // HasValue returns true if the NameValuePair has a non-empty value.
-func (nvp NameValuePair) HasValue() bool {
+func (nvp *NameValuePair) HasValue() bool {
 	return len(nvp.Value.JSON.Raw) > 0
 }
 
