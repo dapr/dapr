@@ -32,6 +32,14 @@ func TestConfig(t *testing.T) {
 		assert.Equal(t, defaultConfig, c)
 	})
 
+	t.Run("valid FromConfig, empty config name, standalone mode", func(t *testing.T) {
+		defaultConfig := getDefaultConfig()
+		defaultConfig.Mode = modes.StandaloneMode
+		c, _ := FromConfigName("", "standalone")
+
+		assert.Equal(t, defaultConfig, c)
+	})
+
 	t.Run("valid default config, self hosted", func(t *testing.T) {
 		defaultConfig := getDefaultConfig()
 		defaultConfig.Mode = modes.StandaloneMode
