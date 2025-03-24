@@ -14,7 +14,6 @@ limitations under the License.
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -131,30 +130,30 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 				Namespace: testCase.namespace,
 			},
 		}
-		_, err := client.CoreV1().ServiceAccounts(testCase.namespace).Create(context.TODO(), sa, metav1.CreateOptions{})
+		_, err := client.CoreV1().ServiceAccounts(testCase.namespace).Create(t.Context(), sa, metav1.CreateOptions{})
 		require.NoError(t, err)
 	}
 
 	t.Run("injector config has no allowed service account", func(t *testing.T) {
-		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{}, client)
+		uids, err := AllowedControllersServiceAccountUID(t.Context(), Config{}, client)
 		require.NoError(t, err)
 		assert.Len(t, uids, 2)
 	})
 
 	t.Run("injector config has a valid allowed service account", func(t *testing.T) {
-		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test"}, client)
+		uids, err := AllowedControllersServiceAccountUID(t.Context(), Config{AllowedServiceAccounts: "test:test"}, client)
 		require.NoError(t, err)
 		assert.Len(t, uids, 3)
 	})
 
 	t.Run("injector config has a invalid allowed service account", func(t *testing.T) {
-		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "abc:abc"}, client)
+		uids, err := AllowedControllersServiceAccountUID(t.Context(), Config{AllowedServiceAccounts: "abc:abc"}, client)
 		require.NoError(t, err)
 		assert.Len(t, uids, 2)
 	})
 
 	t.Run("injector config has multiple allowed service accounts", func(t *testing.T) {
-		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
+		uids, err := AllowedControllersServiceAccountUID(t.Context(), Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
 		require.NoError(t, err)
 		assert.Len(t, uids, 3)
 	})

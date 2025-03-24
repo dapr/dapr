@@ -36,6 +36,7 @@ issues:
     - ^pkg.*client.*clientset.*versioned.*
     - ^pkg.*client.*informers.*externalversions.*
     - ^pkg.*proto.*
+    - pkg/proto
 
 # output configuration options
 output:
@@ -269,7 +270,6 @@ linters:
     - lll
     - unparam
     - wsl
-    - gomnd
     - testpackage
     - nestif
     - nlreturn
@@ -306,7 +306,5 @@ linters:
     - tagalign
     - mnd
     - canonicalheader
-    - exportloopref
-    - execinquery
     - err113
     - fatcontext

@@ -76,7 +76,7 @@ func (g *Channel) GetAppConfig(_ context.Context, appID string) (*config.Applica
 
 // InvokeMethod invokes user code via gRPC.
 func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
-	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
+	if g.appHealth != nil && !g.appHealth.GetStatus().IsHealthy {
 		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
 
@@ -92,7 +92,7 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 
 // TriggerJob sends the triggered job to the app via gRPC.
 func (g *Channel) TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
-	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
+	if g.appHealth != nil && !g.appHealth.GetStatus().IsHealthy {
 		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
 
@@ -217,15 +217,19 @@ var emptyPbPool = sync.Pool{
 }
 
 // HealthProbe performs a health probe.
-func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
+func (g *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
 	// We use the low-level method here so we can avoid allocating multiple &emptypb.Empty and use the pool
 	in := emptyPbPool.Get()
 	defer emptyPbPool.Put(in)
 	out := emptyPbPool.Get()
 	defer emptyPbPool.Put(out)
 	err := g.conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", in, out)
+	if err != nil {
+		reason := fmt.Sprintf("Health check failed: %v", err)
+		return apphealth.NewStatus(false, &reason), err
+	}
 
-	return err == nil, err
+	return apphealth.NewStatus(true, nil), nil
 }
 
 // SetAppHealth sets the apphealth.AppHealth object.
