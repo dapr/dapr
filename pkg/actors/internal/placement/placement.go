@@ -16,6 +16,7 @@ package placement
 import (
 	"context"
 	"errors"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -89,6 +90,7 @@ type placement struct {
 
 	tableUnlock context.CancelFunc
 
+	podName   string
 	appID     string
 	namespace string
 	hostname  string
@@ -120,6 +122,7 @@ func New(opts Options) (Interface, error) {
 			Entries: make(map[string]*hashing.Consistent),
 		},
 		reminders:     opts.Reminders,
+		podName:       os.Getenv("POD_NAME"),
 		appID:         opts.AppID,
 		port:          strconv.Itoa(opts.Port),
 		namespace:     opts.Namespace,
@@ -223,6 +226,7 @@ func (p *placement) sendHost(ctx context.Context, actorTypes []string) error {
 		Id:        p.appID,
 		ApiLevel:  20,
 		Namespace: p.namespace,
+		Pod:       p.podName,
 	})
 	if err != nil {
 		diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")

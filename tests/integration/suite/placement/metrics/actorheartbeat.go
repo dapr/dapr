@@ -56,7 +56,9 @@ func (m *actorheartbeat) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore1"),
 		daprd.WithPlacementAddresses(m.place.Address()),
 		daprd.WithAppPort(srv.Port()),
-		daprd.WithNamespace("ns1"))
+		daprd.WithNamespace("ns1"),
+		daprd.WithPodName(t, "pod1"),
+	)
 
 	return []framework.Option{
 		framework.WithProcesses(m.place, m.daprd, srv),
@@ -75,11 +77,11 @@ func (m *actorheartbeat) Run(t *testing.T, ctx context.Context) {
 		i++
 		metrics := m.place.Metrics(t, ctx)
 
-		metricActor1 := metrics.MatchMetric("dapr_placement_actor_heartbeat_timestamp", "actor_type:myactortype1", "app_id:"+m.daprd.AppID(), "host_name:"+m.daprd.InternalGRPCAddress(), "host_namespace:ns1")
+		metricActor1 := metrics.MatchMetric("dapr_placement_actor_heartbeat_timestamp", "actor_type:myactortype1", "app_id:"+m.daprd.AppID(), "host_name:"+m.daprd.InternalGRPCAddress(), "host_namespace:ns1", "pod_name:pod1")
 		require.Len(t, metricActor1, 1)
 		require.Greater(t, int(metricActor1[0].Value), m1)
 
-		metricActor2 := metrics.MatchMetric("dapr_placement_actor_heartbeat_timestamp", "actor_type:myactortype2", "app_id:"+m.daprd.AppID(), "host_name:"+m.daprd.InternalGRPCAddress(), "host_namespace:ns1")
+		metricActor2 := metrics.MatchMetric("dapr_placement_actor_heartbeat_timestamp", "actor_type:myactortype2", "app_id:"+m.daprd.AppID(), "host_name:"+m.daprd.InternalGRPCAddress(), "host_namespace:ns1", "pod_name:pod1")
 		require.Len(t, metricActor2, 1)
 		require.Greater(t, int(metricActor2[0].Value), m2)
 
