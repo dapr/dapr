@@ -49,3 +49,4 @@ resources: {}
 
 extraEnvVars: {}
 
+mode: kubernetes

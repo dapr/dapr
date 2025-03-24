@@ -29,6 +29,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/modes"
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -82,6 +83,7 @@ func (l *longname) Setup(t *testing.T) []framework.Option {
 		return sentry.New(t,
 			sentry.WithWriteConfig(false),
 			sentry.WithKubeconfig(kubeAPI.KubeconfigPath(t)),
+			sentry.WithMode(string(modes.KubernetesMode)),
 			sentry.WithExecOptions(
 				// Enable Kubernetes validator.
 				exec.WithEnvVars(t, "KUBERNETES_SERVICE_HOST", "anything"),
