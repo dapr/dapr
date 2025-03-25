@@ -159,3 +159,29 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 	}
 	return nil, err
 }
+
+func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetActorReminderRequest) (*emptypb.Empty, error) {
+	r, err := a.ActorReminders(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	req := &api.GetReminderRequest{
+		Name:      in.GetName(),
+		ActorID:   in.GetActorId(),
+		ActorType: in.GetActorType(),
+	}
+
+	err = r.Get(ctx, req)
+	if err != nil {
+		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
+			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
+			return nil, messages.ErrActorReminderOpActorNotHosted
+		}
+
+		err = messages.ErrActorReminderGet.WithFormat(err)
+		a.logger.Debug(err)
+		return nil, err
+	}
+	return nil, err
+}

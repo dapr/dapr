@@ -621,6 +621,13 @@ message RegisterActorReminderRequest {
   string ttl = 7;
 }
 
+// GetActorReminderRequest is the message to get an already-registered actor reminder
+message GetActorReminderRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
+  string name = 3;
+}
+
 // UnregisterActorReminderRequest is the message to unregister an actor reminder.
 message UnregisterActorReminderRequest {
   string actor_type = 1 [json_name = "actorType"];
