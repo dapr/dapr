@@ -20,19 +20,29 @@ import (
 	"github.com/stretchr/testify/require"
 
 	daprDaprConfig "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/modes"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
 
 func TestConfig(t *testing.T) {
 	t.Run("valid FromConfig, empty config name", func(t *testing.T) {
 		defaultConfig := getDefaultConfig()
-		c, _ := FromConfigName("")
+		c, _ := FromConfigName("", "")
+
+		assert.Equal(t, defaultConfig, c)
+	})
+
+	t.Run("valid FromConfig, empty config name, standalone mode", func(t *testing.T) {
+		defaultConfig := getDefaultConfig()
+		defaultConfig.Mode = modes.StandaloneMode
+		c, _ := FromConfigName("", "standalone")
 
 		assert.Equal(t, defaultConfig, c)
 	})
 
 	t.Run("valid default config, self hosted", func(t *testing.T) {
 		defaultConfig := getDefaultConfig()
+		defaultConfig.Mode = modes.StandaloneMode
 		c, _ := getSelfhostedConfig("")
 
 		assert.Equal(t, defaultConfig, c)
@@ -57,20 +67,23 @@ func TestConfig(t *testing.T) {
 	})
 
 	t.Run("set validators", func(t *testing.T) {
-		daprConfig := daprDaprConfig.Configuration{
-			Spec: daprDaprConfig.ConfigurationSpec{
-				MTLSSpec: &daprDaprConfig.MTLSSpec{
-					Enabled:          true,
-					WorkloadCertTTL:  "5s",
-					AllowedClockSkew: "1h",
-				},
-			},
-		}
-		defaultConfig := getDefaultConfig()
-
 		t.Run("kubernetes mode", func(t *testing.T) {
+			defaultConfig := getDefaultConfig()
+			defaultConfig.Mode = modes.KubernetesMode
+
+			daprConfig := getDefaultDaprConfig()
+
 			// Setting this env var makes Sentry think we're running on Kubernetes
 			t.Setenv(kubernetesServiceHostEnvVar, "TEST")
+
+			t.Run("default kubernetes", func(t *testing.T) {
+				conf, err := parseConfiguration(defaultConfig, &daprConfig)
+				require.NoError(t, err)
+
+				require.Len(t, conf.Validators, 1)
+				require.NotNil(t, conf.Validators[sentryv1pb.SignCertificateRequest_KUBERNETES])
+				require.Equal(t, sentryv1pb.SignCertificateRequest_KUBERNETES, conf.DefaultValidator)
+			})
 
 			t.Run("no additional validators", func(t *testing.T) {
 				daprConfig.Spec.MTLSSpec.TokenValidators = nil
@@ -100,8 +113,21 @@ func TestConfig(t *testing.T) {
 		})
 
 		t.Run("self-hosted mode", func(t *testing.T) {
+			defaultConfig := getDefaultConfig()
+			defaultConfig.Mode = modes.StandaloneMode
+			daprConfig := getDefaultDaprConfig()
+
 			// Deleting this env var to empty makes Sentry think we're running on self-hosted mode
 			t.Setenv(kubernetesServiceHostEnvVar, "")
+
+			t.Run("default self-hosted", func(t *testing.T) {
+				conf, err := parseConfiguration(defaultConfig, &daprConfig)
+				require.NoError(t, err)
+
+				require.Len(t, conf.Validators, 1)
+				require.NotNil(t, conf.Validators[sentryv1pb.SignCertificateRequest_INSECURE])
+				require.Equal(t, sentryv1pb.SignCertificateRequest_INSECURE, conf.DefaultValidator)
+			})
 
 			t.Run("no additional validators", func(t *testing.T) {
 				daprConfig.Spec.MTLSSpec.TokenValidators = nil
@@ -129,4 +155,16 @@ func TestConfig(t *testing.T) {
 			})
 		})
 	})
+}
+
+func getDefaultDaprConfig() daprDaprConfig.Configuration {
+	return daprDaprConfig.Configuration{
+		Spec: daprDaprConfig.ConfigurationSpec{
+			MTLSSpec: &daprDaprConfig.MTLSSpec{
+				Enabled:          true,
+				WorkloadCertTTL:  "5s",
+				AllowedClockSkew: "1h",
+			},
+		},
+	}
 }
