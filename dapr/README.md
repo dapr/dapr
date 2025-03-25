@@ -41,11 +41,10 @@ cd protoc
 wget https://github.com/protocolbuffers/protobuf/releases/download/v25.4/protoc-25.4-linux-x86_64.zip
 unzip protoc-25.4-linux-x64_64.zip
 rm protoc-25.4-linux-x64_64.zip
-sudo mkdir /usr/bin/protoc
-sudo mv * /usr/bin/protoc/
-export PATH=$PATH:/usr/bin/protoc/bin/
+sudo mv bin/* /usr/local/bin
+sudo mv include/* /usr/local/include
 cd ..
-sudo rm protoc
+sudo rm -r protoc
 ```
 2. Navigate to your Dapr repository. For example, if you've got it in Windows at `P:/Code/Dapr` in your Ubuntu terminal
 use `cd /mnt/p/Code/Dapr`.
@@ -56,10 +55,6 @@ make init-proto
 cp ~/go/bin
 mv protoc-gen-go /usr/local/bin
 mv protoc-gen-go-grpc /usr/local/bin
-```
-4. Confirm that your `$PATH` contains `/usr/local/bin` (at the end) with:
-```bash
-echo $PATH
 ```
 5. Generate the proto clients
 ```bash
