@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kubernetes
+package standalone
 
 import (
 	"context"
@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/dapr/tests/integration/suite/sentry/utils"
 )
 
 func init() {
@@ -48,11 +49,11 @@ func (k *standalone) Setup(t *testing.T) []framework.Option {
 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
 	require.NoError(t, err)
 
-	kubeAPI := kubeAPI(t, kubeAPIOptions{
-		bundle:         bundle,
-		namespace:      "mynamespace",
-		serviceAccount: "myserviceaccount",
-		appID:          "myappid",
+	kubeAPI := utils.KubeAPI(t, utils.KubeAPIOptions{
+		Bundle:         bundle,
+		Namespace:      "mynamespace",
+		ServiceAccount: "myserviceaccount",
+		AppID:          "myappid",
 	})
 
 	k.sentry = sentry.New(t,

@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/dapr/tests/integration/suite/sentry/utils"
 )
 
 func init() {
@@ -58,25 +59,25 @@ func (l *longname) Setup(t *testing.T) []framework.Option {
 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
 	require.NoError(t, err)
 
-	kubeAPI1 := kubeAPI(t, kubeAPIOptions{
-		bundle:         bundle,
-		namespace:      strings.Repeat("n", 253),
-		serviceAccount: strings.Repeat("s", 253),
-		appID:          "myapp",
+	kubeAPI1 := utils.KubeAPI(t, utils.KubeAPIOptions{
+		Bundle:         bundle,
+		Namespace:      strings.Repeat("n", 253),
+		ServiceAccount: strings.Repeat("s", 253),
+		AppID:          "myapp",
 	})
 
-	kubeAPI2 := kubeAPI(t, kubeAPIOptions{
-		bundle:         bundle,
-		namespace:      strings.Repeat("n", 253),
-		serviceAccount: strings.Repeat("s", 253),
-		appID:          strings.Repeat("a", 65),
+	kubeAPI2 := utils.KubeAPI(t, utils.KubeAPIOptions{
+		Bundle:         bundle,
+		Namespace:      strings.Repeat("n", 253),
+		ServiceAccount: strings.Repeat("s", 253),
+		AppID:          strings.Repeat("a", 65),
 	})
 
-	kubeAPI3 := kubeAPI(t, kubeAPIOptions{
-		bundle:         bundle,
-		namespace:      strings.Repeat("n", 253),
-		serviceAccount: strings.Repeat("s", 253),
-		appID:          strings.Repeat("a", 64),
+	kubeAPI3 := utils.KubeAPI(t, utils.KubeAPIOptions{
+		Bundle:         bundle,
+		Namespace:      strings.Repeat("n", 253),
+		ServiceAccount: strings.Repeat("s", 253),
+		AppID:          strings.Repeat("a", 64),
 	})
 
 	sentryOpts := func(kubeAPI *kubernetes.Kubernetes) *sentry.Sentry {
