@@ -160,7 +160,7 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 	return nil, err
 }
 
-func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetActorReminderRequest) (*emptypb.Empty, error) {
+func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetActorReminderRequest) (*runtimev1pb.GetActorReminderRequest, error) {
 	r, err := a.ActorReminders(ctx)
 	if err != nil {
 		return nil, err

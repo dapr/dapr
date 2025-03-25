@@ -628,6 +628,17 @@ message GetActorReminderRequest {
   string name = 3;
 }
 
+// GetActorReminderResponse is the response conveying an actor's reminder.
+message GetActorReminderResponse {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
+  string name = 3;
+  string due_time = 4 [json_name = "dueTime"];
+  string period = 5;
+  bytes data = 6;
+  string ttl = 7;
+}
+
 // UnregisterActorReminderRequest is the message to unregister an actor reminder.
 message UnregisterActorReminderRequest {
   string actor_type = 1 [json_name = "actorType"];
