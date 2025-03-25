@@ -254,7 +254,7 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 
 	attempt := resiliency.GetAttempt(ctx)
 	code := status.Code(err)
-	if code == codes.Unavailable || code == codes.Internal {
+	if code == codes.Unavailable {
 		// Destroy the connection and force a re-connection on the next attempt
 		return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
 	}
