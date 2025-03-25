@@ -126,7 +126,7 @@ Every two weeks we host a community call to showcase new features, review upcomi
 
 We have a variety of keynotes, podcasts, and presentations available to reference and learn from.
 
-📺 Visit https://docs.dapr.io/contributing/presentations/ for previous talks and slide decks.
+📺 Visit https://docs.dapr.io/contributing/presentations/ for previous talks and slide decks or our YouTube channel https://www.youtube.com/@DaprDev/videos.
 
 ### Contributing to Dapr
 
