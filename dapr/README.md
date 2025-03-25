@@ -53,8 +53,8 @@ in `/usr/bin/protoc`
 ```bash
 make init-proto
 cp ~/go/bin
-mv protoc-gen-go /usr/local/bin
-mv protoc-gen-go-grpc /usr/local/bin
+ln -s ~/go/bin/protoc-gen-go /usr/local/bin
+ln -s ~/go/bin/proto-gen-go-grpc /usr/local/bin
 ```
 4. Generate the proto clients
 ```bash
