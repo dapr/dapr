@@ -26,12 +26,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/modes"
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/dapr/tests/integration/suite/sentry/utils"
 	secpem "github.com/dapr/kit/crypto/pem"
 )
 
@@ -50,17 +52,18 @@ func (k *kube) Setup(t *testing.T) []framework.Option {
 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
 	require.NoError(t, err)
 
-	kubeAPI := kubeAPI(t, kubeAPIOptions{
-		bundle:         bundle,
-		namespace:      "mynamespace",
-		serviceAccount: "myserviceaccount",
-		appID:          "myappid",
+	kubeAPI := utils.KubeAPI(t, utils.KubeAPIOptions{
+		Bundle:         bundle,
+		Namespace:      "mynamespace",
+		ServiceAccount: "myserviceaccount",
+		AppID:          "myappid",
 	})
 
 	k.sentry = sentry.New(t,
 		sentry.WithWriteConfig(false),
 		sentry.WithKubeconfig(kubeAPI.KubeconfigPath(t)),
 		sentry.WithNamespace("sentrynamespace"),
+		sentry.WithMode(string(modes.KubernetesMode)),
 		sentry.WithExecOptions(
 			// Enable Kubernetes validator.
 			exec.WithEnvVars(t, "KUBERNETES_SERVICE_HOST", "anything"),
