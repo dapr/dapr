@@ -1,5 +1,5 @@
 <div style="text-align: center"><img src="/img/dapr_logo.svg" height="120px">
-<h2>Any language, any framework, anywhere</h2>
+<h2>APIs for Building Secure and Reliable Microservices</h2>
 </div>
 
 [![Go Report][go-report-badge]][go-report-url] [![OpenSSF][openssf-badge]][openssf-url] [![Docker Pulls][docker-badge]][docker-url] [![Build Status][actions-badge]][actions-url] [![Test Status][e2e-badge]][e2e-url] [![Code Coverage][codecov-badge]][codecov-url] [![License: Apache 2.0][apache-badge]][apache-url] [![FOSSA Status][fossa-badge]][fossa-url] [![TODOs][todo-badge]][todo-url] [![Good First Issues][gfi-badge]][gfi-url] [![discord][discord-badge]][discord-url] [![YouTube][youtube-badge]][youtube-link] [![X/Twitter][x-badge]][x-link]
@@ -31,9 +31,9 @@
 [x-badge]:https://img.shields.io/twitter/follow/daprdev?logo=x&style=flat
 [x-link]:https://twitter.com/daprdev
 
-Dapr is a portable, serverless, event-driven runtime that makes it easy for developers to build resilient, stateless and stateful microservices that run on the cloud and edge and embraces the diversity of languages and developer frameworks.
+Dapr is a set of integrated APIs with built-in best practices and patterns to build distributed applications. Dapr increases your developer productivity by 20-40% with out-of-the-box features such as workflow, pub/sub, state management, secret stores, external configuration, bindings, actors, distributed lock, and cryptography. You benefit from the built-in security, reliability, and observability capabilities, so you don't need to write boilerplate code to achieve production-ready applications.
 
-Dapr codifies the *best practices* for building microservice applications into open, independent, building blocks that enable you to build portable applications with the language and framework of your choice. Each building block is independent and you can use one, some, or all of them in your application.
+With Dapr, a graduated CNCF project, platform teams can configure complex setups while exposing simple interfaces to application development teams, making it easier for them to build highly scalable distributed applications. Many platform teams have adopted Dapr to provide governance and golden paths for API-based infrastructure interaction.
 
 ![Dapr overview](./img/overview.png)
 
@@ -108,15 +108,19 @@ Reach out with any questions you may have and we'll make sure to answer them as 
 
 | Platform  | Link        |
 |:----------|:------------|
-| 💬 Instant Message Chat (preferred) | [![Discord Banner](https://discord.com/api/guilds/778680217417809931/widget.png?style=banner2)](https://aka.ms/dapr-discord)
-| 📧 Mailing List | https://groups.google.com/forum/#!forum/dapr-dev
+| 💬 Discord (preferred) | [![Discord Banner](https://discord.com/api/guilds/778680217417809931/widget.png?style=banner2)](https://aka.ms/dapr-discord)
+| 💭 LinkedIn | [@daprdev](https://www.linkedin.com/company/daprdev)
+| 🦋 BlueSky | [@daprdev.bsky.social](https://bsky.app/profile/daprdev.bsky.social)
 | 🐤 Twitter | [@daprdev](https://twitter.com/daprdev)
+
 
 ### Community Call
 
 Every two weeks we host a community call to showcase new features, review upcoming milestones, and engage in a Q&A. All are welcome!
 
-📞 Visit https://aka.ms/dapr-community-call for upcoming dates and the meeting link.
+📞 Visit https://github.com/dapr/community/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22community%20call%22 for upcoming dates and the meeting link.
+
+📺 Visit https://www.youtube.com/@DaprDev/streams for previous community call live streams.
 
 ### Videos and Podcasts
 
