@@ -118,7 +118,7 @@ Reach out with any questions you may have and we'll make sure to answer them as 
 
 Every two weeks we host a community call to showcase new features, review upcoming milestones, and engage in a Q&A. All are welcome!
 
-📞 Visit https://github.com/dapr/community/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22community%20call%22 for upcoming dates and the meeting link.
+📞 Visit [Upcoming Dapr Community Calls](https://github.com/dapr/community/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22community%20call%22) for upcoming dates and the meeting link.
 
 📺 Visit https://www.youtube.com/@DaprDev/streams for previous community call live streams.
 
