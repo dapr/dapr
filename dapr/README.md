@@ -56,7 +56,7 @@ cp ~/go/bin
 mv protoc-gen-go /usr/local/bin
 mv protoc-gen-go-grpc /usr/local/bin
 ```
-5. Generate the proto clients
+4. Generate the proto clients
 ```bash
 make gen-proto
 ```
