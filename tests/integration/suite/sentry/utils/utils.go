@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kubernetes
+package utils
 
 import (
 	"encoding/json"
@@ -29,14 +29,14 @@ import (
 	prockube "github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 )
 
-type kubeAPIOptions struct {
-	bundle         ca.Bundle
-	namespace      string
-	serviceAccount string
-	appID          string
+type KubeAPIOptions struct {
+	Bundle         ca.Bundle
+	Namespace      string
+	ServiceAccount string
+	AppID          string
 }
 
-func kubeAPI(t *testing.T, opts kubeAPIOptions) *prockube.Kubernetes {
+func KubeAPI(t *testing.T, opts KubeAPIOptions) *prockube.Kubernetes {
 	t.Helper()
 
 	return prockube.New(t,
@@ -52,15 +52,15 @@ func kubeAPI(t *testing.T, opts kubeAPIOptions) *prockube.Kubernetes {
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
 			Data: map[string][]byte{
-				"ca.crt":     opts.bundle.TrustAnchors,
-				"issuer.crt": opts.bundle.IssChainPEM,
-				"issuer.key": opts.bundle.IssKeyPEM,
+				"ca.crt":     opts.Bundle.TrustAnchors,
+				"issuer.crt": opts.Bundle.IssChainPEM,
+				"issuer.key": opts.Bundle.IssKeyPEM,
 			},
 		}),
 		prockube.WithConfigMapGet(t, &corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
-			Data:       map[string]string{"ca.crt": string(opts.bundle.TrustAnchors)},
+			Data:       map[string]string{"ca.crt": string(opts.Bundle.TrustAnchors)},
 		}),
 		prockube.WithClusterPodList(t, &corev1.PodList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
@@ -68,10 +68,10 @@ func kubeAPI(t *testing.T, opts kubeAPIOptions) *prockube.Kubernetes {
 				{
 					TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: opts.namespace, Name: "mypod",
-						Annotations: map[string]string{"dapr.io/app-id": opts.appID},
+						Namespace: opts.Namespace, Name: "mypod",
+						Annotations: map[string]string{"dapr.io/app-id": opts.AppID},
 					},
-					Spec: corev1.PodSpec{ServiceAccountName: opts.serviceAccount},
+					Spec: corev1.PodSpec{ServiceAccountName: opts.ServiceAccount},
 				},
 			},
 		}),
@@ -89,7 +89,7 @@ func kubeAPI(t *testing.T, opts kubeAPIOptions) *prockube.Kubernetes {
 			resp, err := json.Marshal(&authapi.TokenReview{
 				Status: authapi.TokenReviewStatus{
 					Authenticated: true,
-					User:          authapi.UserInfo{Username: fmt.Sprintf("system:serviceaccount:%s:%s", opts.namespace, opts.serviceAccount)},
+					User:          authapi.UserInfo{Username: fmt.Sprintf("system:serviceaccount:%s:%s", opts.Namespace, opts.ServiceAccount)},
 				},
 			})
 			assert.NoError(t, err)
