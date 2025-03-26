@@ -51,7 +51,7 @@ def get_memory_info(process):
 def run_sidecar(executable, app_id):
     print(f"Running {executable} ...")
     expanded_executable=Path(executable).expanduser()
-    args = [expanded_executable, f"--app-id", f"{app_id}"]
+    args = [expanded_executable, "--app-id", f"{app_id}"]
 
     # Run the process in the background
     background_process = run_process_background(args)
