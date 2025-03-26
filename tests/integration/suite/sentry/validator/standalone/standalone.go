@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kubernetes
+package standalone
 
 import (
 	"context"
@@ -23,32 +23,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/modes"
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/dapr/tests/integration/suite/sentry/utils"
 )
 
 func init() {
-	suite.Register(new(legacyid))
+	suite.Register(new(standalone))
 }
 
-// legacyid ensures that the legacy '<namespace>:<service account>' ID format
-// is no longer supported.
-type legacyid struct {
+// standalone tests Sentry in standalone mode in kubernetes
+type standalone struct {
 	sentry *sentry.Sentry
 }
 
-func (l *legacyid) Setup(t *testing.T) []framework.Option {
+func (k *standalone) Setup(t *testing.T) []framework.Option {
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
@@ -56,33 +51,27 @@ func (l *legacyid) Setup(t *testing.T) []framework.Option {
 
 	kubeAPI := utils.KubeAPI(t, utils.KubeAPIOptions{
 		Bundle:         bundle,
-		Namespace:      "myns",
-		ServiceAccount: "myaccount",
+		Namespace:      "mynamespace",
+		ServiceAccount: "myserviceaccount",
 		AppID:          "myappid",
 	})
 
-	l.sentry = sentry.New(t,
-		sentry.WithWriteConfig(false),
-		sentry.WithKubeconfig(kubeAPI.KubeconfigPath(t)),
-		sentry.WithMode(string(modes.KubernetesMode)),
-		sentry.WithExecOptions(
-			// Enable Kubernetes validator.
-			exec.WithEnvVars(t, "KUBERNETES_SERVICE_HOST", "anything"),
-			exec.WithEnvVars(t, "NAMESPACE", "sentrynamespace"),
-		),
+	k.sentry = sentry.New(t,
+		sentry.WithNamespace("sentrynamespace"),
+		sentry.WithMode(string(modes.StandaloneMode)),
 		sentry.WithCABundle(bundle),
 		sentry.WithTrustDomain("integration.test.dapr.io"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(l.sentry, kubeAPI),
+		framework.WithProcesses(k.sentry, kubeAPI),
 	}
 }
 
-func (l *legacyid) Run(t *testing.T, ctx context.Context) {
-	l.sentry.WaitUntilRunning(t, ctx)
+func (k *standalone) Run(t *testing.T, ctx context.Context) {
+	k.sentry.WaitUntilRunning(t, ctx)
 
-	conn := l.sentry.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
+	conn := k.sentry.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
 	client := sentrypbv1.NewCAClient(conn)
 
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -91,13 +80,12 @@ func (l *legacyid) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
-		Id:                        "myns:myaccount",
-		Namespace:                 "myns",
+		Id:                        "myappid",
+		Namespace:                 "mynamespace",
 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
-		TokenValidator:            sentrypbv1.SignCertificateRequest_KUBERNETES,
+		TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
 		Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
 	})
-	assert.Nil(t, resp)
-	require.Error(t, err)
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.GetWorkloadCertificate())
 }

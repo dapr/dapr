@@ -11,29 +11,32 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pool
+package connection
 
 import (
 	"context"
-	"errors"
-	"io"
 	"sync"
 
 	"github.com/diagridio/go-etcd-cron/api"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-// conn represents a single connection bidirectional stream between the
+// JobEvent is a triggered job event.
+type JobEvent struct {
+	Name     string
+	Data     *anypb.Any
+	Metadata *schedulerv1pb.JobMetadata
+}
+
+// Connection represents a single connection bidirectional stream between the
 // scheduler and the client (daprd). conn manages sending triggered jobs to the
 // client, and receiving job process results from the client. Jobs are sent
 // serially via a channel as gRPC does not support concurrent sends. conn
 // tracks the inflight jobs and acks them when the client sends back the
 // result, releasing the job triggering.
-type conn struct {
-	pool  *Pool
+type Connection struct {
 	jobCh chan *schedulerv1pb.WatchJobsResponse
 
 	// idx is the uuid of a triggered job. We can use a simple counter as there
@@ -49,75 +52,18 @@ type conn struct {
 	closeCh chan struct{}
 }
 
-// newConn creates a new connection and starts the goroutines to handle sending
-// jobs to the client and receiving job process results from the client.
-func (p *Pool) newConn(ctx context.Context,
-	req *schedulerv1pb.WatchJobsRequestInitial,
-	stream schedulerv1pb.Scheduler_WatchJobsServer,
-	id uint64,
-	cancel context.CancelFunc,
-) *conn {
-	conn := &conn{
-		pool:     p,
-		closeCh:  make(chan struct{}),
+func New() *Connection {
+	return &Connection{
 		inflight: make(map[uint64]chan schedulerv1pb.WatchJobsRequestResultStatus),
 		jobCh:    make(chan *schedulerv1pb.WatchJobsResponse, 10),
+		closeCh:  make(chan struct{}),
 	}
-
-	p.wg.Add(2)
-
-	go func() {
-		defer func() {
-			cancel()
-			log.Debugf("Closed send connection to %s/%s", req.GetNamespace(), req.GetAppId())
-			p.wg.Done()
-		}()
-
-		for {
-			select {
-			case job := <-conn.jobCh:
-				if err := stream.Send(job); err != nil {
-					log.Warnf("Error sending job to connection %s/%s: %s", req.GetNamespace(), req.GetAppId(), err)
-					return
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	go func() {
-		defer func() {
-			cancel()
-			log.Debugf("Closed receive connection to %s/%s", req.GetNamespace(), req.GetAppId())
-			p.wg.Done()
-		}()
-
-		for {
-			resp, err := stream.Recv()
-			if err == nil {
-				conn.handleJobProcessed(resp.GetResult())
-				continue
-			}
-
-			isEOF := errors.Is(err, io.EOF)
-			s, ok := status.FromError(err)
-			if stream.Context().Err() != nil || isEOF || (ok && s.Code() != codes.Canceled) {
-				return
-			}
-
-			log.Warnf("Error receiving from connection %s/%s: %s", req.GetNamespace(), req.GetAppId(), err)
-			return
-		}
-	}()
-
-	return conn
 }
 
-// sendWaitForResponse sends a job to the client and waits for the client to
-// send back the result. The job is acked when the client sends back the result
-// with a UUID corresponding to the job.
-func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) api.TriggerResponseResult {
+// Handle sends a job to the client and waits for the client to send back the
+// result. The job is acked when the client sends back the result with a UUID
+// corresponding to the job.
+func (c *Connection) Handle(ctx context.Context, jobEvt *JobEvent) api.TriggerResponseResult {
 	c.lock.Lock()
 	c.idx++
 	ackCh := make(chan schedulerv1pb.WatchJobsRequestResultStatus, 1)
@@ -138,11 +84,9 @@ func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) api.Tr
 
 	select {
 	case c.jobCh <- job:
-	case <-c.pool.closeCh:
+	case <-ctx.Done():
 		return api.TriggerResponseResult_FAILED
 	case <-c.closeCh:
-		return api.TriggerResponseResult_FAILED
-	case <-ctx.Done():
 		return api.TriggerResponseResult_FAILED
 	}
 
@@ -151,26 +95,39 @@ func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) api.Tr
 		if result == schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS {
 			return api.TriggerResponseResult_SUCCESS
 		}
-	case <-c.pool.closeCh:
-	case <-c.closeCh:
+		return api.TriggerResponseResult_FAILED
 	case <-ctx.Done():
+		return api.TriggerResponseResult_FAILED
+	case <-c.closeCh:
+		return api.TriggerResponseResult_FAILED
 	}
-	return api.TriggerResponseResult_FAILED
 }
 
-// handleJobProcessed acks the job with the given UUID. This is called when the
-// client sends back the result of the job to be acked.
-func (c *conn) handleJobProcessed(result *schedulerv1pb.WatchJobsRequestResult) {
+// Ack acks the job with the given UUID. This is called when the client
+// sends back the result of the job to be acked.
+func (c *Connection) Ack(ctx context.Context, result *schedulerv1pb.WatchJobsRequestResult) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	if ch, ok := c.inflight[result.GetId()]; ok {
 		select {
 		case ch <- result.GetStatus():
-		case <-c.closeCh:
-		case <-c.pool.closeCh:
+		case <-ctx.Done():
 		}
 	}
 
 	delete(c.inflight, result.GetId())
+}
+
+func (c *Connection) Close() {
+	close(c.closeCh)
+}
+
+func (c *Connection) Next(ctx context.Context) (*schedulerv1pb.WatchJobsResponse, error) {
+	select {
+	case job := <-c.jobCh:
+		return job, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
