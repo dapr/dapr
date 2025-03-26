@@ -129,7 +129,7 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        run: govulncheck -C '.' -format text --tags=uint,allcomponents,integration ./...
+        run: govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
         shell: bash
 
   lint-slow:
@@ -144,7 +144,7 @@ jobs:
         target_os: ["linux"]
         target_arch: ["amd64"]
     env:
-      GOLANGCILINT_VER: "v1.61.0"
+      GOLANGCILINT_VER: "v1.64.6"
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"

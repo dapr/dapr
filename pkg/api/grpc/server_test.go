@@ -168,7 +168,7 @@ func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 		if userAgent != "" {
 			md["user-agent"] = []string{userAgent}
 		}
-		ctx := grpcMetadata.NewIncomingContext(context.Background(), md)
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), md)
 
 		info := &grpcGo.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",

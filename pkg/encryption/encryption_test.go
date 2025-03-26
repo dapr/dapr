@@ -94,7 +94,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 		secondaryKey := hex.EncodeToString(bytes[:16]) // 128-bit key
 
 		secretStore := &mockSecretStore{}
-		secretStore.Init(context.Background(), secretstores.Metadata{Base: metadata.Base{
+		secretStore.Init(t.Context(), secretstores.Metadata{Base: metadata.Base{
 			Properties: map[string]string{
 				"primaryKey":   primaryKey,
 				"secondaryKey": secondaryKey,
@@ -158,7 +158,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 func TestTryGetEncryptionKeyFromMetadataItem(t *testing.T) {
 	t.Run("no secretRef on valid item", func(t *testing.T) {
 		secretStore := &mockSecretStore{}
-		secretStore.Init(context.Background(), secretstores.Metadata{Base: metadata.Base{
+		secretStore.Init(t.Context(), secretstores.Metadata{Base: metadata.Base{
 			Properties: map[string]string{
 				"primaryKey":   "123",
 				"secondaryKey": "456",

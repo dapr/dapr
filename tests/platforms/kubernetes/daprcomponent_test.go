@@ -75,6 +75,6 @@ func TestDaprComponentSpec(t *testing.T) {
 		annotations := daprComponent.toComponentSpec().ObjectMeta.Annotations
 
 		assert.Len(t, annotations, 1)
-		assert.Equal(t, testContainer, annotations["dapr.io/component-container"])
+		assert.JSONEq(t, testContainer, annotations["dapr.io/component-container"])
 	})
 }

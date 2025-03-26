@@ -143,7 +143,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		for _, comp := range pubsubComponents {
-			err := ps.Init(context.Background(), comp)
+			err := ps.Init(t.Context(), comp)
 			require.NoError(t, err)
 		}
 
@@ -175,7 +175,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := ps.Init(context.Background(), comp)
+			err := ps.Init(t.Context(), comp)
 			require.NoError(t, err)
 		}
 
@@ -208,7 +208,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := ps.Init(context.Background(), comp)
+			err := ps.Init(t.Context(), comp)
 			require.NoError(t, err)
 		}
 
@@ -240,7 +240,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := ps.Init(context.Background(), comp)
+			err := ps.Init(t.Context(), comp)
 			require.NoError(t, err)
 		}
 
@@ -270,7 +270,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			require.NoError(t, ps.Init(context.Background(), comp))
+			require.NoError(t, ps.Init(t.Context(), comp))
 		}
 
 		// assert
@@ -302,7 +302,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := ps.Init(context.Background(), comp)
+			err := ps.Init(t.Context(), comp)
 			require.NoError(t, err)
 		}
 
@@ -334,7 +334,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := ps.Init(context.Background(), comp)
+			err := ps.Init(t.Context(), comp)
 			require.NoError(t, err)
 		}
 
@@ -361,7 +361,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := ps.Init(context.Background(), comp)
+			err := ps.Init(t.Context(), comp)
 			require.NoError(t, err)
 		}
 
@@ -384,7 +384,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := ps.Init(context.Background(), comp)
+			err := ps.Init(t.Context(), comp)
 			require.NoError(t, err)
 		}
 
@@ -458,7 +458,7 @@ func TestConsumerID(t *testing.T) {
 		ComponentStore: compStore,
 	})
 
-	err := ps.Init(context.Background(), pubsubComponent)
+	err := ps.Init(t.Context(), pubsubComponent)
 	require.NoError(t, err)
 }
 

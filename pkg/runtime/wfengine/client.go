@@ -184,18 +184,15 @@ func (c *client) Get(ctx context.Context, req *workflows.GetRequest) (*workflows
 		res.Workflow.Properties["dapr.workflow.custom_status"] = metadata.GetCustomStatus().GetValue()
 	}
 
-	//nolint:protogetter
 	if metadata.Input != nil {
 		res.Workflow.Properties["dapr.workflow.input"] = metadata.GetInput().GetValue()
 	}
 
-	//nolint:protogetter
 	if metadata.Output != nil {
 		res.Workflow.Properties["dapr.workflow.output"] = metadata.GetOutput().GetValue()
 	}
 
 	// Status-specific fields
-	//nolint:protogetter
 	if metadata.FailureDetails != nil {
 		res.Workflow.Properties["dapr.workflow.failure.error_type"] = metadata.GetFailureDetails().GetErrorType()
 		res.Workflow.Properties["dapr.workflow.failure.error_message"] = metadata.GetFailureDetails().GetErrorMessage()
