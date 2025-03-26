@@ -17,11 +17,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"sync"
 	"sync/atomic"
 
 	"github.com/google/uuid"
-	"golang.org/x/exp/maps"
 
 	state "github.com/dapr/components-contrib/state"
 )

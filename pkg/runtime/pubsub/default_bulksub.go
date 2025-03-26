@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/exp/maps"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/utils"
@@ -115,12 +114,12 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 			if n >= cfg.MaxMessagesCount {
 				flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
 				n = 0
-				maps.Clear(msgCbMap)
+				clear(msgCbMap)
 			}
 		case <-ticker.C:
 			flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
 			n = 0
-			maps.Clear(msgCbMap)
+			clear(msgCbMap)
 		}
 	}
 }

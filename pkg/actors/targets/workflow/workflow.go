@@ -48,6 +48,7 @@ import (
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/events/broadcaster"
@@ -230,9 +231,6 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 
 	if completed == runCompletedTrue {
 		w.table.DeleteFromTableIn(w, time.Second*10)
-		if w.closed.CompareAndSwap(false, true) {
-			close(w.closeCh)
-		}
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.
@@ -273,28 +271,8 @@ func (w *workflow) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 }
 
 func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) error {
-	// create a new state entry if one doesn't already exist
-	state, _, err := w.loadInternalState(ctx)
-	if err != nil {
-		return err
-	}
-
-	created := false
-	if state == nil {
-		state = wfenginestate.NewState(wfenginestate.Options{
-			AppID:             w.appID,
-			WorkflowActorType: w.actorType,
-			ActivityActorType: w.activityActorType,
-		})
-		w.lock.Lock()
-		w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
-		w.setOrchestrationMetadata(w.rstate)
-		created = true
-		w.lock.Unlock()
-	}
-
 	var createWorkflowInstanceRequest backend.CreateWorkflowInstanceRequest
-	if err = proto.Unmarshal(request, &createWorkflowInstanceRequest); err != nil {
+	if err := proto.Unmarshal(request, &createWorkflowInstanceRequest); err != nil {
 		return fmt.Errorf("failed to unmarshal createWorkflowInstanceRequest: %w", err)
 	}
 	reuseIDPolicy := createWorkflowInstanceRequest.GetPolicy()
@@ -310,8 +288,23 @@ func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) e
 		}
 	}
 
-	// orchestration didn't exist and was just created
-	if created {
+	state, _, err := w.loadInternalState(ctx)
+	if err != nil {
+		return err
+	}
+
+	// orchestration didn't exist
+	// create a new state entry if one doesn't already exist
+	if state == nil {
+		state = wfenginestate.NewState(wfenginestate.Options{
+			AppID:             w.appID,
+			WorkflowActorType: w.actorType,
+			ActivityActorType: w.activityActorType,
+		})
+		w.lock.Lock()
+		w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
+		w.setOrchestrationMetadata(w.rstate, startEvent.GetExecutionStarted())
+		w.lock.Unlock()
 		return w.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 
@@ -408,7 +401,7 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 	if err != nil {
 		return err
 	}
-	w.table.DeleteFromTable(w.actorType, w.actorID)
+	w.table.DeleteFromTableIn(w, 0)
 	w.cleanup()
 	return nil
 }
@@ -457,18 +450,18 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 	return nil
 }
 
-func (w *workflow) getWorkflowName(oldEvents, newEvents []*backend.HistoryEvent) string {
-	for _, e := range oldEvents {
+func (w *workflow) getExecutionStartedEvent(state *wfenginestate.State) *protos.ExecutionStartedEvent {
+	for _, e := range state.History {
 		if es := e.GetExecutionStarted(); es != nil {
-			return es.GetName()
+			return es
 		}
 	}
-	for _, e := range newEvents {
+	for _, e := range state.Inbox {
 		if es := e.GetExecutionStarted(); es != nil {
-			return es.GetName()
+			return es
 		}
 	}
-	return ""
+	return &protos.ExecutionStartedEvent{}
 }
 
 func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (runCompleted, error) {
@@ -580,7 +573,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
 	}
-	workflowName := w.getWorkflowName(state.History, state.Inbox)
+	workflowName := w.getExecutionStartedEvent(state).GetName()
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", w.actorID, wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend
@@ -856,7 +849,7 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 	defer w.lock.Unlock()
 	w.state = state
 	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
-	w.setOrchestrationMetadata(w.rstate)
+	w.setOrchestrationMetadata(w.rstate, w.getExecutionStartedEvent(state))
 	w.ometaBroadcaster.Broadcast(w.ometa)
 
 	return state, w.ometa, nil
@@ -883,7 +876,7 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 	defer w.lock.Unlock()
 	w.state = state
 	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
-	w.setOrchestrationMetadata(w.rstate)
+	w.setOrchestrationMetadata(w.rstate, w.getExecutionStartedEvent(state))
 	w.ometaBroadcaster.Broadcast(w.ometa)
 	return nil
 }
@@ -1000,8 +993,10 @@ func (w *workflow) InvokeStream(ctx context.Context, req *internalsv1pb.Internal
 		return err
 	}
 
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ch := make(chan *backend.OrchestrationMetadata)
-	w.ometaBroadcaster.Subscribe(ctx, ch)
+	w.ometaBroadcaster.Subscribe(subCtx, ch)
 
 	for {
 		select {
@@ -1063,8 +1058,18 @@ func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.I
 	return nil
 }
 
-func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntimeState) {
+func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntimeState, startEvent *protos.ExecutionStartedEvent) {
+	var se *protos.ExecutionStartedEvent = nil
+	if rstate.GetStartEvent() != nil {
+		se = rstate.GetStartEvent()
+	} else if startEvent != nil {
+		se = startEvent
+	}
+
 	name, _ := runtimestate.Name(rstate)
+	if name == "" && se != nil {
+		name = se.GetName()
+	}
 	createdAt, _ := runtimestate.CreatedTime(rstate)
 	lastUpdated, _ := runtimestate.LastUpdatedTime(rstate)
 	completedAt, _ := runtimestate.CompletedTime(rstate)
@@ -1072,8 +1077,8 @@ func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntime
 	output, _ := runtimestate.Output(rstate)
 	failureDetails, _ := runtimestate.FailureDetails(rstate)
 	var parentInstanceID string
-	if rstate.GetStartEvent() != nil && rstate.GetStartEvent().GetParentInstance() != nil && rstate.GetStartEvent().GetParentInstance().GetOrchestrationInstance() != nil {
-		parentInstanceID = rstate.GetStartEvent().GetParentInstance().GetOrchestrationInstance().GetInstanceId()
+	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetOrchestrationInstance() != nil {
+		parentInstanceID = se.GetParentInstance().GetOrchestrationInstance().GetInstanceId()
 	}
 	w.ometa = &backend.OrchestrationMetadata{
 		InstanceId:       rstate.GetInstanceId(),
