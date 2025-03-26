@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,7 +25,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
@@ -148,7 +148,7 @@ func TestPolicy(t *testing.T) {
 		"nil policy": nil,
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			called := atomic.Bool{}
@@ -204,7 +204,7 @@ func TestPolicyTimeout(t *testing.T) {
 				return nil, nil
 			}
 
-			policy := NewRunner[any](context.Background(), &PolicyDefinition{
+			policy := NewRunner[any](t.Context(), &PolicyDefinition{
 				log:  testLog,
 				name: "timeout",
 				t:    test.timeout,
@@ -253,7 +253,7 @@ func TestPolicyRetry(t *testing.T) {
 				return struct{}{}, nil
 			}
 
-			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
+			policy := NewRunner[struct{}](t.Context(), &PolicyDefinition{
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
@@ -319,7 +319,7 @@ func TestPolicyRetryWithMatch(t *testing.T) {
 
 			match, err := ParseRetryConditionMatch(test.matching)
 			require.NoError(t, err)
-			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
+			policy := NewRunner[struct{}](t.Context(), &PolicyDefinition{
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
@@ -363,7 +363,7 @@ func TestPolicyAccumulator(t *testing.T) {
 		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionMatch()),
 	}
 	var accumulatorCalled int
-	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
+	policy := NewRunnerWithOptions(t.Context(), policyDef, RunnerOpts[int32]{
 		Accumulator: func(i int32) {
 			// Only reason for incrementing "val" here is to have something to check for race conditions with "go test -race"
 			val.Add(1)
@@ -406,7 +406,7 @@ func TestPolicyDisposer(t *testing.T) {
 		t:    10 * time.Millisecond,
 		r:    NewRetry(retry.Config{MaxRetries: 5}, NewRetryConditionMatch()),
 	}
-	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
+	policy := NewRunnerWithOptions(t.Context(), policyDef, RunnerOpts[int32]{
 		Disposer: func(i int32) {
 			disposerCalled <- i
 		},

@@ -15,8 +15,6 @@ name: dapr
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "00 22 * * *"
   push:
     branches:
       - main
@@ -131,7 +129,7 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        run: govulncheck -C '.' -format text --tags=uint,allcomponents,integration ./...
+        run: govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
         shell: bash
 
   lint-slow:
@@ -146,7 +144,7 @@ jobs:
         target_os: ["linux"]
         target_arch: ["amd64"]
     env:
-      GOLANGCILINT_VER: "v1.61.0"
+      GOLANGCILINT_VER: "v1.64.6"
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
@@ -262,7 +260,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    needs: [unit-tests, integration-tests, lint-slow]
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
@@ -768,59 +765,19 @@ jobs:
             echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
             exit -1
           fi
-
   update-longhauls:
-    name: Update the dapr version in long haul tests
+    name: Update the dapr version in longhaul tests
     needs: helmpublish
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    permissions: {}
     if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr'
     env:
-      LONG_HAUL_REPO: test-infra
+      GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
     steps:
-      - name: Get Token
-        id: get_workflow_token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APPLICATION_ID }}
-          private-key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
-          repositories: ${{ env.LONG_HAUL_REPO }}
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
-        with:
-          path: dapr
-      - name: Checkout the longhaul tests repo
-        uses: actions/checkout@v4
-        with:
-          repository: dapr/${{ env.LONG_HAUL_REPO }}
-          token: ${{ steps.get_workflow_token.outputs.token }}
-          path: ${{ env.LONG_HAUL_REPO }}
-      - name: Install Python Dependencies
-        run: |
-          pip install packaging
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
-        run: python dapr/.github/scripts/get_release_version.py ${{ github.event_name }}
-
-      - name: Compare versions and determine if update of long haul tests is required
-        id: compare_versions
-        run: |
-          EXISTING_VERSION=$(cat "${{ env.LONG_HAUL_REPO }}/config/dapr_runtime.version")
-          echo "Existing version in long haul tests: $EXISTING_VERSION"
-          echo "New version: ${{ env.REL_VERSION }}"
-          python dapr/.github/scripts/compare_versions.py "${{ env.REL_VERSION }}" "$EXISTING_VERSION"
-
-      - name: Update dapr runtime version in the long haul tests repo
-        if: env.VERSION_UPDATE_REQUIRED == 'true'
-        run: |
-          echo "${REL_VERSION}" > ${{ env.LONG_HAUL_REPO }}/config/dapr_runtime.version
-
-      - name: Commit and Push Changes to repoB
-        if: env.VERSION_UPDATE_REQUIRED == 'true'
-        run: |
-          cd ${{ env.LONG_HAUL_REPO }}
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git add config/dapr_runtime.version
-          git commit -m "Updates dapr runtime version to ${REL_VERSION}"
-          git push
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - name: Trigger GitHub workflow
+        run: gh api repos/dapr/test-infra/actions/workflows/version-update.yml/dispatches \
+             -X POST -f ref="master" -f inputs[rel_version]="${{ env.REL_VERSION }}"

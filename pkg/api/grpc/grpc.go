@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	otelTrace "go.opentelemetry.io/otel/trace"
-	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcMetadata "google.golang.org/grpc/metadata"
@@ -43,7 +43,6 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
-	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/api/universal"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -117,7 +116,6 @@ type APIOpts struct {
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
-	codec.Register()
 	return &api{
 		Universal:             opts.Universal,
 		logger:                opts.Logger,

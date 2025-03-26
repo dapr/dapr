@@ -229,7 +229,8 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	}
 
 	// Create the container object
-	probeHTTPHandler := getProbeHTTPHandler(c.SidecarPublicPort, injectorConsts.APIVersionV1, injectorConsts.SidecarHealthzPath)
+	readinessProbeHandler := getReadinessProbeHandler(c.SidecarPublicPort, injectorConsts.APIVersionV1, injectorConsts.SidecarHealthzPath)
+	livenessProbeHandler := getLivenessProbeHandler(c.SidecarPublicPort)
 	env := []corev1.EnvVar{
 		{
 			Name:  "NAMESPACE",
@@ -296,14 +297,14 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		Env:             env,
 		VolumeMounts:    opts.VolumeMounts,
 		ReadinessProbe: &corev1.Probe{
-			ProbeHandler:        probeHTTPHandler,
+			ProbeHandler:        readinessProbeHandler,
 			InitialDelaySeconds: c.SidecarReadinessProbeDelaySeconds,
 			TimeoutSeconds:      c.SidecarReadinessProbeTimeoutSeconds,
 			PeriodSeconds:       c.SidecarReadinessProbePeriodSeconds,
 			FailureThreshold:    c.SidecarReadinessProbeThreshold,
 		},
 		LivenessProbe: &corev1.Probe{
-			ProbeHandler:        probeHTTPHandler,
+			ProbeHandler:        livenessProbeHandler,
 			InitialDelaySeconds: c.SidecarLivenessProbeDelaySeconds,
 			TimeoutSeconds:      c.SidecarLivenessProbeTimeoutSeconds,
 			PeriodSeconds:       c.SidecarLivenessProbePeriodSeconds,
@@ -574,10 +575,18 @@ func (c *SidecarConfig) GetAppProtocol() string {
 	}
 }
 
-func getProbeHTTPHandler(port int32, pathElements ...string) corev1.ProbeHandler {
+func getReadinessProbeHandler(port int32, pathElements ...string) corev1.ProbeHandler {
 	return corev1.ProbeHandler{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: formatProbePath(pathElements...),
+			Port: intstr.IntOrString{IntVal: port},
+		},
+	}
+}
+
+func getLivenessProbeHandler(port int32) corev1.ProbeHandler {
+	return corev1.ProbeHandler{
+		TCPSocket: &corev1.TCPSocketAction{
 			Port: intstr.IntOrString{IntVal: port},
 		},
 	}

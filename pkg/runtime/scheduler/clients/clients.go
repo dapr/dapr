@@ -22,4 +22,5 @@ import (
 type Clients interface {
 	Next(context.Context) (schedulerv1pb.SchedulerClient, error)
 	All(context.Context) ([]schedulerv1pb.SchedulerClient, error)
+	Addresses() []string
 }

@@ -56,13 +56,13 @@ func TestAppDescription_MarshalJSON(t *testing.T) {
 		app := AppDescription{
 			IngressEnabled: true,
 		}
-		os.Setenv(useServiceInternalIP, "false")
+		t.Setenv(useServiceInternalIP, "false")
 
 		if !app.ShouldBeExposed() {
 			t.Error("AppDescription.ShouldBeExposed() should evaluate to true when ingress is enabled and internal ip should not be used")
 		}
 
-		os.Setenv(useServiceInternalIP, "true")
+		t.Setenv(useServiceInternalIP, "true")
 
 		if app.ShouldBeExposed() {
 			t.Error("AppDescription.ShouldBeExposed() should evaluate to false when internal ip should be used")

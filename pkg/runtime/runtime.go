@@ -43,6 +43,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/api/grpc"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/api/http"
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -146,6 +147,24 @@ func newDaprRuntime(ctx context.Context,
 	accessControlList *config.AccessControlList,
 	resiliencyProvider resiliency.Provider,
 ) (*DaprRuntime, error) {
+	// TODO: @joshvanl: find a solution for this:
+	// We need to register our custom proxy codec in the global registrar, but
+	// only after all gRPC internal codecs have been registered. This is because
+	// we are squatting the conflicted base name "proto" which we use to inject
+	// our custom marshal code. We do this to optionally passthrough proxy data
+	// if the gRPC frame encoding is a message we don't recognise- i.e. a user is
+	// doing a direct message using their own message type.
+	// Since 'd' comes before 'g' in the alphabet and go `init` func execution
+	// order is now sane, we have to register our conflicting base codec as
+	// runtime.
+	// It is also the case that gRPC uses a global variable codec registrar so we
+	// can't build a custom one that we propagate.
+	// The solution is to keep this as is, or find a way to bypass the codec
+	// stack further down the transport layer in a wrapper.
+	// I assume we can use a custom message type to wrap user messages which does
+	// not have a conflicting name with the base codec.
+	codec.Register()
+
 	compStore := compstore.New()
 
 	namespace := security.CurrentNamespace()
@@ -216,6 +235,7 @@ func newDaprRuntime(ctx context.Context,
 		Healthz:            runtimeConfig.healthz,
 		CompStore:          compStore,
 		StateTTLEnabled:    globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+		MaxRequestBodySize: runtimeConfig.maxRequestBodySize,
 	})
 
 	processor := processor.New(processor.Options{
@@ -305,14 +325,15 @@ func newDaprRuntime(ctx context.Context,
 		namespace:             namespace,
 		podName:               podName,
 		jobsManager: scheduler.New(scheduler.Options{
-			Namespace: namespace,
-			AppID:     runtimeConfig.id,
-			Channels:  channels,
-			Actors:    actors,
-			Addresses: runtimeConfig.schedulerAddress,
-			Security:  sec,
-			Healthz:   runtimeConfig.healthz,
-			WFEngine:  wfe,
+			Namespace:          namespace,
+			AppID:              runtimeConfig.id,
+			Channels:           channels,
+			Actors:             actors,
+			Addresses:          runtimeConfig.schedulerAddress,
+			Security:           sec,
+			Healthz:            runtimeConfig.healthz,
+			WFEngine:           wfe,
+			SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 		}),
 		initComplete:   make(chan struct{}),
 		isAppHealthy:   make(chan struct{}),
@@ -670,7 +691,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.appHealthReady = a.appHealthReadyInit
 	if a.runtimeConfig.appConnectionConfig.HealthCheck != nil && a.channels.AppChannel() != nil {
 		// We can't just pass "a.channels.HealthProbe" because appChannel may be re-created
-		a.appHealth = apphealth.New(*a.runtimeConfig.appConnectionConfig.HealthCheck, func(ctx context.Context) (bool, error) {
+		a.appHealth = apphealth.New(*a.runtimeConfig.appConnectionConfig.HealthCheck, func(ctx context.Context) (*apphealth.Status, error) {
 			return a.channels.AppChannel().HealthProbe(ctx)
 		})
 		if err := a.runnerCloser.AddCloser(a.appHealth); err != nil {
@@ -689,7 +710,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		a.appHealth.Enqueue()
 	} else {
 		// If there's no health check, mark the app as healthy right away so subscriptions can start
-		a.appHealthChanged(ctx, apphealth.AppStatusHealthy)
+		a.appHealthChanged(ctx, apphealth.NewStatus(true, nil))
 	}
 
 	return nil
@@ -725,12 +746,11 @@ func (a *DaprRuntime) initPluggableComponents(ctx context.Context) {
 
 // Sets the status of the app to healthy or un-healthy
 // Callback for apphealth when the detected status changed
-func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
+func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.Status) {
 	a.appHealthLock.Lock()
 	defer a.appHealthLock.Unlock()
 
-	switch status {
-	case apphealth.AppStatusHealthy:
+	if status.IsHealthy {
 		select {
 		case <-a.isAppHealthy:
 			a.isAppHealthy = make(chan struct{})
@@ -776,8 +796,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		}
 
 		a.jobsManager.StartApp(ctx)
-
-	case apphealth.AppStatusUnhealthy:
+	} else {
 		select {
 		case <-a.isAppHealthy:
 		default:

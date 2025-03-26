@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/connection"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
@@ -54,7 +56,7 @@ type Interface interface {
 	Client(ctx context.Context) (api.Interface, error)
 
 	// JobsWatch adds a watch for jobs to the connection pool.
-	JobsWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error
+	JobsWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error)
 
 	// HostsWatch adds a watch for hosts to the connection pool.
 	HostsWatch(schedulerv1pb.Scheduler_WatchHostsServer) error
@@ -105,7 +107,7 @@ func (c *cron) Run(ctx context.Context) error {
 		Client:          client,
 		Namespace:       "dapr",
 		ID:              c.id,
-		TriggerFn:       c.triggerJob,
+		TriggerFn:       c.triggerHandler,
 		ReplicaData:     hostAny,
 		WatchLeadership: watchLeadershipCh,
 	})
@@ -170,12 +172,12 @@ func (c *cron) Client(ctx context.Context) (api.Interface, error) {
 }
 
 // JobsWatch adds a watch for jobs to the connection pool.
-func (c *cron) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
+func (c *cron) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error) {
 	select {
 	case <-c.readyCh:
 		return c.connectionPool.Add(req, stream)
 	case <-stream.Context().Done():
-		return stream.Context().Err()
+		return nil, stream.Context().Err()
 	}
 }
 
@@ -193,10 +195,11 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 	// Always send the current hosts initially to catch up to broadcast
 	// subscribe.
 	c.lock.RLock()
-	err := stream.Send(&schedulerv1pb.WatchHostsResponse{
-		Hosts: c.currHosts,
-	})
+	hosts := slices.Clone(c.currHosts)
 	c.lock.RUnlock()
+	err := stream.Send(&schedulerv1pb.WatchHostsResponse{
+		Hosts: hosts,
+	})
 	if err != nil {
 		return err
 	}
@@ -220,9 +223,19 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 	}
 }
 
-func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
+func (c *cron) triggerHandler(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
 	log.Debugf("Triggering job: %s", req.GetName())
 
+	start := time.Now()
+	resp := c.triggerJob(ctx, req)
+	monitoring.RecordTriggerDuration(start)
+
+	log.Debugf("Triggered job %s in %s (%s)", req.GetName(), time.Since(start), resp.GetResult())
+
+	return resp
+}
+
+func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
 	var meta schedulerv1pb.JobMetadata
 	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
 		log.Errorf("Error unmarshalling metadata: %s", err)
@@ -235,14 +248,9 @@ func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) *api.Tri
 		return &api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE}
 	}
 
-	now := time.Now()
-	defer func() {
-		monitoring.RecordTriggerDuration(now)
-		monitoring.RecordJobsTriggeredCount(&meta)
-	}()
-
+	defer monitoring.RecordJobsTriggeredCount(&meta)
 	return &api.TriggerResponse{
-		Result: c.connectionPool.Send(ctx, &pool.JobEvent{
+		Result: c.connectionPool.Send(ctx, &connection.JobEvent{
 			Name:     req.GetName()[idx+2:],
 			Data:     req.GetPayload(),
 			Metadata: &meta,

@@ -39,6 +39,7 @@ type options struct {
 	actorIdleTimeout  *time.Duration
 	entityConfig      []entityConfig
 	resources         []string
+	maxBodySize       *string
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -138,5 +139,11 @@ func WithEntityConfig(opts ...EntityConfig) Option {
 func WithResources(resources ...string) Option {
 	return func(o *options) {
 		o.resources = append(o.resources, resources...)
+	}
+}
+
+func WithMaxBodySize(size string) Option {
+	return func(o *options) {
+		o.maxBodySize = &size
 	}
 }

@@ -40,6 +40,7 @@ type get struct {
 func (g *get) Setup(t *testing.T) []framework.Option {
 	g.actors = actors.New(t,
 		actors.WithActorTypes("foo"),
+		actors.WithActorTypeHandler("foo", func(http.ResponseWriter, *http.Request) {}),
 	)
 
 	return []framework.Option{
@@ -77,5 +78,5 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, `{"period":"@every 1s","data":"reminderdata","actorID":"1234","actorType":"foo","dueTime":"1s"}`, strings.TrimSpace(string(b)))
+	assert.JSONEq(t, `{"period":"@every 1s","data":"reminderdata","actorID":"1234","actorType":"foo","dueTime":"1s"}`, strings.TrimSpace(string(b)))
 }

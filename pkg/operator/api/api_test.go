@@ -94,7 +94,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			},
 		}
 
-		err := processComponentSecrets(context.Background(), &c, "default", nil)
+		err := processComponentSecrets(t.Context(), &c, "default", nil)
 		require.NoError(t, err)
 	})
 
@@ -136,13 +136,13 @@ func TestProcessComponentSecrets(t *testing.T) {
 			}).
 			Build()
 
-		err = processComponentSecrets(context.Background(), &c, "default", client)
+		err = processComponentSecrets(t.Context(), &c, "default", client)
 		require.NoError(t, err)
 
 		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
 		jsonEnc, _ := json.Marshal(enc)
 
-		assert.Equal(t, jsonEnc, c.Spec.Metadata[0].Value.Raw)
+		assert.JSONEq(t, string(jsonEnc), string(c.Spec.Metadata[0].Value.Raw))
 	})
 
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
@@ -183,13 +183,13 @@ func TestProcessComponentSecrets(t *testing.T) {
 			}).
 			Build()
 
-		err = processComponentSecrets(context.Background(), &c, "default", client)
+		err = processComponentSecrets(t.Context(), &c, "default", client)
 		require.NoError(t, err)
 
 		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
 		jsonEnc, _ := json.Marshal(enc)
 
-		assert.Equal(t, jsonEnc, c.Spec.Metadata[0].Value.Raw)
+		assert.JSONEq(t, string(jsonEnc), string(c.Spec.Metadata[0].Value.Raw))
 	})
 }
 
@@ -587,7 +587,7 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Equal(t, "sub1", sub.Name)
 		assert.Equal(t, "namespace-a", sub.Namespace)
 
-		res, err = api.ListSubscriptionsV2(context.TODO(), &operatorv1pb.ListSubscriptionsRequest{
+		res, err = api.ListSubscriptionsV2(t.Context(), &operatorv1pb.ListSubscriptionsRequest{
 			PodName:   "baz",
 			Namespace: "namespace-c",
 		})
@@ -692,7 +692,7 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Equal(t, "obj1", endpoint.Name)
 		assert.Equal(t, "namespace-a", endpoint.Namespace)
 
-		res, err = api.ListHTTPEndpoints(context.TODO(), &operatorv1pb.ListHTTPEndpointsRequest{
+		res, err = api.ListHTTPEndpoints(t.Context(), &operatorv1pb.ListHTTPEndpointsRequest{
 			Namespace: "namespace-c",
 		})
 		require.Error(t, err)
@@ -719,7 +719,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 		},
 	}
 	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
-		err := processHTTPEndpointSecrets(context.Background(), &e, "default", nil)
+		err := processHTTPEndpointSecrets(t.Context(), &e, "default", nil)
 		require.NoError(t, err)
 	})
 
@@ -744,11 +744,11 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 				},
 			}).
 			Build()
-		require.NoError(t, processHTTPEndpointSecrets(context.Background(), &e, "default", client))
+		require.NoError(t, processHTTPEndpointSecrets(t.Context(), &e, "default", client))
 		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
 		jsonEnc, err := json.Marshal(enc)
 		require.NoError(t, err)
-		assert.Equal(t, jsonEnc, e.Spec.Headers[0].Value.Raw)
+		assert.JSONEq(t, string(jsonEnc), string(e.Spec.Headers[0].Value.Raw))
 	})
 
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
@@ -773,12 +773,12 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 			}).
 			Build()
 
-		require.NoError(t, processHTTPEndpointSecrets(context.Background(), &e, "default", client))
+		require.NoError(t, processHTTPEndpointSecrets(t.Context(), &e, "default", client))
 
 		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
 		jsonEnc, err := json.Marshal(enc)
 		require.NoError(t, err)
-		assert.Equal(t, jsonEnc, e.Spec.Headers[0].Value.Raw)
+		assert.JSONEq(t, string(jsonEnc), string(e.Spec.Headers[0].Value.Raw))
 	})
 }
 
@@ -794,7 +794,7 @@ func Test_Ready(t *testing.T) {
 				close(ch)
 				return ch
 			},
-			ctx:    context.Background,
+			ctx:    t.Context,
 			expErr: false,
 		},
 		"if context is cancelled, then expect error": {
@@ -803,7 +803,7 @@ func Test_Ready(t *testing.T) {
 				return ch
 			},
 			ctx: func() context.Context {
-				ctx, cancel := context.WithCancel(context.Background())
+				ctx, cancel := context.WithCancel(t.Context())
 				cancel()
 				return ctx
 			},

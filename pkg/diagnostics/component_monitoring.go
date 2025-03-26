@@ -58,6 +58,9 @@ type componentMetrics struct {
 	secretCount   *stats.Int64Measure
 	secretLatency *stats.Float64Measure
 
+	conversationCount   *stats.Int64Measure
+	conversationLatency *stats.Float64Measure
+
 	cryptoCount   *stats.Int64Measure
 	cryptoLatency *stats.Float64Measure
 
@@ -149,6 +152,14 @@ func newComponentMetrics() *componentMetrics {
 			"component/secret/latencies",
 			"The latency of the response from the secret component.",
 			stats.UnitMilliseconds),
+		conversationCount: stats.Int64(
+			"component/conversation/count",
+			"The number of operations performed on the conversation component.",
+			stats.UnitDimensionless),
+		conversationLatency: stats.Float64(
+			"component/conversation/latencies",
+			"The latency of the response from the conversation component.",
+			stats.UnitMilliseconds),
 		cryptoCount: stats.Int64(
 			"component/crypto/count",
 			"The number of operations performed on the crypto component.",
@@ -186,6 +197,8 @@ func (c *componentMetrics) Init(appID, namespace string, latencyDistribution *vi
 		diagUtils.NewMeasureView(c.configurationCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.secretLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.secretCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
+		diagUtils.NewMeasureView(c.conversationLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, latencyDistribution),
+		diagUtils.NewMeasureView(c.conversationCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.cryptoLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.cryptoCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 	)
@@ -343,6 +356,23 @@ func (c *componentMetrics) ConfigurationInvoked(ctx context.Context, component, 
 				ctx,
 				diagUtils.WithTags(c.configurationLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.configurationLatency.M(elapsed))
+		}
+	}
+}
+
+// SecretInvoked records the metrics for a secret event.
+func (c *componentMetrics) ConversationInvoked(ctx context.Context, component string, success bool, elapsed float64) {
+	if c.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(c.conversationCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success)),
+			c.conversationCount.M(1))
+
+		if elapsed > 0 {
+			stats.RecordWithTags(
+				ctx,
+				diagUtils.WithTags(c.conversationLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success)),
+				c.conversationLatency.M(elapsed))
 		}
 	}
 }

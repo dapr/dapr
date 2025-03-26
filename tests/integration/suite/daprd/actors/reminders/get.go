@@ -41,6 +41,7 @@ func (g *get) Setup(t *testing.T) []framework.Option {
 	g.actors = actors.New(t,
 		actors.WithActorTypes("foo"),
 		actors.WithFeatureSchedulerReminders(false),
+		actors.WithActorTypeHandler("foo", func(http.ResponseWriter, *http.Request) {}),
 	)
 
 	return []framework.Option{
@@ -78,5 +79,5 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, `{"period":"1s","data":"reminderdata","dueTime":"1s"}`, strings.TrimSpace(string(b)))
+	assert.JSONEq(t, `{"period":"1s","data":"reminderdata","dueTime":"1s"}`, strings.TrimSpace(string(b)))
 }

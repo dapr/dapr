@@ -80,7 +80,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       fp.Port(t),
 		metricsPort:      fp.Port(t),
 		profilePort:      fp.Port(t),
-		logLevel:         "info",
+		logLevel:         "debug",
 		mode:             "standalone",
 	}
 
@@ -153,6 +153,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 	if opts.controlPlaneTrustDomain != nil {
 		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
+	}
+	if opts.maxBodySize != nil {
+		args = append(args, "--max-body-size="+*opts.maxBodySize)
 	}
 
 	ns := "default"
@@ -411,11 +414,21 @@ func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*
 	return d.meta(t, ctx).HTTPEndpoints
 }
 
+func (d *Daprd) GetMetaScheduler(t assert.TestingT, ctx context.Context) *rtv1.MetadataScheduler {
+	return d.meta(t, ctx).Scheduler
+}
+
+func (d *Daprd) GetMetaActorRuntime(t assert.TestingT, ctx context.Context) *MetadataActorRuntime {
+	return d.meta(t, ctx).ActorRuntime
+}
+
 // metaResponse is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
 type metaResponse struct {
 	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
 	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
 	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
+	Scheduler            *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
+	ActorRuntime         *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
@@ -431,6 +444,18 @@ type MetadataResponsePubsubSubscription struct {
 type MetadataResponsePubsubSubscriptionRule struct {
 	Match string `json:"match,omitempty"`
 	Path  string `json:"path,omitempty"`
+}
+
+type MetadataActorRuntime struct {
+	RuntimeStatus string                             `json:"runtimeStatus"`
+	HostReady     bool                               `json:"hostReady"`
+	Placement     string                             `json:"placement"`
+	ActiveActors  []*MetadataActorRuntimeActiveActor `json:"activeActors"`
+}
+
+type MetadataActorRuntimeActiveActor struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
 }
 
 func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {

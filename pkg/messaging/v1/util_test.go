@@ -14,7 +14,6 @@ limitations under the License.
 package v1
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
 	"sort"
@@ -49,7 +48,7 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 
 	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout"}
 	savedHeaderKeyNames := []string{}
-	ctx := context.Background()
+	ctx := t.Context()
 	InternalMetadataToHTTPHeader(ctx, fakeMetadata, func(k, v string) {
 		savedHeaderKeyNames = append(savedHeaderKeyNames, k)
 	})
@@ -111,7 +110,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("without http header conversion for http headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, false)
@@ -338,7 +337,7 @@ func TestWithCustomGrpcMetadata(t *testing.T) {
 		md[customMetadataKey(i)] = customMetadataValue(i)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx = WithCustomGRPCMetadata(ctx, md)
 
 	ctxMd, ok := metadata.FromOutgoingContext(ctx)

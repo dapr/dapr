@@ -20,6 +20,7 @@ import (
 	"io"
 
 	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -57,6 +58,7 @@ type Options struct {
 	IdlerQueue         *queue.Processor[string, targets.Idlable]
 	SchedulerReminders bool
 	Locker             locker.Interface
+	MaxRequestBodySize int
 }
 
 type engine struct {
@@ -74,6 +76,8 @@ type engine struct {
 
 	lock  *fifo.Mutex
 	clock clock.Clock
+
+	callOptions []grpc.CallOption
 }
 
 func New(opts Options) Interface {
@@ -89,6 +93,10 @@ func New(opts Options) Interface {
 		locker:             opts.Locker,
 		lock:               fifo.New(),
 		clock:              clock.RealClock{},
+		callOptions: []grpc.CallOption{
+			grpc.MaxCallRecvMsgSize(opts.MaxRequestBodySize),
+			grpc.MaxCallSendMsgSize(opts.MaxRequestBodySize),
+		},
 	}
 }
 
@@ -179,7 +187,12 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 			return backoff.Permanent(errors.New("remote actor moved"))
 		}
 
-		return e.callRemoteActorReminder(ctx, lar, req)
+		err = e.callRemoteActorReminder(ctx, lar, req)
+		status, ok := status.FromError(err)
+		if ok && status.Code() == codes.Unavailable {
+			return backoff.Permanent(err)
+		}
+		return err
 	}
 
 	target, _, err := e.table.GetOrCreate(req.ActorType, req.ActorID)
@@ -199,10 +212,9 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	// If we are in a reentrancy which is local, skip the placement lock.
 	_, isDaprRemote := req.GetMetadata()["X-Dapr-Remote"]
-	_, isReentrancy := req.GetMetadata()["Dapr-Reentrancy-Id"]
 	_, isAPICall := req.GetMetadata()["Dapr-API-Call"]
 
-	if isAPICall || isDaprRemote || !isReentrancy {
+	if isAPICall || isDaprRemote {
 		var cancel context.CancelFunc
 		var err error
 		ctx, cancel, err = e.placement.Lock(ctx)
@@ -261,7 +273,7 @@ func (e *engine) callRemoteActor(ctx context.Context, lar *api.LookupActorRespon
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	client := internalv1pb.NewServiceInvocationClient(conn)
 
-	res, err := client.CallActor(ctx, req)
+	res, err := client.CallActor(ctx, req, e.callOptions...)
 	if err != nil {
 		return nil, err
 	}

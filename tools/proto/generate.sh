@@ -1,3 +1,4 @@
+#!/bin/bash
 #
 # Copyright 2021 The Dapr Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -9,9 +10,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-
-#!/bin/bash
 
 set +x
 
@@ -63,10 +61,10 @@ wget "https://github.com/protocolbuffers/protobuf/releases/download/v${VERSION}/
   -O ${root}/${file}
 
 # Download Java gRPC plugin
-java_grpc_plugin_file="protoc-gen-grpc-java-1.24.0-${OS}-x86_64.exe"
+java_grpc_plugin_file="protoc-gen-grpc-java-1.24.1-${OS}-x86_64.exe"
 java_grpc_plugin_path=${root}/${java_grpc_plugin_file}
 
-wget "https://repo1.maven.org/maven2/io/grpc/protoc-gen-grpc-java/1.24.0/${java_grpc_plugin_file}" \
+wget "https://repo1.maven.org/maven2/io/grpc/protoc-gen-grpc-java/1.24.1/${java_grpc_plugin_file}" \
   -O ${java_grpc_plugin_path}
 
 chmod +x ${java_grpc_plugin_path}

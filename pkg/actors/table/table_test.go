@@ -14,7 +14,6 @@ limitations under the License.
 package table_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,7 +45,7 @@ func Test_HaltAll(t *testing.T) {
 			{
 				Type: "test1",
 				Factory: fake.New("test1", func(f *fake.Fake) {
-					f.WithDeactivate(func(context.Context) error {
+					f.WithDeactivate(func() error {
 						deactivations.Append(f.Key())
 						return nil
 					})
@@ -55,7 +54,7 @@ func Test_HaltAll(t *testing.T) {
 			{
 				Type: "test2",
 				Factory: fake.New("test2", func(f *fake.Fake) {
-					f.WithDeactivate(func(context.Context) error {
+					f.WithDeactivate(func() error {
 						deactivations.Append(f.Key())
 						return nil
 					})
@@ -64,7 +63,7 @@ func Test_HaltAll(t *testing.T) {
 			{
 				Type: "test3",
 				Factory: fake.New("test3", func(f *fake.Fake) {
-					f.WithDeactivate(func(context.Context) error {
+					f.WithDeactivate(func() error {
 						deactivations.Append(f.Key())
 						return nil
 					})
@@ -95,15 +94,26 @@ func Test_HaltAll(t *testing.T) {
 	assert.True(t, tble.IsActorTypeHosted("test3"))
 	assert.False(t, tble.IsActorTypeHosted("test4"))
 
-	require.NoError(t, tble.Halt(context.Background(), "test1", "1"))
+	require.NoError(t, tble.Drain(func(target targets.Interface) bool {
+		return target.Key() == "test1||1"
+	}))
 
 	assert.ElementsMatch(t, []string{
-		"test1/1",
+		"test1||1",
+	}, deactivations.Slice())
+
+	require.NoError(t, tble.Drain(func(target targets.Interface) bool {
+		return target.Key() == "test2||2"
+	}))
+
+	assert.ElementsMatch(t, []string{
+		"test1||1",
+		"test2||2",
 	}, deactivations.Slice())
 
 	require.NoError(t, tble.HaltAll())
 
 	assert.ElementsMatch(t, []string{
-		"test1/1", "test2/1", "test2/2", "test3/312", "test3/xyz",
+		"test1||1", "test2||1", "test2||2", "test3||312", "test3||xyz",
 	}, deactivations.Slice())
 }
