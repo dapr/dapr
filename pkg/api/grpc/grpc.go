@@ -94,9 +94,10 @@ type api struct {
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
 	processor             *processor.Processor
-	closed                atomic.Bool
-	closeCh               chan struct{}
 	wg                    sync.WaitGroup
+
+	closeCh chan struct{}
+	closed  atomic.Bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -1447,6 +1448,7 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 
 func (a *api) Close() error {
 	defer a.wg.Wait()
+
 	if a.closed.CompareAndSwap(false, true) {
 		close(a.closeCh)
 	}

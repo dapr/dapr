@@ -41,6 +41,7 @@ type AdapterStreamer interface {
 	Subscribe(rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1) error
 	Publish(context.Context, *SubscribedMessage) error
 	StreamerKey(pubsub, topic string) string
+	Close(key string)
 }
 
 func IsOperationAllowed(topic string, pubSub *PubsubItem, scopedTopics []string) bool {
