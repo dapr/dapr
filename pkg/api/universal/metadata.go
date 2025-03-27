@@ -82,12 +82,13 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	ps := make([]*runtimev1pb.PubsubSubscription, len(subscriptions))
 	for i, s := range subscriptions {
 		ps[i] = &runtimev1pb.PubsubSubscription{
-			PubsubName:      s.PubsubName,
-			Topic:           s.Topic,
-			Metadata:        s.Metadata,
-			DeadLetterTopic: s.DeadLetterTopic,
-			Rules:           metadataConvertPubSubSubscriptionRules(s.Rules),
-			Type:            s.Type,
+			PubsubName:       s.PubsubName,
+			Topic:            s.Topic,
+			Metadata:         s.Metadata,
+			DeadLetterTopic:  s.DeadLetterTopic,
+			Rules:            metadataConvertPubSubSubscriptionRules(s.Rules),
+			Type:             s.Type,
+			SubscribersCount: s.SubscribersCount,
 		}
 	}
 
