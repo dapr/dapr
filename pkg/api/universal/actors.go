@@ -160,7 +160,7 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 	return nil, err
 }
 
-func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetActorReminderRequest) (*runtimev1pb.GetActorReminderRequest, error) {
+func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetActorReminderRequest) (*runtimev1pb.GetActorReminderResponse, error) {
 	r, err := a.ActorReminders(ctx)
 	if err != nil {
 		return nil, err
@@ -172,7 +172,8 @@ func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetAct
 		ActorType: in.GetActorType(),
 	}
 
-	err = r.Get(ctx, req)
+	response, err := r.Get(ctx, req)
+
 	if err != nil {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
@@ -183,5 +184,17 @@ func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetAct
 		a.logger.Debug(err)
 		return nil, err
 	}
-	return nil, err
+
+	resp := &runtimev1pb.GetActorReminderResponse{
+
+		ActorType: response.ActorType,
+		ActorId:   response.ActorID,
+		Name:      response.Name,
+		DueTime:   response.DueTime,
+		Period:    response.Period.String(),
+		Data:      response.Data.GetValue(),
+		Ttl:       response.ExpirationTime.String(),
+	}
+
+	return resp, err
 }
