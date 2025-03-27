@@ -118,18 +118,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	// (Note that GetTypeUrl could return an empty value, so this call becomes a no-op)
 	req.WithDataTypeURL(chunk.GetRequest().GetMessage().GetData().GetTypeUrl())
 
-	ctx, cancel := context.WithCancel(stream.Context())
-	defer cancel()
-
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		select {
-		case <-ctx.Done():
-		case <-a.closeCh:
-			cancel()
-		}
-	}()
+	ctx := stream.Context()
 
 	// Check the ACL
 	err = a.callLocalValidateACL(ctx, req)
@@ -356,8 +345,6 @@ func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream in
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-a.closeCh:
-					return errors.New("server closed")
 				case val := <-ch:
 					if err := stream.Send(val); err != nil {
 						return err
