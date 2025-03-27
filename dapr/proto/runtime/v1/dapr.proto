@@ -763,6 +763,7 @@ message PubsubSubscription {
   PubsubSubscriptionRules rules = 4 [json_name = "rules"];
   string dead_letter_topic = 5 [json_name = "deadLetterTopic"];
   PubsubSubscriptionType type = 6 [json_name = "type"];
+  uint64 subscribers_count = 7 [json_name = "subscribersCount"];
 }
 
 // PubsubSubscriptionType indicates the type of subscription

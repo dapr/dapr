@@ -40,9 +40,8 @@ type Options struct {
 
 type streamer struct {
 	tracingSpec *config.TracingSpec
-	subscribers map[string]*conn
-
-	lock sync.RWMutex
+	subscribers map[string][]*conn
+	lock        sync.RWMutex
 }
 
 var log = logger.NewLogger("dapr.runtime.pubsub.streamer")
@@ -50,30 +49,41 @@ var log = logger.NewLogger("dapr.runtime.pubsub.streamer")
 func New(opts Options) rtpubsub.AdapterStreamer {
 	return &streamer{
 		tracingSpec: opts.TracingSpec,
-		subscribers: make(map[string]*conn),
+		subscribers: make(map[string][]*conn),
 	}
 }
 
 func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, req *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1) error {
 	s.lock.Lock()
 	key := s.StreamerKey(req.GetPubsubName(), req.GetTopic())
-	if _, ok := s.subscribers[key]; ok {
-		s.lock.Unlock()
-		return fmt.Errorf("already subscribed to pubsub %q topic %q", req.GetPubsubName(), req.GetTopic())
-	}
 
-	conn := &conn{
+	connection := &conn{
 		stream:           stream,
 		publishResponses: make(map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1),
 	}
-	s.subscribers[key] = conn
+
+	if s.subscribers[key] == nil {
+		s.subscribers[key] = make([]*conn, 0)
+	}
+	s.subscribers[key] = append(s.subscribers[key], connection)
+	s.lock.Unlock()
 
 	log.Infof("Subscribing to pubsub '%s' topic '%s'", req.GetPubsubName(), req.GetTopic())
-	s.lock.Unlock()
 
 	defer func() {
 		s.lock.Lock()
-		delete(s.subscribers, key)
+
+		conns := s.subscribers[key]
+		for i, c := range conns {
+			if c == connection {
+				s.subscribers[key] = append(conns[:i], conns[i+1:]...)
+				break
+			}
+		}
+
+		if len(s.subscribers[key]) == 0 {
+			delete(s.subscribers, key)
+		}
 		s.lock.Unlock()
 	}()
 
@@ -103,7 +113,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			conn.notifyPublishResponse(stream.Context(), eventResp)
+			connection.notifyPublishResponse(stream.Context(), eventResp)
 		}()
 	}
 }
@@ -111,9 +121,10 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage) error {
 	s.lock.RLock()
 	key := s.StreamerKey(msg.PubSub, msg.Topic)
-	conn, ok := s.subscribers[key]
+	conns, ok := s.subscribers[key]
 	s.lock.RUnlock()
-	if !ok {
+
+	if !ok || len(conns) == 0 {
 		return fmt.Errorf("no streamer subscribed to pubsub %q topic %q", msg.PubSub, msg.Topic)
 	}
 
@@ -122,59 +133,80 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 		return err
 	}
 
-	ch, defFn := conn.registerPublishResponse(envelope.GetId())
-	defer defFn()
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(conns))
 
-	start := time.Now()
-	conn.streamLock.Lock()
-	err = conn.stream.Send(&rtv1pb.SubscribeTopicEventsResponseAlpha1{
-		SubscribeTopicEventsResponseType: &rtv1pb.SubscribeTopicEventsResponseAlpha1_EventMessage{
-			EventMessage: envelope,
-		},
-	})
-	conn.streamLock.Unlock()
-	elapsed := diag.ElapsedSince(start)
+	for _, connection := range conns {
+		wg.Add(1)
+		go func(conn *conn) {
+			defer wg.Done()
 
-	if span != nil {
-		m := diag.ConstructSubscriptionSpanAttributes(envelope.GetTopic())
-		diag.AddAttributesToSpan(span, m)
-		diag.UpdateSpanStatusFromGRPCError(span, err)
-		span.End()
+			ch, defFn := conn.registerPublishResponse(envelope.GetId())
+			defer defFn()
+
+			start := time.Now()
+			conn.streamLock.Lock()
+			err := conn.stream.Send(&rtv1pb.SubscribeTopicEventsResponseAlpha1{
+				SubscribeTopicEventsResponseType: &rtv1pb.SubscribeTopicEventsResponseAlpha1_EventMessage{
+					EventMessage: envelope,
+				},
+			})
+			conn.streamLock.Unlock()
+
+			if err != nil {
+				errCh <- fmt.Errorf("send error: %w", err)
+				return
+			}
+
+			if span != nil {
+				m := diag.ConstructSubscriptionSpanAttributes(envelope.GetTopic())
+				diag.AddAttributesToSpan(span, m)
+				diag.UpdateSpanStatusFromGRPCError(span, err)
+				span.End()
+			}
+
+			var resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
+			select {
+			case <-ctx.Done():
+				errCh <- ctx.Err()
+				return
+			case resp = <-ch:
+			}
+
+			switch resp.GetStatus().GetStatus() {
+			case rtv1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
+				// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
+				// success from protobuf definition
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Success)), "", msg.Topic, diag.ElapsedSince(start))
+				return
+			case rtv1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
+				// TODO: add retry error info
+				errCh <- fmt.Errorf("RETRY status from subscriber: %w", rterrors.NewRetriable(nil))
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, diag.ElapsedSince(start))
+			case rtv1pb.TopicEventResponse_DROP: //nolint:nosnakecase
+				log.Warnf("DROP status returned from app while processing pub/sub event %v", msg.CloudEvent[contribpubsub.IDField])
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), "", msg.Topic, diag.ElapsedSince(start))
+				errCh <- rtpubsub.ErrMessageDropped
+			default:
+				// Consider unknown status field as error and retry
+				errCh <- fmt.Errorf("unknown status: %v", resp.GetStatus())
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, diag.ElapsedSince(start))
+			}
+		}(connection)
 	}
 
-	if err != nil {
-		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", msg.CloudEvent[contribpubsub.IDField], rterrors.NewRetriable(err))
-		log.Debug(err)
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
-		return err
+	wg.Wait()
+	close(errCh)
+
+	var errs []error
+	for err := range errCh {
+		errs = append(errs, err)
 	}
 
-	var resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case resp = <-ch:
+	if len(errs) > 0 {
+		return fmt.Errorf("publish errors (%d): %v", len(errs), errs)
 	}
-
-	switch resp.GetStatus().GetStatus() {
-	case rtv1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
-		// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
-		// success from protobuf definition
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Success)), "", msg.Topic, elapsed)
-		return nil
-	case rtv1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
-		// TODO: add retry error info
-		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", msg.CloudEvent[contribpubsub.IDField], rterrors.NewRetriable(nil))
-	case rtv1pb.TopicEventResponse_DROP: //nolint:nosnakecase
-		log.Warnf("DROP status returned from app while processing pub/sub event %v", msg.CloudEvent[contribpubsub.IDField])
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), "", msg.Topic, elapsed)
-		return rtpubsub.ErrMessageDropped
-	default:
-		// Consider unknown status field as error and retry
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
-		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", msg.CloudEvent[contribpubsub.IDField], resp.GetStatus(), rterrors.NewRetriable(nil))
-	}
+	return nil
 }
 
 func (s *streamer) StreamerKey(pubsub, topic string) string {

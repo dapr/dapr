@@ -14,8 +14,6 @@ limitations under the License.
 package compstore
 
 import (
-	"fmt"
-
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -75,11 +73,14 @@ func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, s
 	c.subscriptions.declarativesList = append(c.subscriptions.declarativesList, comp.Name)
 }
 
-func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription) error {
+func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	// Subscription already exists
 	if _, ok := c.subscriptions.streams[comp.Name]; ok {
-		return fmt.Errorf("streamer already subscribed to pubsub %q topic %q", comp.Spec.Pubsubname, comp.Spec.Topic)
+		// A new subscriber has been added to the existing subscription
+		c.subscriptions.streams[comp.Name].SubscribersCount++
+		return
 	}
 
 	c.subscriptions.streams[comp.Name] = &DeclarativeSubscription{
@@ -96,14 +97,24 @@ func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription) error 
 		},
 	}
 
-	return nil
+	// Increment subscriber count for this streaming subscription
+	c.subscriptions.streams[comp.Name].SubscribersCount++
 }
 
 func (c *ComponentStore) DeleteStreamSubscription(names ...string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	for _, name := range names {
-		delete(c.subscriptions.streams, name)
+		// Check if the subscription exists and decrement subscriber count
+		if sub, ok := c.subscriptions.streams[name]; ok {
+			// Decrement subscriber count for this streaming subscription
+			sub.SubscribersCount--
+
+			// If the subscriber count is 0, delete the subscription
+			if sub.SubscribersCount == 0 {
+				delete(c.subscriptions.streams, name)
+			}
+		}
 	}
 }
 

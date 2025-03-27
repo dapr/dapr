@@ -70,7 +70,7 @@ func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1
 	}
 
 	key := a.pubsubAdapterStreamer.StreamerKey(req.GetPubsubName(), req.GetTopic())
-	err = a.Universal.CompStore().AddStreamSubscription(&subapi.Subscription{
+	a.Universal.CompStore().AddStreamSubscription(&subapi.Subscription{
 		ObjectMeta: metav1.ObjectMeta{Name: key},
 		Spec: subapi.SubscriptionSpec{
 			Pubsubname:      req.GetPubsubName(),
@@ -80,9 +80,6 @@ func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1
 			Routes:          subapi.Routes{Default: "/"},
 		},
 	})
-	if err != nil {
-		return err
-	}
 
 	if err = a.processor.Subscriber().StartStreamerSubscription(key); err != nil {
 		a.Universal.CompStore().DeleteStreamSubscription(key)
