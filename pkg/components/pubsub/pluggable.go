@@ -172,7 +172,7 @@ func (p *grpcPubSub) pullMessages(parentCtx context.Context, topic *proto.Topic,
 		return fmt.Errorf("unable to subscribe: %w", err)
 	}
 
-	streamCtx, cancel := context.WithCancel(pull.Context())
+	streamCtx, streamCancel := context.WithCancel(pull.Context())
 
 	err = pull.Send(&proto.PullMessagesRequest{
 		Topic: topic,
@@ -182,7 +182,7 @@ func (p *grpcPubSub) pullMessages(parentCtx context.Context, topic *proto.Topic,
 		if closeErr := pull.CloseSend(); closeErr != nil {
 			p.logger.Warnf("could not close pull stream of topic %s: %v", topic.GetName(), closeErr)
 		}
-		cancel()
+		streamCancel()
 	}
 
 	if err != nil {
