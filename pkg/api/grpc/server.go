@@ -22,7 +22,6 @@ import (
 	"net"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -98,8 +97,6 @@ type server struct {
 	sec            security.Handler
 	wg             sync.WaitGroup
 	htarget        healthz.Target
-	closed         atomic.Bool
-	closeCh        chan struct{}
 }
 
 var (
@@ -150,7 +147,6 @@ func NewAPIServer(opts Options) Server {
 		proxy:          opts.Proxy,
 		workflowEngine: opts.WorkflowEngine,
 		htarget:        opts.Healthz.AddTarget(),
-		closeCh:        make(chan struct{}),
 		grpcServerOpts: serverOpts,
 	}
 }
@@ -193,7 +189,6 @@ func NewInternalServer(opts OptionsInternal) Server {
 		proxy:          opts.Proxy,
 		sec:            opts.Security,
 		htarget:        opts.Healthz.AddTarget(),
-		closeCh:        make(chan struct{}),
 	}
 }
 
@@ -261,8 +256,10 @@ func (s *server) Close() error {
 
 	s.htarget.NotReady()
 
-	if s.closed.CompareAndSwap(false, true) {
-		close(s.closeCh)
+	if s.api != nil {
+		if err := s.api.Close(); err != nil {
+			return err
+		}
 	}
 
 	s.wg.Add(len(s.servers))
@@ -272,12 +269,6 @@ func (s *server) Close() error {
 			defer s.wg.Done()
 			server.GracefulStop()
 		}(server)
-	}
-
-	if s.api != nil {
-		if err := s.api.Close(); err != nil {
-			return err
-		}
 	}
 
 	return nil
