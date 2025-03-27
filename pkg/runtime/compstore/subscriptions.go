@@ -107,10 +107,8 @@ func (c *ComponentStore) DeleteStreamSubscription(names ...string) {
 	for _, name := range names {
 		// Check if the subscription exists and decrement subscriber count
 		if sub, ok := c.subscriptions.streams[name]; ok {
-			// Decrement subscriber count for this streaming subscription
 			sub.SubscribersCount--
 
-			// If the subscriber count is 0, delete the subscription
 			if sub.SubscribersCount == 0 {
 				delete(c.subscriptions.streams, name)
 			}
