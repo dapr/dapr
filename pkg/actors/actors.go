@@ -193,12 +193,10 @@ func (a *actors) Init(opts InitOptions) error {
 
 	storeEnabled := a.buildStateStore(opts, apiLevel)
 
-	if a.reminderStore != nil {
-		a.reminders = reminders.New(reminders.Options{
-			Storage: a.reminderStore,
-			Table:   a.table,
-		})
-	}
+	a.reminders = reminders.New(reminders.Options{
+		Storage: a.reminderStore,
+		Table:   a.table,
+	})
 
 	var err error
 	a.placement, err = placement.New(placement.Options{
@@ -357,6 +355,10 @@ func (a *actors) Reminders(ctx context.Context) (reminders.Interface, error) {
 		return nil, err
 	}
 
+	if a.reminders == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
+
 	return a.reminders, nil
 }
 
@@ -374,7 +376,7 @@ func (a *actors) waitForReady(ctx context.Context) error {
 		}
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return messages.ErrActorRuntimeNotFound
 	}
 }
 
