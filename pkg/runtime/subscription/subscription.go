@@ -307,6 +307,9 @@ func New(opts Options) (*Subscription, error) {
 
 func (s *Subscription) Stop() {
 	s.cancel()
+	if s.adapterStreamer != nil {
+		s.adapterStreamer.Close(s.adapterStreamer.StreamerKey(s.pubsubName, s.topic))
+	}
 }
 
 func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *contribpubsub.NewMessage, deadLetterTopic string) error {
