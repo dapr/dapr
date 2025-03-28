@@ -8,7 +8,6 @@ const owners = [
     'daixiang0',
     'elena-kolevska',
     'halspang',
-    'italypaleale',
     'joshvanl',
     'mikeee',
     'msfussell',
