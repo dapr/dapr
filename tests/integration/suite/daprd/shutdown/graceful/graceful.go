@@ -14,6 +14,7 @@ limitations under the License.
 package graceful
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/graceful/binding"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/graceful/invocation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/graceful/subscription"
 )
