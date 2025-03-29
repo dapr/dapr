@@ -129,6 +129,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		args = append(args, "-trust-domain="+*opts.trustDomain)
 	}
 
+	if opts.mode != nil {
+		args = append(args, "-mode="+*opts.mode)
+	}
+
 	if opts.writeConfig {
 		configPath := filepath.Join(t.TempDir(), "sentry-config.yaml")
 		require.NoError(t, os.WriteFile(configPath, []byte(opts.configuration), 0o600))

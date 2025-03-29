@@ -32,6 +32,7 @@ type options struct {
 	kubeconfig    *string
 	trustDomain   *string
 	namespace     *string
+	mode          *string
 }
 
 // Option is a function that configures the process.
@@ -100,5 +101,11 @@ func WithWriteConfig(write bool) Option {
 func WithNamespace(namespace string) Option {
 	return func(o *options) {
 		o.namespace = &namespace
+	}
+}
+
+func WithMode(mode string) Option {
+	return func(o *options) {
+		o.mode = &mode
 	}
 }
