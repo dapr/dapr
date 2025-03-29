@@ -427,9 +427,6 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 			log.Infof("Blocking graceful shutdown for %s or until app reports unhealthy...", *a.runtimeConfig.blockShutdownDuration)
 
 			a.processor.Subscriber().StopAllSubscriptionsForever()
-
-			// TODO: @joshvanl: gracefully shutdown bindings without disrupting
-			// in-flight requests.
 			a.processor.Binding().StopReadingFromBindings(true)
 
 			select {
@@ -899,12 +896,6 @@ func (a *DaprRuntime) startHTTPServer() error {
 		return err
 	}
 	if err := a.runnerCloser.AddCloser(server); err != nil {
-		return err
-	}
-
-	if err := a.runnerCloser.AddCloser(func() {
-		a.processor.Binding().StopReadingFromBindings(true)
-	}); err != nil {
 		return err
 	}
 
