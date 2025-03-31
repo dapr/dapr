@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -88,6 +89,9 @@ func New(opts Options) (validator.Validator, error) {
 		return nil, err
 	}
 
+	opts.RestConfig.RateLimiter = nil
+	opts.RestConfig.QPS = math.MaxFloat32
+	opts.RestConfig.Burst = math.MaxInt
 	cache, err := cache.New(opts.RestConfig, cache.Options{Scheme: scheme})
 	if err != nil {
 		return nil, err
