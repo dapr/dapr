@@ -53,7 +53,11 @@ func (s *streamer) run(ctx context.Context) error {
 // scheduler job messages. It then invokes the appropriate app or actor
 // reminder based on the job metadata.
 func (s *streamer) receive(ctx context.Context) error {
-	defer s.wg.Wait()
+	defer func() {
+		s.wg.Wait()
+		close(s.resultCh)
+		s.stream.CloseSend()
+	}()
 
 	for {
 		resp, err := s.stream.Recv()
@@ -88,21 +92,14 @@ func (s *streamer) receive(ctx context.Context) error {
 // results back to the Scheduler. Ack messages are collected via a channel to
 // ensure they are sent unary over the stream- gRPC does not support parallel
 // message sends.
-func (s *streamer) outgoing(ctx context.Context) error {
-	defer s.stream.CloseSend()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-s.stream.Context().Done():
-			return s.stream.Context().Err()
-		case result := <-s.resultCh:
-			if err := s.stream.Send(result); err != nil {
-				return err
-			}
+func (s *streamer) outgoing(context.Context) error {
+	for result := range s.resultCh {
+		if err := s.stream.Send(result); err != nil {
+			return err
 		}
 	}
+
+	return nil
 }
 
 // handleJob invokes the appropriate app or actor reminder based on the job metadata.
