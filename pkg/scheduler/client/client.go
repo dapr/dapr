@@ -27,8 +27,8 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-// New returns a new scheduler client and the underlying connection.
-func New(ctx context.Context, address string, sec security.Handler) (schedulerv1pb.SchedulerClient, error) {
+// New returns a new scheduler client.
+func New(ctx context.Context, address string, sec security.Handler) (schedulerv1pb.SchedulerClient, context.CancelFunc, error) {
 	unaryClientInterceptor := grpcRetry.UnaryClientInterceptor()
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
@@ -40,7 +40,7 @@ func New(ctx context.Context, address string, sec security.Handler) (schedulerv1
 
 	schedulerID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", sec.ControlPlaneNamespace(), "dapr-scheduler")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	opts := []grpc.DialOption{
@@ -52,8 +52,8 @@ func New(ctx context.Context, address string, sec security.Handler) (schedulerv1
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, address, opts...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return schedulerv1pb.NewSchedulerClient(conn), nil
+	return schedulerv1pb.NewSchedulerClient(conn), func() { conn.Close() }, nil
 }
