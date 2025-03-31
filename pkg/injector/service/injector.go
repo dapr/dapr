@@ -59,6 +59,7 @@ var AllowedServiceAccountInfos = []string{
 	"kube-system:daemon-set-controller",
 	"openshift-operator-lifecycle-manager:olm-operator-serviceaccount",
 	"tekton-pipelines:tekton-pipelines-controller",
+	"mirrord:mirrord-operator",
 }
 
 type (
