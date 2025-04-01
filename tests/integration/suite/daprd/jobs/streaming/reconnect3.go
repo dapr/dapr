@@ -115,6 +115,9 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 	r.scheduler3.WaitUntilRunning(t, ctx)
 
 	r.daprd.WaitUntilRunning(t, ctx)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, r.daprd.GetMetaScheduler(c, ctx).GetConnectedAddresses(), 3)
+	}, time.Second*10, time.Millisecond*10)
 
 	for i := range 100 {
 		_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
