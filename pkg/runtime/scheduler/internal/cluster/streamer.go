@@ -85,6 +85,7 @@ func (s *streamer) receive(ctx context.Context) error {
 				},
 			}:
 			case <-s.stream.Context().Done():
+			case <-ctx.Done():
 			}
 		}()
 	}
