@@ -353,3 +353,9 @@ func WithMaxBodySize(size string) Option {
 		o.maxBodySize = &size
 	}
 }
+
+func WithPodName(t *testing.T, podName string) Option {
+	return func(o *options) {
+		WithExecOptions(exec.WithEnvVars(t, "POD_NAME", podName))(o)
+	}
+}
