@@ -64,7 +64,7 @@ func (c *connector) run(ctx context.Context) error {
 
 	err = (&streamer{
 		stream:   stream,
-		resultCh: make(chan *schedulerv1pb.WatchJobsRequest, 10),
+		resultCh: make(chan *schedulerv1pb.WatchJobsRequest),
 		channels: c.channels,
 		actors:   c.actors,
 		wfengine: c.wfengine,
