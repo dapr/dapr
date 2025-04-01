@@ -156,14 +156,21 @@ func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSu
 }
 
 // pullMessages pull messages of the given subscription and execute the handler for that messages.
-func (p *grpcPubSub) pullMessages(ctx context.Context, topic *proto.Topic, handler pubsub.Handler) error {
+func (p *grpcPubSub) pullMessages(parentCtx context.Context, topic *proto.Topic, handler pubsub.Handler) error {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		<-parentCtx.Done()
+		cancel()
+	}()
+
 	// first pull should be sync and subsequent connections can be made in background if necessary
 	pull, err := p.Client.PullMessages(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to subscribe: %w", err)
 	}
 
-	streamCtx, cancel := context.WithCancel(pull.Context())
+	streamCtx, streamCancel := context.WithCancel(pull.Context())
 
 	err = pull.Send(&proto.PullMessagesRequest{
 		Topic: topic,
@@ -173,7 +180,7 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, topic *proto.Topic, handl
 		if closeErr := pull.CloseSend(); closeErr != nil {
 			p.logger.Warnf("could not close pull stream of topic %s: %v", topic.GetName(), closeErr)
 		}
-		cancel()
+		streamCancel()
 	}
 
 	if err != nil {
@@ -192,13 +199,13 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, topic *proto.Topic, handl
 
 			// TODO reconnect on error
 			if err != nil {
-				p.logger.Errorf("failed to receive message: %v", err)
+				p.logger.Errorf("Failed to receive pubsub message: %v", err)
 				return
 			}
 
-			p.logger.Debugf("received message from stream on topic %s", msg.GetTopicName())
+			p.logger.Debugf("Received message from stream on topic %s", msg.GetTopicName())
 
-			go handle(msg)
+			handle(msg)
 		}
 	}()
 

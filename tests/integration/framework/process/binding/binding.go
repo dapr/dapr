@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,11 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub
+package binding
 
 import (
 	"context"
-	"io"
 	"net"
 	"testing"
 
@@ -23,35 +22,35 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/dapr/components-contrib/pubsub"
 	compv1pb "github.com/dapr/dapr/pkg/proto/components/v1"
+	"github.com/dapr/dapr/tests/integration/framework/os"
+	"github.com/dapr/dapr/tests/integration/framework/socket"
 )
 
-// Option is a function that configures the process.
-type Option func(*options)
-
-// PubSub is a pluggable pubsub component for Dapr.
-type PubSub struct {
+type Binding struct {
 	listener   net.Listener
 	socketName string
 	component  *component
+	socket     *socket.Socket
 	srvErrCh   chan error
 	stopCh     chan struct{}
 }
 
-func New(t *testing.T, fopts ...Option) *PubSub {
+func New(t *testing.T, fopts ...Option) *Binding {
 	t.Helper()
 
+	os.SkipWindows(t)
+
 	opts := options{
-		pmrRespCh: make(chan *compv1pb.PullMessagesResponse),
-		pmrReqCh:  make(chan *compv1pb.PullMessagesRequest),
+		socket: socket.New(t),
 	}
 	for _, fopts := range fopts {
 		fopts(&opts)
 	}
 
 	require.NotNil(t, opts.socket)
-	require.NotNil(t, opts.pubsub)
+
+	comp := newComponent(t, opts)
 
 	// Start the listener in New, so we can sit on the path immediately, and
 	// keep it for the entire test case.
@@ -59,38 +58,47 @@ func New(t *testing.T, fopts ...Option) *PubSub {
 	listener, err := net.Listen("unix", socketFile.Filename())
 	require.NoError(t, err)
 
-	return &PubSub{
+	return &Binding{
 		listener:   listener,
-		component:  newComponent(t, opts),
+		component:  comp,
 		socketName: socketFile.Name(),
+		socket:     opts.socket,
 		srvErrCh:   make(chan error),
 		stopCh:     make(chan struct{}),
 	}
 }
 
-func (p *PubSub) SocketName() string {
-	return p.socketName
-}
-
-func (p *PubSub) Run(t *testing.T, ctx context.Context) {
-	p.component.impl.Init(ctx, pubsub.Metadata{})
+func (b *Binding) Run(t *testing.T, ctx context.Context) {
+	b.component.Init(ctx, new(compv1pb.InputBindingInitRequest))
 
 	server := grpc.NewServer()
-	compv1pb.RegisterPubSubServer(server, p.component)
+	compv1pb.RegisterInputBindingServer(server, b.component)
 	reflection.Register(server)
 
 	go func() {
-		p.srvErrCh <- server.Serve(p.listener)
+		b.srvErrCh <- server.Serve(b.listener)
 	}()
 
 	go func() {
-		<-p.stopCh
+		<-b.stopCh
 		server.GracefulStop()
 	}()
 }
 
-func (p *PubSub) Cleanup(t *testing.T) {
-	close(p.stopCh)
-	require.NoError(t, <-p.srvErrCh)
-	require.NoError(t, p.component.impl.(io.Closer).Close())
+func (b *Binding) Cleanup(t *testing.T) {
+	close(b.stopCh)
+	require.NoError(t, <-b.srvErrCh)
+}
+
+func (b *Binding) SocketName() string {
+	return b.socketName
+}
+
+func (b *Binding) Socket() *socket.Socket {
+	return b.socket
+}
+
+func (b *Binding) SendMessage(r *compv1pb.ReadResponse) <-chan *compv1pb.ReadRequest {
+	b.component.msgCh <- r
+	return b.component.respCh
 }
