@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,8 +41,7 @@ type streamer struct {
 	channels *channels.Channels
 	wfengine wfengine.Interface
 
-	wg       sync.WaitGroup
-	inflight atomic.Int64
+	wg sync.WaitGroup
 }
 
 // run starts the streamer and blocks until the stream is closed or an error occurs.
@@ -70,11 +68,9 @@ func (s *streamer) receive(ctx context.Context) error {
 		}
 
 		s.wg.Add(1)
-		s.inflight.Add(1)
 		go func() {
 			defer func() {
 				s.wg.Done()
-				s.inflight.Add(-1)
 			}()
 
 			result := s.handleJob(ctx, resp)
@@ -108,9 +104,7 @@ func (s *streamer) outgoing(ctx context.Context) error {
 				return err
 			}
 		case <-ctx.Done():
-			if s.inflight.Load() == 0 && len(s.resultCh) == 0 {
-				return ctx.Err()
-			}
+			return ctx.Err()
 		}
 	}
 }
