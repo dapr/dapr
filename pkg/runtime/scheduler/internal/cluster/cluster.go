@@ -128,8 +128,8 @@ func (c *Cluster) RunClients(ctx context.Context, clients *clients.Clients) erro
 
 		err := c.loop(lctx, clients, appRunning, actorTypes)
 		cancel()
-		if cerr := ctx.Err(); cerr != nil {
-			return cerr
+		if errors.Is(err, context.Canceled) {
+			return nil
 		}
 
 		if err != nil {
