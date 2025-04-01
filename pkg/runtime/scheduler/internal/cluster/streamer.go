@@ -55,7 +55,10 @@ func (s *streamer) run(ctx context.Context) error {
 // scheduler job messages. It then invokes the appropriate app or actor
 // reminder based on the job metadata.
 func (s *streamer) receive(ctx context.Context) error {
-	defer s.wg.Wait()
+	defer func() {
+		s.wg.Wait()
+		s.stream.CloseSend()
+	}()
 
 	for {
 		resp, err := s.stream.Recv()
