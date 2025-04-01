@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -83,7 +84,13 @@ func (c *Clients) All() []schedulerv1pb.SchedulerClient {
 }
 
 func (c *Clients) Close() {
+	var wg sync.WaitGroup
+	wg.Add(len(c.closeFns))
 	for _, closeFn := range c.closeFns {
-		closeFn()
+		go func() {
+			closeFn()
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 }
