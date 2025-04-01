@@ -22,6 +22,8 @@ import (
 	"sync"
 
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/kit/logger"
+
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compsecret "github.com/dapr/dapr/pkg/components/secretstores"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -29,8 +31,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/consts"
-	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.processor.secret")
@@ -197,6 +199,8 @@ func isEnvVarAllowed(key string) bool {
 	case key == "":
 		return false
 	case key == "APP_API_TOKEN":
+		return false
+	case key == security.GetAppTokenHeader():
 		return false
 	case strings.HasPrefix(key, "DAPR_"):
 		return false
