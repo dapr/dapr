@@ -121,56 +121,6 @@ func TestAppHealth_setResult(t *testing.T) {
 	assert.Equal(t, threshold+3, h.failureCount.Load())
 }
 
-func TestAppHealth_ratelimitReports(t *testing.T) {
-	clock := clocktesting.NewFakeClock(time.Now())
-	h := New(config.AppHealthConfig{}, nil)
-	h.clock = clock
-
-	// First run should always succeed
-	require.True(t, h.ratelimitReports())
-
-	// Run again without waiting
-	require.False(t, h.ratelimitReports())
-	require.False(t, h.ratelimitReports())
-
-	// Step and test
-	clock.Step(reportMinInterval)
-	require.True(t, h.ratelimitReports())
-	require.False(t, h.ratelimitReports())
-
-	// Run tests for 1 second, constantly
-	// Should succeed only 10 times.
-	clock.Step(reportMinInterval)
-	firehose := func(start time.Time, step time.Duration) (passed int64) {
-		for clock.Now().Sub(start) < time.Second*10 {
-			if h.ratelimitReports() {
-				passed++
-			}
-			clock.Step(step)
-		}
-		return passed
-	}
-
-	passed := firehose(clock.Now(), 10*time.Millisecond)
-	assert.Equal(t, int64(10), passed)
-
-	// Repeat, but run with 3 parallel goroutines
-	wg := sync.WaitGroup{}
-	totalPassed := atomic.Int64{}
-	start := clock.Now()
-	wg.Add(3)
-	for range 3 {
-		go func() {
-			totalPassed.Add(firehose(start, 3*time.Millisecond))
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-	passed = totalPassed.Load()
-	assert.GreaterOrEqual(t, passed, int64(8))
-	assert.LessOrEqual(t, passed, int64(12))
-}
-
 func Test_StartProbes(t *testing.T) {
 	t.Run("closing context should return", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())

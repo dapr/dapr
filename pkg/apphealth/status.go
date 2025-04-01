@@ -16,11 +16,6 @@ package apphealth
 
 import "time"
 
-const (
-	// reportMinInterval is the minimum interval between health reports.
-	reportMinInterval = time.Second
-)
-
 type Status struct {
 	IsHealthy bool    `json:"ishealthy"`
 	TimeUnix  int64   `json:"timeUnix"`
