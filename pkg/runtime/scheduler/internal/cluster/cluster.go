@@ -128,12 +128,12 @@ func (c *Cluster) RunClients(ctx context.Context, clients *clients.Clients) erro
 
 		err := c.loop(lctx, clients, appRunning, actorTypes)
 		cancel()
-		if errors.Is(err, context.Canceled) {
-			return nil
+		if cerr := ctx.Err(); cerr != nil {
+			return cerr
 		}
 
 		if err != nil {
-			return fmt.Errorf("error watching scheduler jobs: %v", err)
+			return fmt.Errorf("error watching scheduler jobs: %w", err)
 		}
 	}
 }
