@@ -165,14 +165,14 @@ for issueOrPR in issuesOrPRs:
         a = [l.login for l in issueOrPR.assignees]
         if len(a) == 0:
             print("Issue is unassigned: {}".format(url))
-        for c in a: 
+        for c in a:
             contributors.add("@" + str(c))
     repo = issueOrPR.repository
     if repo == "docs":
         # Do not add this to the list of changes (but add to contributors).
         continue
     hasNote = False
-    if not (issueOrPR.body is None):
+    if issueOrPR.body is not None:
         match = re.search(releaseNoteRegex, issueOrPR.body, re.M)
         if match:
             note = match.group(1).strip()
@@ -212,7 +212,7 @@ for change in sorted(changes, key=lambda c: (get_repo_priority(c[0].name), c[0].
     # set issue url
     changeUrl = " [" + str(change[1].number) + "](" + change[4] + ")"
     changeLines.append("- " + change[2] + changeUrl)
-    
+
     if breakingChange:
         if lastBreakingChangeSubtitle != subtitle:
             lastBreakingChangeSubtitle = subtitle
