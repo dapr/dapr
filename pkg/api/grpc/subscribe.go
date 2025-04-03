@@ -27,32 +27,28 @@ import (
 // to close stream.
 func (a *api) SubscribeTopicEventsAlpha1(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1Server) error {
 	errCh := make(chan error, 2)
-	subDone := make(chan struct{})
-	a.wg.Add(2)
 
+	a.wg.Add(2)
 	go func() {
 		defer a.wg.Done()
 		select {
+		case <-stream.Context().Done():
+			errCh <- stream.Context().Err()
 		case <-a.closeCh:
 			errCh <- errors.New("api server closed")
-		case <-subDone:
 		}
 	}()
 
+	var ireq *runtimev1pb.SubscribeTopicEventsRequestAlpha1
+	var err error
 	go func() {
 		defer a.wg.Done()
-		errCh <- a.streamSubscribe(stream, subDone)
+		ireq, err = stream.Recv()
+		errCh <- err
 	}()
 
-	return <-errCh
-}
-
-func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1Server, subDone chan struct{}) error {
-	defer close(subDone)
-
-	ireq, err := stream.Recv()
-	if err != nil {
-		return err
+	if cerr := <-errCh; cerr != nil {
+		return cerr
 	}
 
 	req := ireq.GetInitialRequest()

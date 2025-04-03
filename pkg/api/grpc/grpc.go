@@ -94,9 +94,10 @@ type api struct {
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
 	processor             *processor.Processor
-	closed                atomic.Bool
-	closeCh               chan struct{}
 	wg                    sync.WaitGroup
+
+	closeCh chan struct{}
+	closed  atomic.Bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -518,7 +519,11 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
-			req.Metadata[sanitizedKey] = val[0]
+			// Not to overwrite the existing metadata
+			// But if the key is traceparent or tracestate, we allow overwrite the existing metadata.
+			if _, exist := req.Metadata[sanitizedKey]; !exist || (key == diag.TraceparentHeader || key == diag.TracestateHeader) {
+				req.Metadata[sanitizedKey] = val[0]
+			}
 		}
 	}
 
@@ -1443,6 +1448,7 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 
 func (a *api) Close() error {
 	defer a.wg.Wait()
+
 	if a.closed.CompareAndSwap(false, true) {
 		close(a.closeCh)
 	}
