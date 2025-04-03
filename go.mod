@@ -12,6 +12,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.15.1-0.20250312205032-d8ac01bc76b8
+	// github.com/ManuInNZ/dapr-components-contrib v1.15.1-0.20250323214101-76ad78a39226
 	github.com/dapr/durabletask-go v0.6.5
 	github.com/dapr/kit v0.15.1
 	github.com/diagridio/go-etcd-cron v0.4.4
@@ -88,14 +89,18 @@ require (
 
 require (
 	cloud.google.com/go v0.115.1 // indirect
+	cloud.google.com/go/ai v0.6.0 // indirect
+	cloud.google.com/go/aiplatform v1.68.0 // indirect
 	cloud.google.com/go/auth v0.9.3 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.4 // indirect
 	cloud.google.com/go/compute/metadata v0.5.2 // indirect
 	cloud.google.com/go/datastore v1.19.0 // indirect
 	cloud.google.com/go/iam v1.2.1 // indirect
+	cloud.google.com/go/longrunning v0.6.1 // indirect
 	cloud.google.com/go/pubsub v1.43.0 // indirect
 	cloud.google.com/go/secretmanager v1.14.1 // indirect
 	cloud.google.com/go/storage v1.43.0 // indirect
+	cloud.google.com/go/vertexai v0.10.0 // indirect
 	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20230118042253-4f159a2b38f3 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.1 // indirect
@@ -261,6 +266,7 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/flatbuffers v23.5.26+incompatible // indirect
+	github.com/google/generative-ai-go v0.14.0 // indirect
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/pprof v0.0.0-20240525223248-4bfdf5a9a2af // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
@@ -497,7 +503,8 @@ replace (
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
-// replace github.com/dapr/components-contrib => ../components-contrib
+replace github.com/dapr/components-contrib => github.com/ManuInNZ/dapr-components-contrib v1.15.1-0.20250323214101-76ad78a39226
+
 // replace github.com/dapr/kit => ../kit
 //
 // Then, run `make modtidy-all` in this repository.
