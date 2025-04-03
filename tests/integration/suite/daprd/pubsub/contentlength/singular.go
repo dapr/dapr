@@ -54,7 +54,7 @@ func (s *singular) Setup(t *testing.T) []framework.Option {
 	socket1 := socket.New(t)
 	inmem1 := pubsub.New(t,
 		pubsub.WithSocket(socket1),
-		pubsub.WithPullMessagesChannel(s.pmrChHTTP),
+		pubsub.WithPullMessagesChannel(nil, s.pmrChHTTP),
 		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t)),
 	)
 
@@ -84,7 +84,7 @@ spec:
 	socket2 := socket.New(t)
 	inmem2 := pubsub.New(t,
 		pubsub.WithSocket(socket2),
-		pubsub.WithPullMessagesChannel(s.pmrChGRPC),
+		pubsub.WithPullMessagesChannel(nil, s.pmrChGRPC),
 		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t)),
 	)
 

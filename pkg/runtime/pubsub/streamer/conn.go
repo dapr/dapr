@@ -15,7 +15,6 @@ package streamer
 
 import (
 	"sync"
-	"sync/atomic"
 
 	rtv1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -26,7 +25,6 @@ type conn struct {
 	stream           rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
 	closeCh          chan struct{}
-	closed           atomic.Bool
 }
 
 func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, func()) {
