@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 )
 
 type fakeProxyStream struct {
@@ -41,7 +42,7 @@ func (f *fakeProxyStream) Context() context.Context {
 	}
 
 	ctx := context.Background()
-	ctx = grpcMetadata.NewIncomingContext(ctx, grpcMetadata.New(map[string]string{GRPCProxyAppIDKey: f.appID}))
+	ctx = grpcMetadata.NewIncomingContext(ctx, grpcMetadata.New(map[string]string{diagConsts.GRPCProxyAppIDKey: f.appID}))
 	ctx, _ = metadata.SetMetadataInTapHandle(ctx, nil)
 	return ctx
 }

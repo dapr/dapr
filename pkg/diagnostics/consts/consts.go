@@ -61,6 +61,25 @@ const (
 	// Keys used in the context's metadata for streaming calls
 	// Note: these keys must always be all-lowercase
 	DaprCallLocalStreamMethodKey = "__dapr_calllocalstream_method"
+
+	// We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
+	// Reference : https://github.com/census-instrumentation/opencensus-go/blob/master/plugin/ochttp/propagation/tracecontext/propagation.go
+	// Trace context headers
+	TraceparentHeader = "traceparent"
+	TracestateHeader  = "tracestate"
+	BaggageHeader     = "baggage"
+
+	GRPCTraceContextKey = "grpc-trace-bin"
+	GRPCProxyAppIDKey   = "dapr-app-id"
+
+	// Trace sampling constants
+	SupportedVersion = 0
+	MaxVersion       = 254
+	MaxTracestateLen = 512
+
+	// MaxBaggageLength is the maximum length of a baggage header according to W3C spec
+	// Reverence: https://www.w3.org/TR/baggage/#limits
+	MaxBaggageLength = 8192
 )
 
 // GrpcAppendSpanAttributesFn is the interface that applies to gRPC requests that add span attributes.

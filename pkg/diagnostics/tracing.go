@@ -42,7 +42,7 @@ func SpanContextToW3CString(sc trace.SpanContext) string {
 	spanID := sc.SpanID()
 	traceFlags := sc.TraceFlags()
 	return fmt.Sprintf("%x-%x-%x-%x",
-		[]byte{supportedVersion},
+		[]byte{diagConsts.SupportedVersion},
 		traceID[:],
 		spanID[:],
 		[]byte{byte(traceFlags)})
@@ -71,7 +71,7 @@ func SpanContextFromW3CString(h string) (sc trace.SpanContext, ok bool) {
 		return trace.SpanContext{}, false
 	}
 	version := int(ver[0])
-	if version > maxVersion {
+	if version > diagConsts.MaxVersion {
 		return trace.SpanContext{}, false
 	}
 

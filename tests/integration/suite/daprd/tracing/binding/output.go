@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 	grpcMetadata "google.golang.org/grpc/metadata"
 
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
@@ -42,15 +43,22 @@ type output struct {
 	daprd   *daprd.Daprd
 
 	traceparent atomic.Bool
+	baggage     atomic.Bool
 }
 
 func (b *output) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		if tp := r.Header.Get("traceparent"); tp != "" {
+		if tp := r.Header.Get(diagConsts.TraceparentHeader); tp != "" {
 			b.traceparent.Store(true)
 		} else {
 			b.traceparent.Store(false)
+		}
+
+		if baggage := r.Header.Get(diagConsts.BaggageHeader); baggage != "" {
+			b.baggage.Store(true)
+		} else {
+			b.baggage.Store(false)
 		}
 
 		w.Write([]byte(`OK`))
@@ -83,7 +91,7 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 	httpClient := client.HTTP(t)
 	client := b.daprd.GRPCClient(t, ctx)
 
-	t.Run("no traceparent header provided", func(t *testing.T) {
+	t.Run("no traceparent header or baggage provided", func(t *testing.T) {
 		// invoke binding
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/http-binding-traceparent", b.daprd.HTTPPort())
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader("{\"operation\":\"get\"}"))
@@ -93,6 +101,7 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.True(t, b.traceparent.Load())
+		assert.False(t, b.baggage.Load())
 
 		invokereq := runtime.InvokeBindingRequest{
 			Name:      "http-binding-traceparent",
@@ -104,9 +113,10 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NotNil(t, invokeresp)
 		assert.True(t, b.traceparent.Load())
+		assert.False(t, b.baggage.Load())
 	})
 
-	t.Run("traceparent header provided", func(t *testing.T) {
+	t.Run("traceparent and baggage headers provided", func(t *testing.T) {
 		// invoke binding
 		ctx := t.Context()
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/http-binding-traceparent", b.daprd.HTTPPort())
@@ -114,13 +124,16 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		tp := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-		req.Header.Set("traceparent", tp)
+		req.Header.Set(diagConsts.TraceparentHeader, tp)
+		bag := "key1=value1,key2=value2"
+		req.Header.Set(diagConsts.BaggageHeader, bag)
 
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.True(t, b.traceparent.Load())
+		assert.True(t, b.baggage.Load())
 
 		invokereq := runtime.InvokeBindingRequest{
 			Name:      "http-binding-traceparent",
@@ -129,10 +142,14 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 
 		// invoke binding
 		tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-02"
-		ctx = grpcMetadata.AppendToOutgoingContext(ctx, "traceparent", tp)
+		ctx = grpcMetadata.AppendToOutgoingContext(ctx,
+			diagConsts.TraceparentHeader, tp,
+			diagConsts.BaggageHeader, bag,
+		)
 		invokeresp, err := client.InvokeBinding(ctx, &invokereq)
 		require.NoError(t, err)
 		require.NotNil(t, invokeresp)
 		assert.True(t, b.traceparent.Load())
+		assert.True(t, b.baggage.Load())
 	})
 }
