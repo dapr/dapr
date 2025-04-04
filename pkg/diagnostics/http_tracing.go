@@ -37,34 +37,7 @@ func handleHTTPBaggage(r *http.Request, rw http.ResponseWriter) *http.Request {
 		return r
 	}
 
-	var validBaggage []string
-	var members []otelbaggage.Member
-	for _, baggageHeader := range baggageHeaders {
-		if baggageHeader == "" {
-			continue
-		}
-
-		// Split baggage values & validate each one
-		items := strings.Split(baggageHeader, ",")
-		for _, item := range items {
-			item = strings.TrimSpace(item)
-			if item == "" {
-				continue
-			}
-			if diagUtils.IsValidBaggage(item) {
-				// For items with properties, we need to split only the key=value part
-				parts := strings.SplitN(item, ";", 2)
-				keyValue := strings.SplitN(parts[0], "=", 2)
-				if len(keyValue) == 2 {
-					if member, err := otelbaggage.NewMember(keyValue[0], keyValue[1]); err == nil {
-						members = append(members, member)
-						// Keep the entire item including properties
-						validBaggage = append(validBaggage, item)
-					}
-				}
-			}
-		}
-	}
+	validBaggage, members := diagUtils.ProcessBaggageValues(baggageHeaders)
 
 	// Update metadata with only valid baggage
 	if len(validBaggage) > 0 {
