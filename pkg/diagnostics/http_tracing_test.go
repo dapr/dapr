@@ -413,6 +413,17 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		// Check response headers - only valid baggage should be propagated
 		assert.Equal(t, "key1=value1;prop1=val1,key2=value2", rr.Header().Get(diagConsts.BaggageHeader))
 	})
+
+	t.Run("multiple, separate baggage headers", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Add(diagConsts.BaggageHeader, "key1=value1")
+		req.Header.Add(diagConsts.BaggageHeader, "key2=value2")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		// Verify the baggage headers were combined
+		assert.Equal(t, "key1=value1,key2=value2", rr.Header().Get(diagConsts.BaggageHeader))
+	})
 }
 
 func TestTraceStatusFromHTTPCode(t *testing.T) {

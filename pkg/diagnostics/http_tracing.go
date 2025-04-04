@@ -32,29 +32,46 @@ import (
 // handleHTTPBaggage processes baggage from the request, validates it, and updates both the context and response headers.
 // It returns the updated request with the new context.
 func handleHTTPBaggage(r *http.Request, rw http.ResponseWriter) *http.Request {
-	baggageHeader := r.Header.Get(diagConsts.BaggageHeader)
-	if baggageHeader == "" {
+	baggageHeaders := r.Header.Values(diagConsts.BaggageHeader)
+	if len(baggageHeaders) == 0 {
 		return r
 	}
 
-	// Split baggage values & validate each one
-	baggageValues := strings.Split(baggageHeader, ",")
 	var validBaggage []string
-
-	for _, b := range baggageValues {
-		b = strings.TrimSpace(b)
-		if b == "" {
+	var members []otelbaggage.Member
+	for _, baggageHeader := range baggageHeaders {
+		if baggageHeader == "" {
 			continue
 		}
-		if diagUtils.IsValidBaggage(b) {
-			if member, err := otelbaggage.Parse(b); err == nil {
-				r = r.WithContext(otelbaggage.ContextWithBaggage(r.Context(), member))
-				validBaggage = append(validBaggage, b)
+
+		// Split baggage values & validate each one
+		items := strings.Split(baggageHeader, ",")
+		for _, item := range items {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			if diagUtils.IsValidBaggage(item) {
+				// For items with properties, we need to split only the key=value part
+				parts := strings.SplitN(item, ";", 2)
+				keyValue := strings.SplitN(parts[0], "=", 2)
+				if len(keyValue) == 2 {
+					if member, err := otelbaggage.NewMember(keyValue[0], keyValue[1]); err == nil {
+						members = append(members, member)
+						// Keep the entire item including properties
+						validBaggage = append(validBaggage, item)
+					}
+				}
 			}
 		}
 	}
 
+	// Update metadata with only valid baggage
 	if len(validBaggage) > 0 {
+		// Create a (single) baggage with all members
+		if baggage, err := otelbaggage.New(members...); err == nil {
+			r = r.WithContext(otelbaggage.ContextWithBaggage(r.Context(), baggage))
+		}
 		rw.Header().Set(diagConsts.BaggageHeader, strings.Join(validBaggage, ","))
 	}
 

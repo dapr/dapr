@@ -329,6 +329,21 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 		require.NotEmpty(t, bag)
 		assert.Equal(t, "key1=value1;prop1=val1,key2=value2", bag[0])
 	})
+
+	t.Run("multiple, separate baggage headers", func(t *testing.T) {
+		md := grpcMetadata.MD{}
+		md.Append(diagConsts.BaggageHeader, "key1=value1")
+		md.Append(diagConsts.BaggageHeader, "key2=value2")
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), md)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify the baggage headers were combined
+		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		assert.Equal(t, "key1=value1,key2=value2", md.Get(diagConsts.BaggageHeader)[0])
+	})
 }
 
 func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
