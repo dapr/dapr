@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	otelbaggage "go.opentelemetry.io/otel/baggage"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -28,15 +29,37 @@ import (
 	"github.com/dapr/dapr/pkg/responsewriter"
 )
 
-// We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
-// Reference : https://github.com/census-instrumentation/opencensus-go/blob/master/plugin/ochttp/propagation/tracecontext/propagation.go
-const (
-	supportedVersion  = 0
-	maxVersion        = 254
-	maxTracestateLen  = 512
-	TraceparentHeader = "traceparent"
-	TracestateHeader  = "tracestate"
-)
+// handleHTTPBaggage processes baggage from the request, validates it, and updates both the context and response headers.
+// It returns the updated request with the new context.
+func handleHTTPBaggage(r *http.Request, rw http.ResponseWriter) *http.Request {
+	baggageHeader := r.Header.Get(diagConsts.BaggageHeader)
+	if baggageHeader == "" {
+		return r
+	}
+
+	// Split baggage values & validate each one
+	baggageValues := strings.Split(baggageHeader, ",")
+	var validBaggage []string
+
+	for _, b := range baggageValues {
+		b = strings.TrimSpace(b)
+		if b == "" {
+			continue
+		}
+		if diagUtils.IsValidBaggage(b) {
+			if member, err := otelbaggage.Parse(b); err == nil {
+				r = r.WithContext(otelbaggage.ContextWithBaggage(r.Context(), member))
+				validBaggage = append(validBaggage, b)
+			}
+		}
+	}
+
+	if len(validBaggage) > 0 {
+		rw.Header().Set(diagConsts.BaggageHeader, strings.Join(validBaggage, ","))
+	}
+
+	return r
+}
 
 // HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
 func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpec) http.Handler {
@@ -51,6 +74,8 @@ func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpe
 
 		// Wrap the writer in a ResponseWriter so we can collect stats such as status code and size
 		rw := responsewriter.EnsureResponseWriter(w)
+
+		r = handleHTTPBaggage(r, rw)
 
 		// Before the response is written, we need to add the tracing headers
 		rw.Before(func(rw responsewriter.ResponseWriter) {
@@ -67,7 +92,7 @@ func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpe
 			}
 
 			// Check if response has traceparent header and add if absent
-			if rw.Header().Get(TraceparentHeader) == "" {
+			if rw.Header().Get(diagConsts.TraceparentHeader) == "" {
 				span = diagUtils.SpanFromContext(r.Context())
 				// Using Header.Set here because we know the traceparent header isn't set
 				SpanContextToHTTPHeaders(span.SpanContext(), rw.Header().Set)
@@ -124,7 +149,7 @@ func StartProducerSpanChildFromParent(r *http.Request, parentSpan trace.Span) tr
 
 // SpanContextFromRequest extracts a span context from incoming requests.
 func SpanContextFromRequest(r *http.Request) (sc trace.SpanContext) {
-	h := r.Header.Get(TraceparentHeader)
+	h := r.Header.Get(diagConsts.TraceparentHeader)
 	if h == "" {
 		return trace.SpanContext{}
 	}
@@ -165,7 +190,7 @@ func traceStatusFromHTTPCode(httpCode int) (otelcodes.Code, string) {
 }
 
 func tracestateFromRequest(r *http.Request) *trace.TraceState {
-	h := r.Header.Get(TracestateHeader)
+	h := r.Header.Get(diagConsts.TracestateHeader)
 	return TraceStateFromW3CString(h)
 }
 
@@ -176,13 +201,13 @@ func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, strin
 		return
 	}
 	h := SpanContextToW3CString(sc)
-	setHeader(TraceparentHeader, h)
+	setHeader(diagConsts.TraceparentHeader, h)
 	tracestateToHeader(sc, setHeader)
 }
 
 func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
-	if h := TraceStateToW3CString(sc); h != "" && len(h) <= maxTracestateLen {
-		setHeader(TracestateHeader, h)
+	if h := TraceStateToW3CString(sc); h != "" && len(h) <= diagConsts.MaxTracestateLen {
+		setHeader(diagConsts.TracestateHeader, h)
 	}
 }
 

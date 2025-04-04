@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -259,6 +260,74 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 		bag := md.Get(diagConsts.BaggageHeader)
 		require.NotEmpty(t, bag)
 		assert.Equal(t, "key1=value1,key2=value2", bag[0])
+	})
+
+	t.Run("mixed valid and invalid baggage items", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
+			diagConsts.BaggageHeader, "key1=value1,invalid-format-no-equals,key2=value2",
+		))
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage)
+		member := baggage.Member("key1")
+		assert.Equal(t, "value1", member.Value())
+		member = baggage.Member("key2")
+		assert.Equal(t, "value2", member.Value())
+
+		// baggage headers are combined in metadata
+		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		bag := md.Get(diagConsts.BaggageHeader)
+		require.NotEmpty(t, bag)
+		assert.Equal(t, "key1=value1,key2=value2", bag[0])
+	})
+
+	t.Run("baggage with max length", func(t *testing.T) {
+		// Create context with baggage header at max length
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
+			diagConsts.BaggageHeader, fmt.Sprintf("key1=value1,key2=%s", strings.Repeat("x", diagConsts.MaxBaggageLength-20)),
+		))
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage)
+		member := baggage.Member("key1")
+		assert.Equal(t, "value1", member.Value())
+		member = baggage.Member("key2")
+		assert.Equal(t, strings.Repeat("x", diagConsts.MaxBaggageLength-20), member.Value())
+
+		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		bag := md.Get(diagConsts.BaggageHeader)
+		require.NotEmpty(t, bag)
+		assert.Equal(t, fmt.Sprintf("key1=value1,key2=%s", strings.Repeat("x", diagConsts.MaxBaggageLength-20)), bag[0])
+	})
+
+	t.Run("multiple baggage items with mixed validity", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
+			diagConsts.BaggageHeader, "key1=value1;prop1=val1,invalid;format,key2=value2",
+		))
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage)
+		member := baggage.Member("key1")
+		assert.Equal(t, "value1", member.Value())
+		member = baggage.Member("key2")
+		assert.Equal(t, "value2", member.Value())
+
+		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		bag := md.Get(diagConsts.BaggageHeader)
+		require.NotEmpty(t, bag)
+		assert.Equal(t, "key1=value1;prop1=val1,key2=value2", bag[0])
 	})
 }
 

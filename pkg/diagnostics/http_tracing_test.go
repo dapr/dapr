@@ -92,7 +92,7 @@ func TestSpanContextFromRequest(t *testing.T) {
 			req := &http.Request{
 				Header: make(http.Header),
 			}
-			req.Header.Add("traceparent", tt.header)
+			req.Header.Add(diagConsts.TraceparentHeader, tt.header)
 
 			gotSc := SpanContextFromRequest(req)
 			wantSc := trace.NewSpanContext(tt.wantSc)
@@ -145,7 +145,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 		sc := trace.SpanContext{}
 		SpanContextToHTTPHeaders(sc, req.Header.Set)
 
-		assert.Empty(t, req.Header.Get(TraceparentHeader))
+		assert.Empty(t, req.Header.Get(diagConsts.TraceparentHeader))
 	})
 }
 
@@ -214,7 +214,7 @@ func TestSpanContextToResponse(t *testing.T) {
 			wantSc := trace.NewSpanContext(tt.scConfig)
 			SpanContextToHTTPHeaders(wantSc, resp.Header().Set)
 
-			h := resp.Header().Get("traceparent")
+			h := resp.Header().Get(diagConsts.TraceparentHeader)
 			got, _ := SpanContextFromW3CString(h)
 
 			assert.Equalf(t, wantSc, got, "SpanContextToResponse() got = %v, want %v", got, wantSc)
@@ -267,7 +267,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		r := newTraceRequest(
 			requestBody, "/v1.0/state/statestore",
 			map[string]string{
-				"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+				diagConsts.TraceparentHeader: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
 			},
 		)
 		w := httptest.NewRecorder()
@@ -308,7 +308,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(w, r)
 		span := diagUtils.SpanFromContext(r.Context())
 		sc := span.SpanContext()
-		assert.Equal(t, w.Header().Get(TraceparentHeader), SpanContextToW3CString(sc))
+		assert.Equal(t, w.Header().Get(diagConsts.TraceparentHeader), SpanContextToW3CString(sc))
 	})
 
 	t.Run("traceparent given in response", func(t *testing.T) {
@@ -319,12 +319,99 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			},
 		)
 		w := httptest.NewRecorder()
-		w.Header().Set(TraceparentHeader, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-		w.Header().Set(TracestateHeader, "xyz=t61pCWkhMzZ")
+		w.Header().Set(diagConsts.TraceparentHeader, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+		w.Header().Set(diagConsts.TracestateHeader, "xyz=t61pCWkhMzZ")
 		handler.ServeHTTP(w, r)
 		span := diagUtils.SpanFromContext(r.Context())
 		sc := span.SpanContext()
-		assert.NotEqual(t, w.Header().Get(TraceparentHeader), SpanContextToW3CString(sc))
+		assert.NotEqual(t, w.Header().Get(diagConsts.TraceparentHeader), SpanContextToW3CString(sc))
+	})
+
+	t.Run("baggage header propagation", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Add(diagConsts.BaggageHeader, "key1=value1")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, "key1=value1", rr.Header().Get(diagConsts.BaggageHeader))
+	})
+
+	t.Run("empty baggage header", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Add(diagConsts.BaggageHeader, "")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		assert.Empty(t, rr.Header().Get(diagConsts.BaggageHeader))
+	})
+
+	t.Run("baggage with properties", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Add(diagConsts.BaggageHeader, "key1=value1;prop1=propvalue1,key2=value2;prop2=propvalue2")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, "key1=value1;prop1=propvalue1,key2=value2;prop2=propvalue2", rr.Header().Get(diagConsts.BaggageHeader))
+	})
+
+	t.Run("baggage with special characters", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Add(diagConsts.BaggageHeader, "key1=value1%20with%20spaces,key2=value2%2Fwith%2Fslashes")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, "key1=value1%20with%20spaces,key2=value2%2Fwith%2Fslashes", rr.Header().Get(diagConsts.BaggageHeader))
+	})
+
+	t.Run("invalid baggage header", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Add(diagConsts.BaggageHeader, "invalid-baggage")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		assert.Empty(t, rr.Header().Get(diagConsts.BaggageHeader))
+	})
+
+	t.Run("multiple baggage values in header", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Add(diagConsts.BaggageHeader, "key1=value1,key2=value2")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		assert.Equal(t, "key1=value1,key2=value2", rr.Header().Get(diagConsts.BaggageHeader))
+	})
+
+	t.Run("mixed valid and invalid baggage items", func(t *testing.T) {
+		// Create request with both valid and invalid baggage
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Add(diagConsts.BaggageHeader, "key1=value1,invalid-format-no-equals,key2=value2")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		// Only valid baggage items should be propagated
+		assert.Equal(t, "key1=value1,key2=value2", rr.Header().Get(diagConsts.BaggageHeader))
+	})
+
+	t.Run("baggage with max length", func(t *testing.T) {
+		// Create test request with baggage at max length
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Add(diagConsts.BaggageHeader, "key1=value1,key2="+strings.Repeat("x", diagConsts.MaxBaggageLength-20))
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		// Check response headers - baggage at max length should be propagated
+		assert.NotEmpty(t, rr.Header().Get(diagConsts.BaggageHeader))
+	})
+
+	t.Run("multiple baggage items with mixed validity", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Add(diagConsts.BaggageHeader, "key1=value1;prop1=val1,invalid;format,key2=value2")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		// Check response headers - only valid baggage should be propagated
+		assert.Equal(t, "key1=value1;prop1=val1,key2=value2", rr.Header().Get(diagConsts.BaggageHeader))
 	})
 }
 

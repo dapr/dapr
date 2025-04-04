@@ -49,27 +49,51 @@ func handleBaggage(ctx context.Context) context.Context {
 	}
 
 	baggageValues, exists := md[diagConsts.BaggageHeader]
-	if !exists {
+	if !exists || len(baggageValues) == 0 {
 		return ctx
 	}
 
 	var validBaggage []string
-	for _, b := range baggageValues {
-		if diagUtils.IsValidBaggage(b) {
-			if member, err := otelbaggage.Parse(b); err == nil {
-				ctx = otelbaggage.ContextWithBaggage(ctx, member)
-				validBaggage = append(validBaggage, b)
+	var members []otelbaggage.Member
+	for _, baggageHeader := range baggageValues {
+		baggageHeader = strings.TrimSpace(baggageHeader)
+		if baggageHeader == "" {
+			continue
+		}
+
+		// Split baggage values & validate each one
+		items := strings.Split(baggageHeader, ",")
+		for _, item := range items {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			if diagUtils.IsValidBaggage(item) {
+				// For items with properties, we need to split only the key=value part
+				parts := strings.SplitN(item, ";", 2)
+				keyValue := strings.SplitN(parts[0], "=", 2)
+				if len(keyValue) == 2 {
+					if member, err := otelbaggage.NewMember(keyValue[0], keyValue[1]); err == nil {
+						members = append(members, member)
+						// Keep the entire item including properties
+						validBaggage = append(validBaggage, item)
+					}
+				}
 			}
 		}
 	}
 
+	// Update metadata with only valid baggage
 	if len(validBaggage) > 0 {
 		md[diagConsts.BaggageHeader] = []string{strings.Join(validBaggage, ",")}
+		// Create a (single) baggage with all members
+		if baggage, err := otelbaggage.New(members...); err == nil {
+			ctx = otelbaggage.ContextWithBaggage(ctx, baggage)
+		}
 	} else {
 		// Remove the baggage header if no valid entries
 		delete(md, diagConsts.BaggageHeader)
 	}
-
 	return grpcMetadata.NewIncomingContext(ctx, md)
 }
 
@@ -153,7 +177,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		// set header, ensures consistency with traceparent and tracestate headers
 		md, _ := grpcMetadata.FromIncomingContext(ctx)
 		if baggage, exists := md[diagConsts.BaggageHeader]; exists {
-			grpc.SetHeader(ctx, grpcMetadata.Pairs(diagConsts.BaggageHeader, strings.Join(baggage, ",")))
+			ss.SetHeader(grpcMetadata.Pairs(diagConsts.BaggageHeader, strings.Join(baggage, ",")))
 		}
 		// This middleware is shared by multiple services and proxied requests, which need to be handled separately
 		switch {
