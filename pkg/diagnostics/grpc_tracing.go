@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	otelbaggage "go.opentelemetry.io/otel/baggage"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
@@ -33,14 +34,40 @@ import (
 )
 
 const (
-	GRPCTraceContextKey       = "grpc-trace-bin"
-	GRPCProxyAppIDKey         = "dapr-app-id"
 	daprInternalPrefix        = "/dapr.proto.internals."
 	daprRuntimePrefix         = "/dapr.proto.runtime."
 	daprInvokeServiceMethod   = "/dapr.proto.runtime.v1.Dapr/InvokeService"
 	daprCallLocalStreamMethod = "/dapr.proto.internals.v1.ServiceInvocation/CallLocalStream"
 	daprWorkflowPrefix        = "/TaskHubSidecarService"
 )
+
+// handleBaggage processes baggage from incoming metadata, validates it, and updates the context accordingly.
+func handleBaggage(ctx context.Context) context.Context {
+	md, ok := grpcMetadata.FromIncomingContext(ctx)
+	if !ok {
+		return ctx
+	}
+
+	baggageValues, exists := md[diagConsts.BaggageHeader]
+	if !exists || len(baggageValues) == 0 {
+		return ctx
+	}
+
+	validBaggage, members := diagUtils.ProcessBaggageValues(baggageValues)
+
+	// Update metadata with only valid baggage
+	if len(validBaggage) > 0 {
+		md[diagConsts.BaggageHeader] = []string{strings.Join(validBaggage, ",")}
+		// Create a (single) baggage with all members
+		if baggage, err := otelbaggage.New(members...); err == nil {
+			ctx = otelbaggage.ContextWithBaggage(ctx, baggage)
+		}
+	} else {
+		// Remove the baggage header if no valid entries
+		delete(md, diagConsts.BaggageHeader)
+	}
+	return grpcMetadata.NewIncomingContext(ctx, md)
+}
 
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
 func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc.UnaryServerInterceptor {
@@ -51,6 +78,14 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			prefixedMetadata map[string]string
 			reqSpanAttr      map[string]string
 		)
+
+		ctx = handleBaggage(ctx)
+		// set header for outgoing response headers
+		md, _ := grpcMetadata.FromIncomingContext(ctx)
+		if baggage, exists := md[diagConsts.BaggageHeader]; exists {
+			grpc.SetHeader(ctx, grpcMetadata.Pairs(diagConsts.BaggageHeader, strings.Join(baggage, ",")))
+		}
+
 		sc, _ := SpanContextFromIncomingGRPCMetadata(ctx)
 		// This middleware is shared by internal gRPC for service invocation and API
 		// so that it needs to handle separately.
@@ -89,7 +124,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		// Add grpc-trace-bin header for all non-invocation api's
 		if info.FullMethod != daprInvokeServiceMethod {
 			traceContextBinary := diagUtils.BinaryFromSpanContext(span.SpanContext())
-			grpc.SetHeader(ctx, grpcMetadata.Pairs(GRPCTraceContextKey, string(traceContextBinary)))
+			grpc.SetHeader(ctx, grpcMetadata.Pairs(diagConsts.GRPCTraceContextKey, string(traceContextBinary)))
 		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
@@ -110,7 +145,12 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		)
 
 		ctx := ss.Context()
-
+		ctx = handleBaggage(ctx)
+		// set header, ensures consistency with traceparent and tracestate headers
+		md, _ := grpcMetadata.FromIncomingContext(ctx)
+		if baggage, exists := md[diagConsts.BaggageHeader]; exists {
+			ss.SetHeader(grpcMetadata.Pairs(diagConsts.BaggageHeader, strings.Join(baggage, ",")))
+		}
 		// This middleware is shared by multiple services and proxied requests, which need to be handled separately
 		switch {
 		// For gRPC service invocation, this generates ServerSpan
@@ -129,9 +169,9 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		default:
 			isProxied = true
 			md, _ := metadata.FromIncomingContext(ctx)
-			vals := md.Get(GRPCProxyAppIDKey)
+			vals := md.Get(diagConsts.GRPCProxyAppIDKey)
 			if len(vals) == 0 {
-				return fmt.Errorf("cannot proxy request: missing %s metadata", GRPCProxyAppIDKey)
+				return fmt.Errorf("cannot proxy request: missing %s metadata", diagConsts.GRPCProxyAppIDKey)
 			}
 			// vals[0] is the target app ID
 			if appID == vals[0] {
@@ -181,7 +221,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		// Add grpc-trace-bin header for all non-invocation api's
 		if !isProxied && info.FullMethod != daprInvokeServiceMethod {
 			traceContextBinary := diagUtils.BinaryFromSpanContext(span.SpanContext())
-			grpc.SetHeader(ctx, grpcMetadata.Pairs(GRPCTraceContextKey, string(traceContextBinary)))
+			grpc.SetHeader(ctx, grpcMetadata.Pairs(diagConsts.GRPCTraceContextKey, string(traceContextBinary)))
 		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
@@ -243,7 +283,7 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 	if md, ok = metadata.FromIncomingContext(ctx); !ok {
 		return sc, false
 	}
-	traceContext := md[GRPCTraceContextKey]
+	traceContext := md[diagConsts.GRPCTraceContextKey]
 	if len(traceContext) > 0 {
 		sc, ok = diagUtils.SpanContextFromBinary([]byte(traceContext[0]))
 	} else {
@@ -251,11 +291,11 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 		// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
 		// TODO : Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827
-		traceContext = md[TraceparentHeader]
+		traceContext = md[diagConsts.TraceparentHeader]
 		if len(traceContext) > 0 {
 			sc, ok = SpanContextFromW3CString(traceContext[0])
-			if ok && len(md[TracestateHeader]) > 0 {
-				ts := TraceStateFromW3CString(md[TracestateHeader][0])
+			if ok && len(md[diagConsts.TracestateHeader]) > 0 {
+				ts := TraceStateFromW3CString(md[diagConsts.TracestateHeader][0])
 				sc.WithTraceState(*ts)
 			}
 		}
@@ -270,7 +310,7 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 		return ctx
 	}
 
-	return grpcMetadata.AppendToOutgoingContext(ctx, GRPCTraceContextKey, string(traceContextBinary))
+	return grpcMetadata.AppendToOutgoingContext(ctx, diagConsts.GRPCTraceContextKey, string(traceContextBinary))
 }
 
 // spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs.
