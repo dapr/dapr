@@ -47,6 +47,7 @@ import (
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
@@ -505,12 +506,12 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	sc := span.SpanContext()
 	tp := diag.SpanContextToW3CString(sc)
 	if span != nil {
-		if _, ok := req.Metadata[diag.TraceparentHeader]; !ok {
-			req.Metadata[diag.TraceparentHeader] = tp
+		if _, ok := req.Metadata[diagConsts.TraceparentHeader]; !ok {
+			req.Metadata[diagConsts.TraceparentHeader] = tp
 		}
-		if _, ok := req.Metadata[diag.TracestateHeader]; !ok {
+		if _, ok := req.Metadata[diagConsts.TracestateHeader]; !ok {
 			if sc.TraceState().Len() > 0 {
-				req.Metadata[diag.TracestateHeader] = diag.TraceStateToW3CString(sc)
+				req.Metadata[diagConsts.TracestateHeader] = diag.TraceStateToW3CString(sc)
 			}
 		}
 	}
@@ -521,7 +522,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
 			// Not to overwrite the existing metadata
 			// But if the key is traceparent or tracestate, we allow overwrite the existing metadata.
-			if _, exist := req.Metadata[sanitizedKey]; !exist || (key == diag.TraceparentHeader || key == diag.TracestateHeader) {
+			if _, exist := req.Metadata[sanitizedKey]; !exist || (key == diagConsts.TraceparentHeader || key == diagConsts.TracestateHeader) {
 				req.Metadata[sanitizedKey] = val[0]
 			}
 		}
