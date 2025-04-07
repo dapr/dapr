@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -518,6 +519,13 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
+		if baggageValues := incomingMD[diagConsts.BaggageHeader]; len(baggageValues) > 0 {
+			validBaggage, _ := diagUtils.ProcessBaggageValues(baggageValues)
+			if len(validBaggage) > 0 {
+				req.Metadata[diagConsts.BaggageHeader] = strings.Join(validBaggage, ",")
+			}
+		}
+
 		for key, val := range incomingMD {
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
 			// Not to overwrite the existing metadata

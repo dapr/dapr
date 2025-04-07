@@ -433,6 +433,16 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 		}
 	}
 
+	if baggageHeaders := r.Header.Values(diagConsts.BaggageHeader); len(baggageHeaders) > 0 {
+		validBaggage, _ := diagUtils.ProcessBaggageValues(baggageHeaders)
+		if len(validBaggage) > 0 {
+			if req.Metadata == nil {
+				req.Metadata = map[string]string{}
+			}
+			req.Metadata[diagConsts.BaggageHeader] = strings.Join(validBaggage, ",")
+		}
+	}
+
 	start := time.Now()
 	resp, err := a.sendToOutputBindingFn(r.Context(), name, &bindings.InvokeRequest{
 		Metadata:  req.Metadata,
