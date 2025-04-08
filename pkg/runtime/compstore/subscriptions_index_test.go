@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -43,10 +44,10 @@ func TestNextSubscriberIndex(t *testing.T) {
 		ids := make(map[rtpubsub.ConnectionID]bool)
 
 		wg.Add(numGoroutines)
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			go func() {
 				defer wg.Done()
-				for j := 0; j < numCallsPerGoroutine; j++ {
+				for range numCallsPerGoroutine {
 					id := store.NextSubscriberIndex()
 					mu.Lock()
 					ids[id] = true
@@ -59,7 +60,7 @@ func TestNextSubscriberIndex(t *testing.T) {
 		assert.Len(t, ids, numGoroutines*numCallsPerGoroutine, "Expected all IDs to be unique")
 
 		for i := 1; i <= numGoroutines*numCallsPerGoroutine; i++ {
-			assert.True(t, ids[rtpubsub.ConnectionID(i)], "Expected ID %d to be present", i)
+			assert.True(t, ids[rtpubsub.ConnectionID(i)], "Expected ID %d to be present", i) //nolint:gosec
 		}
 	})
 }
