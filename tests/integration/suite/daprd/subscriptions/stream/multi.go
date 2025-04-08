@@ -15,12 +15,13 @@ package stream
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -145,8 +146,8 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 		stream2: "b",
 		stream3: "c",
 	} {
-		event, err := stream.Recv()
-		require.NoError(t, err)
+		event, recvErr := stream.Recv()
+		require.NoError(t, recvErr)
 		assert.Equal(t, topic, event.GetEventMessage().GetTopic())
 	}
 
@@ -226,7 +227,7 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 
 			for receivedMessages < expectedMessages {
 				event, recvErr := stream.Recv()
-				require.NoError(c, recvErr)
+				assert.NoError(c, recvErr)
 				assert.Equal(c, singleTopicMultipleSubscribers, event.GetEventMessage().GetTopic())
 
 				sendErr := stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
@@ -237,7 +238,7 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 						},
 					},
 				})
-				require.NoError(c, sendErr)
+				assert.NoError(c, sendErr)
 
 				receivedTotal.Add(1)
 				receivedMessages++
@@ -256,6 +257,6 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		wg.Wait()
-		return receivedTotal.Load() == int32(messagesToSend*len(subscribers))
+		return receivedTotal.Load() == int32(messagesToSend*len(subscribers)) //nolint:gosec
 	}, time.Second*10, time.Millisecond*10)
 }

@@ -14,19 +14,17 @@ limitations under the License.
 package streamer
 
 import (
-	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"sync"
 	"sync/atomic"
 
 	rtv1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 type conn struct {
-	lock       sync.RWMutex
-	streamLock sync.Mutex
-	stream     rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
-	//publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
-	//publishResponses2 sync.Map
+	lock              sync.RWMutex
+	streamLock        sync.Mutex
+	stream            rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 	publishResponses3 map[string]map[rtpubsub.ConnectionID]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
 	closeCh           chan struct{}
 	closed            atomic.Bool
@@ -38,10 +36,6 @@ func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEv
 	log.Warnf("Lock registerPublishResponse messageId %s ConnectionID%d", id, c.connectionID)
 	c.lock.Lock()
 
-	//ch, ok := c.publishResponses[id]
-	//if !ok {
-	//	c.publishResponses[id] = ch
-	//}
 	if c.publishResponses3[id] == nil {
 		c.publishResponses3[id] = make(map[rtpubsub.ConnectionID]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1)
 	}
@@ -52,7 +46,6 @@ func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEv
 	return ch, func() {
 		log.Warnf("Lock registerPublishResponse defer messageId %s ConnectionID%d", id, c.connectionID)
 		c.lock.Lock()
-		//delete(c.publishResponses, id)
 
 		delete(c.publishResponses3[id], c.connectionID)
 		if len(c.publishResponses3[id]) == 0 {
@@ -73,7 +66,6 @@ func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEv
 func (c *conn) notifyPublishResponse(resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1) {
 	log.Warnf("Lock notifyPublishResponse messageId %s ConnectionID%d", resp.GetId(), c.connectionID)
 	c.lock.RLock()
-	//ch, ok := c.publishResponses[resp.GetId()]
 	ch, ok := c.publishResponses3[resp.GetId()][c.connectionID]
 	c.lock.RUnlock()
 	log.Warnf("Unlock notifyPublishResponse messageId %s ConnectionID%d", resp.GetId(), c.connectionID)

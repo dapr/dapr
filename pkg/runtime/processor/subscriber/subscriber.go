@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"sync"
 	"sync/atomic"
 
@@ -25,6 +24,7 @@ import (
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -139,7 +139,10 @@ func (s *Subscriber) StartStreamerSubscription(subscription *subapi.Subscription
 		return apierrors.PubSub("").WithMetadata(nil).DeserializeError(errors.New("subscriber is closed"))
 	}
 
-	sub, ok := s.compStore.GetStreamSubscription(subscription)
+	sub, found := s.compStore.GetStreamSubscription(subscription)
+	if !found {
+		return apierrors.PubSub("").WithMetadata(nil).NotFound()
+	}
 
 	pubsub, ok := s.compStore.GetPubSub(sub.PubsubName)
 	if !ok {
@@ -153,8 +156,8 @@ func (s *Subscriber) StartStreamerSubscription(subscription *subapi.Subscription
 
 	key := s.adapterStreamer.StreamerKey(sub.PubsubName, sub.Topic)
 
-	subscriptions, ok := s.streamSubs[sub.PubsubName]
-	if subscriptions == nil {
+	_, exists := s.streamSubs[sub.PubsubName]
+	if !exists {
 		s.streamSubs[sub.PubsubName] = make(map[rtpubsub.ConnectionID]*namedSubscription)
 	}
 
@@ -352,7 +355,6 @@ func (s *Subscriber) reloadPubSubStream(name string, pubsub *rtpubsub.PubsubItem
 		return nil
 	}
 
-	//subs := make([]*namedSubscription, 0, len(s.compStore.ListSubscriptionsStreamByPubSub(name)))
 	subs := make(map[rtpubsub.ConnectionID]*namedSubscription, len(s.compStore.ListSubscriptionsStreamByPubSub(name)))
 	var errs []error
 	for _, sub := range s.compStore.ListSubscriptionsStreamByPubSub(name) {

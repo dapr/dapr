@@ -66,8 +66,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 	key := s.StreamerKey(req.GetPubsubName(), req.GetTopic())
 
 	connection := &conn{
-		stream: stream,
-		//publishResponses:  make(map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1),
+		stream:            stream,
 		publishResponses3: make(map[string]map[rtpubsub.ConnectionID]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1),
 		closeCh:           make(chan struct{}),
 		connectionID:      connectionID,
@@ -157,7 +156,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	}
 
 	if connection.closed.Load() {
-		return fmt.Errorf("connection is closed")
+		return errors.New("connection is closed")
 	}
 
 	envelope, span, err := rtpubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, s.tracingSpec)
