@@ -22,7 +22,6 @@ import (
 
 	"google.golang.org/grpc"
 
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
@@ -128,25 +127,23 @@ func (s *Subscriber) ReloadPubSub(name string) error {
 }
 
 func (s *Subscriber) StartStreamerSubscription(subscription *subapi.Subscription, connectionID rtpubsub.ConnectionID) error {
-	log.Warn("Lock StartStreamerSubscription")
 	s.lock.Lock()
 	defer func() {
 		s.lock.Unlock()
-		log.Warn("Unlock StartStreamerSubscription defer")
 	}()
 
 	if s.closed {
-		return apierrors.PubSub("").WithMetadata(nil).DeserializeError(errors.New("subscriber is closed"))
+		return fmt.Errorf("streaming subscriber %s with ID %d is closed", subscription.Name, connectionID)
 	}
 
 	sub, found := s.compStore.GetStreamSubscription(subscription)
 	if !found {
-		return apierrors.PubSub("").WithMetadata(nil).NotFound()
+		return fmt.Errorf("streaming subscription %s not found", subscription.Name)
 	}
 
 	pubsub, ok := s.compStore.GetPubSub(sub.PubsubName)
 	if !ok {
-		return apierrors.PubSub(sub.PubsubName).WithMetadata(nil).NotFound()
+		return fmt.Errorf("streaming subscription pubsub %s not found", sub.PubsubName)
 	}
 
 	ss, err := s.startSubscription(pubsub, sub, true)
@@ -169,11 +166,9 @@ func (s *Subscriber) StartStreamerSubscription(subscription *subapi.Subscription
 }
 
 func (s *Subscriber) StopStreamerSubscription(subscription *subapi.Subscription, connectionID rtpubsub.ConnectionID) {
-	log.Warn("Lock StopStreamerSubscription")
 	s.lock.Lock()
 	defer func() {
 		s.lock.Unlock()
-		log.Warn("Unlock StopStreamerSubscription defer")
 	}()
 
 	if s.closed {
@@ -315,11 +310,9 @@ func (s *Subscriber) StopAppSubscriptions() {
 }
 
 func (s *Subscriber) StopAllSubscriptionsForever() {
-	log.Warn("Lock StopAllSubscriptionsForever")
 	s.lock.Lock()
 	defer func() {
 		s.lock.Unlock()
-		log.Warn("Unlock StopAllSubscriptionsForever defer")
 	}()
 
 	s.closed = true

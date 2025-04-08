@@ -122,7 +122,6 @@ func New(opts Options) (*Subscription, error) {
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
-		log.Warnf("Handler Message ConnectionID%d message %s", s.connectionID, msg.Data)
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
 		}

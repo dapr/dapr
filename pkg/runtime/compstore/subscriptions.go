@@ -17,11 +17,8 @@ import (
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
-
-var log = logger.NewLogger("dapr.runtime.compstore.subscriptions")
 
 type DeclarativeSubscription struct {
 	Comp *subapi.Subscription
@@ -78,11 +75,9 @@ func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, s
 }
 
 func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription, connectionID rtpubsub.ConnectionID) error {
-	log.Warn("Lock AddStreamSubscription")
 	c.lock.Lock()
 	defer func() {
 		c.lock.Unlock()
-		log.Warn("Unlock AddStreamSubscription defer")
 	}()
 
 	sub := &DeclarativeSubscription{
@@ -105,11 +100,9 @@ func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription, connec
 }
 
 func (c *ComponentStore) DeleteStreamSubscription(comp *subapi.Subscription) {
-	log.Warn("Lock DeleteStreamSubscription")
 	c.lock.Lock()
 	defer func() {
 		c.lock.Unlock()
-		log.Warn("Unlock DeleteStreamSubscription defer")
 	}()
 	streamingSubscriptions, ok := c.subscriptions.streams[comp.Name]
 	if ok && len(streamingSubscriptions) > 0 {

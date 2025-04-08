@@ -33,7 +33,6 @@ type conn struct {
 
 func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, func()) {
 	ch := make(chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, 1)
-	log.Warnf("Lock registerPublishResponse messageId %s ConnectionID%d", id, c.connectionID)
 	c.lock.Lock()
 
 	if c.publishResponses3[id] == nil {
@@ -42,9 +41,7 @@ func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEv
 	c.publishResponses3[id][c.connectionID] = ch
 
 	c.lock.Unlock()
-	log.Warnf("Unlock registerPublishResponse messageId %s ConnectionID%d", id, c.connectionID)
 	return ch, func() {
-		log.Warnf("Lock registerPublishResponse defer messageId %s ConnectionID%d", id, c.connectionID)
 		c.lock.Lock()
 
 		delete(c.publishResponses3[id], c.connectionID)
@@ -59,16 +56,13 @@ func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEv
 		default:
 		}
 		close(ch)
-		log.Warnf("Unlock registerPublishResponse defer messageId %s ConnectionID%d", id, c.connectionID)
 	}
 }
 
 func (c *conn) notifyPublishResponse(resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1) {
-	log.Warnf("Lock notifyPublishResponse messageId %s ConnectionID%d", resp.GetId(), c.connectionID)
 	c.lock.RLock()
 	ch, ok := c.publishResponses3[resp.GetId()][c.connectionID]
 	c.lock.RUnlock()
-	log.Warnf("Unlock notifyPublishResponse messageId %s ConnectionID%d", resp.GetId(), c.connectionID)
 
 	if !ok {
 		log.Errorf("no client stream expecting publish response for id %s ConnectionID%d", resp.GetId(), c.connectionID)
