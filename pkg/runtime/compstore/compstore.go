@@ -15,6 +15,7 @@ package compstore
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/dapr/durabletask-go/backend"
 
@@ -63,6 +64,9 @@ type ComponentStore struct {
 
 	compPendingLock sync.Mutex
 	compPending     *compsv1alpha1.Component
+
+	// subscribersIndex is used to generate unique connection IDs for streaming subscriptions
+	subscribersIndex atomic.Uint64
 }
 
 func New() *ComponentStore {

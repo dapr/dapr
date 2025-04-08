@@ -76,7 +76,7 @@ func (a *api) SubscribeTopicEventsAlpha1(stream runtimev1pb.Dapr_SubscribeTopicE
 			Routes:          subapi.Routes{Default: "/"},
 		},
 	}
-	connectionID := a.pubsubAdapterStreamer.NextIndex()
+	connectionID := a.Universal.CompStore().NextSubscriberIndex()
 	err = a.Universal.CompStore().AddStreamSubscription(sub, connectionID)
 	if err != nil {
 		return err

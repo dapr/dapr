@@ -277,3 +277,7 @@ func (c *ComponentStore) ListProgramaticSubscriptions() []rtpubsub.Subscription 
 	defer c.lock.RUnlock()
 	return c.subscriptions.programmatics
 }
+
+func (c *ComponentStore) NextSubscriberIndex() rtpubsub.ConnectionID {
+	return rtpubsub.ConnectionID(c.subscribersIndex.Add(1))
+}

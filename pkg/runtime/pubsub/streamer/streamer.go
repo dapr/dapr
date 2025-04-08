@@ -20,7 +20,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -44,9 +43,8 @@ type Connections map[rtpubsub.ConnectionID]*conn
 type Subscribers map[string]Connections
 
 type streamer struct {
-	tracingSpec      *config.TracingSpec
-	subscribers      Subscribers
-	subscribersIndex atomic.Uint64
+	tracingSpec *config.TracingSpec
+	subscribers Subscribers
 
 	lock sync.RWMutex
 }
@@ -226,10 +224,6 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 
 func (s *streamer) StreamerKey(pubsub, topic string) string {
 	return "___" + pubsub + "||" + topic
-}
-
-func (s *streamer) NextIndex() rtpubsub.ConnectionID {
-	return rtpubsub.ConnectionID(s.subscribersIndex.Add(1))
 }
 
 func (s *streamer) Close(key string, connectionID rtpubsub.ConnectionID) {
