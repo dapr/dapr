@@ -66,7 +66,7 @@ func (a *api) SubscribeTopicEventsAlpha1(stream runtimev1pb.Dapr_SubscribeTopicE
 	}
 
 	key := a.pubsubAdapterStreamer.StreamerKey(req.GetPubsubName(), req.GetTopic())
-	err = a.Universal.CompStore().AddStreamSubscription(&subapi.Subscription{
+	sub := &subapi.Subscription{
 		ObjectMeta: metav1.ObjectMeta{Name: key},
 		Spec: subapi.SubscriptionSpec{
 			Pubsubname:      req.GetPubsubName(),
@@ -75,19 +75,21 @@ func (a *api) SubscribeTopicEventsAlpha1(stream runtimev1pb.Dapr_SubscribeTopicE
 			DeadLetterTopic: req.GetDeadLetterTopic(),
 			Routes:          subapi.Routes{Default: "/"},
 		},
-	})
+	}
+	connectionID := a.pubsubAdapterStreamer.NextIndex()
+	err = a.Universal.CompStore().AddStreamSubscription(sub, connectionID)
 	if err != nil {
 		return err
 	}
 
-	if err = a.processor.Subscriber().StartStreamerSubscription(key); err != nil {
-		a.Universal.CompStore().DeleteStreamSubscription(key)
+	if err = a.processor.Subscriber().StartStreamerSubscription(sub, connectionID); err != nil {
+		a.Universal.CompStore().DeleteStreamSubscription(sub)
 		return err
 	}
 
 	defer func() {
-		a.processor.Subscriber().StopStreamerSubscription(req.GetPubsubName(), key)
-		a.Universal.CompStore().DeleteStreamSubscription(key)
+		a.processor.Subscriber().StopStreamerSubscription(sub, connectionID)
+		a.Universal.CompStore().DeleteStreamSubscription(sub)
 	}()
 
 	if err = stream.Send(&runtimev1pb.SubscribeTopicEventsResponseAlpha1{
@@ -98,5 +100,5 @@ func (a *api) SubscribeTopicEventsAlpha1(stream runtimev1pb.Dapr_SubscribeTopicE
 		return err
 	}
 
-	return a.pubsubAdapterStreamer.Subscribe(stream, req)
+	return a.pubsubAdapterStreamer.Subscribe(stream, req, connectionID)
 }

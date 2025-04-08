@@ -14,6 +14,7 @@ limitations under the License.
 package streamer
 
 import (
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"sync"
 	"sync/atomic"
 
@@ -21,33 +22,64 @@ import (
 )
 
 type conn struct {
-	lock             sync.RWMutex
-	streamLock       sync.Mutex
-	stream           rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
-	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
-	closeCh          chan struct{}
-	closed           atomic.Bool
+	lock       sync.RWMutex
+	streamLock sync.Mutex
+	stream     rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
+	//publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
+	//publishResponses2 sync.Map
+	publishResponses3 map[string]map[rtpubsub.ConnectionID]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
+	closeCh           chan struct{}
+	closed            atomic.Bool
+	connectionID      rtpubsub.ConnectionID
 }
 
 func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, func()) {
 	ch := make(chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, 1)
+	log.Warnf("Lock registerPublishResponse messageId %s ConnectionID%d", id, c.connectionID)
 	c.lock.Lock()
-	c.publishResponses[id] = ch
+
+	//ch, ok := c.publishResponses[id]
+	//if !ok {
+	//	c.publishResponses[id] = ch
+	//}
+	if c.publishResponses3[id] == nil {
+		c.publishResponses3[id] = make(map[rtpubsub.ConnectionID]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1)
+	}
+	c.publishResponses3[id][c.connectionID] = ch
+
 	c.lock.Unlock()
+	log.Warnf("Unlock registerPublishResponse messageId %s ConnectionID%d", id, c.connectionID)
 	return ch, func() {
+		log.Warnf("Lock registerPublishResponse defer messageId %s ConnectionID%d", id, c.connectionID)
 		c.lock.Lock()
-		delete(c.publishResponses, id)
+		//delete(c.publishResponses, id)
+
+		delete(c.publishResponses3[id], c.connectionID)
+		if len(c.publishResponses3[id]) == 0 {
+			delete(c.publishResponses3, id)
+		}
+
 		c.lock.Unlock()
+		// Ensure channel is closed to prevent goroutine leaks
+		select {
+		case <-ch: // drain if there's a value
+		default:
+		}
+		close(ch)
+		log.Warnf("Unlock registerPublishResponse defer messageId %s ConnectionID%d", id, c.connectionID)
 	}
 }
 
 func (c *conn) notifyPublishResponse(resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1) {
+	log.Warnf("Lock notifyPublishResponse messageId %s ConnectionID%d", resp.GetId(), c.connectionID)
 	c.lock.RLock()
-	ch, ok := c.publishResponses[resp.GetId()]
+	//ch, ok := c.publishResponses[resp.GetId()]
+	ch, ok := c.publishResponses3[resp.GetId()][c.connectionID]
 	c.lock.RUnlock()
+	log.Warnf("Unlock notifyPublishResponse messageId %s ConnectionID%d", resp.GetId(), c.connectionID)
 
 	if !ok {
-		log.Errorf("no client stream expecting publish response for id %q", resp.GetId())
+		log.Errorf("no client stream expecting publish response for id %s ConnectionID%d", resp.GetId(), c.connectionID)
 		return
 	}
 

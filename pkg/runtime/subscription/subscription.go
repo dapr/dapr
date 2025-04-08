@@ -46,6 +46,7 @@ type Options struct {
 	GRPC            *manager.Manager
 	Adapter         rtpubsub.Adapter
 	AdapterStreamer rtpubsub.AdapterStreamer
+	ConnectionID    rtpubsub.ConnectionID
 }
 
 type Subscription struct {
@@ -62,6 +63,7 @@ type Subscription struct {
 	grpc            *manager.Manager
 	adapter         rtpubsub.Adapter
 	adapterStreamer rtpubsub.AdapterStreamer
+	connectionID    rtpubsub.ConnectionID
 
 	cancel func()
 }
@@ -91,6 +93,7 @@ func New(opts Options) (*Subscription, error) {
 		cancel:          cancel,
 		adapter:         opts.Adapter,
 		adapterStreamer: opts.AdapterStreamer,
+		connectionID:    opts.ConnectionID,
 	}
 
 	name := s.pubsubName
@@ -119,6 +122,7 @@ func New(opts Options) (*Subscription, error) {
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
+		log.Warnf("Handler Message ConnectionID%d message %s", s.connectionID, msg.Data)
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
 		}
@@ -243,12 +247,13 @@ func New(opts Options) (*Subscription, error) {
 		}
 
 		sm := &rtpubsub.SubscribedMessage{
-			CloudEvent: cloudEvent,
-			Data:       data,
-			Topic:      msgTopic,
-			Metadata:   msg.Metadata,
-			Path:       routePath,
-			PubSub:     name,
+			CloudEvent:   cloudEvent,
+			Data:         data,
+			Topic:        msgTopic,
+			Metadata:     msg.Metadata,
+			Path:         routePath,
+			PubSub:       name,
+			SubscriberID: s.connectionID,
 		}
 		policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
@@ -308,7 +313,7 @@ func New(opts Options) (*Subscription, error) {
 func (s *Subscription) Stop() {
 	s.cancel()
 	if s.adapterStreamer != nil {
-		s.adapterStreamer.Close(s.adapterStreamer.StreamerKey(s.pubsubName, s.topic))
+		s.adapterStreamer.Close(s.adapterStreamer.StreamerKey(s.pubsubName, s.topic), s.connectionID)
 	}
 }
 

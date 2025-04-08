@@ -82,7 +82,7 @@ func New() *ComponentStore {
 		cryptoProviders:         make(map[string]crypto.SubtleCrypto),
 		subscriptions: &subscriptions{
 			declaratives: make(map[string]*DeclarativeSubscription),
-			streams:      make(map[string]*DeclarativeSubscription),
+			streams:      make(map[string][]*DeclarativeSubscription),
 		},
 		conversations: make(map[string]conversation.Conversation),
 	}

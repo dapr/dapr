@@ -14,13 +14,14 @@ limitations under the License.
 package compstore
 
 import (
-	"fmt"
-
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
+
+var log = logger.NewLogger("dapr.runtime.compstore.subscriptions")
 
 type DeclarativeSubscription struct {
 	Comp *subapi.Subscription
@@ -30,7 +31,8 @@ type DeclarativeSubscription struct {
 type NamedSubscription struct {
 	// Name is the optional name of the subscription. If not set, the name of the
 	// component is used.
-	Name *string
+	Name         *string
+	ConnectionID rtpubsub.ConnectionID
 	rtpubsub.Subscription
 }
 
@@ -40,7 +42,7 @@ type subscriptions struct {
 	// declarativesList used to track order of declarative subscriptions for
 	// processing priority.
 	declarativesList []string
-	streams          map[string]*DeclarativeSubscription
+	streams          map[string][]*DeclarativeSubscription
 }
 
 // MetadataSubscription is a temporary wrapper for rtpubsub.Subscription to add a Type attribute to be used in GetMetadata
@@ -75,17 +77,19 @@ func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, s
 	c.subscriptions.declarativesList = append(c.subscriptions.declarativesList, comp.Name)
 }
 
-func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription) error {
+func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription, connectionID rtpubsub.ConnectionID) error {
+	log.Warn("Lock AddStreamSubscription")
 	c.lock.Lock()
-	defer c.lock.Unlock()
-	if _, ok := c.subscriptions.streams[comp.Name]; ok {
-		return fmt.Errorf("streamer already subscribed to pubsub %q topic %q", comp.Spec.Pubsubname, comp.Spec.Topic)
-	}
+	defer func() {
+		c.lock.Unlock()
+		log.Warn("Unlock AddStreamSubscription defer")
+	}()
 
-	c.subscriptions.streams[comp.Name] = &DeclarativeSubscription{
+	sub := &DeclarativeSubscription{
 		Comp: comp,
 		NamedSubscription: &NamedSubscription{
-			Name: ptr.Of(comp.Name),
+			Name:         ptr.Of(comp.Name),
+			ConnectionID: connectionID,
 			Subscription: rtpubsub.Subscription{
 				PubsubName:      comp.Spec.Pubsubname,
 				Topic:           comp.Spec.Topic,
@@ -95,15 +99,28 @@ func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription) error 
 			},
 		},
 	}
+	c.subscriptions.streams[comp.Name] = append(c.subscriptions.streams[comp.Name], sub)
 
 	return nil
 }
 
-func (c *ComponentStore) DeleteStreamSubscription(names ...string) {
+func (c *ComponentStore) DeleteStreamSubscription(comp *subapi.Subscription) {
+	log.Warn("Lock DeleteStreamSubscription")
 	c.lock.Lock()
-	defer c.lock.Unlock()
-	for _, name := range names {
-		delete(c.subscriptions.streams, name)
+	defer func() {
+		c.lock.Unlock()
+		log.Warn("Unlock DeleteStreamSubscription defer")
+	}()
+	streamingSubscriptions, ok := c.subscriptions.streams[comp.Name]
+	if ok && len(streamingSubscriptions) > 0 {
+		for i, sub := range streamingSubscriptions {
+			if sub.Comp == comp {
+				c.subscriptions.streams[comp.Name] = append(c.subscriptions.streams[comp.Name][:i], c.subscriptions.streams[comp.Name][i+1:]...)
+			}
+		}
+	}
+	if len(c.subscriptions.streams[comp.Name]) == 0 {
+		delete(c.subscriptions.streams, comp.Name)
 	}
 }
 
@@ -155,17 +172,12 @@ func (c *ComponentStore) ListTypedSubscriptions() []TypedSubscription {
 			subs = append(subs, typedSub)
 		}
 	}
-	for i := range c.subscriptions.streams {
-		sub := c.subscriptions.streams[i].Subscription
-		typedSub := TypedSubscription{
-			Subscription: sub,
-			Type:         runtimev1pb.PubsubSubscriptionType_STREAMING,
-		}
-		key := sub.PubsubName + "||" + sub.Topic
-		if j, ok := taken[key]; ok {
-			subs[j] = typedSub
-		} else {
-			taken[key] = len(subs)
+	for _, streamingSubs := range c.subscriptions.streams {
+		for _, sub := range streamingSubs {
+			typedSub := TypedSubscription{
+				Subscription: sub.Subscription,
+				Type:         runtimev1pb.PubsubSubscriptionType_STREAMING,
+			}
 			subs = append(subs, typedSub)
 		}
 	}
@@ -215,9 +227,11 @@ func (c *ComponentStore) ListSubscriptionsStreamByPubSub(name string) []*NamedSu
 	defer c.lock.RUnlock()
 
 	var subs []*NamedSubscription
-	for _, sub := range c.subscriptions.streams {
-		if sub.Subscription.PubsubName == name {
-			subs = append(subs, sub.NamedSubscription)
+	for _, subscriptions := range c.subscriptions.streams {
+		for _, sub := range subscriptions {
+			if sub.Subscription.PubsubName == name {
+				subs = append(subs, sub.NamedSubscription)
+			}
 		}
 	}
 
@@ -235,12 +249,14 @@ func (c *ComponentStore) GetDeclarativeSubscription(name string) (*DeclarativeSu
 	return nil, false
 }
 
-func (c *ComponentStore) GetStreamSubscription(key string) (*NamedSubscription, bool) {
+func (c *ComponentStore) GetStreamSubscription(subscription *subapi.Subscription) (*NamedSubscription, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	for i, sub := range c.subscriptions.streams {
-		if sub.Comp.Name == key {
-			return c.subscriptions.streams[i].NamedSubscription, true
+	for _, subscriptions := range c.subscriptions.streams {
+		for _, sub := range subscriptions {
+			if sub.Comp == subscription {
+				return sub.NamedSubscription, true
+			}
 		}
 	}
 	return nil, false
