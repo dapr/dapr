@@ -1083,6 +1083,10 @@ func TestFindTargetIDAndMethod(t *testing.T) {
 			if gotMethod != tt.wantMethod {
 				t.Errorf("findTargetIDAndMethod() gotMethod = %v, want %v", gotMethod, tt.wantMethod)
 			}
+			appIDHeader := tt.headers.Get(daprAppID)
+			if appIDHeader != "" {
+				t.Error("dapr-app-id is present in request headers and shouldn't be")
+			}
 		})
 	}
 }
