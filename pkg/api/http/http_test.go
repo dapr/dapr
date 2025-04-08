@@ -83,6 +83,7 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
+	dt_api "github.com/dapr/durabletask-go/api"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -2614,6 +2615,23 @@ func TestV1Workflow(t *testing.T) {
 
 		// assert
 		assert.Nil(t, resp.ErrorBody)
+	})
+
+	// Test the error formatting when the workflow instance is not found
+	t.Run("Purge with workflow instance not found - 404", func(t *testing.T) {
+		wf.WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithPurge(func(ctx context.Context, req *workflows.PurgeRequest) error {
+				return fmt.Errorf("%w: failed to fetch orchestration metadata: error from internal actor: no such instance exists", dt_api.ErrInstanceNotFound)
+			})
+		})
+
+		apiPath := "v1.0/workflows/dapr/instanceID/purge"
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, nethttp.StatusNotFound, resp.StatusCode, "expected 404 when workflow instance is not found")
+		assert.NotNil(t, resp.ErrorBody)
+
+		expectedMessage := "unable to find workflow with the provided instance ID: instanceID: no such instance exists: failed to fetch orchestration metadata: error from internal actor: no such instance exists"
+		assert.Equal(t, expectedMessage, resp.ErrorBody["message"])
 	})
 }
 

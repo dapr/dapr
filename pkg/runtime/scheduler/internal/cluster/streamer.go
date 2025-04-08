@@ -53,7 +53,10 @@ func (s *streamer) run(ctx context.Context) error {
 // scheduler job messages. It then invokes the appropriate app or actor
 // reminder based on the job metadata.
 func (s *streamer) receive(ctx context.Context) error {
-	defer s.wg.Wait()
+	defer func() {
+		s.wg.Wait()
+		s.stream.CloseSend()
+	}()
 
 	for {
 		resp, err := s.stream.Recv()
@@ -66,11 +69,12 @@ func (s *streamer) receive(ctx context.Context) error {
 
 		s.wg.Add(1)
 		go func() {
-			defer s.wg.Done()
+			defer func() {
+				s.wg.Done()
+			}()
+
 			result := s.handleJob(ctx, resp)
 			select {
-			case <-ctx.Done():
-			case <-s.stream.Context().Done():
 			case s.resultCh <- &schedulerv1pb.WatchJobsRequest{
 				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
 					Result: &schedulerv1pb.WatchJobsRequestResult{
@@ -79,6 +83,8 @@ func (s *streamer) receive(ctx context.Context) error {
 					},
 				},
 			}:
+			case <-s.stream.Context().Done():
+			case <-ctx.Done():
 			}
 		}()
 	}
@@ -93,14 +99,12 @@ func (s *streamer) outgoing(ctx context.Context) error {
 
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-s.stream.Context().Done():
-			return s.stream.Context().Err()
 		case result := <-s.resultCh:
 			if err := s.stream.Send(result); err != nil {
 				return err
 			}
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 }
