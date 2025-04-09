@@ -80,10 +80,13 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.CurrentTrustAnchors = trustAnchors
 	sidecar.DisableTokenVolume = !token.HasKubernetesToken()
 
-	// Set addresses for actor services
+	// Set addresses for actor services only if it's not explicitly globally disabled
 	// Even if actors are disabled, however, the placement-host-address flag will still be included if explicitly set in the annotation dapr.io/placement-host-address
 	// So, if the annotation is already set, we accept that and also use placement for actors services
-	if sidecar.PlacementAddress == "" {
+	if !i.config.GetActorsEnabled() {
+		sidecar.ActorsService = ""
+		sidecar.PlacementAddress = ""
+	} else if sidecar.PlacementAddress == "" {
 		// Set configuration for the actors service
 		actorsSvcName, actorsSvc := i.config.GetActorsService()
 		actorsSvcAddr := actorsSvc.Address(i.config.Namespace, i.config.KubeClusterDomain)
