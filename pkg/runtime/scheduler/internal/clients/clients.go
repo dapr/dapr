@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -37,30 +38,34 @@ type Options struct {
 // fashion.
 type Clients struct {
 	clients     []schedulerv1pb.SchedulerClient
+	closeFns    []context.CancelFunc
 	lastUsedIdx atomic.Uint64
 }
 
 func New(ctx context.Context, opts Options) (*Clients, error) {
-	clients := make([]schedulerv1pb.SchedulerClient, len(opts.Addresses))
+	c := &Clients{
+		clients:  make([]schedulerv1pb.SchedulerClient, 0, len(opts.Addresses)),
+		closeFns: make([]context.CancelFunc, 0, len(opts.Addresses)),
+	}
 
-	for i, address := range opts.Addresses {
+	for _, address := range opts.Addresses {
 		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
-		client, err := client.New(ctx, address, opts.Security)
+		client, closeFn, err := client.New(ctx, address, opts.Security)
 		if err != nil {
+			c.Close()
 			return nil, fmt.Errorf("scheduler client not initialized for address %s: %s", address, err)
 		}
 
 		log.Infof("Scheduler client initialized for address: %s", address)
-		clients[i] = client
+		c.clients = append(c.clients, client)
+		c.closeFns = append(c.closeFns, closeFn)
 	}
 
-	if len(clients) > 0 {
+	if len(c.clients) > 0 {
 		log.Info("Scheduler clients initialized")
 	}
 
-	return &Clients{
-		clients: clients,
-	}, nil
+	return c, nil
 }
 
 // Next returns the next client in a round-robin manner.
@@ -76,4 +81,16 @@ func (c *Clients) Next() (schedulerv1pb.SchedulerClient, error) {
 // All returns all scheduler clients.
 func (c *Clients) All() []schedulerv1pb.SchedulerClient {
 	return c.clients
+}
+
+func (c *Clients) Close() {
+	var wg sync.WaitGroup
+	wg.Add(len(c.closeFns))
+	for _, closeFn := range c.closeFns {
+		go func() {
+			closeFn()
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }
