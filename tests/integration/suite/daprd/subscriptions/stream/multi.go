@@ -255,8 +255,8 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	assert.Eventually(t, func() bool {
-		wg.Wait()
-		return receivedTotal.Load() == int32(messagesToSend*len(subscribers)) //nolint:gosec
+	wg.Wait()
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int32(messagesToSend*len(subscribers)), receivedTotal.Load()) //nolint:gosec
 	}, time.Second*10, time.Millisecond*10)
 }
