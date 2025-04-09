@@ -133,7 +133,7 @@ func (c *Cluster) RunClients(ctx context.Context, clients *clients.Clients) erro
 		}
 
 		if err != nil {
-			log.Warnf("Error watching scheduler jobs: %v", err)
+			return fmt.Errorf("error watching scheduler jobs: %w", err)
 		}
 	}
 }
