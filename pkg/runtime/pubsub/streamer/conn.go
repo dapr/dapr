@@ -22,31 +22,31 @@ import (
 )
 
 type conn struct {
-	lock              sync.RWMutex
-	streamLock        sync.Mutex
-	stream            rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
-	publishResponses3 map[string]map[rtpubsub.ConnectionID]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
-	closeCh           chan struct{}
-	closed            atomic.Bool
-	connectionID      rtpubsub.ConnectionID
+	lock             sync.RWMutex
+	streamLock       sync.Mutex
+	stream           rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
+	closeCh          chan struct{}
+	closed           atomic.Bool
+	connectionID     rtpubsub.ConnectionID
+	publishResponses PublishResponses
 }
 
 func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, func()) {
 	ch := make(chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, 1)
 	c.lock.Lock()
 
-	if c.publishResponses3[id] == nil {
-		c.publishResponses3[id] = make(map[rtpubsub.ConnectionID]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1)
+	if c.publishResponses[id] == nil {
+		c.publishResponses[id] = make(ConnectionChannel)
 	}
-	c.publishResponses3[id][c.connectionID] = ch
+	c.publishResponses[id][c.connectionID] = ch
 
 	c.lock.Unlock()
 	return ch, func() {
 		c.lock.Lock()
 
-		delete(c.publishResponses3[id], c.connectionID)
-		if len(c.publishResponses3[id]) == 0 {
-			delete(c.publishResponses3, id)
+		delete(c.publishResponses[id], c.connectionID)
+		if len(c.publishResponses[id]) == 0 {
+			delete(c.publishResponses, id)
 		}
 
 		c.lock.Unlock()
@@ -61,7 +61,7 @@ func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEv
 
 func (c *conn) notifyPublishResponse(resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1) {
 	c.lock.RLock()
-	ch, ok := c.publishResponses3[resp.GetId()][c.connectionID]
+	ch, ok := c.publishResponses[resp.GetId()][c.connectionID]
 	c.lock.RUnlock()
 
 	if !ok {

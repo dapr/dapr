@@ -42,6 +42,10 @@ type Connections map[rtpubsub.ConnectionID]*conn
 
 type Subscribers map[string]Connections
 
+type ConnectionChannel map[rtpubsub.ConnectionID]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
+
+type PublishResponses map[string]ConnectionChannel
+
 type streamer struct {
 	tracingSpec *config.TracingSpec
 	subscribers Subscribers
@@ -63,10 +67,10 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 	key := s.StreamerKey(req.GetPubsubName(), req.GetTopic())
 
 	connection := &conn{
-		stream:            stream,
-		publishResponses3: make(map[string]map[rtpubsub.ConnectionID]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1),
-		closeCh:           make(chan struct{}),
-		connectionID:      connectionID,
+		stream:           stream,
+		connectionID:     connectionID,
+		closeCh:          make(chan struct{}),
+		publishResponses: make(PublishResponses),
 	}
 	if s.subscribers[key] == nil {
 		s.subscribers[key] = make(Connections)
