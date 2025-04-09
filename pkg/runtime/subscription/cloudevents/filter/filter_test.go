@@ -1,3 +1,16 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package filter
 
 import (
@@ -187,16 +200,16 @@ func Test_Parse_NestedCombinations(t *testing.T) {
 func Test_ParseExpressionValidation(t *testing.T) {
 	t.Run("missing attribute returns error", func(t *testing.T) {
 		_, err := parseExpression(&rtv1.SubscribeActorEventRequestExpressionAlpha1{
-			Attribute: "",
-			Value:     "val",
+			AttributePath: nil,
+			Value:         "val",
 		}, opExact)
 		assert.Error(t, err)
 	})
 
 	t.Run("missing value returns error", func(t *testing.T) {
 		_, err := parseExpression(&rtv1.SubscribeActorEventRequestExpressionAlpha1{
-			Attribute: "attr",
-			Value:     "",
+			AttributePath: []string{"attr"},
+			Value:         "",
 		}, opExact)
 		assert.Error(t, err)
 	})
@@ -270,10 +283,223 @@ func Test_Parse_NonStringAttributeValues(t *testing.T) {
 	}
 }
 
+func Test_Parse_NestedAttributePaths(t *testing.T) {
+	tests := map[string]struct {
+		filter *rtv1.SubscribeActorEventRequestFilterAlpha1
+		event  map[string]any
+		exp    bool
+	}{
+		"Nested exact match succeeds": {
+			filter: wrapExact(&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+				AttributePath: []string{"meta", "env"},
+				Value:         "prod",
+			}),
+			event: map[string]any{
+				"meta": map[string]any{
+					"env": "prod",
+				},
+			},
+			exp: true,
+		},
+		"Nested exact match fails": {
+			filter: wrapExact(&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+				AttributePath: []string{"meta", "env"},
+				Value:         "prod",
+			}),
+			event: map[string]any{
+				"meta": map[string]any{
+					"env": "dev",
+				},
+			},
+			exp: false,
+		},
+		"Path not found": {
+			filter: wrapExact(&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+				AttributePath: []string{"meta", "region"},
+				Value:         "us-east",
+			}),
+			event: map[string]any{
+				"meta": map[string]any{
+					"env": "prod",
+				},
+			},
+			exp: false,
+		},
+		"Path segment is not a map": {
+			filter: wrapExact(&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+				AttributePath: []string{"meta", "env", "region"},
+				Value:         "us-west",
+			}),
+			event: map[string]any{
+				"meta": map[string]any{
+					"env": "prod", // env is string, not map
+				},
+			},
+			exp: false,
+		},
+		"Nested prefix match works": {
+			filter: wrapPrefix(&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+				AttributePath: []string{"meta", "env"},
+				Value:         "pr",
+			}),
+			event: map[string]any{
+				"meta": map[string]any{
+					"env": "prod",
+				},
+			},
+			exp: true,
+		},
+		"Nested suffix match fails on wrong type": {
+			filter: wrapSuffix(&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+				AttributePath: []string{"meta", "count"},
+				Value:         "42",
+			}),
+			event: map[string]any{
+				"meta": map[string]any{
+					"count": 42, // int, not string
+				},
+			},
+			exp: false,
+		},
+		"Exact match passes with path": {
+			filter: wrapExact(&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+				AttributePath: []string{"data", "type"},
+				Value:         "created",
+			}),
+			event: map[string]any{
+				"data": map[string]any{"type": "created"},
+			},
+			exp: true,
+		},
+		"Exact match fails with path": {
+			filter: wrapExact(&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+				AttributePath: []string{"data", "type"},
+				Value:         "deleted",
+			}),
+			event: map[string]any{
+				"data": map[string]any{"type": "created"},
+			},
+			exp: false,
+		},
+		"Multiple Exact path expressions all match": {
+			filter: wrapExact(
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"data", "type"},
+					Value:         "created",
+				},
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"meta", "source"},
+					Value:         "svc-a",
+				},
+			),
+			event: map[string]any{
+				"data": map[string]any{"type": "created"},
+				"meta": map[string]any{"source": "svc-a"},
+			},
+			exp: true,
+		},
+		"Multiple Exact path expressions, one fails": {
+			filter: wrapExact(
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"data", "type"},
+					Value:         "created",
+				},
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"meta", "source"},
+					Value:         "svc-x",
+				},
+			),
+			event: map[string]any{
+				"data": map[string]any{"type": "created"},
+				"meta": map[string]any{"source": "svc-a"},
+			},
+			exp: false,
+		},
+
+		"Multiple Prefix path expressions all match": {
+			filter: wrapPrefix(
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"data", "type"},
+					Value:         "cr",
+				},
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"meta", "source"},
+					Value:         "svc",
+				},
+			),
+			event: map[string]any{
+				"data": map[string]any{"type": "created"},
+				"meta": map[string]any{"source": "svc-a"},
+			},
+			exp: true,
+		},
+		"Multiple Prefix path expressions, one fails": {
+			filter: wrapPrefix(
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"data", "type"},
+					Value:         "cr",
+				},
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"meta", "source"},
+					Value:         "api",
+				},
+			),
+			event: map[string]any{
+				"data": map[string]any{"type": "created"},
+				"meta": map[string]any{"source": "svc-a"},
+			},
+			exp: false,
+		},
+
+		"Multiple Suffix path expressions all match": {
+			filter: wrapSuffix(
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"data", "type"},
+					Value:         "ted",
+				},
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"meta", "source"},
+					Value:         "c-a",
+				},
+			),
+			event: map[string]any{
+				"data": map[string]any{"type": "created"},
+				"meta": map[string]any{"source": "svc-a"},
+			},
+			exp: true,
+		},
+		"Multiple Suffix path expressions, one fails": {
+			filter: wrapSuffix(
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"data", "type"},
+					Value:         "ted",
+				},
+				&rtv1.SubscribeActorEventRequestExpressionAlpha1{
+					AttributePath: []string{"meta", "source"},
+					Value:         "bad",
+				},
+			),
+			event: map[string]any{
+				"data": map[string]any{"type": "created"},
+				"meta": map[string]any{"source": "svc-a"},
+			},
+			exp: false,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			fn, err := parse(test.filter)
+			require.NoError(t, err)
+			assert.Equal(t, test.exp, fn(test.event))
+		})
+	}
+}
+
 func newExpr(attr, val string) *rtv1.SubscribeActorEventRequestExpressionAlpha1 {
 	return &rtv1.SubscribeActorEventRequestExpressionAlpha1{
-		Attribute: attr,
-		Value:     val,
+		AttributePath: []string{attr},
+		Value:         val,
 	}
 }
 

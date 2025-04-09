@@ -105,7 +105,10 @@ message SubscribeActorEventRequestFilterNoneAlpha1 {
 // attribute of the cloud event. The expression is a key-value pair where
 // the key is the attribute name and the value is the attribute value.
 message SubscribeActorEventRequestExpressionAlpha1 {
-  string attribute = 1;
+  // The attribute name to match. This is JSON path to the attribute which is
+  // wished to be filtered on.
+  repeated string attribute_path = 1;
+
   string value = 2;
 }
 

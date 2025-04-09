@@ -114,13 +114,19 @@ func parseExpressions(exps []*rtv1.SubscribeActorEventRequestExpressionAlpha1, o
 }
 
 func parseExpression(exp *rtv1.SubscribeActorEventRequestExpressionAlpha1, op expressionOp) (FilterFunc, error) {
-	if len(exp.GetAttribute()) == 0 {
-		return nil, errors.New("expression attribute is empty")
+	if len(exp.GetAttributePath()) == 0 {
+		return nil, errors.New("expression attribute path is empty")
+	}
+
+	for _, c := range exp.GetAttributePath() {
+		if len(c) == 0 {
+			return nil, errors.New("expression attribute path contains empty component")
+		}
 	}
 
 	if len(exp.GetValue()) == 0 {
 		return nil, errors.New("expression value is empty")
 	}
 
-	return makeOp(exp.GetAttribute(), exp.GetValue(), op), nil
+	return makeOp(exp.GetAttributePath(), exp.GetValue(), op), nil
 }

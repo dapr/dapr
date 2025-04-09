@@ -17,9 +17,22 @@ import "strings"
 
 type expressionOp func(any, string) bool
 
-func makeOp(field string, value string, op expressionOp) FilterFunc {
+func makeOp(path []string, value string, op expressionOp) FilterFunc {
 	return func(m map[string]any) bool {
-		return op(m[field], value)
+		var val any = m
+		for _, segment := range path {
+			mp, ok := val.(map[string]any)
+			if !ok {
+				return false
+			}
+			val, ok = mp[segment]
+			if !ok {
+				return false
+			}
+		}
+
+		str, ok := val.(string)
+		return ok && op(str, value)
 	}
 }
 

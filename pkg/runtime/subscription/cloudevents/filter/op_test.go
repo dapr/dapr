@@ -46,33 +46,82 @@ func Test_ExpressionOps(t *testing.T) {
 
 func Test_MakeOp(t *testing.T) {
 	tests := map[string]struct {
-		field string
-		value string
-		op    expressionOp
-		input map[string]any
-		exp   bool
+		path     []string
+		value    string
+		op       expressionOp
+		input    map[string]any
+		expected bool
 	}{
-		"Exact match": {
-			"name", "Alice", opExact,
-			map[string]any{"name": "Alice"},
-			true,
+		"exact match success": {
+			path:     []string{"type"},
+			value:    "created",
+			op:       opExact,
+			input:    map[string]any{"type": "created"},
+			expected: true,
 		},
-		"Prefix match": {
-			"name", "Al", opPrefix,
-			map[string]any{"name": "Alice"},
-			true,
+		"exact match fail": {
+			path:     []string{"type"},
+			value:    "deleted",
+			op:       opExact,
+			input:    map[string]any{"type": "created"},
+			expected: false,
 		},
-		"Suffix mismatch": {
-			"name", "Bob", opSuffix,
-			map[string]any{"name": "Alice"},
-			false,
+		"prefix match success": {
+			path:     []string{"source"},
+			value:    "svc",
+			op:       opPrefix,
+			input:    map[string]any{"source": "svc-a"},
+			expected: true,
+		},
+		"prefix match fail": {
+			path:     []string{"source"},
+			value:    "api",
+			op:       opPrefix,
+			input:    map[string]any{"source": "svc-a"},
+			expected: false,
+		},
+		"suffix match success": {
+			path:     []string{"source"},
+			value:    "-a",
+			op:       opSuffix,
+			input:    map[string]any{"source": "svc-a"},
+			expected: true,
+		},
+		"nested path success": {
+			path:     []string{"metadata", "source"},
+			value:    "svc-a",
+			op:       opExact,
+			input:    map[string]any{"metadata": map[string]any{"source": "svc-a"}},
+			expected: true,
+		},
+		"nested path fail": {
+			path:     []string{"metadata", "source"},
+			value:    "svc-x",
+			op:       opExact,
+			input:    map[string]any{"metadata": map[string]any{"source": "svc-a"}},
+			expected: false,
+		},
+		"non-string leaf value": {
+			path:     []string{"count"},
+			value:    "42",
+			op:       opExact,
+			input:    map[string]any{"count": 42},
+			expected: false,
+		},
+		"invalid path segment": {
+			path:     []string{"metadata", "source"},
+			value:    "svc-a",
+			op:       opExact,
+			input:    map[string]any{"metadata": "not-a-map"},
+			expected: false,
 		},
 	}
 
-	for name, test := range tests {
+	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			fn := makeOp(test.field, test.value, test.op)
-			assert.Equal(t, test.exp, fn(test.input))
+			fn := makeOp(tt.path, tt.value, tt.op)
+			result := fn(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -103,8 +152,10 @@ func Test_FilterOps(t *testing.T) {
 }
 
 func Test_MakeFilter(t *testing.T) {
-	isGo := makeOp("ext", ".go", opSuffix)
-	isTest := makeOp("name", "_test", opSuffix)
+	isGo := makeOp([]string{"ext"}, ".go", opSuffix)
+	isTest := makeOp([]string{"name"}, "_test", opSuffix)
+	isNestedService := makeOp([]string{"meta", "service"}, "backend", opExact)
+	isNestedEnv := makeOp([]string{"meta", "env"}, "prod", opExact)
 
 	tests := map[string]struct {
 		a     FilterFunc
@@ -133,6 +184,41 @@ func Test_MakeFilter(t *testing.T) {
 			map[string]any{"ext": "main.py", "name": "main"},
 			false,
 		},
+		"MakeFilter nested path AND match": {
+			isNestedService, isNestedEnv, filterAnd,
+			map[string]any{"meta": map[string]any{"service": "backend", "env": "prod"}},
+			true,
+		},
+		"MakeFilter nested path AND mismatch": {
+			isNestedService, isNestedEnv, filterAnd,
+			map[string]any{"meta": map[string]any{"service": "frontend", "env": "prod"}},
+			false,
+		},
+		"MakeFilter nested path OR match": {
+			isNestedService, isNestedEnv, filterOr,
+			map[string]any{"meta": map[string]any{"service": "backend", "env": "dev"}},
+			true,
+		},
+		"MakeFilter nested path OR mismatch": {
+			isNestedService, isNestedEnv, filterOr,
+			map[string]any{"meta": map[string]any{"service": "frontend", "env": "dev"}},
+			false,
+		},
+		"MakeFilter nested path not a string": {
+			isNestedService, isNestedEnv, filterAnd,
+			map[string]any{"meta": map[string]any{"service": 123, "env": true}},
+			false,
+		},
+		"MakeFilter nested path partial missing": {
+			isNestedService, isNestedEnv, filterOr,
+			map[string]any{"meta": map[string]any{"service": "backend"}},
+			true,
+		},
+		"MakeFilter nested path wrong type in path": {
+			isNestedService, isNestedEnv, filterAnd,
+			map[string]any{"meta": "not-a-map"},
+			false,
+		},
 	}
 
 	for name, test := range tests {
@@ -144,7 +230,8 @@ func Test_MakeFilter(t *testing.T) {
 }
 
 func Test_FilterNot(t *testing.T) {
-	isGo := makeOp("ext", ".go", opSuffix)
+	isGo := makeOp([]string{"ext"}, ".go", opSuffix)
+	isGoPath := makeOp([]string{"ext", "foo"}, ".go", opSuffix)
 
 	tests := map[string]struct {
 		fn    FilterFunc
@@ -159,6 +246,16 @@ func Test_FilterNot(t *testing.T) {
 		"NOT false becomes true": {
 			filterNot(isGo),
 			map[string]any{"ext": "main.py"},
+			true,
+		},
+		"NOT true becomes false path": {
+			filterNot(isGoPath),
+			map[string]any{"ext": map[string]any{"foo": "main.go"}},
+			false,
+		},
+		"NOT false becomes true path": {
+			filterNot(isGoPath),
+			map[string]any{"ext": "main.go"},
 			true,
 		},
 	}
