@@ -1,0 +1,143 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+option csharp_namespace = "Dapr.Actor.Autogen.Grpc.v1";
+option java_outer_classname = "DaprActorProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+
+// The message containing the details for subscribing an actor to a topic via
+// streaming.
+message SubscribeActorEventRequestAlpha1 {
+  // Required: The name of the PubSub component the subscription applied to.
+  string pubsub_name = 1;
+
+  // Required: The name of the topic being subscribed to.
+  string topic_name = 2;
+
+  // Optional: The types of events the subscription is filtered to receiving
+  // (evaluated against the CloudEvent `type` attribute) - must match at least
+  // one.
+  // Defaults to Daprs pubslish event types:
+  // ["com.dapr.event.sent", "com.dapr.event.sent.bulk"]
+  repeated string types = 3;
+
+  // Optional: The filters to apply to the subscription - all must evaluate as
+  // true to allow event delivery to subscription
+  repeated SubscribeActorEventRequestFilterAlpha1 filters = 4;
+
+  // Required: The destination actor type or instance that is subscribing to
+  // the event
+  SubscribeActorEventRequestSinkAlpha1 sink = 5;
+}
+
+message SubscribeActorEventResponseAlpha1 {}
+
+// SubscribeActorEventRequestFilterAlpha1 is the filter for the
+// SubscribeActorEventRequestAlpha1 message. It is used to filter events
+// based on the attribute of the event.
+message SubscribeActorEventRequestFilterAlpha1 {
+  oneof filter {
+    SubscribeActorEventRequestFilterExactAlpha1 exact = 1;
+    SubscribeActorEventRequestFilterPrefixAlpha1 prefix = 2;
+    SubscribeActorEventRequestFilterSuffixAlpha1 suffix = 3;
+    SubscribeActorEventRequestFilterAllAlpha1 all = 4;
+    SubscribeActorEventRequestFilterAnyAlpha1 any = 5;
+    SubscribeActorEventRequestFilterNoneAlpha1 none = 6;
+  };
+}
+
+// SubscribeActorEventRequestFilterSuffixAlpha1 is the expression to match
+// suffixes of the cloud event attribute.
+message SubscribeActorEventRequestFilterExactAlpha1 {
+  repeated SubscribeActorEventRequestExpressionAlpha1 expression = 1;
+}
+
+// SubscribeActorEventRequestFilterSuffixAlpha1 is the expression to match
+// suffixes of the cloud event attribute.
+message SubscribeActorEventRequestFilterPrefixAlpha1 {
+  repeated SubscribeActorEventRequestExpressionAlpha1 expression = 1;
+}
+
+// SubscribeActorEventRequestFilterSuffixAlpha1 is the expression to match
+// suffixes of the cloud event attribute.
+message SubscribeActorEventRequestFilterSuffixAlpha1 {
+  repeated SubscribeActorEventRequestExpressionAlpha1 expression = 1;
+}
+
+// SubscribeActorEventRequestFilterAllAlpha1 is the filter where all nested
+// filter expressions MUST evaluate to true in order for the all filter
+// expression to be true. (AND)
+message SubscribeActorEventRequestFilterAllAlpha1 {
+  repeated SubscribeActorEventRequestFilterAlpha1 filters = 1;
+}
+
+// SubscribeActorEventRequestFilterAnyAlpha1 is the filter where ANY nested
+// filter expressions MUST evaluate to true in order for the any filter
+// expression to be true. (OR)
+message SubscribeActorEventRequestFilterAnyAlpha1 {
+  repeated SubscribeActorEventRequestFilterAlpha1 filters = 1;
+}
+
+// SubscribeActorEventRequestFilterNoneAlpha1 is the filter where NONE nested
+// filter expressions MUST evaluate to true in order for the none filter
+// expression to be true. (NOT)
+message SubscribeActorEventRequestFilterNoneAlpha1 {
+  repeated SubscribeActorEventRequestFilterAlpha1 filters = 1;
+}
+
+// SubscribeActorEventRequestExpressionAlpha1 is the expression to match
+// attribute of the cloud event. The expression is a key-value pair where
+// the key is the attribute name and the value is the attribute value.
+message SubscribeActorEventRequestExpressionAlpha1 {
+  string attribute = 1;
+  string value = 2;
+}
+
+// SubscribeActorEventRequestSinkAlpha1 is the sink for the
+// SubscribeActorEventRequestAlpha1 message. It is used to specify the
+// destination actor type or instance that is subscribing to the event.
+message SubscribeActorEventRequestSinkAlpha1 {
+  oneof sink {
+    SubscribeActorEventRequestSinkActorTypeAlpha1 type = 1;
+    SubscribeActorEventRequestSinkActorInstanceAlpha1 instance = 2;
+  };
+}
+
+// SubscribeActorEventRequestSinkActorTypeAlpha1 is the sink for the
+// SubscribeActorEventRequestAlpha1 message. It is used to specify the
+// destination actor type that is subscribing to the event. It matches on all
+// actor ID instances with that type _that are currently active_ on this host.
+message SubscribeActorEventRequestSinkActorTypeAlpha1 {
+  string actor_type = 1;
+
+  string method = 2;
+}
+
+// SubscribeActorEventRequestSinkActorInstanceAlpha1 is the sink for the
+// SubscribeActorEventRequestAlpha1 message. It is used to specify the
+// destination actor instance that is subscribing to the event. It matches on
+// the actor ID instance with that type. The actor Instance may not be active
+// on this host.
+message SubscribeActorEventRequestSinkActorInstanceAlpha1 {
+  string actor_type = 1;
+
+  string method = 2;
+
+  string actor_id = 3;
+}

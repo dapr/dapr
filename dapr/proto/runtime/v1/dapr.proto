@@ -20,6 +20,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "dapr/proto/common/v1/common.proto";
 import "dapr/proto/runtime/v1/appcallback.proto";
+import "dapr/proto/runtime/v1/actor.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -205,7 +206,7 @@ service Dapr {
 
   // Raise an event to a running workflow instance
   rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
-  
+
   // Shutdown the sidecar
   rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
 
@@ -220,6 +221,10 @@ service Dapr {
 
   // Converse with a LLM service
   rpc ConverseAlpha1(ConversationRequest) returns (ConversationResponse) {}
+
+  // SubscribeTopicActorEventsAlpha1 subscribes to a PubSub Actor topic and
+  // receives topic events from it.
+  rpc SubscribeActorTopicEventsAlpha1(stream SubscribeActorEventRequestAlpha1) returns (stream SubscribeActorEventResponseAlpha1) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
