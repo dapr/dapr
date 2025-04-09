@@ -155,11 +155,6 @@ func (h *AppHealth) ReportHealth(status *Status) {
 		return
 	}
 
-	// Limit health reports to 1 per second
-	if !h.ratelimitReports() {
-		return
-	}
-
 	// Channel is buffered, so make sure that this doesn't block
 	// Just in case another report is being worked on!
 	select {
@@ -203,32 +198,6 @@ func (h *AppHealth) doProbe(parentCtx context.Context) {
 	} else {
 		log.Debug("App health probe status is unchanged - health probe successful: %v", strconv.FormatBool(status.IsHealthy))
 	}
-}
-
-// Returns true if the health report can be saved. Only 1 report per second at most is allowed.
-func (h *AppHealth) ratelimitReports() bool {
-	var (
-		swapped  bool
-		attempts uint8
-	)
-
-	now := h.clock.Now().UnixMicro()
-
-	// Attempts at most 2 times before giving up, as the report may be stale at that point
-	for !swapped && attempts < 2 {
-		attempts++
-
-		// If the last report was less than `reportMinInterval` ago, nothing to do here
-		prev := h.lastReport.Load()
-		if prev > now-reportMinInterval.Microseconds() {
-			return false
-		}
-
-		swapped = h.lastReport.CompareAndSwap(prev, now)
-	}
-
-	// If we couldn't do the swap after 2 attempts, just return false
-	return swapped
 }
 
 func (h *AppHealth) setResult(ctx context.Context, status *Status) {
