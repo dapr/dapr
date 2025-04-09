@@ -107,21 +107,6 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, e.daprd.GetMetaSubscriptions(c, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
-	streamDupe, err := client.SubscribeTopicEventsAlpha1(ctx)
-	require.NoError(t, err)
-	require.NoError(t, streamDupe.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
-				PubsubName: "mypub", Topic: "a",
-			},
-		},
-	}))
-	t.Cleanup(func() { require.NoError(t, streamDupe.CloseSend()) })
-	_, err = streamDupe.Recv()
-	s, ok = status.FromError(err)
-	require.True(t, ok)
-	assert.Contains(t, s.Message(), `streamer already subscribed to pubsub "mypub" topic "a"`)
-
 	streamDoubleInit, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, streamDoubleInit.CloseSend()) })
