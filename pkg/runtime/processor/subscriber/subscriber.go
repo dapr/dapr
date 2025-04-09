@@ -22,6 +22,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
@@ -143,7 +144,7 @@ func (s *Subscriber) StartStreamerSubscription(subscription *subapi.Subscription
 
 	pubsub, ok := s.compStore.GetPubSub(sub.PubsubName)
 	if !ok {
-		return fmt.Errorf("streaming subscription pubsub %s not found", sub.PubsubName)
+		return apierrors.PubSub(sub.PubsubName).WithMetadata(nil).NotFound()
 	}
 
 	ss, err := s.startSubscription(pubsub, sub, true)
