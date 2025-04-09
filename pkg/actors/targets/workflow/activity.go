@@ -25,9 +25,9 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -61,7 +61,7 @@ type activity struct {
 	workflowActorType string
 
 	table     table.Interface
-	engine    engine.Interface
+	router    router.Interface
 	state     state.Interface
 	reminders reminders.Interface
 
@@ -86,7 +86,7 @@ func ActivityFactory(ctx context.Context, opts ActivityOptions) (targets.Factory
 		return nil, err
 	}
 
-	engine, err := opts.Actors.Engine(ctx)
+	router, err := opts.Actors.Router(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func ActivityFactory(ctx context.Context, opts ActivityOptions) (targets.Factory
 			workflowActorType:  opts.WorkflowActorType,
 			reminderInterval:   reminderInterval,
 			table:              table,
-			engine:             engine,
+			router:             router,
 			state:              state,
 			reminders:          reminders,
 			scheduler:          opts.Scheduler,
@@ -276,7 +276,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		WithData(resultData).
 		WithContentType(invokev1.ProtobufContentType)
 
-	_, err = a.engine.Call(ctx, req)
+	_, err = a.router.Call(ctx, req)
 	switch {
 	case err != nil:
 		// Returning recoverable error, record metrics

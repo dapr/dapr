@@ -235,13 +235,13 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		WithContentType(invokev1.ProtobufContentType)
 	start := time.Now()
 
-	engine, err := abe.actors.Engine(ctx)
+	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
 
 	err = backoff.Retry(func() error {
-		_, eerr := engine.Call(ctx, req)
+		_, eerr := router.Call(ctx, req)
 		status, ok := status.FromError(eerr)
 		if ok && status.Code() == codes.FailedPrecondition {
 			return eerr
@@ -331,13 +331,13 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
 
-	engine, err := abe.actors.Engine(ctx)
+	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
 
 	start := time.Now()
-	_, err = engine.Call(ctx, req)
+	_, err = router.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to ADD EVENT, record count and latency metrics.
@@ -389,7 +389,7 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, ch chan<- *backend.OrchestrationMetadata) error {
 	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
 
-	engine, err := abe.actors.Engine(ctx)
+	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
@@ -404,7 +404,7 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 	for {
 		err = concurrency.NewRunnerManager(
 			func(ctx context.Context) error {
-				return engine.CallStream(ctx, req, stream)
+				return router.CallStream(ctx, req, stream)
 			},
 			func(ctx context.Context) error {
 				for {
@@ -447,13 +447,13 @@ func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceI
 		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
 		WithActor(abe.workflowActorType, string(id))
 
-	engine, err := abe.actors.Engine(ctx)
+	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
 
 	start := time.Now()
-	_, err = engine.Call(ctx, req)
+	_, err = router.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to PURGE WORKFLOW, record latency and count metrics.

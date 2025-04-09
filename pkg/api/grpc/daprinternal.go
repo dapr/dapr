@@ -275,13 +275,13 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	var res *internalv1pb.InternalInvokeResponse
-	engine, err := a.ActorEngine(ctx)
+	router, err := a.ActorRouter(ctx)
 	if err == nil {
 		if in.Metadata == nil {
 			in.Metadata = make(map[string]*internalv1pb.ListStringValue)
 		}
 		in.Metadata["X-Dapr-Remote"] = &internalv1pb.ListStringValue{Values: []string{"true"}}
-		res, err = engine.Call(ctx, in)
+		res, err = router.Call(ctx, in)
 	}
 
 	if err != nil {
@@ -306,13 +306,13 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 // CallActorReminder invokes an internal virtual actor.
 func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
-	engine, err := a.ActorEngine(ctx)
+	router, err := a.ActorRouter(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	period, _ := actorapi.NewReminderPeriod(in.GetPeriod())
-	return nil, engine.CallReminder(ctx, &actorapi.Reminder{
+	return nil, router.CallReminder(ctx, &actorapi.Reminder{
 		Name:           in.GetName(),
 		ActorType:      in.GetActorType(),
 		ActorID:        in.GetActorId(),
@@ -327,7 +327,7 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 }
 
 func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream internalv1pb.ServiceInvocation_CallActorStreamServer) error {
-	engine, err := a.ActorEngine(stream.Context())
+	router, err := a.ActorRouter(stream.Context())
 	if err != nil {
 		return err
 	}
@@ -353,7 +353,7 @@ func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream in
 			}
 		},
 		func(ctx context.Context) error {
-			return engine.CallStream(stream.Context(), req, ch)
+			return router.CallStream(stream.Context(), req, ch)
 		},
 	).Run(stream.Context())
 }
