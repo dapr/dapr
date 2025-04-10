@@ -20,8 +20,8 @@ import (
 	"sync"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/config"
@@ -105,11 +105,11 @@ func (a *Universal) AppConnectionConfig() config.AppConnectionConfig {
 	return a.appConnectionConfig
 }
 
-func (a *Universal) ActorEngine(ctx context.Context) (engine.Interface, error) {
+func (a *Universal) ActorRouter(ctx context.Context) (router.Interface, error) {
 	if err := a.actors.WaitForRegisteredHosts(ctx); err != nil {
 		return nil, err
 	}
-	return a.actors.Engine(ctx)
+	return a.actors.Router(ctx)
 }
 
 func (a *Universal) ActorState(ctx context.Context) (state.Interface, error) {
