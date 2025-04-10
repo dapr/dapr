@@ -31,6 +31,12 @@ type PubsubItem struct {
 	NamespaceScoped     bool
 }
 
+// TopicKey uniquely identifies a pubsub+topic combination
+type TopicKey string
+
+// ConnectionID uniquely identifies a connection
+type ConnectionID uint64
+
 // Adapter is the interface for message buses.
 type Adapter interface {
 	Publish(context.Context, *contribPubsub.PublishRequest) error
@@ -38,10 +44,10 @@ type Adapter interface {
 }
 
 type AdapterStreamer interface {
-	Subscribe(rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1) error
+	Subscribe(rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1, ConnectionID) error
 	Publish(context.Context, *SubscribedMessage) error
 	StreamerKey(pubsub, topic string) string
-	Close(key string)
+	Close(key string, connectionID ConnectionID)
 }
 
 func IsOperationAllowed(topic string, pubSub *PubsubItem, scopedTopics []string) bool {
