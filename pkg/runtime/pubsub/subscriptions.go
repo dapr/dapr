@@ -87,12 +87,13 @@ type (
 	}
 
 	SubscribedMessage struct {
-		CloudEvent map[string]interface{}
-		Data       []byte
-		Topic      string
-		Metadata   map[string]string
-		Path       string
-		PubSub     string
+		CloudEvent   map[string]interface{}
+		Data         []byte
+		Topic        string
+		Metadata     map[string]string
+		Path         string
+		PubSub       string
+		SubscriberID ConnectionID
 	}
 )
 

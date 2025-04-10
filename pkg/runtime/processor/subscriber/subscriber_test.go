@@ -96,7 +96,7 @@ func TestSubscriptionLifecycle(t *testing.T) {
 			Topic:      "topic4",
 			Routes:     subapi.Routes{Default: "/"},
 		},
-	})
+	}, rtpubsub.ConnectionID(1))
 	compStore.AddStreamSubscription(&subapi.Subscription{
 		ObjectMeta: metav1.ObjectMeta{Name: "sub2||"},
 		Spec: subapi.SubscriptionSpec{
@@ -104,7 +104,7 @@ func TestSubscriptionLifecycle(t *testing.T) {
 			Topic:      "topic5",
 			Routes:     subapi.Routes{Default: "/"},
 		},
-	})
+	}, rtpubsub.ConnectionID(2))
 	compStore.AddStreamSubscription(&subapi.Subscription{
 		ObjectMeta: metav1.ObjectMeta{Name: "sub3||"},
 		Spec: subapi.SubscriptionSpec{
@@ -112,7 +112,7 @@ func TestSubscriptionLifecycle(t *testing.T) {
 			Topic:      "topic6",
 			Routes:     subapi.Routes{Default: "/"},
 		},
-	})
+	}, rtpubsub.ConnectionID(3))
 
 	subs := New(Options{
 		CompStore:  compStore,
@@ -356,7 +356,7 @@ func TestReloadPubSub(t *testing.T) {
 			Topic:      "topic4",
 			Routes:     subapi.Routes{Default: "/"},
 		},
-	})
+	}, rtpubsub.ConnectionID(1))
 	compStore.AddStreamSubscription(&subapi.Subscription{
 		ObjectMeta: metav1.ObjectMeta{Name: "sub2||"},
 		Spec: subapi.SubscriptionSpec{
@@ -364,7 +364,7 @@ func TestReloadPubSub(t *testing.T) {
 			Topic:      "topic5",
 			Routes:     subapi.Routes{Default: "/"},
 		},
-	})
+	}, rtpubsub.ConnectionID(2))
 	compStore.AddStreamSubscription(&subapi.Subscription{
 		ObjectMeta: metav1.ObjectMeta{Name: "sub3||"},
 		Spec: subapi.SubscriptionSpec{
@@ -372,7 +372,7 @@ func TestReloadPubSub(t *testing.T) {
 			Topic:      "topic6",
 			Routes:     subapi.Routes{Default: "/"},
 		},
-	})
+	}, rtpubsub.ConnectionID(3))
 
 	subs.ReloadPubSub("mockPubSub1")
 	assert.Eventually(t, func() bool {
