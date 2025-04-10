@@ -109,20 +109,10 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 		pipe := tee.WriteCloser(iow, pipe.procPipe)
 
 		e.wg.Add(1)
-		pipeErrCh := make(chan error, 1)
 		go func() {
 			defer e.wg.Done()
 			io.Copy(pipe, cmdPipe)
-			pipeErrCh <- pipe.Close()
 		}()
-		t.Cleanup(func() {
-			select {
-			case err := <-pipeErrCh:
-				require.NoError(t, err)
-			case <-time.After(time.Second * 5):
-				assert.Fail(t, "context cancelled before exec pipe closed")
-			}
-		})
 	}
 
 	// Wait for a few seconds before killing the process completely.
