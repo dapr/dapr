@@ -174,7 +174,7 @@ func (m *mixed) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*5, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, m.daprd.GetMetaSubscriptions(c, ctx), 3)
+		assert.Len(c, m.daprd.GetMetaSubscriptions(c, ctx), 4)
 	}, time.Second*5, time.Millisecond*10)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
