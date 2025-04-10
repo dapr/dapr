@@ -116,11 +116,6 @@ func (s *State) AddToInbox(e *backend.HistoryEvent) {
 	s.inboxAddedCount++
 }
 
-func (s *State) AddToHistory(e *backend.HistoryEvent) {
-	s.History = append(s.History, e)
-	s.historyAddedCount++
-}
-
 func (s *State) ClearInbox() {
 	for _, e := range s.Inbox {
 		if e.GetTimerFired() != nil {
