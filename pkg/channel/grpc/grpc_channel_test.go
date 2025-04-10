@@ -103,6 +103,7 @@ func TestInvokeMethod(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("successful request", func(t *testing.T) {
+		t.Setenv(securityConsts.AppAPITokenHeaderEnvVar, "x-api-token")
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 		defer req.Close()
@@ -119,6 +120,7 @@ func TestInvokeMethod(t *testing.T) {
 		assert.Equal(t, "POST", actual["httpverb"])
 		assert.Equal(t, "method", actual["method"])
 		assert.Equal(t, "token1", actual[securityConsts.APITokenHeader])
+		assert.Equal(t, "token1", actual["x-api-token"])
 		assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
 	})
 
