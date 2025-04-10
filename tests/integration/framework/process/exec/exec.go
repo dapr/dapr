@@ -111,6 +111,7 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 		go func() {
 			defer e.wg.Done()
 			io.Copy(pipe, cmdPipe)
+			pipe.Close()
 		}()
 	}
 
@@ -140,11 +141,5 @@ func (e *exec) checkExit(t *testing.T) {
 	e.runErrorFn(t, e.cmd.Wait())
 	assert.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
 	assert.Equalf(t, e.exitCode, e.cmd.ProcessState.ExitCode(), "expected exit code to be %d", e.exitCode)
-	if e.stdoutpipe != nil {
-		assert.NoError(t, e.stdoutpipe.Close())
-	}
-	if e.stderrpipe != nil {
-		assert.NoError(t, e.stderrpipe.Close())
-	}
 	t.Logf("%q process exited", filepath.Base(e.binPath))
 }
