@@ -82,11 +82,10 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 
 	defer func() {
 		s.lock.Lock()
-		defer s.lock.Unlock()
 		select {
-		case <-conn.closeCh:
+		case <-connection.closeCh:
 		default:
-			close(conn.closeCh)
+			close(connection.closeCh)
 		}
 		if connections, ok := s.subscribers[key]; ok {
 			delete(connections, connectionID)
@@ -101,7 +100,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 	go func() {
 		var err error
 		select {
-		case <-conn.closeCh:
+		case <-connection.closeCh:
 			err = errors.New("stream closed")
 		case <-stream.Context().Done():
 			err = stream.Context().Err()
@@ -110,7 +109,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 	}()
 
 	go func() {
-		errCh <- s.recvLoop(stream, req, conn)
+		errCh <- s.recvLoop(stream, req, connection)
 	}()
 
 	return <-errCh
@@ -199,7 +198,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-conn.closeCh:
+	case <-connection.closeCh:
 	case resp = <-ch:
 	}
 
@@ -228,12 +227,14 @@ func (s *streamer) StreamerKey(pubsub, topic string) string {
 	return "___" + pubsub + "||" + topic
 }
 
-func (s *streamer) Close(key string) {
+func (s *streamer) Close(key string, connectionID rtpubsub.ConnectionID) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	conn, ok := s.subscribers[key]
+	conns, ok := s.subscribers[key]
 	if ok {
-		close(conn.closeCh)
+		if conn, ok := conns[connectionID]; ok {
+			close(conn.closeCh)
+		}
 	}
 }
