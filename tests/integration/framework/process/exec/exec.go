@@ -23,7 +23,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -115,9 +114,6 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 		}()
 	}
 
-	// Wait for a few seconds before killing the process completely.
-	e.cmd.WaitDelay = time.Second * 5
-
 	for k, v := range e.envs {
 		e.cmd.Env = append(e.cmd.Env, k+"="+v)
 	}
@@ -126,8 +122,7 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 }
 
 func (e *exec) Cleanup(t *testing.T) {
-	e.wg.Add(1)
-	defer func() { e.wg.Done(); e.wg.Wait() }()
+	defer func() { e.wg.Wait() }()
 
 	if !e.once.CompareAndSwap(false, true) {
 		return
@@ -145,5 +140,11 @@ func (e *exec) checkExit(t *testing.T) {
 	e.runErrorFn(t, e.cmd.Wait())
 	assert.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
 	assert.Equalf(t, e.exitCode, e.cmd.ProcessState.ExitCode(), "expected exit code to be %d", e.exitCode)
+	if e.stdoutpipe != nil {
+		assert.NoError(t, e.stdoutpipe.Close())
+	}
+	if e.stderrpipe != nil {
+		assert.NoError(t, e.stderrpipe.Close())
+	}
 	t.Logf("%q process exited", filepath.Base(e.binPath))
 }
