@@ -29,14 +29,15 @@ jobs:
     permissions:
       contents: read
     env:
-      GOLANGCILINT_VER: "v1.61.0" # Make sure to bump /.build-tools/check-lint-version/main_test.go
+      GOLANGCILINT_VER: "v1.64.6" # Make sure to bump /.build-tools/check-lint-version/main_test.go
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup
-        uses: actions/setup-go@v5
+        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
+        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
         with:
           go-version-file: './.build-tools/go.mod'
 

@@ -14,7 +14,6 @@ limitations under the License.
 package secret
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,7 +76,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 		)
 
 		// add Kubernetes component manually
-		require.NoError(t, sec.Init(context.Background(), componentsapi.Component{
+		require.NoError(t, sec.Init(t.Context(), componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: compsecret.BuiltinKubernetesSecretStore,
 			},
@@ -87,7 +86,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 			},
 		}))
 
-		updated, unready := sec.ProcessResource(context.Background(), mockBinding)
+		updated, unready := sec.ProcessResource(t.Context(), mockBinding)
 		assert.True(t, updated)
 		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
 		assert.Empty(t, unready)
@@ -120,7 +119,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		err := sec.Init(context.Background(), componentsapi.Component{
+		err := sec.Init(t.Context(), componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "mock",
 			},
@@ -131,7 +130,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		updated, unready := sec.ProcessResource(context.Background(), mockBinding)
+		updated, unready := sec.ProcessResource(t.Context(), mockBinding)
 		assert.True(t, updated)
 		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
 		assert.Empty(t, unready)
@@ -155,7 +154,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 			}),
 		})
 
-		updated, unready := sec.ProcessResource(context.Background(), mockBinding)
+		updated, unready := sec.ProcessResource(t.Context(), mockBinding)
 		assert.True(t, updated)
 		assert.Equal(t, "ciao mondo", mockBinding.Spec.Metadata[0].Value.String())
 		assert.Empty(t, unready)
@@ -186,7 +185,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 			}),
 		})
 
-		updated, unready := sec.ProcessResource(context.Background(), mockBinding)
+		updated, unready := sec.ProcessResource(t.Context(), mockBinding)
 		assert.True(t, updated)
 		assert.Equal(t, "", mockBinding.Spec.Metadata[0].Value.String())
 		assert.Equal(t, "", mockBinding.Spec.Metadata[1].Value.String())

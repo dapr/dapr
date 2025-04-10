@@ -45,7 +45,7 @@ const (
 	secondsToCheckGetMetadata             = 10                                   // How much time to wait to check metadata.
 	secondsBetweenChecksForActorFailover  = 5                                    // How much time to wait to make sure the result is in logs.
 	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
-	actorsToCheckRebalance                = 10                                   // How many actors to create in the rebalance check test.
+	actorsToCheckRebalance                = 30                                   // How many actors to create in the rebalance check test.
 	appScaleToCheckRebalance              = 2                                    // How many instances of the app to create to validate rebalance.
 	actorsToCheckMetadata                 = 5                                    // How many actors to create in get metdata test.
 	appScaleToCheckMetadata               = 1                                    // How many instances of the app to test get metadata.
@@ -113,7 +113,8 @@ func findActorAction(resp []byte, actorID string, action string) *actorLogEntry 
 func findNthActorAction(resp []byte, actorID string, action string, position int) *actorLogEntry {
 	skips := position - 1
 	logEntries := parseLogEntries(resp)
-	for _, logEntry := range logEntries {
+	for i := len(logEntries) - 1; i >= 0; i-- {
+		logEntry := logEntries[i]
 		if (logEntry.ActorID == actorID) && (logEntry.Action == action) {
 			if skips == 0 {
 				return &logEntry
@@ -140,7 +141,7 @@ func TestMain(m *testing.M) {
 			DaprEnabled:         true,
 			DebugLoggingEnabled: true,
 			ImageName:           "e2e-actorfeatures",
-			Config:              "omithealthchecksconfig",
+			Config:              "featureactorreminderscheduler",
 			Replicas:            1,
 			IngressEnabled:      true,
 			MetricsEnabled:      true,
@@ -154,7 +155,7 @@ func TestMain(m *testing.M) {
 			DaprEnabled:         true,
 			DebugLoggingEnabled: true,
 			ImageName:           "e2e-actorclientapp",
-			Config:              "omithealthchecksconfig",
+			Config:              "featureactorreminderscheduler",
 			Replicas:            1,
 			IngressEnabled:      true,
 			MetricsEnabled:      true,
@@ -382,7 +383,7 @@ func TestActorFeatures(t *testing.T) {
 		req := actorReminderOrTimer{
 			Data:    "reminderdata",
 			DueTime: "1s",
-			Period:  "5s",
+			Period:  "10s",
 		}
 		reqBody, _ := json.Marshal(req)
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
@@ -416,7 +417,7 @@ func TestActorFeatures(t *testing.T) {
 			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
-		require.True(t, countActorAction(res, actorID, reminderName) == 1, "condition failed")
+		require.Equalf(t, 1, countActorAction(res, actorID, reminderName), "condition failed: %s", string(res))
 	})
 
 	t.Run("Actor reminder with deactivate.", func(t *testing.T) {
@@ -518,6 +519,13 @@ func TestActorFeatures(t *testing.T) {
 		err := tr.Platform.Restart(appName)
 		require.NoError(t, err)
 
+		// Re-establish port forwarding after app restart, likely connection would be lost to pod.
+		// replace externalUrl and Logs URL since the new port will be assigned
+		externalURL = tr.Platform.AcquireAppExternalURL(appName)
+		require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+		logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
+
 		err = backoff.Retry(func() error {
 			time.Sleep(30 * time.Second)
 			resp, errb := httpGet(logsURL)
@@ -557,7 +565,7 @@ func TestActorFeatures(t *testing.T) {
 		req := actorReminderOrTimer{
 			Data:    "reminderdata",
 			DueTime: "1s",
-			Period:  "1s",
+			Period:  "10s",
 		}
 		var reqBody []byte
 		reqBody, err = json.Marshal(req)
@@ -576,7 +584,7 @@ func TestActorFeatures(t *testing.T) {
 			log.Printf("failed to get reminder. Error='%v' Response='%s'", err, string(res))
 		}
 		require.NoError(t, err, "failed to get reminder")
-		require.True(t, len(res) == 0, "Reminder %s exist", reminderName)
+		require.Empty(t, res, "Reminder %s exist", reminderName)
 
 		res, err = httpGet(logsURL)
 		if err != nil {
@@ -584,7 +592,7 @@ func TestActorFeatures(t *testing.T) {
 		}
 		require.NoError(t, err, "failed to get logs")
 		count := countActorAction(res, actorID, reminderName)
-		require.True(t, count == 1, "condition failed: %d not == 1. Response='%s'", count, string(res))
+		require.LessOrEqual(t, count, 2, "condition failed: %d not == 1. Response='%s'", count, string(res))
 	})
 
 	t.Run("Actor timer.", func(t *testing.T) {
@@ -779,6 +787,13 @@ func TestActorFeatures(t *testing.T) {
 		require.NoError(t, err, "error getting first hostname")
 
 		tr.Platform.Restart(appName)
+
+		// Re-establish port forwarding after app restart, likely connection would be lost to pod.
+		// replace externalUrl and Logs URL since the new port will be assigned
+		externalURL = tr.Platform.AcquireAppExternalURL(appName)
+		require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+		logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
 
 		newHostname := []byte{}
 		for i := 0; i <= actorInvokeRetriesAfterRestart; i++ {

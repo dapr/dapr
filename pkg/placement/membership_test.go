@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
@@ -52,17 +51,19 @@ func TestMembershipChangeWorker(t *testing.T) {
 		clock         *clocktesting.FakeClock
 	)
 
+	raftOpts, err := tests.RaftOpts(t)
+	require.NoError(t, err)
+
 	setupEach := func(t *testing.T) context.CancelFunc {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		var cancelServer context.CancelFunc
 
-		testRaftServer := tests.Raft(t)
-		serverAddress, testServer, clock, cancelServer = newTestPlacementServer(t, testRaftServer)
+		serverAddress, testServer, clock, cancelServer = newTestPlacementServer(t, *raftOpts)
 		testServer.hasLeadership.Store(true)
 		membershipStopCh := make(chan struct{})
 
-		cleanupStates(testRaftServer)
-		state := testRaftServer.FSM().State()
+		cleanupStates(testServer.raftNode)
+		state := testServer.raftNode.FSM().State()
 		require.Equal(t, 0, state.MemberCount())
 
 		go func() {
@@ -458,58 +459,37 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	const testClients = 10
-	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, tests.Raft(t))
+
+	raftOpts, err := tests.RaftOpts(t)
+	require.NoError(t, err)
+
+	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, *raftOpts)
 	testServer.hasLeadership.Store(true)
 	var (
-		overArr       [testClients]int64
-		overArrLock   sync.RWMutex
-		clientConns   = make([]*grpc.ClientConn, 0, testClients)
-		clientStreams = make([]v1pb.Placement_ReportDaprStatusClient, 0, testClients)
-		wg            sync.WaitGroup
+		disseminationTime [testClients]int64
+		clientConns       = make([]*grpc.ClientConn, 0, testClients)
+		clientStreams     = make([]v1pb.Placement_ReportDaprStatusClient, 0, testClients)
+		wg                sync.WaitGroup
 	)
-	startFlag := atomic.Bool{}
-	startFlag.Store(false)
-	wg.Add(testClients)
+
+	// Create test clients to read from the streams
 	for i := range testClients {
 		conn, _, stream := newTestClient(t, serverAddress)
 		clientConns = append(clientConns, conn)
 		clientStreams = append(clientStreams, stream)
+		wg.Add(1)
 		go func(clientID int, clientStream v1pb.Placement_ReportDaprStatusClient) {
 			defer wg.Done()
-			var start time.Time
 			for {
-				placementOrder, streamErr := clientStream.Recv()
+				_, streamErr := clientStream.Recv()
 				if streamErr != nil {
 					return
-				}
-				if placementOrder != nil {
-					if placementOrder.GetOperation() == lockOperation {
-						if startFlag.Load() {
-							start = time.Now()
-							if clientID == 1 {
-								t.Log("client 1 lock", start)
-							}
-						}
-					}
-					if placementOrder.GetOperation() == updateOperation {
-						continue
-					}
-					if placementOrder.GetOperation() == unlockOperation {
-						if startFlag.Load() {
-							if clientID == 1 {
-								t.Log("client 1 unlock", time.Now())
-							}
-							overArrLock.Lock()
-							overArr[clientID] = time.Since(start).Nanoseconds()
-							overArrLock.Unlock()
-						}
-					}
 				}
 			}
 		}(i, stream)
 	}
 
-	// register
+	// Clients register actor types with placement
 	for i := range testClients {
 		host := &v1pb.Host{
 			Name:     fmt.Sprintf("127.0.0.1:5010%d", i),
@@ -520,7 +500,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 		require.NoError(t, clientStreams[i].Send(host))
 	}
 
-	// Wait until clientStreams[clientID].Recv() in client go routine received new table.
+	// Wait until all clientStreams received the new table and got registered with placement
 	ns := "" // The client didn't send any namespace
 	require.Eventually(t, func() bool {
 		return testServer.streamConnPool.getStreamCount(ns) == testClients
@@ -531,89 +511,40 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 		streamConnPool = append(streamConnPool, *val)
 	})
 
-	startFlag.Store(true)
 	mockMessage := &v1pb.PlacementTables{Version: "demo"}
 
-	for _, host := range streamConnPool {
-		require.NoError(t, testServer.disseminateOperation(context.Background(), host, lockOperation, mockMessage))
-		require.NoError(t, testServer.disseminateOperation(context.Background(), host, updateOperation, mockMessage))
-		require.NoError(t, testServer.disseminateOperation(context.Background(), host, unlockOperation, mockMessage))
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	var start time.Time
+	for i, host := range streamConnPool {
+		start = time.Now()
+		require.NoError(t, testServer.disseminateOperation(ctx, host, lockOperation, mockMessage))
+		require.NoError(t, testServer.disseminateOperation(ctx, host, updateOperation, mockMessage))
+		require.NoError(t, testServer.disseminateOperation(ctx, host, unlockOperation, mockMessage))
+		disseminationTime[i] = time.Since(start).Nanoseconds()
 	}
-	startFlag.Store(false)
+
 	var max int64
-	overArrLock.RLock()
-	for i := range overArr {
-		if overArr[i] > max {
-			max = overArr[i]
+	for i := range disseminationTime {
+		fmt.Println("client ", i, " cost time(ns): ", disseminationTime[i])
+		if disseminationTime[i] > max {
+			max = disseminationTime[i]
 		}
 	}
-	overArrLock.RUnlock()
 
-	// clean up resources.
+	// Close streams and tcp connections
 	for i := range testClients {
+		require.NoError(t, clientStreams[i].CloseSend())
 		require.NoError(t, clientConns[i].Close())
 	}
+	wg.Wait()
 	cleanup()
 	return max
 }
 
 func TestPerformTableUpdatePerf(t *testing.T) {
 	for range 3 {
-		fmt.Println("max cost time(ns)", PerformTableUpdateCostTime(t))
-	}
-}
-
-// MockPlacementGRPCStream simulates the behavior of placementv1pb.Placement_ReportDaprStatusServer
-type MockPlacementGRPCStream struct {
-	v1pb.Placement_ReportDaprStatusServer
-	ctx context.Context
-}
-
-func (m MockPlacementGRPCStream) Context() context.Context {
-	return m.ctx
-}
-
-// Utility function to create metadata and context for testing
-func createContextWithMetadata(key, value string) context.Context {
-	md := metadata.Pairs(key, value)
-	return metadata.NewIncomingContext(context.Background(), md)
-}
-
-func TestExpectsVNodes(t *testing.T) {
-	tests := []struct {
-		name     string
-		ctx      context.Context
-		expected bool
-	}{
-		{
-			name:     "Without metadata",
-			ctx:      context.Background(),
-			expected: true,
-		},
-		{
-			name:     "With metadata expectsVNodes true",
-			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "true"),
-			expected: true,
-		},
-		{
-			name:     "With metadata expectsVNodes false",
-			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "false"),
-			expected: false,
-		},
-		{
-			name:     "With invalid metadata value",
-			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "invalid"),
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			stream := MockPlacementGRPCStream{ctx: tt.ctx}
-			result := hostNeedsVNodes(stream)
-			if result != tt.expected {
-				t.Errorf("expectsVNodes() for %s: expected %v, got %v", tt.name, tt.expected, result)
-			}
-		})
+		fmt.Printf("==== Max cost time %d ms", PerformTableUpdateCostTime(t)/1000)
 	}
 }

@@ -22,7 +22,6 @@ import (
 	"net"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -67,7 +66,7 @@ type Options struct {
 	MetricSpec     config.MetricSpec
 	APISpec        config.APISpec
 	Proxy          messaging.Proxy
-	WorkflowEngine *wfengine.WorkflowEngine
+	WorkflowEngine wfengine.Interface
 	Healthz        healthz.Healthz
 }
 
@@ -94,12 +93,10 @@ type server struct {
 	authToken      string
 	apiSpec        config.APISpec
 	proxy          messaging.Proxy
-	workflowEngine *wfengine.WorkflowEngine
+	workflowEngine wfengine.Interface
 	sec            security.Handler
 	wg             sync.WaitGroup
 	htarget        healthz.Target
-	closed         atomic.Bool
-	closeCh        chan struct{}
 }
 
 var (
@@ -150,7 +147,6 @@ func NewAPIServer(opts Options) Server {
 		proxy:          opts.Proxy,
 		workflowEngine: opts.WorkflowEngine,
 		htarget:        opts.Healthz.AddTarget(),
-		closeCh:        make(chan struct{}),
 		grpcServerOpts: serverOpts,
 	}
 }
@@ -193,7 +189,6 @@ func NewInternalServer(opts OptionsInternal) Server {
 		proxy:          opts.Proxy,
 		sec:            opts.Security,
 		htarget:        opts.Healthz.AddTarget(),
-		closeCh:        make(chan struct{}),
 	}
 }
 
@@ -239,10 +234,8 @@ func (s *server) StartNonBlocking() error {
 			internalv1pb.RegisterServiceInvocationServer(server, s.api)
 		} else if s.kind == apiServer {
 			runtimev1pb.RegisterDaprServer(server, s.api)
-			if s.workflowEngine != nil {
-				s.logger.Infof("Registering workflow engine for gRPC endpoint: %s", listener.Addr())
-				s.workflowEngine.RegisterGrpcServer(server)
-			}
+			s.logger.Infof("Registering workflow engine for gRPC endpoint: %s", listener.Addr())
+			s.workflowEngine.RegisterGrpcServer(server)
 		}
 
 		s.wg.Add(1)
@@ -263,8 +256,10 @@ func (s *server) Close() error {
 
 	s.htarget.NotReady()
 
-	if s.closed.CompareAndSwap(false, true) {
-		close(s.closeCh)
+	if s.api != nil {
+		if err := s.api.Close(); err != nil {
+			return err
+		}
 	}
 
 	s.wg.Add(len(s.servers))
@@ -274,12 +269,6 @@ func (s *server) Close() error {
 			defer s.wg.Done()
 			server.GracefulStop()
 		}(server)
-	}
-
-	if s.api != nil {
-		if err := s.api.Close(); err != nil {
-			return err
-		}
 	}
 
 	return nil

@@ -14,7 +14,6 @@ limitations under the License.
 package universal
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -22,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/actors"
+	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/expr"
@@ -35,9 +34,16 @@ func TestGetMetadata(t *testing.T) {
 	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 
-	mockActors := new(actors.MockActors)
-	mockActors.On("GetRuntimeStatus")
-
+	actors := actorsfake.New().WithRuntimeStatus(func() *runtimev1pb.ActorRuntime {
+		return &runtimev1pb.ActorRuntime{
+			RuntimeStatus: runtimev1pb.ActorRuntime_RUNNING,
+			HostReady:     true,
+			ActiveActors: []*runtimev1pb.ActiveActorsCount{
+				{Type: "abcd", Count: 10},
+				{Type: "xyz", Count: 5},
+			},
+		}
+	})
 	compStore := compstore.New()
 	require.NoError(t, compStore.AddPendingComponentForCommit(fakeComponent))
 	require.NoError(t, compStore.CommitPendingComponent())
@@ -89,7 +95,7 @@ func TestGetMetadata(t *testing.T) {
 
 			fakeAPI := &Universal{
 				appID:     "fakeAPI",
-				actors:    mockActors,
+				actors:    actors,
 				compStore: compStore,
 				getComponentsCapabilitiesFn: func() map[string][]string {
 					capsMap := make(map[string][]string)
@@ -102,9 +108,8 @@ func TestGetMetadata(t *testing.T) {
 				appConnectionConfig: appConnectionConfig,
 				globalConfig:        &config.Configuration{},
 			}
-			fakeAPI.actorsReady.Store(true)
 
-			response, err := fakeAPI.GetMetadata(context.Background(), &runtimev1pb.GetMetadataRequest{})
+			response, err := fakeAPI.GetMetadata(t.Context(), &runtimev1pb.GetMetadataRequest{})
 			require.NoError(t, err, "Expected no error")
 
 			bytes, err := json.Marshal(response)
@@ -135,7 +140,7 @@ func TestSetMetadata(t *testing.T) {
 		appID: "fakeAPI",
 	}
 
-	_, err := fakeAPI.SetMetadata(context.Background(), &runtimev1pb.SetMetadataRequest{
+	_, err := fakeAPI.SetMetadata(t.Context(), &runtimev1pb.SetMetadataRequest{
 		Key:   "testKey",
 		Value: "testValue",
 	})

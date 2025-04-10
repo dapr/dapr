@@ -125,7 +125,7 @@ func TestInputBindingCalls(t *testing.T) {
 			}()
 
 			conn := inputFromConnector(testLogger, connector)
-			err = conn.Init(context.Background(), bindings.Metadata{
+			err = conn.Init(t.Context(), bindings.Metadata{
 				Base: contribMetadata.Base{},
 			})
 
@@ -180,7 +180,7 @@ func TestInputBindingCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = binding.Read(context.Background(), func(_ context.Context, resp *bindings.ReadResponse) ([]byte, error) {
+		err = binding.Read(t.Context(), func(_ context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 			handleCalled.Add(1)
 			messagesProcessed.Done()
 			assert.Contains(t, messagesData, resp.Data)

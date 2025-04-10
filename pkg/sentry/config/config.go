@@ -26,6 +26,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/modes"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
@@ -65,6 +66,7 @@ type Config struct {
 	RootCertPath     string
 	IssuerCertPath   string
 	IssuerKeyPath    string
+	Mode             modes.DaprMode
 	Validators       map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
 	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
 	Features         []daprGlobalConfig.FeatureSpec
@@ -72,8 +74,8 @@ type Config struct {
 
 // FromConfigName returns a Sentry configuration based on a configuration spec.
 // A default configuration is loaded in case of an error.
-func FromConfigName(configName string) (conf Config, err error) {
-	if IsKubernetesHosted() {
+func FromConfigName(configName, mode string) (conf Config, err error) {
+	if IsKubernetesHosted(modes.DaprMode(mode)) {
 		conf, err = getKubernetesConfig(configName)
 	} else {
 		conf, err = getSelfhostedConfig(configName)
@@ -82,13 +84,21 @@ func FromConfigName(configName string) (conf Config, err error) {
 	if err != nil {
 		err = fmt.Errorf("loading default config. couldn't find config name %q: %w", configName, err)
 		conf = getDefaultConfig()
+		conf.Mode = modes.DaprMode(mode)
 	}
 
 	return conf, err
 }
 
-func IsKubernetesHosted() bool {
-	return os.Getenv(kubernetesServiceHostEnvVar) != ""
+func IsKubernetesHosted(mode modes.DaprMode) bool {
+	switch mode {
+	case modes.KubernetesMode:
+		return true
+	case modes.StandaloneMode:
+		return false
+	default:
+		return os.Getenv(kubernetesServiceHostEnvVar) != ""
+	}
 }
 
 func getDefaultConfig() Config {
@@ -103,6 +113,7 @@ func getDefaultConfig() Config {
 
 func getKubernetesConfig(configName string) (Config, error) {
 	defaultConfig := getDefaultConfig()
+	defaultConfig.Mode = modes.KubernetesMode
 
 	kubeConf := utils.GetConfig()
 	daprClient, err := scheme.NewForConfig(kubeConf)
@@ -145,6 +156,8 @@ func getKubernetesConfig(configName string) (Config, error) {
 
 func getSelfhostedConfig(configName string) (Config, error) {
 	defaultConfig := getDefaultConfig()
+	defaultConfig.Mode = modes.StandaloneMode
+
 	daprConfig, err := daprGlobalConfig.LoadStandaloneConfiguration(configName)
 	if err != nil {
 		return defaultConfig, err
@@ -180,13 +193,14 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 		conf.TrustDomain = daprConfig.Spec.MTLSSpec.ControlPlaneTrustDomain
 	}
 
+	daprConfig.SetDefaultFeatures()
 	conf.Features = daprConfig.Spec.Features
 
 	// Get token validators
 	// In Kubernetes mode, we always allow the built-in "kubernetes" validator
 	// In self-hosted mode, the built-in "insecure" validator is enabled only if no other validator is configured
 	conf.Validators = map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string{}
-	if IsKubernetesHosted() {
+	if IsKubernetesHosted(conf.Mode) {
 		conf.DefaultValidator = sentryv1pb.SignCertificateRequest_KUBERNETES
 		conf.Validators[sentryv1pb.SignCertificateRequest_KUBERNETES] = map[string]string{}
 	}
@@ -209,7 +223,7 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 
 			conf.Validators[sentryv1pb.SignCertificateRequest_TokenValidator(val)] = v.OptionsMap()
 		}
-	} else if !IsKubernetesHosted() {
+	} else if !IsKubernetesHosted(conf.Mode) {
 		conf.DefaultValidator = sentryv1pb.SignCertificateRequest_INSECURE
 		conf.Validators[sentryv1pb.SignCertificateRequest_INSECURE] = map[string]string{}
 	}

@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,6 +53,9 @@ type Sentry struct {
 	metricsPort int
 	trustDomain *string
 	namespace   string
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Sentry {
@@ -125,6 +129,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		args = append(args, "-trust-domain="+*opts.trustDomain)
 	}
 
+	if opts.mode != nil {
+		args = append(args, "-mode="+*opts.mode)
+	}
+
 	if opts.writeConfig {
 		configPath := filepath.Join(t.TempDir(), "sentry-config.yaml")
 		require.NoError(t, os.WriteFile(configPath, []byte(opts.configuration), 0o600))
@@ -150,12 +158,16 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 }
 
 func (s *Sentry) Run(t *testing.T, ctx context.Context) {
-	s.ports.Free(t)
-	s.exec.Run(t, ctx)
+	s.runOnce.Do(func() {
+		s.ports.Free(t)
+		s.exec.Run(t, ctx)
+	})
 }
 
 func (s *Sentry) Cleanup(t *testing.T) {
-	s.exec.Cleanup(t)
+	s.cleanupOnce.Do(func() {
+		s.exec.Cleanup(t)
+	})
 }
 
 func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {

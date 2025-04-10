@@ -260,7 +260,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp),
 	)
-	defer func() { _ = tp.Shutdown(context.Background()) }()
+	defer func() { _ = tp.Shutdown(t.Context()) }()
 	otel.SetTracerProvider(tp)
 
 	t.Run("traceparent is given in request and sampling is enabled", func(t *testing.T) {

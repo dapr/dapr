@@ -18,11 +18,13 @@ import (
 	"google.golang.org/grpc/codes"
 	grpcMetadata "google.golang.org/grpc/metadata"
 
+	"github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/universal"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -95,13 +97,19 @@ func TestClose(t *testing.T) {
 			ReadBufferSize:     4 << 10,
 			EnableAPILogging:   true,
 		}
-		a := &api{Universal: universal.New(universal.Options{
-			CompStore: compstore.New(),
-		}), closeCh: make(chan struct{})}
+		a := &api{
+			Universal: universal.New(universal.Options{
+				CompStore:      compstore.New(),
+				Actors:         fake.New(),
+				WorkflowEngine: wfenginefake.New(),
+			}),
+			closeCh: make(chan struct{}),
+		}
 		server := NewAPIServer(Options{
-			API:     a,
-			Config:  serverConfig,
-			Healthz: healthz.New(),
+			API:            a,
+			Config:         serverConfig,
+			Healthz:        healthz.New(),
+			WorkflowEngine: wfenginefake.New(),
 		})
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
@@ -122,13 +130,19 @@ func TestClose(t *testing.T) {
 			ReadBufferSize:     4 << 10,
 			EnableAPILogging:   false,
 		}
-		a := &api{Universal: universal.New(universal.Options{
-			CompStore: compstore.New(),
-		}), closeCh: make(chan struct{})}
+		a := &api{
+			Universal: universal.New(universal.Options{
+				CompStore:      compstore.New(),
+				Actors:         fake.New(),
+				WorkflowEngine: wfenginefake.New(),
+			}),
+			closeCh: make(chan struct{}),
+		}
 		server := NewAPIServer(Options{
-			API:     a,
-			Config:  serverConfig,
-			Healthz: healthz.New(),
+			API:            a,
+			Config:         serverConfig,
+			Healthz:        healthz.New(),
+			WorkflowEngine: wfenginefake.New(),
 		})
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
@@ -160,7 +174,7 @@ func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 		if userAgent != "" {
 			md["user-agent"] = []string{userAgent}
 		}
-		ctx := grpcMetadata.NewIncomingContext(context.Background(), md)
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), md)
 
 		info := &grpcGo.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",

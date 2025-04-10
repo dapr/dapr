@@ -17,7 +17,6 @@ limitations under the License.
 package metrics_e2e
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -195,7 +194,7 @@ func testMetricDisabled(t *testing.T, app string, res *http.Response) {
 
 func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) (foundMetric bool) {
 	rfmt := expfmt.ResponseFormat(res.Header)
-	require.NotEqual(t, rfmt, expfmt.TypeUnknown)
+	require.NotEqual(t, rfmt.FormatType(), expfmt.TypeUnknown)
 
 	decoder := expfmt.NewDecoder(res.Body, rfmt)
 
@@ -260,7 +259,7 @@ func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
 	client := pb.NewDaprClient(conn)
 
 	for i := 0; i < n; i++ {
-		_, err = client.SaveState(context.Background(), &pb.SaveStateRequest{
+		_, err = client.SaveState(t.Context(), &pb.SaveStateRequest{
 			StoreName: "statestore",
 			States: []*commonv1pb.StateItem{
 				{
@@ -277,7 +276,7 @@ func testGRPCMetrics(t *testing.T, app string, res *http.Response) {
 	require.NotNil(t, res)
 
 	rfmt := expfmt.ResponseFormat(res.Header)
-	require.NotEqual(t, rfmt, expfmt.TypeUnknown)
+	require.NotEqual(t, rfmt.FormatType(), expfmt.TypeUnknown)
 
 	decoder := expfmt.NewDecoder(res.Body, rfmt)
 

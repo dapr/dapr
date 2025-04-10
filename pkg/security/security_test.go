@@ -91,7 +91,7 @@ func Test_Start(t *testing.T) {
 		tdFile := filepath.Join(t.TempDir(), "root.pem")
 		require.NoError(t, os.WriteFile(tdFile, root1, 0o600))
 
-		p, err := New(context.Background(), Options{
+		p, err := New(t.Context(), Options{
 			TrustAnchorsFile:        &tdFile,
 			AppID:                   "test",
 			ControlPlaneTrustDomain: "test.example.com",
@@ -104,7 +104,7 @@ func Test_Start(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 
 		providerStopped := make(chan struct{})
 		go func() {
@@ -136,17 +136,17 @@ func Test_Start(t *testing.T) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			curr, err := prov.sec.trustAnchors.CurrentTrustAnchors(ctx)
-			require.NoError(t, err)
+			assert.NoError(c, err)
 			assert.Equal(c, root1, curr)
 		}, time.Second, time.Millisecond)
 
 		assert.Eventually(t, func() bool {
 			// We put the write file inside this assert loop since we have to wait
 			// for the fsnotify go rountine to warm up.
-			require.NoError(t, os.WriteFile(tdFile, root2, 0o600))
+			assert.NoError(t, os.WriteFile(tdFile, root2, 0o600))
 
 			curr, err := prov.sec.trustAnchors.CurrentTrustAnchors(ctx)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			return bytes.Equal(root2, curr)
 		}, time.Second*5, time.Millisecond*750)
 
@@ -175,7 +175,7 @@ func TestCurrentNamespace(t *testing.T) {
 		os.Unsetenv("NAMESPACE")
 		t.Cleanup(func() {
 			if ok {
-				os.Setenv("NAMESPACE", osns)
+				t.Setenv("NAMESPACE", osns)
 			}
 		})
 		ns, err := CurrentNamespaceOrError()

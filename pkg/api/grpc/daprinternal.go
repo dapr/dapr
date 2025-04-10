@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/acl"
-	"github.com/dapr/dapr/pkg/actors"
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -35,6 +35,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/kit/concurrency"
 )
 
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
@@ -117,18 +118,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	// (Note that GetTypeUrl could return an empty value, so this call becomes a no-op)
 	req.WithDataTypeURL(chunk.GetRequest().GetMessage().GetData().GetTypeUrl())
 
-	ctx, cancel := context.WithCancel(stream.Context())
-	defer cancel()
-
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		select {
-		case <-ctx.Done():
-		case <-a.closeCh:
-			cancel()
-		}
-	}()
+	ctx := stream.Context()
 
 	// Check the ACL
 	err = a.callLocalValidateACL(ctx, req)
@@ -284,8 +274,21 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 // CallActor invokes a virtual actor.
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
-	res, err := a.Actors().Call(ctx, in)
+	var res *internalv1pb.InternalInvokeResponse
+	engine, err := a.ActorEngine(ctx)
+	if err == nil {
+		if in.Metadata == nil {
+			in.Metadata = make(map[string]*internalv1pb.ListStringValue)
+		}
+		in.Metadata["X-Dapr-Remote"] = &internalv1pb.ListStringValue{Values: []string{"true"}}
+		res, err = engine.Call(ctx, in)
+	}
+
 	if err != nil {
+		if _, ok := status.FromError(err); ok {
+			return nil, err
+		}
+
 		actorErr, isActorErr := actorerrors.As(err)
 		if res != nil && isActorErr {
 			// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
@@ -303,15 +306,56 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 // CallActorReminder invokes an internal virtual actor.
 func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
-	return nil, a.Actors().ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
-		Name:      in.GetName(),
-		ActorType: in.GetActorType(),
-		ActorID:   in.GetActorId(),
-		Data:      in.GetData(),
-		DueTime:   in.GetDueTime(),
-		Period:    in.GetPeriod(),
-		TTL:       in.GetExpirationTime().String(),
+	engine, err := a.ActorEngine(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	period, _ := actorapi.NewReminderPeriod(in.GetPeriod())
+	return nil, engine.CallReminder(ctx, &actorapi.Reminder{
+		Name:           in.GetName(),
+		ActorType:      in.GetActorType(),
+		ActorID:        in.GetActorId(),
+		Data:           in.GetData(),
+		DueTime:        in.GetDueTime(),
+		Period:         period,
+		ExpirationTime: in.GetExpirationTime().AsTime(),
+		IsTimer:        in.GetIsTimer(),
+		IsRemote:       true,
+		SkipLock:       in.GetSkipLock(),
 	})
+}
+
+func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream internalv1pb.ServiceInvocation_CallActorStreamServer) error {
+	engine, err := a.ActorEngine(stream.Context())
+	if err != nil {
+		return err
+	}
+
+	if req.Metadata == nil {
+		req.Metadata = make(map[string]*internalv1pb.ListStringValue)
+	}
+	req.Metadata["X-Dapr-Remote"] = &internalv1pb.ListStringValue{Values: []string{"true"}}
+
+	ch := make(chan *internalv1pb.InternalInvokeResponse)
+
+	return concurrency.NewRunnerManager(
+		func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case val := <-ch:
+					if err := stream.Send(val); err != nil {
+						return err
+					}
+				}
+			}
+		},
+		func(ctx context.Context) error {
+			return engine.CallStream(stream.Context(), req, ch)
+		},
+	).Run(stream.Context())
 }
 
 // Used by CallLocal and CallLocalStream to check the request against the access control list

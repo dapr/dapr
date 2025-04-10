@@ -163,14 +163,14 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%v/getValue", o.daprd.AppPort(t)), nil)
-		require.NoError(c, err)
+		assert.NoError(c, err)
 		resp, err = httpClient.Do(req)
-		require.NoError(c, err)
+		assert.NoError(c, err)
 		t.Cleanup(func() {
-			require.NoError(t, resp.Body.Close())
+			assert.NoError(t, resp.Body.Close())
 		})
 		body, err = io.ReadAll(resp.Body)
-		require.NoError(c, err)
+		assert.NoError(c, err)
 
 		var ce map[string]string
 		err = json.Unmarshal(body, &ce)

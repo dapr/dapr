@@ -72,7 +72,8 @@ type AppManager struct {
 	app       AppDescription
 	ctx       context.Context
 
-	forwarder *PodPortForwarder
+	forwarder     *PodPortForwarder
+	forwarderUsed bool
 
 	logPrefix string
 }
@@ -512,6 +513,15 @@ func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int
 			break
 		}
 	}
+
+	if m.forwarderUsed {
+		log.Printf("Re-creating pod port forwarder for app %v ....", m.app.AppName)
+		m.forwarder.Close()
+		m.forwarder = NewPodPortForwarder(m.client, m.namespace)
+		log.Printf("Pod port forwarder for app %v has been created.", m.app.AppName)
+	}
+
+	m.forwarderUsed = true
 
 	return m.forwarder.Connect(name, targetPorts...)
 }
