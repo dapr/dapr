@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -41,7 +42,8 @@ type streamer struct {
 	channels *channels.Channels
 	wfengine wfengine.Interface
 
-	wg sync.WaitGroup
+	wg       sync.WaitGroup
+	inflight atomic.Int64
 }
 
 // run starts the streamer and blocks until the stream is closed or an error occurs.
@@ -53,7 +55,10 @@ func (s *streamer) run(ctx context.Context) error {
 // scheduler job messages. It then invokes the appropriate app or actor
 // reminder based on the job metadata.
 func (s *streamer) receive(ctx context.Context) error {
-	defer s.wg.Wait()
+	defer func() {
+		s.wg.Wait()
+		s.stream.CloseSend()
+	}()
 
 	for {
 		resp, err := s.stream.Recv()
@@ -65,12 +70,15 @@ func (s *streamer) receive(ctx context.Context) error {
 		}
 
 		s.wg.Add(1)
+		s.inflight.Add(1)
 		go func() {
-			defer s.wg.Done()
+			defer func() {
+				s.wg.Done()
+				s.inflight.Add(-1)
+			}()
+
 			result := s.handleJob(ctx, resp)
 			select {
-			case <-ctx.Done():
-			case <-s.stream.Context().Done():
 			case s.resultCh <- &schedulerv1pb.WatchJobsRequest{
 				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
 					Result: &schedulerv1pb.WatchJobsRequestResult{
@@ -79,6 +87,8 @@ func (s *streamer) receive(ctx context.Context) error {
 					},
 				},
 			}:
+			case <-s.stream.Context().Done():
+			case <-ctx.Done():
 			}
 		}()
 	}
@@ -93,13 +103,13 @@ func (s *streamer) outgoing(ctx context.Context) error {
 
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-s.stream.Context().Done():
-			return s.stream.Context().Err()
 		case result := <-s.resultCh:
 			if err := s.stream.Send(result); err != nil {
 				return err
+			}
+		case <-ctx.Done():
+			if s.inflight.Load() == 0 && len(s.resultCh) == 0 {
+				return ctx.Err()
 			}
 		}
 	}
@@ -118,29 +128,25 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 
 	case *schedulerv1pb.JobTargetMetadata_Actor:
-		if err := s.invokeActorReminder(ctx, job); err != nil {
-			// this err is expected if the reminder was triggered once already, the next time it goes to get
-			// triggered by scheduler it sees that it's been canceled and does not invoke the 2nd time. This
-			// more relevant for workflows which currently has a repeat set to 2 since setting it to 1 caused
-			// issues. This will be updated in the future releases, but for now we will see this err. To not
-			// spam users only log if the error is not reminder canceled because this is expected for now.
-			if errors.Is(err, actorerrors.ErrReminderCanceled) {
-				return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
-			}
-
-			// If the actor was hosted on another instance, the error will be a gRPC status error,
-			// so we need to unwrap it and match on the error message
-			if st, ok := status.FromError(err); ok {
-				if st.Message() == actorerrors.ErrReminderCanceled.Error() {
-					return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
-				}
-			}
-
-			log.Errorf("failed to invoke scheduled actor reminder named: %s due to: %s", job.GetName(), err)
-			return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
+		err := s.invokeActorReminder(ctx, job)
+		if err == nil {
+			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 		}
 
-		return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
+		if errors.Is(err, actorerrors.ErrReminderCanceled) {
+			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
+		}
+
+		// If the actor was hosted on another instance, the error will be a gRPC status error,
+		// so we need to unwrap it and match on the error message
+		if st, ok := status.FromError(err); ok {
+			if st.Message() == actorerrors.ErrReminderCanceled.Error() {
+				return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
+			}
+		}
+
+		log.Errorf("failed to invoke scheduled actor reminder named: %s due to: %s", job.GetName(), err)
+		return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 
 	default:
 		log.Errorf("Unknown job metadata type: %+v", t)

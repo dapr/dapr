@@ -51,7 +51,7 @@ def get_memory_info(process):
 def run_sidecar(executable, app_id):
     print(f"Running {executable} ...")
     expanded_executable=Path(executable).expanduser()
-    args = [expanded_executable, f"--app-id", f"{app_id}"]
+    args = [expanded_executable, "--app-id", f"{app_id}"]
 
     # Run the process in the background
     background_process = run_process_background(args)
@@ -80,7 +80,7 @@ def run_sidecar(executable, app_id):
 
 def test_diff(arr_old, arr_new, label, test='ttest'):
     # Output mean and median for memory utilization
-    
+
     p25_new, p50_new, p75_new = np.percentile(arr_new, [25, 50, 75])
     p25_old, p50_old, p75_old = np.percentile(arr_old, [25, 50, 75])
 
@@ -127,7 +127,7 @@ def size_diff(old_binary, new_binary):
 
     print(f"Passed! Did not find significant increase in file size: was {old_size} KB, now {new_size} KB.")
     return False
-    
+
 
 def getenv(key, default):
     v = os.getenv(key)
