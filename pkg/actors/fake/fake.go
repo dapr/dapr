@@ -17,11 +17,11 @@ import (
 	"context"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/engine"
-	enginefake "github.com/dapr/dapr/pkg/actors/engine/fake"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
+	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	"github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/table"
@@ -33,7 +33,7 @@ import (
 type Fake struct {
 	fnInit                   func(actors.InitOptions) error
 	fnRun                    func(context.Context) error
-	fnEngine                 func(context.Context) (engine.Interface, error)
+	fnRouter                 func(context.Context) (router.Interface, error)
 	fnTable                  func(context.Context) (table.Interface, error)
 	fnState                  func(context.Context) (state.Interface, error)
 	fnTimers                 func(context.Context) (timers.Interface, error)
@@ -52,8 +52,8 @@ func New() *Fake {
 		fnRun: func(context.Context) error {
 			return nil
 		},
-		fnEngine: func(context.Context) (engine.Interface, error) {
-			return enginefake.New(), nil
+		fnRouter: func(context.Context) (router.Interface, error) {
+			return routerfake.New(), nil
 		},
 		fnTable: func(context.Context) (table.Interface, error) {
 			return nil, nil
@@ -90,8 +90,8 @@ func (f *Fake) WithRun(fn func(context.Context) error) *Fake {
 	return f
 }
 
-func (f *Fake) WithEngine(fn func(context.Context) (engine.Interface, error)) *Fake {
-	f.fnEngine = fn
+func (f *Fake) WithRouter(fn func(context.Context) (router.Interface, error)) *Fake {
+	f.fnRouter = fn
 	return f
 }
 
@@ -143,8 +143,8 @@ func (f *Fake) Run(ctx context.Context) error {
 	return f.fnRun(ctx)
 }
 
-func (f *Fake) Engine(ctx context.Context) (engine.Interface, error) {
-	return f.fnEngine(ctx)
+func (f *Fake) Router(ctx context.Context) (router.Interface, error) {
+	return f.fnRouter(ctx)
 }
 
 func (f *Fake) Table(ctx context.Context) (table.Interface, error) {
