@@ -2,3 +2,14 @@ secretReader:
   enabled: true
   namespace: default
 component: rbac
+serviceAccount:
+  injector:
+    annotations: {}
+  operator:
+    annotations: {}
+  placement:
+    annotations: {}
+  scheduler:
+    annotations: {}
+  sentry:
+    annotations: {}
