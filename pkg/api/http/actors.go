@@ -350,7 +350,7 @@ func (a *api) onDeleteActorTimer() http.HandlerFunc {
 func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	engine, err := a.universal.ActorEngine(ctx)
+	router, err := a.universal.ActorRouter(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -384,7 +384,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	policyDef := a.universal.Resiliency().ActorPreLockPolicy(actorType, actorID)
 	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
 	res, err := policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
-		return engine.Call(ctx, req)
+		return router.Call(ctx, req)
 	})
 	if err != nil {
 		if merr, ok := err.(messages.APIError); ok {

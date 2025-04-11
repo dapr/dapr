@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors/router"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
@@ -27,7 +27,7 @@ type connector struct {
 	req      *schedulerv1pb.WatchJobsRequest
 	client   schedulerv1pb.SchedulerClient
 	channels *channels.Channels
-	actors   engine.Interface
+	actors   router.Interface
 	wfengine wfengine.Interface
 	readyCh  chan struct{}
 }

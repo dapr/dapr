@@ -16,10 +16,10 @@ package fake
 import (
 	"testing"
 
-	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors/router"
 )
 
 func Test_Fake(t *testing.T) {
 	t.Parallel()
-	var _ engine.Interface = New()
+	var _ router.Interface = New()
 }
