@@ -20,9 +20,10 @@ import (
 )
 
 type options struct {
-	socket *socket.Socket
-	pubsub pubsub.PubSub
-	pmrCh  <-chan *compv1pb.PullMessagesResponse
+	socket    *socket.Socket
+	pubsub    pubsub.PubSub
+	pmrReqCh  chan<- *compv1pb.PullMessagesRequest
+	pmrRespCh <-chan *compv1pb.PullMessagesResponse
 }
 
 func WithSocket(socket *socket.Socket) Option {
@@ -37,8 +38,9 @@ func WithPubSub(pubsub pubsub.PubSub) Option {
 	}
 }
 
-func WithPullMessagesChannel(ch <-chan *compv1pb.PullMessagesResponse) Option {
+func WithPullMessagesChannel(reqCh chan<- *compv1pb.PullMessagesRequest, resCh <-chan *compv1pb.PullMessagesResponse) Option {
 	return func(o *options) {
-		o.pmrCh = ch
+		o.pmrReqCh = reqCh
+		o.pmrRespCh = resCh
 	}
 }
