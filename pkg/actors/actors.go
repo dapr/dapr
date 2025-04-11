@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/locker"
@@ -37,6 +36,7 @@ import (
 	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/internal/timers/inmemory"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/router"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -88,7 +88,7 @@ type InitOptions struct {
 type Interface interface {
 	Init(InitOptions) error
 	Run(context.Context) error
-	Engine(context.Context) (engine.Interface, error)
+	Router(context.Context) (router.Interface, error)
 	Table(context.Context) (table.Interface, error)
 	State(context.Context) (actorstate.Interface, error)
 	Timers(context.Context) (timers.Interface, error)
@@ -117,7 +117,7 @@ type actors struct {
 	reminders      reminders.Interface
 	table          table.Interface
 	placement      placement.Interface
-	engine         engine.Interface
+	router         router.Interface
 	timerStorage   internaltimers.Storage
 	timers         timers.Interface
 	idlerQueue     *queue.Processor[string, targets.Idlable]
@@ -227,7 +227,7 @@ func (a *actors) Init(opts InitOptions) error {
 		})
 	}
 
-	a.engine = engine.New(engine.Options{
+	a.router = router.New(router.Options{
 		Namespace:          a.namespace,
 		SchedulerReminders: a.schedulerReminders,
 		Placement:          a.placement,
@@ -241,7 +241,7 @@ func (a *actors) Init(opts InitOptions) error {
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
-		Engine: a.engine,
+		Router: a.router,
 	})
 	a.timers = timers.New(timers.Options{
 		Storage: a.timerStorage,
@@ -249,7 +249,7 @@ func (a *actors) Init(opts InitOptions) error {
 	})
 
 	if a.stateReminders != nil {
-		a.stateReminders.SetEngine(a.engine)
+		a.stateReminders.SetRouter(a.router)
 	}
 
 	return nil
@@ -318,12 +318,12 @@ func (a *actors) Run(ctx context.Context) error {
 	return mngr.Run(ctx)
 }
 
-func (a *actors) Engine(ctx context.Context) (engine.Interface, error) {
+func (a *actors) Router(ctx context.Context) (router.Interface, error) {
 	if err := a.waitForReady(ctx); err != nil {
 		return nil, err
 	}
 
-	return a.engine, nil
+	return a.router, nil
 }
 
 func (a *actors) Table(ctx context.Context) (table.Interface, error) {
