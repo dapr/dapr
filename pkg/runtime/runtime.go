@@ -637,7 +637,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
-		Scheduler:                   a.jobsManager,
+		Scheduler:                   a.jobsManager.Client(),
 		Actors:                      a.actors,
 		WorkflowEngine:              a.wfengine,
 	})
@@ -1080,10 +1080,10 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	}
 
 	if err := a.actors.Init(actors.InitOptions{
-		Hostname:         hostAddress,
-		StateStoreName:   actorStateStoreName,
-		GRPC:             a.grpc,
-		SchedulerClients: a.jobsManager,
+		Hostname:        hostAddress,
+		StateStoreName:  actorStateStoreName,
+		GRPC:            a.grpc,
+		SchedulerClient: a.jobsManager.Client(),
 	}); err != nil {
 		return err
 	}
