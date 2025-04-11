@@ -16,10 +16,10 @@ package graceful
 import (
 	"context"
 	"net/http"
-	"runtime"
 	"testing"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -38,9 +38,7 @@ type timein struct {
 }
 
 func (i *timein) Setup(t *testing.T) []framework.Option {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping test on windows which relies on unix process signals")
-	}
+	os.SkipWindows(t)
 
 	app := prochttp.New(t, prochttp.WithHandler(http.NewServeMux()))
 
