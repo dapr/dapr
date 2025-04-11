@@ -31,10 +31,10 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
+	"github.com/dapr/dapr/pkg/actors/router"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -74,7 +74,7 @@ type Statestore struct {
 	resiliency      resiliency.Provider
 	apiLevel        *apilevel.APILevel
 	table           table.Interface
-	engine          engine.Interface
+	router          router.Interface
 	closed          atomic.Bool
 	wg              sync.WaitGroup
 
@@ -1079,7 +1079,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				break loop
 			}
 
-			err = r.engine.CallReminder(context.TODO(), reminder)
+			err = r.router.CallReminder(context.TODO(), reminder)
 			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
 			if errors.Is(err, actorerrors.ErrReminderCanceled) {
 				nextTimer = nil
@@ -1197,8 +1197,8 @@ func (r *Statestore) updateReminderTrack(ctx context.Context, key string, repeti
 
 // TODO: :(
 // Statestore option will be removed completely in v1.16
-func (r *Statestore) SetEngine(engine engine.Interface) {
-	r.engine = engine
+func (r *Statestore) SetRouter(router router.Interface) {
+	r.router = router
 }
 
 func isEtagMismatchError(err error) bool {
