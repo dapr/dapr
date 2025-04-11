@@ -25,8 +25,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/router"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -38,7 +38,7 @@ type streamer struct {
 	stream   schedulerv1pb.Scheduler_WatchJobsClient
 	resultCh chan *schedulerv1pb.WatchJobsRequest
 
-	actors   engine.Interface
+	actors   router.Interface
 	channels *channels.Channels
 	wfengine wfengine.Interface
 

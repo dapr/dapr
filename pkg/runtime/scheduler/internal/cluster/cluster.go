@@ -195,13 +195,13 @@ func (c *Cluster) watchJobs(ctx context.Context, clients *clients.Clients, appTa
 	connectors := make([]*connector, len(cls))
 
 	// Accept engine to be nil, and ignore the disabled error.
-	engine, _ := c.actors.Engine(ctx)
+	router, _ := c.actors.Router(ctx)
 	for i := range cls {
 		connectors[i] = &connector{
 			req:      req,
 			client:   cls[i],
 			channels: c.channels,
-			actors:   engine,
+			actors:   router,
 			wfengine: c.wfengine,
 			readyCh:  make(chan struct{}),
 		}
