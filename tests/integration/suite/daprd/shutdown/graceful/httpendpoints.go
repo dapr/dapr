@@ -6,12 +6,12 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package graceful
 
 import (
 	"context"
@@ -33,50 +33,52 @@ import (
 )
 
 func init() {
-	suite.Register(new(self))
+	suite.Register(new(httpendpoints))
 }
 
-type self struct {
+type httpendpoints struct {
 	daprd *daprd.Daprd
 
 	inInvoke    atomic.Bool
 	closeInvoke chan struct{}
 }
 
-func (s *self) Setup(t *testing.T) []framework.Option {
+func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	s.closeInvoke = make(chan struct{})
+	h.closeInvoke = make(chan struct{})
 
 	app := app.New(t,
 		app.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {}),
 		app.WithHandlerFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
-			s.inInvoke.Store(true)
-			<-s.closeInvoke
+			h.inInvoke.Store(true)
+			<-h.closeInvoke
 		}),
 	)
 
-	s.daprd = daprd.New(t,
-		daprd.WithAppPort(app.Port()),
-		daprd.WithDaprGracefulShutdownSeconds(180),
-		daprd.WithAppHealthProbeInterval(1),
-		daprd.WithAppHealthProbeThreshold(1),
-		daprd.WithAppHealthCheck(true),
-	)
+	h.daprd = daprd.New(t, daprd.WithResourceFiles(fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
+kind: HTTPEndpoint
+metadata:
+  name: mywebsite
+spec:
+  version: v1alpha1
+  baseUrl: http://localhost:%d
+`, app.Port())))
 
 	return []framework.Option{
 		framework.WithProcesses(app),
 	}
 }
 
-func (s *self) Run(t *testing.T, ctx context.Context) {
-	s.daprd.Run(t, ctx)
-	s.daprd.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { s.daprd.Cleanup(t) })
+func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
+	h.daprd.Run(t, ctx)
+	h.daprd.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() { h.daprd.Cleanup(t) })
 
 	client := client.HTTP(t)
 
-	url := fmt.Sprintf("http://%s/v1.0/invoke/%s/method/foo", s.daprd.HTTPAddress(), s.daprd.AppID())
+	url := fmt.Sprintf("http://%s/v1.0/invoke/mywebsite/method/foo", h.daprd.HTTPAddress())
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	require.NoError(t, err)
 
@@ -92,9 +94,9 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 		respCh <- resp
 	}()
 
-	require.Eventually(t, s.inInvoke.Load, time.Second*10, time.Millisecond*10)
+	require.Eventually(t, h.inInvoke.Load, time.Second*10, time.Millisecond*10)
 
-	go s.daprd.Cleanup(t)
+	go h.daprd.Cleanup(t)
 
 	select {
 	case err = <-errCh:
@@ -102,7 +104,7 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(time.Second * 3):
 	}
 
-	close(s.closeInvoke)
+	close(h.closeInvoke)
 
 	select {
 	case err = <-errCh:
