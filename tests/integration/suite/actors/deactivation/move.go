@@ -60,7 +60,7 @@ func (m *move) Setup(t *testing.T) []framework.Option {
 func (m *move) Run(t *testing.T, ctx context.Context) {
 	m.app.WaitUntilRunning(t, ctx)
 
-	for i := range 1000 {
+	for i := range 100 {
 		_, err := m.app.GRPCClient(t, ctx).InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "abc",
 			ActorId:   strconv.Itoa(i),

@@ -11,16 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package clients
+package client
 
 import (
-	"context"
-
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-type Clients interface {
-	Next(context.Context) (schedulerv1pb.SchedulerClient, error)
-	All(context.Context) ([]schedulerv1pb.SchedulerClient, error)
+type Client interface {
+	schedulerv1pb.SchedulerClient
 	Addresses() []string
 }
