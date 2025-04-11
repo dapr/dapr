@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,9 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package graceful
+package fake
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/graceful/invocation"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/graceful/subscription"
+	"testing"
+
+	"github.com/dapr/dapr/pkg/actors/router"
 )
+
+func Test_Fake(t *testing.T) {
+	t.Parallel()
+	var _ router.Interface = New()
+}
