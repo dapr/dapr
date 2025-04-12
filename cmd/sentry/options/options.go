@@ -47,9 +47,13 @@ type Options struct {
 	Metrics               *metrics.FlagOptions
 	Mode                  string
 
-	RootCAFilename     string
-	IssuerCertFilename string
-	IssuerKeyFilename  string
+	RootCAFilename        string
+	IssuerCertFilename    string
+	IssuerKeyFilename     string
+	JWTSigningKeyFilename string
+	JWKSFilename          string
+	JWKSPort              int
+	JWTEnabled            bool
 }
 
 func New(origArgs []string) *Options {
@@ -79,6 +83,10 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.RootCAFilename, "issuer-ca-filename", config.DefaultRootCertFilename, "Certificate Authority certificate filename")
 	fs.StringVar(&opts.IssuerCertFilename, "issuer-certificate-filename", config.DefaultIssuerCertFilename, "Issuer certificate filename")
 	fs.StringVar(&opts.IssuerKeyFilename, "issuer-key-filename", config.DefaultIssuerKeyFilename, "Issuer private key filename")
+	fs.StringVar(&opts.JWTSigningKeyFilename, "jwt-key-filename", config.DefaultJWTSigningKeyFilename, "JWT signing key filename")
+	fs.StringVar(&opts.JWKSFilename, "jwks-filename", config.DefaultJWKSFilename, "JWKS (JSON Web Key Set) filename")
+	fs.IntVar(&opts.JWKSPort, "jwks-port", 0, "The port for the JWKS HTTP server (0 to disable)")
+	fs.BoolVar(&opts.JWTEnabled, "jwt-enabled", false, "Enable JWT token issuance by Sentry")
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
 	fs.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The listen address for the sentry server")

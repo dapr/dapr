@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -15,12 +15,12 @@ package security
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/golang-jwt/jwt"
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
@@ -67,7 +67,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 	sentryTokenFile := opts.SentryTokenFile
 	kubernetesMode := opts.Mode == modes.KubernetesMode
 
-	fn := func(ctx context.Context, csrDER []byte) ([]*x509.Certificate, error) {
+	fn := func(ctx context.Context, csrDER []byte) (*spiffe.SVIDResponse, error) {
 		unaryClientInterceptor := retry.UnaryClientInterceptor(
 			retry.WithMax(sentryMaxRetries),
 			retry.WithPerRetryTimeout(sentrySignTimeout),
@@ -137,7 +137,40 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			return nil, fmt.Errorf("error parsing newly signed certificate: %w", err)
 		}
 
-		return workloadcert, nil
+		var audiences []string
+		if resp.Jwt != "" {
+			token, err := jwt.Parse(resp.Jwt, func(token *jwt.Token) (interface{}, error) {
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+				}
+
+				// Validate the token's audience
+				audiences = token.Claims.(jwt.MapClaims)["aud"].([]string)
+				if len(audiences) == 0 {
+					return nil, fmt.Errorf("audience claim is empty")
+				}
+
+				token.Valid = true
+
+				return []byte(resp.Jwt), nil
+			})
+			if err != nil {
+				return nil, fmt.Errorf("error parsing JWT: %w", err)
+			}
+
+			if !token.Valid {
+				return nil, fmt.Errorf("invalid JWT token")
+			}
+			if err := token.Claims.Valid(); err != nil {
+				return nil, fmt.Errorf("invalid JWT claims: %w", err)
+			}
+		}
+
+		return &spiffe.SVIDResponse{
+			X509Certificates: workloadcert,
+			JWT:              resp.Jwt,
+			Audiences:        audiences,
+		}, nil
 	}
 
 	return fn, nil

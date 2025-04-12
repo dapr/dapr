@@ -96,6 +96,15 @@ type Options struct {
 	// file are automatically picked up. Cannot be used with TrustAnchors.
 	TrustAnchorsFile *string
 
+	// JSONWebKeySet is the JSON Web Key Set for this Dapr installation. Cannot be
+	// used with JSONWebKeySetFile or TrustAnchorsFile.
+	JSONWebKeySet []byte
+
+	// JSONWebKeySetFile is the path to the JSON Web Key Set for this Dapr
+	// installation. Prefer this over JSONWebKeySet so changes to the file are
+	// automatically picked up. Cannot be used with JSONWebKeySet or TrustAnchors.
+	JSONWebKeySetFile *string
+
 	// AppID is the application ID of this workload.
 	AppID string
 
@@ -147,6 +156,7 @@ type security struct {
 
 	identityDir      *string
 	trustAnchorsFile *string
+	jwksFile         *string
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {
@@ -177,16 +187,36 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 				return nil, errors.New("trust anchors are required")
 			}
 
+			if len(opts.JSONWebKeySet) > 0 && opts.JSONWebKeySetFile != nil {
+				return nil, errors.New("JSON Web Key Set cannot be specified in both JSONWebKeySet and JSONWebKeySetFile")
+			}
+
+			if len(opts.JSONWebKeySet) == 0 && opts.JSONWebKeySetFile == nil {
+				return nil, errors.New("JSON Web Key Set is required")
+			}
+
+			if len(opts.TrustAnchors) > 0 && opts.JSONWebKeySetFile != nil {
+				return nil, errors.New("json web key set file cannot be used with trust anchors")
+			}
+
+			if len(opts.JSONWebKeySet) > 0 && opts.TrustAnchorsFile != nil {
+				return nil, errors.New("trust anchors file cannot be used with json web key set")
+			}
+
 			switch {
 			case len(opts.TrustAnchors) > 0:
-				trustAnchors, err = trustanchors.FromStatic(opts.TrustAnchors)
+				trustAnchors, err = trustanchors.FromStatic(trustanchors.OptionsStatic{
+					Anchors: opts.TrustAnchors,
+					Jwks:    opts.JSONWebKeySet,
+				})
 				if err != nil {
 					return nil, err
 				}
 			case opts.TrustAnchorsFile != nil:
 				trustAnchors = trustanchors.FromFile(trustanchors.OptionsFile{
-					Log:  log,
-					Path: *opts.TrustAnchorsFile,
+					Log:      log,
+					CAPath:   *opts.TrustAnchorsFile,
+					JwksPath: *opts.JSONWebKeySetFile,
 				})
 			}
 		}
@@ -248,7 +278,7 @@ func (p *provider) Run(ctx context.Context) error {
 			if err := p.sec.spiffe.Ready(ctx); err != nil {
 				return err
 			}
-			id, err := p.sec.spiffe.SVIDSource().GetX509SVID()
+			id, err := p.sec.spiffe.X509SVIDSource().GetX509SVID()
 			if err != nil {
 				return err
 			}
@@ -285,7 +315,7 @@ func (s *security) GRPCDialOptionMTLS(appID spiffeid.ID) grpc.DialOption {
 	}
 
 	return grpc.WithTransportCredentials(
-		grpccredentials.MTLSClientCredentials(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(appID)),
+		grpccredentials.MTLSClientCredentials(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(appID)),
 	)
 }
 
@@ -299,7 +329,7 @@ func (s *security) GRPCServerOptionMTLS() grpc.ServerOption {
 	return grpc.Creds(
 		// TODO: It would be better if we could give a subset of trust domains in
 		// which this server authorizes.
-		grpccredentials.MTLSServerCredentials(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeAny()),
+		grpccredentials.MTLSServerCredentials(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeAny()),
 	)
 }
 
@@ -307,7 +337,7 @@ func (s *security) GRPCServerOptionMTLS() grpc.ServerOption {
 // authentication of clients using the current trust anchors. Doesn't require
 // clients to present a certificate.
 func (s *security) GRPCServerOptionNoClientAuth() grpc.ServerOption {
-	return grpc.Creds(grpccredentials.TLSServerCredentials(s.spiffe.SVIDSource()))
+	return grpc.Creds(grpccredentials.TLSServerCredentials(s.spiffe.X509SVIDSource()))
 }
 
 // GRPCDialOptionMTLSUnknownTrustDomain returns a gRPC dial option which
@@ -329,7 +359,7 @@ func (s *security) GRPCDialOptionMTLSUnknownTrustDomain(ns, appID string) grpc.D
 	}
 
 	return grpc.WithTransportCredentials(
-		grpccredentials.MTLSClientCredentials(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AdaptMatcher(matcher)),
+		grpccredentials.MTLSClientCredentials(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AdaptMatcher(matcher)),
 	)
 }
 
@@ -364,7 +394,7 @@ func (s *security) ControlPlaneNamespace() string {
 // using the current signed server certificate. Authorizes client certificate
 // chains against the trust anchors.
 func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
-	return tlsconfig.TLSServerConfig(s.spiffe.SVIDSource())
+	return tlsconfig.TLSServerConfig(s.spiffe.X509SVIDSource())
 }
 
 // NetListenerID returns a mTLS net listener which instruments using the
@@ -375,7 +405,7 @@ func (s *security) NetListenerID(lis net.Listener, id spiffeid.ID) net.Listener 
 		return lis
 	}
 	return tls.NewListener(lis,
-		tlsconfig.MTLSServerConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id)),
+		tlsconfig.MTLSServerConfig(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id)),
 	)
 }
 
@@ -388,7 +418,7 @@ func (s *security) NetDialerID(ctx context.Context, spiffeID spiffeid.ID, timeou
 	}
 	return (&tls.Dialer{
 		NetDialer: (&net.Dialer{Timeout: timeout, Cancel: ctx.Done()}),
-		Config:    tlsconfig.MTLSClientConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(spiffeID)),
+		Config:    tlsconfig.MTLSClientConfig(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(spiffeID)),
 	}).Dial
 }
 
@@ -403,7 +433,7 @@ func (s *security) MTLSClientConfig(id spiffeid.ID) *tls.Config {
 		return nil
 	}
 
-	return tlsconfig.MTLSClientConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id))
+	return tlsconfig.MTLSClientConfig(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id))
 }
 
 // CurrentNamespace returns the namespace of this workload.
