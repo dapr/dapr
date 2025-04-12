@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/http"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	validatorInsecure "github.com/dapr/dapr/pkg/sentry/server/validator/insecure"
 	validatorJWKS "github.com/dapr/dapr/pkg/sentry/server/validator/jwks"
@@ -44,8 +45,9 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 type Options struct {
-	Config  config.Config
-	Healthz healthz.Healthz
+	Config   config.Config
+	Healthz  healthz.Healthz
+	HTTPPort int // HTTP port for JWKS endpoint
 }
 
 // CertificateAuthority is the interface for the Sentry Certificate Authority.
@@ -119,8 +121,28 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 			CA:               camngr,
 			Healthz:          opts.Healthz,
 			ListenAddress:    opts.Config.ListenAddress,
+			JWTEnabled:       opts.Config.JWTEnabled,
 		}).Start,
 	)
+
+	// Add HTTP server for JWKS endpoint if JWT is enabled and HTTP port is specified
+	if opts.Config.JWTEnabled && opts.HTTPPort > 0 {
+		log.Infof("Starting HTTPS server for JWKS endpoint on port %d", opts.HTTPPort)
+
+		httpServer := http.New(http.Options{
+			Port:          opts.HTTPPort,
+			ListenAddress: opts.Config.ListenAddress,
+			CABundle:      camngr.Bundle(),
+			Healthz:       opts.Healthz,
+		})
+
+		if err := runners.Add(httpServer.Start); err != nil {
+			return nil, fmt.Errorf("error adding HTTP server: %w", err)
+		}
+	} else if opts.HTTPPort > 0 && !opts.Config.JWTEnabled {
+		log.Info("JWKS HTTP server not started: JWT functionality is disabled in configuration")
+	}
+
 	for name, val := range vals {
 		log.Infof("Using validator '%s'", strings.ToLower(name.String()))
 		if err := runners.Add(val.Start); err != nil {
