@@ -34,6 +34,8 @@ func (s *selfhosted) store(_ context.Context, bundle Bundle) error {
 		{s.config.RootCertPath, bundle.TrustAnchors},
 		{s.config.IssuerCertPath, bundle.IssChainPEM},
 		{s.config.IssuerKeyPath, bundle.IssKeyPEM},
+		{s.config.JWTSigningKeyPath, bundle.JWTSigningKeyPEM},
+		{s.config.JWKSPath, bundle.JWKS},
 	} {
 		if err := os.WriteFile(f.name, f.data, 0o600); err != nil {
 			return err
@@ -71,6 +73,32 @@ func (s *selfhosted) get(_ context.Context) (Bundle, bool, error) {
 	bundle, err := verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
 	if err != nil {
 		return Bundle{}, false, fmt.Errorf("failed to verify CA bundle: %w", err)
+	}
+
+	// Load JWT signing key if it exists
+	jwtKeyPEM, err := os.ReadFile(s.config.JWTSigningKeyPath)
+	if err == nil {
+		// JWT key exists, load it
+		jwtKey, err := loadJWTSigningKey(jwtKeyPEM)
+		if err != nil {
+			return Bundle{}, false, fmt.Errorf("failed to load JWT signing key: %w", err)
+		}
+		bundle.JWTSigningKey = jwtKey
+		bundle.JWTSigningKeyPEM = jwtKeyPEM
+	} else if !os.IsNotExist(err) {
+		return Bundle{}, false, fmt.Errorf("error reading JWT signing key: %w", err)
+	}
+
+	// Load JWKS if it exists
+	jwks, err := os.ReadFile(s.config.JWKSPath)
+	if err == nil {
+		// JWKS exists, verify and use it
+		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
+			return Bundle{}, false, fmt.Errorf("failed to verify JWKS: %w", err)
+		}
+		bundle.JWKS = jwks
+	} else if !os.IsNotExist(err) {
+		return Bundle{}, false, fmt.Errorf("error reading JWKS: %w", err)
 	}
 
 	return bundle, true, nil
