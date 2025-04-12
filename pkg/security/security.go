@@ -98,6 +98,15 @@ type Options struct {
 	// file are automatically picked up. Cannot be used with TrustAnchors.
 	TrustAnchorsFile *string
 
+	// JSONWebKeySet is the JSON Web Key Set for this Dapr installation. Cannot be
+	// used with JSONWebKeySetFile or TrustAnchorsFile.
+	JSONWebKeySet []byte
+
+	// JSONWebKeySetFile is the path to the JSON Web Key Set for this Dapr
+	// installation. Prefer this over JSONWebKeySet so changes to the file are
+	// automatically picked up. Cannot be used with JSONWebKeySet or TrustAnchors.
+	JSONWebKeySetFile *string
+
 	// AppID is the application ID of this workload.
 	AppID string
 
@@ -149,6 +158,7 @@ type security struct {
 
 	identityDir      *string
 	trustAnchorsFile *string
+	jwksFile         *string
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {
@@ -181,6 +191,22 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 
 			if len(opts.TrustAnchors) == 0 && opts.TrustAnchorsFile == nil {
 				return nil, errors.New("trust anchors are required")
+			}
+
+			if len(opts.JSONWebKeySet) > 0 && opts.JSONWebKeySetFile != nil {
+				return nil, errors.New("JSON Web Key Set cannot be specified in both JSONWebKeySet and JSONWebKeySetFile")
+			}
+
+			if len(opts.JSONWebKeySet) == 0 && opts.JSONWebKeySetFile == nil {
+				return nil, errors.New("JSON Web Key Set is required")
+			}
+
+			if len(opts.TrustAnchors) > 0 && opts.JSONWebKeySetFile != nil {
+				return nil, errors.New("json web key set file cannot be used with trust anchors")
+			}
+
+			if len(opts.JSONWebKeySet) > 0 && opts.TrustAnchorsFile != nil {
+				return nil, errors.New("trust anchors file cannot be used with json web key set")
 			}
 
 			switch {

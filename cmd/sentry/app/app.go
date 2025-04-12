@@ -82,15 +82,26 @@ func Run() {
 		log.Debugf("Using user provided root cert path: %s", opts.RootCAFilename)
 		rootCertPath = opts.RootCAFilename
 	}
+	jwtKeyPath := filepath.Join(opts.IssuerCredentialsPath, config.DefaultJWTSigningKeyFilename)
+	if filepath.IsAbs(opts.JWTSigningKeyFilename) {
+		log.Debugf("Using user provided JWT signing key path: %s", opts.JWTSigningKeyFilename)
+		jwtKeyPath = opts.JWTSigningKeyFilename
+	}
+	jwksPath := filepath.Join(opts.IssuerCredentialsPath, config.DefaultJWKSFilename)
+	if filepath.IsAbs(opts.JWKSFilename) {
+		log.Debugf("Using user provided JWKS path: %s", opts.JWKSFilename)
+		jwksPath = opts.JWKSFilename
+	}
 
 	m := make(map[string]struct{})
 	// we need to watch over all these relevant directories
-	for _, path := range []string{issuerCertPath, issuerKeyPath, rootCertPath} {
+	for _, path := range []string{issuerCertPath, issuerKeyPath, rootCertPath, jwtKeyPath, jwksPath} {
 		dir := filepath.Dir(path)
 		if _, ok := m[dir]; !ok {
 			m[dir] = struct{}{}
 		}
 	}
+
 	watchDirs := make([]string, 0, len(m))
 	for dir := range m {
 		watchDirs = append(watchDirs, dir)
@@ -104,6 +115,9 @@ func Run() {
 	cfg.IssuerCertPath = issuerCertPath
 	cfg.IssuerKeyPath = issuerKeyPath
 	cfg.RootCertPath = rootCertPath
+	cfg.JWTSigningKeyPath = jwtKeyPath
+	cfg.JWTEnabled = opts.JWTEnabled
+	cfg.JWKSPath = jwksPath
 	cfg.TrustDomain = opts.TrustDomain
 	cfg.Port = opts.Port
 	cfg.ListenAddress = opts.ListenAddress
@@ -123,8 +137,9 @@ func Run() {
 			Healthz:   healthz,
 		})
 		sentry, serr := sentry.New(ctx, sentry.Options{
-			Config:  cfg,
-			Healthz: healthz,
+			Config:   cfg,
+			Healthz:  healthz,
+			HTTPPort: opts.JWKSPort,
 		})
 		if serr != nil {
 			return serr

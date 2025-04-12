@@ -53,23 +53,32 @@ const (
 
 	// DefaultIssuerKeyFilename is the filename that holds the issuer key.
 	DefaultIssuerKeyFilename = "issuer.key"
+
+	// DefaultJWTSigningKeyFilename is the filename that holds the JWT signing key.
+	DefaultJWTSigningKeyFilename = "jwt.key"
+
+	// DefaultJWKSFilename is the filename that holds the JWKS (JSON Web Key Set).
+	DefaultJWKSFilename = "jwks.json"
 )
 
 // Config holds the configuration for the Certificate Authority.
 type Config struct {
-	Port             int
-	ListenAddress    string
-	TrustDomain      string
-	CAStore          string
-	WorkloadCertTTL  time.Duration
-	AllowedClockSkew time.Duration
-	RootCertPath     string
-	IssuerCertPath   string
-	IssuerKeyPath    string
-	Mode             modes.DaprMode
-	Validators       map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
-	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
-	Features         []daprGlobalConfig.FeatureSpec
+	Port              int
+	ListenAddress     string
+	TrustDomain       string
+	CAStore           string
+	WorkloadCertTTL   time.Duration
+	AllowedClockSkew  time.Duration
+	RootCertPath      string
+	IssuerCertPath    string
+	IssuerKeyPath     string
+	JWTSigningKeyPath string
+	JWKSPath          string
+	JWTEnabled        bool
+	Mode              modes.DaprMode
+	Validators        map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
+	DefaultValidator  sentryv1pb.SignCertificateRequest_TokenValidator
+	Features          []daprGlobalConfig.FeatureSpec
 }
 
 // FromConfigName returns a Sentry configuration based on a configuration spec.
@@ -108,6 +117,9 @@ func getDefaultConfig() Config {
 		WorkloadCertTTL:  defaultWorkloadCertTTL,
 		AllowedClockSkew: defaultAllowedClockSkew,
 		TrustDomain:      defaultTrustDomain,
+		// Default paths for JWT keys will be set when the config is used
+		JWTSigningKeyPath: "",
+		JWKSPath:          "",
 	}
 }
 

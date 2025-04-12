@@ -66,8 +66,15 @@ type Signer interface {
 	// possible according to the signing certificate.
 	SignIdentity(context.Context, *SignRequest) ([]*x509.Certificate, error)
 
+	// GenerateJWT creates a JWT token for the given request. The token includes
+	// claims based on the identity information provided in the request.
+	GenerateJWT(context.Context, *JWTRequest) (string, error)
+
 	// TrustAnchors returns the trust anchors for the CA in PEM format.
 	TrustAnchors() []byte
+
+	// Bundle returns the bundle of certificates and keys used by the CA.
+	Bundle() Bundle
 }
 
 // store is the interface for the trust bundle backend store.
@@ -172,4 +179,8 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 // TODO: Remove this method in v1.12 since it is not used any more.
 func (c *ca) TrustAnchors() []byte {
 	return c.bundle.TrustAnchors
+}
+
+func (c *ca) Bundle() Bundle {
+	return c.bundle
 }
