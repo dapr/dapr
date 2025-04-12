@@ -19,9 +19,13 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"time"
+
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
 // Bundle is the bundle of certificates and keys used by the CA.
@@ -31,6 +35,10 @@ type Bundle struct {
 	IssKeyPEM    []byte
 	IssChain     []*x509.Certificate
 	IssKey       any
+
+	JWTSigningKey    crypto.Signer
+	JWTSigningKeyPEM []byte // PEM for serialization
+	JWKS             []byte
 }
 
 func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew time.Duration, overrideCATTL *time.Duration) (Bundle, error) {
@@ -70,11 +78,56 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 		return Bundle{}, err
 	}
 
+	// Generate JWT signing key
+	jwtSigningKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return Bundle{}, fmt.Errorf("failed to generate JWT signing key: %w", err)
+	}
+
+	// Convert to JWK
+	jwtJWK, err := jwk.FromRaw(jwtSigningKey)
+	if err != nil {
+		return Bundle{}, fmt.Errorf("failed to create JWK from key: %w", err)
+	}
+
+	// Set key ID and algorithm
+	if err := jwtJWK.Set(jwk.KeyIDKey, "dapr-sentry-jwt-signer"); err != nil {
+		return Bundle{}, fmt.Errorf("failed to set JWK kid: %w", err)
+	}
+	if err := jwtJWK.Set(jwk.AlgorithmKey, jwa.ES256); err != nil {
+		return Bundle{}, fmt.Errorf("failed to set JWK alg: %w", err)
+	}
+
+	// Marshal the private key to PKCS8 for storage
+	jwtKeyDer, err := x509.MarshalPKCS8PrivateKey(jwtSigningKey)
+	if err != nil {
+		return Bundle{}, fmt.Errorf("failed to marshal JWT signing key: %w", err)
+	}
+	jwtKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: jwtKeyDer})
+
+	// Create a JWKS with the public key
+	jwtPublicJWK, err := jwtJWK.PublicKey()
+	if err != nil {
+		return Bundle{}, fmt.Errorf("failed to get public JWK: %w", err)
+	}
+
+	jwkSet := jwk.NewSet()
+	jwkSet.AddKey(jwtPublicJWK)
+
+	jwksBytes, err := json.Marshal(jwkSet)
+	if err != nil {
+		return Bundle{}, fmt.Errorf("failed to marshal JWKS: %w", err)
+	}
+
 	return Bundle{
 		TrustAnchors: trustAnchors,
 		IssChainPEM:  issCertPEM,
 		IssKeyPEM:    issKeyPEM,
 		IssChain:     []*x509.Certificate{issCert},
 		IssKey:       issKey,
+
+		JWTSigningKey:    jwtSigningKey,
+		JWTSigningKeyPEM: jwtKeyPEM,
+		JWKS:             jwksBytes,
 	}, nil
 }
