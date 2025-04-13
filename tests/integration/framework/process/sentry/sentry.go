@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -100,8 +101,9 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		"-listen-address=127.0.0.1",
 	}
 
+	tmpDir := t.TempDir()
+
 	if opts.writeBundle {
-		tmpDir := t.TempDir()
 		caPath := filepath.Join(tmpDir, "ca.crt")
 		issuerKeyPath := filepath.Join(tmpDir, "issuer.key")
 		issuerCertPath := filepath.Join(tmpDir, "issuer.crt")
@@ -118,7 +120,67 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		}
 		args = append(args, "-issuer-credentials="+tmpDir)
 	} else {
-		args = append(args, "-issuer-credentials="+t.TempDir())
+		args = append(args, "-issuer-credentials="+tmpDir)
+	}
+
+	// Handle JWT options
+	if opts.enableJWT {
+		args = append(args, "-enable-jwt=true")
+
+		// Check if JWT signing key file is provided
+		if opts.jwtSigningKeyFile != nil {
+			args = append(args, "-jwt-key-filename="+filepath.Base(*opts.jwtSigningKeyFile))
+
+			// Copy the JWT signing key to the credentials directory
+			jwtKeyDest := filepath.Join(tmpDir, filepath.Base(*opts.jwtSigningKeyFile))
+			jwtKeyData, err := os.ReadFile(*opts.jwtSigningKeyFile)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(jwtKeyDest, jwtKeyData, 0o600))
+		} else {
+			// Use default JWT key filename
+			args = append(args, "-jwt-key-filename=jwt.key")
+		}
+
+		// Check if JWKS file is provided
+		if opts.jwksFile != nil {
+			args = append(args, "-jwks-filename="+filepath.Base(*opts.jwksFile))
+
+			// Copy the JWKS file to the credentials directory
+			jwksDest := filepath.Join(tmpDir, filepath.Base(*opts.jwksFile))
+			jwksData, err := os.ReadFile(*opts.jwksFile)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(jwksDest, jwksData, 0o600))
+		} else {
+			// Use default JWKS filename
+			args = append(args, "-jwks-filename=jwks.json")
+		}
+	}
+
+	// Handle OIDC options
+	if opts.oidcHTTPPort != nil {
+		args = append(args, "-oidc-http-port="+strconv.Itoa(*opts.oidcHTTPPort))
+
+		// When OIDC HTTP server is enabled, set the other OIDC options
+		if opts.oidcJWKSURI != nil {
+			args = append(args, "-oidc-jwks-uri="+*opts.oidcJWKSURI)
+		}
+
+		if opts.oidcPathPrefix != nil {
+			args = append(args, "-oidc-path-prefix="+*opts.oidcPathPrefix)
+		}
+
+		if len(opts.oidcDomains) > 0 {
+			args = append(args, "-oidc-allowed-hosts="+strings.Join(opts.oidcDomains, ","))
+		}
+
+		// Handle TLS files for OIDC HTTP server
+		if opts.oidcTLSCertFile != nil {
+			args = append(args, "-oidc-tls-cert-file="+*opts.oidcTLSCertFile)
+		}
+
+		if opts.oidcTLSKeyFile != nil {
+			args = append(args, "-oidc-tls-key-file="+*opts.oidcTLSKeyFile)
+		}
 	}
 
 	if opts.kubeconfig != nil {
