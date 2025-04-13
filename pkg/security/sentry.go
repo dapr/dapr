@@ -137,9 +137,12 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			return nil, fmt.Errorf("error parsing newly signed certificate: %w", err)
 		}
 
-		var audiences []string
+		var (
+			jwtValue  string
+			audiences []string
+		)
 		if resp.Jwt != nil {
-			token, err := jwt.Parse(resp.Jwt, func(token *jwt.Token) (interface{}, error) {
+			token, err := jwt.Parse(resp.GetJwt(), func(token *jwt.Token) (interface{}, error) {
 				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 				}
@@ -152,7 +155,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 
 				token.Valid = true
 
-				return []byte(*resp.Jwt), nil
+				return []byte(resp.GetJwt()), nil
 			})
 			if err != nil {
 				return nil, fmt.Errorf("error parsing JWT: %w", err)
@@ -164,6 +167,8 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			if err := token.Claims.Valid(); err != nil {
 				return nil, fmt.Errorf("invalid JWT claims: %w", err)
 			}
+
+			jwtValue = token.Raw
 		}
 
 		return &spiffe.SVIDResponse{

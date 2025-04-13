@@ -15,6 +15,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"os"
 	"path/filepath"
 	"time"
@@ -95,10 +96,18 @@ func Run() {
 
 	m := make(map[string]struct{})
 	// we need to watch over all these relevant directories
-	for _, path := range []string{issuerCertPath, issuerKeyPath, rootCertPath, jwtKeyPath, jwksPath} {
-		dir := filepath.Dir(path)
-		if _, ok := m[dir]; !ok {
-			m[dir] = struct{}{}
+	for _, path := range []string{
+		issuerCertPath,
+		issuerKeyPath,
+		rootCertPath,
+		jwtKeyPath,
+		jwksPath,
+	} {
+		if path != "" {
+			dir := filepath.Dir(path)
+			if _, ok := m[dir]; !ok {
+				m[dir] = struct{}{}
+			}
 		}
 	}
 
@@ -136,10 +145,27 @@ func Run() {
 			Port:      opts.Metrics.Port(),
 			Healthz:   healthz,
 		})
+
+		// Configure TLS for OIDC HTTP server if needed
+		var oidcTLSConfig *tls.Config
+		if opts.OIDCTLSCertFile != "" && opts.OIDCTLSKeyFile != "" {
+			var err error
+			oidcTLSConfig, err = createOIDCTLSConfig(opts.OIDCTLSCertFile, opts.OIDCTLSKeyFile)
+			if err != nil {
+				log.Errorf("Failed to create OIDC TLS config: %v", err)
+				return err
+			}
+		}
+
 		sentry, serr := sentry.New(ctx, sentry.Options{
-			Config:   cfg,
-			Healthz:  healthz,
-			HTTPPort: opts.JWKSPort,
+			Config:         cfg,
+			Healthz:        healthz,
+			JWTIssuer:      opts.JWTIssuer,
+			OIDCHTTPPort:   opts.OIDCHTTPPort,
+			OIDCDomains:    opts.OIDCAllowedHosts,
+			OIDCJWKSURI:    opts.OIDCJWKSURI,
+			ODICPathPrefix: opts.OIDCPathPrefix,
+			OIDCTLSConfig:  oidcTLSConfig,
 		})
 		if serr != nil {
 			return serr
@@ -211,4 +237,17 @@ func Run() {
 		log.Fatal(err)
 	}
 	log.Info("Sentry shut down gracefully")
+}
+
+// createOIDCTLSConfig creates a TLS configuration for the OIDC HTTP server
+func createOIDCTLSConfig(certFile, keyFile string) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	}, nil
 }
