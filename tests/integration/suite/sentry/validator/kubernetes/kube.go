@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -108,6 +109,30 @@ func (k *kube) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Len(t, trustBundle, 1)
 	require.NoError(t, certs[1].CheckSignatureFrom(trustBundle[0]))
+
+	// Test JWT validation
+	t.Run("validate JWT token is returned", func(t *testing.T) {
+		require.NotEmpty(t, resp.GetJwt(), "JWT token should be included in the response")
+
+		// Parse and verify the JWT token
+		token, err := jwt.Parse([]byte(resp.GetJwt()), jwt.WithVerify(false)) // Skip signature verification as we'd need the public key
+		require.NoError(t, err, "JWT token should be parsable")
+
+		// Validate the subject claim matches the expected SPIFFE ID
+		expectedSubject := "spiffe://integration.test.dapr.io/ns/mynamespace/myappid"
+		sub, found := token.Get("sub")
+		require.True(t, found, "subject claim should exist in JWT")
+		assert.Equal(t, expectedSubject, sub, "JWT subject should match SPIFFE ID")
+
+		// Validate expiration and issuance time
+		exp, found := token.Get("exp")
+		require.True(t, found, "exp claim should exist in JWT")
+		require.NotNil(t, exp, "expiration time should not be nil")
+
+		iat, found := token.Get("iat")
+		require.True(t, found, "iat claim should exist in JWT")
+		require.NotNil(t, iat, "issued at time should not be nil")
+	})
 
 	for _, req := range map[string]*sentrypbv1.SignCertificateRequest{
 		"wrong app id": {

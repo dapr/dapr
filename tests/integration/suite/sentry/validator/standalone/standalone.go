@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/modes"
@@ -32,6 +34,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/dapr/tests/integration/suite/sentry/utils"
+	secpem "github.com/dapr/kit/crypto/pem"
 )
 
 func init() {
@@ -88,4 +91,111 @@ func (k *standalone) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.GetWorkloadCertificate())
+
+	// Validate certificate chain
+	certs, err := secpem.DecodePEMCertificates(resp.GetWorkloadCertificate())
+	require.NoError(t, err)
+	require.Len(t, certs, 2)
+	require.NoError(t, certs[0].CheckSignatureFrom(certs[1]))
+	require.Len(t, k.sentry.CABundle().IssChain, 1)
+	assert.Equal(t, k.sentry.CABundle().IssChain[0].Raw, certs[1].Raw)
+	trustBundle, err := secpem.DecodePEMCertificates(k.sentry.CABundle().TrustAnchors)
+	require.NoError(t, err)
+	require.Len(t, trustBundle, 1)
+	require.NoError(t, certs[1].CheckSignatureFrom(trustBundle[0]))
+
+	// Test JWT validation and TTL behavior
+	t.Run("validate JWT token with standard TTL", func(t *testing.T) {
+		require.NotEmpty(t, resp.GetJwt(), "JWT token should be included in the response")
+
+		// Parse and verify the JWT token
+		token, err := jwt.Parse([]byte(resp.GetJwt()), jwt.WithVerify(false)) // Skip signature verification
+		require.NoError(t, err, "JWT token should be parsable")
+
+		// Validate the subject claim matches the expected SPIFFE ID
+		expectedSubject := "spiffe://integration.test.dapr.io/ns/mynamespace/myappid"
+		sub, found := token.Get("sub")
+		require.True(t, found, "subject claim should exist in JWT")
+		assert.Equal(t, expectedSubject, sub, "JWT subject should match SPIFFE ID")
+
+		// Validate expiration and issuance time
+		exp, found := token.Get("exp")
+		require.True(t, found, "exp claim should exist in JWT")
+		require.NotNil(t, exp, "expiration time should not be nil")
+
+		iat, found := token.Get("iat")
+		require.True(t, found, "iat claim should exist in JWT")
+		require.NotNil(t, iat, "issued at time should not be nil")
+
+		// Verify expiration is set properly (default is 1 hour)
+		expTime := exp.(time.Time)
+		iatTime := iat.(time.Time)
+		ttlDuration := expTime.Sub(iatTime)
+		assert.GreaterOrEqual(t, ttlDuration.Hours(), float64(1), "Default TTL should be at least 1 hour")
+	})
+
+	// Test with explicit TTL
+	t.Run("validate JWT token with explicit TTL", func(t *testing.T) {
+		requestTTL := 30 * time.Minute
+
+		resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+			Id:                        "myappid",
+			Namespace:                 "mynamespace",
+			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
+			TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
+			Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.GetJwt(), "JWT token should be included in the response")
+
+		// Parse and verify the JWT token
+		token, err := jwt.Parse([]byte(resp.GetJwt()), jwt.WithVerify(false))
+		require.NoError(t, err, "JWT token should be parsable")
+
+		// Verify expiration matches the requested TTL
+		exp, found := token.Get("exp")
+		require.True(t, found, "exp claim should exist in JWT")
+
+		iat, found := token.Get("iat")
+		require.True(t, found, "iat claim should exist in JWT")
+
+		expTime := exp.(time.Time)
+		iatTime := iat.(time.Time)
+		ttlDuration := expTime.Sub(iatTime)
+
+		// Allow small margin of error (1 second) for processing time
+		assert.InDelta(t, requestTTL.Seconds(), ttlDuration.Seconds(), 1,
+			"JWT expiration should match the requested TTL")
+	})
+
+	// Test with zero TTL (should use default TTL)
+	t.Run("validate JWT token with zero TTL", func(t *testing.T) {
+		resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+			Id:                        "myappid",
+			Namespace:                 "mynamespace",
+			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
+			TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
+			Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.GetJwt(), "JWT token should be included in the response")
+
+		// Parse and verify the JWT token
+		token, err := jwt.Parse([]byte(resp.GetJwt()), jwt.WithVerify(false))
+		require.NoError(t, err, "JWT token should be parsable")
+
+		// Verify default expiration is set
+		exp, found := token.Get("exp")
+		require.True(t, found, "exp claim should exist in JWT")
+
+		iat, found := token.Get("iat")
+		require.True(t, found, "iat claim should exist in JWT")
+
+		expTime := exp.(time.Time)
+		iatTime := iat.(time.Time)
+		ttlDuration := expTime.Sub(iatTime)
+
+		// Default TTL should be at least 1 hour
+		assert.GreaterOrEqual(t, ttlDuration.Hours(), float64(1), "Default TTL should be at least 1 hour")
+	})
 }

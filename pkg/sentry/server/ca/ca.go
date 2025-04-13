@@ -66,15 +66,20 @@ type Signer interface {
 	// possible according to the signing certificate.
 	SignIdentity(context.Context, *SignRequest) ([]*x509.Certificate, error)
 
+	// TrustAnchors returns the trust anchors for the CA in PEM format.
+	TrustAnchors() []byte
+
+	// Extends signing to issue JWT tokens.
+	JWTIssuer
+}
+
+type JWTIssuer interface {
 	// GenerateJWT creates a JWT token for the given request. The token includes
 	// claims based on the identity information provided in the request.
 	GenerateJWT(context.Context, *JWTRequest) (string, error)
 
-	// TrustAnchors returns the trust anchors for the CA in PEM format.
-	TrustAnchors() []byte
-
-	// Bundle returns the bundle of certificates and keys used by the CA.
-	Bundle() Bundle
+	// Jwks returns the JSON Web Key Set (JWKS).
+	Jwks() []byte
 }
 
 // store is the interface for the trust bundle backend store.
@@ -87,6 +92,7 @@ type store interface {
 type ca struct {
 	bundle Bundle
 	config config.Config
+	jwtIssuer
 }
 
 func New(ctx context.Context, conf config.Config) (Signer, error) {
@@ -143,6 +149,12 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	return &ca{
 		bundle: bundle,
 		config: conf,
+
+		jwtIssuer: jwtIssuer{
+			signingKey:       bundle.JWTSigningKey,
+			issuer:           conf.JWTIssuer, // Optional
+			allowedClockSkew: conf.AllowedClockSkew,
+		},
 	}, nil
 }
 
@@ -181,6 +193,6 @@ func (c *ca) TrustAnchors() []byte {
 	return c.bundle.TrustAnchors
 }
 
-func (c *ca) Bundle() Bundle {
-	return c.bundle
+func (c *ca) Jwks() []byte {
+	return c.bundle.JWKSRaw
 }

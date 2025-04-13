@@ -19,6 +19,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -225,10 +226,11 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 			TrustDomain: req.TrustDomain,
 			Namespace:   req.Namespace,
 			AppID:       req.Id,
+			TTL:         24 * time.Hour,
 		})
 		if err != nil {
+			// Continue but log the error as the certificate is still valid
 			log.Errorf("Failed to generate JWT for %s/%s: %v", req.Namespace, req.Id, err)
-			// Continue without JWT if generation fails - the certificate will still work
 		}
 		if tkn != "" {
 			jwtToken = &tkn

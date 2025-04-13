@@ -52,8 +52,14 @@ type Options struct {
 	IssuerKeyFilename     string
 	JWTSigningKeyFilename string
 	JWKSFilename          string
-	JWKSPort              int
 	JWTEnabled            bool
+	JWTIssuer             string
+	OIDCHTTPPort          int
+	OIDCJWKSURI           string
+	OIDCPathPrefix        string
+	OIDCAllowedHosts      []string
+	OIDCTLSCertFile       string
+	OIDCTLSKeyFile        string
 }
 
 func New(origArgs []string) *Options {
@@ -83,16 +89,22 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.RootCAFilename, "issuer-ca-filename", config.DefaultRootCertFilename, "Certificate Authority certificate filename")
 	fs.StringVar(&opts.IssuerCertFilename, "issuer-certificate-filename", config.DefaultIssuerCertFilename, "Issuer certificate filename")
 	fs.StringVar(&opts.IssuerKeyFilename, "issuer-key-filename", config.DefaultIssuerKeyFilename, "Issuer private key filename")
-	fs.StringVar(&opts.JWTSigningKeyFilename, "jwt-key-filename", config.DefaultJWTSigningKeyFilename, "JWT signing key filename")
-	fs.StringVar(&opts.JWKSFilename, "jwks-filename", config.DefaultJWKSFilename, "JWKS (JSON Web Key Set) filename")
-	fs.IntVar(&opts.JWKSPort, "jwks-port", 0, "The port for the JWKS HTTP server (0 to disable)")
-	fs.BoolVar(&opts.JWTEnabled, "jwt-enabled", false, "Enable JWT token issuance by Sentry")
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
 	fs.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The listen address for the sentry server")
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Sentry")
+	fs.BoolVar(&opts.JWTEnabled, "jwt-enabled", false, "Enable JWT token issuance by Sentry")
+	fs.StringVar(&opts.JWTSigningKeyFilename, "jwt-key-filename", config.DefaultJWTSigningKeyFilename, "JWT signing key filename")
+	fs.StringVar(&opts.JWKSFilename, "jwks-filename", config.DefaultJWKSFilename, "JWKS (JSON Web Key Set) filename")
+	fs.StringVar(&opts.JWTIssuer, "jwt-issuer", "", "Custom issuer value for JWT tokens")
+	fs.IntVar(&opts.OIDCHTTPPort, "oidc-http-port", 0, "The port for the OIDC HTTP server (disabled if 0)")
+	fs.StringVar(&opts.OIDCJWKSURI, "oidc-jwks-uri", "", "Custom URI where the JWKS can be accessed externally")
+	fs.StringVar(&opts.OIDCPathPrefix, "oidc-path-prefix", "", "Path prefix to add to all OIDC HTTP endpoints")
+	fs.StringSliceVar(&opts.OIDCAllowedHosts, "oidc-allowed-hosts", nil, "List of allowed hosts for OIDC HTTP endpoint requests")
+	fs.StringVar(&opts.OIDCTLSCertFile, "oidc-tls-cert-file", "", "TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
+	fs.StringVar(&opts.OIDCTLSKeyFile, "oidc-tls-key-file", "", "TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
@@ -115,6 +127,16 @@ func New(origArgs []string) *Options {
 func (o *Options) Validate() error {
 	if o.Mode != string(modes.KubernetesMode) && o.Mode != string(modes.StandaloneMode) {
 		return fmt.Errorf("invalid mode: %s", o.Mode)
+	}
+
+	// Validate OIDC TLS configuration when OIDC HTTP server is enabled
+	if o.OIDCHTTPPort > 0 {
+		if o.OIDCTLSCertFile == "" {
+			return fmt.Errorf("oidc-tls-cert-file is required when OIDC HTTP server is enabled")
+		}
+		if o.OIDCTLSKeyFile == "" {
+			return fmt.Errorf("oidc-tls-key-file is required when OIDC HTTP server is enabled")
+		}
 	}
 
 	return nil

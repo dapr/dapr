@@ -75,6 +75,7 @@ type Config struct {
 	JWTSigningKeyPath string
 	JWKSPath          string
 	JWTEnabled        bool
+	JWTIssuer         *string
 	Mode              modes.DaprMode
 	Validators        map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
 	DefaultValidator  sentryv1pb.SignCertificateRequest_TokenValidator
