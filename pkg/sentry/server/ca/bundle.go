@@ -37,7 +37,7 @@ type Bundle struct {
 	JWTSigningKey    crypto.Signer
 	JWTSigningKeyPEM []byte // PEM for serialization
 	JWKS             jwk.Set
-	JWKSRaw          []byte
+	JWKSJson         []byte
 }
 
 func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew time.Duration, overrideCATTL *time.Duration) (Bundle, error) {
@@ -77,33 +77,28 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 		return Bundle{}, err
 	}
 
-	jwtSigningKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to generate JWT signing key: %w", err)
-	}
-
-	jwtJWK, err := jwk.FromRaw(jwtSigningKey)
+	jwtKey, err := jwk.FromRaw(rootKey)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("failed to create JWK from key: %w", err)
 	}
 
 	// Set key ID and algorithm
-	if err := jwtJWK.Set(jwk.KeyIDKey, JWTKeyID); err != nil {
+	if err := jwtKey.Set(jwk.KeyIDKey, JWTKeyID); err != nil {
 		return Bundle{}, fmt.Errorf("failed to set JWK kid: %w", err)
 	}
-	if err := jwtJWK.Set(jwk.AlgorithmKey, JWTSignatureAlgorithm); err != nil {
+	if err := jwtKey.Set(jwk.AlgorithmKey, JWTSignatureAlgorithm); err != nil {
 		return Bundle{}, fmt.Errorf("failed to set JWK alg: %w", err)
 	}
 
 	// Marshal the private key to PKCS8 for storage
-	jwtKeyDer, err := x509.MarshalPKCS8PrivateKey(jwtSigningKey)
+	jwtKeyDer, err := x509.MarshalPKCS8PrivateKey(rootKey)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("failed to marshal JWT signing key: %w", err)
 	}
 	jwtKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: jwtKeyDer})
 
 	// Create a JWKS with the public key
-	jwtPublicJWK, err := jwtJWK.PublicKey()
+	jwtPublicJWK, err := jwtKey.PublicKey()
 	if err != nil {
 		return Bundle{}, fmt.Errorf("failed to get public JWK: %w", err)
 	}
@@ -111,7 +106,7 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 	jwkSet := jwk.NewSet()
 	jwkSet.AddKey(jwtPublicJWK)
 
-	jwksBytes, err := json.Marshal(jwkSet)
+	jwksJson, err := json.Marshal(jwkSet)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("failed to marshal JWKS: %w", err)
 	}
@@ -122,9 +117,9 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 		IssKeyPEM:        issKeyPEM,
 		IssChain:         []*x509.Certificate{issCert},
 		IssKey:           issKey,
-		JWTSigningKey:    jwtSigningKey,
+		JWTSigningKey:    rootKey,
 		JWTSigningKeyPEM: jwtKeyPEM,
 		JWKS:             jwkSet,
-		JWKSRaw:          jwksBytes,
+		JWKSJson:         jwksJson,
 	}, nil
 }
