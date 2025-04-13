@@ -33,6 +33,19 @@ type options struct {
 	trustDomain   *string
 	namespace     *string
 	mode          *string
+
+	// JWT options
+	enableJWT         bool
+	jwtSigningKeyFile *string
+	jwksFile          *string
+
+	// OIDC options
+	oidcHTTPPort    *int
+	oidcJWKSURI     *string
+	oidcPathPrefix  *string
+	oidcDomains     []string
+	oidcTLSCertFile *string
+	oidcTLSKeyFile  *string
 }
 
 // Option is a function that configures the process.
@@ -107,5 +120,68 @@ func WithNamespace(namespace string) Option {
 func WithMode(mode string) Option {
 	return func(o *options) {
 		o.mode = &mode
+	}
+}
+
+// WithEnableJWT enables JWT token issuance in Sentry
+func WithEnableJWT(enable bool) Option {
+	return func(o *options) {
+		o.enableJWT = enable
+	}
+}
+
+// WithJWTSigningKeyFile specifies a custom JWT signing key file
+func WithJWTSigningKeyFile(keyFile string) Option {
+	return func(o *options) {
+		o.jwtSigningKeyFile = &keyFile
+	}
+}
+
+// WithJWKSFile specifies a custom JWKS file
+func WithJWKSFile(jwksFile string) Option {
+	return func(o *options) {
+		o.jwksFile = &jwksFile
+	}
+}
+
+// WithOIDCHTTPPort sets the port for the OIDC HTTP server
+func WithOIDCHTTPPort(port int) Option {
+	return func(o *options) {
+		o.oidcHTTPPort = &port
+	}
+}
+
+// WithOIDCJWKSURI sets the custom URI where the JWKS can be accessed externally
+func WithOIDCJWKSURI(jwksURI string) Option {
+	return func(o *options) {
+		o.oidcJWKSURI = &jwksURI
+	}
+}
+
+// WithOIDCPathPrefix sets the path prefix to add to all OIDC HTTP endpoints
+func WithOIDCPathPrefix(prefix string) Option {
+	return func(o *options) {
+		o.oidcPathPrefix = &prefix
+	}
+}
+
+// WithOIDCDomains sets the list of allowed domains for OIDC HTTP endpoint requests
+func WithOIDCDomains(hosts []string) Option {
+	return func(o *options) {
+		o.oidcDomains = hosts
+	}
+}
+
+// WithOIDCTLSCertFile sets the TLS certificate file for the OIDC HTTP server
+func WithOIDCTLSCertFile(certFile string) Option {
+	return func(o *options) {
+		o.oidcTLSCertFile = &certFile
+	}
+}
+
+// WithOIDCTLSKeyFile sets the TLS key file for the OIDC HTTP server
+func WithOIDCTLSKeyFile(keyFile string) Option {
+	return func(o *options) {
+		o.oidcTLSKeyFile = &keyFile
 	}
 }
