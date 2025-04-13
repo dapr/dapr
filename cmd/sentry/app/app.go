@@ -162,7 +162,7 @@ func Run() {
 			Healthz:        healthz,
 			JWTIssuer:      opts.JWTIssuer,
 			OIDCHTTPPort:   opts.OIDCHTTPPort,
-			OIDCDomains:    opts.OIDCAllowedHosts,
+			OIDCDomains:    opts.OIDCDomains,
 			OIDCJWKSURI:    opts.OIDCJWKSURI,
 			ODICPathPrefix: opts.OIDCPathPrefix,
 			OIDCTLSConfig:  oidcTLSConfig,
