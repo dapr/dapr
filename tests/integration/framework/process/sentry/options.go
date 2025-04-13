@@ -35,9 +35,7 @@ type options struct {
 	mode          *string
 
 	// JWT options
-	enableJWT         bool
-	jwtSigningKeyFile *string
-	jwksFile          *string
+	enableJWT bool
 
 	// OIDC options
 	oidcHTTPPort    *int
@@ -127,20 +125,6 @@ func WithMode(mode string) Option {
 func WithEnableJWT(enable bool) Option {
 	return func(o *options) {
 		o.enableJWT = enable
-	}
-}
-
-// WithJWTSigningKeyFile specifies a custom JWT signing key file
-func WithJWTSigningKeyFile(keyFile string) Option {
-	return func(o *options) {
-		o.jwtSigningKeyFile = &keyFile
-	}
-}
-
-// WithJWKSFile specifies a custom JWKS file
-func WithJWKSFile(jwksFile string) Option {
-	return func(o *options) {
-		o.jwksFile = &jwksFile
 	}
 }
 
