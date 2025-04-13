@@ -15,6 +15,7 @@ package ca
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,6 +73,26 @@ func (k *kube) get(ctx context.Context) (Bundle, bool, error) {
 		return Bundle{}, false, err
 	}
 
+	// Load JWT signing key if it exists
+	jwtKeyPEM, ok := s.Data[filepath.Base(k.config.JWTSigningKeyPath)]
+	if ok {
+		jwtKey, err := loadJWTSigningKey(jwtKeyPEM)
+		if err != nil {
+			return Bundle{}, false, fmt.Errorf("failed to load JWT signing key: %w", err)
+		}
+		bundle.JWTSigningKey = jwtKey
+		bundle.JWTSigningKeyPEM = jwtKeyPEM
+	}
+
+	// Load JWKS if it exists
+	jwks, ok := s.Data[filepath.Base(k.config.JWKSPath)]
+	if ok {
+		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
+			return Bundle{}, false, fmt.Errorf("failed to verify JWKS: %w", err)
+		}
+		bundle.JWKSRaw = jwks
+	}
+
 	return bundle, true, nil
 }
 
@@ -85,6 +106,14 @@ func (k *kube) store(ctx context.Context, bundle Bundle) error {
 		filepath.Base(k.config.RootCertPath):   bundle.TrustAnchors,
 		filepath.Base(k.config.IssuerCertPath): bundle.IssChainPEM,
 		filepath.Base(k.config.IssuerKeyPath):  bundle.IssKeyPEM,
+	}
+
+	// Add JWT signing key and JWKS if provided
+	if bundle.JWTSigningKeyPEM != nil {
+		s.Data[filepath.Base(k.config.JWTSigningKeyPath)] = bundle.JWTSigningKeyPEM
+	}
+	if bundle.JWKSRaw != nil {
+		s.Data[filepath.Base(k.config.JWKSPath)] = bundle.JWKSRaw
 	}
 
 	_, err = k.client.CoreV1().Secrets(k.namespace).Update(ctx, s, metav1.UpdateOptions{})

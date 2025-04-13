@@ -16,6 +16,7 @@ package sentry
 import (
 	"context"
 	"crypto"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -31,7 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
-	"github.com/dapr/dapr/pkg/sentry/server/http"
+	"github.com/dapr/dapr/pkg/sentry/server/oidc"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	validatorInsecure "github.com/dapr/dapr/pkg/sentry/server/validator/insecure"
 	validatorJWKS "github.com/dapr/dapr/pkg/sentry/server/validator/jwks"
@@ -45,9 +46,14 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 type Options struct {
-	Config   config.Config
-	Healthz  healthz.Healthz
-	HTTPPort int // HTTP port for JWKS endpoint
+	Config         config.Config
+	Healthz        healthz.Healthz
+	OIDCHTTPPort   int         // HTTP port for OIDC endpoints
+	OIDCTLSConfig  *tls.Config // custom TLS configuration for the HTTP server (Optional)
+	OIDCDomains    []string    // Domains that public endpoints can be accessed from (Optional)
+	OIDCJWKSURI    string      // Force the public JWKS URI to this value (Optional)
+	ODICPathPrefix string      // Path prefix for HTTP endpoints (Optional)
+	JWTIssuer      string      // Issuer for JWT tokens (Optional)
 }
 
 // CertificateAuthority is the interface for the Sentry Certificate Authority.
@@ -125,22 +131,27 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 		}).Start,
 	)
 
-	// Add HTTP server for JWKS endpoint if JWT is enabled and HTTP port is specified
-	if opts.Config.JWTEnabled && opts.HTTPPort > 0 {
-		log.Infof("Starting HTTPS server for JWKS endpoint on port %d", opts.HTTPPort)
+	// Add HTTP server for OIDC endpoints if enabled
+	if opts.OIDCHTTPPort > 0 {
+		log.Infof("Starting OIDC HTTP server on port %d", opts.OIDCHTTPPort)
 
-		httpServer := http.New(http.Options{
-			Port:          opts.HTTPPort,
+		httpServer := oidc.New(oidc.Options{
+			Port:          opts.OIDCHTTPPort,
 			ListenAddress: opts.Config.ListenAddress,
-			CABundle:      camngr.Bundle(),
+			JWKS:          camngr.Jwks(),
+			JWTIssuer:     opts.JWTIssuer,
 			Healthz:       opts.Healthz,
+			JWKSURI:       opts.OIDCJWKSURI,
+			Domains:       opts.OIDCDomains,
+			TLSConfig:     opts.OIDCTLSConfig,
+			PathPrefix:    opts.ODICPathPrefix,
 		})
 
 		if err := runners.Add(httpServer.Start); err != nil {
 			return nil, fmt.Errorf("error adding HTTP server: %w", err)
 		}
-	} else if opts.HTTPPort > 0 && !opts.Config.JWTEnabled {
-		log.Info("JWKS HTTP server not started: JWT functionality is disabled in configuration")
+	} else {
+		log.Info("OIDC HTTP server is disabled")
 	}
 
 	for name, val := range vals {

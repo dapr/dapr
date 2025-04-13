@@ -24,21 +24,20 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
 // Bundle is the bundle of certificates and keys used by the CA.
 type Bundle struct {
-	TrustAnchors []byte
-	IssChainPEM  []byte
-	IssKeyPEM    []byte
-	IssChain     []*x509.Certificate
-	IssKey       any
-
+	TrustAnchors     []byte
+	IssChainPEM      []byte
+	IssKeyPEM        []byte
+	IssChain         []*x509.Certificate
+	IssKey           any
 	JWTSigningKey    crypto.Signer
 	JWTSigningKeyPEM []byte // PEM for serialization
-	JWKS             []byte
+	JWKS             jwk.Set
+	JWKSRaw          []byte
 }
 
 func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew time.Duration, overrideCATTL *time.Duration) (Bundle, error) {
@@ -78,23 +77,21 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 		return Bundle{}, err
 	}
 
-	// Generate JWT signing key
 	jwtSigningKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("failed to generate JWT signing key: %w", err)
 	}
 
-	// Convert to JWK
 	jwtJWK, err := jwk.FromRaw(jwtSigningKey)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("failed to create JWK from key: %w", err)
 	}
 
 	// Set key ID and algorithm
-	if err := jwtJWK.Set(jwk.KeyIDKey, "dapr-sentry-jwt-signer"); err != nil {
+	if err := jwtJWK.Set(jwk.KeyIDKey, JWTKeyID); err != nil {
 		return Bundle{}, fmt.Errorf("failed to set JWK kid: %w", err)
 	}
-	if err := jwtJWK.Set(jwk.AlgorithmKey, jwa.ES256); err != nil {
+	if err := jwtJWK.Set(jwk.AlgorithmKey, JWTSignatureAlgorithm); err != nil {
 		return Bundle{}, fmt.Errorf("failed to set JWK alg: %w", err)
 	}
 
@@ -120,14 +117,14 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 	}
 
 	return Bundle{
-		TrustAnchors: trustAnchors,
-		IssChainPEM:  issCertPEM,
-		IssKeyPEM:    issKeyPEM,
-		IssChain:     []*x509.Certificate{issCert},
-		IssKey:       issKey,
-
+		TrustAnchors:     trustAnchors,
+		IssChainPEM:      issCertPEM,
+		IssKeyPEM:        issKeyPEM,
+		IssChain:         []*x509.Certificate{issCert},
+		IssKey:           issKey,
 		JWTSigningKey:    jwtSigningKey,
 		JWTSigningKeyPEM: jwtKeyPEM,
-		JWKS:             jwksBytes,
+		JWKS:             jwkSet,
+		JWKSRaw:          jwksBytes,
 	}, nil
 }
