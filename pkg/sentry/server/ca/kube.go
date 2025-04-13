@@ -90,7 +90,7 @@ func (k *kube) get(ctx context.Context) (Bundle, bool, error) {
 		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
 			return Bundle{}, false, fmt.Errorf("failed to verify JWKS: %w", err)
 		}
-		bundle.JWKSRaw = jwks
+		bundle.JWKSJson = jwks
 	}
 
 	return bundle, true, nil
@@ -112,8 +112,8 @@ func (k *kube) store(ctx context.Context, bundle Bundle) error {
 	if bundle.JWTSigningKeyPEM != nil {
 		s.Data[filepath.Base(k.config.JWTSigningKeyPath)] = bundle.JWTSigningKeyPEM
 	}
-	if bundle.JWKSRaw != nil {
-		s.Data[filepath.Base(k.config.JWKSPath)] = bundle.JWKSRaw
+	if bundle.JWKSJson != nil {
+		s.Data[filepath.Base(k.config.JWKSPath)] = bundle.JWKSJson
 	}
 
 	_, err = k.client.CoreV1().Secrets(k.namespace).Update(ctx, s, metav1.UpdateOptions{})

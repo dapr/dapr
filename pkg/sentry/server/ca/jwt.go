@@ -25,7 +25,7 @@ import (
 
 const (
 	JWTKeyID              = "dapr-sentry"
-	JWTSignatureAlgorithm = jwa.ES256
+	JWTSignatureAlgorithm = jwa.ES256 // For now only support ES256 - check whether this is sufficient
 )
 
 // JWTRequest is the request for generating a JWT
@@ -40,7 +40,6 @@ type JWTRequest struct {
 	AppID string
 
 	// TTL is the time-to-live for the token in seconds
-	// If 0, defaults to the configured workload certificate TTL
 	TTL time.Duration
 }
 
@@ -78,6 +77,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	builder := jwt.NewBuilder().
 		Subject(subject).
 		IssuedAt(now).
+		Audience([]string{req.TrustDomain}).
 		NotBefore(notBefore).
 		Expiration(notAfter)
 

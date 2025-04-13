@@ -20,11 +20,13 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"math/big"
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -242,4 +244,134 @@ func TestVerifyBundle(t *testing.T) {
 			require.Equal(t, test.expBundle, Bundle)
 		})
 	}
+}
+
+// TestVerifyJWKS tests the verifyJWKS function which validates that a JWKS contains
+// a matching public key for a given signing key.
+func TestVerifyJWKS(t *testing.T) {
+	// Generate a test signing key
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err, "Failed to generate signing key")
+
+	// Create and set up test cases
+	t.Run("valid JWKS with matching key", func(t *testing.T) {
+		// Create a JWKS with the public key of the signing key
+		jwksBytes := createJWKS(t, signingKey, "test-key")
+
+		// Verify the JWKS
+		err := verifyJWKS(jwksBytes, signingKey)
+		assert.NoError(t, err, "JWKS verification should succeed with valid key")
+	})
+
+	t.Run("valid JWKS with multiple keys including the matching one", func(t *testing.T) {
+		// Generate an additional key
+		extraKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err, "Failed to generate extra key")
+
+		// Create a JWKS with multiple keys
+		jwksBytes := createMultiKeyJWKS(t, map[string]crypto.Signer{
+			"extra-key": extraKey,
+			"test-key":  signingKey,
+		})
+
+		// Verify the JWKS
+		err = verifyJWKS(jwksBytes, signingKey)
+		assert.NoError(t, err, "JWKS verification should succeed when multiple keys are present")
+	})
+
+	t.Run("nil signing key", func(t *testing.T) {
+		jwksBytes := createJWKS(t, signingKey, "test-key")
+		err := verifyJWKS(jwksBytes, nil)
+		assert.Error(t, err, "JWKS verification should fail with nil signing key")
+		assert.Contains(t, err.Error(), "can't verify JWKS without signing key")
+	})
+
+	t.Run("invalid JWKS format", func(t *testing.T) {
+		invalidJWKS := []byte(`{"keys": [{"invalid": "format"]}`)
+		err := verifyJWKS(invalidJWKS, signingKey)
+		assert.Error(t, err, "JWKS verification should fail with invalid JWKS format")
+		assert.Contains(t, err.Error(), "failed to parse JWKS")
+	})
+
+	t.Run("empty JWKS", func(t *testing.T) {
+		emptyJWKS := []byte(`{"keys": []}`)
+		err := verifyJWKS(emptyJWKS, signingKey)
+		assert.Error(t, err, "JWKS verification should fail with empty JWKS")
+		assert.Contains(t, err.Error(), "JWKS doesn't contain any keys")
+	})
+
+	t.Run("JWKS without matching key", func(t *testing.T) {
+		// Generate a different key
+		differentKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err, "Failed to generate different key")
+
+		// Create a JWKS with a different key
+		jwksBytes := createJWKS(t, differentKey, "different-key")
+
+		// Verify the JWKS with the original signing key
+		err = verifyJWKS(jwksBytes, signingKey)
+		assert.Error(t, err, "JWKS verification should fail when no matching key is found")
+		assert.Contains(t, err.Error(), "JWKS doesn't contain a matching public key")
+	})
+}
+
+// Helper function to create a JWKS from a signing key
+func createJWKS(t *testing.T, signingKey crypto.Signer, keyID string) []byte {
+	// Convert the key to a JWK
+	key, err := jwk.FromRaw(signingKey.Public())
+	require.NoError(t, err, "Failed to convert public key to JWK")
+
+	// Set the key ID
+	err = key.Set(jwk.KeyIDKey, keyID)
+	require.NoError(t, err, "Failed to set key ID")
+
+	// Set the algorithm
+	err = key.Set(jwk.AlgorithmKey, "ES256")
+	require.NoError(t, err, "Failed to set algorithm")
+
+	// Set the key use
+	err = key.Set(jwk.KeyUsageKey, "sig")
+	require.NoError(t, err, "Failed to set key usage")
+
+	// Create a JWKS
+	keySet := jwk.NewSet()
+	keySet.AddKey(key)
+
+	// Marshal the JWKS to JSON
+	jwksBytes, err := json.Marshal(keySet)
+	require.NoError(t, err, "Failed to marshal JWKS to JSON")
+
+	return jwksBytes
+}
+
+// Helper function to create a JWKS with multiple keys
+func createMultiKeyJWKS(t *testing.T, keys map[string]crypto.Signer) []byte {
+	keySet := jwk.NewSet()
+
+	for keyID, signingKey := range keys {
+		// Convert the key to a JWK
+		key, err := jwk.FromRaw(signingKey.Public())
+		require.NoError(t, err, "Failed to convert public key to JWK")
+
+		// Set the key ID
+		err = key.Set(jwk.KeyIDKey, keyID)
+		require.NoError(t, err, "Failed to set key ID")
+
+		// Set the algorithm
+		err = key.Set(jwk.AlgorithmKey, "ES256")
+		require.NoError(t, err, "Failed to set algorithm")
+
+		// Set the key use
+		err = key.Set(jwk.KeyUsageKey, "sig")
+		require.NoError(t, err, "Failed to set key usage")
+
+		// Add the key to the set
+		keySet.AddKey(key)
+	}
+
+	// Marshal the JWKS to JSON
+	jwksBytes, err := json.Marshal(keySet)
+	require.NoError(t, err, "Failed to marshal JWKS to JSON")
+
+	return jwksBytes
 }

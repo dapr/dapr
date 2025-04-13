@@ -76,6 +76,27 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			},
 		},
 		{
+			name:       "audience claim is set correctly",
+			signingKey: signingKey,
+			clockSkew:  time.Minute,
+			request: &JWTRequest{
+				TrustDomain: "example.com",
+				Namespace:   "default",
+				AppID:       "audience-test-app",
+				TTL:         time.Hour,
+			},
+			expectedError: false,
+			validateClaims: func(t *testing.T, token jwt.Token) {
+				// Validate audience claim is set correctly to the trust domain
+				auds, found := token.Get("aud")
+				require.True(t, found, "audience claim should exist")
+				aud, ok := auds.([]string)
+				require.True(t, ok, "audience claim should be a string array")
+				require.Len(t, aud, 1, "audience should have exactly one value")
+				assert.Equal(t, "example.com", aud[0], "audience value should be the trust domain")
+			},
+		},
+		{
 			name:       "valid token with custom issuer",
 			signingKey: signingKey,
 			clockSkew:  time.Minute,

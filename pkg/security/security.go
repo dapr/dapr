@@ -197,10 +197,6 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 				return nil, errors.New("JSON Web Key Set cannot be specified in both JSONWebKeySet and JSONWebKeySetFile")
 			}
 
-			if len(opts.JSONWebKeySet) == 0 && opts.JSONWebKeySetFile == nil {
-				return nil, errors.New("JSON Web Key Set is required")
-			}
-
 			if len(opts.TrustAnchors) > 0 && opts.JSONWebKeySetFile != nil {
 				return nil, errors.New("json web key set file cannot be used with trust anchors")
 			}
@@ -210,6 +206,14 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			}
 
 			switch {
+			case len(opts.TrustAnchors) > 0 && opts.JSONWebKeySetFile != nil:
+				trustAnchors, err = static.From(static.Options{
+					Anchors: opts.TrustAnchors,
+					Jwks:    opts.JSONWebKeySet,
+				})
+				if err != nil {
+					return nil, err
+				}
 			case len(opts.TrustAnchors) > 0:
 				trustAnchors, err = static.From(static.Options{
 					Anchors: opts.TrustAnchors,

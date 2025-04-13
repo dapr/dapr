@@ -15,6 +15,7 @@ package ca
 
 import (
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -176,7 +177,7 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 
 		// If the key has a key ID, check if it matches
 		if kid, ok := key.Get(jwk.KeyIDKey); ok {
-			if privateKID, privateOK := privateJWK.Get(jwk.KeyIDKey); privateOK && kid == privateKID {
+			if privateKID, privateOK := publicJWK.Get(jwk.KeyIDKey); privateOK && kid == privateKID {
 				found = true
 				break
 			}
@@ -189,19 +190,39 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 			continue
 		}
 
-		// Compare raw public keys
-		var rawKey, rawPrivatePublic []byte
-		if err := keyPublic.Raw(rawKey); err != nil {
-			continue
-		}
-		if err := publicJWK.Raw(rawPrivatePublic); err != nil {
+		// Get raw representations of both keys to compare
+		var pubRaw interface{}
+		err = keyPublic.Raw(&pubRaw)
+		if err != nil {
 			continue
 		}
 
-		// For EC keys, we need to compare each component separately
-		// This is a simplification; for a production system would need more robust comparison
-		if fmt.Sprintf("%v", rawKey) == fmt.Sprintf("%v", rawPrivatePublic) {
-			found = true
+		var signerPubRaw interface{}
+		err = publicJWK.Raw(&signerPubRaw)
+		if err != nil {
+			continue
+		}
+
+		// For EC keys, we can compare the public key values directly
+		// Use a more robust type-specific comparison
+		switch pubKey := pubRaw.(type) {
+		case *ecdsa.PublicKey:
+			if signerPubKey, ok := signerPubRaw.(*ecdsa.PublicKey); ok {
+				// For ECDSA, compare the curve, X and Y values
+				if pubKey.Curve == signerPubKey.Curve &&
+					pubKey.X.Cmp(signerPubKey.X) == 0 &&
+					pubKey.Y.Cmp(signerPubKey.Y) == 0 {
+					found = true
+				}
+			}
+		default:
+			// If keys are the same type and same value, they are equal
+			if pubRaw == signerPubRaw {
+				found = true
+			}
+		}
+
+		if found {
 			break
 		}
 	}

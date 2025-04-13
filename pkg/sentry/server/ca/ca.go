@@ -194,5 +194,5 @@ func (c *ca) TrustAnchors() []byte {
 }
 
 func (c *ca) Jwks() []byte {
-	return c.bundle.JWKSRaw
+	return c.bundle.JWKSJson
 }

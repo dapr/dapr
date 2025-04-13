@@ -79,6 +79,14 @@ func (j *jwtvalidation) Setup(t *testing.T) []framework.Option {
 	require.NoError(t, os.WriteFile(j.oidcTLSCertFile, cert, 0o600))
 	require.NoError(t, os.WriteFile(j.oidcTLSKeyFile, key, 0o600))
 
+	// Create a JWT signing key
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	// Save the signing key to a file
+	signingKeyFile := filepath.Join(tmpDir, "sign.key")
+	require.NoError(t, os.WriteFile(signingKeyFile, signingKey.D.Bytes(), 0o600))
+
 	// Configure Sentry with JWT and OIDC enabled
 	j.sentry = sentry.New(t,
 		sentry.WithEnableJWT(true),                    // Enable JWT token issuance
