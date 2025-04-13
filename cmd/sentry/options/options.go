@@ -57,7 +57,7 @@ type Options struct {
 	OIDCHTTPPort          int
 	OIDCJWKSURI           string
 	OIDCPathPrefix        string
-	OIDCAllowedHosts      []string
+	OIDCDomains           []string
 	OIDCTLSCertFile       string
 	OIDCTLSKeyFile        string
 }
@@ -102,7 +102,7 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.OIDCHTTPPort, "oidc-http-port", 0, "The port for the OIDC HTTP server (disabled if 0)")
 	fs.StringVar(&opts.OIDCJWKSURI, "oidc-jwks-uri", "", "Custom URI where the JWKS can be accessed externally")
 	fs.StringVar(&opts.OIDCPathPrefix, "oidc-path-prefix", "", "Path prefix to add to all OIDC HTTP endpoints")
-	fs.StringSliceVar(&opts.OIDCAllowedHosts, "oidc-allowed-hosts", nil, "List of allowed hosts for OIDC HTTP endpoint requests")
+	fs.StringSliceVar(&opts.OIDCDomains, "oidc-domains", nil, "List of allowed domains for OIDC HTTP endpoint requests")
 	fs.StringVar(&opts.OIDCTLSCertFile, "oidc-tls-cert-file", "", "TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
 	fs.StringVar(&opts.OIDCTLSKeyFile, "oidc-tls-key-file", "", "TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
 
