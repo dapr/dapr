@@ -143,12 +143,21 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 		)
 		if resp.Jwt != nil {
 			token, err := jwt.Parse(resp.GetJwt(), func(token *jwt.Token) (interface{}, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {
 					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 				}
 
 				// Validate the token's audience
-				audiences = token.Claims.(jwt.MapClaims)["aud"].([]string)
+				as := token.Claims.(jwt.MapClaims)["aud"].([]interface{})
+				if len(audiences) == 0 {
+					return nil, fmt.Errorf("audience claim is empty")
+				}
+
+				for _, a := range as {
+					if aStr, ok := a.(string); ok {
+						audiences = append(audiences, aStr)
+					}
+				}
 				if len(audiences) == 0 {
 					return nil, fmt.Errorf("audience claim is empty")
 				}

@@ -107,6 +107,8 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		caPath := filepath.Join(tmpDir, "ca.crt")
 		issuerKeyPath := filepath.Join(tmpDir, "issuer.key")
 		issuerCertPath := filepath.Join(tmpDir, "issuer.crt")
+		jwtSigningKeyPath := filepath.Join(tmpDir, "jwt.key")
+		jwksPath := filepath.Join(tmpDir, "jwks.json")
 
 		for _, pair := range []struct {
 			path string
@@ -115,6 +117,8 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 			{caPath, opts.bundle.TrustAnchors},
 			{issuerKeyPath, opts.bundle.IssKeyPEM},
 			{issuerCertPath, opts.bundle.IssChainPEM},
+			{jwtSigningKeyPath, opts.bundle.JWTSigningKeyPEM},
+			{jwksPath, opts.bundle.JWKSJson},
 		} {
 			require.NoError(t, os.WriteFile(pair.path, pair.data, 0o600))
 		}
@@ -125,35 +129,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 
 	// Handle JWT options
 	if opts.enableJWT {
-		args = append(args, "-enable-jwt=true")
-
-		// Check if JWT signing key file is provided
-		if opts.jwtSigningKeyFile != nil {
-			args = append(args, "-jwt-key-filename="+filepath.Base(*opts.jwtSigningKeyFile))
-
-			// Copy the JWT signing key to the credentials directory
-			jwtKeyDest := filepath.Join(tmpDir, filepath.Base(*opts.jwtSigningKeyFile))
-			jwtKeyData, err := os.ReadFile(*opts.jwtSigningKeyFile)
-			require.NoError(t, err)
-			require.NoError(t, os.WriteFile(jwtKeyDest, jwtKeyData, 0o600))
-		} else {
-			// Use default JWT key filename
-			args = append(args, "-jwt-key-filename=jwt.key")
-		}
-
-		// Check if JWKS file is provided
-		if opts.jwksFile != nil {
-			args = append(args, "-jwks-filename="+filepath.Base(*opts.jwksFile))
-
-			// Copy the JWKS file to the credentials directory
-			jwksDest := filepath.Join(tmpDir, filepath.Base(*opts.jwksFile))
-			jwksData, err := os.ReadFile(*opts.jwksFile)
-			require.NoError(t, err)
-			require.NoError(t, os.WriteFile(jwksDest, jwksData, 0o600))
-		} else {
-			// Use default JWKS filename
-			args = append(args, "-jwks-filename=jwks.json")
-		}
+		args = append(args, "-jwt-enabled=true")
 	}
 
 	// Handle OIDC options
