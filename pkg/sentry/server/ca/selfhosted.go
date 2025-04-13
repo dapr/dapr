@@ -35,7 +35,7 @@ func (s *selfhosted) store(_ context.Context, bundle Bundle) error {
 		{s.config.IssuerCertPath, bundle.IssChainPEM},
 		{s.config.IssuerKeyPath, bundle.IssKeyPEM},
 		{s.config.JWTSigningKeyPath, bundle.JWTSigningKeyPEM},
-		{s.config.JWKSPath, bundle.JWKS},
+		{s.config.JWKSPath, bundle.JWKSRaw},
 	} {
 		if err := os.WriteFile(f.name, f.data, 0o600); err != nil {
 			return err
@@ -96,7 +96,7 @@ func (s *selfhosted) get(_ context.Context) (Bundle, bool, error) {
 		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
 			return Bundle{}, false, fmt.Errorf("failed to verify JWKS: %w", err)
 		}
-		bundle.JWKS = jwks
+		bundle.JWKSRaw = jwks
 	} else if !os.IsNotExist(err) {
 		return Bundle{}, false, fmt.Errorf("error reading JWKS: %w", err)
 	}
