@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
@@ -30,8 +31,8 @@ const (
 
 // JWTRequest is the request for generating a JWT
 type JWTRequest struct {
-	// TrustDomain is the trust domain of the client.
-	TrustDomain string
+	// Audience is the audience of the JWT.
+	Audience string
 
 	// Namespace is the namespace of the client.
 	Namespace string
@@ -45,13 +46,27 @@ type JWTRequest struct {
 
 type jwtIssuer struct {
 	// signingKey is the key used to sign the JWT
-	signingKey crypto.Signer
+	signingKey jwk.Key
 
 	// issuer is the issuer of the JWT (optional)
 	issuer *string
 
 	// allowedClockSkew is the time allowed for clock skew
 	allowedClockSkew time.Duration
+}
+
+func NewJWTIssuer(signingKey crypto.Signer, issuer *string, allowedClockSkew time.Duration) (jwtIssuer, error) {
+	sk, err := jwk.FromRaw(signingKey)
+	if err != nil {
+		return jwtIssuer{}, fmt.Errorf("failed to create JWK from signing key: %w", err)
+	}
+	sk.Set(jwk.KeyIDKey, JWTKeyID)
+
+	return jwtIssuer{
+		signingKey:       sk,
+		issuer:           issuer,
+		allowedClockSkew: allowedClockSkew,
+	}, nil
 }
 
 // GenerateJWT creates a JWT for the given request. The JWT is always generated and included
@@ -61,13 +76,21 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	if req == nil {
 		return "", fmt.Errorf("request cannot be nil")
 	}
-
+	if req.Audience == "" {
+		return "", fmt.Errorf("audience cannot be empty")
+	}
+	if req.Namespace == "" {
+		return "", fmt.Errorf("namespace cannot be empty")
+	}
+	if req.AppID == "" {
+		return "", fmt.Errorf("app ID cannot be empty")
+	}
 	if i.signingKey == nil {
 		return "", fmt.Errorf("JWT signing key is not available")
 	}
 
 	// Create SPIFFE ID format string for the subject claim
-	subject := fmt.Sprintf("spiffe://%s/ns/%s/%s", req.TrustDomain, req.Namespace, req.AppID)
+	subject := fmt.Sprintf("spiffe://%s/ns/%s/%s", req.Audience, req.Namespace, req.AppID)
 
 	now := time.Now()
 	notBefore := now.Add(-i.allowedClockSkew) // Account for clock skew
@@ -77,7 +100,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	builder := jwt.NewBuilder().
 		Subject(subject).
 		IssuedAt(now).
-		Audience([]string{req.TrustDomain}).
+		Audience([]string{req.Audience}).
 		NotBefore(notBefore).
 		Expiration(notAfter)
 
@@ -93,7 +116,8 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 		return "", fmt.Errorf("error creating JWT token: %w", err)
 	}
 
-	signedToken, err := jwt.Sign(token, jwt.WithKey(JWTSignatureAlgorithm, i.signingKey))
+	signedToken, err := jwt.Sign(token,
+		jwt.WithKey(JWTSignatureAlgorithm, i.signingKey))
 	if err != nil {
 		log.Errorf("Error signing JWT token: %v", err)
 		return "", fmt.Errorf("error signing JWT token: %w", err)
