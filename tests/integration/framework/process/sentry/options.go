@@ -36,6 +36,7 @@ type options struct {
 
 	// JWT options
 	enableJWT bool
+	jwtIssuer *string
 
 	// OIDC options
 	oidcHTTPPort    *int
@@ -125,6 +126,13 @@ func WithMode(mode string) Option {
 func WithEnableJWT(enable bool) Option {
 	return func(o *options) {
 		o.enableJWT = enable
+	}
+}
+
+// WithJWTIssuer sets the JWT issuer for Sentry
+func WithJWTIssuer(issuer string) Option {
+	return func(o *options) {
+		o.jwtIssuer = &issuer
 	}
 }
 
