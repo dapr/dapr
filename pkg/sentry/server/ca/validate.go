@@ -20,8 +20,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dapr/kit/crypto/pem"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+
+	"github.com/dapr/kit/crypto/pem"
 )
 
 // verifyBundle verifies issuer certificate key pair, and trust anchor set.
