@@ -118,7 +118,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 
 	bundle, ok, err := castore.get(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CA bundle: %w", err)
 	}
 
 	if !ok {
@@ -131,13 +131,13 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 
 		bundle, err = GenerateBundle(rootKey, conf.TrustDomain, conf.AllowedClockSkew, nil)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to generate CA bundle: %w", err)
 		}
 
 		log.Info("Root and issuer certs generated")
 
 		if err := castore.store(ctx, bundle); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to store CA bundle: %w", err)
 		}
 
 		log.Info("Self-signed certs generated and persisted successfully")
@@ -147,9 +147,14 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	}
 	monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 
-	jwtIssuer, err := NewJWTIssuer(bundle.JWTSigningKey, conf.JWTIssuer, conf.AllowedClockSkew)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create JWT issuer: %w", err)
+	var jwtIssuer jwtIssuer
+	if conf.JWTEnabled {
+		log.Info("JWT signing enabled")
+
+		jwtIssuer, err = NewJWTIssuer(bundle.JWTSigningKey, conf.JWTIssuer, conf.AllowedClockSkew)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create JWT issuer: %w", err)
+		}
 	}
 
 	return &ca{

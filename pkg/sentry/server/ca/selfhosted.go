@@ -37,6 +37,10 @@ func (s *selfhosted) store(_ context.Context, bundle Bundle) error {
 		{s.config.JWTSigningKeyPath, bundle.JWTSigningKeyPEM},
 		{s.config.JWKSPath, bundle.JWKSJson},
 	} {
+		if f.name == "" {
+			continue
+		}
+
 		if err := os.WriteFile(f.name, f.data, 0o600); err != nil {
 			return err
 		}
@@ -75,7 +79,6 @@ func (s *selfhosted) get(_ context.Context) (Bundle, bool, error) {
 		return Bundle{}, false, fmt.Errorf("failed to verify CA bundle: %w", err)
 	}
 
-	// Load JWT signing key if it exists
 	jwtKeyPEM, err := os.ReadFile(s.config.JWTSigningKeyPath)
 	if err == nil {
 		// JWT key exists, load it
@@ -89,7 +92,6 @@ func (s *selfhosted) get(_ context.Context) (Bundle, bool, error) {
 		return Bundle{}, false, fmt.Errorf("error reading JWT signing key: %w", err)
 	}
 
-	// Load JWKS if it exists
 	jwks, err := os.ReadFile(s.config.JWKSPath)
 	if err == nil {
 		// JWKS exists, verify and use it
