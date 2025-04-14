@@ -20,6 +20,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"fmt"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/kubernetes"
@@ -146,15 +147,15 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	}
 	monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 
-	return &ca{
-		bundle: bundle,
-		config: conf,
+	jwtIssuer, err := NewJWTIssuer(bundle.JWTSigningKey, conf.JWTIssuer, conf.AllowedClockSkew)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create JWT issuer: %w", err)
+	}
 
-		jwtIssuer: jwtIssuer{
-			signingKey:       bundle.JWTSigningKey,
-			issuer:           conf.JWTIssuer, // Optional
-			allowedClockSkew: conf.AllowedClockSkew,
-		},
+	return &ca{
+		bundle:    bundle,
+		config:    conf,
+		jwtIssuer: jwtIssuer,
 	}, nil
 }
 
