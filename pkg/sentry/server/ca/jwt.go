@@ -67,6 +67,10 @@ type jwtIssuer struct {
 }
 
 func NewJWTIssuer(signingKey crypto.Signer, issuer *string, allowedClockSkew time.Duration) (jwtIssuer, error) {
+	if signingKey == nil {
+		return jwtIssuer{}, fmt.Errorf("signing key cannot be nil")
+	}
+
 	sk, err := jwk.FromRaw(signingKey)
 	if err != nil {
 		return jwtIssuer{}, fmt.Errorf("failed to create JWK from signing key: %w", err)
