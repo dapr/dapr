@@ -102,6 +102,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 		IssuedAt(now).
 		Audience([]string{req.Audience}).
 		NotBefore(notBefore).
+		Claim("use", "sig"). // required by Azure
 		Expiration(notAfter)
 
 	// Set issuer only if configured
