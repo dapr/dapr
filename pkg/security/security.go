@@ -188,7 +188,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			}
 
 			if len(opts.JSONWebKeySet) > 0 && opts.JSONWebKeySetFile != nil {
-				return nil, errors.New("JSON Web Key Set cannot be specified in both JSONWebKeySet and JSONWebKeySetFile")
+				return nil, errors.New("json web key set cannot be specified in both JSONWebKeySet and JSONWebKeySetFile")
 			}
 
 			if len(opts.TrustAnchors) > 0 && opts.JSONWebKeySetFile != nil {
@@ -477,7 +477,7 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 		return ctx
 	}
 
-	return spiffecontext.With(ctx, s.spiffe)
+	return spiffecontext.WithSpiffe(ctx, s.spiffe)
 }
 
 func (s *security) IdentityDir() *string {
