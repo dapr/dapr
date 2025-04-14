@@ -82,7 +82,6 @@ func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (Bundle, error) {
 		return Bundle{}, err
 	}
 
-	// Re-encode the issuer key to ensure only the private key material is encoded.
 	issKeyPEM, err = pem.EncodePrivateKey(issKey)
 	if err != nil {
 		return Bundle{}, err

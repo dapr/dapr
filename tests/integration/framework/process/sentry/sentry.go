@@ -150,7 +150,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		}
 
 		if len(opts.oidcDomains) > 0 {
-			args = append(args, "-oidc-allowed-hosts="+strings.Join(opts.oidcDomains, ","))
+			args = append(args, "-oidc-domains="+strings.Join(opts.oidcDomains, ","))
 		}
 
 		// Handle TLS files for OIDC HTTP server
