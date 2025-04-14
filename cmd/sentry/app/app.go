@@ -132,6 +132,10 @@ func Run() {
 	cfg.ListenAddress = opts.ListenAddress
 	cfg.Mode = modes.DaprMode(opts.Mode)
 
+	if opts.JWTIssuer != "" {
+		cfg.JWTIssuer = &opts.JWTIssuer
+	}
+
 	// We use runner manager inception here since we want the inner manager to be
 	// restarted when the CA server needs to be restarted because of file events.
 	// We don't want to restart the healthz server and file watcher on file
@@ -160,7 +164,6 @@ func Run() {
 		sentry, serr := sentry.New(ctx, sentry.Options{
 			Config:         cfg,
 			Healthz:        healthz,
-			JWTIssuer:      opts.JWTIssuer,
 			OIDCHTTPPort:   opts.OIDCHTTPPort,
 			OIDCDomains:    opts.OIDCDomains,
 			OIDCJWKSURI:    opts.OIDCJWKSURI,
