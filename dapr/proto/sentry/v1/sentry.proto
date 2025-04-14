@@ -58,8 +58,8 @@ message SignCertificateResponse {
 
   google.protobuf.Timestamp valid_until = 3;
   
-  // JWT token for authentication. Always provided by Sentry and can be used as
-  // an alternative to the certificate. The JWT contains the same identity 
-  // information as the certificate and is signed by the same issuing authority.
+  // JWT token for authentication. Always provided by Sentry if configured to
+  // issue JWTs (not requested). The JWT contains the same identity information
+  // as the certificate and is signed by the same issuing authority.
   optional string jwt = 4;
 }

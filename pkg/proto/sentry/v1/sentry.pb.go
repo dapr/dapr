@@ -189,9 +189,9 @@ type SignCertificateResponse struct {
 	// between the workload certificate and the well-known trust root cert.
 	TrustChainCertificates [][]byte               `protobuf:"bytes,2,rep,name=trust_chain_certificates,json=trustChainCertificates,proto3" json:"trust_chain_certificates,omitempty"`
 	ValidUntil             *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"`
-	// JWT token for authentication. Always provided by Sentry and can be used as
-	// an alternative to the certificate. The JWT contains the same identity
-	// information as the certificate and is signed by the same issuing authority.
+	// JWT token for authentication. Always provided by Sentry if configured to
+	// issue JWTs (not requested). The JWT contains the same identity information
+	// as the certificate and is signed by the same issuing authority.
 	Jwt *string `protobuf:"bytes,4,opt,name=jwt,proto3,oneof" json:"jwt,omitempty"`
 }
 
