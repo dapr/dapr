@@ -143,5 +143,9 @@ func (o *Options) Validate() error {
 		return fmt.Errorf("jwt-issuer cannot be set when jwt-enabled is false")
 	}
 
+	if o.JWTSigningKeyFilename != "" && !o.JWTEnabled {
+		return fmt.Errorf("jwt-key-filename cannot be set when jwt-enabled is false")
+	}
+
 	return nil
 }
