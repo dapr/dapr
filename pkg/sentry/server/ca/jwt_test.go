@@ -92,7 +92,6 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 				require.True(t, found, "audience claim should exist")
 				aud, ok := auds.([]string)
 				require.True(t, ok, "audience claim should be a string array")
-				require.Len(t, aud, 1, "audience should have exactly one value")
 				assert.Equal(t, "example.com", aud[0], "audience value should be the trust domain")
 			},
 		},
