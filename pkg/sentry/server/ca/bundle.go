@@ -41,6 +41,11 @@ type Bundle struct {
 }
 
 func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew time.Duration, overrideCATTL *time.Duration) (Bundle, error) {
+	if _, ok := rootKey.(*ecdsa.PrivateKey); !ok {
+		// currently only ecdsa is supported!
+		return Bundle{}, fmt.Errorf("root key is not ecdsa")
+	}
+
 	rootCert, err := generateRootCert(trustDomain, allowedClockSkew, overrideCATTL)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("failed to generate root cert: %w", err)
