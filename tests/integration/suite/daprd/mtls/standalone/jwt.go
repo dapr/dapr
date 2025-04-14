@@ -25,19 +25,19 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -45,6 +45,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
 )
 
 func init() {
@@ -80,11 +81,11 @@ func (j *jwtvalidation) Setup(t *testing.T) []framework.Option {
 	// Configure Sentry with JWT and OIDC server enabled
 	j.sentry = sentry.New(t,
 		sentry.WithMode("standalone"),
-		sentry.WithTrustDomain("localhost"),
-		sentry.WithEnableJWT(true),                    // Enable JWT token issuance
-		sentry.WithOIDCHTTPPort(8443),                 // Enable OIDC HTTP server on port 8443
-		sentry.WithOIDCTLSCertFile(j.oidcTLSCertFile), // Provide TLS cert for OIDC server
-		sentry.WithOIDCTLSKeyFile(j.oidcTLSKeyFile),   // Provide TLS key for OIDC server
+		sentry.WithEnableJWT(true),                     // Enable JWT token issuance
+		sentry.WithJWTIssuer("https://localhost:8443"), // Set JWT issuer
+		sentry.WithOIDCHTTPPort(8443),                  // Enable OIDC HTTP server on port 8443
+		sentry.WithOIDCTLSCertFile(j.oidcTLSCertFile),  // Provide TLS cert for OIDC server
+		sentry.WithOIDCTLSKeyFile(j.oidcTLSKeyFile),    // Provide TLS key for OIDC server
 	)
 
 	bundle := j.sentry.CABundle()
@@ -160,33 +161,6 @@ type oidcDiscoveryResponse struct {
 	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
 }
 
-// generateCSR generates a CSR for testing with the given SPIFFE ID
-func generateCSR(spiffeID string) ([]byte, error) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-
-	spiffeURI, err := url.Parse(spiffeID)
-	if err != nil {
-		return nil, err
-	}
-
-	template := &x509.CertificateRequest{
-		Subject: pkix.Name{
-			CommonName: "test-subject",
-		},
-		URIs: []*url.URL{spiffeURI},
-	}
-
-	csrDER, err := x509.CreateCertificateRequest(rand.Reader, template, key)
-	if err != nil {
-		return nil, err
-	}
-
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER}), nil
-}
-
 func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 	j.sentry.WaitUntilRunning(t, ctx)
 	j.placement.WaitUntilRunning(t, ctx)
@@ -194,26 +168,52 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 	j.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("validate JWT token issued by Sentry service in standalone mode", func(t *testing.T) {
-		// Setup a direct connection to Sentry
-		conn, err := grpc.Dial(j.sentry.Address(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-		require.NoError(t, err)
-		defer conn.Close()
+		sctx, cancel := context.WithCancel(ctx)
 
-		client := sentrypbv1.NewCAClient(conn)
-
-		// Generate a CSR for testing
-		spiffeID := "spiffe://localhost/ns/default/standalone-test-app"
-		csr, err := generateCSR(spiffeID)
-		require.NoError(t, err)
-
-		// Call SignCertificate and get a JWT token
-		resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
-			CertificateSigningRequest: csr,
-			TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
-			Token:                     `{"kubernetes.io":{"pod":{"name":"standalone-test-pod"}}}`,
+		secProv, err := security.New(sctx, security.Options{
+			SentryAddress:           j.sentry.Address(),
+			ControlPlaneTrustDomain: "localhost",
+			ControlPlaneNamespace:   "default",
+			TrustAnchors:            j.trustAnchors,
+			AppID:                   "my-app",
+			MTLSEnabled:             true,
+			Healthz:                 healthz.New(),
 		})
 		require.NoError(t, err)
-		require.NotEmpty(t, resp.GetJwt(), "JWT token should be included in the response")
+
+		secProvErr := make(chan error)
+		go func() {
+			secProvErr <- secProv.Run(sctx)
+		}()
+
+		t.Cleanup(func() {
+			cancel()
+			select {
+			case <-time.After(5 * time.Second):
+				t.Fatal("timed out waiting for security provider to stop")
+			case err = <-secProvErr:
+				require.NoError(t, err)
+			}
+		})
+
+		sec, err := secProv.Handler(sctx)
+		require.NoError(t, err)
+
+		ctxWithIdentity := sec.WithSVIDContext(context.Background())
+		jwtSource, ok := spiffecontext.JWTFrom(ctxWithIdentity)
+		require.True(t, ok, "JWT source should be present in context")
+		require.NotNil(t, jwtSource, "JWT source should not be nil")
+
+		myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
+
+		token, err := jwtSource.FetchJWTSVID(ctx, jwtsvid.Params{
+			Audience: "public",
+			Subject:  myAppID,
+		})
+		require.NoError(t, err, "JWT token should be fetched successfully")
+		require.NotEmpty(t, token, "JWT token should not be empty")
+
+		tokenRaw := token.Marshal()
 
 		// Create a custom HTTP client that skips certificate validation
 		// since we're using a self-signed certificate for the OIDC server
@@ -232,7 +232,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer httpResp.Body.Close()
 
-		require.Equal(t, http.StatusOK, httpResp.StatusCode, "OIDC discovery endpoint should be accessible")
+		require.Equal(t, http.StatusOK, httpResp.StatusCode, "Expected 200 OK response from OIDC discovery document but got %d", httpResp.StatusCode)
 
 		var discovery oidcDiscoveryResponse
 		err = json.NewDecoder(httpResp.Body).Decode(&discovery)
@@ -252,28 +252,31 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		require.True(t, keySet.Len() > 0, "JWKS should contain at least one key")
 
 		// Parse and validate the JWT token using the JWKS
-		token, err := jwt.Parse([]byte(resp.GetJwt()), jwt.WithKeySet(keySet))
+		tkn, err := jwt.Parse([]byte(tokenRaw), jwt.WithKeySet(keySet))
 		require.NoError(t, err, "JWT token should be valid and verifiable with JWKS")
 
 		// Validate expected claims
-		issuer, _ := token.Get("iss")
-		require.Equal(t, discovery.Issuer, issuer, "Issuer in JWT should match discovery document")
+		issuer, _ := tkn.Get("iss")
+		require.Equal(t, discovery.Issuer, issuer, "Expected issuer %s, but got %s", discovery.Issuer, issuer)
 
-		sub, _ := token.Get("sub")
-		require.Equal(t, spiffeID, sub, "Subject should match CSR SPIFFE ID")
+		sub, _ := tkn.Get("sub")
+		require.Equal(t, myAppID.String(), sub.(string), "Expected subject %s, but got %s", myAppID, sub)
 
 		// Verify token expiration
-		expTime, _ := token.Get("exp")
+		expTime, _ := tkn.Get("exp")
 		require.NotNil(t, expTime, "Expiration claim should exist")
 
 		// Verify token issuance time
-		iatTime, _ := token.Get("iat")
+		iatTime, _ := tkn.Get("iat")
 		require.NotNil(t, iatTime, "Issued at claim should exist")
 
 		// Verify token audience
-		aud, ok := token.Get("aud")
+		aud, ok := tkn.Get("aud")
 		require.True(t, ok, "Audience claim should exist")
 		require.NotEmpty(t, aud, "Audience claim should not be empty")
+		audList, ok := aud.([]string)
+		require.True(t, ok, "Audience claim should be a list of strings")
+		require.Contains(t, audList, "public", "Audience claim should contain 'public'")
 
 		// Validate that expiration is in the future
 		exp, ok := expTime.(time.Time)
@@ -291,6 +294,6 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		t.Logf("Token lifetime: %v", tokenLifetime)
 
 		// Log the full token claims for debugging
-		t.Logf("JWT token claims: %+v", token.PrivateClaims())
+		t.Logf("JWT token claims: %+v", tkn.PrivateClaims())
 	})
 }
