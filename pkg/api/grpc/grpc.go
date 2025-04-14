@@ -1157,7 +1157,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	engine, err := a.ActorEngine(ctx)
+	router, err := a.ActorRouter(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1174,7 +1174,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	policyDef := a.Universal.Resiliency().ActorPreLockPolicy(in.GetActorType(), in.GetActorId())
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
 	res, err := policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
-		return engine.Call(ctx, req)
+		return router.Call(ctx, req)
 	})
 	if err != nil {
 		if _, ok := status.FromError(err); ok {

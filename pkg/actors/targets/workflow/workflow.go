@@ -33,9 +33,9 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -66,7 +66,7 @@ type workflow struct {
 	activityActorType string
 
 	resiliency resiliency.Provider
-	engine     engine.Interface
+	router     router.Interface
 	table      table.Interface
 	reminders  reminders.Interface
 	actorState state.Interface
@@ -111,7 +111,7 @@ func WorkflowFactory(ctx context.Context, opts WorkflowOptions) (targets.Factory
 		return nil, err
 	}
 
-	engine, err := opts.Actors.Engine(ctx)
+	router, err := opts.Actors.Router(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func WorkflowFactory(ctx context.Context, opts WorkflowOptions) (targets.Factory
 			resiliency:         opts.Resiliency,
 			table:              table,
 			reminders:          reminders,
-			engine:             engine,
+			router:             router,
 			actorState:         astate,
 			schedulerReminders: opts.SchedulerReminders,
 			ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
@@ -396,13 +396,16 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 	if err != nil {
 		return err
 	}
+
 	// This will do the purging
 	err = w.actorState.TransactionalStateOperation(ctx, true, req)
 	if err != nil {
 		return err
 	}
+
 	w.table.DeleteFromTableIn(w, 0)
 	w.cleanup()
+
 	return nil
 }
 
@@ -684,7 +687,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 
 			log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", w.actorID, targetActorID)
 
-			_, eerr := w.engine.Call(ctx, internalsv1pb.
+			_, eerr := w.router.Call(ctx, internalsv1pb.
 				NewInternalInvokeRequest("Execute").
 				WithActor(w.activityActorType, targetActorID).
 				WithData(eventData).
@@ -741,7 +744,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 
 				log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", w.actorID, method, msg.GetTargetInstanceID())
 
-				_, eerr := w.engine.Call(ctx, internalsv1pb.
+				_, eerr := w.router.Call(ctx, internalsv1pb.
 					NewInternalInvokeRequest(method).
 					WithActor(w.actorType, msg.GetTargetInstanceID()).
 					WithData(requestBytes).

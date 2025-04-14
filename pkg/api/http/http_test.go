@@ -45,11 +45,11 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/workflows"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
-	enginefake "github.com/dapr/dapr/pkg/actors/engine/fake"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
+	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	actorsstate "github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/timers"
@@ -1031,7 +1031,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
 			return nil, messages.ErrActorRuntimeNotFound
-		}).WithEngine(func(context.Context) (engine.Interface, error) {
+		}).WithRouter(func(context.Context) (router.Interface, error) {
 			return nil, messages.ErrActorRuntimeNotFound
 		}).WithTimers(func(context.Context) (timers.Interface, error) {
 			return nil, messages.ErrActorRuntimeNotFound
@@ -1508,8 +1508,8 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		actors.WithEngine(func(context.Context) (engine.Interface, error) {
-			return enginefake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+		actors.WithRouter(func(context.Context) (router.Interface, error) {
+			return routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 				return response, nil
 			}), nil
 		})
@@ -1524,8 +1524,8 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Direct Message - 500 for actor call failure", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
 
-		actors.WithEngine(func(context.Context) (engine.Interface, error) {
-			return enginefake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+		actors.WithRouter(func(context.Context) (router.Interface, error) {
+			return routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 				return nil, errors.New("UPSTREAM_ERROR")
 			}), nil
 		})
