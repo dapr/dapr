@@ -29,6 +29,17 @@ const (
 	JWTSignatureAlgorithm = jwa.ES256 // For now only support ES256 - check whether this is sufficient
 )
 
+// We include common cloud audiences in the token
+// so that components can request the token without
+// needing to know the originally requested audience.
+// This is because we issue tokens for the workload
+// identity only and not for other resources.
+var cloudAudiences = []string{
+	"api://AzureADTokenExchange",
+	"sts.amazonaws.com",
+	"iam.googleapis.com",
+}
+
 // JWTRequest is the request for generating a JWT
 type JWTRequest struct {
 	// Audience is the audience of the JWT.
@@ -96,11 +107,14 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	notBefore := now.Add(-i.allowedClockSkew) // Account for clock skew
 	notAfter := now.Add(req.TTL)
 
+	// requested audience is always the first audience
+	audiences := append([]string{req.Audience}, cloudAudiences...)
+
 	// Create JWT token with claims builder
 	builder := jwt.NewBuilder().
 		Subject(subject).
 		IssuedAt(now).
-		Audience([]string{req.Audience}).
+		Audience(audiences).
 		NotBefore(notBefore).
 		Claim("use", "sig"). // required by Azure
 		Expiration(notAfter)
