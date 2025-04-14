@@ -130,6 +130,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	// Handle JWT options
 	if opts.enableJWT {
 		args = append(args, "-jwt-enabled=true")
+
+		if opts.jwtIssuer != nil {
+			args = append(args, "-jwt-issuer="+*opts.jwtIssuer)
+		}
 	}
 
 	// Handle OIDC options

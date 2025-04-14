@@ -46,10 +46,10 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			signingKey: signingKey,
 			clockSkew:  time.Minute,
 			request: &JWTRequest{
-				TrustDomain: "example.com",
-				Namespace:   "default",
-				AppID:       "test-app",
-				TTL:         time.Hour,
+				Audience:  "example.com",
+				Namespace: "default",
+				AppID:     "test-app",
+				TTL:       time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -80,10 +80,10 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			signingKey: signingKey,
 			clockSkew:  time.Minute,
 			request: &JWTRequest{
-				TrustDomain: "example.com",
-				Namespace:   "default",
-				AppID:       "audience-test-app",
-				TTL:         time.Hour,
+				Audience:  "example.com",
+				Namespace: "default",
+				AppID:     "audience-test-app",
+				TTL:       time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -102,10 +102,10 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			clockSkew:  time.Minute,
 			issuer:     stringPtr("https://auth.example.com"),
 			request: &JWTRequest{
-				TrustDomain: "example.com",
-				Namespace:   "default",
-				AppID:       "test-app",
-				TTL:         time.Hour,
+				Audience:  "example.com",
+				Namespace: "default",
+				AppID:     "test-app",
+				TTL:       time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -120,10 +120,10 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			signingKey: signingKey,
 			clockSkew:  time.Minute,
 			request: &JWTRequest{
-				TrustDomain: "example.com",
-				Namespace:   "default",
-				AppID:       "test-app",
-				TTL:         24 * time.Hour, // Explicitly providing a default TTL for testing
+				Audience:  "example.com",
+				Namespace: "default",
+				AppID:     "test-app",
+				TTL:       24 * time.Hour, // Explicitly providing a default TTL for testing
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -146,11 +146,8 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create issuer with test parameters
-			issuer := jwtIssuer{
-				signingKey:       tc.signingKey,
-				issuer:           tc.issuer,
-				allowedClockSkew: tc.clockSkew,
-			}
+			issuer, err := NewJWTIssuer(tc.signingKey, tc.issuer, tc.clockSkew)
+			require.NoError(t, err)
 
 			token, err := issuer.GenerateJWT(context.Background(), tc.request)
 
@@ -206,17 +203,15 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	require.NotNil(t, bundle.JWKS, "JWKS should be generated")
 
 	// Create JWT issuer using the bundle's signing key
-	issuer := jwtIssuer{
-		signingKey:       bundle.JWTSigningKey,
-		allowedClockSkew: time.Minute,
-	}
+	issuer, err := NewJWTIssuer(bundle.JWTSigningKey, nil, time.Minute)
+	require.NoError(t, err)
 
 	// Generate a JWT
 	request := &JWTRequest{
-		TrustDomain: "example.com",
-		Namespace:   "default",
-		AppID:       "test-app",
-		TTL:         time.Hour,
+		Audience:  "example.com",
+		Namespace: "default",
+		AppID:     "test-app",
+		TTL:       time.Hour,
 	}
 
 	token, err := issuer.GenerateJWT(context.Background(), request)
@@ -276,27 +271,27 @@ func TestCustomIssuerInToken(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create issuer with test parameters
-			issuer := jwtIssuer{
-				signingKey:       signingKey,
-				issuer:           tc.issuerValue,
-				allowedClockSkew: time.Minute,
-			}
+			issuer, err := NewJWTIssuer(signingKey, tc.issuerValue, time.Minute)
+			require.NoError(t, err)
 
 			// Create a basic request
 			request := &JWTRequest{
-				TrustDomain: "example.com",
-				Namespace:   "default",
-				AppID:       "test-app",
-				TTL:         time.Hour,
+				Audience:  "example.com",
+				Namespace: "default",
+				AppID:     "test-app",
+				TTL:       time.Hour,
 			}
 
 			// Generate token
 			token, err := issuer.GenerateJWT(context.Background(), request)
 			require.NoError(t, err)
 
+			pubKey, err := issuer.signingKey.PublicKey()
+			require.NoError(t, err)
+
 			// Parse token without verification (we just want to check the claims)
 			parsedToken, err := jwt.Parse([]byte(token),
-				jwt.WithKey(JWTSignatureAlgorithm, issuer.signingKey.Public()),
+				jwt.WithKey(JWTSignatureAlgorithm, pubKey),
 				jwt.WithValidate(true),
 				jwt.WithValidate(false))
 			require.NoError(t, err)

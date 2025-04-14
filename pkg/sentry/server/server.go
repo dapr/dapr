@@ -223,10 +223,10 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if s.jwtEnabled {
 		// Generate a JWT with the same identity
 		tkn, err := s.ca.GenerateJWT(ctx, &ca.JWTRequest{
-			TrustDomain: req.TrustDomain,
-			Namespace:   req.Namespace,
-			AppID:       req.Id,
-			TTL:         24 * time.Hour,
+			Audience:  trustDomain.String(), // use the trust domain as the audience
+			Namespace: req.Namespace,
+			AppID:     req.Id,
+			TTL:       24 * time.Hour,
 		})
 		if err != nil {
 			// Continue but log the error as the certificate is still valid

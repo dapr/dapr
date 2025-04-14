@@ -15,14 +15,16 @@ package security
 
 import (
 	"context"
+	"crypto"
 	"encoding/pem"
 	"fmt"
 	"os"
 	"time"
 
-	"github.com/golang-jwt/jwt"
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
@@ -137,56 +139,69 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			return nil, fmt.Errorf("error parsing newly signed certificate: %w", err)
 		}
 
-		var (
-			jwtValue  string
-			audiences []string
-		)
+		var jwtVal *string
 		if resp.Jwt != nil {
-			token, err := jwt.Parse(resp.GetJwt(), func(token *jwt.Token) (interface{}, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {
-					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-				}
-
-				// Validate the token's audience
-				as := token.Claims.(jwt.MapClaims)["aud"].([]interface{})
-				if len(audiences) == 0 {
-					return nil, fmt.Errorf("audience claim is empty")
-				}
-
-				for _, a := range as {
-					if aStr, ok := a.(string); ok {
-						audiences = append(audiences, aStr)
-					}
-				}
-				if len(audiences) == 0 {
-					return nil, fmt.Errorf("audience claim is empty")
-				}
-
-				token.Valid = true
-
-				return []byte(resp.GetJwt()), nil
-			})
+			// NOTE: We do not verify the signature of the token here
+			// as the token was passed over a secure channel. This avoids
+			// potential issues where the workload does not yet have an
+			// authority used by Sentry but that would be successfully
+			// validated by a 3rd party via the OIDC server.
+			tkn, err := jwt.Parse([]byte(resp.GetJwt()),
+				jwt.WithVerify(false))
 			if err != nil {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_parse")
 				return nil, fmt.Errorf("error parsing JWT: %w", err)
 			}
 
-			if !token.Valid {
-				return nil, fmt.Errorf("invalid JWT token")
-			}
-			if err := token.Claims.Valid(); err != nil {
-				return nil, fmt.Errorf("invalid JWT claims: %w", err)
+			if len(tkn.Audience()) == 0 {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_aud")
+				return nil, fmt.Errorf("JWT audience is empty")
 			}
 
-			jwtValue = token.Raw
+			// TODO: Handle allowed clock skew?
+			now := time.Now()
+			if tkn.IssuedAt().After(now) {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_iat")
+				return nil, fmt.Errorf("JWT issued at future time")
+			}
+			if tkn.Expiration().Before(now) {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_expired")
+				return nil, fmt.Errorf("JWT token has expired")
+			}
+
+			j := resp.GetJwt()
+			jwtVal = &j
 		}
 
 		return &spiffe.SVIDResponse{
 			X509Certificates: workloadcert,
-			JWT:              resp.Jwt,
+			JWT:              jwtVal,
 		}, nil
 	}
 
 	return fn, nil
+}
+
+func JWKKeySetFromJWTAuthorities(authorities map[string]crypto.PublicKey) (jwk.Set, error) {
+	keySet := jwk.NewSet()
+
+	for keyID, publicKey := range authorities {
+		jwkKey, err := jwk.FromRaw(publicKey)
+		if err != nil {
+			return nil, fmt.Errorf("error converting crypto.PublicKey to JWK: %w", err)
+		}
+
+		err = jwkKey.Set(jwk.KeyIDKey, keyID)
+		if err != nil {
+			return nil, fmt.Errorf("error setting key ID on JWK: %w", err)
+		}
+
+		if err = keySet.AddKey(jwkKey); err != nil {
+			return nil, fmt.Errorf("error adding JWK to key set: %w", err)
+		}
+	}
+
+	return keySet, nil
 }
 
 // isControlPlaneService returns true if the app ID corresponds to a Dapr

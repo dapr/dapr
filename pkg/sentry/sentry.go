@@ -53,7 +53,6 @@ type Options struct {
 	OIDCDomains    []string    // Domains that public endpoints can be accessed from (Optional)
 	OIDCJWKSURI    string      // Force the public JWKS URI to this value (Optional)
 	ODICPathPrefix string      // Path prefix for HTTP endpoints (Optional)
-	JWTIssuer      string      // Issuer for JWT tokens (Optional)
 }
 
 // CertificateAuthority is the interface for the Sentry Certificate Authority.
@@ -135,11 +134,16 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 	if opts.OIDCHTTPPort > 0 {
 		log.Infof("Starting OIDC HTTP server on port %d", opts.OIDCHTTPPort)
 
+		var issuer string
+		if opts.Config.JWTIssuer != nil {
+			issuer = *opts.Config.JWTIssuer
+		}
+
 		httpServer := oidc.New(oidc.Options{
 			Port:          opts.OIDCHTTPPort,
 			ListenAddress: opts.Config.ListenAddress,
 			JWKS:          camngr.Jwks(),
-			JWTIssuer:     opts.JWTIssuer,
+			JWTIssuer:     issuer,
 			Healthz:       opts.Healthz,
 			JWKSURI:       opts.OIDCJWKSURI,
 			Domains:       opts.OIDCDomains,

@@ -109,10 +109,13 @@ func (s *Server) Start(ctx context.Context) error {
 	// Add path prefix to endpoints if configured
 	jwksEndpoint := JWKSEndpoint
 	oidcEndpoint := OIDCDiscoveryEndpoint
-	if s.pathPrefix != "" {
+	if s.pathPrefix != "" && s.pathPrefix != "/" {
+		if strings.HasSuffix(s.pathPrefix, "/") {
+			s.pathPrefix = strings.TrimSuffix(s.pathPrefix, "/")
+		}
 		jwksEndpoint = s.pathPrefix + JWKSEndpoint
 		oidcEndpoint = s.pathPrefix + OIDCDiscoveryEndpoint
-		log.Infof("Using path prefix '%s' for HTTP endpoints", s.pathPrefix)
+		log.Infof("Using path prefix '%s' for OIDC HTTP endpoints", s.pathPrefix)
 	}
 
 	// Add JWKS endpoint with domain validation wrapper
@@ -124,7 +127,7 @@ func (s *Server) Start(ctx context.Context) error {
 	addr := fmt.Sprintf("%s:%d", s.listenAddress, s.port)
 
 	if len(s.domains) > 0 {
-		log.Infof("Server will only accept requests for domains: %v", s.domains)
+		log.Infof("OIDC server will only accept requests for domains: %v", s.domains)
 	}
 
 	s.server = &http.Server{
@@ -135,9 +138,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Infof("Starting HTTPS server on %s", addr)
+		log.Infof("Starting OIDC HTTPS server on %s", addr)
 		if err := s.server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
-			errCh <- fmt.Errorf("HTTPS server error: %w", err)
+			errCh <- fmt.Errorf("OIDC HTTPS server error: %w", err)
 			return
 		}
 		errCh <- nil
@@ -153,7 +156,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	case <-ctx.Done():
 		s.htarget.NotReady()
-		log.Info("Shutting down HTTPS server")
+		log.Info("Shutting down OIDC HTTPS server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return s.server.Shutdown(shutdownCtx)
@@ -233,6 +236,9 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		if issuerURL.Scheme == "" {
+			issuerURL.Scheme = scheme
+		}
 	}
 
 	var jwksURI *url.URL
@@ -244,17 +250,6 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		jwksURI = uri
-	case issuerURL != nil:
-		keysPath, err := url.JoinPath(issuerURL.Path, JWKSEndpoint)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		jwksURI = &url.URL{
-			Scheme: issuerURL.Scheme,
-			Host:   issuerURL.Host,
-			Path:   keysPath,
-		}
 	default:
 		keysPath, err := url.JoinPath(s.pathPrefix, JWKSEndpoint)
 		if err != nil {
