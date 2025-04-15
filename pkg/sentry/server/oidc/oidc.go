@@ -263,13 +263,26 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 	var jwksURI *url.URL
 	switch {
 	case s.jwksURI != "":
+		// if the jwksURI is set, use that
 		uri, err := url.Parse(s.jwksURI)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		jwksURI = uri
+	case s.jwtIssuer != "":
+		// if the issuer is set, use that
+		jwksURI, err = url.Parse(s.jwtIssuer)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if jwksURI.Scheme == "" {
+			jwksURI.Scheme = scheme
+		}
 	default:
+		// if nothing is set, use
+		// the host from the request
 		keysPath, err := url.JoinPath(s.pathPrefix, JWKSEndpoint)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
