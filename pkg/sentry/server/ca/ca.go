@@ -151,7 +151,11 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	if conf.JWTEnabled {
 		log.Info("JWT signing enabled")
 
-		jwtIssuer, err = NewJWTIssuer(bundle.JWTSigningKey, conf.JWTIssuer, conf.AllowedClockSkew)
+		jwtIssuer, err = NewJWTIssuer(
+			bundle.JWTSigningKey,
+			conf.JWTIssuer,
+			conf.AllowedClockSkew,
+			conf.JWTAudiences)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWT issuer: %w", err)
 		}
