@@ -88,10 +88,10 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 	}
 
 	// Set key ID and algorithm
-	if err := jwtKey.Set(jwk.KeyIDKey, JWTKeyID); err != nil {
+	if err := jwtKey.Set(jwk.KeyIDKey, DefaultJWTKeyID); err != nil {
 		return Bundle{}, fmt.Errorf("failed to set JWK kid: %w", err)
 	}
-	if err := jwtKey.Set(jwk.AlgorithmKey, JWTSignatureAlgorithm); err != nil {
+	if err := jwtKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm); err != nil {
 		return Bundle{}, fmt.Errorf("failed to set JWK alg: %w", err)
 	}
 

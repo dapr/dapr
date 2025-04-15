@@ -140,15 +140,16 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 		}
 
 		httpServer := oidc.New(oidc.Options{
-			Port:          opts.OIDCHTTPPort,
-			ListenAddress: opts.Config.ListenAddress,
-			JWKS:          camngr.Jwks(),
-			JWTIssuer:     issuer,
-			Healthz:       opts.Healthz,
-			JWKSURI:       opts.OIDCJWKSURI,
-			Domains:       opts.OIDCDomains,
-			TLSConfig:     opts.OIDCTLSConfig,
-			PathPrefix:    opts.ODICPathPrefix,
+			Port:               opts.OIDCHTTPPort,
+			ListenAddress:      opts.Config.ListenAddress,
+			JWKS:               camngr.JWKS(),
+			JWTIssuer:          issuer,
+			Healthz:            opts.Healthz,
+			JWKSURI:            opts.OIDCJWKSURI,
+			Domains:            opts.OIDCDomains,
+			TLSConfig:          opts.OIDCTLSConfig,
+			PathPrefix:         opts.ODICPathPrefix,
+			SignatureAlgorithm: camngr.JWTSignatureAlgorithm(),
 		})
 
 		if err := runners.Add(httpServer.Start); err != nil {
