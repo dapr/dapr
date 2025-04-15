@@ -136,10 +136,6 @@ func loadJWTSigningKey(keyPEM []byte) (crypto.Signer, error) {
 		return nil, fmt.Errorf("JWT signing key is not a valid crypto.Signer")
 	}
 
-	if _, ok := signer.Public().(*ecdsa.PublicKey); !ok {
-		return nil, fmt.Errorf("JWT signing key is not an ECDSA key")
-	}
-
 	return signer, nil
 }
 

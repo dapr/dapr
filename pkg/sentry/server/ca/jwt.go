@@ -16,6 +16,9 @@ package ca
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/rsa"
 	"fmt"
 	"time"
 
@@ -25,8 +28,10 @@ import (
 )
 
 const (
-	JWTKeyID              = "dapr-sentry"
-	JWTSignatureAlgorithm = jwa.ES256 // For now only support ES256 - check whether this is sufficient
+	// for both the provided or generated signing keys,
+	// if "kid" not set, we will set it to this value.
+	DefaultJWTKeyID              = "dapr-sentry"
+	DefaultJWTSignatureAlgorithm = jwa.ES256
 )
 
 // By defaults we include common cloud audiences in the
@@ -78,7 +83,29 @@ func NewJWTIssuer(signingKey crypto.Signer, issuer *string, allowedClockSkew tim
 	if err != nil {
 		return jwtIssuer{}, fmt.Errorf("failed to create JWK from signing key: %w", err)
 	}
-	sk.Set(jwk.KeyIDKey, JWTKeyID)
+
+	// jwk.FromRaw does not set the algorithm, so we
+	// need to set it manually if it is not already set.
+	if sk.Algorithm().String() == "" {
+		alg, err := signatureAlgorithmFrom(signingKey)
+		if err != nil {
+			return jwtIssuer{}, fmt.Errorf("failed to determine signature algorithm: %w", err)
+		}
+
+		log.Debugf("Setting jwt issuer algorithm to %s", alg)
+		if err := sk.Set(jwk.AlgorithmKey, alg.String()); err != nil {
+			return jwtIssuer{}, fmt.Errorf("failed to set algorithm: %w", err)
+		}
+	} else {
+		log.Debugf("Using provided jwt issuer algorithm %s", sk.Algorithm())
+	}
+
+	if sk.KeyID() == "" {
+		log.Debugf("Setting jwt issuer key id to %s", DefaultJWTKeyID)
+		if err := sk.Set(jwk.KeyIDKey, DefaultJWTKeyID); err != nil {
+			return jwtIssuer{}, fmt.Errorf("failed to set key ID: %w", err)
+		}
+	}
 
 	return jwtIssuer{
 		signingKey:       sk,
@@ -139,11 +166,41 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	}
 
 	signedToken, err := jwt.Sign(token,
-		jwt.WithKey(JWTSignatureAlgorithm, i.signingKey))
+		jwt.WithKey(i.signingKey.Algorithm(), i.signingKey))
 	if err != nil {
 		log.Errorf("Error signing JWT token: %v", err)
 		return "", fmt.Errorf("error signing JWT token: %w", err)
 	}
 
 	return string(signedToken), nil
+}
+
+func signatureAlgorithmFrom(signer crypto.Signer) (jwa.SignatureAlgorithm, error) {
+	switch k := signer.(type) {
+	case *rsa.PrivateKey:
+		bitSize := k.Size() * 8
+		switch {
+		case bitSize >= 4096:
+			return jwa.RS512, nil
+		case bitSize >= 3072:
+			return jwa.RS384, nil
+		default:
+			return jwa.RS256, nil // consider deprecating support for RS256
+		}
+	case *ecdsa.PrivateKey:
+		switch k.Curve.Params().BitSize {
+		case 521:
+			return jwa.ES512, nil
+		case 384:
+			return jwa.ES384, nil
+		case 256:
+			return jwa.ES256, nil
+		default:
+			return "", fmt.Errorf("unsupported ecdsa curve bit size: %d", k.Curve.Params().BitSize)
+		}
+	case ed25519.PrivateKey:
+		return jwa.EdDSA, nil
+	default:
+		return "", fmt.Errorf("unsupported key type %T", signer)
+	}
 }

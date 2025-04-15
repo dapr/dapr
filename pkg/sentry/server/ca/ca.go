@@ -22,6 +22,7 @@ import (
 	"crypto/x509"
 	"fmt"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/kubernetes"
 
@@ -79,8 +80,11 @@ type JWTIssuer interface {
 	// claims based on the identity information provided in the request.
 	GenerateJWT(context.Context, *JWTRequest) (string, error)
 
-	// Jwks returns the JSON Web Key Set (JWKS).
-	Jwks() []byte
+	// JWKS returns the JSON Web Key Set (JWKS).
+	JWKS() []byte
+
+	// JWTSignatureAlgorithm returns the signature algorithm used for signing JWTs.
+	JWTSignatureAlgorithm() jwa.KeyAlgorithm
 }
 
 // store is the interface for the trust bundle backend store.
@@ -203,6 +207,13 @@ func (c *ca) TrustAnchors() []byte {
 	return c.bundle.TrustAnchors
 }
 
-func (c *ca) Jwks() []byte {
+func (c *ca) JWKS() []byte {
 	return c.bundle.JWKSJson
+}
+
+func (c *ca) JWTSignatureAlgorithm() jwa.KeyAlgorithm {
+	if c.jwtIssuer.signingKey == nil {
+		return jwa.KeyAlgorithmFrom(DefaultJWTSignatureAlgorithm)
+	}
+	return c.jwtIssuer.signingKey.Algorithm()
 }

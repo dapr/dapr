@@ -15,20 +15,29 @@ package ca
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
+	"io"
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestJWTIssuer_GenerateJWT(t *testing.T) {
-	// Generate a test private key for JWT signing
-	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	// Generate a ecdsa private key for JWT signing
+	ecSigningKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	// Generate a rsa private key for JWT signing
+	rsaSigningKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	// Define test scenarios
@@ -36,14 +45,14 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 		name           string
 		issuer         *string
 		request        *JWTRequest
-		signingKey     *ecdsa.PrivateKey
+		signingKey     crypto.Signer
 		clockSkew      time.Duration
 		expectedError  bool
 		validateClaims func(t *testing.T, token jwt.Token)
 	}{
 		{
 			name:       "valid token with default settings",
-			signingKey: signingKey,
+			signingKey: ecSigningKey,
 			clockSkew:  time.Minute,
 			request: &JWTRequest{
 				Audience:  "example.com",
@@ -77,7 +86,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 		},
 		{
 			name:       "audience claim is set correctly",
-			signingKey: signingKey,
+			signingKey: ecSigningKey,
 			clockSkew:  time.Minute,
 			request: &JWTRequest{
 				Audience:  "example.com",
@@ -97,7 +106,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 		},
 		{
 			name:       "valid token with custom issuer",
-			signingKey: signingKey,
+			signingKey: ecSigningKey,
 			clockSkew:  time.Minute,
 			issuer:     stringPtr("https://auth.example.com"),
 			request: &JWTRequest{
@@ -116,7 +125,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 		},
 		{
 			name:       "valid token with zero TTL",
-			signingKey: signingKey,
+			signingKey: ecSigningKey,
 			clockSkew:  time.Minute,
 			request: &JWTRequest{
 				Audience:  "example.com",
@@ -134,8 +143,38 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			},
 		},
 		{
+			name:       "valid token with RSA signing key",
+			signingKey: rsaSigningKey,
+			clockSkew:  time.Minute,
+			request: &JWTRequest{
+				Audience:  "example.com",
+				Namespace: "default",
+				AppID:     "test-app",
+				TTL:       time.Hour,
+			},
+			expectedError: false,
+			validateClaims: func(t *testing.T, token jwt.Token) {
+				// Validate subject (SPIFFE ID format)
+				sub, found := token.Get("sub")
+				require.True(t, found, "subject claim should exist")
+				assert.Equal(t, "spiffe://example.com/ns/default/test-app", sub)
+
+				// Validate token was issued recently
+				iat, found := token.Get("iat")
+				require.True(t, found, "iat claim should exist")
+				iatTime := iat.(time.Time)
+				assert.WithinDuration(t, time.Now(), iatTime, 2*time.Second)
+
+				// Validate expiration is properly set
+				exp, found := token.Get("exp")
+				require.True(t, found, "exp claim should exist")
+				expTime := exp.(time.Time)
+				assert.WithinDuration(t, time.Now().Add(time.Hour), expTime, 2*time.Second)
+			},
+		},
+		{
 			name:          "nil request",
-			signingKey:    signingKey,
+			signingKey:    ecSigningKey,
 			clockSkew:     time.Minute,
 			request:       nil,
 			expectedError: true,
@@ -163,9 +202,12 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotEmpty(t, token)
 
+			algo, err := signatureAlgorithmFrom(tc.signingKey)
+			require.NoError(t, err)
+
 			// Parse and validate the token
 			parsedToken, err := jwt.Parse([]byte(token),
-				jwt.WithKey(JWTSignatureAlgorithm, tc.signingKey.Public()),
+				jwt.WithKey(algo, tc.signingKey.Public()),
 				jwt.WithValidate(true),
 				jwt.WithValidate(true))
 			require.NoError(t, err)
@@ -226,7 +268,7 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	require.NotEmpty(t, token)
 
 	parsedToken, err := jwt.Parse([]byte(token),
-		jwt.WithKey(JWTSignatureAlgorithm, bundle.JWTSigningKey.Public()),
+		jwt.WithKey(DefaultJWTSignatureAlgorithm, bundle.JWTSigningKey.Public()),
 		jwt.WithValidate(true))
 	require.NoError(t, err)
 	require.NotNil(t, parsedToken)
@@ -302,7 +344,7 @@ func TestCustomIssuerInToken(t *testing.T) {
 
 			// Parse token without verification (we just want to check the claims)
 			parsedToken, err := jwt.Parse([]byte(token),
-				jwt.WithKey(JWTSignatureAlgorithm, pubKey),
+				jwt.WithKey(DefaultJWTSignatureAlgorithm, pubKey),
 				jwt.WithValidate(true),
 				jwt.WithValidate(false))
 			require.NoError(t, err)
@@ -380,7 +422,7 @@ func TestExtraAudiencesInToken(t *testing.T) {
 
 			// Parse token with verification
 			parsedToken, err := jwt.Parse([]byte(token),
-				jwt.WithKey(JWTSignatureAlgorithm, pubKey),
+				jwt.WithKey(DefaultJWTSignatureAlgorithm, pubKey),
 				jwt.WithValidate(true))
 			require.NoError(t, err)
 
@@ -394,6 +436,108 @@ func TestExtraAudiencesInToken(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSignatureAlgorithmFrom(t *testing.T) {
+	t.Run("with RSA keys", func(t *testing.T) {
+		t.Run("returns RS256 for 2048-bit key", func(t *testing.T) {
+			key, err := rsa.GenerateKey(rand.Reader, 2048)
+			require.NoError(t, err)
+
+			alg, err := signatureAlgorithmFrom(key)
+			require.NoError(t, err)
+			assert.Equal(t, jwa.RS256, alg)
+		})
+
+		t.Run("returns RS384 for 3072-bit key", func(t *testing.T) {
+			key, err := rsa.GenerateKey(rand.Reader, 3072)
+			require.NoError(t, err)
+
+			alg, err := signatureAlgorithmFrom(key)
+			require.NoError(t, err)
+			assert.Equal(t, jwa.RS384, alg)
+		})
+
+		t.Run("returns RS512 for 4096-bit key", func(t *testing.T) {
+			key, err := rsa.GenerateKey(rand.Reader, 4096)
+			require.NoError(t, err)
+
+			alg, err := signatureAlgorithmFrom(key)
+			require.NoError(t, err)
+			assert.Equal(t, jwa.RS512, alg)
+		})
+	})
+
+	t.Run("with ECDSA keys", func(t *testing.T) {
+		t.Run("returns ES256 for P-256 curve", func(t *testing.T) {
+			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			require.NoError(t, err)
+
+			alg, err := signatureAlgorithmFrom(key)
+			require.NoError(t, err)
+			assert.Equal(t, jwa.ES256, alg)
+		})
+
+		t.Run("returns ES384 for P-384 curve", func(t *testing.T) {
+			key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+			require.NoError(t, err)
+
+			alg, err := signatureAlgorithmFrom(key)
+			require.NoError(t, err)
+			assert.Equal(t, jwa.ES384, alg)
+		})
+
+		t.Run("returns ES512 for P-521 curve", func(t *testing.T) {
+			key, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+			require.NoError(t, err)
+
+			alg, err := signatureAlgorithmFrom(key)
+			require.NoError(t, err)
+			assert.Equal(t, jwa.ES512, alg)
+		})
+
+		t.Run("returns error for unsupported curve", func(t *testing.T) {
+			key, err := ecdsa.GenerateKey(elliptic.P224(), rand.Reader)
+			require.NoError(t, err)
+
+			_, err = signatureAlgorithmFrom(key)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "unsupported ecdsa curve bit size")
+		})
+	})
+
+	t.Run("with Ed25519 keys", func(t *testing.T) {
+		t.Run("returns EdDSA", func(t *testing.T) {
+			_, key, err := ed25519.GenerateKey(rand.Reader)
+			require.NoError(t, err)
+
+			alg, err := signatureAlgorithmFrom(key)
+			require.NoError(t, err)
+			assert.Equal(t, jwa.EdDSA, alg)
+		})
+	})
+
+	t.Run("with unsupported key type", func(t *testing.T) {
+		t.Run("returns error", func(t *testing.T) {
+			// Using a mock signer that's not one of the supported types
+			mockSigner := &mockUnsupportedSigner{}
+
+			_, err := signatureAlgorithmFrom(mockSigner)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "unsupported key type")
+		})
+	})
+}
+
+// mockUnsupportedSigner implements crypto.Signer but is not one of the supported types
+type mockUnsupportedSigner struct{}
+
+func (m *mockUnsupportedSigner) Public() crypto.PublicKey {
+	return nil
+}
+
+func (m *mockUnsupportedSigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+	return nil, nil
 }
 
 // Helper method to create string pointers
