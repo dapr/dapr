@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/healthz"
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/kit/logger"
+	"github.com/lestrrat-go/jwx/v2/jwa"
 )
 
 const (
@@ -57,6 +57,8 @@ type Options struct {
 	JWTIssuer string
 	// PathPrefix is a prefix to add to all HTTP endpoints
 	PathPrefix string
+	// SignatureAlgorithm is the signature algorithm to use for JWT tokens
+	SignatureAlgorithm jwa.KeyAlgorithm
 }
 
 // Server is a HTTP server that partially implements the OIDC spec.
@@ -64,16 +66,17 @@ type Options struct {
 // being able to verify the JWT tokens issued by the Sentry server
 // which may be used by the Dapr runtime to authenticate to components.
 type Server struct {
-	port          int
-	listenAddress string
-	jwks          []byte
-	htarget       healthz.Target
-	server        *http.Server
-	jwksURI       string
-	domains       []string
-	tlsConfig     *tls.Config
-	jwtIssuer     string
-	pathPrefix    string
+	port               int
+	listenAddress      string
+	jwks               []byte
+	htarget            healthz.Target
+	server             *http.Server
+	jwksURI            string
+	domains            []string
+	tlsConfig          *tls.Config
+	jwtIssuer          string
+	pathPrefix         string
+	signatureAlgorithm jwa.KeyAlgorithm
 }
 
 // New creates a new HTTP server with the given options
@@ -83,15 +86,16 @@ func New(opts Options) *Server {
 	}
 
 	return &Server{
-		port:          opts.Port,
-		listenAddress: opts.ListenAddress,
-		jwks:          opts.JWKS,
-		htarget:       opts.Healthz.AddTarget(),
-		jwksURI:       opts.JWKSURI,
-		domains:       opts.Domains,
-		tlsConfig:     opts.TLSConfig,
-		jwtIssuer:     opts.JWTIssuer,
-		pathPrefix:    opts.PathPrefix,
+		port:               opts.Port,
+		listenAddress:      opts.ListenAddress,
+		jwks:               opts.JWKS,
+		htarget:            opts.Healthz.AddTarget(),
+		jwksURI:            opts.JWKSURI,
+		domains:            opts.Domains,
+		tlsConfig:          opts.TLSConfig,
+		jwtIssuer:          opts.JWTIssuer,
+		pathPrefix:         opts.PathPrefix,
+		signatureAlgorithm: opts.SignatureAlgorithm,
 	}
 }
 
@@ -104,6 +108,9 @@ func (s *Server) Start(ctx context.Context) error {
 	_, err := url.Parse(s.jwksURI)
 	if err != nil {
 		return fmt.Errorf("invalid JWKS URI: %w", err)
+	}
+	if s.signatureAlgorithm == nil {
+		return fmt.Errorf("signature algorithm is required")
 	}
 
 	// Add path prefix to endpoints if configured
@@ -189,14 +196,25 @@ func (s *Server) handleJWKS(w http.ResponseWriter, r *http.Request) {
 // OIDCDiscoveryDocument is a partial implementation of the OIDC discovery document
 // it contains only the fields that are relevant for a resource provider to validate
 // a JWT token issued by the Sentry server. We do not implement the full OIDC spec.
+//
+// reference: https://openid.net/specs/openid-connect-discovery-1_0.html
 type OIDCDiscoveryDocument struct {
-	Issuer                           string   `json:"issuer"`
-	JwksURI                          string   `json:"jwks_uri"`
-	ResponseTypesSupported           []string `json:"response_types_supported"`
-	SubjectTypesSupported            []string `json:"subject_types_supported"`
+	// REQUIRED. URL using the https scheme with no query or fragment components that the OP asserts as its Issuer Identifier. If Issuer discovery is supported (see Section 2), this value MUST be identical to the issuer value returned by WebFinger. This also MUST be identical to the iss Claim value in ID Tokens issued from this Issuer.
+	Issuer string `json:"issuer"`
+	// REQUIRED. URL using the https scheme with no query or fragment components that the OP asserts as its Issuer Identifier. If Issuer discovery is supported (see Section 2), this value MUST be identical to the issuer value returned by WebFinger. This also MUST be identical to the iss Claim value in ID Tokens issued from this Issuer.
+	AuthorizationEndpoint string `json:"authorization_endpoint,omitempty"`
+	// REQUIRED. URL of the OP's JWK Set [JWK] document, which MUST use the https scheme. This contains the signing key(s) the RP uses to validate signatures from the OP. The JWK Set MAY also contain the Server's encryption key(s), which are used by RPs to encrypt requests to the Server. When both signing and encryption keys are made available, a use (public key use) parameter value is REQUIRED for all keys in the referenced JWK Set to indicate each key's intended usage. Although some algorithms allow the same key to be used for both signatures and encryption, doing so is NOT RECOMMENDED, as it is less secure. The JWK x5c parameter MAY be used to provide X.509 representations of keys provided. When used, the bare key values MUST still be present and MUST match those in the certificate. The JWK Set MUST NOT contain private or symmetric key values.
+	JwksURI string `json:"jwks_uri"`
+	// REQUIRED. JSON array containing a list of the OAuth 2.0 response_type values that this OP supports. Dynamic OpenID Providers MUST support the code, id_token, and the id_token token Response Type values.
+	ResponseTypesSupported []string `json:"response_types_supported"`
+	// REQUIRED. JSON array containing a list of the Subject Identifier types that this OP supports. Valid types include pairwise and public.
+	SubjectTypesSupported []string `json:"subject_types_supported"`
+	// REQUIRED. JSON array containing a list of the JWS signing algorithms (alg values) supported by the OP for the ID Token to encode the Claims in a JWT [JWT]. The algorithm RS256 MUST be included. The value none MAY be supported but MUST NOT be used unless the Response Type used returns no ID Token from the Authorization Endpoint (such as when using the Authorization Code Flow)
 	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
-	ScopesSupported                  []string `json:"scopes_supported,omitempty"`
-	ClaimsSupported                  []string `json:"claims_supported,omitempty"`
+	// RECOMMENDED. JSON array containing a list of the OAuth 2.0 [RFC6749] scope values that this server supports. The server MUST support the openid scope value. Servers MAY choose not to advertise some supported scope values even when this parameter is used, although those defined in [OpenID.Core] SHOULD be listed, if supported.
+	ScopesSupported []string `json:"scopes_supported,omitempty"`
+	// RECOMMENDED. JSON array containing a list of the Claim Names of the Claims that the OpenID Provider MAY be able to supply values for. Note that for privacy or other reasons, this might not be an exhaustive list.
+	ClaimsSupported []string `json:"claims_supported,omitempty"`
 }
 
 // handleOIDCDiscovery handles requests to the OIDC discovery endpoint
@@ -275,9 +293,10 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 	discovery := OIDCDiscoveryDocument{
 		Issuer:                           issuer,
 		JwksURI:                          jwks,
+		AuthorizationEndpoint:            issuer + "/authorize", // WARN: not implemented
 		ResponseTypesSupported:           []string{"id_token"},
 		SubjectTypesSupported:            []string{"public"},
-		IDTokenSigningAlgValuesSupported: []string{string(ca.JWTSignatureAlgorithm)},
+		IDTokenSigningAlgValuesSupported: []string{string(s.signatureAlgorithm.String())},
 		ScopesSupported:                  []string{"openid"},
 		ClaimsSupported:                  []string{"sub", "iss", "aud", "exp", "iat", "nbf", "use"},
 	}
