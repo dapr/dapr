@@ -23,9 +23,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
+
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/kit/logger"
-	"github.com/lestrrat-go/jwx/v2/jwa"
 )
 
 const (
