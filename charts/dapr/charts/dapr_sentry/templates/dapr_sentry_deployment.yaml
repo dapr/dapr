@@ -188,6 +188,37 @@ spec:
         - "--issuer-key-filename"
         - "{{ .key }}"
 {{- end }}
+        - "--jwt-enabled={{ .Values.jwt.enabled }}"
+{{- if .Values.jwt.keyFilename }}
+        - "--jwt-key-filename={{ .Values.jwt.keyFilename }}"
+{{- end }}
+{{- if .Values.jwt.jwksFilename }}
+        - "--jwks-filename={{ .Values.jwt.jwksFilename }}"
+{{- end }}
+{{- if .Values.jwt.issuer }}
+        - "--jwt-issuer={{ .Values.jwt.issuer }}"
+{{- end }}
+{{- if .Values.jwt.audiences }}
+        - "--jwt-audiences={{ join "," .Values.jwt.audiences }}"
+{{- end }}
+{{- if gt (.Values.oidc.httpPort | int) 0 }}
+        - "--oidc-http-port={{ .Values.oidc.httpPort }}"
+{{- end }}
+{{- if .Values.oidc.jwksURI }}
+        - "--oidc-jwks-uri={{ .Values.oidc.jwksURI }}"
+{{- end }}
+{{- if .Values.oidc.pathPrefix }}
+        - "--oidc-path-prefix={{ .Values.oidc.pathPrefix }}"
+{{- end }}
+{{- if .Values.oidc.domains }}
+        - "--oidc-domains={{ join "," .Values.oidc.domains }}"
+{{- end }}
+{{- if .Values.oidc.tlsCertFile }}
+        - "--oidc-tls-cert-file={{ .Values.oidc.tlsCertFile }}"
+{{- end }}
+{{- if .Values.oidc.tlsKeyFile }}
+        - "--oidc-tls-key-file={{ .Values.oidc.tlsKeyFile }}"
+{{- end }}
       serviceAccountName: dapr-sentry
       volumes:
         - name: credentials
