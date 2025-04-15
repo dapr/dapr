@@ -145,7 +145,11 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create issuer with test parameters
-			issuer, err := NewJWTIssuer(tc.signingKey, tc.issuer, tc.clockSkew)
+			issuer, err := NewJWTIssuer(
+				tc.signingKey,
+				tc.issuer,
+				tc.clockSkew,
+				[]string{})
 			require.NoError(t, err)
 
 			token, err := issuer.GenerateJWT(context.Background(), tc.request)
@@ -202,7 +206,11 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	require.NotNil(t, bundle.JWKS, "JWKS should be generated")
 
 	// Create JWT issuer using the bundle's signing key
-	issuer, err := NewJWTIssuer(bundle.JWTSigningKey, nil, time.Minute)
+	issuer, err := NewJWTIssuer(
+		bundle.JWTSigningKey,
+		nil,
+		time.Minute,
+		[]string{})
 	require.NoError(t, err)
 
 	// Generate a JWT
@@ -270,7 +278,11 @@ func TestCustomIssuerInToken(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create issuer with test parameters
-			issuer, err := NewJWTIssuer(signingKey, tc.issuerValue, time.Minute)
+			issuer, err := NewJWTIssuer(
+				signingKey,
+				tc.issuerValue,
+				time.Minute,
+				[]string{})
 			require.NoError(t, err)
 
 			// Create a basic request
@@ -303,6 +315,82 @@ func TestCustomIssuerInToken(t *testing.T) {
 			} else {
 				_, found := parsedToken.Get("iss")
 				assert.False(t, found, "issuer claim should not exist")
+			}
+		})
+	}
+}
+
+// TestExtraAudiencesInToken tests that extraAudiences are correctly included in the JWT token
+func TestExtraAudiencesInToken(t *testing.T) {
+	// Generate a test private key for JWT signing
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	// Test cases with different audience configurations
+	testCases := []struct {
+		name           string
+		extraAudiences []string
+		expectedAuds   []string
+		mainAudience   string
+	}{
+		{
+			name:           "no extra audiences",
+			extraAudiences: []string{},
+			mainAudience:   "example.com",
+			expectedAuds:   []string{"example.com"},
+		},
+		{
+			name:           "with custom extra audiences",
+			extraAudiences: []string{"custom-audience-1", "custom-audience-2"},
+			mainAudience:   "example.com",
+			expectedAuds:   []string{"example.com", "custom-audience-1", "custom-audience-2"},
+		},
+		{
+			name:           "with default extra audiences",
+			extraAudiences: DefaultExtraAudiences,
+			mainAudience:   "example.com",
+			expectedAuds:   append([]string{"example.com"}, DefaultExtraAudiences...),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create issuer with test parameters
+			issuer, err := NewJWTIssuer(
+				signingKey,
+				nil, // no custom issuer
+				time.Minute,
+				tc.extraAudiences)
+			require.NoError(t, err)
+
+			// Create a basic request
+			request := &JWTRequest{
+				Audience:  tc.mainAudience,
+				Namespace: "default",
+				AppID:     "test-app",
+				TTL:       time.Hour,
+			}
+
+			// Generate token
+			token, err := issuer.GenerateJWT(context.Background(), request)
+			require.NoError(t, err)
+
+			pubKey, err := issuer.signingKey.PublicKey()
+			require.NoError(t, err)
+
+			// Parse token with verification
+			parsedToken, err := jwt.Parse([]byte(token),
+				jwt.WithKey(JWTSignatureAlgorithm, pubKey),
+				jwt.WithValidate(true))
+			require.NoError(t, err)
+
+			// Check audience claim
+			aud := parsedToken.Audience()
+			assert.Len(t, aud, len(tc.expectedAuds), "Should have the expected number of audiences")
+
+			// Check that each expected audience is present
+			for _, expectedAud := range tc.expectedAuds {
+				assert.Contains(t, aud, expectedAud, "Expected audience '%s' not found", expectedAud)
 			}
 		})
 	}

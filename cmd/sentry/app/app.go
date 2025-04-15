@@ -136,6 +136,10 @@ func Run() {
 		cfg.JWTIssuer = &opts.JWTIssuer
 	}
 
+	if len(opts.JWTAudiences) > 0 {
+		cfg.JWTAudiences = opts.JWTAudiences
+	}
+
 	// We use runner manager inception here since we want the inner manager to be
 	// restarted when the CA server needs to be restarted because of file events.
 	// We don't want to restart the healthz server and file watcher on file

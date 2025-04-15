@@ -29,12 +29,12 @@ const (
 	JWTSignatureAlgorithm = jwa.ES256 // For now only support ES256 - check whether this is sufficient
 )
 
-// We include common cloud audiences in the token
-// so that components can request the token without
-// needing to know the originally requested audience.
-// This is because we issue tokens for the workload
-// identity only and not for other resources.
-var cloudAudiences = []string{
+// By defaults we include common cloud audiences in the
+// token so that components can request the token without
+// needing to know the trust domain which is the required
+// audience.
+// Users can override these defaults via config.
+var DefaultExtraAudiences = []string{
 	"api://AzureADTokenExchange",
 	"sts.amazonaws.com",
 	"iam.googleapis.com",
@@ -64,9 +64,12 @@ type jwtIssuer struct {
 
 	// allowedClockSkew is the time allowed for clock skew
 	allowedClockSkew time.Duration
+
+	// extraAudiences are optional audiences to include in the JWT
+	extraAudiences []string
 }
 
-func NewJWTIssuer(signingKey crypto.Signer, issuer *string, allowedClockSkew time.Duration) (jwtIssuer, error) {
+func NewJWTIssuer(signingKey crypto.Signer, issuer *string, allowedClockSkew time.Duration, extraAudiences []string) (jwtIssuer, error) {
 	if signingKey == nil {
 		return jwtIssuer{}, fmt.Errorf("signing key cannot be nil")
 	}
@@ -81,6 +84,7 @@ func NewJWTIssuer(signingKey crypto.Signer, issuer *string, allowedClockSkew tim
 		signingKey:       sk,
 		issuer:           issuer,
 		allowedClockSkew: allowedClockSkew,
+		extraAudiences:   extraAudiences,
 	}, nil
 }
 
@@ -111,8 +115,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	notBefore := now.Add(-i.allowedClockSkew) // Account for clock skew
 	notAfter := now.Add(req.TTL)
 
-	// requested audience is always the first audience
-	audiences := append([]string{req.Audience}, cloudAudiences...)
+	audiences := append([]string{req.Audience}, i.extraAudiences...)
 
 	// Create JWT token with claims builder
 	builder := jwt.NewBuilder().
