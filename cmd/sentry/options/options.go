@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/kit/logger"
 )
 
@@ -54,6 +55,7 @@ type Options struct {
 	JWKSFilename          string
 	JWTEnabled            bool
 	JWTIssuer             string
+	JWTAudiences          []string
 	OIDCHTTPPort          int
 	OIDCJWKSURI           string
 	OIDCPathPrefix        string
@@ -99,6 +101,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.JWTSigningKeyFilename, "jwt-key-filename", config.DefaultJWTSigningKeyFilename, "JWT signing key filename")
 	fs.StringVar(&opts.JWKSFilename, "jwks-filename", config.DefaultJWKSFilename, "JWKS (JSON Web Key Set) filename")
 	fs.StringVar(&opts.JWTIssuer, "jwt-issuer", "", "Issuer value for JWT tokens (no issuer if empty)")
+	fs.StringSliceVar(&opts.JWTAudiences, "jwt-audiences", ca.DefaultExtraAudiences, "List of audiences to include in JWT tokens")
 	fs.IntVar(&opts.OIDCHTTPPort, "oidc-http-port", 0, "The port for the OIDC HTTP server (disabled if 0)")
 	fs.StringVar(&opts.OIDCJWKSURI, "oidc-jwks-uri", "", "Custom URI where the JWKS can be accessed externally")
 	fs.StringVar(&opts.OIDCPathPrefix, "oidc-path-prefix", "", "Path prefix to add to all OIDC HTTP endpoints")
@@ -141,10 +144,6 @@ func (o *Options) Validate() error {
 
 	if o.JWTIssuer != "" && !o.JWTEnabled {
 		return fmt.Errorf("jwt-issuer cannot be set when jwt-enabled is false")
-	}
-
-	if o.JWTSigningKeyFilename != "" && !o.JWTEnabled {
-		return fmt.Errorf("jwt-key-filename cannot be set when jwt-enabled is false")
 	}
 
 	return nil
