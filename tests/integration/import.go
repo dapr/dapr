@@ -14,7 +14,6 @@ limitations under the License.
 package integration
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd"
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/helm"
