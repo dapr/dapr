@@ -330,7 +330,8 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 		// Create ctx with baggage header at exactly max per-member len. Member, aka, item: k=v
 		// "key1=value1,key2=" is 17 bytes, so we need MaxBaggageBytesPerMember-17 bytes of 'x's
 		existingBaggageByteCount := len("key1=value1,key2=")
-		longValue := strings.Repeat("x", diagConsts.MaxBaggageBytesPerMember-existingBaggageByteCount)
+		maxBaggageBytesPerMember := 4096 // OpenTelemetry limit: https://github.com/open-telemetry/opentelemetry-go/blob/main/baggage/baggage.go
+		longValue := strings.Repeat("x", maxBaggageBytesPerMember-existingBaggageByteCount)
 		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
 			diagConsts.BaggageHeader, fmt.Sprintf("key1=value1,key2=%s", longValue),
 		))
@@ -353,7 +354,10 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 	})
 
 	t.Run("baggage exceeding max item length", func(t *testing.T) {
-		longValue := strings.Repeat("x", diagConsts.MaxBaggageLength)
+		// MaxBaggageLength is the maximum length of a baggage header according to W3C spec
+		// Reverence: https://www.w3.org/TR/baggage/#limits
+		maxBagLen := 8192
+		longValue := strings.Repeat("x", maxBagLen)
 		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
 			diagConsts.BaggageHeader, fmt.Sprintf("key1=value1,key2=%s", longValue),
 		))

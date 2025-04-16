@@ -76,10 +76,6 @@ const (
 	SupportedVersion = 0
 	MaxVersion       = 254
 	MaxTracestateLen = 512
-
-	// MaxBaggageLength is the maximum length of a baggage header according to W3C spec
-	// Reverence: https://www.w3.org/TR/baggage/#limits
-	MaxBaggageLength = 8192
 )
 
 // GrpcAppendSpanAttributesFn is the interface that applies to gRPC requests that add span attributes.
