@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 	grpcMetadata "google.golang.org/grpc/metadata"
 
-	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
@@ -49,13 +48,13 @@ type output struct {
 func (b *output) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		if tp := r.Header.Get(diagConsts.TraceparentHeader); tp != "" {
+		if tp := r.Header.Get("traceparent"); tp != "" {
 			b.traceparent.Store(true)
 		} else {
 			b.traceparent.Store(false)
 		}
 
-		if baggage := r.Header.Get(diagConsts.BaggageHeader); baggage != "" {
+		if baggage := r.Header.Get("baggage"); baggage != "" {
 			b.baggage.Store(true)
 		} else {
 			b.baggage.Store(false)
@@ -124,9 +123,9 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		tp := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-		req.Header.Set(diagConsts.TraceparentHeader, tp)
+		req.Header.Set("traceparent", tp)
 		bag := "key1=value1,key2=value2"
-		req.Header.Set(diagConsts.BaggageHeader, bag)
+		req.Header.Set("baggage", bag)
 
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
@@ -143,8 +142,8 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		// invoke binding
 		tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-02"
 		ctx = grpcMetadata.AppendToOutgoingContext(ctx,
-			diagConsts.TraceparentHeader, tp,
-			diagConsts.BaggageHeader, bag,
+			"traceparent", tp,
+			"baggage", bag,
 		)
 		invokeresp, err := client.InvokeBinding(ctx, &invokereq)
 		require.NoError(t, err)

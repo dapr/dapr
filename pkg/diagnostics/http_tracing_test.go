@@ -93,7 +93,7 @@ func TestSpanContextFromRequest(t *testing.T) {
 			req := &http.Request{
 				Header: make(http.Header),
 			}
-			req.Header.Add(diagConsts.TraceparentHeader, tt.header)
+			req.Header.Add("traceparent", tt.header)
 
 			gotSc := SpanContextFromRequest(req)
 			wantSc := trace.NewSpanContext(tt.wantSc)
@@ -146,7 +146,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 		sc := trace.SpanContext{}
 		SpanContextToHTTPHeaders(sc, req.Header.Set)
 
-		assert.Empty(t, req.Header.Get(diagConsts.TraceparentHeader))
+		assert.Empty(t, req.Header.Get("traceparent"))
 	})
 }
 
@@ -215,7 +215,7 @@ func TestSpanContextToResponse(t *testing.T) {
 			wantSc := trace.NewSpanContext(tt.scConfig)
 			SpanContextToHTTPHeaders(wantSc, resp.Header().Set)
 
-			h := resp.Header().Get(diagConsts.TraceparentHeader)
+			h := resp.Header().Get("traceparent")
 			got, _ := SpanContextFromW3CString(h)
 
 			assert.Equalf(t, wantSc, got, "SpanContextToResponse() got = %v, want %v", got, wantSc)
@@ -268,7 +268,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		r := newTraceRequest(
 			requestBody, "/v1.0/state/statestore",
 			map[string]string{
-				diagConsts.TraceparentHeader: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+				"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
 			},
 		)
 		w := httptest.NewRecorder()
@@ -309,7 +309,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(w, r)
 		span := diagUtils.SpanFromContext(r.Context())
 		sc := span.SpanContext()
-		assert.Equal(t, w.Header().Get(diagConsts.TraceparentHeader), SpanContextToW3CString(sc))
+		assert.Equal(t, w.Header().Get("traceparent"), SpanContextToW3CString(sc))
 	})
 
 	t.Run("traceparent given in response", func(t *testing.T) {
@@ -320,26 +320,26 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			},
 		)
 		w := httptest.NewRecorder()
-		w.Header().Set(diagConsts.TraceparentHeader, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-		w.Header().Set(diagConsts.TracestateHeader, "xyz=t61pCWkhMzZ")
+		w.Header().Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+		w.Header().Set("tracestate", "xyz=t61pCWkhMzZ")
 		handler.ServeHTTP(w, r)
 		span := diagUtils.SpanFromContext(r.Context())
 		sc := span.SpanContext()
-		assert.NotEqual(t, w.Header().Get(diagConsts.TraceparentHeader), SpanContextToW3CString(sc))
+		assert.NotEqual(t, w.Header().Get("traceparent"), SpanContextToW3CString(sc))
 	})
 
 	t.Run("baggage header propagation", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Add(diagConsts.BaggageHeader, "key1=value1")
+		req.Header.Add("baggage", "key1=value1")
 
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
-		assert.Equal(t, "key1=value1", rr.Header().Get(diagConsts.BaggageHeader))
+		assert.Equal(t, "key1=value1", rr.Header().Get("baggage"))
 	})
 
 	t.Run("empty baggage propagates", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Add(diagConsts.BaggageHeader, "")
+		req.Header.Add("baggage", "")
 
 		var handlerCtx context.Context
 		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -351,7 +351,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		// Verify baggage is in the header & context (OpenTelemetry creates empty baggage)
-		assert.Equal(t, "", rr.Header().Get(diagConsts.BaggageHeader))
+		assert.Equal(t, "", rr.Header().Get("baggage"))
 		baggage := otelbaggage.FromContext(handlerCtx)
 		assert.NotNil(t, baggage, "baggage should be in context")
 		assert.Empty(t, baggage.Members(), "baggage should be empty")
@@ -359,7 +359,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 	t.Run("baggage with properties", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Add(diagConsts.BaggageHeader, "key1=value1;prop1=propvalue1,key2=value2;prop2=propvalue2")
+		req.Header.Add("baggage", "key1=value1;prop1=propvalue1,key2=value2;prop2=propvalue2")
 
 		var handlerCtx context.Context
 		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -371,7 +371,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		// Verify baggage is preserved in response headers
-		assert.Equal(t, "key1=value1;prop1=propvalue1,key2=value2;prop2=propvalue2", rr.Header().Get(diagConsts.BaggageHeader))
+		assert.Equal(t, "key1=value1;prop1=propvalue1,key2=value2;prop2=propvalue2", rr.Header().Get("baggage"))
 
 		// Verify baggage is in ctx w/ both members & properties
 		baggage := otelbaggage.FromContext(handlerCtx)
@@ -400,7 +400,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 	t.Run("baggage with special characters", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Add(diagConsts.BaggageHeader, "key1=value1%20with%20spaces,key2=value2%2Fwith%2Fslashes")
+		req.Header.Add("baggage", "key1=value1%20with%20spaces,key2=value2%2Fwith%2Fslashes")
 
 		var handlerCtx context.Context
 		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -412,7 +412,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		// Verify baggage is preserved in response headers with decoded values to align with OpenTelemetry
-		assert.Equal(t, "key1=value1 with spaces,key2=value2/with/slashes", rr.Header().Get(diagConsts.BaggageHeader))
+		assert.Equal(t, "key1=value1 with spaces,key2=value2/with/slashes", rr.Header().Get("baggage"))
 
 		// Verify baggage is in ctx with both members (URL-decoded by OpenTelemetry)
 		baggage := otelbaggage.FromContext(handlerCtx)
@@ -426,7 +426,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 	t.Run("invalid baggage header", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Add(diagConsts.BaggageHeader, "invalid-baggage")
+		req.Header.Add("baggage", "invalid-baggage")
 
 		var handlerCtx context.Context
 		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -438,7 +438,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		// Verify invalid baggage is not propagated in headers
-		assert.Empty(t, rr.Header().Get(diagConsts.BaggageHeader))
+		assert.Empty(t, rr.Header().Get("baggage"))
 
 		// Verify baggage is in ctx, but empty (OpenTelemetry creates empty baggage)
 		baggage := otelbaggage.FromContext(handlerCtx)
@@ -448,7 +448,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 	t.Run("multiple baggage values in header", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Add(diagConsts.BaggageHeader, "key1=value1,key2=value2")
+		req.Header.Add("baggage", "key1=value1,key2=value2")
 
 		var handlerCtx context.Context
 		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -460,7 +460,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		// Verify baggage is preserved in response headers
-		assert.Equal(t, "key1=value1,key2=value2", rr.Header().Get(diagConsts.BaggageHeader))
+		assert.Equal(t, "key1=value1,key2=value2", rr.Header().Get("baggage"))
 
 		// Verify baggage is in ctx with both members
 		baggage := otelbaggage.FromContext(handlerCtx)
@@ -475,7 +475,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 	t.Run("mixed valid and invalid baggage items", func(t *testing.T) {
 		// Create request with both valid and invalid baggage
 		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Add(diagConsts.BaggageHeader, "key1=value1,invalid-format-no-equals,key2=value2")
+		req.Header.Add("baggage", "key1=value1,invalid-format-no-equals,key2=value2")
 
 		var handlerCtx context.Context
 		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -487,7 +487,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		// OpenTelemetry rejects entire baggage if any part is invalid
-		assert.Empty(t, rr.Header().Get(diagConsts.BaggageHeader))
+		assert.Empty(t, rr.Header().Get("baggage"))
 		baggage := otelbaggage.FromContext(handlerCtx)
 		assert.NotNil(t, baggage, "baggage should be in context")
 		assert.Empty(t, baggage.Members(), "baggage should be empty since it was rejected")
@@ -500,7 +500,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		maxBaggageBytesPerMember := 4096 // OpenTelemetry limit: https://github.com/open-telemetry/opentelemetry-go/blob/main/baggage/baggage.go
 		longValue := strings.Repeat("x", maxBaggageBytesPerMember-existingBaggageByteCount)
 		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Add(diagConsts.BaggageHeader, fmt.Sprintf("key1=value1,key2=%s", longValue))
+		req.Header.Add("baggage", fmt.Sprintf("key1=value1,key2=%s", longValue))
 
 		var handlerCtx context.Context
 		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -512,7 +512,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		// Verify both items are preserved in response
-		assert.Equal(t, fmt.Sprintf("key1=value1,key2=%s", longValue), rr.Header().Get(diagConsts.BaggageHeader))
+		assert.Equal(t, fmt.Sprintf("key1=value1,key2=%s", longValue), rr.Header().Get("baggage"))
 
 		// Verify baggage is in ctx with both members
 		baggage := otelbaggage.FromContext(handlerCtx)
@@ -530,7 +530,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		maxBagLen := 8192
 		longValue := strings.Repeat("x", maxBagLen)
 		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Add(diagConsts.BaggageHeader, fmt.Sprintf("key1=value1,key2=%s", longValue))
+		req.Header.Add("baggage", fmt.Sprintf("key1=value1,key2=%s", longValue))
 
 		var handlerCtx context.Context
 		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -542,7 +542,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		// OpenTelemetry rejects entire baggage if any item exceeds length limit
-		assert.Empty(t, rr.Header().Get(diagConsts.BaggageHeader))
+		assert.Empty(t, rr.Header().Get("baggage"))
 
 		// Verify baggage is in ctx, but empty (OpenTelemetry creates empty baggage)
 		baggage := otelbaggage.FromContext(handlerCtx)

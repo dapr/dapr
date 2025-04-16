@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -46,7 +45,7 @@ type httpBaggage struct {
 func (h *httpBaggage) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		if baggage := r.Header.Get(diagConsts.BaggageHeader); baggage != "" {
+		if baggage := r.Header.Get("baggage"); baggage != "" {
 			h.baggage.Store(true)
 		} else {
 			h.baggage.Store(false)
@@ -84,7 +83,7 @@ func (h *httpBaggage) Run(t *testing.T, ctx context.Context) {
 		appreq, err := http.NewRequestWithContext(ctx, http.MethodPost, appURL, strings.NewReader("{\"operation\":\"get\"}"))
 		require.NoError(t, err)
 
-		appreq.Header.Set(diagConsts.BaggageHeader, "key1=value1,key2=value2")
+		appreq.Header.Set("baggage", "key1=value1,key2=value2")
 
 		appresp, err := httpClient.Do(appreq)
 		require.NoError(t, err)
@@ -93,6 +92,6 @@ func (h *httpBaggage) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, h.baggage.Load())
 
 		// Verify baggage header is in response
-		assert.Equal(t, "key1=value1,key2=value2", appresp.Header.Get(diagConsts.BaggageHeader))
+		assert.Equal(t, "key1=value1,key2=value2", appresp.Header.Get("baggage"))
 	})
 }

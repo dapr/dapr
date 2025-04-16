@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 	grpcMetadata "google.golang.org/grpc/metadata"
 
-	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -46,7 +45,7 @@ func (g *grpcBaggage) Setup(t *testing.T) []framework.Option {
 	g.grpcapp = procgrpc.New(t,
 		procgrpc.WithOnInvokeFn(func(ctx context.Context, in *common.InvokeRequest) (*common.InvokeResponse, error) {
 			if md, ok := grpcMetadata.FromIncomingContext(ctx); ok {
-				if _, exists := md[diagConsts.BaggageHeader]; exists {
+				if _, exists := md["baggage"]; exists {
 					g.baggage.Store(true)
 				} else {
 					g.baggage.Store(false)
@@ -103,7 +102,7 @@ func (g *grpcBaggage) Run(t *testing.T, ctx context.Context) {
 
 		// Add baggage header to context
 		ctx = grpcMetadata.AppendToOutgoingContext(ctx,
-			diagConsts.BaggageHeader, "key1=value1,key2=value2",
+			"baggage", "key1=value1,key2=value2",
 		)
 		svcresp, err := client.InvokeService(ctx, &svcreq)
 		require.NoError(t, err)
@@ -113,7 +112,7 @@ func (g *grpcBaggage) Run(t *testing.T, ctx context.Context) {
 		// Verify baggage header is in response metadata
 		md, ok := grpcMetadata.FromOutgoingContext(ctx)
 		require.True(t, ok)
-		baggage := md.Get(diagConsts.BaggageHeader)
+		baggage := md.Get("baggage")
 		require.Len(t, baggage, 1)
 		assert.Equal(t, "key1=value1,key2=value2", baggage[0])
 	})

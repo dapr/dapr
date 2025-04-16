@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 	grpcMetadata "google.golang.org/grpc/metadata"
 
-	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -54,12 +53,12 @@ type invoke struct {
 func (i *invoke) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		if tp := r.Header.Get(diagConsts.TraceparentHeader); tp != "" {
+		if tp := r.Header.Get("traceparent"); tp != "" {
 			i.traceparent.Store(true)
 		} else {
 			i.traceparent.Store(false)
 		}
-		if baggage := r.Header.Get(diagConsts.BaggageHeader); baggage != "" {
+		if baggage := r.Header.Get("baggage"); baggage != "" {
 			i.baggage.Store(true)
 		} else {
 			i.baggage.Store(false)
@@ -74,12 +73,12 @@ func (i *invoke) Setup(t *testing.T) []framework.Option {
 			switch in.GetMethod() {
 			case "test":
 				if md, ok := grpcMetadata.FromIncomingContext(ctx); ok {
-					if _, exists := md[diagConsts.GRPCTraceContextKey]; exists {
+					if _, exists := md["grpc-trace-bin"]; exists {
 						i.grpctracectxkey.Store(true)
 					} else {
 						i.grpctracectxkey.Store(false)
 					}
-					if _, exists := md[diagConsts.BaggageHeader]; exists {
+					if _, exists := md["baggage"]; exists {
 						i.baggage.Store(true)
 					} else {
 						i.baggage.Store(false)
@@ -166,9 +165,9 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		tp := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-		appreq.Header.Set(diagConsts.TraceparentHeader, tp)
+		appreq.Header.Set("traceparent", tp)
 		bag := "key1=value1,key2=value2"
-		appreq.Header.Set(diagConsts.BaggageHeader, bag)
+		appreq.Header.Set("baggage", bag)
 
 		appresp, err := httpClient.Do(appreq)
 		require.NoError(t, err)
@@ -192,8 +191,8 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 
 		tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-02"
 		tctx := grpcMetadata.AppendToOutgoingContext(ctx,
-			diagConsts.TraceparentHeader, tp,
-			diagConsts.BaggageHeader, bag,
+			"traceparent", tp,
+			"baggage", bag,
 		)
 		svcresp, err := client.InvokeService(tctx, &svcreq)
 		require.NoError(t, err)
@@ -216,8 +215,8 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 
 		tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-03"
 		tctx = grpcMetadata.AppendToOutgoingContext(tctx,
-			diagConsts.TraceparentHeader, tp,
-			diagConsts.BaggageHeader, bag,
+			"traceparent", tp,
+			"baggage", bag,
 		)
 		grpcclient := i.grpcdaprd.GRPCClient(t, tctx)
 		svcresp, err = grpcclient.InvokeService(tctx, &grpcappreq)
