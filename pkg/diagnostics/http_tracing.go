@@ -47,7 +47,51 @@ func handleHTTPBaggage(r *http.Request, rw http.ResponseWriter) *http.Request {
 
 	// Add baggage to context & headers
 	r = r.WithContext(otelbaggage.ContextWithBaggage(r.Context(), baggage))
-	rw.Header().Set(diagConsts.BaggageHeader, baggageString)
+
+	// Process headers individually to maintain order
+	var validBaggage []string
+	for _, header := range baggageHeaders {
+		items := strings.Split(header, ",")
+		for _, item := range items {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+
+			// Parse & validate each item
+			itemBaggage, err := otelbaggage.Parse(item)
+			if err != nil {
+				continue
+			}
+
+			// Get the first member -there should only be one per item
+			members := itemBaggage.Members()
+			if len(members) == 0 {
+				continue
+			}
+			member := members[0]
+
+			// Use the decoded value from the member
+			value := member.Value()
+			key := member.Key()
+
+			// ensure decoded values for headers
+			baggageItem := key + "=" + value
+			if props := member.Properties(); len(props) > 0 {
+				for _, prop := range props {
+					propValue, exists := prop.Value()
+					if exists {
+						baggageItem += ";" + prop.Key() + "=" + propValue
+					}
+				}
+			}
+			validBaggage = append(validBaggage, baggageItem)
+		}
+	}
+
+	if len(validBaggage) > 0 {
+		rw.Header().Set(diagConsts.BaggageHeader, strings.Join(validBaggage, ","))
+	}
 
 	return r
 }

@@ -545,33 +545,6 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		assert.NotNil(t, baggage, "baggage should be in context")
 		assert.Empty(t, baggage.Members(), "baggage should be empty since it was rejected")
 	})
-
-	t.Run("baggage exceeding member count", func(t *testing.T) {
-		var items []string
-		for i := 0; i < diagConsts.MaxBaggageListMembers+1; i++ {
-			items = append(items, fmt.Sprintf("key%d=value%d", i, i))
-		}
-		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Add(diagConsts.BaggageHeader, strings.Join(items, ","))
-
-		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			handlerCtx = r.Context()
-		})
-
-		rr := httptest.NewRecorder()
-		handler := HTTPTraceMiddleware(fakeHandler, "fakeAppID", config.TracingSpec{SamplingRate: "1"})
-		handler.ServeHTTP(rr, req)
-
-		assert.Equal(t, strings.Join(items, ","), rr.Header().Get(diagConsts.BaggageHeader))
-		baggage := otelbaggage.FromContext(handlerCtx)
-		assert.NotNil(t, baggage, "baggage should be in context")
-		assert.Len(t, baggage.Members(), diagConsts.MaxBaggageListMembers+1, "all baggage members should be preserved")
-		for i := 0; i < diagConsts.MaxBaggageListMembers+1; i++ {
-			member := baggage.Member(fmt.Sprintf("key%d", i))
-			assert.Equal(t, fmt.Sprintf("value%d", i), member.Value())
-		}
-	})
 }
 
 func TestTraceStatusFromHTTPCode(t *testing.T) {

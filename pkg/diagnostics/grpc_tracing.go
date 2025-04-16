@@ -61,9 +61,53 @@ func handleBaggage(ctx context.Context) context.Context {
 		return grpcMetadata.NewIncomingContext(ctx, md)
 	}
 
-	// Add baggage to context & headers
-	md[diagConsts.BaggageHeader] = []string{baggageString}
+	// Add baggage to context
 	ctx = otelBaggage.ContextWithBaggage(ctx, baggage)
+
+	// Process headers individually to maintain order
+	var validBaggage []string
+	for _, header := range baggageValues {
+		items := strings.Split(header, ",")
+		for _, item := range items {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+
+			// Parse & validate each item
+			itemBaggage, err := otelBaggage.Parse(item)
+			if err != nil {
+				continue
+			}
+
+			// Get the first member - there should only be one per item
+			members := itemBaggage.Members()
+			if len(members) == 0 {
+				continue
+			}
+			member := members[0]
+
+			// Use the decoded value from the member
+			value := member.Value()
+			key := member.Key()
+
+			// ensure decoded values for headers
+			baggageItem := key + "=" + value
+			if props := member.Properties(); len(props) > 0 {
+				for _, prop := range props {
+					propValue, exists := prop.Value()
+					if exists {
+						baggageItem += ";" + prop.Key() + "=" + propValue
+					}
+				}
+			}
+			validBaggage = append(validBaggage, baggageItem)
+		}
+	}
+
+	if len(validBaggage) > 0 {
+		md[diagConsts.BaggageHeader] = []string{strings.Join(validBaggage, ",")}
+	}
 
 	return grpcMetadata.NewIncomingContext(ctx, md)
 }
