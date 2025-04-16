@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	otelbaggage "go.opentelemetry.io/otel/baggage"
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -520,9 +521,11 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		if baggageValues := incomingMD[diagConsts.BaggageHeader]; len(baggageValues) > 0 {
-			validBaggage, _ := diagUtils.ProcessBaggageValues(baggageValues)
-			if len(validBaggage) > 0 {
-				req.Metadata[diagConsts.BaggageHeader] = strings.Join(validBaggage, ",")
+			baggageString := strings.Join(baggageValues, ",")
+			baggage, err := otelbaggage.Parse(baggageString)
+			if err == nil {
+				ctx = otelbaggage.ContextWithBaggage(ctx, baggage)
+				req.Metadata[diagConsts.BaggageHeader] = baggageString
 			}
 		}
 

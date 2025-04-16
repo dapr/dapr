@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	otelbaggage "go.opentelemetry.io/otel/baggage"
+	otelBaggage "go.opentelemetry.io/otel/baggage"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
@@ -49,23 +49,22 @@ func handleBaggage(ctx context.Context) context.Context {
 	}
 
 	baggageValues, exists := md[diagConsts.BaggageHeader]
-	if !exists || len(baggageValues) == 0 {
+	if !exists {
 		return ctx
 	}
 
-	validBaggage, members := diagUtils.ProcessBaggageValues(baggageValues)
-
-	// Update metadata with only valid baggage
-	if len(validBaggage) > 0 {
-		md[diagConsts.BaggageHeader] = []string{strings.Join(validBaggage, ",")}
-		// Create a (single) baggage with all members
-		if baggage, err := otelbaggage.New(members...); err == nil {
-			ctx = otelbaggage.ContextWithBaggage(ctx, baggage)
-		}
-	} else {
-		// Remove the baggage header if no valid entries
+	baggageString := strings.Join(baggageValues, ",")
+	baggage, err := otelBaggage.Parse(baggageString)
+	if err != nil {
+		// Remove the baggage header if parsing fails
 		delete(md, diagConsts.BaggageHeader)
+		return grpcMetadata.NewIncomingContext(ctx, md)
 	}
+
+	// Add baggage to context & headers
+	md[diagConsts.BaggageHeader] = []string{baggageString}
+	ctx = otelBaggage.ContextWithBaggage(ctx, baggage)
+
 	return grpcMetadata.NewIncomingContext(ctx, md)
 }
 

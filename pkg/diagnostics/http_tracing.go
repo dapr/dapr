@@ -37,16 +37,17 @@ func handleHTTPBaggage(r *http.Request, rw http.ResponseWriter) *http.Request {
 		return r
 	}
 
-	validBaggage, members := diagUtils.ProcessBaggageValues(baggageHeaders)
-
-	// Update metadata with only valid baggage
-	if len(validBaggage) > 0 {
-		// Create a (single) baggage with all members
-		if baggage, err := otelbaggage.New(members...); err == nil {
-			r = r.WithContext(otelbaggage.ContextWithBaggage(r.Context(), baggage))
-		}
-		rw.Header().Set(diagConsts.BaggageHeader, strings.Join(validBaggage, ","))
+	baggageString := strings.Join(baggageHeaders, ",")
+	baggage, err := otelbaggage.Parse(baggageString)
+	if err != nil {
+		// Remove the baggage header if parsing fails
+		r.Header.Del(diagConsts.BaggageHeader)
+		return r
 	}
+
+	// Add baggage to context & headers
+	r = r.WithContext(otelbaggage.ContextWithBaggage(r.Context(), baggage))
+	rw.Header().Set(diagConsts.BaggageHeader, baggageString)
 
 	return r
 }
