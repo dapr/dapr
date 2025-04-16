@@ -290,7 +290,7 @@ func (s *Subscriber) StartAppSubscriptions() error {
 		return nil
 	}
 
-	if err := s.initProgramaticSubscriptions(context.TODO()); err != nil {
+	if err := s.initProgrammaticSubscriptions(context.TODO()); err != nil {
 		return err
 	}
 
@@ -358,7 +358,7 @@ func (s *Subscriber) StopAppSubscriptions() {
 func (s *Subscriber) InitProgramaticSubscriptions(ctx context.Context) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return s.initProgramaticSubscriptions(ctx)
+	return s.initProgrammaticSubscriptions(ctx)
 }
 
 func (s *Subscriber) reloadPubSubStream(name string, pubsub *rtpubsub.PubsubItem) error {
@@ -415,7 +415,7 @@ func (s *Subscriber) reloadPubSubApp(name string, pubsub *rtpubsub.PubsubItem) e
 		return nil
 	}
 
-	if err := s.initProgramaticSubscriptions(context.TODO()); err != nil {
+	if err := s.initProgrammaticSubscriptions(context.TODO()); err != nil {
 		return err
 	}
 
@@ -439,7 +439,7 @@ func (s *Subscriber) reloadPubSubApp(name string, pubsub *rtpubsub.PubsubItem) e
 	return errors.Join(errs...)
 }
 
-func (s *Subscriber) initProgramaticSubscriptions(ctx context.Context) error {
+func (s *Subscriber) initProgrammaticSubscriptions(ctx context.Context) error {
 	if s.hasInitProg {
 		return nil
 	}
@@ -464,7 +464,7 @@ func (s *Subscriber) initProgramaticSubscriptions(ctx context.Context) error {
 
 	// handle app subscriptions
 	if s.isHTTP {
-		subscriptions, err = rtpubsub.GetSubscriptionsHTTP(ctx, appChannel, log, s.resiliency)
+		subscriptions, err = rtpubsub.GetSubscriptionsHTTP(ctx, appChannel, log, s.resiliency, s.appID)
 	} else {
 		var conn grpc.ClientConnInterface
 		conn, err = s.grpc.GetAppClient()
