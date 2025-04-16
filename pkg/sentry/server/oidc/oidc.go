@@ -60,6 +60,8 @@ type Options struct {
 	PathPrefix string
 	// SignatureAlgorithm is the signature algorithm to use for JWT tokens
 	SignatureAlgorithm jwa.KeyAlgorithm
+	// Insecure allows using HTTP instead of HTTPS for the OIDC server and discovery document
+	Insecure bool
 }
 
 // Server is a HTTP server that partially implements the OIDC spec.
@@ -78,6 +80,7 @@ type Server struct {
 	jwtIssuer          string
 	pathPrefix         string
 	signatureAlgorithm jwa.KeyAlgorithm
+	insecure           bool
 }
 
 // New creates a new HTTP server with the given options
@@ -97,14 +100,15 @@ func New(opts Options) *Server {
 		jwtIssuer:          opts.JWTIssuer,
 		pathPrefix:         opts.PathPrefix,
 		signatureAlgorithm: opts.SignatureAlgorithm,
+		insecure:           opts.Insecure,
 	}
 }
 
 func (s *Server) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 
-	if s.tlsConfig == nil {
-		return fmt.Errorf("TLS configuration is required")
+	if !s.insecure && s.tlsConfig == nil {
+		return fmt.Errorf("TLS configuration is required when not in insecure mode")
 	}
 	_, err := url.Parse(s.jwksURI)
 	if err != nil {
@@ -146,10 +150,18 @@ func (s *Server) Start(ctx context.Context) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Infof("Starting OIDC HTTPS server on %s", addr)
-		if err := s.server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
-			errCh <- fmt.Errorf("OIDC HTTPS server error: %w", err)
-			return
+		if s.insecure {
+			log.Infof("Starting OIDC HTTP server (insecure) on %s", addr)
+			if err := s.server.ListenAndServe(); err != http.ErrServerClosed {
+				errCh <- fmt.Errorf("OIDC HTTP server error: %w", err)
+				return
+			}
+		} else {
+			log.Infof("Starting OIDC HTTP server on %s", addr)
+			if err := s.server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
+				errCh <- fmt.Errorf("OIDC HTTP server error: %w", err)
+				return
+			}
 		}
 		errCh <- nil
 	}()
@@ -164,7 +176,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	case <-ctx.Done():
 		s.htarget.NotReady()
-		log.Info("Shutting down OIDC HTTPS server")
+		log.Info("Shutting down OIDC HTTP server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return s.server.Shutdown(shutdownCtx)
@@ -231,7 +243,13 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Use HTTP instead of HTTPS when in insecure mode
 	scheme := "https"
+	if s.insecure {
+		scheme = "http"
+		log.Debug("Using HTTP scheme for OIDC discovery document in insecure mode")
+	}
+
 	host := r.Host
 	if host == "" {
 		host = fmt.Sprintf("%s:%d", s.listenAddress, s.port)
@@ -270,6 +288,10 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		jwksURI = uri
+		// If in insecure mode and no scheme is specified, use HTTP
+		if s.insecure && jwksURI.Scheme == "" {
+			jwksURI.Scheme = scheme
+		}
 	case s.jwtIssuer != "":
 		// if the issuer is set, use that
 		jwksURI, err = url.Parse(s.jwtIssuer)
@@ -280,6 +302,10 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 		if jwksURI.Scheme == "" {
 			jwksURI.Scheme = scheme
 		}
+		if s.pathPrefix != "/" {
+			jwksURI.Path = s.pathPrefix
+		}
+		jwksURI.Path += JWKSEndpoint
 	default:
 		// if nothing is set, use
 		// the host from the request
