@@ -87,10 +87,28 @@ type JWTIssuer interface {
 	JWTSignatureAlgorithm() jwa.KeyAlgorithm
 }
 
+// generate represents the type of credentials to generate.
+type generate struct {
+	x509 bool
+	jwt  bool
+}
+
+func (g *generate) Any() bool {
+	return g.x509 || g.jwt
+}
+
+func (g *generate) X509() bool {
+	return g.x509
+}
+
+func (g *generate) JWT() bool {
+	return g.jwt
+}
+
 // store is the interface for the trust bundle backend store.
 type store interface {
 	store(context.Context, Bundle) error
-	get(context.Context) (Bundle, bool, error)
+	get(context.Context) (Bundle, generate, error)
 }
 
 // ca is the implementation of the CA Signer.
@@ -120,12 +138,12 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		castore = &selfhosted{config: conf}
 	}
 
-	bundle, ok, err := castore.get(ctx)
+	bundle, gen, err := castore.get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CA bundle: %w", err)
 	}
 
-	if !ok {
+	if gen.Any() {
 		log.Info("Root and issuer certs not found: generating self signed CA")
 
 		rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -133,7 +151,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 			return nil, err
 		}
 
-		bundle, err = GenerateBundle(rootKey, conf.TrustDomain, conf.AllowedClockSkew, nil)
+		bundle, err = GenerateBundle(rootKey, conf.TrustDomain, conf.AllowedClockSkew, nil, gen)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate CA bundle: %w", err)
 		}

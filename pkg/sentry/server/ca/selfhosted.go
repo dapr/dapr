@@ -21,14 +21,16 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/config"
 )
 
-// selfSigned is a store that uses the file system as the secret store.
+// selfhosted is a store that uses the file system as the secret store.
 type selfhosted struct {
 	config config.Config
 }
 
+// store saves the certificate bundle to the local filesystem.
 func (s *selfhosted) store(_ context.Context, bundle Bundle) error {
-	for _, f := range []struct {
-		name string
+	// Files to write with their corresponding data
+	files := []struct {
+		path string
 		data []byte
 	}{
 		{s.config.RootCertPath, bundle.TrustAnchors},
@@ -36,72 +38,98 @@ func (s *selfhosted) store(_ context.Context, bundle Bundle) error {
 		{s.config.IssuerKeyPath, bundle.IssKeyPEM},
 		{s.config.JWTSigningKeyPath, bundle.JWTSigningKeyPEM},
 		{s.config.JWKSPath, bundle.JWKSJson},
-	} {
-		if f.name == "" {
+	}
+
+	// Write each file if the path is specified and data exists
+	for _, file := range files {
+		if file.path == "" || file.data == nil {
 			continue
 		}
 
-		if err := os.WriteFile(f.name, f.data, 0o600); err != nil {
-			return err
+		if err := os.WriteFile(file.path, file.data, 0o600); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", file.path, err)
 		}
 	}
 
 	return nil
 }
 
-func (s *selfhosted) get(_ context.Context) (Bundle, bool, error) {
+// get retrieves the existing certificate bundle from the filesystem.
+func (s *selfhosted) get(_ context.Context) (Bundle, generate, error) {
+	needsX509 := false
+
+	// Read trust anchors (root certificate)
 	trustAnchors, err := os.ReadFile(s.config.RootCertPath)
 	if os.IsNotExist(err) {
-		return Bundle{}, false, nil
-	}
-	if err != nil {
-		return Bundle{}, false, err
+		needsX509 = true
+	} else if err != nil {
+		return Bundle{}, generate{}, fmt.Errorf("failed to read root certificate: %w", err)
 	}
 
+	// Read issuer certificate chain
 	issChainPEM, err := os.ReadFile(s.config.IssuerCertPath)
 	if os.IsNotExist(err) {
-		return Bundle{}, false, nil
-	}
-	if err != nil {
-		return Bundle{}, false, err
+		needsX509 = true
+	} else if err != nil {
+		return Bundle{}, generate{}, fmt.Errorf("failed to read issuer certificate: %w", err)
 	}
 
+	// Read issuer private key
 	issKeyPEM, err := os.ReadFile(s.config.IssuerKeyPath)
 	if os.IsNotExist(err) {
-		return Bundle{}, false, nil
-	}
-	if err != nil {
-		return Bundle{}, false, err
-	}
-
-	bundle, err := verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
-	if err != nil {
-		return Bundle{}, false, fmt.Errorf("failed to verify CA bundle: %w", err)
+		needsX509 = true
+	} else if err != nil {
+		return Bundle{}, generate{}, fmt.Errorf("failed to read issuer key: %w", err)
 	}
 
+	// If all X.509 certificates and keys exist, verify them
+	var bundle Bundle
+	if !needsX509 {
+		bundle, err = verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
+		if err != nil {
+			return Bundle{}, generate{}, fmt.Errorf("failed to verify CA bundle: %w", err)
+		}
+	}
+
+	// Check if JWT components need to be generated
+	needsJWT := false
+
+	// Read JWT signing key
 	jwtKeyPEM, err := os.ReadFile(s.config.JWTSigningKeyPath)
 	if err == nil {
 		// JWT key exists, load it
 		jwtKey, err := loadJWTSigningKey(jwtKeyPEM)
 		if err != nil {
-			return Bundle{}, false, fmt.Errorf("failed to load JWT signing key: %w", err)
+			return Bundle{}, generate{}, fmt.Errorf("failed to load JWT signing key: %w", err)
 		}
 		bundle.JWTSigningKey = jwtKey
 		bundle.JWTSigningKeyPEM = jwtKeyPEM
-	} else if !os.IsNotExist(err) {
-		return Bundle{}, false, fmt.Errorf("error reading JWT signing key: %w", err)
+	} else if os.IsNotExist(err) {
+		// JWT key doesn't exist, need to generate it
+		needsJWT = true
+	} else {
+		// Unexpected error
+		return Bundle{}, generate{}, fmt.Errorf("error reading JWT signing key: %w", err)
 	}
 
+	// Read JWKS
 	jwks, err := os.ReadFile(s.config.JWKSPath)
 	if err == nil {
-		// JWKS exists, verify and use it
+		// JWKS exists, verify it
 		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
-			return Bundle{}, false, fmt.Errorf("failed to verify JWKS: %w", err)
+			return Bundle{}, generate{}, fmt.Errorf("failed to verify JWKS: %w", err)
 		}
 		bundle.JWKSJson = jwks
-	} else if !os.IsNotExist(err) {
-		return Bundle{}, false, fmt.Errorf("error reading JWKS: %w", err)
+	} else if os.IsNotExist(err) {
+		// JWKS doesn't exist, need to generate it
+		needsJWT = true
+	} else {
+		// Unexpected error
+		return Bundle{}, generate{}, fmt.Errorf("error reading JWKS: %w", err)
 	}
 
-	return bundle, true, nil
+	return bundle, generate{
+		x509: needsX509,
+		jwt:  needsJWT,
+	}, nil
 }

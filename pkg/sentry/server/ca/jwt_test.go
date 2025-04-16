@@ -239,7 +239,10 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Generate the bundle
-	bundle, err := GenerateBundle(rootKey, "example.com", time.Minute, nil)
+	bundle, err := GenerateBundle(rootKey, "example.com", time.Minute, nil, generate{
+		x509: true,
+		jwt:  true,
+	})
 	require.NoError(t, err)
 
 	// Verify the JWT signing key was generated

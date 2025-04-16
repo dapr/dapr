@@ -22,6 +22,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -310,6 +311,106 @@ func TestVerifyJWKS(t *testing.T) {
 
 		// Verify the JWKS with the original signing key
 		err = verifyJWKS(jwksBytes, signingKey)
+		assert.Error(t, err, "JWKS verification should fail when no matching key is found")
+		assert.Contains(t, err.Error(), "JWKS doesn't contain a matching public key")
+	})
+
+	t.Run("match key by keyID", func(t *testing.T) {
+		// Create a signing key with a specific key ID
+		privateJWK, err := jwk.FromRaw(signingKey)
+		require.NoError(t, err, "Failed to convert signing key to JWK")
+
+		err = privateJWK.Set(jwk.KeyIDKey, "specific-kid")
+		require.NoError(t, err, "Failed to set key ID")
+
+		// Create a JWKS with a key that has the same ID
+		key, err := jwk.FromRaw(signingKey.Public())
+		require.NoError(t, err, "Failed to create public key")
+
+		err = key.Set(jwk.KeyIDKey, "specific-kid")
+		require.NoError(t, err, "Failed to set key ID")
+
+		err = key.Set(jwk.AlgorithmKey, "ES256")
+		require.NoError(t, err, "Failed to set algorithm")
+
+		err = key.Set(jwk.KeyUsageKey, "sig")
+		require.NoError(t, err, "Failed to set key usage")
+
+		keySet := jwk.NewSet()
+		keySet.AddKey(key)
+
+		jwksBytes, err := json.Marshal(keySet)
+		require.NoError(t, err, "Failed to marshal JWKS")
+
+		// Verification should succeed because the key IDs match
+		err = verifyJWKS(jwksBytes, signingKey)
+		assert.NoError(t, err, "JWKS verification should succeed when key IDs match")
+	})
+
+	t.Run("large JWKS with many keys", func(t *testing.T) {
+		// Create a large JWKS with many keys
+		const numKeys = 50
+		keys := make(map[string]crypto.Signer, numKeys)
+
+		// Generate many different keys
+		for i := 0; i < numKeys-1; i++ {
+			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			require.NoError(t, err, "Failed to generate key")
+			keys[fmt.Sprintf("key-%d", i)] = key
+		}
+
+		// Add the real signing key as the last one
+		keys["real-key"] = signingKey
+
+		jwksBytes := createMultiKeyJWKS(t, keys)
+
+		// Verification should succeed even with many keys
+		err := verifyJWKS(jwksBytes, signingKey)
+		assert.NoError(t, err, "JWKS verification should succeed even with many keys")
+	})
+
+	t.Run("malformed key in JWKS", func(t *testing.T) {
+		// Create a JWKS with a valid structure but malformed key data
+		malformedJWKS := []byte(`{
+			"keys": [
+				{
+					"kty": "EC",
+					"use": "sig", 
+					"kid": "test-key",
+					"crv": "P-256",
+					"x": "invalidbase64",
+					"y": "alsoInvalidbase64"
+				}
+			]
+		}`)
+
+		err := verifyJWKS(malformedJWKS, signingKey)
+		assert.Error(t, err, "JWKS verification should fail with malformed key")
+	})
+
+	t.Run("mixed key types in JWKS", func(t *testing.T) {
+		// Create a JWKS with mixed key types (EC and RSA)
+		mixedJWKS := []byte(`{
+			"keys": [
+				{
+					"kty": "RSA",
+					"use": "sig",
+					"kid": "rsa-key",
+					"n": "someRSAModulus",
+					"e": "AQAB"
+				},
+				{
+					"kty": "EC",
+					"use": "sig",
+					"kid": "ec-key",
+					"crv": "P-256",
+					"x": "someECPointX",
+					"y": "someECPointY"
+				}
+			]
+		}`)
+
+		err := verifyJWKS(mixedJWKS, signingKey)
 		assert.Error(t, err, "JWKS verification should fail when no matching key is found")
 		assert.Contains(t, err.Error(), "JWKS doesn't contain a matching public key")
 	})
