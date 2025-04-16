@@ -19,6 +19,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -59,6 +60,9 @@ type Options struct {
 
 	// Healthz is the healthz handler for the server.
 	Healthz healthz.Healthz
+
+	// JWTEnabled indicates whether JWT support is enabled
+	JWTEnabled bool
 }
 
 // Server is the gRPC server for the Sentry service.
@@ -70,6 +74,7 @@ type Server struct {
 	defaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
 	ca               ca.Signer
 	htarget          healthz.Target
+	jwtEnabled       bool
 }
 
 func New(opts Options) *Server {
@@ -81,6 +86,7 @@ func New(opts Options) *Server {
 		defaultValidator: opts.DefaultValidator,
 		ca:               opts.CA,
 		htarget:          opts.Healthz.AddTarget(),
+		jwtEnabled:       opts.JWTEnabled,
 	}
 }
 
@@ -213,11 +219,28 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	log.Debugf("Successfully signed certificate for %s/%s", namespace, req.GetId())
 
+	var jwtToken *string
+	if s.jwtEnabled {
+		// Generate a JWT with the same identity
+		tkn, err := s.ca.GenerateJWT(ctx, &ca.JWTRequest{
+			Audience:  trustDomain.String(), // use the trust domain as the audience
+			Namespace: req.Namespace,
+			AppID:     req.Id,
+			TTL:       24 * time.Hour,
+		})
+		if err != nil {
+			// Continue but log the error as the certificate is still valid
+			log.Errorf("Failed to generate JWT for %s/%s: %v", req.Namespace, req.Id, err)
+		}
+		if tkn != "" {
+			jwtToken = &tkn
+		}
+	}
+
 	return &sentryv1pb.SignCertificateResponse{
-		WorkloadCertificate: chainPEM,
-		// We only populate the trust chain and valid until for clients pre-1.12.
-		// TODO: Remove fields in 1.14.
+		WorkloadCertificate:    chainPEM,
 		TrustChainCertificates: [][]byte{s.ca.TrustAnchors()},
 		ValidUntil:             timestamppb.New(chain[0].NotAfter),
+		Jwt:                    jwtToken,
 	}, nil
 }

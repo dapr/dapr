@@ -448,7 +448,6 @@ func hashFilesInDir(basePath string, ignores *gitignore.GitIgnore) ([]string, er
 		files = append(files, checksum)
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
