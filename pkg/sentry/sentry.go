@@ -53,6 +53,7 @@ type Options struct {
 	OIDCDomains    []string    // Domains that public endpoints can be accessed from (Optional)
 	OIDCJWKSURI    string      // Force the public JWKS URI to this value (Optional)
 	ODICPathPrefix string      // Path prefix for HTTP endpoints (Optional)
+	OIDCInsecure   bool        // Allow HTTP insecure (Optional)
 }
 
 // CertificateAuthority is the interface for the Sentry Certificate Authority.
@@ -150,6 +151,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 			TLSConfig:          opts.OIDCTLSConfig,
 			PathPrefix:         opts.ODICPathPrefix,
 			SignatureAlgorithm: camngr.JWTSignatureAlgorithm(),
+			Insecure:           opts.OIDCInsecure,
 		})
 
 		if err := runners.Add(httpServer.Start); err != nil {

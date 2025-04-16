@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -40,91 +41,104 @@ type Bundle struct {
 	JWKSJson         []byte
 }
 
-func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew time.Duration, overrideCATTL *time.Duration) (Bundle, error) {
-	if _, ok := rootKey.(*ecdsa.PrivateKey); !ok {
-		// currently only ecdsa is supported!
-		return Bundle{}, fmt.Errorf("root key is not ecdsa")
+// Warning: this equals assumes that the serialized fields
+// and their associated keys are the same before comparing.
+func (b Bundle) Equals(other Bundle) bool {
+	return reflect.DeepEqual(b.TrustAnchors, other.TrustAnchors) &&
+		reflect.DeepEqual(b.IssChainPEM, other.IssChainPEM) &&
+		reflect.DeepEqual(b.IssKeyPEM, other.IssKeyPEM) &&
+		reflect.DeepEqual(b.IssKey, other.IssKey) &&
+		reflect.DeepEqual(b.JWTSigningKeyPEM, other.JWTSigningKeyPEM) &&
+		reflect.DeepEqual(b.JWKSJson, other.JWKSJson)
+}
+
+func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew time.Duration, overrideCATTL *time.Duration, gen generate) (Bundle, error) {
+	var bundle Bundle
+	if gen.X509() {
+		rootCert, err := generateRootCert(trustDomain, allowedClockSkew, overrideCATTL)
+		if err != nil {
+			return Bundle{}, fmt.Errorf("failed to generate root cert: %w", err)
+		}
+
+		rootCertDER, err := x509.CreateCertificate(rand.Reader, rootCert, rootCert, rootKey.Public(), rootKey)
+		if err != nil {
+			return Bundle{}, fmt.Errorf("failed to sign root certificate: %w", err)
+		}
+		trustAnchors := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCertDER})
+
+		issKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return Bundle{}, err
+		}
+		issKeyDer, err := x509.MarshalPKCS8PrivateKey(issKey)
+		if err != nil {
+			return Bundle{}, err
+		}
+		issKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: issKeyDer})
+
+		issCert, err := generateIssuerCert(trustDomain, allowedClockSkew, overrideCATTL)
+		if err != nil {
+			return Bundle{}, fmt.Errorf("failed to generate issuer cert: %w", err)
+		}
+		issCertDER, err := x509.CreateCertificate(rand.Reader, issCert, rootCert, &issKey.PublicKey, rootKey)
+		if err != nil {
+			return Bundle{}, fmt.Errorf("failed to sign issuer cert: %w", err)
+		}
+		issCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: issCertDER})
+
+		issCert, err = x509.ParseCertificate(issCertDER)
+		if err != nil {
+			return Bundle{}, err
+		}
+
+		bundle.TrustAnchors = trustAnchors
+		bundle.IssChainPEM = issCertPEM
+		bundle.IssKeyPEM = issKeyPEM
+		bundle.IssChain = []*x509.Certificate{issCert}
+		bundle.IssKey = issKey
 	}
 
-	rootCert, err := generateRootCert(trustDomain, allowedClockSkew, overrideCATTL)
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to generate root cert: %w", err)
+	if gen.JWT() {
+		jwtKey, err := jwk.FromRaw(rootKey)
+		if err != nil {
+			return Bundle{}, fmt.Errorf("failed to create JWK from key: %w", err)
+		}
+
+		// Set key ID and algorithm
+		if err := jwtKey.Set(jwk.KeyIDKey, DefaultJWTKeyID); err != nil {
+			return Bundle{}, fmt.Errorf("failed to set JWK kid: %w", err)
+		}
+		if err := jwtKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm); err != nil {
+			return Bundle{}, fmt.Errorf("failed to set JWK alg: %w", err)
+		}
+
+		// Marshal the private key to PKCS8 for storage
+		jwtKeyDer, err := x509.MarshalPKCS8PrivateKey(rootKey)
+		if err != nil {
+			return Bundle{}, fmt.Errorf("failed to marshal JWT signing key: %w", err)
+		}
+		jwtKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: jwtKeyDer})
+
+		// Create a JWKS with the public key
+		jwtPublicJWK, err := jwtKey.PublicKey()
+		if err != nil {
+			return Bundle{}, fmt.Errorf("failed to get public JWK: %w", err)
+		}
+
+		jwkSet := jwk.NewSet()
+		jwkSet.AddKey(jwtPublicJWK)
+
+		jwksJson, err := json.Marshal(jwkSet)
+		if err != nil {
+			return Bundle{}, fmt.Errorf("failed to marshal JWKS: %w", err)
+		}
+
+		bundle.JWTSigningKey = rootKey
+		bundle.JWTSigningKeyPEM = jwtKeyPEM
+		bundle.JWKS = jwkSet
+		bundle.JWKSJson = jwksJson
+
 	}
 
-	rootCertDER, err := x509.CreateCertificate(rand.Reader, rootCert, rootCert, rootKey.Public(), rootKey)
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to sign root certificate: %w", err)
-	}
-	trustAnchors := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCertDER})
-
-	issKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return Bundle{}, err
-	}
-	issKeyDer, err := x509.MarshalPKCS8PrivateKey(issKey)
-	if err != nil {
-		return Bundle{}, err
-	}
-	issKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: issKeyDer})
-
-	issCert, err := generateIssuerCert(trustDomain, allowedClockSkew, overrideCATTL)
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to generate issuer cert: %w", err)
-	}
-	issCertDER, err := x509.CreateCertificate(rand.Reader, issCert, rootCert, &issKey.PublicKey, rootKey)
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to sign issuer cert: %w", err)
-	}
-	issCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: issCertDER})
-
-	issCert, err = x509.ParseCertificate(issCertDER)
-	if err != nil {
-		return Bundle{}, err
-	}
-
-	jwtKey, err := jwk.FromRaw(rootKey)
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to create JWK from key: %w", err)
-	}
-
-	// Set key ID and algorithm
-	if err := jwtKey.Set(jwk.KeyIDKey, DefaultJWTKeyID); err != nil {
-		return Bundle{}, fmt.Errorf("failed to set JWK kid: %w", err)
-	}
-	if err := jwtKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm); err != nil {
-		return Bundle{}, fmt.Errorf("failed to set JWK alg: %w", err)
-	}
-
-	// Marshal the private key to PKCS8 for storage
-	jwtKeyDer, err := x509.MarshalPKCS8PrivateKey(rootKey)
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to marshal JWT signing key: %w", err)
-	}
-	jwtKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: jwtKeyDer})
-
-	// Create a JWKS with the public key
-	jwtPublicJWK, err := jwtKey.PublicKey()
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to get public JWK: %w", err)
-	}
-
-	jwkSet := jwk.NewSet()
-	jwkSet.AddKey(jwtPublicJWK)
-
-	jwksJson, err := json.Marshal(jwkSet)
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to marshal JWKS: %w", err)
-	}
-
-	return Bundle{
-		TrustAnchors:     trustAnchors,
-		IssChainPEM:      issCertPEM,
-		IssKeyPEM:        issKeyPEM,
-		IssChain:         []*x509.Certificate{issCert},
-		IssKey:           issKey,
-		JWTSigningKey:    rootKey,
-		JWTSigningKeyPEM: jwtKeyPEM,
-		JWKS:             jwkSet,
-		JWKSJson:         jwksJson,
-	}, nil
+	return bundle, nil
 }
