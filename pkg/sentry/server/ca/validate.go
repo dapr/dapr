@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 
@@ -170,41 +171,60 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 		return fmt.Errorf("failed to extract public key from JWT signing key: %w", err)
 	}
 
+	// Get the key ID if it exists on the signing key
+	var signingKeyID string
+	if kid, ok := publicJWK.Get(jwk.KeyIDKey); ok {
+		if s, ok := kid.(string); ok {
+			signingKeyID = s
+		}
+	}
+
 	// Verify that the public key is in the JWKS
 	found := false
+	matchAttempted := false
+
 	for i := 0; i < keySet.Len(); i++ {
 		key, _ := keySet.Key(i)
 
-		// If the key has a key ID, check if it matches
-		if kid, ok := key.Get(jwk.KeyIDKey); ok {
-			if privateKID, privateOK := publicJWK.Get(jwk.KeyIDKey); privateOK && kid == privateKID {
-				found = true
-				break
+		// If both keys have key IDs, check if they match first (faster path)
+		if signingKeyID != "" {
+			if kid, ok := key.Get(jwk.KeyIDKey); ok {
+				if s, ok := kid.(string); ok && s == signingKeyID {
+					found = true
+					break
+				}
 			}
 		}
 
-		// Otherwise, compare the JWK raw values
+		// If key ID check wasn't successful, compare the key contents
+		matchAttempted = true
+
 		// First, ensure we're comparing public keys
 		keyPublic, err := key.PublicKey()
 		if err != nil {
 			continue
 		}
 
+		// Check if the key has a valid "use" field (if present)
+		if use, ok := keyPublic.Get(jwk.KeyUsageKey); ok {
+			if s, ok := use.(string); ok && s != "sig" {
+				// Skip keys not meant for signature verification
+				continue
+			}
+		}
+
 		// Get raw representations of both keys to compare
 		var pubRaw interface{}
-		err = keyPublic.Raw(&pubRaw)
-		if err != nil {
+		if err = keyPublic.Raw(&pubRaw); err != nil {
 			continue
 		}
 
 		var signerPubRaw interface{}
-		err = publicJWK.Raw(&signerPubRaw)
-		if err != nil {
+		if err = publicJWK.Raw(&signerPubRaw); err != nil {
 			continue
 		}
 
-		// For EC keys, we can compare the public key values directly
-		// Use a more robust type-specific comparison
+		// Type-specific comparisons for different key types
 		switch pubKey := pubRaw.(type) {
 		case *ecdsa.PublicKey:
 			if signerPubKey, ok := signerPubRaw.(*ecdsa.PublicKey); ok {
@@ -216,9 +236,12 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 				}
 			}
 		default:
-			// If keys are the same type and same value, they are equal
-			if pubRaw == signerPubRaw {
-				found = true
+			// For other key types, try direct comparison
+			if reflect.TypeOf(pubRaw) == reflect.TypeOf(signerPubRaw) {
+				// If keys are the same type and same value, they are equal
+				if reflect.DeepEqual(pubRaw, signerPubRaw) {
+					found = true
+				}
 			}
 		}
 
@@ -228,6 +251,9 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 	}
 
 	if !found {
+		if !matchAttempted {
+			return fmt.Errorf("JWKS doesn't contain a key with matching key ID '%s'", signingKeyID)
+		}
 		return errors.New("JWKS doesn't contain a matching public key for the JWT signing key")
 	}
 
