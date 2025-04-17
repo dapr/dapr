@@ -42,6 +42,8 @@ type output struct {
 	daprd   *daprd.Daprd
 
 	traceparent atomic.Bool
+	baggage     atomic.Bool
+	lastBaggage atomic.Value // Stores the last received baggage header value
 }
 
 func (b *output) Setup(t *testing.T) []framework.Option {
@@ -51,6 +53,14 @@ func (b *output) Setup(t *testing.T) []framework.Option {
 			b.traceparent.Store(true)
 		} else {
 			b.traceparent.Store(false)
+		}
+
+		if baggage := r.Header.Get("baggage"); baggage != "" {
+			b.baggage.Store(true)
+			b.lastBaggage.Store(baggage)
+		} else {
+			b.baggage.Store(false)
+			b.lastBaggage.Store("")
 		}
 
 		w.Write([]byte(`OK`))
@@ -83,7 +93,7 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 	httpClient := client.HTTP(t)
 	client := b.daprd.GRPCClient(t, ctx)
 
-	t.Run("no traceparent header provided", func(t *testing.T) {
+	t.Run("no traceparent header or baggage provided", func(t *testing.T) {
 		// invoke binding
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/http-binding-traceparent", b.daprd.HTTPPort())
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader("{\"operation\":\"get\"}"))
@@ -93,6 +103,7 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.True(t, b.traceparent.Load())
+		assert.False(t, b.baggage.Load())
 
 		invokereq := runtime.InvokeBindingRequest{
 			Name:      "http-binding-traceparent",
@@ -104,9 +115,10 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NotNil(t, invokeresp)
 		assert.True(t, b.traceparent.Load())
+		assert.False(t, b.baggage.Load())
 	})
 
-	t.Run("traceparent header provided", func(t *testing.T) {
+	t.Run("traceparent and baggage headers provided", func(t *testing.T) {
 		// invoke binding
 		ctx := t.Context()
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/http-binding-traceparent", b.daprd.HTTPPort())
@@ -115,12 +127,16 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 
 		tp := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 		req.Header.Set("traceparent", tp)
+		bag := "key1=value1,key2=value2"
+		req.Header.Set("baggage", bag)
 
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.True(t, b.traceparent.Load())
+		assert.True(t, b.baggage.Load())
+		assert.Equal(t, "key1=value1,key2=value2", b.lastBaggage.Load())
 
 		invokereq := runtime.InvokeBindingRequest{
 			Name:      "http-binding-traceparent",
@@ -129,10 +145,15 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 
 		// invoke binding
 		tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-02"
-		ctx = grpcMetadata.AppendToOutgoingContext(ctx, "traceparent", tp)
+		ctx = grpcMetadata.AppendToOutgoingContext(ctx,
+			"traceparent", tp,
+			"baggage", bag,
+		)
 		invokeresp, err := client.InvokeBinding(ctx, &invokereq)
 		require.NoError(t, err)
 		require.NotNil(t, invokeresp)
 		assert.True(t, b.traceparent.Load())
+		assert.True(t, b.baggage.Load())
+		assert.Equal(t, "key1=value1,key2=value2", b.lastBaggage.Load())
 	})
 }

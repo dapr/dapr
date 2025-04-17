@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -233,16 +234,16 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 
 	// Check the grpc-trace-bin with fallback to traceparent.
 	validTraceparent := false
-	if val, ok := metadata[diag.GRPCTraceContextKey]; ok {
+	if val, ok := metadata[diagConsts.GRPCTraceContextKey]; ok {
 		if sc, ok := diagUtils.SpanContextFromBinary([]byte(val)); ok {
 			spanContext = sc
 		}
-	} else if val, ok := metadata[diag.TraceparentHeader]; ok {
+	} else if val, ok := metadata[diagConsts.TraceparentHeader]; ok {
 		if sc, ok := diag.SpanContextFromW3CString(val); ok {
 			spanContext = sc
 			validTraceparent = true
 			// Only parse the tracestate if we've successfully parsed the traceparent.
-			if val, ok := metadata[diag.TracestateHeader]; ok {
+			if val, ok := metadata[diagConsts.TracestateHeader]; ok {
 				ts := diag.TraceStateFromW3CString(val)
 				spanContext.WithTraceState(*ts)
 			}
@@ -340,11 +341,13 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 		for k, v := range metadata {
 			reqMetadata[k] = []string{v}
 		}
+
 		req := invokev1.NewInvokeMethodRequest(path).
 			WithHTTPExtension(http.MethodPost, "").
 			WithRawDataBytes(data).
 			WithContentType(invokev1.JSONContentType).
 			WithMetadata(reqMetadata)
+
 		if policyDef != nil {
 			req.WithReplay(policyDef.HasRetries())
 		}

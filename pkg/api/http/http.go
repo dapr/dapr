@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
+	otelBaggage "go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -430,6 +431,17 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 		}
 		if sc.TraceState().Len() > 0 {
 			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
+		}
+	}
+
+	if baggageHeaders := r.Header.Values(diagConsts.BaggageHeader); len(baggageHeaders) > 0 {
+		baggageString := strings.Join(baggageHeaders, ",")
+
+		if _, err := otelBaggage.Parse(baggageString); err == nil {
+			if req.Metadata == nil {
+				req.Metadata = map[string]string{}
+			}
+			req.Metadata[diagConsts.BaggageHeader] = baggageString
 		}
 	}
 
