@@ -501,8 +501,9 @@ replace (
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
-// replace github.com/dapr/components-contrib => ../components-contrib
-replace github.com/dapr/components-contrib => github.com/cicoyle/components-contrib v0.0.0-20250410214414-fcc59db89d03
+//replace github.com/dapr/components-contrib => ../components-contrib
+
+replace github.com/dapr/components-contrib => github.com/cicoyle/components-contrib v0.0.0-20250417203904-8bed256d79ee
 
 // replace github.com/dapr/kit => ../kit
 //

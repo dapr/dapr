@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
+	otelBaggage "go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -55,7 +56,6 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 	kiterrors "github.com/dapr/kit/errors"
-	otelBaggage "go.opentelemetry.io/otel/baggage"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -437,12 +437,11 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 	if baggageHeaders := r.Header.Values(diagConsts.BaggageHeader); len(baggageHeaders) > 0 {
 		baggageString := strings.Join(baggageHeaders, ",")
 
-		if baggage, err := otelBaggage.Parse(baggageString); err == nil {
+		if _, err := otelBaggage.Parse(baggageString); err == nil {
 			if req.Metadata == nil {
 				req.Metadata = map[string]string{}
 			}
 			req.Metadata[diagConsts.BaggageHeader] = baggageString
-			r = r.WithContext(otelBaggage.ContextWithBaggage(r.Context(), baggage))
 		}
 	}
 
