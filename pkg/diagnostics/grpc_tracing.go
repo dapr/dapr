@@ -41,75 +41,38 @@ const (
 	daprWorkflowPrefix        = "/TaskHubSidecarService"
 )
 
-// handleBaggage processes baggage from incoming metadata, validates it, and updates the context accordingly.
-func handleBaggage(ctx context.Context) context.Context {
-	md, ok := grpcMetadata.FromIncomingContext(ctx)
-	if !ok {
-		return ctx
+// handleBaggage extracts baggage from the incoming metadata and forwards that along as metadata,
+// and checks for context baggage via otel context checking and propagates that along in the ctx.
+// There are 2 separate streams in which baggage can come in and flow out and each is respected
+// and NOT combined for security reasons.
+func handleBaggage(ctx context.Context) (context.Context, string) {
+	// metadata baggage (do not inject into context)
+	md, _ := grpcMetadata.FromIncomingContext(ctx)
+	if md == nil {
+		md = make(grpcMetadata.MD)
 	}
 
-	baggageValues, exists := md[diagConsts.BaggageHeader]
-	if !exists {
-		return ctx
-	}
-
-	baggageString := strings.Join(baggageValues, ",")
-	baggage, err := otelBaggage.Parse(baggageString)
-	if err != nil {
-		// Remove the baggage header if parsing fails
-		delete(md, diagConsts.BaggageHeader)
-		return grpcMetadata.NewIncomingContext(ctx, md)
-	}
-
-	// Add baggage to context
-	ctx = otelBaggage.ContextWithBaggage(ctx, baggage)
-
-	// Process headers individually to maintain order
-	var validBaggage []string
-	for _, header := range baggageValues {
-		items := strings.Split(header, ",")
-		for _, item := range items {
-			item = strings.TrimSpace(item)
-			if item == "" {
-				continue
-			}
-
-			// Parse & validate each item
-			itemBaggage, err := otelBaggage.Parse(item)
-			if err != nil {
-				continue
-			}
-
-			// Get the first member - there should only be one per item
-			members := itemBaggage.Members()
-			if len(members) == 0 {
-				continue
-			}
-			member := members[0]
-
-			// Use the decoded value from the member
-			value := member.Value()
-			key := member.Key()
-
-			// ensure decoded values for headers
-			baggageItem := key + "=" + value
-			if props := member.Properties(); len(props) > 0 {
-				for _, prop := range props {
-					propValue, exists := prop.Value()
-					if exists {
-						baggageItem += ";" + prop.Key() + "=" + propValue
-					}
-				}
-			}
-			validBaggage = append(validBaggage, baggageItem)
+	var parsedMetadataBaggage string
+	if baggageValues := md.Get(diagConsts.BaggageHeader); len(baggageValues) > 0 {
+		metadataBaggageHeader := strings.Join(baggageValues, ",")
+		if baggage, err := otelBaggage.Parse(metadataBaggageHeader); err == nil {
+			parsedMetadataBaggage = baggage.String()
+		} else {
+			// remove if invalid
+			md.Delete(diagConsts.BaggageHeader)
 		}
 	}
 
-	if len(validBaggage) > 0 {
-		md[diagConsts.BaggageHeader] = []string{strings.Join(validBaggage, ",")}
+	// context baggage (do not inject into metadata)
+	contextBaggage := otelBaggage.FromContext(ctx)
+	if len(contextBaggage.Members()) > 0 {
+		// remove if invalid
+		if _, err := otelBaggage.Parse(contextBaggage.String()); err != nil {
+			ctx = otelBaggage.ContextWithoutBaggage(ctx)
+		}
 	}
 
-	return grpcMetadata.NewIncomingContext(ctx, md)
+	return grpcMetadata.NewIncomingContext(ctx, md), parsedMetadataBaggage
 }
 
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
@@ -122,11 +85,10 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			reqSpanAttr      map[string]string
 		)
 
-		ctx = handleBaggage(ctx)
-		// set header for outgoing response headers
-		md, _ := grpcMetadata.FromIncomingContext(ctx)
-		if baggage, exists := md[diagConsts.BaggageHeader]; exists {
-			grpc.SetHeader(ctx, grpcMetadata.Pairs(diagConsts.BaggageHeader, strings.Join(baggage, ",")))
+		// Handle incoming baggage
+		ctx, validBaggage := handleBaggage(ctx)
+		if validBaggage != "" {
+			grpc.SetHeader(ctx, grpcMetadata.Pairs(diagConsts.BaggageHeader, validBaggage))
 		}
 
 		sc, _ := SpanContextFromIncomingGRPCMetadata(ctx)
@@ -188,12 +150,13 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		)
 
 		ctx := ss.Context()
-		ctx = handleBaggage(ctx)
-		// set header, ensures consistency with traceparent and tracestate headers
-		md, _ := grpcMetadata.FromIncomingContext(ctx)
-		if baggage, exists := md[diagConsts.BaggageHeader]; exists {
-			ss.SetHeader(grpcMetadata.Pairs(diagConsts.BaggageHeader, strings.Join(baggage, ",")))
+
+		// Handle incoming baggage
+		ctx, validBaggage := handleBaggage(ctx)
+		if validBaggage != "" {
+			ss.SetHeader(grpcMetadata.Pairs(diagConsts.BaggageHeader, validBaggage))
 		}
+
 		// This middleware is shared by multiple services and proxied requests, which need to be handled separately
 		switch {
 		// For gRPC service invocation, this generates ServerSpan
