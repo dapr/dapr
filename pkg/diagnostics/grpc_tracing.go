@@ -52,11 +52,11 @@ func handleBaggage(ctx context.Context) (context.Context, string) {
 		md = make(grpcMetadata.MD)
 	}
 
-	var parsedMetadataBaggage string
+	var validBaggage string
 	if baggageValues := md.Get(diagConsts.BaggageHeader); len(baggageValues) > 0 {
 		metadataBaggageHeader := strings.Join(baggageValues, ",")
 		if baggage, err := otelBaggage.Parse(metadataBaggageHeader); err == nil {
-			parsedMetadataBaggage = baggage.String()
+			validBaggage = baggage.String()
 		} else {
 			// remove if invalid
 			md.Delete(diagConsts.BaggageHeader)
@@ -72,7 +72,7 @@ func handleBaggage(ctx context.Context) (context.Context, string) {
 		}
 	}
 
-	return grpcMetadata.NewIncomingContext(ctx, md), parsedMetadataBaggage
+	return grpcMetadata.NewIncomingContext(ctx, md), validBaggage
 }
 
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
