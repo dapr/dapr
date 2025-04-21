@@ -39,6 +39,13 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		return nil, err
 	}
 
+	_, err = cron.Get(ctx, serialized.Name())
+	if err == nil {
+		// Job exists - do not overwrite
+		log.Errorf("job already exists %s: %s; delete the job first if you wish to replace it", serialized.Name(), err)
+		return nil, err
+	}
+
 	job := req.GetJob()
 
 	//nolint:protogetter
