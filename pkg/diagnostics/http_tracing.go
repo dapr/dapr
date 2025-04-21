@@ -29,71 +29,32 @@ import (
 	"github.com/dapr/dapr/pkg/responsewriter"
 )
 
-// handleHTTPBaggage processes baggage from the request, validates it, and updates both the context and response headers.
-// It returns the updated request with the new context.
-func handleHTTPBaggage(r *http.Request, rw http.ResponseWriter) *http.Request {
-	baggageHeaders := r.Header.Values(diagConsts.BaggageHeader)
-	if len(baggageHeaders) == 0 {
-		return r
-	}
-
-	baggageString := strings.Join(baggageHeaders, ",")
-	baggage, err := otelbaggage.Parse(baggageString)
-	if err != nil {
-		// Remove the baggage header if parsing fails
-		r.Header.Del(diagConsts.BaggageHeader)
-		return r
-	}
-
-	// Add baggage to context & headers
-	r = r.WithContext(otelbaggage.ContextWithBaggage(r.Context(), baggage))
-
-	// Process headers individually to maintain order
-	var validBaggage []string
-	for _, header := range baggageHeaders {
-		items := strings.Split(header, ",")
-		for _, item := range items {
-			item = strings.TrimSpace(item)
-			if item == "" {
-				continue
-			}
-
-			// Parse & validate each item
-			itemBaggage, err := otelbaggage.Parse(item)
-			if err != nil {
-				continue
-			}
-
-			// Get the first member -there should only be one per item
-			members := itemBaggage.Members()
-			if len(members) == 0 {
-				continue
-			}
-			member := members[0]
-
-			// Use the decoded value from the member
-			value := member.Value()
-			key := member.Key()
-
-			// ensure decoded values for headers
-			baggageItem := key + "=" + value
-			if props := member.Properties(); len(props) > 0 {
-				for _, prop := range props {
-					propValue, exists := prop.Value()
-					if exists {
-						baggageItem += ";" + prop.Key() + "=" + propValue
-					}
-				}
-			}
-			validBaggage = append(validBaggage, baggageItem)
+// handleHTTPBaggage processes baggage from the request headers and context, keeping them separate for security.
+// It returns the updated request with the new context and the valid baggage string for response headers.
+func handleHTTPBaggage(r *http.Request) (*http.Request, string) {
+	// metadata baggage (do not inject into context)
+	var validBaggage string
+	if baggageHeaders := r.Header.Values(diagConsts.BaggageHeader); len(baggageHeaders) > 0 {
+		metadataBaggageHeader := strings.Join(baggageHeaders, ",")
+		if _, err := otelbaggage.Parse(metadataBaggageHeader); err == nil {
+			// Need to keep the original encoded string to preserve URL encoding
+			validBaggage = metadataBaggageHeader
+		} else {
+			// remove if invalid
+			r.Header.Del(diagConsts.BaggageHeader)
 		}
 	}
 
-	if len(validBaggage) > 0 {
-		rw.Header().Set(diagConsts.BaggageHeader, strings.Join(validBaggage, ","))
+	// context baggage (do not inject into metadata)
+	contextBaggage := otelbaggage.FromContext(r.Context())
+	if len(contextBaggage.Members()) > 0 {
+		// remove if invalid
+		if _, err := otelbaggage.Parse(contextBaggage.String()); err != nil {
+			r = r.WithContext(otelbaggage.ContextWithoutBaggage(r.Context()))
+		}
 	}
 
-	return r
+	return r, validBaggage
 }
 
 // HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
@@ -110,7 +71,11 @@ func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpe
 		// Wrap the writer in a ResponseWriter so we can collect stats such as status code and size
 		rw := responsewriter.EnsureResponseWriter(w)
 
-		r = handleHTTPBaggage(r, rw)
+		// Handle incoming baggage
+		r, validBaggage := handleHTTPBaggage(r)
+		if validBaggage != "" {
+			rw.Header().Set(diagConsts.BaggageHeader, validBaggage)
+		}
 
 		// Before the response is written, we need to add the tracing headers
 		rw.Before(func(rw responsewriter.ResponseWriter) {
