@@ -94,9 +94,10 @@ type api struct {
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
 	processor             *processor.Processor
-	closed                atomic.Bool
-	closeCh               chan struct{}
 	wg                    sync.WaitGroup
+
+	closeCh chan struct{}
+	closed  atomic.Bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -518,7 +519,11 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
-			req.Metadata[sanitizedKey] = val[0]
+			// Not to overwrite the existing metadata
+			// But if the key is traceparent or tracestate, we allow overwrite the existing metadata.
+			if _, exist := req.Metadata[sanitizedKey]; !exist || (key == diag.TraceparentHeader || key == diag.TracestateHeader) {
+				req.Metadata[sanitizedKey] = val[0]
+			}
 		}
 	}
 
@@ -1143,7 +1148,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	engine, err := a.ActorEngine(ctx)
+	router, err := a.ActorRouter(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1160,7 +1165,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	policyDef := a.Universal.Resiliency().ActorPreLockPolicy(in.GetActorType(), in.GetActorId())
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
 	res, err := policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
-		return engine.Call(ctx, req)
+		return router.Call(ctx, req)
 	})
 	if err != nil {
 		if _, ok := status.FromError(err); ok {
@@ -1443,6 +1448,7 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 
 func (a *api) Close() error {
 	defer a.wg.Wait()
+
 	if a.closed.CompareAndSwap(false, true) {
 		close(a.closeCh)
 	}

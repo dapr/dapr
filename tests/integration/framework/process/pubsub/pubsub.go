@@ -43,7 +43,8 @@ func New(t *testing.T, fopts ...Option) *PubSub {
 	t.Helper()
 
 	opts := options{
-		pmrCh: make(chan *compv1pb.PullMessagesResponse),
+		pmrRespCh: make(chan *compv1pb.PullMessagesResponse),
+		pmrReqCh:  make(chan *compv1pb.PullMessagesRequest),
 	}
 	for _, fopts := range fopts {
 		fopts(&opts)

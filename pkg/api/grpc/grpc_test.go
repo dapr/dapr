@@ -49,8 +49,8 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/universal"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -397,7 +397,7 @@ func TestAPIToken(t *testing.T) {
 			AppID:      "fakeAPI",
 			Resiliency: resiliency.New(nil),
 			Logger:     log,
-			Actors: fake.New().WithEngine(func(context.Context) (engine.Interface, error) {
+			Actors: fake.New().WithRouter(func(context.Context) (router.Interface, error) {
 				return nil, messages.ErrActorRuntimeNotFound
 			}),
 			WorkflowEngine: wfenginefake.New(),
@@ -2676,7 +2676,7 @@ func TestInvokeBinding(t *testing.T) {
 	_, err = client.InvokeBinding(t.Context(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
-	ctx := grpcMetadata.AppendToOutgoingContext(t.Context(), "traceparent", "Test")
+	ctx := grpcMetadata.AppendToOutgoingContext(t.Context(), "traceparent", "Test", "userMetadata", "overwrited", "additional", "val2")
 	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -2684,6 +2684,8 @@ func TestInvokeBinding(t *testing.T) {
 	assert.Equal(t, "Test", resp.GetMetadata()["traceparent"])
 	assert.Contains(t, resp.GetMetadata(), "userMetadata")
 	assert.Equal(t, "val1", resp.GetMetadata()["userMetadata"])
+	assert.Contains(t, resp.GetMetadata(), "additional")
+	assert.Equal(t, "val2", resp.GetMetadata()["additional"])
 }
 
 func TestTransactionStateStoreNotConfigured(t *testing.T) {

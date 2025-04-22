@@ -15,6 +15,8 @@ package stream
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -144,8 +146,117 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 		stream2: "b",
 		stream3: "c",
 	} {
-		event, err := stream.Recv()
-		require.NoError(t, err)
+		event, recvErr := stream.Recv()
+		require.NoError(t, recvErr)
 		assert.Equal(t, topic, event.GetEventMessage().GetTopic())
 	}
+
+	streamNew1, err := client.SubscribeTopicEventsAlpha1(ctx)
+	require.NoError(t, err)
+
+	singleTopicMultipleSubscribers := "new"
+	require.NoError(t, streamNew1.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
+				PubsubName: "mypub", Topic: singleTopicMultipleSubscribers,
+			},
+		},
+	}))
+
+	resp, err = streamNew1.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
+	streamNew2, err := client.SubscribeTopicEventsAlpha1(ctx)
+	require.NoError(t, err)
+	require.NoError(t, streamNew2.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
+				PubsubName: "mypub", Topic: singleTopicMultipleSubscribers,
+			},
+		},
+	}))
+	resp, err = streamNew2.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
+	streamNew3, err := client.SubscribeTopicEventsAlpha1(ctx)
+	require.NoError(t, err)
+	require.NoError(t, streamNew3.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
+				PubsubName: "mypub", Topic: singleTopicMultipleSubscribers,
+			},
+		},
+	}))
+	resp, err = streamNew3.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
+	var receivedTotal atomic.Int32
+	receivedTotal.Store(0)
+
+	subscribers := []rtv1.Dapr_SubscribeTopicEventsAlpha1Client{
+		streamNew1,
+		streamNew2,
+		streamNew3,
+	}
+
+	messagesToSend := 100
+
+	var wg sync.WaitGroup
+	wg.Add(len(subscribers))
+
+	for i, stream := range subscribers {
+		go func(stream rtv1.Dapr_SubscribeTopicEventsAlpha1Client, i int, c *testing.T) {
+			defer wg.Done()
+			expectedMessages := messagesToSend
+			receivedMessages := 0
+
+			for receivedMessages < expectedMessages {
+				event, recvErr := stream.Recv()
+				assert.NoError(c, recvErr)
+				assert.Equal(c, singleTopicMultipleSubscribers, event.GetEventMessage().GetTopic())
+
+				sendErr := stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+					SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+						EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+							Id:     event.GetEventMessage().GetId(),
+							Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
+						},
+					},
+				})
+				assert.NoError(c, sendErr)
+
+				receivedTotal.Add(1)
+				receivedMessages++
+			}
+		}(stream, i, t)
+	}
+
+	for range messagesToSend {
+		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+			PubsubName: "mypub", Topic: singleTopicMultipleSubscribers,
+			Data:            []byte(`{"status": "completed"}`),
+			DataContentType: "application/json",
+		})
+		require.NoError(t, err)
+	}
+
+	wg.Wait()
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int32(messagesToSend*len(subscribers)), receivedTotal.Load()) //nolint:gosec
+	}, time.Second*10, time.Millisecond*10)
 }

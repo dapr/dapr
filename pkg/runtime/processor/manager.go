@@ -21,7 +21,9 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 // manager implements the life cycle events of a component category.
@@ -46,8 +48,8 @@ type SubscribeManager interface {
 	StopAppSubscriptions()
 	StopAllSubscriptionsForever()
 	ReloadDeclaredAppSubscription(name, pubsubName string) error
-	StartStreamerSubscription(key string) error
-	StopStreamerSubscription(pubsubName, key string)
+	StartStreamerSubscription(sub *subapi.Subscription, connectionID rtpubsub.ConnectionID) error
+	StopStreamerSubscription(sub *subapi.Subscription, connectionID rtpubsub.ConnectionID)
 	ReloadPubSub(string) error
 	StopPubSub(string)
 }

@@ -19,6 +19,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
@@ -46,6 +49,7 @@ type Options struct {
 	GRPC            *manager.Manager
 	Adapter         rtpubsub.Adapter
 	AdapterStreamer rtpubsub.AdapterStreamer
+	ConnectionID    rtpubsub.ConnectionID
 }
 
 type Subscription struct {
@@ -62,8 +66,12 @@ type Subscription struct {
 	grpc            *manager.Manager
 	adapter         rtpubsub.Adapter
 	adapterStreamer rtpubsub.AdapterStreamer
+	connectionID    rtpubsub.ConnectionID
 
-	cancel func()
+	cancel   func()
+	closed   atomic.Bool
+	wg       sync.WaitGroup
+	inflight atomic.Int64
 }
 
 var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription")
@@ -91,6 +99,7 @@ func New(opts Options) (*Subscription, error) {
 		cancel:          cancel,
 		adapter:         opts.Adapter,
 		adapterStreamer: opts.AdapterStreamer,
+		connectionID:    opts.ConnectionID,
 	}
 
 	name := s.pubsubName
@@ -119,6 +128,17 @@ func New(opts Options) (*Subscription, error) {
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
+		s.wg.Add(1)
+		s.inflight.Add(1)
+		defer func() {
+			s.wg.Done()
+			s.inflight.Add(-1)
+		}()
+
+		if s.closed.Load() {
+			return errors.New("subscription is closed")
+		}
+
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
 		}
@@ -243,12 +263,13 @@ func New(opts Options) (*Subscription, error) {
 		}
 
 		sm := &rtpubsub.SubscribedMessage{
-			CloudEvent: cloudEvent,
-			Data:       data,
-			Topic:      msgTopic,
-			Metadata:   msg.Metadata,
-			Path:       routePath,
-			PubSub:     name,
+			CloudEvent:   cloudEvent,
+			Data:         data,
+			Topic:        msgTopic,
+			Metadata:     msg.Metadata,
+			Path:         routePath,
+			PubSub:       name,
+			SubscriberID: s.connectionID,
 		}
 		policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
@@ -306,6 +327,19 @@ func New(opts Options) (*Subscription, error) {
 }
 
 func (s *Subscription) Stop() {
+	s.closed.Store(true)
+	inflight := s.inflight.Load() > 0
+
+	s.wg.Wait()
+	if s.adapterStreamer != nil {
+		s.adapterStreamer.Close(s.adapterStreamer.StreamerKey(s.pubsubName, s.topic), s.connectionID)
+	}
+	// If there were in-flight requests then wait some time for the result to be
+	// sent to the broker. This is because the message result context is
+	// disparate.
+	if inflight {
+		time.Sleep(time.Millisecond * 400)
+	}
 	s.cancel()
 }
 
