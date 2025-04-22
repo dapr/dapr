@@ -145,7 +145,7 @@ func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
 }
 
 func (wfe *engine) Run(ctx context.Context) error {
-	_, err := wfe.actors.Engine(ctx)
+	_, err := wfe.actors.Router(ctx)
 	if err != nil {
 		<-ctx.Done()
 		return ctx.Err()

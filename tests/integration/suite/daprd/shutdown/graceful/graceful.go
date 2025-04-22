@@ -15,4 +15,5 @@ package graceful
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/graceful/invocation"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/graceful/subscription"
 )

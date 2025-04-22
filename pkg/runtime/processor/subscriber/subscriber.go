@@ -24,6 +24,7 @@ import (
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -60,12 +61,11 @@ type Subscriber struct {
 	adapterStreamer rtpubsub.AdapterStreamer
 
 	appSubs      map[string][]*namedSubscription
-	streamSubs   map[string][]*namedSubscription
+	streamSubs   map[string]map[rtpubsub.ConnectionID]*namedSubscription
 	appSubActive bool
 	hasInitProg  bool
 	lock         sync.RWMutex
-	running      atomic.Bool
-	closed       bool
+	closed       atomic.Bool
 }
 
 type namedSubscription struct {
@@ -88,27 +88,54 @@ func New(opts Options) *Subscriber {
 		adapter:         opts.Adapter,
 		adapterStreamer: opts.AdapterStreamer,
 		appSubs:         make(map[string][]*namedSubscription),
-		streamSubs:      make(map[string][]*namedSubscription),
+		streamSubs:      make(map[string]map[rtpubsub.ConnectionID]*namedSubscription),
 	}
 }
 
 func (s *Subscriber) Run(ctx context.Context) error {
-	if !s.running.CompareAndSwap(false, true) {
-		return errors.New("subscriber is already running")
+	<-ctx.Done()
+	s.closed.Store(true)
+	return nil
+}
+
+func (s *Subscriber) StopAllSubscriptionsForever() {
+	s.lock.Lock()
+
+	s.closed.Store(true)
+
+	var wg sync.WaitGroup
+	for _, psubs := range s.appSubs {
+		wg.Add(len(psubs))
+		for _, sub := range psubs {
+			go func(sub *namedSubscription) {
+				sub.Stop()
+				wg.Done()
+			}(sub)
+		}
 	}
 
-	<-ctx.Done()
+	for _, psubs := range s.streamSubs {
+		wg.Add(len(psubs))
+		for _, sub := range psubs {
+			go func() {
+				sub.Stop()
+				wg.Done()
+			}()
+		}
+	}
 
-	s.StopAllSubscriptionsForever()
+	s.appSubs = make(map[string][]*namedSubscription)
+	s.streamSubs = make(map[string]map[rtpubsub.ConnectionID]*namedSubscription)
+	s.lock.Unlock()
 
-	return nil
+	wg.Wait()
 }
 
 func (s *Subscriber) ReloadPubSub(name string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if s.closed {
+	if s.closed.Load() {
 		return nil
 	}
 
@@ -126,18 +153,19 @@ func (s *Subscriber) ReloadPubSub(name string) error {
 	return errors.Join(errs...)
 }
 
-func (s *Subscriber) StartStreamerSubscription(key string) error {
+func (s *Subscriber) StartStreamerSubscription(subscription *subapi.Subscription, connectionID rtpubsub.ConnectionID) error {
 	s.lock.Lock()
-	defer s.lock.Unlock()
+	defer func() {
+		s.lock.Unlock()
+	}()
 
-	if s.closed {
+	if s.closed.Load() {
 		return apierrors.PubSub("").WithMetadata(nil).DeserializeError(errors.New("subscriber is closed"))
 	}
 
-	sub, ok := s.compStore.GetStreamSubscription(key)
-	if !ok {
-		err := fmt.Errorf("starting stream subscription without connection: %s", key)
-		return apierrors.PubSub("").WithMetadata(nil).DeserializeError(err)
+	sub, found := s.compStore.GetStreamSubscription(subscription)
+	if !found {
+		return fmt.Errorf("streaming subscription %s not found", subscription.Name)
 	}
 
 	pubsub, ok := s.compStore.GetPubSub(sub.PubsubName)
@@ -150,28 +178,40 @@ func (s *Subscriber) StartStreamerSubscription(key string) error {
 		return fmt.Errorf("failed to create subscription for %s: %s", sub.PubsubName, err)
 	}
 
-	s.streamSubs[sub.PubsubName] = append(s.streamSubs[sub.PubsubName], &namedSubscription{
+	key := s.adapterStreamer.StreamerKey(sub.PubsubName, sub.Topic)
+
+	_, exists := s.streamSubs[sub.PubsubName]
+	if !exists {
+		s.streamSubs[sub.PubsubName] = make(map[rtpubsub.ConnectionID]*namedSubscription)
+	}
+
+	s.streamSubs[sub.PubsubName][connectionID] = &namedSubscription{
 		name:         &key,
 		Subscription: ss,
-	})
-
+	}
 	return nil
 }
 
-func (s *Subscriber) StopStreamerSubscription(pubsubName, key string) {
+func (s *Subscriber) StopStreamerSubscription(subscription *subapi.Subscription, connectionID rtpubsub.ConnectionID) {
 	s.lock.Lock()
-	defer s.lock.Unlock()
+	defer func() {
+		s.lock.Unlock()
+	}()
 
-	if s.closed {
+	subscriptions, ok := s.streamSubs[subscription.Spec.Pubsubname]
+	if !ok {
 		return
 	}
 
-	for i, sub := range s.streamSubs[pubsubName] {
-		if sub.name != nil && *sub.name == key {
-			sub.Stop()
-			s.streamSubs[pubsubName] = append(s.streamSubs[pubsubName][:i], s.streamSubs[pubsubName][i+1:]...)
-			return
-		}
+	sub, ok := subscriptions[connectionID]
+	if !ok {
+		return
+	}
+
+	sub.Stop()
+	delete(subscriptions, connectionID)
+	if len(subscriptions) == 0 {
+		delete(s.streamSubs, subscription.Spec.Pubsubname)
 	}
 }
 
@@ -179,7 +219,7 @@ func (s *Subscriber) ReloadDeclaredAppSubscription(name, pubsubName string) erro
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if !s.appSubActive || s.closed {
+	if !s.appSubActive || s.closed.Load() {
 		return nil
 	}
 
@@ -222,12 +262,21 @@ func (s *Subscriber) StopPubSub(name string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	var wg sync.WaitGroup
+	wg.Add(len(s.appSubs[name]) + len(s.streamSubs[name]))
 	for _, sub := range s.appSubs[name] {
-		sub.Stop()
+		go func(sub *namedSubscription) {
+			sub.Stop()
+			wg.Done()
+		}(sub)
 	}
 	for _, sub := range s.streamSubs[name] {
-		sub.Stop()
+		go func(sub *namedSubscription) {
+			sub.Stop()
+			wg.Done()
+		}(sub)
 	}
+	wg.Wait()
 
 	s.appSubs[name] = nil
 	s.streamSubs[name] = nil
@@ -237,7 +286,7 @@ func (s *Subscriber) StartAppSubscriptions() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if s.appSubActive || s.closed {
+	if s.appSubActive || s.closed.Load() {
 		return nil
 	}
 
@@ -247,11 +296,19 @@ func (s *Subscriber) StartAppSubscriptions() error {
 
 	s.appSubActive = true
 
+	var wg sync.WaitGroup
 	for _, subs := range s.appSubs {
+		wg.Add(len(subs))
 		for _, sub := range subs {
-			sub.Stop()
+			go func(sub *namedSubscription) {
+				sub.Stop()
+				wg.Done()
+			}(sub)
 		}
 	}
+
+	wg.Wait()
+
 	s.appSubs = make(map[string][]*namedSubscription)
 
 	var errs []error
@@ -283,34 +340,19 @@ func (s *Subscriber) StopAppSubscriptions() {
 
 	s.appSubActive = false
 
+	var wg sync.WaitGroup
 	for _, psub := range s.appSubs {
+		wg.Add(len(psub))
 		for _, sub := range psub {
-			sub.Stop()
+			go func(sub *namedSubscription) {
+				sub.Stop()
+				wg.Done()
+			}(sub)
 		}
 	}
+	wg.Wait()
 
 	s.appSubs = make(map[string][]*namedSubscription)
-}
-
-func (s *Subscriber) StopAllSubscriptionsForever() {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	s.closed = true
-
-	for _, psubs := range s.appSubs {
-		for _, sub := range psubs {
-			sub.Stop()
-		}
-	}
-	for _, psubs := range s.streamSubs {
-		for _, sub := range psubs {
-			sub.Stop()
-		}
-	}
-
-	s.appSubs = make(map[string][]*namedSubscription)
-	s.streamSubs = make(map[string][]*namedSubscription)
 }
 
 func (s *Subscriber) InitProgramaticSubscriptions(ctx context.Context) error {
@@ -320,16 +362,23 @@ func (s *Subscriber) InitProgramaticSubscriptions(ctx context.Context) error {
 }
 
 func (s *Subscriber) reloadPubSubStream(name string, pubsub *rtpubsub.PubsubItem) error {
+	var wg sync.WaitGroup
+	wg.Add(len(s.streamSubs[name]))
 	for _, sub := range s.streamSubs[name] {
-		sub.Stop()
+		go func(sub *namedSubscription) {
+			sub.Stop()
+			wg.Done()
+		}(sub)
 	}
+	wg.Wait()
+
 	s.streamSubs[name] = nil
 
-	if s.closed || pubsub == nil {
+	if s.closed.Load() || pubsub == nil {
 		return nil
 	}
 
-	subs := make([]*namedSubscription, 0, len(s.compStore.ListSubscriptionsStreamByPubSub(name)))
+	subs := make(map[rtpubsub.ConnectionID]*namedSubscription, len(s.compStore.ListSubscriptionsStreamByPubSub(name)))
 	var errs []error
 	for _, sub := range s.compStore.ListSubscriptionsStreamByPubSub(name) {
 		ss, err := s.startSubscription(pubsub, sub, true)
@@ -338,10 +387,10 @@ func (s *Subscriber) reloadPubSubStream(name string, pubsub *rtpubsub.PubsubItem
 			continue
 		}
 
-		subs = append(subs, &namedSubscription{
+		subs[sub.ConnectionID] = &namedSubscription{
 			name:         sub.Name,
 			Subscription: ss,
-		})
+		}
 	}
 
 	s.streamSubs[name] = subs
@@ -350,13 +399,19 @@ func (s *Subscriber) reloadPubSubStream(name string, pubsub *rtpubsub.PubsubItem
 }
 
 func (s *Subscriber) reloadPubSubApp(name string, pubsub *rtpubsub.PubsubItem) error {
+	var wg sync.WaitGroup
+	wg.Add(len(s.appSubs[name]))
 	for _, sub := range s.appSubs[name] {
-		sub.Stop()
+		go func(sub *namedSubscription) {
+			sub.Stop()
+			wg.Done()
+		}(sub)
 	}
+	wg.Wait()
 
 	s.appSubs[name] = nil
 
-	if !s.appSubActive || s.closed || pubsub == nil {
+	if !s.appSubActive || s.closed.Load() || pubsub == nil {
 		return nil
 	}
 
@@ -455,5 +510,6 @@ func (s *Subscriber) startSubscription(pubsub *rtpubsub.PubsubItem, comp *compst
 		GRPC:            s.grpc,
 		Adapter:         s.adapter,
 		AdapterStreamer: streamer,
+		ConnectionID:    comp.ConnectionID,
 	})
 }

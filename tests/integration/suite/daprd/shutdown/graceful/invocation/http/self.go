@@ -81,12 +81,15 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	errCh := make(chan error)
+	respCh := make(chan *http.Response)
 	go func() {
-		resp, err := client.Do(req)
+		var resp *http.Response
+		resp, err = client.Do(req)
 		if resp != nil {
 			assert.NoError(t, resp.Body.Close())
 		}
 		errCh <- err
+		respCh <- resp
 	}()
 
 	require.Eventually(t, s.inInvoke.Load, time.Second*10, time.Millisecond*10)
@@ -94,7 +97,7 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	go s.daprd.Cleanup(t)
 
 	select {
-	case err := <-errCh:
+	case err = <-errCh:
 		assert.Fail(t, "unexpected error returned", err)
 	case <-time.After(time.Second * 3):
 	}
@@ -102,9 +105,22 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	close(s.closeInvoke)
 
 	select {
-	case err := <-errCh:
+	case err = <-errCh:
 		require.NoError(t, err)
 	case <-time.After(time.Second * 10):
 		assert.Fail(t, "timeout")
+	}
+
+	select {
+	case resp := <-respCh:
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	case <-time.After(time.Second * 10):
+		assert.Fail(t, "timeout")
+	}
+
+	resp, err := client.Do(req)
+	require.Error(t, err)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
 	}
 }
