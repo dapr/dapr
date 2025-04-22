@@ -82,7 +82,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
-	t.Run("good request", func(t *testing.T) {
+	t.Run("jobs are immutable - should fail with error", func(t *testing.T) {
 		for _, req := range []*rtv1.ScheduleJobRequest{
 			{
 				Job: &rtv1.Job{
@@ -104,6 +104,43 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			{
 				Job: &rtv1.Job{
 					Name:     "test1",
+					Schedule: ptr.Of("@daily"),
+					Data: &anypb.Any{
+						Value: []byte("test"),
+					},
+					Repeats: ptr.Of(uint32(1)),
+					DueTime: ptr.Of("0h0m9s0ms"),
+					Ttl:     ptr.Of("20s"),
+				},
+			},
+		} {
+			_, err := client.ScheduleJobAlpha1(ctx, req)
+			require.Error(t, err)
+		}
+	})
+
+	t.Run("good request", func(t *testing.T) {
+		for _, req := range []*rtv1.ScheduleJobRequest{
+			{
+				Job: &rtv1.Job{
+					Name:     "test",
+					Schedule: ptr.Of("@daily"),
+					Repeats:  ptr.Of(uint32(1)),
+				},
+			},
+			{
+				Job: &rtv1.Job{
+					Name:     "test1",
+					Schedule: ptr.Of("@daily"),
+					Data: &anypb.Any{
+						Value: []byte("test"),
+					},
+					Repeats: ptr.Of(uint32(1)),
+				},
+			},
+			{
+				Job: &rtv1.Job{
+					Name:     "test2",
 					Schedule: ptr.Of("@daily"),
 					Data: &anypb.Any{
 						Value: []byte("test"),
