@@ -15,6 +15,7 @@ package stream
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -110,26 +111,39 @@ func (o *ordering) Run(t *testing.T, ctx context.Context) {
 		}
 	}(t)
 
+	errCh := make(chan error)
+
 	go func(c *testing.T) {
 		for range messageCount {
 			event, recvErr := stream.Recv()
-			assert.NoError(c, recvErr)
+			if recvErr != nil {
+				errCh <- fmt.Errorf("failed to receive message: %w", recvErr)
+				return
+			}
 
 			data := string(event.GetEventMessage().GetData())
 			msgID, err := strconv.Atoi(data)
-			assert.NoError(c, err)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to parse message ID from data: %w", err)
+				return
+			}
 
-			assert.NoError(c, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+			sendErr := stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 				SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
 					EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
 						Id:     event.GetEventMessage().GetId(),
 						Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
 					},
 				},
-			}))
+			})
+			if sendErr != nil {
+				errCh <- fmt.Errorf("failed to send message: %w", sendErr)
+				return
+			}
 			receivedCount.Add(1)
 			receivedMessages <- msgID
 		}
+		errCh <- nil
 	}(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -141,6 +155,8 @@ func (o *ordering) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, i, <-sentMessages)
 		assert.Equal(t, i, <-receivedMessages)
 	}
+
+	require.NoError(t, <-errCh)
 
 	require.NoError(t, stream.CloseSend())
 }

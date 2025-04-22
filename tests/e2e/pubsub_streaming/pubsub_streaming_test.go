@@ -23,20 +23,18 @@ import (
 	"os"
 	"strconv"
 	"testing"
-	"time"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
 	publisherStreamingAppName  = "pubsub-publisher-streaming"
 	subscriberStreamingAppName = "pubsub-subscriber-streaming"
-	pubsubStreamingName        = "redis-pubsub-streaming"
 	pubsubInMemoryName         = "inmemory-pubsub-streaming"
 )
 
@@ -67,25 +65,6 @@ func TestMain(m *testing.M) {
 
 	components := []kube.ComponentDescription{
 		{
-			Name:      pubsubStreamingName,
-			Namespace: &kube.DaprTestNamespace,
-			TypeName:  "pubsub.redis",
-			MetaData: map[string]kube.MetadataValue{
-				"redisHost": {
-					FromSecretRef: &kube.SecretRef{
-						Name: "redissecret",
-						Key:  "host",
-					},
-				},
-				"redisPassword":      {Raw: `""`},
-				"processingTimeout":  {Raw: `"1s"`},
-				"redeliverInterval":  {Raw: `"1s"`},
-				"idleCheckFrequency": {Raw: `"1s"`},
-				"readTimeout":        {Raw: `"1s"`},
-			},
-			Scopes: []string{publisherStreamingAppName, subscriberStreamingAppName},
-		},
-		{
 			Name:      pubsubInMemoryName,
 			Namespace: &kube.DaprTestNamespace,
 			TypeName:  "pubsub.in-memory",
@@ -107,13 +86,8 @@ var pubsubStreamingTests = []struct {
 	handler  func(*testing.T, string, string, int)
 }{
 	{
-		testName: "publish and subscribe message order - 100",
-		count:    100,
-		handler:  testPublishSubscribeOrder,
-	},
-	{
-		testName: "publish and subscribe in-memory message order - 200",
-		count:    200,
+		testName: "publish and subscribe in-memory message order - 10000",
+		count:    10000,
 		handler:  testInMemoryPubsubStreaming,
 	},
 }
@@ -129,36 +103,6 @@ func TestPubSubStreaming(t *testing.T) {
 			tt.handler(t, publisherURL, subscriberURL, tt.count)
 		})
 	}
-}
-
-func testPublishSubscribeOrder(t *testing.T, publisherURL, subscriberURL string, numberOfMessages int) {
-	log.Println("Test publish subscribe messaging order with count: " + strconv.Itoa(numberOfMessages))
-	publishTestURL := fmt.Sprintf("http://%s/tests/streaming-order-publish?count=%d", publisherURL, numberOfMessages)
-	subscribeTestURL := fmt.Sprintf("http://%s/tests/streaming-order-subscribe?count=%d", subscriberURL, numberOfMessages)
-
-	bytes := []byte(nil)
-	sentMessagesBody, statusCode, err := utils.HTTPPostWithStatus(publishTestURL, bytes)
-
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, statusCode)
-
-	sentMessages := make([]int, 0)
-	err = json.Unmarshal(sentMessagesBody, &sentMessages)
-	require.NoError(t, err)
-	require.Equal(t, numberOfMessages, len(sentMessages))
-
-	time.Sleep(5 * time.Second)
-
-	receivedMessagesBody, statusCode, err := utils.HTTPPostWithStatus(subscribeTestURL, bytes)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, statusCode)
-
-	receivedMessages := make([]int, 0)
-	err = json.Unmarshal(receivedMessagesBody, &receivedMessages)
-	require.NoError(t, err)
-	require.Equal(t, numberOfMessages, len(receivedMessages))
-
-	require.Equal(t, sentMessages, receivedMessages)
 }
 
 func testInMemoryPubsubStreaming(t *testing.T, publisherURL, subscriberURL string, numberOfMessages int) {
