@@ -11,7 +11,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.15.1-0.20250409220637-70c99725fd12
+	github.com/dapr/components-contrib v1.15.1-0.20250423123324-b2c31ceba20b
 	github.com/dapr/durabletask-go v0.6.5
 	github.com/dapr/kit v0.15.1
 	github.com/diagridio/go-etcd-cron v0.4.4
@@ -502,9 +502,7 @@ replace (
 // Don't commit with this uncommented!
 //
 //replace github.com/dapr/components-contrib => ../components-contrib
-
-replace github.com/dapr/components-contrib => github.com/cicoyle/components-contrib v0.0.0-20250417203904-8bed256d79ee
-
+//
 // replace github.com/dapr/kit => ../kit
 //
 // Then, run `make modtidy-all` in this repository.
