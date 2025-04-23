@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,6 +14,8 @@ limitations under the License.
 package subscription
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"strconv"
 	"testing"
@@ -25,11 +27,38 @@ import (
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	rtv1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/subscription/postman/http"
+	"github.com/dapr/dapr/pkg/runtime/subscription/postman/streaming"
+	"github.com/dapr/kit/logger"
 )
+
+// mockAdapterStreamer implements runtimePubsub.AdapterStreamer and captures the published message.
+type mockAdapterStreamer struct {
+	mock.Mock
+	receivedMessage *runtimePubsub.SubscribedMessage
+}
+
+func (f *mockAdapterStreamer) Publish(ctx context.Context, sm *runtimePubsub.SubscribedMessage) (*rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, error) {
+	f.receivedMessage = sm
+	args := f.Called(ctx, sm)
+	return args.Get(0).(*rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1), args.Error(1)
+}
+
+func (f *mockAdapterStreamer) StreamerKey(pubsubName, topic string) string {
+	return f.Called(pubsubName, topic).String(0)
+}
+
+func (f *mockAdapterStreamer) Close(key string, connectionID runtimePubsub.ConnectionID) {
+	f.Called(key, connectionID)
+}
+
+func (f *mockAdapterStreamer) Subscribe(server rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, request *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1, connectionID runtimePubsub.ConnectionID) error {
+	return f.Called(server, request, connectionID).Error(0)
+}
 
 func TestTracingOnNewPublishedMessage(t *testing.T) {
 	t.Run("succeeded to publish message with TraceParent in metadata", func(t *testing.T) {
@@ -95,6 +124,176 @@ func TestTracingOnNewPublishedMessage(t *testing.T) {
 				assert.NotContains(t, string(reqs["orders"]), traceid)
 			} else {
 				assert.Contains(t, string(reqs["orders"]), `{"orderId":"1"}`)
+			}
+		}
+	})
+}
+
+func TestCloudEventPayload(t *testing.T) {
+	// Prepare a JSON payload that will be unmarshaled.
+	originalData := map[string]interface{}{"foo": "bar"}
+	dataBytes, err := json.Marshal(originalData)
+	require.NoError(t, err)
+
+	pubSub := &mockSubscribePubSub{}
+	require.NoError(t, pubSub.Init(t.Context(), contribpubsub.Metadata{}))
+
+	resp := contribpubsub.AppResponse{
+		Status: contribpubsub.Success,
+	}
+	respB, _ := json.Marshal(resp)
+
+	t.Run("verify payload and metadata are included in the cloud event for non-raw routes", func(t *testing.T) {
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(respB).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockStreamer := &mockAdapterStreamer{}
+		mockStreamer.On("Publish", mock.Anything, mock.Anything).Return(&rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1{}, nil)
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.Init()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
+
+		// Create subscription options.
+		opts := Options{
+			AppID:      "test-app",
+			PubSubName: "fake-pubsub",
+			Topic:      "test-topic",
+			PubSub:     &runtimePubsub.PubsubItem{Component: pubSub},
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Postman: streaming.New(streaming.Options{
+				Channel: mockStreamer,
+			}),
+			Route: runtimePubsub.Subscription{
+				Metadata: map[string]string{},
+				Rules:    []*runtimePubsub.Rule{{Path: "/"}},
+			},
+		}
+
+		s, err := New(opts)
+		require.NoError(t, err)
+		defer s.Stop()
+
+		// Simulate a message
+		err = pubSub.Publish(t.Context(), &contribpubsub.PublishRequest{
+			PubsubName: "fake-pubsub",
+			Topic:      "test-topic",
+			Data:       dataBytes,
+			Metadata:   map[string]string{"__key": "key-value"},
+		})
+		require.NoError(t, err)
+
+		// Check that the original data is properly unmarshaled into the DataField.
+		cloudEvent := mockStreamer.receivedMessage.CloudEvent
+		if de, exists := cloudEvent[contribpubsub.DataField]; !exists {
+			t.Error("missing DataField in CloudEvent")
+		} else {
+			got, ok := de.(map[string]interface{})
+			if !ok {
+				t.Errorf("expected DataField to be map[string]interface{}, got %T", de)
+			}
+			if v, ok := got["foo"]; !ok || v != "bar" {
+				t.Errorf("expected DataField to contain foo=bar, got: %v", got)
+			}
+		}
+
+		// Check that DataContentTypeField is set to "application/json"
+		if v, exists := cloudEvent[contribpubsub.DataContentTypeField]; !exists || v != "application/json" {
+			t.Errorf("expected DataContentTypeField to be 'application/json', got: %v", v)
+		}
+
+		// Verify that the remaining metadata has been copied as extensions.
+		expectedMetadata := map[string]string{
+			"_metadata___key":      "key-value",
+			"_metadata_pubsubName": "fake-pubsub",
+		}
+		for k, v := range expectedMetadata {
+			if cloudEvent[k] != v {
+				t.Errorf("expected CloudEvent to contain %s=%s, got: %v", k, v, cloudEvent[k])
+			}
+		}
+	})
+
+	t.Run("verify payload and metadata are included in the cloud event for raw routes", func(t *testing.T) {
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(respB).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockStreamer := &mockAdapterStreamer{}
+		mockStreamer.On("Publish", mock.Anything, mock.Anything).Return(&rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1{}, nil)
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.Init()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
+
+		// Create subscription options.
+		opts := Options{
+			AppID:      "test-app",
+			PubSubName: "fake-pubsub",
+			Topic:      "test-topic",
+			PubSub:     &runtimePubsub.PubsubItem{Component: pubSub},
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Postman: streaming.New(streaming.Options{
+				Channel: mockStreamer,
+			}),
+			Route: runtimePubsub.Subscription{
+				Metadata: map[string]string{"rawPayload": "true"},
+				Rules:    []*runtimePubsub.Rule{{Path: "/"}},
+			},
+		}
+
+		s, err := New(opts)
+		require.NoError(t, err)
+		defer s.Stop()
+
+		// Simulate a message
+		err = pubSub.Publish(t.Context(), &contribpubsub.PublishRequest{
+			PubsubName: "fake-pubsub",
+			Topic:      "test-topic",
+			Data:       dataBytes,
+			Metadata:   map[string]string{"__key": "key-value"},
+		})
+		require.NoError(t, err)
+
+		// Verify that the published message was captured by our fake adapter streamer.
+		sm := mockStreamer.receivedMessage
+		if sm == nil {
+			t.Fatal("expected a subscribed message to be published, but got nil")
+		}
+
+		// Check that the original data is properly unmarshaled into the DataBase64Field.
+		cloudEvent := sm.CloudEvent
+		if de, exists := cloudEvent[contribpubsub.DataBase64Field]; !exists {
+			t.Error("missing DataBase64Field in CloudEvent")
+		} else {
+			// Decode the base64 data
+			decodedData, err := base64.StdEncoding.DecodeString(de.(string))
+			require.NoError(t, err)
+
+			// Unmarshal the decoded data into a map
+			var got map[string]interface{}
+			require.NoError(t, json.Unmarshal(decodedData, &got))
+
+			if v, ok := got["foo"]; !ok || v != "bar" {
+				t.Errorf("expected DataField to contain foo=bar, got: %v", got)
+			}
+		}
+
+		// Check that DataContentTypeField is set to "application/json"
+		if v, exists := cloudEvent[contribpubsub.DataContentTypeField]; !exists || v != "application/octet-stream" {
+			t.Errorf("expected DataContentTypeField to be 'application/json', got: %v", v)
+		}
+
+		// Also verify that the remaining metadata has been copied as extensions.
+		// For example, the pubsub name should be added as an extension if not already present.
+		expectedMetadata := map[string]string{
+			"_metadata___key":      "key-value",
+			"_metadata_pubsubName": "fake-pubsub",
+		}
+		for k, v := range expectedMetadata {
+			if cloudEvent[k] != v {
+				t.Errorf("expected CloudEvent to contain %s=%s, got: %v", k, v, cloudEvent[k])
 			}
 		}
 	})
