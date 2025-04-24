@@ -360,7 +360,7 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 
 	t.Run("context baggage with properties", func(t *testing.T) {
 		bag, err := otelbaggage.Parse("key1=value1;prop1=propvalue1,key2=value2;prop2=propvalue2")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, bag)
 		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
 
@@ -408,7 +408,7 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 
 	t.Run("context baggage with special characters", func(t *testing.T) {
 		bag, err := otelbaggage.Parse("key1=value1%20with%20spaces,key2=value2%2Fwith%2Fslashes")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, bag)
 		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
 
@@ -462,7 +462,7 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 
 	t.Run("multiple context baggage values in header", func(t *testing.T) {
 		bag, err := otelbaggage.Parse("key1=value1,key2=value2")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, bag)
 		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
 
@@ -506,7 +506,7 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 		maxBaggageBytesPerMember := 4096 // OpenTelemetry limit: https://github.com/open-telemetry/opentelemetry-go/blob/main/baggage/baggage.go
 		longValue := strings.Repeat("x", maxBaggageBytesPerMember-existingBaggageByteCount)
 		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
-			"baggage", fmt.Sprintf("key1=value1,key2=%s", longValue),
+			"baggage", "key1=value1,key2="+longValue,
 		))
 
 		handlerCtx, err := runInterceptor(ctx)
@@ -519,7 +519,7 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 		require.True(t, ok)
 		bag := md.Get("baggage")
 		require.NotEmpty(t, bag)
-		assert.Equal(t, fmt.Sprintf("key1=value1,key2=%s", longValue), bag[0])
+		assert.Equal(t, "key1=value1,key2="+longValue, bag[0])
 	})
 
 	t.Run("baggage exceeding max item length", func(t *testing.T) {
@@ -528,7 +528,7 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 		maxBagLen := 8192
 		longValue := strings.Repeat("x", maxBagLen)
 		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
-			"baggage", fmt.Sprintf("key1=value1,key2=%s", longValue),
+			"baggage", "key1=value1,key2="+longValue,
 		))
 
 		handlerCtx, err := runInterceptor(ctx)
