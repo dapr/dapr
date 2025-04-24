@@ -437,7 +437,7 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 	if baggageHeaders := r.Header.Values(diagConsts.BaggageHeader); len(baggageHeaders) > 0 {
 		baggageString := strings.Join(baggageHeaders, ",")
 
-		if _, err := otelBaggage.Parse(baggageString); err == nil {
+		if _, err3 := otelBaggage.Parse(baggageString); err3 == nil {
 			if req.Metadata == nil {
 				req.Metadata = map[string]string{}
 			}

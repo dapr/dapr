@@ -646,13 +646,13 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		maxBaggageBytesPerMember := 4096 // OpenTelemetry limit: https://github.com/open-telemetry/opentelemetry-go/blob/main/baggage/baggage.go
 		longValue := strings.Repeat("x", maxBaggageBytesPerMember-existingBaggageByteCount)
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Add("baggage", fmt.Sprintf("key1=value1,key2=%s", longValue))
+		req.Header.Add("baggage", "key1=value1,key2="+longValue)
 
 		rr := httptest.NewRecorder()
 		handler := HTTPTraceMiddleware(fakeHandler, "fakeAppID", config.TracingSpec{SamplingRate: "1"})
 		handler.ServeHTTP(rr, req)
 
-		assert.Equal(t, fmt.Sprintf("key1=value1,key2=%s", longValue), rr.Header().Get("baggage"))
+		assert.Equal(t, "key1=value1,key2="+longValue, rr.Header().Get("baggage"))
 
 		// Verify baggage is NOT in context
 		baggage := otelbaggage.FromContext(req.Context())
@@ -666,7 +666,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		maxBaggageBytesPerMember := 4096 // OpenTelemetry limit
 		longValue := strings.Repeat("x", maxBaggageBytesPerMember-existingBaggageByteCount)
 		// Create baggage with max length value
-		bag, err := otelbaggage.Parse(fmt.Sprintf("key1=value1,key2=%s", longValue))
+		bag, err := otelbaggage.Parse("key1=value1,key2=" + longValue)
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -692,7 +692,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		maxBagLen := 8192
 		longValue := strings.Repeat("x", maxBagLen)
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
-		req.Header.Add("baggage", fmt.Sprintf("key1=value1,key2=%s", longValue))
+		req.Header.Add("baggage", "key1=value1,key2="+longValue)
 
 		rr := httptest.NewRecorder()
 		handler := HTTPTraceMiddleware(fakeHandler, "fakeAppID", config.TracingSpec{SamplingRate: "1"})
