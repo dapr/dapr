@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Workiva/go-datastructures/threadsafe/err"
 	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
 	otelBaggage "go.opentelemetry.io/otel/baggage"
@@ -1635,15 +1634,15 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		Operations: operations,
 		Metadata:   req.Metadata,
 	}
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
+	_, err2 := policyRunner(func(ctx context.Context) (any, error) {
 		return nil, transactionalStore.Multi(r.Context(), storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateTransaction, err == nil, elapsed)
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateTransaction, err2 == nil, elapsed)
 
-	if err != nil {
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateTransaction, err.Error()), errorcodes.StateTransaction, nethttp.StatusInternalServerError)
+	if err2 != nil {
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateTransaction, err2.Error()), errorcodes.StateTransaction, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
 		log.Debug(resp)
 	} else {
