@@ -27,7 +27,7 @@ spec:
       name: dapr-scheduler-data-dir
     spec:
       accessModes: [ "ReadWriteOnce" ]
-      {{- if Values.cluster.storageClassName }}
+      {{- if .Values.cluster.storageClassName }}
       storageClassName: {{ .Values.cluster.storageClassName }}
       {{- end }}
       resources:
