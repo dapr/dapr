@@ -57,7 +57,9 @@ func New(opts Options) timers.Storage {
 		activeTimersCount: make(map[string]*int64),
 		runningCh:         make(chan struct{}),
 	}
-	i.processor = queue.NewProcessor[string, *api.Reminder](i.processorExecuteFn)
+	i.processor = queue.NewProcessor[string, *api.Reminder](queue.Options[string, *api.Reminder]{
+		ExecuteFn: i.processorExecuteFn,
+	})
 	return i
 }
 

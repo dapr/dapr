@@ -185,7 +185,7 @@ func (s *Server) Run(ctx context.Context) error {
 		runners = append(runners, s.controller)
 	}
 
-	mngr := concurrency.NewRunnerCloserManager(nil, runners...)
+	mngr := concurrency.NewRunnerCloserManager(log, nil, runners...)
 	if err := mngr.AddCloser(s.etcd); err != nil {
 		return err
 	}
