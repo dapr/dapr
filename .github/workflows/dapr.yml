@@ -162,6 +162,7 @@ jobs:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
           args: --build-tags allcomponents --timeout=15m
+          only-new-issues: true
 
   unit-tests:
     name: Unit tests
