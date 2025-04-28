@@ -175,7 +175,9 @@ func (a *actors) Init(opts InitOptions) error {
 		return nil
 	}
 
-	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
+	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](queue.Options[string, targets.Idlable]{
+		ExecuteFn: a.handleIdleActor,
+	})
 
 	rStore := reentrancystore.New()
 
@@ -276,7 +278,7 @@ func (a *actors) Run(ctx context.Context) error {
 
 	log.Info("Actor runtime started")
 
-	mngr := concurrency.NewRunnerCloserManager(nil,
+	mngr := concurrency.NewRunnerCloserManager(log, nil,
 		func(ctx context.Context) error {
 			// Only wait for host registration before starting the placement client,
 			// since registering Actor host types is dependent on the Actor state
