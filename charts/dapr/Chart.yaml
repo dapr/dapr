@@ -1,4 +1,4 @@
-apiVersion: v1
+apiVersion: v2
 appVersion: '0.0.0'
 description: A Helm chart for Dapr on Kubernetes
 name: dapr
@@ -22,3 +22,7 @@ dependencies:
   - name: dapr_scheduler
     version: '0.0.0'
     repository: "file://dapr_scheduler"
+  - name: dapr_config
+    version: '0.0.0'
+    repository: "file://dapr_config"
+icon: https://dapr.io/images/dapr.svg
