@@ -55,9 +55,11 @@ func newResource[T differ.Resource](opts resourceOptions[T]) *resource[T] {
 		sourceBatcher: opts.batcher,
 		store:         opts.store,
 		diskLoader:    opts.loader,
-		streamBatcher: batcher.New[int, struct{}](0),
-		running:       make(chan struct{}),
-		closeCh:       make(chan struct{}),
+		streamBatcher: batcher.New[int, struct{}](batcher.Options{
+			Interval: 0,
+		}),
+		running: make(chan struct{}),
+		closeCh: make(chan struct{}),
 	}
 }
 
