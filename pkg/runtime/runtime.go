@@ -214,7 +214,7 @@ func newDaprRuntime(ctx context.Context,
 		Resiliency:  resiliencyProvider,
 		GetPubSubFn: compStore.GetPubSub,
 	})
-	pubsubAdapterStreamer := streamer.New(streamer.Options{
+	pubsubAdapterStreamer := streamer.New(ctx, streamer.Options{
 		TracingSpec: globalConfig.Spec.TracingSpec,
 	})
 	outbox := pubsub.NewOutbox(pubsub.OptionsOutbox{
