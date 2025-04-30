@@ -99,15 +99,30 @@ func (o *ordering) Run(t *testing.T, ctx context.Context) {
 
 	go func(c *testing.T) {
 		for msgID := range messageCount {
-			_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-				PubsubName:      "mypub",
-				Topic:           "ordered",
-				Data:            []byte(strconv.Itoa(msgID)), // send Int as bytes
-				DataContentType: "text/plain",
-			})
-			assert.NoError(c, err)
-			sendCount.Add(1)
-			sentMessages <- msgID
+			select {
+			case <-ctx.Done():
+				c.Errorf("Context canceled or deadline exceeded, stop publishing, %+v", ctx.Err())
+				return
+			default:
+				_, publishErr := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+					PubsubName:      "mypub",
+					Topic:           "ordered",
+					Data:            []byte(strconv.Itoa(msgID)),
+					DataContentType: "text/plain",
+				})
+
+				if publishErr != nil {
+					if ctx.Err() == nil {
+						// This is a real error, not related to context deadline or cancellation
+						c.Errorf("Failed to publish message: %v", publishErr)
+					}
+					// Either way, stop publishing more messages
+					return
+				}
+
+				sendCount.Add(1)
+				sentMessages <- msgID
+			}
 		}
 	}(t)
 
