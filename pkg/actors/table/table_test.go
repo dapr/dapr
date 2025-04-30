@@ -29,7 +29,7 @@ import (
 )
 
 func Test_HaltAll(t *testing.T) {
-	queue := queue.NewProcessor[string, targets.Idlable](nil)
+	queue := queue.NewProcessor[string, targets.Idlable](queue.Options[string, targets.Idlable]{})
 
 	tble := table.New(table.Options{
 		IdlerQueue:      queue,
