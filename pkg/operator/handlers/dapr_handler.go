@@ -177,9 +177,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	} else {
 		if wrapper.GetObject().GetDeletionTimestamp() != nil {
 			log.Debugf("deployment is being deleted, %s", req.NamespacedName)
-			return ctrl.Result{}, nil
+		} else {
+			expectedService = r.isAnnotatedForDapr(wrapper)
 		}
-		expectedService = r.isAnnotatedForDapr(wrapper)
 	}
 
 	if expectedService {
@@ -188,6 +188,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Errorf("failed to ensure dapr service present, err: %v", err)
 			return ctrl.Result{Requeue: true}, err
 		}
+	} else {
+		log.Debugf("delete service associated with %s", req.NamespacedName)
 	}
 
 	return ctrl.Result{}, nil

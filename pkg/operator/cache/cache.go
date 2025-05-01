@@ -5,7 +5,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -14,19 +13,6 @@ import (
 )
 
 var (
-	// create pseudo-unique name for empty resources
-	randomName    = "dapr-dev-null" + rand.String(20)
-	deployDevNull = &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: randomName, Namespace: randomName},
-	}
-	stsDevNull = &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: randomName, Namespace: randomName},
-	}
-
-	podDevNull = &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: randomName, Namespace: randomName},
-	}
-
 	podEmptyStatus    = corev1.PodStatus{}
 	podEmptySpec      = corev1.PodSpec{}
 	deployEmptyStatus = appsv1.DeploymentStatus{}
@@ -54,7 +40,7 @@ func GetFilteredCache(namespace string, podSelector labels.Selector) cache.NewCa
 
 // getTransformerFunctions creates transformers that are called by the DeltaFifo before they are inserted in the cache
 // the transformations here try to reduce size of objects, and for some others objects that we don't care about (non-dapr)
-// we set all these objects to store a single one, a sort of sinkhole
+// we set all these objects to store a minimal version with only name and namespace
 func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cache.ByObject {
 	return map[client.Object]cache.ByObject{
 		&corev1.Pod{}: {
@@ -72,7 +58,12 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 					return objClone, nil
 				}
 
-				return podDevNull, nil
+				return &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      obj.Name,
+						Namespace: obj.Namespace,
+					},
+				}, nil
 			},
 		},
 		&appsv1.Deployment{}: {
@@ -97,7 +88,12 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 					return objClone, nil
 				}
 
-				return deployDevNull, nil
+				return &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      obj.Name,
+						Namespace: obj.Namespace,
+					},
+				}, nil
 			},
 		},
 		&appsv1.StatefulSet{}: {
@@ -116,7 +112,12 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 					return objClone, nil
 				}
 
-				return stsDevNull, nil
+				return &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      obj.Name,
+						Namespace: obj.Namespace,
+					},
+				}, nil
 			},
 		},
 	}
