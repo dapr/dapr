@@ -50,15 +50,18 @@ type streamer struct {
 	tracingSpec *config.TracingSpec
 	subscribers Subscribers
 
-	lock sync.RWMutex
+	lock    sync.RWMutex
+	closeCh <-chan struct{}
 }
 
 var log = logger.NewLogger("dapr.runtime.pubsub.streamer")
 
-func New(opts Options) rtpubsub.AdapterStreamer {
+// TODO: @joshvanl: remove context after refactor.
+func New(ctx context.Context, opts Options) rtpubsub.AdapterStreamer {
 	return &streamer{
 		tracingSpec: opts.TracingSpec,
 		subscribers: make(Subscribers),
+		closeCh:     ctx.Done(),
 	}
 }
 
@@ -96,7 +99,22 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 		s.lock.Unlock()
 	}()
 
+	// TODO: @joshvanl: remove after pubsub refactor.
 	errCh := make(chan error, 2)
+	go func() {
+		select {
+		case <-s.closeCh:
+			connection.lock.Lock()
+			connection.closed.Store(true)
+			if len(connection.publishResponses) == 0 {
+				errCh <- errors.New("stream closed")
+			}
+			connection.lock.Unlock()
+		case <-connection.closeCh:
+		case <-stream.Context().Done():
+		}
+	}()
+
 	go func() {
 		var err error
 		select {
@@ -156,7 +174,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	}
 
 	if connection.closed.Load() {
-		return errors.New("connection is closed")
+		return errors.New("subscription is closed")
 	}
 
 	envelope, span, err := rtpubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, s.tracingSpec)
