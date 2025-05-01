@@ -115,10 +115,12 @@ func New(opts Options) Interface {
 		table:                   cmap.NewMap[string, targets.Interface](),
 		actorTypesLock:          fifo.NewMap[string](),
 		clock:                   clock.RealClock{},
-		typeUpdates:             batcher.New[int, []string](0),
-		idlerQueue:              opts.IdlerQueue,
-		locker:                  opts.Locker,
-		reentrancyStore:         opts.ReentrancyStore,
+		typeUpdates: batcher.New[int, []string](batcher.Options{
+			Interval: 0,
+		}),
+		idlerQueue:      opts.IdlerQueue,
+		locker:          opts.Locker,
+		reentrancyStore: opts.ReentrancyStore,
 	}
 }
 

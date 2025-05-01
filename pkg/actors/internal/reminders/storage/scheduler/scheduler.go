@@ -29,7 +29,7 @@ import (
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 	kittime "github.com/dapr/kit/time"
@@ -40,7 +40,7 @@ var log = logger.NewLogger("dapr.runtime.actor.reminders.scheduler")
 type Options struct {
 	Namespace     string
 	AppID         string
-	Clients       clients.Clients
+	Client        client.Client
 	StateReminder storage.Interface
 	Table         table.Interface
 	Healthz       healthz.Healthz
@@ -50,7 +50,7 @@ type Options struct {
 type scheduler struct {
 	namespace     string
 	appID         string
-	clients       clients.Clients
+	client        client.Client
 	table         table.Interface
 	stateReminder storage.Interface
 	htarget       healthz.Target
@@ -59,7 +59,7 @@ type scheduler struct {
 func New(opts Options) storage.Interface {
 	log.Info("Using Scheduler service for reminders.")
 	return &scheduler{
-		clients:       opts.Clients,
+		client:        opts.Client,
 		namespace:     opts.Namespace,
 		appID:         opts.AppID,
 		stateReminder: opts.StateReminder,
@@ -135,16 +135,13 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 		},
 	}
 
-	client, err := s.clients.Next(ctx)
-	if err != nil {
-		return fmt.Errorf("error getting scheduler client: %w", err)
-	}
-
-	_, err = client.ScheduleJob(ctx, internalScheduleJobReq)
+	_, err = s.client.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
 		log.Errorf("Error scheduling reminder job %s due to: %s", reminder.Name, err)
+		return err
 	}
-	return err
+
+	return nil
 }
 
 func scheduleFromPeriod(period string) (*string, *uint32, error) {
@@ -192,12 +189,7 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 		},
 	}
 
-	client, err := s.clients.Next(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error getting scheduler client: %w", err)
-	}
-
-	job, err := client.GetJob(ctx, internalGetJobReq)
+	job, err := s.client.GetJob(ctx, internalGetJobReq)
 	if err != nil {
 		errMetadata := map[string]string{
 			"appID":     s.appID,
@@ -241,25 +233,17 @@ func (s *scheduler) Delete(ctx context.Context, req *api.DeleteReminderRequest) 
 		},
 	}
 
-	client, err := s.clients.Next(ctx)
-	if err != nil {
-		return fmt.Errorf("error getting scheduler client: %w", err)
-	}
-
-	_, err = client.DeleteJob(ctx, internalDeleteJobReq)
+	_, err := s.client.DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
 		log.Errorf("Error deleting reminder job %s due to: %s", req.Name, err)
+		return err
 	}
 
-	return err
+	return nil
 }
 
 func (s *scheduler) List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error) {
-	client, err := s.clients.Next(ctx)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+	resp, err := s.client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,
 			Namespace: s.namespace,
