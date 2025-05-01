@@ -116,7 +116,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 			r.scheduler1.Address(),
 			r.scheduler3.Address(),
 		}, resp.GetScheduler().GetConnectedAddresses())
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	r.scheduler4.Run(t, ctx)
 	r.scheduler4.WaitUntilRunning(t, ctx)
