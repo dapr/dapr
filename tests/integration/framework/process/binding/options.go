@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,10 +11,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package app
+package binding
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block/app/binding"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block/app/invocation"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block/app/pubsub"
+	"github.com/dapr/dapr/tests/integration/framework/socket"
 )
+
+type Option func(*options)
+
+type options struct {
+	socket *socket.Socket
+}
+
+func WithSocket(socket *socket.Socket) Option {
+	return func(o *options) {
+		o.socket = socket
+	}
+}
