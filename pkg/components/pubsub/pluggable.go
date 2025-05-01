@@ -159,10 +159,8 @@ func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSu
 func (p *grpcPubSub) pullMessages(parentCtx context.Context, topic *proto.Topic, handler pubsub.Handler) error {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	var wg sync.WaitGroup
 	go func() {
 		<-parentCtx.Done()
-		wg.Wait()
 		cancel()
 	}()
 
@@ -207,11 +205,7 @@ func (p *grpcPubSub) pullMessages(parentCtx context.Context, topic *proto.Topic,
 
 			p.logger.Debugf("Received message from stream on topic %s", msg.GetTopicName())
 
-			wg.Add(1)
-			go func() {
-				handle(msg)
-				wg.Done()
-			}()
+			handle(msg)
 		}
 	}()
 
