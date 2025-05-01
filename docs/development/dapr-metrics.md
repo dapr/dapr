@@ -129,7 +129,7 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_workflow_operation_latency: The latencies of responses for workflow operation requests.
 * dapr_runtime_workflow_execution_count: The number of successful/failed/recoverable workflow executions.
 * dapr_runtime_workflow_activity_operation_count: The number of successful/failed/recoverable activity requests.
-* dapr_runtime_workflow_activity_operation_latency: The total time taken to run an activity to requests.
+* dapr_runtime_workflow_activity_operation_latency: The total time taken to run an activity request.
 * dapr_runtime_workflow_activity_execution_count: The number of successful/failed/recoverable activity executions.
 * dapr_runtime_workflow_activity_execution_latency: The total time taken to run an activity to completion.
 
