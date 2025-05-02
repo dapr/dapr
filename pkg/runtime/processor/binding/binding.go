@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/dapr/pkg/runtime/processor/binding/input"
 	"github.com/dapr/kit/logger"
 )
 
@@ -75,7 +76,7 @@ type binding struct {
 	stopForever     bool
 
 	subscribeBindingList []string
-	inputCancels         map[string]context.CancelFunc
+	activeInputs         map[string]*input.Input
 	wg                   sync.WaitGroup
 }
 
@@ -89,7 +90,7 @@ func New(opts Options) *binding {
 		tracingSpec:  opts.TracingSpec,
 		grpc:         opts.GRPC,
 		channels:     opts.Channels,
-		inputCancels: make(map[string]context.CancelFunc),
+		activeInputs: make(map[string]*input.Input),
 	}
 }
 
@@ -130,10 +131,10 @@ func (b *binding) Close(comp compapi.Component) error {
 	inbinding, ok := b.compStore.GetInputBinding(comp.Name)
 	if ok {
 		defer b.compStore.DeleteInputBinding(comp.Name)
-		if cancel := b.inputCancels[comp.Name]; cancel != nil {
-			cancel()
+		if input := b.activeInputs[comp.Name]; input != nil {
+			input.Stop()
 		}
-		delete(b.inputCancels, comp.Name)
+		delete(b.activeInputs, comp.Name)
 		if err := inbinding.Close(); err != nil {
 			errs = append(errs, err)
 		}

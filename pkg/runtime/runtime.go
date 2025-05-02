@@ -127,6 +127,9 @@ type DaprRuntime struct {
 	clock                 clock.Clock
 	reloader              *hotreload.Reloader
 
+	grpcAPIServer      grpc.Server
+	grpcInternalServer grpc.Server
+
 	// Used for testing.
 	initComplete chan struct{}
 
@@ -211,7 +214,7 @@ func newDaprRuntime(ctx context.Context,
 		Resiliency:  resiliencyProvider,
 		GetPubSubFn: compStore.GetPubSub,
 	})
-	pubsubAdapterStreamer := streamer.New(streamer.Options{
+	pubsubAdapterStreamer := streamer.New(ctx, streamer.Options{
 		TracingSpec: globalConfig.Spec.TracingSpec,
 	})
 	outbox := pubsub.NewOutbox(pubsub.OptionsOutbox{
@@ -376,6 +379,20 @@ func newDaprRuntime(ctx context.Context,
 
 			return nil
 		},
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			if server := rt.grpcInternalServer; server != nil {
+				return server.Close()
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			if server := rt.grpcAPIServer; server != nil {
+				return server.Close()
+			}
+			return nil
+		},
 	)
 
 	if err := rt.runnerCloser.AddCloser(
@@ -427,9 +444,6 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 			log.Infof("Blocking graceful shutdown for %s or until app reports unhealthy...", *a.runtimeConfig.blockShutdownDuration)
 
 			a.processor.Subscriber().StopAllSubscriptionsForever()
-
-			// TODO: @joshvanl: gracefully shutdown bindings without disrupting
-			// in-flight requests.
 			a.processor.Binding().StopReadingFromBindings(true)
 
 			select {
@@ -620,7 +634,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
-		Scheduler:                   a.jobsManager,
+		Scheduler:                   a.jobsManager.Client(),
 		Actors:                      a.actors,
 		WorkflowEngine:              a.wfengine,
 	})
@@ -902,19 +916,13 @@ func (a *DaprRuntime) startHTTPServer() error {
 		return err
 	}
 
-	if err := a.runnerCloser.AddCloser(func() {
-		a.processor.Binding().StopReadingFromBindings(true)
-	}); err != nil {
-		return err
-	}
-
 	return nil
 }
 
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{a.runtimeConfig.internalGRPCListenAddress}, a.runtimeConfig.internalGRPCPort)
-	server := grpc.NewInternalServer(grpc.OptionsInternal{
+	a.grpcInternalServer = grpc.NewInternalServer(grpc.OptionsInternal{
 		API:         api,
 		Config:      serverConf,
 		TracingSpec: a.globalConfig.GetTracingSpec(),
@@ -923,10 +931,8 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 		Proxy:       a.proxy,
 		Healthz:     a.runtimeConfig.healthz,
 	})
-	if err := server.StartNonBlocking(); err != nil {
-		return err
-	}
-	if err := a.runnerCloser.AddCloser(server); err != nil {
+
+	if err := a.grpcInternalServer.StartNonBlocking(); err != nil {
 		return err
 	}
 
@@ -935,7 +941,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
-	server := grpc.NewAPIServer(grpc.Options{
+	a.grpcAPIServer = grpc.NewAPIServer(grpc.Options{
 		API:            api,
 		Config:         serverConf,
 		TracingSpec:    a.globalConfig.GetTracingSpec(),
@@ -945,10 +951,8 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 		WorkflowEngine: a.wfengine,
 		Healthz:        a.runtimeConfig.healthz,
 	})
-	if err := server.StartNonBlocking(); err != nil {
-		return err
-	}
-	if err := a.runnerCloser.AddCloser(server); err != nil {
+
+	if err := a.grpcAPIServer.StartNonBlocking(); err != nil {
 		return err
 	}
 
@@ -1067,10 +1071,10 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	}
 
 	if err := a.actors.Init(actors.InitOptions{
-		Hostname:         hostAddress,
-		StateStoreName:   actorStateStoreName,
-		GRPC:             a.grpc,
-		SchedulerClients: a.jobsManager,
+		Hostname:        hostAddress,
+		StateStoreName:  actorStateStoreName,
+		GRPC:            a.grpc,
+		SchedulerClient: a.jobsManager.Client(),
 	}); err != nil {
 		return err
 	}
