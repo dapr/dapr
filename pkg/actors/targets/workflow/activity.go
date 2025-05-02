@@ -229,16 +229,24 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
 	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
+	elapsed := float64(0)
+	start := time.Now()
 	err := a.scheduler(ctx, wi)
+	elapsed = diag.ElapsedSince(start)
+
 	if errors.Is(err, context.DeadlineExceeded) {
+		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
 		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 	} else if err != nil {
+		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
 		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
+	diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusSuccess, elapsed)
+
 	// Activity execution started
-	start := time.Now()
+	start = time.Now()
 	executionStatus := ""
-	elapsed := float64(0)
+	elapsed = float64(0)
 	// Record metrics on exit
 	defer func() {
 		if executionStatus != "" {
