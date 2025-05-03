@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/argoproj/argo-rollouts/pkg/apis/rollouts"
@@ -170,6 +171,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Debugf("deployment has be deleted, %s", req.NamespacedName)
+			return ctrl.Result{}, nil
 		} else {
 			log.Errorf("unable to get deployment, %s, err: %s", req.NamespacedName, err)
 			return ctrl.Result{}, err
@@ -177,9 +179,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	} else {
 		if wrapper.GetObject().GetDeletionTimestamp() != nil {
 			log.Debugf("deployment is being deleted, %s", req.NamespacedName)
-		} else {
-			expectedService = r.isAnnotatedForDapr(wrapper)
+			return ctrl.Result{}, nil
 		}
+		expectedService = r.isAnnotatedForDapr(wrapper)
 	}
 
 	if expectedService {
@@ -189,7 +191,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{Requeue: true}, err
 		}
 	} else {
-		log.Debugf("delete service associated with %s", req.NamespacedName)
+		err := r.ensureDaprServiceAbsent(ctx, req.NamespacedName)
+		if err != nil {
+			log.Error(err)
+			return ctrl.Result{Requeue: true}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -224,6 +230,51 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 	}
 
 	return nil
+}
+
+func (h *DaprHandler) ensureDaprServiceAbsent(ctx context.Context, ownerRef types.NamespacedName) error {
+	// get services that has the target owner
+	var svcList corev1.ServiceList
+	var err error
+
+	if err = h.List(ctx, &svcList,
+		client.InNamespace(ownerRef.Namespace),
+		client.MatchingFields{daprServiceOwnerField: ownerRef.Name},
+	); err != nil {
+		return err
+	}
+
+	found := len(svcList.Items)
+
+	if found == 0 {
+		log.Debugf("no Dapr service matched for deletion with owner %s", ownerRef)
+		return nil
+	}
+
+	var svcDeleteList []corev1.Service
+
+	// filter services that were created by Dapr.
+	for _, svc := range svcList.Items {
+		if h.isLabeledForDapr(svc.Labels) {
+			svcDeleteList = append(svcDeleteList, svc)
+		}
+	}
+
+	switch size := len(svcDeleteList); {
+	case size == 0:
+	case size == 1:
+		svc := svcDeleteList[0]
+		err = h.Delete(ctx, &svc)
+		if err != nil {
+			err = fmt.Errorf("%s/%s delete failed: %w", svc.Namespace, svc.Name, err)
+		} else {
+			log.Debugf("deleted service: %s/%s", svc.Namespace, svc.Name)
+		}
+	default:
+		log.Warn("skipping cleanup after more than one Dapr service found owned by %s", ownerRef)
+	}
+
+	return err
 }
 
 func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService types.NamespacedName, wrapper ObjectWrapper, daprSvc corev1.Service) error {
@@ -329,6 +380,10 @@ func (h *DaprHandler) getAppID(wrapper ObjectWrapper) string {
 
 func (h *DaprHandler) isAnnotatedForDapr(wrapper ObjectWrapper) bool {
 	return meta.IsAnnotatedForDapr(wrapper.GetTemplateAnnotations())
+}
+
+func (h *DaprHandler) isLabeledForDapr(a map[string]string) bool {
+	return meta.IsAnnotatedForDapr(a)
 }
 
 func (h *DaprHandler) getEnableMetrics(wrapper ObjectWrapper) bool {
