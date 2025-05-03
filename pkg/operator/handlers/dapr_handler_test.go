@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -9,11 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
@@ -104,6 +107,100 @@ func TestDaprService(t *testing.T) {
 		err := getTestDaprHandler().ensureDaprServicePresent(t.Context(), "default", d)
 		require.Error(t, err)
 	})
+}
+
+func TestDaprServiceCleanup(t *testing.T) {
+	// Arrange
+	testDaprHandler := getTestDaprHandler()
+
+	sch := runtime.NewScheme()
+	err := scheme.AddToScheme(sch)
+	require.NoError(t, err)
+
+	cli := fake.NewClientBuilder().WithScheme(sch).WithIndex(
+		&corev1.Service{},
+		daprServiceOwnerField,
+		func(rawObj client.Object) []string {
+			svc := rawObj.(*corev1.Service)
+			owner := metaV1.GetControllerOf(svc)
+			if testDaprHandler.isReconciled(owner) {
+				return []string{owner.Name}
+			}
+			return nil
+		},
+	).Build()
+	testDaprHandler.Scheme = sch
+	testDaprHandler.Client = cli
+
+	d := getDeployment("test_id", "true")
+	s := getStatefulSet("test_id", "true")
+
+	t.Run("deployment dapr service cleanup", func(t *testing.T) {
+		// Arrange
+		svcName := fmt.Sprintf("%s-dapr", d.GetObject().GetName())
+		namespace := "test"
+		myDaprService := types.NamespacedName{
+			Namespace: namespace,
+			Name:      svcName,
+		}
+
+		// Act: create
+		err := testDaprHandler.createDaprService(t.Context(), myDaprService, d)
+		require.NoError(t, err)
+
+		var actualService corev1.Service
+		err = cli.Get(t.Context(), myDaprService, &actualService)
+		require.NoError(t, err)
+		assert.Equal(t, "test_id", actualService.ObjectMeta.Annotations[annotations.KeyAppID])
+
+		// Act: cleanup
+		err = testDaprHandler.ensureDaprServiceAbsent(t.Context(), types.NamespacedName{
+			Name:      d.GetObject().GetName(),
+			Namespace: namespace,
+		})
+		require.NoError(t, err)
+
+		var nilService corev1.Service
+		err = cli.Get(t.Context(), myDaprService, &nilService)
+
+		// Assert
+		require.Error(t, err)
+		require.True(t, apierrors.IsNotFound(err))
+	})
+
+	t.Run("statefulset dapr service cleanup", func(t *testing.T) {
+		// Arrange
+		svcName := fmt.Sprintf("%s-dapr", s.GetObject().GetName())
+		namespace := "test"
+		myDaprService := types.NamespacedName{
+			Namespace: namespace,
+			Name:      svcName,
+		}
+
+		// Act: create
+		err := testDaprHandler.createDaprService(t.Context(), myDaprService, s)
+		require.NoError(t, err)
+
+		var actualService corev1.Service
+		err = cli.Get(t.Context(), myDaprService, &actualService)
+		require.NoError(t, err)
+		assert.Equal(t, "test_id", actualService.ObjectMeta.Annotations[annotations.KeyAppID])
+
+		// Act: cleanup
+		err = testDaprHandler.ensureDaprServiceAbsent(t.Context(), types.NamespacedName{
+			Name:      s.GetObject().GetName(),
+			Namespace: namespace,
+		})
+		require.NoError(t, err)
+
+		var nilService corev1.Service
+		err = cli.Get(t.Context(), myDaprService, &nilService)
+
+		// Assert
+		require.Error(t, err)
+		require.True(t, apierrors.IsNotFound(err))
+	})
+
 }
 
 func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
