@@ -152,7 +152,7 @@ func Test_deployTransformer(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
 		}
-		require.Len(t, store.List(), 1)
+		require.Len(t, store.List(), len(deployments))
 	})
 	t.Run("allNonDaprPlusInjectorDeployment", func(t *testing.T) {
 		store := getNewTestStore()
@@ -171,7 +171,7 @@ func Test_deployTransformer(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
 		}
-		require.Len(t, store.List(), 2)
+		require.Len(t, store.List(), len(deployments))
 	})
 }
 
@@ -217,6 +217,6 @@ func Test_stsTransformer(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, store.Add(obj))
 		}
-		require.Len(t, store.List(), 1)
+		require.Len(t, store.List(), len(statefulsets))
 	})
 }
