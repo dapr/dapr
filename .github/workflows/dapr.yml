@@ -103,19 +103,17 @@ jobs:
           make gen-proto check-proto-diff
   unit-tests:
     name: Unit tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-latest-4-cores
             target_os: linux
             target_arch: amd64
-          - os: windows-2022
+          - os: windows-latest-8-cores
             target_os: windows
             target_arch: amd64
-            windows_version: ltsc2022
           - os: macOS-latest
             target_os: darwin
             target_arch: amd64
@@ -148,19 +146,17 @@ jobs:
 
   integration-tests:
     name: Integration tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-latest-4-cores
             target_os: linux
             target_arch: amd64
-          - os: windows-2022
+          - os: windows-latest-8-cores
             target_os: windows
             target_arch: amd64
-            windows_version: ltsc2022
           - os: macOS-latest
             target_os: darwin
             target_arch: amd64
@@ -184,7 +180,7 @@ jobs:
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
-    needs: [unit-tests, integration-tests]
+    needs: [lint, unit-tests, integration-tests]
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
