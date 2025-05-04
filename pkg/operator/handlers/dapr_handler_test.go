@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -137,7 +136,7 @@ func TestDaprServiceCleanup(t *testing.T) {
 
 	t.Run("deployment dapr service cleanup", func(t *testing.T) {
 		// Arrange
-		svcName := fmt.Sprintf("%s-dapr", d.GetObject().GetName())
+		svcName := d.GetObject().GetName() + "-dapr"
 		namespace := "test"
 		myDaprService := types.NamespacedName{
 			Namespace: namespace,
@@ -170,7 +169,7 @@ func TestDaprServiceCleanup(t *testing.T) {
 
 	t.Run("statefulset dapr service cleanup", func(t *testing.T) {
 		// Arrange
-		svcName := fmt.Sprintf("%s-dapr", s.GetObject().GetName())
+		svcName := s.GetObject().GetName() + "-dapr"
 		namespace := "test"
 		myDaprService := types.NamespacedName{
 			Namespace: namespace,
@@ -200,7 +199,6 @@ func TestDaprServiceCleanup(t *testing.T) {
 		require.Error(t, err)
 		require.True(t, apierrors.IsNotFound(err))
 	})
-
 }
 
 func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
