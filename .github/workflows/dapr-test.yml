@@ -33,14 +33,11 @@ on:
   # Dispatch on external events
   repository_dispatch:
     types: [e2e-test]
-
-permissions: {}
-
 env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.30.0"
+  KUBECTLVER: "v1.27.6"
   # If not empty, uses cloud resources for testing
   TEST_CLOUD_ENV: "azure"
   # Version of Helm
@@ -54,29 +51,21 @@ env:
   # Enable tests on ARM64
   ENABLE_ARM: "false"
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
-  AZURE_REGIONS: "eastus"
+  AZURE_REGIONS: "westus3"
   AZURE_ARM_REGIONS: "eastus"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
-  # Name of the Azure Key Vault resource used in tests
-  # The credentials defined in AZURE_CREDENTIALS must have permissions to perform operations in this vault
-  AZURE_KEY_VAULT_NAME: "dapre2ekv"
   # Whether to collect TCP dumps
   TCP_DUMPS: "false"
-  # Additional build tags for Dapr
-  DAPR_GO_BUILD_TAGS: "subtlecrypto"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
-  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.13.0"
-  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.12.5"
+  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.12.0"
+  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.11.4"
 
 jobs:
   deploy-infrastructure:
     name: Deploy test infrastructure
     runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-      pull-requests: write
     steps:
       - name: Set up for manual runs
         if: github.event_name == 'workflow_dispatch'
@@ -174,8 +163,8 @@ jobs:
                 location2=${REGION2} \
                 location3=${REGION3} \
                 dateTag="${DATE_TAG}" \
-                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID_EAST }}" \
-                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID_EAST }}" \
+                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
+                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
                 armDiagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_ARM_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
                 armDiagStorageResourceId="${{ secrets.AZURE_ARM_DIAG_STORAGE_ID }}" \
               && success=true \
@@ -223,9 +212,6 @@ jobs:
   build:
     name: Build for  ${{ matrix.target_os }} on ${{ matrix.target_arch }}
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-      pull-requests: write
     env:
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
@@ -285,8 +271,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
       - name: Login to Azure
@@ -297,7 +282,7 @@ jobs:
       - name: Login to cache registry for Windows
         if: runner.os == 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
         run: |
-          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken --output tsv)
+          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken)
           docker login ${{ env.DAPR_CACHE_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
       - name: Login to cache registry for Linux or Mac
         if: runner.os != 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
@@ -325,6 +310,7 @@ jobs:
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
           echo "WINDOWS_VERSION=${{ matrix.windows_version }}" >> $GITHUB_ENV
+          echo "DAPR_GO_BUILD_TAGS=wfbackendsqlite" >> $GITHUB_ENV
         shell: bash
       - name: Build Dapr and its Docker images
         if: env.TEST_PREFIX != ''
@@ -345,7 +331,7 @@ jobs:
       - name: Login to Azure Container Registry for Windows
         if: runner.os == 'Windows' && env.TEST_PREFIX != ''
         run: |
-          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken --output tsv)
+          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken)
           docker login ${{ env.DAPR_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
       - name: Login to Azure Container Registry for Linux or Mac
         if: runner.os != 'Windows' && env.TEST_PREFIX != ''
@@ -400,9 +386,6 @@ jobs:
       - deploy-infrastructure
     # Always run on Linux as the local OS is irrelevant and this is faster
     runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-      pull-requests: write
     env:
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
@@ -459,8 +442,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
       - uses: azure/setup-kubectl@v3
@@ -512,8 +494,6 @@ jobs:
         shell: bash
       - name: Setup for cloud resources
         if: env.TEST_PREFIX != '' && env.TEST_CLOUD_ENV != ''
-        env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         run: ./tests/test-infra/setup_${{ env.TEST_CLOUD_ENV }}.sh
         shell: bash
       - name: Preparing AKS cluster for test
