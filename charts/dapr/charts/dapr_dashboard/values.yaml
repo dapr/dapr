@@ -1,0 +1,16 @@
+replicaCount: 1
+logLevel: info
+
+image:
+  registry: docker.io/daprio
+  name: dashboard
+  tag: "0.2.0"
+
+nameOverride: ""
+fullnameOverride: ""
+
+ports:
+  protocol: TCP
+  port: 8080
+  targetPort: 8080
+  
