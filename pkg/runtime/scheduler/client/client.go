@@ -11,10 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package app
+package client
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block/app/binding"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block/app/invocation"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block/app/pubsub"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
+
+type Client interface {
+	schedulerv1pb.SchedulerClient
+	Addresses() []string
+}

@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
@@ -43,7 +43,7 @@ type Options struct {
 	ExtendedMetadata            map[string]string
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
-	Scheduler                   clients.Clients
+	Scheduler                   client.Client
 	Actors                      actors.Interface
 	WorkflowEngine              wfengine.Interface
 }
@@ -61,7 +61,7 @@ type Universal struct {
 	appConnectionConfig         config.AppConnectionConfig
 	globalConfig                *config.Configuration
 	workflowEngine              wfengine.Interface
-	scheduler                   clients.Clients
+	scheduler                   client.Client
 
 	extendedMetadataLock sync.RWMutex
 	actors               actors.Interface

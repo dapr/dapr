@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,16 +11,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package clients
+package binding
 
 import (
-	"context"
-
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/tests/integration/framework/socket"
 )
 
-type Clients interface {
-	Next(context.Context) (schedulerv1pb.SchedulerClient, error)
-	All(context.Context) ([]schedulerv1pb.SchedulerClient, error)
-	Addresses() []string
+type Option func(*options)
+
+type options struct {
+	socket *socket.Socket
+}
+
+func WithSocket(socket *socket.Socket) Option {
+	return func(o *options) {
+		o.socket = socket
+	}
 }
