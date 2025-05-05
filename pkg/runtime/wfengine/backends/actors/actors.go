@@ -27,10 +27,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors/targets/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -129,7 +130,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 
-	activityFactory, err := workflow.ActivityFactory(ctx, workflow.ActivityOptions{
+	activityFactory, err := activity.ActivityFactory(ctx, activity.ActivityOptions{
 		AppID:             abe.appID,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
@@ -189,6 +190,57 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 	return table.UnRegisterActorTypes(abe.workflowActorType, abe.activityActorType)
 }
 
+// TODO: @joshvanl
+func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.RerunWorkflowFromEventRequest) (api.InstanceID, error) {
+	abe.lock.RLock()
+	ch := abe.registeredCh
+	abe.lock.RUnlock()
+
+	select {
+	case <-ch:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+
+	if len(req.GetSourceInstanceID()) == 0 {
+		return "", status.Error(codes.InvalidArgument, "rerun workflow source instance ID is required")
+	}
+
+	if req.GetNewInstanceID() == "" {
+		u, err := uuid.NewRandom()
+		if err != nil {
+			return "", fmt.Errorf("failed to generate instance ID: %w", err)
+		}
+		req.NewInstanceID = u.String()
+	}
+
+	if req.GetSourceInstanceID() == req.GetNewInstanceID() {
+		return "", status.Error(codes.InvalidArgument, "rerun workflow instance ID must be different from the original instance ID")
+	}
+
+	requestBytes, err := proto.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal RerunWorkflowInstanceRequest: %w", err)
+	}
+
+	areq := internalsv1pb.NewInternalInvokeRequest(todo.ForkWorkflowHistory).
+		WithActor(abe.workflowActorType, req.GetSourceInstanceID()).
+		WithData(requestBytes).
+		WithContentType(invokev1.ProtobufContentType)
+
+	engine, err := abe.actors.Router(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = engine.Call(ctx, areq)
+	if err != nil {
+		return "", err
+	}
+
+	return api.InstanceID(req.GetNewInstanceID()), nil
+}
+
 // CreateOrchestrationInstance implements backend.Backend and creates a new workflow instance.
 //
 // Internally, creating a workflow instance also creates a new actor with the same ID. The create
@@ -240,15 +292,7 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		return err
 	}
 
-	err = backoff.Retry(func() error {
-		_, eerr := router.Call(ctx, req)
-		status, ok := status.FromError(eerr)
-		if ok && status.Code() == codes.FailedPrecondition {
-			return eerr
-		}
-		return backoff.Permanent(eerr)
-	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
-
+	_, err = router.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to CREATE workflow, record count and latency metrics.
