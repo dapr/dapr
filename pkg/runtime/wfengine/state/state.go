@@ -116,6 +116,11 @@ func (s *State) AddToInbox(e *backend.HistoryEvent) {
 	s.inboxAddedCount++
 }
 
+func (s *State) AddToHistory(e *backend.HistoryEvent) {
+	s.History = append(s.History, e)
+	s.historyAddedCount++
+}
+
 func (s *State) ClearInbox() {
 	for _, e := range s.Inbox {
 		if e.GetTimerFired() != nil {
@@ -131,9 +136,8 @@ func (s *State) ClearInbox() {
 func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error) {
 	// TODO: Batching up the save requests into smaller chunks to avoid batch size limits in Dapr state stores.
 	req := &api.TransactionalRequest{
-		ActorType:  s.workflowActorType,
-		ActorID:    actorID,
-		Operations: make([]api.TransactionalOperation, 0, 100),
+		ActorType: s.workflowActorType,
+		ActorID:   actorID,
 	}
 
 	if err := addStateOperations(req, inboxKeyPrefix, s.Inbox, s.inboxAddedCount, s.inboxRemovedCount); err != nil {
@@ -394,6 +398,27 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 	)
 
 	return req, nil
+}
+
+func (s *State) ToWorkflowState() *backend.WorkflowState {
+	return &backend.WorkflowState{
+		Inbox:        s.Inbox,
+		History:      s.History,
+		CustomStatus: s.CustomStatus,
+		Generation:   s.Generation,
+	}
+}
+
+func (s *State) FromWorkflowState(state *backend.WorkflowState) {
+	s.Reset()
+	for _, e := range state.GetInbox() {
+		s.AddToInbox(e)
+	}
+	for _, e := range state.GetHistory() {
+		s.AddToHistory(e)
+	}
+	s.CustomStatus = state.CustomStatus
+	s.Generation = state.Generation
 }
 
 func getMultiEntryKeyName(prefix string, i uint64) string {
