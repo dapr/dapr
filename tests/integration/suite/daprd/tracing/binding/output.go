@@ -43,7 +43,7 @@ type output struct {
 
 	traceparent atomic.Bool
 	baggage     atomic.Bool
-	lastBaggage atomic.Value // Stores the last received baggage header value
+	baggageVals atomic.Value
 }
 
 func (b *output) Setup(t *testing.T) []framework.Option {
@@ -57,10 +57,10 @@ func (b *output) Setup(t *testing.T) []framework.Option {
 
 		if baggage := r.Header.Get("baggage"); baggage != "" {
 			b.baggage.Store(true)
-			b.lastBaggage.Store(baggage)
+			b.baggageVals.Store(baggage)
 		} else {
 			b.baggage.Store(false)
-			b.lastBaggage.Store("")
+			b.baggageVals.Store(baggage)
 		}
 
 		w.Write([]byte(`OK`))
@@ -136,7 +136,7 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.True(t, b.traceparent.Load())
 		assert.True(t, b.baggage.Load())
-		assert.Equal(t, "key1=value1,key2=value2", b.lastBaggage.Load())
+		assert.Equal(t, "key1=value1,key2=value2", b.baggageVals.Load())
 
 		invokereq := runtime.InvokeBindingRequest{
 			Name:      "http-binding-traceparent",
@@ -154,6 +154,6 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, invokeresp)
 		assert.True(t, b.traceparent.Load())
 		assert.True(t, b.baggage.Load())
-		assert.Equal(t, "key1=value1,key2=value2", b.lastBaggage.Load())
+		assert.Equal(t, "key1=value1,key2=value2", b.baggageVals.Load())
 	})
 }
