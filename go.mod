@@ -12,7 +12,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.15.1-0.20250409220637-70c99725fd12
-	github.com/dapr/durabletask-go v0.6.5
+	github.com/dapr/durabletask-go v0.7.0
 	github.com/dapr/kit v0.15.2
 	github.com/diagridio/go-etcd-cron v0.6.1
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -517,5 +517,3 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-replace github.com/dapr/durabletask-go => github.com/joshvanl/durabletask-go v0.0.0-20250506134053-1cae3eb4b56b
