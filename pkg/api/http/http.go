@@ -411,9 +411,10 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 		return
 	}
 
-	b, err2 := json.Marshal(req.Data)
-	if err2 != nil {
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrMalformedRequestData, err2), errorcodes.CommonMalformedRequestData, nethttp.StatusInternalServerError)
+	var b []byte
+	b, err = json.Marshal(req.Data)
+	if err != nil {
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrMalformedRequestData, err), errorcodes.CommonMalformedRequestData, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
 		log.Debug(resp)
 		return
@@ -436,13 +437,15 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 
 	if baggageHeaders := r.Header.Values(diagConsts.BaggageHeader); len(baggageHeaders) > 0 {
 		baggageString := strings.Join(baggageHeaders, ",")
-
-		if _, err3 := otelBaggage.Parse(baggageString); err3 == nil {
-			if req.Metadata == nil {
-				req.Metadata = map[string]string{}
-			}
-			req.Metadata[diagConsts.BaggageHeader] = baggageString
+		if _, err = otelBaggage.Parse(baggageString); err != nil {
+			resp := messages.NewAPIErrorHTTP(fmt.Sprintf("invalid baggage header: %v", err), errorcodes.CommonMalformedRequest, nethttp.StatusBadRequest)
+			respondWithError(w, resp)
+			return
 		}
+		if req.Metadata == nil {
+			req.Metadata = map[string]string{}
+		}
+		req.Metadata[diagConsts.BaggageHeader] = baggageString
 	}
 
 	start := time.Now()
@@ -1634,15 +1637,15 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		Operations: operations,
 		Metadata:   req.Metadata,
 	}
-	_, err2 := policyRunner(func(ctx context.Context) (any, error) {
+	_, err := policyRunner(func(ctx context.Context) (any, error) {
 		return nil, transactionalStore.Multi(r.Context(), storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateTransaction, err2 == nil, elapsed)
+	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateTransaction, err == nil, elapsed)
 
-	if err2 != nil {
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateTransaction, err2.Error()), errorcodes.StateTransaction, nethttp.StatusInternalServerError)
+	if err != nil {
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateTransaction, err.Error()), errorcodes.StateTransaction, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
 		log.Debug(resp)
 	} else {

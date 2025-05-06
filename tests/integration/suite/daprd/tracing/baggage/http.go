@@ -16,6 +16,7 @@ package baggage
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -68,7 +69,7 @@ func (h *httpBaggage) Run(t *testing.T, ctx context.Context) {
 	t.Run("no baggage header provided", func(t *testing.T) {
 		// invoke app
 		appURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/test", h.daprd.HTTPPort(), h.daprd.AppID())
-		appreq, err := http.NewRequestWithContext(ctx, http.MethodPost, appURL, strings.NewReader("{\"operation\":\"get\"}"))
+		appreq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, appURL, strings.NewReader("{\"operation\":\"get\"}"))
 		require.NoError(t, err)
 		appresp, err := httpClient.Do(appreq)
 		require.NoError(t, err)
@@ -80,7 +81,7 @@ func (h *httpBaggage) Run(t *testing.T, ctx context.Context) {
 	t.Run("baggage header provided", func(t *testing.T) {
 		// invoke app
 		appURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/test", h.daprd.HTTPPort(), h.daprd.AppID())
-		appreq, err := http.NewRequestWithContext(ctx, http.MethodPost, appURL, strings.NewReader("{\"operation\":\"get\"}"))
+		appreq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, appURL, strings.NewReader("{\"operation\":\"get\"}"))
 		require.NoError(t, err)
 
 		appreq.Header.Set("baggage", "key1=value1,key2=value2")
@@ -93,5 +94,22 @@ func (h *httpBaggage) Run(t *testing.T, ctx context.Context) {
 
 		// Verify baggage header is in response
 		assert.Equal(t, "key1=value1,key2=value2", appresp.Header.Get("baggage"))
+	})
+
+	t.Run("invalid baggage header", func(t *testing.T) {
+		appURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/test", h.daprd.HTTPPort(), h.daprd.AppID())
+		appreq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, appURL, strings.NewReader("{\"operation\":\"get\"}"))
+		require.NoError(t, err)
+
+		appreq.Header.Set("baggage", "invalid-baggage")
+
+		appresp, err := httpClient.Do(appreq)
+		require.NoError(t, err)
+		defer appresp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, appresp.StatusCode)
+
+		body, err := io.ReadAll(appresp.Body)
+		require.NoError(t, err)
+		assert.Contains(t, string(body), "invalid baggage header")
 	})
 }

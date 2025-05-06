@@ -430,17 +430,9 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 			"baggage", "invalid-baggage",
 		))
 
-		handlerCtx, err := runInterceptor(ctx)
-		require.NoError(t, err)
-
-		// Verify invalid baggage is not propagated in metadata
-		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
-		require.True(t, ok)
-		assert.Empty(t, md.Get("baggage"))
-
-		// Verify baggage is in ctx, but empty (OpenTelemetry creates empty baggage)
-		baggage := otelbaggage.FromContext(handlerCtx)
-		assert.Empty(t, baggage.Members(), "baggage should be empty")
+		_, err := runInterceptor(ctx)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err), "invalid baggage should be rejected")
 	})
 
 	t.Run("multiple metadata baggage values in header", func(t *testing.T) {
@@ -487,16 +479,9 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 			"baggage", "key1=value1,invalid-format-no-equals,key2=value2",
 		))
 
-		handlerCtx, err := runInterceptor(ctx)
-		require.NoError(t, err)
-
-		// Rejects entire baggage if any part is invalid to align with OpenTelemetry
-		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
-		require.True(t, ok)
-		assert.Empty(t, md.Get("baggage"))
-		// metadata baggage is not in ctx
-		baggage := otelbaggage.FromContext(handlerCtx)
-		assert.Nil(t, baggage.Members())
+		_, err := runInterceptor(ctx)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err), "invalid baggage should be rejected")
 	})
 
 	t.Run("baggage at max item length", func(t *testing.T) {
@@ -531,17 +516,9 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 			"baggage", "key1=value1,key2="+longValue,
 		))
 
-		handlerCtx, err := runInterceptor(ctx)
-		require.NoError(t, err)
-
-		// Verify entire baggage is rejected due to length limit
-		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
-		require.True(t, ok)
-		assert.Empty(t, md.Get("baggage"))
-		// Verify baggage is in context but empty (OpenTelemetry creates empty baggage)
-		baggage := otelbaggage.FromContext(handlerCtx)
-		assert.NotNil(t, baggage, "baggage should be in context")
-		assert.Empty(t, baggage.Members(), "baggage should be empty since it was rejected")
+		_, err := runInterceptor(ctx)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err), "invalid baggage should be rejected")
 	})
 }
 

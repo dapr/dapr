@@ -14,6 +14,7 @@ limitations under the License.
 package diagnostics
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,30 +32,27 @@ import (
 
 // handleHTTPBaggage processes baggage from the request headers and context, keeping them separate for security.
 // It returns the updated request with the new context and the valid baggage string for response headers.
-func handleHTTPBaggage(r *http.Request) (*http.Request, string) {
+func handleHTTPBaggage(r *http.Request) (*http.Request, string, error) {
 	// metadata baggage (do not inject into context)
 	var validBaggage string
 	if baggageHeaders := r.Header.Values(diagConsts.BaggageHeader); len(baggageHeaders) > 0 {
 		metadataBaggageHeader := strings.Join(baggageHeaders, ",")
-		if _, err := otelbaggage.Parse(metadataBaggageHeader); err == nil {
-			// Need to keep the original encoded string to preserve URL encoding
-			validBaggage = metadataBaggageHeader
-		} else {
-			// remove if invalid
-			r.Header.Del(diagConsts.BaggageHeader)
+		if _, err := otelbaggage.Parse(metadataBaggageHeader); err != nil {
+			return r, "", fmt.Errorf("invalid baggage header: %w", err)
 		}
+		// Need to keep the original encoded string to preserve URL encoding
+		validBaggage = metadataBaggageHeader
 	}
 
 	// context baggage (do not inject into metadata)
 	contextBaggage := otelbaggage.FromContext(r.Context())
 	if len(contextBaggage.Members()) > 0 {
-		// remove if invalid
 		if _, err := otelbaggage.Parse(contextBaggage.String()); err != nil {
-			r = r.WithContext(otelbaggage.ContextWithoutBaggage(r.Context()))
+			return r, "", fmt.Errorf("invalid context baggage: %w", err)
 		}
 	}
 
-	return r, validBaggage
+	return r, validBaggage, nil
 }
 
 // HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
@@ -72,7 +70,12 @@ func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpe
 		rw := responsewriter.EnsureResponseWriter(w)
 
 		// Handle incoming baggage
-		r, validBaggage := handleHTTPBaggage(r)
+		r, validBaggage, err := handleHTTPBaggage(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		if validBaggage != "" {
 			rw.Header().Set(diagConsts.BaggageHeader, validBaggage)
 		}

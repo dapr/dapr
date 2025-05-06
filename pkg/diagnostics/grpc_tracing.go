@@ -23,6 +23,7 @@ import (
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
@@ -45,34 +46,33 @@ const (
 // and checks for context baggage via otel context checking and propagates that along in the ctx.
 // There are 2 separate streams in which baggage can come in and flow out and each is respected
 // and NOT combined for security reasons.
-func handleBaggage(ctx context.Context) (context.Context, string) {
+func handleBaggage(ctx context.Context) (context.Context, string, error) {
 	// metadata baggage (do not inject into context)
-	md, _ := grpcMetadata.FromIncomingContext(ctx)
-	if md == nil {
+	md, ok := grpcMetadata.FromIncomingContext(ctx)
+	if !ok {
 		md = make(grpcMetadata.MD)
 	}
 
 	var validBaggage string
 	if baggageValues := md.Get(diagConsts.BaggageHeader); len(baggageValues) > 0 {
 		metadataBaggageHeader := strings.Join(baggageValues, ",")
-		if baggage, err := otelBaggage.Parse(metadataBaggageHeader); err == nil {
-			validBaggage = baggage.String()
-		} else {
-			// remove if invalid
-			md.Delete(diagConsts.BaggageHeader)
+		var baggage otelBaggage.Baggage
+		var err error
+		if baggage, err = otelBaggage.Parse(metadataBaggageHeader); err != nil {
+			return ctx, "", status.Error(codes.InvalidArgument, fmt.Sprintf("invalid baggage header: %v", err))
 		}
+		validBaggage = baggage.String()
 	}
 
 	// context baggage (do not inject into metadata)
 	contextBaggage := otelBaggage.FromContext(ctx)
 	if len(contextBaggage.Members()) > 0 {
-		// remove if invalid
 		if _, err := otelBaggage.Parse(contextBaggage.String()); err != nil {
-			ctx = otelBaggage.ContextWithoutBaggage(ctx)
+			return ctx, "", status.Error(codes.InvalidArgument, fmt.Sprintf("invalid context baggage: %v", err))
 		}
 	}
 
-	return grpcMetadata.NewIncomingContext(ctx, md), validBaggage
+	return grpcMetadata.NewIncomingContext(ctx, md), validBaggage, nil
 }
 
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
@@ -86,7 +86,11 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		)
 
 		// Handle incoming baggage
-		ctx, validBaggage := handleBaggage(ctx)
+		ctx, validBaggage, err := handleBaggage(ctx)
+		if err != nil {
+			return nil, err
+		}
+
 		if validBaggage != "" {
 			grpc.SetHeader(ctx, grpcMetadata.Pairs(diagConsts.BaggageHeader, validBaggage))
 		}
@@ -152,7 +156,11 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		ctx := ss.Context()
 
 		// Handle incoming baggage
-		ctx, validBaggage := handleBaggage(ctx)
+		ctx, validBaggage, err := handleBaggage(ctx)
+		if err != nil {
+			return err
+		}
+
 		if validBaggage != "" {
 			ss.SetHeader(grpcMetadata.Pairs(diagConsts.BaggageHeader, validBaggage))
 		}
@@ -194,7 +202,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		wrapped := grpcMiddleware.WrapServerStream(ss)
 		wrapped.WrappedContext = ctx
 
-		err := handler(srv, wrapped)
+		err = handler(srv, wrapped)
 
 		if span.SpanContext().IsSampled() {
 			var (

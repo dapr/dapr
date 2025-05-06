@@ -534,6 +534,9 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler := HTTPTraceMiddleware(fakeHandler1, "fakeAppID", config.TracingSpec{SamplingRate: "1"})
 		handler.ServeHTTP(rr, req)
 
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assert.Contains(t, rr.Body.String(), "invalid baggage header")
+
 		// Verify invalid baggage is NOT propagated in headers
 		assert.Empty(t, rr.Header().Get("baggage"))
 	})
@@ -608,9 +611,10 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler := HTTPTraceMiddleware(fakeHandler, "fakeAppID", config.TracingSpec{SamplingRate: "1"})
 		handler.ServeHTTP(rr, req)
 
-		//  Rejects entire baggage if any part is invalid, aligns with OpenTelemetry
-		assert.Empty(t, rr.Header().Get("baggage"))
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assert.Contains(t, rr.Body.String(), "invalid baggage header")
 
+		assert.Empty(t, rr.Header().Get("baggage"))
 		baggage := otelbaggage.FromContext(req.Context())
 		assert.Empty(t, baggage.Members(), "baggage should be empty since it was rejected")
 	})
@@ -697,6 +701,9 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		rr := httptest.NewRecorder()
 		handler := HTTPTraceMiddleware(fakeHandler, "fakeAppID", config.TracingSpec{SamplingRate: "1"})
 		handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assert.Contains(t, rr.Body.String(), "invalid baggage header")
 
 		// OpenTelemetry rejects entire baggage if any item exceeds length limit
 		assert.Empty(t, rr.Header().Get("baggage"))

@@ -523,10 +523,11 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		if baggageValues := incomingMD[diagConsts.BaggageHeader]; len(baggageValues) > 0 {
 			baggageString := strings.Join(baggageValues, ",")
 			baggage, err := otelbaggage.Parse(baggageString)
-			if err == nil {
-				ctx = otelbaggage.ContextWithBaggage(ctx, baggage)
-				req.Metadata[diagConsts.BaggageHeader] = baggageString
+			if err != nil {
+				return nil, err
 			}
+			ctx = otelbaggage.ContextWithBaggage(ctx, baggage)
+			req.Metadata[diagConsts.BaggageHeader] = baggageString
 		}
 
 		for key, val := range incomingMD {

@@ -20,7 +20,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 	grpcMetadata "google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -80,7 +82,7 @@ func (g *grpcBaggage) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 
-		svcresp, err := client.InvokeService(ctx, &svcreq)
+		svcresp, err := client.InvokeService(t.Context(), &svcreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
 		assert.False(t, g.baggage.Load())
@@ -100,8 +102,7 @@ func (g *grpcBaggage) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 
-		// Add baggage header to context
-		ctx = grpcMetadata.AppendToOutgoingContext(ctx,
+		ctx = grpcMetadata.AppendToOutgoingContext(t.Context(),
 			"baggage", "key1=value1,key2=value2",
 		)
 		svcresp, err := client.InvokeService(ctx, &svcreq)
@@ -115,5 +116,30 @@ func (g *grpcBaggage) Run(t *testing.T, ctx context.Context) {
 		baggage := md.Get("baggage")
 		require.Len(t, baggage, 1)
 		assert.Equal(t, "key1=value1,key2=value2", baggage[0])
+	})
+
+	t.Run("invalid baggage header", func(t *testing.T) {
+		svcreq := runtime.InvokeServiceRequest{
+			Id: g.daprd.AppID(),
+			Message: &common.InvokeRequest{
+				Method:      "test",
+				Data:        nil,
+				ContentType: "",
+				HttpExtension: &common.HTTPExtension{
+					Verb:        common.HTTPExtension_GET,
+					Querystring: "",
+				},
+			},
+		}
+
+		ctx = grpcMetadata.AppendToOutgoingContext(t.Context(),
+			"baggage", "invalid-baggage",
+		)
+
+		svcresp, err := client.InvokeService(ctx, &svcreq)
+		require.Error(t, err)
+		require.Nil(t, svcresp)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+		assert.Contains(t, err.Error(), "invalid baggage header")
 	})
 }
