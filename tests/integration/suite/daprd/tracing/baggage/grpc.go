@@ -15,6 +15,7 @@ package baggage
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -40,17 +41,20 @@ type grpcBaggage struct {
 	grpcapp *procgrpc.App
 	daprd   *daprd.Daprd
 
-	baggage atomic.Bool
+	baggage     atomic.Bool
+	baggageVals atomic.Value
 }
 
 func (g *grpcBaggage) Setup(t *testing.T) []framework.Option {
 	g.grpcapp = procgrpc.New(t,
 		procgrpc.WithOnInvokeFn(func(ctx context.Context, in *common.InvokeRequest) (*common.InvokeResponse, error) {
 			if md, ok := grpcMetadata.FromIncomingContext(ctx); ok {
-				if _, exists := md["baggage"]; exists {
+				if baggage, exists := md["baggage"]; exists {
 					g.baggage.Store(true)
+					g.baggageVals.Store(strings.Join(baggage, ","))
 				} else {
 					g.baggage.Store(false)
+					g.baggageVals.Store("")
 				}
 			}
 			return nil, nil
@@ -86,6 +90,7 @@ func (g *grpcBaggage) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
 		assert.False(t, g.baggage.Load())
+		assert.Equal(t, "", g.baggageVals.Load())
 	})
 
 	t.Run("baggage header provided", func(t *testing.T) {
@@ -102,20 +107,22 @@ func (g *grpcBaggage) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 
+		baggageVal := "key1=value1,key2=value2"
 		ctx = grpcMetadata.AppendToOutgoingContext(t.Context(),
-			"baggage", "key1=value1,key2=value2",
+			"baggage", baggageVal,
 		)
 		svcresp, err := client.InvokeService(ctx, &svcreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
 		assert.True(t, g.baggage.Load())
+		assert.Equal(t, baggageVal, g.baggageVals.Load())
 
 		// Verify baggage header is in response metadata
 		md, ok := grpcMetadata.FromOutgoingContext(ctx)
 		require.True(t, ok)
 		baggage := md.Get("baggage")
 		require.Len(t, baggage, 1)
-		assert.Equal(t, "key1=value1,key2=value2", baggage[0])
+		assert.Equal(t, baggageVal, baggage[0])
 	})
 
 	t.Run("invalid baggage header", func(t *testing.T) {

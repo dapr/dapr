@@ -40,16 +40,19 @@ type httpBaggage struct {
 	httpapp *prochttp.HTTP
 	daprd   *daprd.Daprd
 
-	baggage atomic.Bool
+	baggage     atomic.Bool
+	baggageVals atomic.Value
 }
 
 func (h *httpBaggage) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		if baggage := r.Header.Get("baggage"); baggage != "" {
+		if baggage := r.Header.Values("baggage"); len(baggage) > 0 {
 			h.baggage.Store(true)
+			h.baggageVals.Store(strings.Join(baggage, ","))
 		} else {
 			h.baggage.Store(false)
+			h.baggageVals.Store("")
 		}
 		w.Write([]byte(`OK`))
 	})
@@ -76,6 +79,7 @@ func (h *httpBaggage) Run(t *testing.T, ctx context.Context) {
 		defer appresp.Body.Close()
 		assert.Equal(t, http.StatusOK, appresp.StatusCode)
 		assert.False(t, h.baggage.Load())
+		assert.Equal(t, "", h.baggageVals.Load())
 	})
 
 	t.Run("baggage header provided", func(t *testing.T) {
@@ -84,16 +88,18 @@ func (h *httpBaggage) Run(t *testing.T, ctx context.Context) {
 		appreq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, appURL, strings.NewReader("{\"operation\":\"get\"}"))
 		require.NoError(t, err)
 
-		appreq.Header.Set("baggage", "key1=value1,key2=value2")
+		baggageVal := "key1=value1,key2=value2"
+		appreq.Header.Set("baggage", baggageVal)
 
 		appresp, err := httpClient.Do(appreq)
 		require.NoError(t, err)
 		defer appresp.Body.Close()
 		assert.Equal(t, http.StatusOK, appresp.StatusCode)
 		assert.True(t, h.baggage.Load())
+		assert.Equal(t, baggageVal, h.baggageVals.Load())
 
 		// Verify baggage header is in response
-		assert.Equal(t, "key1=value1,key2=value2", appresp.Header.Get("baggage"))
+		assert.Equal(t, baggageVal, appresp.Header.Get("baggage"))
 	})
 
 	t.Run("invalid baggage header", func(t *testing.T) {
