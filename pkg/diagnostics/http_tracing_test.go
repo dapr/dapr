@@ -338,7 +338,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -366,7 +366,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -395,7 +395,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -421,7 +421,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -448,7 +448,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -471,7 +471,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -497,7 +497,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -539,7 +539,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -566,7 +566,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -593,8 +593,8 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		req.Header.Add("baggage", "invalid-baggage")
 
 		rr := httptest.NewRecorder()
-		fakeHandler1 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
-		handler := HTTPTraceMiddleware(fakeHandler1, "fakeAppID", config.TracingSpec{SamplingRate: "1"})
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+		handler := HTTPTraceMiddleware(fakeHandler, "fakeAppID", config.TracingSpec{SamplingRate: "1"})
 		handler.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
@@ -609,8 +609,8 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		req.Header.Add("baggage", "key1=value1,key2=value2")
 
 		rr := httptest.NewRecorder()
-		fakeHandler2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
-		handler := HTTPTraceMiddleware(fakeHandler2, "fakeAppID", config.TracingSpec{SamplingRate: "1"})
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+		handler := HTTPTraceMiddleware(fakeHandler, "fakeAppID", config.TracingSpec{SamplingRate: "1"})
 		handler.ServeHTTP(rr, req)
 
 		assert.Equal(t, "key1=value1,key2=value2", rr.Header().Get("baggage"))
@@ -626,7 +626,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -663,7 +663,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -704,7 +704,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -735,7 +735,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
@@ -767,7 +767,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 
 		// overwrite handler to ensure we check the ctx baggage properly
 		var handlerCtx context.Context
-		fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCtx = r.Context()
 			w.WriteHeader(http.StatusOK)
 		})
