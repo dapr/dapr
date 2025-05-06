@@ -106,6 +106,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 			metrics := w.daprd.Metrics(c, ctx).All()
 			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
 			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
+			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_activity_operation_count|activity_name:activity_success|app_id:myapp|namespace:|status:success"]))
 			assert.Equal(c, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_success|app_id:myapp|namespace:|status:success"]))
 			assert.GreaterOrEqual(c, 1, int(metrics["dapr_runtime_workflow_execution_latency|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
 			assert.GreaterOrEqual(c, 1, int(metrics["dapr_runtime_workflow_scheduling_latency|app_id:myapp|namespace:|workflow_name:workflow"]))
