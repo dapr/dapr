@@ -48,6 +48,10 @@ type workflowMetrics struct {
 	workflowOperationLatency *stats.Float64Measure
 	// workflowExecutionCount records count of Successful/Failed/Recoverable workflow executions.
 	workflowExecutionCount *stats.Int64Measure
+	// activityOperationCount records count of Successful/Failed requests to create activities.
+	activityOperationCount *stats.Int64Measure
+	// activityOperationLatency records latency of response for activity operation requests.
+	activityOperationLatency *stats.Float64Measure
 	// activityExecutionCount records count of Successful/Failed/Recoverable activity executions.
 	activityExecutionCount *stats.Int64Measure
 	// activityExecutionLatency records time taken to run an activity to completion.
@@ -70,6 +74,14 @@ func newWorkflowMetrics() *workflowMetrics {
 		workflowOperationLatency: stats.Float64(
 			"runtime/workflow/operation/latency",
 			"The latencies of responses for workflow operation requests.",
+			stats.UnitMilliseconds),
+		activityOperationCount: stats.Int64(
+			"runtime/workflow/activity/operation/count",
+			"The number of successful/failed activity operation requests.",
+			stats.UnitDimensionless),
+		activityOperationLatency: stats.Float64(
+			"runtime/workflow/activity/operation/latency",
+			"The latencies of responses for activity operation requests.",
 			stats.UnitMilliseconds),
 		workflowExecutionCount: stats.Int64(
 			"runtime/workflow/execution/count",
@@ -108,6 +120,8 @@ func (w *workflowMetrics) Init(appID, namespace string, latencyDistribution *vie
 		diagUtils.NewMeasureView(w.workflowOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowOperationLatency, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(w.activityOperationCount, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(w.activityOperationLatency, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.activityExecutionCount, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.activityExecutionLatency, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, latencyDistribution),
 		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, latencyDistribution),
@@ -157,7 +171,7 @@ func (w *workflowMetrics) WorkflowSchedulingLatency(ctx context.Context, workflo
 	}
 }
 
-// ActivityExecutionEvent records total number of Successful/Failed/Recoverable workflow executions. It also records latency for these executions.
+// ActivityExecutionEvent records total number of Successful/Failed/Recoverable actvity executions. It also records latency for these executions.
 func (w *workflowMetrics) ActivityExecutionEvent(ctx context.Context, activityName, status string, elapsed float64) {
 	if !w.IsEnabled() {
 		return
@@ -167,5 +181,18 @@ func (w *workflowMetrics) ActivityExecutionEvent(ctx context.Context, activityNa
 
 	if elapsed > 0 {
 		stats.RecordWithTags(ctx, diagUtils.WithTags(w.activityExecutionLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status), w.activityExecutionLatency.M(elapsed))
+	}
+}
+
+// ActivityOperationEvent records total number of Successful/Failed/Recoverable activity requests. It also records latency for these requests.
+func (w *workflowMetrics) ActivityOperationEvent(ctx context.Context, activityName, status string, elapsed float64) {
+	if !w.IsEnabled() {
+		return
+	}
+
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.activityOperationCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status), w.activityOperationCount.M(1))
+
+	if elapsed > 0 {
+		stats.RecordWithTags(ctx, diagUtils.WithTags(w.activityOperationLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status), w.activityOperationLatency.M(elapsed))
 	}
 }
