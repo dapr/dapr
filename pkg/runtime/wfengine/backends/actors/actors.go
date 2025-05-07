@@ -31,8 +31,9 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/dapr/pkg/actors/targets/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -63,7 +64,7 @@ type Options struct {
 	Actors             actors.Interface
 	Resiliency         resiliency.Provider
 	SchedulerReminders bool
-	EventSink          workflow.EventSink
+	EventSink          orchestrator.EventSink
 }
 
 type Actors struct {
@@ -75,7 +76,7 @@ type Actors struct {
 	resiliency              resiliency.Provider
 	actors                  actors.Interface
 	schedulerReminders      bool
-	eventSink               workflow.EventSink
+	eventSink               orchestrator.EventSink
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -108,7 +109,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 
-	workflowFactory, err := workflow.WorkflowFactory(ctx, workflow.WorkflowOptions{
+	oopts := orchestrator.Options{
 		AppID:             abe.appID,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
@@ -126,12 +127,9 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		SchedulerReminders: abe.schedulerReminders,
 		EventSink:          abe.eventSink,
-	})
-	if err != nil {
-		return err
 	}
 
-	activityFactory, err := activity.ActivityFactory(ctx, activity.ActivityOptions{
+	aopts := activity.Options{
 		AppID:             abe.appID,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
@@ -151,7 +149,9 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		Actors:             abe.actors,
 		SchedulerReminders: abe.schedulerReminders,
-	})
+	}
+
+	workflowFactory, activityFactory, err := workflow.Factories(ctx, oopts, aopts)
 	if err != nil {
 		return err
 	}
