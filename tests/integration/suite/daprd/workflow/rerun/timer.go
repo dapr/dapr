@@ -66,7 +66,7 @@ func (i *timer) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 	i.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
-		time.Sleep(time.Second)
+		time.Sleep(time.Second * 2)
 		return nil, nil
 	})
 
@@ -87,8 +87,8 @@ func (i *timer) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		_, err = client.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
-		_, err = client.RerunWorkflowFromEvent(ctx, id, 1)
-		assert.Equal(t, status.Error(codes.Aborted, "'xyz' would have active timers, cannot rerun workflow"), err)
+		_, err = client.RerunWorkflowFromEvent(ctx, id, 0)
+		assert.Equal(t, status.Error(codes.NotFound, "'xyz' target event ID '0' is not a TaskScheduled event"), err)
 	})
 
 	t.Run("completed-timer", func(t *testing.T) {

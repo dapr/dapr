@@ -45,6 +45,7 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.wfengine.backend.actors")
@@ -206,12 +207,12 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 		return "", status.Error(codes.InvalidArgument, "rerun workflow source instance ID is required")
 	}
 
-	if req.GetNewInstanceID() == "" {
+	if req.NewInstanceID == nil {
 		u, err := uuid.NewRandom()
 		if err != nil {
 			return "", fmt.Errorf("failed to generate instance ID: %w", err)
 		}
-		req.NewInstanceID = u.String()
+		req.NewInstanceID = ptr.Of(u.String())
 	}
 
 	if req.GetSourceInstanceID() == req.GetNewInstanceID() {
