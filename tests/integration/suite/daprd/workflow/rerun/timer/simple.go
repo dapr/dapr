@@ -11,16 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rerun
+package timer
 
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -30,41 +29,41 @@ import (
 )
 
 func init() {
-	suite.Register(new(noeventid))
+	suite.Register(new(simple))
 }
 
-type noeventid struct {
+type simple struct {
 	workflow *workflow.Workflow
 }
 
-func (n *noeventid) Setup(t *testing.T) []framework.Option {
-	n.workflow = workflow.New(t)
+func (s *simple) Setup(t *testing.T) []framework.Option {
+	s.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(n.workflow),
+		framework.WithProcesses(s.workflow),
 	}
 }
 
-func (n *noeventid) Run(t *testing.T, ctx context.Context) {
-	n.workflow.WaitUntilRunning(t, ctx)
+func (s *simple) Run(t *testing.T, ctx context.Context) {
+	s.workflow.WaitUntilRunning(t, ctx)
 
-	n.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		require.NoError(t, ctx.CallActivity("bar").Await(nil))
+	s.workflow.Registry().AddOrchestratorN("simple-timer", func(ctx *task.OrchestrationContext) (any, error) {
+		require.NoError(t, ctx.CreateTimer(time.Second*3).Await(nil))
 		return nil, nil
 	})
-	n.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
-		return nil, nil
-	})
+	client := s.workflow.BackendClient(t, ctx)
 
-	client := n.workflow.BackendClient(t, ctx)
-
-	_, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewOrchestration(ctx, "simple-timer", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, api.InstanceID("abc"))
+	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
-	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 5, api.WithRerunNewInstanceID("xyz"))
-	require.Error(t, err)
+	newID, err := client.RerunWorkflowFromEvent(ctx, id, 0)
+	require.NoError(t, err)
 
-	assert.Equal(t, status.Error(codes.NotFound, "does not have history event with ID '5'"), err)
+	meta, err := client.FetchOrchestrationMetadata(ctx, newID)
+	require.NoError(t, err)
+	assert.Equal(t, api.RUNTIME_STATUS_RUNNING.String(), meta.GetRuntimeStatus().String())
+	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	require.NoError(t, err)
 }
