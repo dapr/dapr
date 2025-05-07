@@ -11,14 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package orchestrator
 
 import "github.com/dapr/durabletask-go/backend"
 
-func (w *workflow) runEventSink(ch chan *backend.OrchestrationMetadata, cb func(*backend.OrchestrationMetadata)) {
+func (o *orchestrator) runEventSink(ch chan *backend.OrchestrationMetadata, cb func(*backend.OrchestrationMetadata)) {
 	for {
 		select {
-		case <-w.closeCh:
+		case <-o.closeCh:
 			return
 		case val, ok := <-ch:
 			if !ok {
