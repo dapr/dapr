@@ -103,7 +103,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			},
 			{
 				Job: &rtv1.Job{
-					Name:     "test1",
+					Name:     "test2",
 					Schedule: ptr.Of("@daily"),
 					Data: &anypb.Any{
 						Value: []byte("test"),
@@ -113,6 +113,52 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					Ttl:     ptr.Of("20s"),
 				},
 			},
+		} {
+			_, err := client.ScheduleJobAlpha1(ctx, req)
+			require.NoError(t, err)
+		}
+	})
+
+	t.Run("overwrite if exists", func(t *testing.T) {
+		for _, req := range []*rtv1.ScheduleJobRequest{
+			{Job: &rtv1.Job{
+				Name:      "overwrite1",
+				Schedule:  ptr.Of("@daily"),
+				Repeats:   ptr.Of(uint32(1)),
+				Overwrite: true,
+			}}, {Job: &rtv1.Job{
+				Name:      "overwrite1",
+				Schedule:  ptr.Of("@daily"),
+				Repeats:   ptr.Of(uint32(1)),
+				Overwrite: true,
+			}},
+		} {
+			_, err := client.ScheduleJobAlpha1(ctx, req)
+			require.NoError(t, err)
+		}
+	})
+
+	t.Run("do not overwrite if exists", func(t *testing.T) {
+		r := &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
+			Name:     "overwrite2",
+			Schedule: ptr.Of("@daily"),
+			Repeats:  ptr.Of(uint32(1)),
+		}}
+		_, err := client.ScheduleJobAlpha1(ctx, r)
+		require.NoError(t, err)
+
+		for _, req := range []*rtv1.ScheduleJobRequest{
+			{Job: &rtv1.Job{
+				Name:      "overwrite1",
+				Schedule:  ptr.Of("@daily"),
+				Repeats:   ptr.Of(uint32(1)),
+				Overwrite: true,
+			}}, {Job: &rtv1.Job{
+				Name:      "overwrite1",
+				Schedule:  ptr.Of("@daily"),
+				Repeats:   ptr.Of(uint32(1)),
+				Overwrite: true,
+			}},
 		} {
 			_, err := client.ScheduleJobAlpha1(ctx, req)
 			require.NoError(t, err)

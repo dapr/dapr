@@ -45,12 +45,13 @@ func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1p
 
 	//nolint:protogetter
 	return a.scheduleJob(ctx, &runtimev1pb.Job{
-		Name:     job.GetName(),
-		Schedule: job.Schedule,
-		Repeats:  job.Repeats,
-		DueTime:  job.DueTime,
-		Ttl:      job.Ttl,
-		Data:     data,
+		Name:      job.GetName(),
+		Schedule:  job.Schedule,
+		Repeats:   job.Repeats,
+		DueTime:   job.DueTime,
+		Ttl:       job.Ttl,
+		Data:      data,
+		Overwrite: job.GetOverwrite(),
 	})
 }
 
@@ -85,11 +86,12 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 		},
 		//nolint:protogetter
 		Job: &schedulerv1pb.Job{
-			Schedule: job.Schedule,
-			Data:     job.GetData(),
-			Repeats:  job.Repeats,
-			DueTime:  job.DueTime,
-			Ttl:      job.Ttl,
+			Schedule:  job.Schedule,
+			Data:      job.GetData(),
+			Repeats:   job.Repeats,
+			DueTime:   job.DueTime,
+			Ttl:       job.Ttl,
+			Overwrite: job.GetOverwrite(),
 		},
 	}
 

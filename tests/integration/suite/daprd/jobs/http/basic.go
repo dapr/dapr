@@ -56,11 +56,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.scheduler.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/test", b.daprd.HTTPPort())
-
 	httpClient := client.HTTP(t)
 
 	t.Run("bad json", func(t *testing.T) {
+		postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/test", b.daprd.HTTPPort())
 		for _, body := range []string{
 			"",
 			"{}",
@@ -81,13 +80,19 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("good json", func(t *testing.T) {
-		for _, body := range []string{
-			`{"schedule": "@daily"}`,
-			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`,
-			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "{\"@type\": \"type.googleapis.com/google.protobuf.StringValue\", \"value\": \"Hello, World!\"}"}`,
-			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "Hello, World!"}`,
+		type request struct {
+			name string
+			body string
+		}
+
+		for _, r := range []request{
+			{"test1", `{"schedule": "@daily"}`},
+			{"test2", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`},
+			{"test3", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "{\"@type\": \"type.googleapis.com/google.protobuf.StringValue\", \"value\": \"Hello, World!\"}"}`},
+			{"test4", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "Hello, World!"}`},
 		} {
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", b.daprd.HTTPPort(), r.name)
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
 			require.NoError(t, err)
 			resp, err := httpClient.Do(req)
 			require.NoError(t, err)
@@ -98,4 +103,52 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			assert.Empty(t, string(body))
 		}
 	})
+
+	t.Run("overwrite if exists", func(t *testing.T) {
+		type request struct {
+			name string
+			body string
+		}
+
+		for _, r := range []request{
+			{"overwrite1", `{"schedule": "@daily"}`},
+			{"overwrite1", `{"schedule": "@daily", "repeats": 3, "overwrite": true, "due_time": "10s", "ttl": "11s"}`},
+		} {
+			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", b.daprd.HTTPPort(), r.name)
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			assert.Empty(t, string(body))
+		}
+	})
+
+	t.Run("do not overwrite if exist", func(t *testing.T) {
+		type request struct {
+			name       string
+			body       string
+			statusCode int
+		}
+
+		for _, r := range []request{
+			{"overwrite2", `{"schedule": "@daily"}`, http.StatusNoContent},
+			{"overwrite2", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`, http.StatusInternalServerError},
+			{"overwrite2", `{"schedule": "@daily", "repeats": 3, "overwrite": false, "due_time": "10s", "ttl": "11s"}`, http.StatusInternalServerError},
+		} {
+			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", b.daprd.HTTPPort(), r.name)
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			assert.Equal(t, r.statusCode, resp.StatusCode)
+			_, err = io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+		}
+	})
+
 }
