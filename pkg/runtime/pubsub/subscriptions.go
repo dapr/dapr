@@ -20,6 +20,7 @@ import (
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/api/http/consts"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -97,10 +98,16 @@ type (
 	}
 )
 
-func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log logger.Logger, r resiliency.Provider) ([]Subscription, error) {
+func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log logger.Logger, r resiliency.Provider, appID string) ([]Subscription, error) {
 	req := invokev1.NewInvokeMethodRequest("dapr/subscribe").
 		WithHTTPExtension(http.MethodGet, "").
 		WithContentType(invokev1.JSONContentType)
+
+	if appID != "" {
+		req = req.WithMetadata(map[string][]string{
+			consts.DaprAppIDHeader: {appID},
+		})
+	}
 	defer req.Close()
 
 	policyDef := r.BuiltInPolicy(resiliency.BuiltInInitializationRetries)
