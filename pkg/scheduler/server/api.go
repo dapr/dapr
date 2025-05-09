@@ -52,13 +52,13 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		FailurePolicy: schedFPToCron(job.FailurePolicy),
 	}
 
-	if job.Overwrite {
+	if job.GetOverwrite() {
 		err = cron.Add(ctx, serialized.Name(), apiJob)
 	} else {
 		err = cron.AddIfNotExists(ctx, serialized.Name(), apiJob)
 	}
 
-	logWithField := log.WithFields(map[string]any{"overwrite": job.Overwrite})
+	logWithField := log.WithFields(map[string]any{"overwrite": job.GetOverwrite()})
 	if err != nil {
 		logWithField.Errorf("error scheduling job %s: %s", req.GetName(), err)
 		return nil, err

@@ -150,5 +150,4 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, resp.Body.Close())
 		}
 	})
-
 }
