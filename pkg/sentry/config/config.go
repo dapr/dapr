@@ -63,24 +63,26 @@ const (
 
 // Config holds the configuration for the Certificate Authority.
 type Config struct {
-	Port              int
-	ListenAddress     string
-	TrustDomain       string
-	CAStore           string
-	WorkloadCertTTL   time.Duration
-	AllowedClockSkew  time.Duration
-	RootCertPath      string
-	IssuerCertPath    string
-	IssuerKeyPath     string
-	JWTSigningKeyPath string
-	JWKSPath          string
-	JWTEnabled        bool
-	JWTIssuer         *string
-	JWTAudiences      []string
-	Mode              modes.DaprMode
-	Validators        map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
-	DefaultValidator  sentryv1pb.SignCertificateRequest_TokenValidator
-	Features          []daprGlobalConfig.FeatureSpec
+	Port                int
+	ListenAddress       string
+	TrustDomain         string
+	CAStore             string
+	WorkloadCertTTL     time.Duration
+	AllowedClockSkew    time.Duration
+	RootCertPath        string
+	IssuerCertPath      string
+	IssuerKeyPath       string
+	JWTSigningKeyPath   string
+	JWKSPath            string
+	JWTEnabled          bool
+	JWTIssuer           *string
+	JWTAudiences        []string
+	JWTSigningAlgorithm string
+	JWTKeyID            string
+	Mode                modes.DaprMode
+	Validators          map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
+	DefaultValidator    sentryv1pb.SignCertificateRequest_TokenValidator
+	Features            []daprGlobalConfig.FeatureSpec
 }
 
 // FromConfigName returns a Sentry configuration based on a configuration spec.

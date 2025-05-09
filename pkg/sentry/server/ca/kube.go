@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
 const (
@@ -86,19 +87,20 @@ func (k *kube) get(ctx context.Context) (Bundle, generate, error) {
 		}
 		bundle.JWTSigningKey = jwtKey
 		bundle.JWTSigningKeyPEM = jwtKeyPEM
-
-		log.Warnf("!! Set JWT signing key from secret %s", TrustBundleK8sName)
 	} else {
 		needsJWT = true
 	}
 
 	// Process JWKS if available
 	if jwks, ok := secret.Data[filepath.Base(k.config.JWKSPath)]; ok {
-		log.Warnf("!! Verifying JWKS %s", string(jwks))
 		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
 			return Bundle{}, generate{}, fmt.Errorf("failed to verify JWKS: %w", err)
 		}
 		bundle.JWKSJson = jwks
+		bundle.JWKS, err = jwk.Parse(jwks)
+		if err != nil {
+			return Bundle{}, generate{}, fmt.Errorf("failed to parse JWKS: %w", err)
+		}
 	} else {
 		// clear the JWT signing key if JWKS is not available
 		bundle.JWTSigningKey = nil

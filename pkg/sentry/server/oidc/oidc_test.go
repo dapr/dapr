@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -412,11 +413,12 @@ func TestNew(t *testing.T) {
 
 	t.Run("default options", func(t *testing.T) {
 		s := New(Options{
-			Port:          8443,
-			ListenAddress: "0.0.0.0",
-			JWKS:          jwks,
-			Healthz:       healthz.New(),
-			JWKSURI:       "https://example.com/jwks.json",
+			Port:               8443,
+			ListenAddress:      "0.0.0.0",
+			JWKS:               jwks,
+			Healthz:            healthz.New(),
+			JWKSURI:            "https://example.com/jwks.json",
+			SignatureAlgorithm: jwa.ES256,
 		})
 
 		assert.Equal(t, 8443, s.port)
@@ -428,12 +430,13 @@ func TestNew(t *testing.T) {
 
 	t.Run("with custom path prefix", func(t *testing.T) {
 		s := New(Options{
-			Port:          8443,
-			ListenAddress: "0.0.0.0",
-			JWKS:          jwks,
-			Healthz:       healthz.New(),
-			JWKSURI:       "https://example.com/jwks.json",
-			PathPrefix:    "/auth",
+			Port:               8443,
+			ListenAddress:      "0.0.0.0",
+			JWKS:               jwks,
+			Healthz:            healthz.New(),
+			JWKSURI:            "https://example.com/jwks.json",
+			PathPrefix:         "/auth",
+			SignatureAlgorithm: jwa.ES256,
 		})
 
 		assert.Equal(t, "/auth", s.pathPrefix)
@@ -442,12 +445,13 @@ func TestNew(t *testing.T) {
 	t.Run("with custom domains", func(t *testing.T) {
 		domains := []string{"example.com", "api.example.com"}
 		s := New(Options{
-			Port:          8443,
-			ListenAddress: "0.0.0.0",
-			JWKS:          jwks,
-			Healthz:       healthz.New(),
-			JWKSURI:       "https://example.com/jwks.json",
-			Domains:       domains,
+			Port:               8443,
+			ListenAddress:      "0.0.0.0",
+			JWKS:               jwks,
+			Healthz:            healthz.New(),
+			JWKSURI:            "https://example.com/jwks.json",
+			Domains:            domains,
+			SignatureAlgorithm: jwa.ES256,
 		})
 
 		assert.Equal(t, domains, s.domains)
@@ -455,12 +459,13 @@ func TestNew(t *testing.T) {
 
 	t.Run("with custom issuer", func(t *testing.T) {
 		s := New(Options{
-			Port:          8443,
-			ListenAddress: "0.0.0.0",
-			JWKS:          jwks,
-			Healthz:       healthz.New(),
-			JWKSURI:       "https://example.com/jwks.json",
-			JWTIssuer:     "https://auth.example.com",
+			Port:               8443,
+			ListenAddress:      "0.0.0.0",
+			JWKS:               jwks,
+			Healthz:            healthz.New(),
+			JWKSURI:            "https://example.com/jwks.json",
+			JWTIssuer:          "https://auth.example.com",
+			SignatureAlgorithm: jwa.ES256,
 		})
 
 		assert.Equal(t, "https://auth.example.com", s.jwtIssuer)
@@ -470,14 +475,15 @@ func TestNew(t *testing.T) {
 // Helper function to create a test server for unit tests.
 func createTestServer(t *testing.T, jwks []byte, jwtIssuer string, domains []string) *Server {
 	return &Server{
-		port:          8443,
-		listenAddress: "0.0.0.0",
-		jwks:          jwks,
-		htarget:       healthz.New().AddTarget(),
-		jwksURI:       "https://example.com/jwks.json",
-		domains:       domains,
-		jwtIssuer:     jwtIssuer,
-		pathPrefix:    "/",
+		port:               8443,
+		listenAddress:      "0.0.0.0",
+		jwks:               jwks,
+		htarget:            healthz.New().AddTarget(),
+		jwksURI:            "https://example.com/jwks.json",
+		domains:            domains,
+		jwtIssuer:          jwtIssuer,
+		pathPrefix:         "/",
+		signatureAlgorithm: jwa.ES256,
 	}
 }
 
