@@ -17,7 +17,6 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
-	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -26,6 +25,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,18 +42,22 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 
 	// Define test scenarios
 	testCases := []struct {
-		name           string
-		issuer         *string
-		request        *JWTRequest
-		signingKey     crypto.Signer
-		clockSkew      time.Duration
-		expectedError  bool
-		validateClaims func(t *testing.T, token jwt.Token)
+		name             string
+		issuer           *string
+		request          *JWTRequest
+		signingKey       crypto.Signer
+		signingAlgorithm jwa.SignatureAlgorithm
+		keyID            string
+		clockSkew        time.Duration
+		expectedError    bool
+		validateClaims   func(t *testing.T, token jwt.Token)
 	}{
 		{
-			name:       "valid token with default settings",
-			signingKey: ecSigningKey,
-			clockSkew:  time.Minute,
+			name:             "valid token with default settings",
+			signingKey:       ecSigningKey,
+			signingAlgorithm: jwa.ES256,
+			keyID:            "test-key-id",
+			clockSkew:        time.Minute,
 			request: &JWTRequest{
 				Audience:  "example.com",
 				Namespace: "default",
@@ -85,9 +89,11 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			},
 		},
 		{
-			name:       "audience claim is set correctly",
-			signingKey: ecSigningKey,
-			clockSkew:  time.Minute,
+			name:             "audience claim is set correctly",
+			signingKey:       ecSigningKey,
+			signingAlgorithm: jwa.ES256,
+			keyID:            "test-key-id",
+			clockSkew:        time.Minute,
 			request: &JWTRequest{
 				Audience:  "example.com",
 				Namespace: "default",
@@ -105,10 +111,12 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			},
 		},
 		{
-			name:       "valid token with custom issuer",
-			signingKey: ecSigningKey,
-			clockSkew:  time.Minute,
-			issuer:     stringPtr("https://auth.example.com"),
+			name:             "valid token with custom issuer",
+			signingKey:       ecSigningKey,
+			signingAlgorithm: jwa.ES256,
+			keyID:            "test-key-id",
+			clockSkew:        time.Minute,
+			issuer:           stringPtr("https://auth.example.com"),
 			request: &JWTRequest{
 				Audience:  "example.com",
 				Namespace: "default",
@@ -124,9 +132,11 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			},
 		},
 		{
-			name:       "valid token with zero TTL",
-			signingKey: ecSigningKey,
-			clockSkew:  time.Minute,
+			name:             "valid token with zero TTL",
+			signingKey:       ecSigningKey,
+			signingAlgorithm: jwa.ES256,
+			keyID:            "test-key-id",
+			clockSkew:        time.Minute,
 			request: &JWTRequest{
 				Audience:  "example.com",
 				Namespace: "default",
@@ -143,9 +153,11 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			},
 		},
 		{
-			name:       "valid token with RSA signing key",
-			signingKey: rsaSigningKey,
-			clockSkew:  time.Minute,
+			name:             "valid token with RSA signing key",
+			signingKey:       rsaSigningKey,
+			signingAlgorithm: jwa.RS256,
+			keyID:            "test-key-id",
+			clockSkew:        time.Minute,
 			request: &JWTRequest{
 				Audience:  "example.com",
 				Namespace: "default",
@@ -183,9 +195,15 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			signKey, err := jwk.FromRaw(tc.signingKey)
+			require.NoError(t, err)
+
+			signKey.Set(jwk.KeyIDKey, tc.keyID)
+			signKey.Set(jwk.AlgorithmKey, tc.signingAlgorithm)
+
 			// Create issuer with test parameters
 			issuer, err := NewJWTIssuer(
-				tc.signingKey,
+				signKey,
 				tc.issuer,
 				tc.clockSkew,
 				[]string{})
@@ -201,13 +219,11 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.NotEmpty(t, token)
-
-			algo, err := signatureAlgorithmFrom(tc.signingKey)
 			require.NoError(t, err)
 
 			// Parse and validate the token
 			parsedToken, err := jwt.Parse([]byte(token),
-				jwt.WithKey(algo, tc.signingKey.Public()),
+				jwt.WithKey(tc.signingAlgorithm, tc.signingKey.Public()),
 				jwt.WithValidate(true),
 				jwt.WithValidate(true))
 			require.NoError(t, err)
@@ -250,9 +266,15 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	require.NotNil(t, bundle.JWTSigningKeyPEM, "JWT signing key PEM should be generated")
 	require.NotNil(t, bundle.JWKS, "JWKS should be generated")
 
+	signKey, err := jwk.FromRaw(bundle.JWTSigningKey)
+	require.NoError(t, err)
+
+	signKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm)
+	signKey.Set(jwk.KeyIDKey, DefaultJWTKeyID)
+
 	// Create JWT issuer using the bundle's signing key
 	issuer, err := NewJWTIssuer(
-		bundle.JWTSigningKey,
+		signKey,
 		nil,
 		time.Minute,
 		[]string{})
@@ -322,9 +344,15 @@ func TestCustomIssuerInToken(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			signKey, err := jwk.FromRaw(signingKey)
+			require.NoError(t, err)
+
+			signKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm)
+			signKey.Set(jwk.KeyIDKey, DefaultJWTKeyID)
+
 			// Create issuer with test parameters
 			issuer, err := NewJWTIssuer(
-				signingKey,
+				signKey,
 				tc.issuerValue,
 				time.Minute,
 				[]string{})
@@ -342,7 +370,7 @@ func TestCustomIssuerInToken(t *testing.T) {
 			token, err := issuer.GenerateJWT(context.Background(), request)
 			require.NoError(t, err)
 
-			pubKey, err := issuer.signingKey.PublicKey()
+			pubKey, err := issuer.signKey.PublicKey()
 			require.NoError(t, err)
 
 			// Parse token without verification (we just want to check the claims)
@@ -400,9 +428,15 @@ func TestExtraAudiencesInToken(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			signKey, err := jwk.FromRaw(signingKey)
+			require.NoError(t, err)
+
+			signKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm)
+			signKey.Set(jwk.KeyIDKey, DefaultJWTKeyID)
+
 			// Create issuer with test parameters
 			issuer, err := NewJWTIssuer(
-				signingKey,
+				signKey,
 				nil, // no custom issuer
 				time.Minute,
 				tc.extraAudiences)
@@ -420,7 +454,7 @@ func TestExtraAudiencesInToken(t *testing.T) {
 			token, err := issuer.GenerateJWT(context.Background(), request)
 			require.NoError(t, err)
 
-			pubKey, err := issuer.signingKey.PublicKey()
+			pubKey, err := issuer.signKey.PublicKey()
 			require.NoError(t, err)
 
 			// Parse token with verification
@@ -439,97 +473,6 @@ func TestExtraAudiencesInToken(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestSignatureAlgorithmFrom(t *testing.T) {
-	t.Run("with RSA keys", func(t *testing.T) {
-		t.Run("returns RS256 for 2048-bit key", func(t *testing.T) {
-			key, err := rsa.GenerateKey(rand.Reader, 2048)
-			require.NoError(t, err)
-
-			alg, err := signatureAlgorithmFrom(key)
-			require.NoError(t, err)
-			assert.Equal(t, jwa.RS256, alg)
-		})
-
-		t.Run("returns RS384 for 3072-bit key", func(t *testing.T) {
-			key, err := rsa.GenerateKey(rand.Reader, 3072)
-			require.NoError(t, err)
-
-			alg, err := signatureAlgorithmFrom(key)
-			require.NoError(t, err)
-			assert.Equal(t, jwa.RS384, alg)
-		})
-
-		t.Run("returns RS512 for 4096-bit key", func(t *testing.T) {
-			key, err := rsa.GenerateKey(rand.Reader, 4096)
-			require.NoError(t, err)
-
-			alg, err := signatureAlgorithmFrom(key)
-			require.NoError(t, err)
-			assert.Equal(t, jwa.RS512, alg)
-		})
-	})
-
-	t.Run("with ECDSA keys", func(t *testing.T) {
-		t.Run("returns ES256 for P-256 curve", func(t *testing.T) {
-			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-			require.NoError(t, err)
-
-			alg, err := signatureAlgorithmFrom(key)
-			require.NoError(t, err)
-			assert.Equal(t, jwa.ES256, alg)
-		})
-
-		t.Run("returns ES384 for P-384 curve", func(t *testing.T) {
-			key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-			require.NoError(t, err)
-
-			alg, err := signatureAlgorithmFrom(key)
-			require.NoError(t, err)
-			assert.Equal(t, jwa.ES384, alg)
-		})
-
-		t.Run("returns ES512 for P-521 curve", func(t *testing.T) {
-			key, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
-			require.NoError(t, err)
-
-			alg, err := signatureAlgorithmFrom(key)
-			require.NoError(t, err)
-			assert.Equal(t, jwa.ES512, alg)
-		})
-
-		t.Run("returns error for unsupported curve", func(t *testing.T) {
-			key, err := ecdsa.GenerateKey(elliptic.P224(), rand.Reader)
-			require.NoError(t, err)
-
-			_, err = signatureAlgorithmFrom(key)
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "unsupported ecdsa curve bit size")
-		})
-	})
-
-	t.Run("with Ed25519 keys", func(t *testing.T) {
-		t.Run("returns EdDSA", func(t *testing.T) {
-			_, key, err := ed25519.GenerateKey(rand.Reader)
-			require.NoError(t, err)
-
-			alg, err := signatureAlgorithmFrom(key)
-			require.NoError(t, err)
-			assert.Equal(t, jwa.EdDSA, alg)
-		})
-	})
-
-	t.Run("with unsupported key type", func(t *testing.T) {
-		t.Run("returns error", func(t *testing.T) {
-			// Using a mock signer that's not one of the supported types
-			mockSigner := &mockUnsupportedSigner{}
-
-			_, err := signatureAlgorithmFrom(mockSigner)
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "unsupported key type")
-		})
-	})
 }
 
 // mockUnsupportedSigner implements crypto.Signer but is not one of the supported types

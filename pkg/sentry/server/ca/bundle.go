@@ -25,24 +25,39 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+)
+
+const (
+	DefaultJWTKeyID              = "dapr-sentry"
+	DefaultJWTSignatureAlgorithm = jwa.ES256
 )
 
 // Bundle is the bundle of certificates and keys used by the CA.
 type Bundle struct {
-	TrustAnchors     []byte
-	IssChainPEM      []byte
-	IssKeyPEM        []byte
-	IssChain         []*x509.Certificate
-	IssKey           any
-	JWTSigningKey    crypto.Signer
-	JWTSigningKeyPEM []byte // PEM for serialization
-	JWKS             jwk.Set
-	JWKSJson         []byte
+	// TrustAnchors is the PEM encoded trust anchors.
+	TrustAnchors []byte
+	// IssChainPEM is the PEM encoded issuer certificate chain.
+	IssChainPEM []byte
+	// IssKeyPEM is the PEM encoded issuer private key.
+	IssKeyPEM []byte
+	// IssChain is the issuer certificate chain.
+	IssChain []*x509.Certificate
+	// IssKey is the issuer private key.
+	IssKey any
+	// JWTSigningKey is the private key used to sign JWTs.
+	JWTSigningKey crypto.Signer
+	// JWTSigningKeyPEM is the PEM encoded private key used to sign JWTs.
+	JWTSigningKeyPEM []byte
+	// JWKS is the JWK set used to verify JWTs.
+	JWKS jwk.Set
+	// JWKSJson is the JSON encoded JWK set used to verify JWTs.
+	JWKSJson []byte
 }
 
 // Warning: this equals assumes that the serialized fields
-// and their associated keys are the same before comparing.
+// and their associated keys are consistent.
 func (b Bundle) Equals(other Bundle) bool {
 	return reflect.DeepEqual(b.TrustAnchors, other.TrustAnchors) &&
 		reflect.DeepEqual(b.IssChainPEM, other.IssChainPEM) &&
@@ -52,19 +67,40 @@ func (b Bundle) Equals(other Bundle) bool {
 		reflect.DeepEqual(b.JWKSJson, other.JWKSJson)
 }
 
+func (b *Bundle) Merge(other Bundle) {
+	if len(other.TrustAnchors) > 0 {
+		b.TrustAnchors = other.TrustAnchors
+	}
+	if len(other.IssChainPEM) > 0 {
+		b.IssChainPEM = other.IssChainPEM
+	}
+	if len(other.IssKeyPEM) > 0 {
+		b.IssKeyPEM = other.IssKeyPEM
+	}
+	if len(other.JWTSigningKeyPEM) > 0 {
+		b.JWTSigningKeyPEM = other.JWTSigningKeyPEM
+	}
+	if len(other.JWKSJson) > 0 {
+		b.JWKSJson = other.JWKSJson
+	}
+}
+
 func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew time.Duration, overrideCATTL *time.Duration, gen generate) (Bundle, error) {
 	var bundle Bundle
-	if gen.X509() {
-		rootCert, err := generateRootCert(trustDomain, allowedClockSkew, overrideCATTL)
-		if err != nil {
-			return Bundle{}, fmt.Errorf("failed to generate root cert: %w", err)
-		}
 
-		rootCertDER, err := x509.CreateCertificate(rand.Reader, rootCert, rootCert, rootKey.Public(), rootKey)
-		if err != nil {
-			return Bundle{}, fmt.Errorf("failed to sign root certificate: %w", err)
-		}
-		trustAnchors := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCertDER})
+	rootCert, err := generateRootCert(trustDomain, allowedClockSkew, overrideCATTL)
+	if err != nil {
+		return Bundle{}, fmt.Errorf("failed to generate root cert: %w", err)
+	}
+
+	rootCertDER, err := x509.CreateCertificate(rand.Reader, rootCert, rootCert, rootKey.Public(), rootKey)
+	if err != nil {
+		return Bundle{}, fmt.Errorf("failed to sign root certificate: %w", err)
+	}
+	trustAnchors := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCertDER})
+
+	if gen.X509() {
+		log.Debugf("Generating X.509 bundle with trust domain %s", trustDomain)
 
 		issKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
@@ -99,17 +135,11 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 	}
 
 	if gen.JWT() {
+		log.Debugf("Generating JWT bundle with trust domain %s", trustDomain)
+
 		jwtKey, err := jwk.FromRaw(rootKey)
 		if err != nil {
 			return Bundle{}, fmt.Errorf("failed to create JWK from key: %w", err)
-		}
-
-		// Set key ID and algorithm
-		if err := jwtKey.Set(jwk.KeyIDKey, DefaultJWTKeyID); err != nil {
-			return Bundle{}, fmt.Errorf("failed to set JWK kid: %w", err)
-		}
-		if err := jwtKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm); err != nil {
-			return Bundle{}, fmt.Errorf("failed to set JWK alg: %w", err)
 		}
 
 		// Marshal the private key to PKCS8 for storage
@@ -125,6 +155,12 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 			return Bundle{}, fmt.Errorf("failed to get public JWK: %w", err)
 		}
 
+		jwtPublicJWK.Set(jwk.KeyIDKey, DefaultJWTKeyID)
+		jwtPublicJWK.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm)
+		jwtPublicJWK.Set(jwk.KeyUsageKey, "sig")
+
+		// TODO: consider setting x5c, x5t, and x5t#S256
+
 		jwkSet := jwk.NewSet()
 		jwkSet.AddKey(jwtPublicJWK)
 
@@ -137,7 +173,6 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 		bundle.JWTSigningKeyPEM = jwtKeyPEM
 		bundle.JWKS = jwkSet
 		bundle.JWKSJson = jwksJson
-
 	}
 
 	return bundle, nil
