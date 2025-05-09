@@ -15,23 +15,13 @@ package ca
 
 import (
 	"context"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/ed25519"
-	"crypto/rsa"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-)
-
-const (
-	// for both the provided or generated signing keys,
-	// if "kid" not set, we will set it to this value.
-	DefaultJWTKeyID              = "dapr-sentry"
-	DefaultJWTSignatureAlgorithm = jwa.ES256
 )
 
 // By defaults we include common cloud audiences in the
@@ -61,8 +51,8 @@ type JWTRequest struct {
 }
 
 type jwtIssuer struct {
-	// signingKey is the key used to sign the JWT
-	signingKey jwk.Key
+	// signKey is the key used to sign the JWT
+	signKey jwk.Key
 
 	// issuer is the issuer of the JWT (optional)
 	issuer *string
@@ -74,41 +64,9 @@ type jwtIssuer struct {
 	extraAudiences []string
 }
 
-func NewJWTIssuer(signingKey crypto.Signer, issuer *string, allowedClockSkew time.Duration, extraAudiences []string) (jwtIssuer, error) {
-	if signingKey == nil {
-		return jwtIssuer{}, fmt.Errorf("signing key cannot be nil")
-	}
-
-	sk, err := jwk.FromRaw(signingKey)
-	if err != nil {
-		return jwtIssuer{}, fmt.Errorf("failed to create JWK from signing key: %w", err)
-	}
-
-	// jwk.FromRaw does not set the algorithm, so we
-	// need to set it manually if it is not already set.
-	if sk.Algorithm().String() == "" {
-		alg, err := signatureAlgorithmFrom(signingKey)
-		if err != nil {
-			return jwtIssuer{}, fmt.Errorf("failed to determine signature algorithm: %w", err)
-		}
-
-		log.Debugf("Setting jwt issuer algorithm to %s", alg)
-		if err := sk.Set(jwk.AlgorithmKey, alg.String()); err != nil {
-			return jwtIssuer{}, fmt.Errorf("failed to set algorithm: %w", err)
-		}
-	} else {
-		log.Debugf("Using provided jwt issuer algorithm %s", sk.Algorithm())
-	}
-
-	if sk.KeyID() == "" {
-		log.Debugf("Setting jwt issuer key id to %s", DefaultJWTKeyID)
-		if err := sk.Set(jwk.KeyIDKey, DefaultJWTKeyID); err != nil {
-			return jwtIssuer{}, fmt.Errorf("failed to set key ID: %w", err)
-		}
-	}
-
+func NewJWTIssuer(signKey jwk.Key, issuer *string, allowedClockSkew time.Duration, extraAudiences []string) (jwtIssuer, error) {
 	return jwtIssuer{
-		signingKey:       sk,
+		signKey:          signKey,
 		issuer:           issuer,
 		allowedClockSkew: allowedClockSkew,
 		extraAudiences:   extraAudiences,
@@ -131,7 +89,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	if req.AppID == "" {
 		return "", fmt.Errorf("app ID cannot be empty")
 	}
-	if i.signingKey == nil {
+	if i.signKey == nil {
 		return "", fmt.Errorf("JWT signing key is not available")
 	}
 
@@ -144,13 +102,21 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 
 	audiences := append([]string{req.Audience}, i.extraAudiences...)
 
+	// Generate a random nonce for the token
+	nonce, err := generateNonce()
+	if err != nil {
+		log.Errorf("Error generating nonce: %v", err)
+		return "", fmt.Errorf("error generating nonce: %w", err)
+	}
+
 	// Create JWT token with claims builder
 	builder := jwt.NewBuilder().
 		Subject(subject).
 		IssuedAt(now).
 		Audience(audiences).
 		NotBefore(notBefore).
-		Claim("use", "sig"). // required by Azure
+		Claim("nonce", nonce). // Add nonce claim for enhanced security
+		Claim("use", "sig").   // Needed for Azure
 		Expiration(notAfter)
 
 	// Set issuer only if configured
@@ -165,8 +131,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 		return "", fmt.Errorf("error creating JWT token: %w", err)
 	}
 
-	signedToken, err := jwt.Sign(token,
-		jwt.WithKey(i.signingKey.Algorithm(), i.signingKey))
+	signedToken, err := jwt.Sign(token, jwt.WithKey(i.signKey.Algorithm(), i.signKey))
 	if err != nil {
 		log.Errorf("Error signing JWT token: %v", err)
 		return "", fmt.Errorf("error signing JWT token: %w", err)
@@ -175,32 +140,11 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	return string(signedToken), nil
 }
 
-func signatureAlgorithmFrom(signer crypto.Signer) (jwa.SignatureAlgorithm, error) {
-	switch k := signer.(type) {
-	case *rsa.PrivateKey:
-		bitSize := k.Size() * 8
-		switch {
-		case bitSize >= 4096:
-			return jwa.RS512, nil
-		case bitSize >= 3072:
-			return jwa.RS384, nil
-		default:
-			return jwa.RS256, nil // consider deprecating support for RS256
-		}
-	case *ecdsa.PrivateKey:
-		switch k.Curve.Params().BitSize {
-		case 521:
-			return jwa.ES512, nil
-		case 384:
-			return jwa.ES384, nil
-		case 256:
-			return jwa.ES256, nil
-		default:
-			return "", fmt.Errorf("unsupported ecdsa curve bit size: %d", k.Curve.Params().BitSize)
-		}
-	case ed25519.PrivateKey:
-		return jwa.EdDSA, nil
-	default:
-		return "", fmt.Errorf("unsupported key type %T", signer)
+// generateNonce creates a random nonce to be used in the JWT
+func generateNonce() (string, error) {
+	nonceBytes := make([]byte, 16) // 16 bytes = 128 bits
+	if _, err := rand.Read(nonceBytes); err != nil {
+		return "", fmt.Errorf("failed to generate random nonce: %w", err)
 	}
+	return hex.EncodeToString(nonceBytes), nil
 }
