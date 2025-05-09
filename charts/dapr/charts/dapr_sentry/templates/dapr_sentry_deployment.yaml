@@ -201,6 +201,12 @@ spec:
 {{- if .Values.jwt.audiences }}
         - "--jwt-audiences={{ join "," .Values.jwt.audiences }}"
 {{- end }}
+{{- if .Values.jwt.signingAlgorithm }}
+        - "--jwt-signing-algorithm={{ .Values.jwt.signingAlgorithm }}"
+{{- end }}
+{{- if .Values.jwt.keyID }}
+        - "--jwt-key-id={{ .Values.jwt.keyID }}"
+{{- end }}
 {{- if gt (.Values.oidc.httpPort | int) 0 }}
         - "--oidc-http-port={{ .Values.oidc.httpPort }}"
 {{- end }}

@@ -101,14 +101,16 @@ func TestNew(t *testing.T) {
 		jwksPath := filepath.Join(dir, "jwks.json")
 		jwtKeyPath := filepath.Join(dir, "jwt.key")
 		config := config.Config{
-			RootCertPath:      rootCertPath,
-			IssuerCertPath:    issuerCertPath,
-			IssuerKeyPath:     issuerKeyPath,
-			JWTEnabled:        true,
-			JWKSPath:          jwksPath,
-			JWTSigningKeyPath: jwtKeyPath,
-			TrustDomain:       "test.example.com",
-			Mode:              modes.StandaloneMode,
+			RootCertPath:        rootCertPath,
+			IssuerCertPath:      issuerCertPath,
+			IssuerKeyPath:       issuerKeyPath,
+			JWTEnabled:          true,
+			JWKSPath:            jwksPath,
+			JWTSigningKeyPath:   jwtKeyPath,
+			JWTSigningAlgorithm: DefaultJWTSignatureAlgorithm.String(),
+			JWTKeyID:            DefaultJWTKeyID,
+			TrustDomain:         "test.example.com",
+			Mode:                modes.StandaloneMode,
 		}
 
 		caObj, err := New(t.Context(), config)

@@ -140,6 +140,14 @@ func Run() {
 		cfg.JWTAudiences = opts.JWTAudiences
 	}
 
+	if opts.JWTSigningAlgorithm != "" {
+		cfg.JWTSigningAlgorithm = opts.JWTSigningAlgorithm
+	}
+
+	if opts.JWTKeyID != "" {
+		cfg.JWTKeyID = opts.JWTKeyID
+	}
+
 	// We use runner manager inception here since we want the inner manager to be
 	// restarted when the CA server needs to be restarted because of file events.
 	// We don't want to restart the healthz server and file watcher on file

@@ -247,7 +247,7 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 	scheme := "https"
 	if s.insecure {
 		scheme = "http"
-		log.Debug("Using HTTP scheme for OIDC discovery document in insecure mode")
+		log.Infof("Using HTTP scheme for OIDC discovery document in insecure mode")
 	}
 
 	host := r.Host
@@ -329,6 +329,11 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 		jwks = jwksURI.String()
 	}
 
+	var signAlg string
+	if s.signatureAlgorithm != nil {
+		signAlg = s.signatureAlgorithm.String()
+	}
+
 	// Create the OIDC discovery document that matches the JWT token implementation
 	discovery := OIDCDiscoveryDocument{
 		Issuer:                           issuer,
@@ -336,7 +341,7 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 		AuthorizationEndpoint:            issuer + "/authorize", // WARN: not implemented
 		ResponseTypesSupported:           []string{"id_token"},
 		SubjectTypesSupported:            []string{"public"},
-		IDTokenSigningAlgValuesSupported: []string{string(s.signatureAlgorithm.String())},
+		IDTokenSigningAlgValuesSupported: []string{signAlg},
 		ScopesSupported:                  []string{"openid"},
 		ClaimsSupported:                  []string{"sub", "iss", "aud", "exp", "iat", "nbf", "use"},
 	}

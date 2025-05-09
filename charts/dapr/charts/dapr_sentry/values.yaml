@@ -40,11 +40,15 @@ jwt:
   # Issuer value for JWT tokens (no issuer if empty)
   issuer: ""
   # List of audiences to include in JWT tokens
-  audiences: []
-  # Example:
   # audiences:
   #   - "api://AzureADTokenExchange"
   #   - "sts.amazonaws.com"
+  audiences: []
+  # Algorithm used for JWT signing (e.g., ES256, RS256)
+  signingAlgorithm: ""
+  # Key ID (kid) used for JWT signing
+  keyID: ""
+
 
 oidc:
   # The port for the OIDC HTTP server (disabled if 0)
