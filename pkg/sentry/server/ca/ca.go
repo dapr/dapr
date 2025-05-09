@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/kubernetes"
 
@@ -87,7 +88,7 @@ type JWTIssuer interface {
 	JWTSignatureAlgorithm() jwa.KeyAlgorithm
 }
 
-// generate represents the type of credentials to generate.
+// generate represents the type of credentials that require generation.
 type generate struct {
 	x509 bool
 	jwt  bool
@@ -151,12 +152,13 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 			return nil, err
 		}
 
-		bundle, err = GenerateBundle(rootKey, conf.TrustDomain, conf.AllowedClockSkew, nil, gen)
+		genBundle, err := GenerateBundle(rootKey, conf.TrustDomain, conf.AllowedClockSkew, nil, gen)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate CA bundle: %w", err)
 		}
+		bundle.Merge(genBundle)
 
-		log.Info("Root and issuer certs generated")
+		log.Info("Merged provided and generated CA bundle")
 
 		if err := castore.store(ctx, bundle); err != nil {
 			return nil, fmt.Errorf("failed to store CA bundle: %w", err)
@@ -165,7 +167,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		log.Info("Self-signed certs generated and persisted successfully")
 		monitoring.IssuerCertChanged()
 	} else {
-		log.Info("Root and issuer certs found: using existing certs")
+		log.Info("Root and issuer certs found: using credentials from store")
 	}
 	monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 
@@ -173,8 +175,28 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	if conf.JWTEnabled {
 		log.Info("JWT signing enabled")
 
+		if bundle.JWTSigningKey == nil {
+			return nil, fmt.Errorf("JWT signing key not found in bundle")
+		}
+		if bundle.JWTSigningKeyPEM == nil {
+			return nil, fmt.Errorf("JWT signing key PEM not found in bundle")
+		}
+		if bundle.JWKS == nil {
+			return nil, fmt.Errorf("JWKS not found in bundle")
+		}
+		if bundle.JWKSJson == nil {
+			return nil, fmt.Errorf("JWKS JSON not found in bundle")
+		}
+
+		signKey, err := jwk.FromRaw(bundle.JWTSigningKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create JWK from key: %w", err)
+		}
+		signKey.Set(jwk.KeyIDKey, conf.JWTKeyID)
+		signKey.Set(jwk.AlgorithmKey, conf.JWTSigningAlgorithm)
+
 		jwtIssuer, err = NewJWTIssuer(
-			bundle.JWTSigningKey,
+			signKey,
 			conf.JWTIssuer,
 			conf.AllowedClockSkew,
 			conf.JWTAudiences)
@@ -230,8 +252,8 @@ func (c *ca) JWKS() []byte {
 }
 
 func (c *ca) JWTSignatureAlgorithm() jwa.KeyAlgorithm {
-	if c.jwtIssuer.signingKey == nil {
-		return jwa.KeyAlgorithmFrom(DefaultJWTSignatureAlgorithm)
+	if c.jwtIssuer.signKey == nil {
+		return nil
 	}
-	return c.jwtIssuer.signingKey.Algorithm()
+	return c.jwtIssuer.signKey.Algorithm()
 }

@@ -134,13 +134,18 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 		}).Start,
 	)
 
-	// Add HTTP server for OIDC endpoints if enabled
-	if opts.OIDCHTTPPort > 0 {
+	// Start HTTP server for OIDC endpoints if enabled
+	if opts.OIDCHTTPPort > 0 && opts.Config.JWTEnabled {
 		log.Infof("Starting OIDC HTTP server on port %d", opts.OIDCHTTPPort)
 
 		var issuer string
 		if opts.Config.JWTIssuer != nil {
 			issuer = *opts.Config.JWTIssuer
+		}
+
+		signAlg := camngr.JWTSignatureAlgorithm()
+		if signAlg == nil {
+			return nil, fmt.Errorf("failed to get JWT signature algorithm from signing key")
 		}
 
 		httpServer := oidc.New(oidc.Options{
@@ -153,7 +158,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 			Domains:            opts.OIDCDomains,
 			TLSConfig:          opts.OIDCTLSConfig,
 			PathPrefix:         opts.ODICPathPrefix,
-			SignatureAlgorithm: camngr.JWTSignatureAlgorithm(),
+			SignatureAlgorithm: signAlg,
 			Insecure:           opts.OIDCInsecure,
 		})
 
