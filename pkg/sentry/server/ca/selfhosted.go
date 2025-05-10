@@ -55,44 +55,44 @@ func (s *selfhosted) store(_ context.Context, bundle Bundle) error {
 }
 
 // get retrieves the existing certificate bundle from the filesystem.
-func (s *selfhosted) get(_ context.Context) (Bundle, generate, error) {
-	needsX509 := false
+func (s *selfhosted) get(_ context.Context) (Bundle, CredentialGenOptions, error) {
+	requireX509 := false
 
 	// Read trust anchors (root certificate)
 	trustAnchors, err := os.ReadFile(s.config.RootCertPath)
 	if os.IsNotExist(err) {
-		needsX509 = true
+		requireX509 = true
 	} else if err != nil {
-		return Bundle{}, generate{}, fmt.Errorf("failed to read root certificate: %w", err)
+		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to read root certificate: %w", err)
 	}
 
 	// Read issuer certificate chain
 	issChainPEM, err := os.ReadFile(s.config.IssuerCertPath)
 	if os.IsNotExist(err) {
-		needsX509 = true
+		requireX509 = true
 	} else if err != nil {
-		return Bundle{}, generate{}, fmt.Errorf("failed to read issuer certificate: %w", err)
+		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to read issuer certificate: %w", err)
 	}
 
 	// Read issuer private key
 	issKeyPEM, err := os.ReadFile(s.config.IssuerKeyPath)
 	if os.IsNotExist(err) {
-		needsX509 = true
+		requireX509 = true
 	} else if err != nil {
-		return Bundle{}, generate{}, fmt.Errorf("failed to read issuer key: %w", err)
+		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to read issuer key: %w", err)
 	}
 
 	// If all X.509 certificates and keys exist, verify them
 	var bundle Bundle
-	if !needsX509 {
+	if !requireX509 {
 		bundle, err = verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
 		if err != nil {
-			return Bundle{}, generate{}, fmt.Errorf("failed to verify CA bundle: %w", err)
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify CA bundle: %w", err)
 		}
 	}
 
 	// Check if JWT components need to be generated
-	needsJWT := false
+	requireJWT := false
 
 	// Read JWT signing key
 	jwtKeyPEM, err := os.ReadFile(s.config.JWTSigningKeyPath)
@@ -100,16 +100,16 @@ func (s *selfhosted) get(_ context.Context) (Bundle, generate, error) {
 		// JWT key exists, load it
 		jwtKey, err := loadJWTSigningKey(jwtKeyPEM)
 		if err != nil {
-			return Bundle{}, generate{}, fmt.Errorf("failed to load JWT signing key: %w", err)
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to load JWT signing key: %w", err)
 		}
 		bundle.JWTSigningKey = jwtKey
 		bundle.JWTSigningKeyPEM = jwtKeyPEM
 	} else if os.IsNotExist(err) {
 		// JWT key doesn't exist, need to generate it
-		needsJWT = true
+		requireJWT = true
 	} else {
 		// Unexpected error
-		return Bundle{}, generate{}, fmt.Errorf("error reading JWT signing key: %w", err)
+		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("error reading JWT signing key: %w", err)
 	}
 
 	// Read JWKS
@@ -117,19 +117,19 @@ func (s *selfhosted) get(_ context.Context) (Bundle, generate, error) {
 	if err == nil {
 		// JWKS exists, verify it
 		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
-			return Bundle{}, generate{}, fmt.Errorf("failed to verify JWKS: %w", err)
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify JWKS: %w", err)
 		}
 		bundle.JWKSJson = jwks
 	} else if os.IsNotExist(err) {
 		// JWKS doesn't exist, need to generate it
-		needsJWT = true
+		requireJWT = true
 	} else {
 		// Unexpected error
-		return Bundle{}, generate{}, fmt.Errorf("error reading JWKS: %w", err)
+		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("error reading JWKS: %w", err)
 	}
 
-	return bundle, generate{
-		x509: needsX509,
-		jwt:  needsJWT,
+	return bundle, CredentialGenOptions{
+		RequireX509: requireX509,
+		RequireJWT:  requireJWT,
 	}, nil
 }
