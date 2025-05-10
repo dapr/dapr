@@ -29,11 +29,11 @@ import (
 // needing to know the trust domain which is the required
 // audience.
 // Users can override these defaults via config.
-var DefaultExtraAudiences = []string{
-	"api://AzureADTokenExchange",
-	"sts.amazonaws.com",
-	"iam.googleapis.com",
-}
+// Examples:
+// - api://AzureADTokenExchange
+// - sts.amazonaws.com
+// - iam.googleapis.com
+var DefaultExtraAudiences = []string{}
 
 // JWTRequest is the request for generating a JWT
 type JWTRequest struct {
