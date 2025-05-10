@@ -32,7 +32,7 @@ tls:
 
 jwt:
   # Enable JWT token issuance by Sentry
-  enabled: true
+  enabled: false
   # JWT signing key filename
   keyFilename: ""
   # JWKS (JSON Web Key Set) filename
@@ -59,10 +59,13 @@ oidc:
   pathPrefix: ""
   # List of allowed domains for OIDC HTTP endpoint requests
   domains: []
-  # TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
-  tlsCertFile: ""
-  # TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
-  tlsKeyFile: ""
+  tls:
+    # Insecure flag for the OIDC HTTP server (default: false)
+    insecure: false
+    # TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
+    certFile: ""
+    # TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
+    keyFile: ""
 
 livenessProbe:
   initialDelaySeconds: 3
