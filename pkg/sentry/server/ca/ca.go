@@ -19,6 +19,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
 
@@ -88,28 +89,23 @@ type JWTIssuer interface {
 	JWTSignatureAlgorithm() jwa.KeyAlgorithm
 }
 
-// generate represents the type of credentials that require generation.
-type generate struct {
-	x509 bool
-	jwt  bool
+// CredentialGenOptions represents the type of credentials that require generation.
+type CredentialGenOptions struct {
+	// RequireX509 indicates whether we need to generate X.509 certificates.
+	RequireX509 bool
+
+	// RequireJWT indicates whether we need to generate JWT signing keys.
+	RequireJWT bool
 }
 
-func (g *generate) Any() bool {
-	return g.x509 || g.jwt
-}
-
-func (g *generate) X509() bool {
-	return g.x509
-}
-
-func (g *generate) JWT() bool {
-	return g.jwt
+func (g *CredentialGenOptions) Any() bool {
+	return g.RequireX509 || g.RequireJWT
 }
 
 // store is the interface for the trust bundle backend store.
 type store interface {
 	store(context.Context, Bundle) error
-	get(context.Context) (Bundle, generate, error)
+	get(context.Context) (Bundle, CredentialGenOptions, error)
 }
 
 // ca is the implementation of the CA Signer.
@@ -139,26 +135,33 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		castore = &selfhosted{config: conf}
 	}
 
-	bundle, gen, err := castore.get(ctx)
+	bundle, genOpts, err := castore.get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CA bundle: %w", err)
 	}
 
-	if gen.Any() {
+	if genOpts.Any() {
 		log.Info("Root and issuer certs not found: generating self signed CA")
 
-		rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		// Generate a key for X.509 certificates
+		x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to generate ECDSA key for X.509 certificates: %w", err)
 		}
 
-		genBundle, err := GenerateBundle(rootKey, conf.TrustDomain, conf.AllowedClockSkew, nil, gen)
+		// Generate a key for JWT signing
+		jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate RSA key for JWT signing: %w", err)
+		}
+
+		genBundle, err := GenerateBundle(x509RootKey, jwtRootKey, conf.TrustDomain, conf.AllowedClockSkew, nil, genOpts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate CA bundle: %w", err)
 		}
-		bundle.Merge(genBundle)
 
-		log.Info("Merged provided and generated CA bundle")
+		// Merge the generated bundle into the provided one
+		bundle.Merge(genBundle)
 
 		if err := castore.store(ctx, bundle); err != nil {
 			return nil, fmt.Errorf("failed to store CA bundle: %w", err)
@@ -203,6 +206,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWT issuer: %w", err)
 		}
+
 	}
 
 	return &ca{
