@@ -18,6 +18,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
@@ -110,9 +111,15 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 
 	// We need to run the Kubernetes API server with TLS so that HTTP/2.0 is
 	// enabled, which is required for informers.
-	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	bundle, err := ca.GenerateBundle(pk, "kubernetes.integration.dapr.io", time.Second*5, nil)
+	// Generate a separate key for JWT signing
+	jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	bundle, err := ca.GenerateBundle(x509RootKey, jwtRootKey, "kubernetes.integration.dapr.io", time.Second*5, nil, ca.CredentialGenOptions{
+		RequireX509: true,
+		RequireJWT:  true,
+	})
 	require.NoError(t, err)
 	leafpk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)

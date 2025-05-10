@@ -50,33 +50,33 @@ func TestKube_get(t *testing.T) {
 	jwks, err := jwk.Parse(jwksBytes)
 	require.NoError(t, err)
 
-	shouldGenX509 := func(g generate) bool {
-		return g.x509
+	shouldGenX509 := func(g CredentialGenOptions) bool {
+		return g.RequireX509
 	}
-	shouldNotGenX509 := func(g generate) bool {
-		return !g.x509
+	shouldNotGenX509 := func(g CredentialGenOptions) bool {
+		return !g.RequireX509
 	}
-	shouldGenJWT := func(g generate) bool {
-		return g.jwt
+	shouldGenJWT := func(g CredentialGenOptions) bool {
+		return g.RequireJWT
 	}
-	shouldGenX509Exclusive := func(g generate) bool {
-		return g.x509 && !g.jwt
+	shouldGenX509Exclusive := func(g CredentialGenOptions) bool {
+		return g.RequireX509 && !g.RequireJWT
 	}
-	shouldGenJWTExclusive := func(g generate) bool {
-		return !g.x509 && g.jwt
+	shouldGenJWTExclusive := func(g CredentialGenOptions) bool {
+		return !g.RequireX509 && g.RequireJWT
 	}
-	shouldGenAll := func(g generate) bool {
-		return g.x509 && g.jwt
+	shouldGenAll := func(g CredentialGenOptions) bool {
+		return g.RequireX509 && g.RequireJWT
 	}
-	shouldNotGen := func(g generate) bool {
-		return !g.x509 && !g.jwt
+	shouldNotGen := func(g CredentialGenOptions) bool {
+		return !g.RequireX509 && !g.RequireJWT
 	}
 
 	tests := map[string]struct {
 		sec         *corev1.Secret
 		cm          *corev1.ConfigMap
 		expBundle   Bundle
-		expGenCheck func(generate) bool
+		expGenCheck func(CredentialGenOptions) bool
 		expErr      bool
 	}{
 		"if secret doesn't exist, expect error": {

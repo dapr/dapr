@@ -21,6 +21,7 @@ import (
 	"net"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -196,7 +197,8 @@ func (s *Server) Run(ctx context.Context) error {
 		runners = append(runners, s.controller)
 	}
 
-	mngr := concurrency.NewRunnerCloserManager(log, nil, runners...)
+	gracePeriod := time.Second * 5
+	mngr := concurrency.NewRunnerCloserManager(log, &gracePeriod, runners...)
 	if err := mngr.AddCloser(s.etcd); err != nil {
 		return err
 	}
