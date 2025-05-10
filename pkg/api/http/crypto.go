@@ -25,7 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/kit/ptr"
 	encv1 "github.com/dapr/kit/schemes/enc/v1"
-	"github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 const (
@@ -110,7 +110,7 @@ func (a *api) onCryptoEncrypt(w http.ResponseWriter, r *http.Request) {
 		WrapKeyFn: a.universal.CryptoGetWrapKeyFn(ctx, componentName, component),
 
 		// The next values are optional and could be empty
-		OmitKeyName:       utils.IsTruthy(r.Header.Get(cryptoHeaderOmitDecryptionKeyName)),
+		OmitKeyName:       kitstrings.IsTruthy(r.Header.Get(cryptoHeaderOmitDecryptionKeyName)),
 		DecryptionKeyName: r.Header.Get(cryptoHeaderDecryptionKeyName),
 	}
 

@@ -27,7 +27,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 const (
@@ -384,7 +384,7 @@ func init() {
 	}
 	{
 		v, _ := os.LookupEnv(DisableAPILoggingEnvVar)
-		EnableAPILogging = !utils.IsTruthy(v)
+		EnableAPILogging = !kitstrings.IsTruthy(v)
 	}
-	EnableDebugLogging = utils.IsTruthy(os.Getenv(DebugLoggingEnvVar))
+	EnableDebugLogging = kitstrings.IsTruthy(os.Getenv(DebugLoggingEnvVar))
 }
