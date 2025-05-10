@@ -224,7 +224,6 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			// Parse and validate the token
 			parsedToken, err := jwt.Parse([]byte(token),
 				jwt.WithKey(tc.signingAlgorithm, tc.signingKey.Public()),
-				jwt.WithValidate(true),
 				jwt.WithValidate(true))
 			require.NoError(t, err)
 
@@ -250,14 +249,18 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 // TestJWTIssuerWithBundleGeneration tests that JWT keys are properly generated
 // and included in the CA bundle.
 func TestJWTIssuerWithBundleGeneration(t *testing.T) {
-	// Generate a test root key for the bundle
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	// Generate a test root key for X.509 certificates
+	x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	// Generate a separate key for JWT signing
+	jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	// Generate the bundle
-	bundle, err := GenerateBundle(rootKey, "example.com", time.Minute, nil, generate{
-		x509: true,
-		jwt:  true,
+	bundle, err := GenerateBundle(x509RootKey, jwtRootKey, "example.com", time.Minute, nil, CredentialGenOptions{
+		RequireX509: true,
+		RequireJWT:  true,
 	})
 	require.NoError(t, err)
 
@@ -265,6 +268,9 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	require.NotNil(t, bundle.JWTSigningKey, "JWT signing key should be generated")
 	require.NotNil(t, bundle.JWTSigningKeyPEM, "JWT signing key PEM should be generated")
 	require.NotNil(t, bundle.JWKS, "JWKS should be generated")
+
+	// Verify the JWT signing key is the one we provided
+	require.Equal(t, jwtRootKey, bundle.JWTSigningKey)
 
 	signKey, err := jwk.FromRaw(bundle.JWTSigningKey)
 	require.NoError(t, err)
@@ -304,7 +310,7 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	assert.Equal(t, "spiffe://example.com/ns/default/test-app", sub)
 }
 
-// Helper function to parse the JWT and get the claims
+// TestCustomIssuerInToken tests that the issuer claim is correctly set in the JWT token
 func TestCustomIssuerInToken(t *testing.T) {
 	// Generate a test private key for JWT signing
 	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -347,7 +353,8 @@ func TestCustomIssuerInToken(t *testing.T) {
 			signKey, err := jwk.FromRaw(signingKey)
 			require.NoError(t, err)
 
-			signKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm)
+			// Use ES256 algorithm which is appropriate for ECDSA P-256 keys
+			signKey.Set(jwk.AlgorithmKey, jwa.ES256)
 			signKey.Set(jwk.KeyIDKey, DefaultJWTKeyID)
 
 			// Create issuer with test parameters
@@ -373,11 +380,10 @@ func TestCustomIssuerInToken(t *testing.T) {
 			pubKey, err := issuer.signKey.PublicKey()
 			require.NoError(t, err)
 
-			// Parse token without verification (we just want to check the claims)
+			// Parse token with verification
 			parsedToken, err := jwt.Parse([]byte(token),
-				jwt.WithKey(DefaultJWTSignatureAlgorithm, pubKey),
-				jwt.WithValidate(true),
-				jwt.WithValidate(false))
+				jwt.WithKey(jwa.ES256, pubKey),
+				jwt.WithValidate(true))
 			require.NoError(t, err)
 
 			// Check if issuer claim exists and has expected value
@@ -395,8 +401,8 @@ func TestCustomIssuerInToken(t *testing.T) {
 
 // TestExtraAudiencesInToken tests that extraAudiences are correctly included in the JWT token
 func TestExtraAudiencesInToken(t *testing.T) {
-	// Generate a test private key for JWT signing
-	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	// Generate an RSA private key for JWT signing with PS256 algorithm
+	rsaSigningKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	// Test cases with different audience configurations
@@ -428,7 +434,7 @@ func TestExtraAudiencesInToken(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			signKey, err := jwk.FromRaw(signingKey)
+			signKey, err := jwk.FromRaw(rsaSigningKey)
 			require.NoError(t, err)
 
 			signKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm)

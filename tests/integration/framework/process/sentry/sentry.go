@@ -18,6 +18,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"net/http"
 	"os"
@@ -81,9 +82,16 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		if opts.trustDomain != nil {
 			td = *opts.trustDomain
 		}
-		pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		// Generate key for X.509 certificates
+		x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		require.NoError(t, err)
-		bundle, err := ca.GenerateBundle(pk, td, time.Second*5, nil)
+		// Generate key for JWT signing
+		jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		bundle, err := ca.GenerateBundle(x509RootKey, jwtRootKey, td, time.Second*5, nil, ca.CredentialGenOptions{
+			RequireX509: true,
+			RequireJWT:  true,
+		})
 		require.NoError(t, err)
 		opts.bundle = &bundle
 	}

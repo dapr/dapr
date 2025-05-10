@@ -219,12 +219,16 @@ spec:
 {{- if .Values.oidc.domains }}
         - "--oidc-domains={{ join "," .Values.oidc.domains }}"
 {{- end }}
-{{- if .Values.oidc.tlsCertFile }}
+{{- if .Values.oidc.tls.certFile }}
         - "--oidc-tls-cert-file={{ .Values.oidc.tlsCertFile }}"
 {{- end }}
-{{- if .Values.oidc.tlsKeyFile }}
+{{- if .Values.oidc.tls.keyFile }}
         - "--oidc-tls-key-file={{ .Values.oidc.tlsKeyFile }}"
 {{- end }}
+{{- if .Values.oidc.tls.insecure }}
+        - "--oidc-tls-insecure={{ .Values.oidc.tls.insecure }}"
+{{- end }}
+
       serviceAccountName: dapr-sentry
       volumes:
         - name: credentials

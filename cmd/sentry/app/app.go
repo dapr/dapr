@@ -181,7 +181,7 @@ func Run() {
 			OIDCJWKSURI:    opts.OIDCJWKSURI,
 			ODICPathPrefix: opts.OIDCPathPrefix,
 			OIDCTLSConfig:  oidcTLSConfig,
-			OIDCInsecure:   opts.OIDCInsecure,
+			OIDCInsecure:   opts.OIDCTLSInsecure,
 		})
 		if serr != nil {
 			return serr

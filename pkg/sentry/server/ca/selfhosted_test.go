@@ -107,17 +107,17 @@ func TestSelfhosted_get(t *testing.T) {
 	require.NoError(t, err)
 
 	// Define check functions for generation flags
-	genX509Check := func(g generate) bool {
-		return g.x509
+	genX509Check := func(g CredentialGenOptions) bool {
+		return g.RequireX509
 	}
-	genJWTCheck := func(g generate) bool {
-		return g.jwt
+	genJWTCheck := func(g CredentialGenOptions) bool {
+		return g.RequireJWT
 	}
-	genAllCheck := func(g generate) bool {
-		return g.x509 && g.jwt
+	genAllCheck := func(g CredentialGenOptions) bool {
+		return g.RequireX509 && g.RequireJWT
 	}
-	genNoneCheck := func(g generate) bool {
-		return !g.x509 && !g.jwt
+	genNoneCheck := func(g CredentialGenOptions) bool {
+		return !g.RequireX509 && !g.RequireJWT
 	}
 
 	tests := map[string]struct {
@@ -127,7 +127,7 @@ func TestSelfhosted_get(t *testing.T) {
 		jwtKey      *[]byte
 		jwksData    *[]byte
 		expBundle   Bundle
-		expGenCheck func(generate) bool
+		expGenCheck func(CredentialGenOptions) bool
 		expErr      bool
 	}{
 		"if no files exist, return not ok": {

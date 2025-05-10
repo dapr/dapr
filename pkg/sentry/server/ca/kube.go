@@ -40,78 +40,78 @@ type kube struct {
 }
 
 // get retrieves the existing certificate bundle from Kubernetes.
-func (k *kube) get(ctx context.Context) (Bundle, generate, error) {
+func (k *kube) get(ctx context.Context) (Bundle, CredentialGenOptions, error) {
 	// Get the trust bundle secret
 	secret, err := k.client.CoreV1().Secrets(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
-		return Bundle{}, generate{}, fmt.Errorf("failed to get trust bundle secret: %w", err)
+		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to get trust bundle secret: %w", err)
 	}
 
 	// Check if X.509 certificates need to be generated
-	needsX509 := false
+	requireX509 := false
 	trustAnchors, hasRootCert := secret.Data[filepath.Base(k.config.RootCertPath)]
 	issChainPEM, hasIssuerCert := secret.Data[filepath.Base(k.config.IssuerCertPath)]
 	issKeyPEM, hasIssuerKey := secret.Data[filepath.Base(k.config.IssuerKeyPath)]
 
 	if !hasRootCert || !hasIssuerCert || !hasIssuerKey {
-		needsX509 = true
+		requireX509 = true
 	}
 
 	// Also check if the ConfigMap is in sync
 	configMap, err := k.client.CoreV1().ConfigMaps(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
-		return Bundle{}, generate{}, err
+		return Bundle{}, CredentialGenOptions{}, err
 	}
 
 	if configMapRootCert, ok := configMap.Data[filepath.Base(k.config.RootCertPath)]; !ok || (hasRootCert && configMapRootCert != string(trustAnchors)) {
-		needsX509 = true
+		requireX509 = true
 	}
 
 	// Create a bundle if certificates are available
 	var bundle Bundle
-	if !needsX509 {
+	if !requireX509 {
 		bundle, err = verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
 		if err != nil {
-			return Bundle{}, generate{}, fmt.Errorf("failed to verify CA bundle: %w", err)
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify CA bundle: %w", err)
 		}
 	}
 
 	// Check for JWT signing key and JWKS
-	needsJWT := false
+	requireJWT := false
 
 	// Process JWT signing key if available
 	if jwtKeyPEM, ok := secret.Data[filepath.Base(k.config.JWTSigningKeyPath)]; ok {
 		jwtKey, err := loadJWTSigningKey(jwtKeyPEM)
 		if err != nil {
-			return Bundle{}, generate{}, fmt.Errorf("failed to load JWT signing key: %w", err)
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to load JWT signing key: %w", err)
 		}
 		bundle.JWTSigningKey = jwtKey
 		bundle.JWTSigningKeyPEM = jwtKeyPEM
 	} else {
-		needsJWT = true
+		requireJWT = true
 	}
 
 	// Process JWKS if available
 	if jwks, ok := secret.Data[filepath.Base(k.config.JWKSPath)]; ok {
 		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
-			return Bundle{}, generate{}, fmt.Errorf("failed to verify JWKS: %w", err)
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify JWKS: %w", err)
 		}
 		bundle.JWKSJson = jwks
 		bundle.JWKS, err = jwk.Parse(jwks)
 		if err != nil {
-			return Bundle{}, generate{}, fmt.Errorf("failed to parse JWKS: %w", err)
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to parse JWKS: %w", err)
 		}
 	} else {
 		// clear the JWT signing key if JWKS is not available
 		bundle.JWTSigningKey = nil
 		bundle.JWTSigningKeyPEM = nil
 
-		needsJWT = true
+		requireJWT = true
 	}
 
-	return bundle, generate{
-		x509: needsX509,
-		jwt:  needsJWT,
+	return bundle, CredentialGenOptions{
+		RequireX509: requireX509,
+		RequireJWT:  requireJWT,
 	}, nil
 }
 
@@ -156,6 +156,11 @@ func (k *kube) store(ctx context.Context, bundle Bundle) error {
 	}
 
 	configMap.Data[filepath.Base(k.config.RootCertPath)] = string(bundle.TrustAnchors)
+
+	// If the OIDC server is enabled, clients could use that to access the JWKS
+	// to verify JWTs. However, the OIDC server is not required and so it is
+	// useful to also distribute the JWKS in the configmap.
+	configMap.Data[filepath.Base(k.config.JWKSPath)] = string(bundle.JWKSJson)
 
 	if _, err = k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, configMap, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("failed to update trust bundle configmap: %w", err)

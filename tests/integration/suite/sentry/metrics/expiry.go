@@ -19,6 +19,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"io"
 	"net/http"
@@ -49,8 +50,14 @@ type expiry struct {
 func (e *expiry) Setup(t *testing.T) []framework.Option {
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
+	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
 	onemonth := time.Hour * 24 * 30
-	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, &onemonth)
+	bundle, err := ca.GenerateBundle(rootKey, jwtKey, "integration.test.dapr.io", time.Second*5, &onemonth, ca.CredentialGenOptions{
+		RequireX509: true,
+		RequireJWT:  false,
+	})
 	require.NoError(t, err)
 
 	e.notGiven = procsentry.New(t, procsentry.WithWriteTrustBundle(false))

@@ -1,6 +1,3 @@
-//go:build unit
-// +build unit
-
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,11 +18,15 @@ import (
 	"crypto/x509"
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/lestrrat-go/jwx/v2/jwa"
 )
 
 type Fake struct {
-	signIdentityFn func(context.Context, *ca.SignRequest) ([]*x509.Certificate, error)
-	trustAnchorsFn func() []byte
+	signIdentityFn        func(context.Context, *ca.SignRequest) ([]*x509.Certificate, error)
+	trustAnchorsFn        func() []byte
+	generateJWTFn         func(context.Context, *ca.JWTRequest) (string, error)
+	jwksFn                func() []byte
+	jwtSignatureAlgorithm func() jwa.KeyAlgorithm
 }
 
 func New() *Fake {
@@ -35,6 +36,15 @@ func New() *Fake {
 		},
 		trustAnchorsFn: func() []byte {
 			return nil
+		},
+		generateJWTFn: func(context.Context, *ca.JWTRequest) (string, error) {
+			return "", nil
+		},
+		jwksFn: func() []byte {
+			return nil
+		},
+		jwtSignatureAlgorithm: func() jwa.KeyAlgorithm {
+			return jwa.PS256
 		},
 	}
 }
@@ -49,10 +59,37 @@ func (f *Fake) WithTrustAnchors(fn func() []byte) *Fake {
 	return f
 }
 
+func (f *Fake) WithGenerateJWT(fn func(context.Context, *ca.JWTRequest) (string, error)) *Fake {
+	f.generateJWTFn = fn
+	return f
+}
+
+func (f *Fake) WithJWKS(fn func() []byte) *Fake {
+	f.jwksFn = fn
+	return f
+}
+
+func (f *Fake) WithJWTSignatureAlgorithm(fn func() jwa.KeyAlgorithm) *Fake {
+	f.jwtSignatureAlgorithm = fn
+	return f
+}
+
 func (f *Fake) SignIdentity(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 	return f.signIdentityFn(ctx, req)
 }
 
 func (f *Fake) TrustAnchors() []byte {
 	return f.trustAnchorsFn()
+}
+
+func (f *Fake) GenerateJWT(ctx context.Context, req *ca.JWTRequest) (string, error) {
+	return f.generateJWTFn(ctx, req)
+}
+
+func (f *Fake) JWKS() []byte {
+	return f.jwksFn()
+}
+
+func (f *Fake) JWTSignatureAlgorithm() jwa.KeyAlgorithm {
+	return f.jwtSignatureAlgorithm()
 }

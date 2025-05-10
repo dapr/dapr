@@ -29,8 +29,9 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/kit/crypto/pem"
-	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jwt"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
 func TestNew(t *testing.T) {
@@ -162,14 +163,20 @@ func TestNew(t *testing.T) {
 		// JWKS should have exactly one key
 		require.Equal(t, 1, jwks.Len(), "JWKS should contain exactly one key")
 
-		// Key should have the expected key ID and algorithm
-		key, ok := jwks.Get(0)
-		require.True(t, ok, "JWKS should contain a key")
-		keyID := key.KeyID()
-		require.Equal(t, DefaultJWTKeyID, keyID)
+		// Get the first key from the jwks
+		key, ok := jwks.Key(0)
+		require.True(t, ok, "JWKS should contain a key at index 0")
+		require.NotNil(t, key)
 
-		alg := key.Algorithm()
-		require.Equal(t, DefaultJWTSignatureAlgorithm.String(), alg)
+		// Key should have the expected key ID and algorithm
+		kid, ok := key.Get(jwk.KeyIDKey)
+		require.True(t, ok, "Key should have a key ID")
+		require.Equal(t, DefaultJWTKeyID, kid)
+
+		alg, ok := key.Get(jwk.AlgorithmKey)
+		require.True(t, ok, "Key should have an algorithm")
+		algStr := alg.(jwa.SignatureAlgorithm).String()
+		require.Equal(t, DefaultJWTSignatureAlgorithm.String(), algStr)
 
 		// JWT key should be valid
 		jwtKeyPK, err := pem.DecodePEMPrivateKey(jwtKey)
@@ -190,7 +197,7 @@ func TestNew(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, jwtToken)
 
-		// Parse and verify the token
+		// Parse and verify the token using the JWKS
 		parsedToken, err := jwt.Parse([]byte(jwtToken),
 			jwt.WithKeySet(jwks),
 			jwt.WithValidate(true))
@@ -243,13 +250,13 @@ func TestNew(t *testing.T) {
 		assert.Equal(t, issuerFileContents, issuerCert)
 		assert.Equal(t, issuerKeyFileContents, issuerKey)
 
-		assert.Equal(t, Bundle{
-			TrustAnchors: rootFileContents,
-			IssChainPEM:  issuerFileContents,
-			IssKeyPEM:    issuerKeyFileContents,
-			IssChain:     []*x509.Certificate{int2Crt, int1Crt},
-			IssKey:       int2PK,
-		}, caImp.(*ca).bundle)
+		// Only compare the X.509 certificate fields, not the JWT fields
+		bundle := caImp.(*ca).bundle
+		assert.Equal(t, rootFileContents, bundle.TrustAnchors)
+		assert.Equal(t, issuerFileContents, bundle.IssChainPEM)
+		assert.Equal(t, issuerKeyFileContents, bundle.IssKeyPEM)
+		assert.Equal(t, []*x509.Certificate{int2Crt, int1Crt}, bundle.IssChain)
+		assert.Equal(t, int2PK, bundle.IssKey)
 	})
 }
 

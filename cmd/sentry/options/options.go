@@ -64,7 +64,7 @@ type Options struct {
 	OIDCDomains           []string
 	OIDCTLSCertFile       string
 	OIDCTLSKeyFile        string
-	OIDCInsecure          bool
+	OIDCTLSInsecure       bool
 }
 
 func New(origArgs []string) *Options {
@@ -113,7 +113,7 @@ func New(origArgs []string) *Options {
 	fs.StringSliceVar(&opts.OIDCDomains, "oidc-domains", nil, "List of allowed domains for OIDC HTTP endpoint requests")
 	fs.StringVar(&opts.OIDCTLSCertFile, "oidc-tls-cert-file", "", "TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
 	fs.StringVar(&opts.OIDCTLSKeyFile, "oidc-tls-key-file", "", "TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
-	fs.BoolVar(&opts.OIDCInsecure, "oidc-insecure", false, "Serve OIDC HTTP without TLS")
+	fs.BoolVar(&opts.OIDCTLSInsecure, "oidc-tls-insecure", false, "Serve OIDC HTTP without TLS")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
@@ -139,12 +139,12 @@ func (o *Options) Validate() error {
 	}
 
 	// Validate OIDC TLS configuration when OIDC HTTP server is enabled and not in insecure mode
-	if o.OIDCHTTPPort > 0 && !o.OIDCInsecure {
+	if o.OIDCHTTPPort > 0 && !o.OIDCTLSInsecure {
 		if o.OIDCTLSCertFile == "" {
-			return fmt.Errorf("oidc-tls-cert-file is required when OIDC HTTP server is enabled (unless oidc-insecure is true)")
+			return fmt.Errorf("oidc-tls-cert-file is required when OIDC HTTP server is enabled (unless oidc-tls-insecure is true)")
 		}
 		if o.OIDCTLSKeyFile == "" {
-			return fmt.Errorf("oidc-tls-key-file is required when OIDC HTTP server is enabled (unless oidc-insecure is true)")
+			return fmt.Errorf("oidc-tls-key-file is required when OIDC HTTP server is enabled (unless oidc-tls-insecure is true)")
 		}
 	}
 

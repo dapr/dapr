@@ -30,8 +30,11 @@ import (
 )
 
 const (
-	DefaultJWTKeyID              = "dapr-sentry"
-	DefaultJWTSignatureAlgorithm = jwa.ES256
+	// DefaultJWTKeyID is an identifier for the JWT signing key.
+	DefaultJWTKeyID = "dapr-sentry"
+	// DefaultJWTSignatureAlgorithm is set to PS256 as it is widely supported
+	// by OpenID Connect providers.
+	DefaultJWTSignatureAlgorithm = jwa.PS256
 )
 
 // Bundle is the bundle of certificates and keys used by the CA.
@@ -71,36 +74,50 @@ func (b *Bundle) Merge(other Bundle) {
 	if len(other.TrustAnchors) > 0 {
 		b.TrustAnchors = other.TrustAnchors
 	}
+	if len(other.IssChain) > 0 {
+		b.IssChain = other.IssChain
+	}
 	if len(other.IssChainPEM) > 0 {
 		b.IssChainPEM = other.IssChainPEM
 	}
 	if len(other.IssKeyPEM) > 0 {
 		b.IssKeyPEM = other.IssKeyPEM
 	}
+	if other.IssKey != nil {
+		b.IssKey = other.IssKey
+	}
+
 	if len(other.JWTSigningKeyPEM) > 0 {
 		b.JWTSigningKeyPEM = other.JWTSigningKeyPEM
 	}
 	if len(other.JWKSJson) > 0 {
 		b.JWKSJson = other.JWKSJson
 	}
+	if other.JWTSigningKey != nil {
+		b.JWTSigningKey = other.JWTSigningKey
+	}
+	if other.JWKS != nil {
+		b.JWKS = other.JWKS
+	}
 }
 
-func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew time.Duration, overrideCATTL *time.Duration, gen generate) (Bundle, error) {
+// GenerateBundle generates the x.509 and JWT bundles if required.
+func GenerateBundle(x509RootKey crypto.Signer, jwtRootKey crypto.Signer, trustDomain string, allowedClockSkew time.Duration, overrideCATTL *time.Duration, genOpts CredentialGenOptions) (Bundle, error) {
 	var bundle Bundle
 
-	rootCert, err := generateRootCert(trustDomain, allowedClockSkew, overrideCATTL)
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to generate root cert: %w", err)
-	}
-
-	rootCertDER, err := x509.CreateCertificate(rand.Reader, rootCert, rootCert, rootKey.Public(), rootKey)
-	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to sign root certificate: %w", err)
-	}
-	trustAnchors := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCertDER})
-
-	if gen.X509() {
+	if genOpts.RequireX509 {
 		log.Debugf("Generating X.509 bundle with trust domain %s", trustDomain)
+
+		rootCert, err := generateRootCert(trustDomain, allowedClockSkew, overrideCATTL)
+		if err != nil {
+			return Bundle{}, fmt.Errorf("failed to generate root cert: %w", err)
+		}
+
+		rootCertDER, err := x509.CreateCertificate(rand.Reader, rootCert, rootCert, x509RootKey.Public(), x509RootKey)
+		if err != nil {
+			return Bundle{}, fmt.Errorf("failed to sign root certificate: %w", err)
+		}
+		trustAnchors := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCertDER})
 
 		issKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
@@ -116,7 +133,7 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 		if err != nil {
 			return Bundle{}, fmt.Errorf("failed to generate issuer cert: %w", err)
 		}
-		issCertDER, err := x509.CreateCertificate(rand.Reader, issCert, rootCert, &issKey.PublicKey, rootKey)
+		issCertDER, err := x509.CreateCertificate(rand.Reader, issCert, rootCert, &issKey.PublicKey, x509RootKey)
 		if err != nil {
 			return Bundle{}, fmt.Errorf("failed to sign issuer cert: %w", err)
 		}
@@ -134,16 +151,16 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 		bundle.IssKey = issKey
 	}
 
-	if gen.JWT() {
+	if genOpts.RequireJWT {
 		log.Debugf("Generating JWT bundle with trust domain %s", trustDomain)
 
-		jwtKey, err := jwk.FromRaw(rootKey)
+		jwtKey, err := jwk.FromRaw(jwtRootKey)
 		if err != nil {
 			return Bundle{}, fmt.Errorf("failed to create JWK from key: %w", err)
 		}
 
 		// Marshal the private key to PKCS8 for storage
-		jwtKeyDer, err := x509.MarshalPKCS8PrivateKey(rootKey)
+		jwtKeyDer, err := x509.MarshalPKCS8PrivateKey(jwtRootKey)
 		if err != nil {
 			return Bundle{}, fmt.Errorf("failed to marshal JWT signing key: %w", err)
 		}
@@ -169,7 +186,7 @@ func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew 
 			return Bundle{}, fmt.Errorf("failed to marshal JWKS: %w", err)
 		}
 
-		bundle.JWTSigningKey = rootKey
+		bundle.JWTSigningKey = jwtRootKey
 		bundle.JWTSigningKeyPEM = jwtKeyPEM
 		bundle.JWKS = jwkSet
 		bundle.JWKSJson = jwksJson

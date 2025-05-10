@@ -4,8 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
@@ -18,6 +17,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"math/big"
@@ -47,7 +47,13 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*20, nil)
+
+	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	bundle, err := ca.GenerateBundle(rootKey, jwtKey, "integration.test.dapr.io", time.Second*20, nil, ca.CredentialGenOptions{
+		RequireX509: true,
+		RequireJWT:  true,
+	})
 	require.NoError(t, err)
 
 	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
