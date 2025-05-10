@@ -517,7 +517,6 @@ replace (
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
-//
 // replace github.com/dapr/kit => ../kit
 
 //
