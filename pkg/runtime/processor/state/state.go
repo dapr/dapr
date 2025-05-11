@@ -29,7 +29,7 @@ import (
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 const (
@@ -119,7 +119,7 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 		for k, v := range props {
 			//nolint:gocritic
 			if strings.ToLower(k) == PropertyKeyActorStateStore {
-				actorStoreSpecified = utils.IsTruthy(v)
+				actorStoreSpecified = kitstrings.IsTruthy(v)
 				break
 			}
 		}

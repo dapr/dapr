@@ -36,7 +36,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	cryptotest "github.com/dapr/kit/crypto/test"
-	kitUtils "github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 	apiv1 "k8s.io/api/core/v1"
 )
 
@@ -199,7 +199,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	if !kitUtils.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
+	if !kitstrings.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
 		testApps = append(testApps,
 			kube.AppDescription{
 				AppName:        "serviceinvocation-callee-external",
@@ -550,7 +550,7 @@ func TestServiceInvocation(t *testing.T) {
 }
 
 func TestServiceInvocationExternally(t *testing.T) {
-	if kitUtils.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
+	if kitstrings.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
 		t.Skip()
 	}
 
@@ -692,7 +692,7 @@ func TestGRPCProxy(t *testing.T) {
 }
 
 func TestHeadersExternal(t *testing.T) {
-	if kitUtils.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
+	if kitstrings.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
 		t.Skip()
 	}
 
@@ -1669,7 +1669,7 @@ func TestNegativeCases(t *testing.T) {
 }
 
 func TestNegativeCasesExternal(t *testing.T) {
-	if kitUtils.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
+	if kitstrings.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
 		t.Skip()
 	}
 
