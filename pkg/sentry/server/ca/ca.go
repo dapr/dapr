@@ -195,6 +195,13 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWK from key: %w", err)
 		}
+
+		// Verify that the signing key is compatible with the specified algorithm
+		jwtSignAlg := jwa.SignatureAlgorithm(conf.JWTSigningAlgorithm)
+		if err := validateKeyAlgorithmCompatibility(bundle.JWTSigningKey, jwtSignAlg); err != nil {
+			return nil, fmt.Errorf("JWT signing key is incompatible with algorithm %s: %w", jwtSignAlg, err)
+		}
+
 		signKey.Set(jwk.KeyIDKey, conf.JWTKeyID)
 		signKey.Set(jwk.AlgorithmKey, conf.JWTSigningAlgorithm)
 
@@ -206,7 +213,6 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWT issuer: %w", err)
 		}
-
 	}
 
 	return &ca{
