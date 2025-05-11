@@ -29,7 +29,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 const yamlSeparator = "\n---"
@@ -70,7 +70,7 @@ func (m *manifestSet[T]) loadManifestsFromDirectory(dir string) error {
 		}
 
 		fileName := file.Name()
-		if !utils.IsYaml(fileName) {
+		if !kitstrings.IsYaml(fileName) {
 			log.Warnf("A non-YAML %s file %s was detected, it will not be loaded", m.d.kind, fileName)
 			continue
 		}

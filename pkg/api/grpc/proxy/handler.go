@@ -19,7 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/kit/utils"
+	"github.com/dapr/kit/strings"
 )
 
 // Metadata header used to indicate if the call should be handled as a gRPC stream.
@@ -117,7 +117,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	var isStream bool
 	streamCheckValue := md[StreamMetadataKey]
 	if len(streamCheckValue) > 0 {
-		isStream = utils.IsTruthy(streamCheckValue[0])
+		isStream = strings.IsTruthy(streamCheckValue[0])
 	}
 
 	var replayBuffer replayBufferCh

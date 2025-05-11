@@ -23,7 +23,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/injector/patcher"
 	"github.com/dapr/dapr/utils"
-	kitutils "github.com/dapr/kit/utils"
+	"github.com/dapr/kit/strings"
 )
 
 // Config represents configuration options for the Dapr Sidecar Injector webhook server.
@@ -190,8 +190,8 @@ func (c *Config) parse() (err error) {
 	c.parsedActorsEnabled = isTruthyDefaultTrue(c.ActorsEnabled)
 	c.parsedRunAsNonRoot = isTruthyDefaultTrue(c.RunAsNonRoot)
 	c.parsedReadOnlyRootFilesystem = isTruthyDefaultTrue(c.ReadOnlyRootFilesystem)
-	c.parsedEnableK8sDownwardAPIs = kitutils.IsTruthy(c.EnableK8sDownwardAPIs)
-	c.parsedSidecarDropALLCapabilities = kitutils.IsTruthy(c.SidecarDropALLCapabilities)
+	c.parsedEnableK8sDownwardAPIs = strings.IsTruthy(c.EnableK8sDownwardAPIs)
+	c.parsedSidecarDropALLCapabilities = strings.IsTruthy(c.SidecarDropALLCapabilities)
 
 	// Parse the runAsUser and runAsGroup
 	c.parsedRunAsUser, err = parseStringToInt64Pointer(c.RunAsUser)
@@ -227,7 +227,7 @@ func isTruthyDefaultTrue(val string) bool {
 	if val == "" {
 		return true
 	}
-	return kitutils.IsTruthy(val)
+	return strings.IsTruthy(val)
 }
 
 func parseStringToInt64Pointer(intStr string) (*int64, error) {
