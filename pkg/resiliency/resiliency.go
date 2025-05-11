@@ -36,7 +36,7 @@ import (
 	"github.com/dapr/kit/config"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
-	"github.com/dapr/kit/utils"
+	"github.com/dapr/kit/strings"
 )
 
 const (
@@ -220,7 +220,7 @@ func loadLocalResiliencyPath(log logger.Logger, runtimeID string, path string) [
 	}
 
 	for _, file := range files {
-		if !utils.IsYaml(file.Name()) {
+		if !strings.IsYaml(file.Name()) {
 			log.Warnf("A non-YAML resiliency file %s was detected, it will not be loaded", file.Name())
 			continue
 		}

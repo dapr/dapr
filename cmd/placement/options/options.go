@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 const (
@@ -102,7 +102,7 @@ func New(origArgs []string) (*Options, error) {
 	}
 
 	opts := Options{
-		MetadataEnabled: utils.IsTruthy(os.Getenv(envMetadataEnabled)),
+		MetadataEnabled: kitstrings.IsTruthy(os.Getenv(envMetadataEnabled)),
 	}
 
 	// Create a flag set
