@@ -113,7 +113,7 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 	// enabled, which is required for informers.
 	x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	// Generate a separate key for JWT signing
+	// Generate a test root key for JWT signing
 	jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	bundle, err := ca.GenerateBundle(x509RootKey, jwtRootKey, "kubernetes.integration.dapr.io", time.Second*5, nil, ca.CredentialGenOptions{
