@@ -105,7 +105,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.JWKSFilename, "jwks-filename", config.DefaultJWKSFilename, "JWKS (JSON Web Key Set) filename")
 	fs.StringVar(&opts.JWTIssuer, "jwt-issuer", "", "Issuer value for JWT tokens (no issuer if empty)")
 	fs.StringSliceVar(&opts.JWTAudiences, "jwt-audiences", ca.DefaultExtraAudiences, "List of audiences to include in JWT tokens")
-	fs.StringVar(&opts.JWTSigningAlgorithm, "jwt-signing-algorithm", string(ca.DefaultJWTSignatureAlgorithm), "Algorithm used for JWT signing (e.g., ES256, RS256)")
+	fs.StringVar(&opts.JWTSigningAlgorithm, "jwt-signing-algorithm", string(ca.DefaultJWTSignatureAlgorithm), "Algorithm used for JWT signing, must be supported by signing key")
 	fs.StringVar(&opts.JWTKeyID, "jwt-key-id", ca.DefaultJWTKeyID, "Key ID (kid) used for JWT signing")
 	fs.IntVar(&opts.OIDCHTTPPort, "oidc-http-port", 0, "The port for the OIDC HTTP server (disabled if 0)")
 	fs.StringVar(&opts.OIDCJWKSURI, "oidc-jwks-uri", "", "Custom URI where the JWKS can be accessed externally")
