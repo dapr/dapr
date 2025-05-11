@@ -45,6 +45,7 @@ type options struct {
 	oidcDomains     []string
 	oidcTLSCertFile *string
 	oidcTLSKeyFile  *string
+	oidcTLSInsecure bool
 }
 
 // Option is a function that configures the process.
@@ -175,5 +176,12 @@ func WithOIDCTLSCertFile(certFile string) Option {
 func WithOIDCTLSKeyFile(keyFile string) Option {
 	return func(o *options) {
 		o.oidcTLSKeyFile = &keyFile
+	}
+}
+
+// WithOIDCTLSInsecure sets the OIDC HTTP server to use insecure TLS
+func WithOIDCTLSInsecure(insecure bool) Option {
+	return func(o *options) {
+		o.oidcTLSInsecure = insecure
 	}
 }
