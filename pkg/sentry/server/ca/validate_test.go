@@ -18,6 +18,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
@@ -27,6 +28,9 @@ import (
 	"testing"
 	"time"
 
+	"crypto/ed25519"
+
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -475,4 +479,147 @@ func createMultiKeyJWKS(t *testing.T, keys map[string]crypto.Signer) []byte {
 	require.NoError(t, err, "Failed to marshal JWKS to JSON")
 
 	return jwksBytes
+}
+
+func TestValidateKeyAlgorithmCompatibility(t *testing.T) {
+	// Generate test keys
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	ecdsaP256Key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	ecdsaP384Key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	require.NoError(t, err)
+
+	ecdsaP521Key, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+	require.NoError(t, err)
+
+	// Generate Ed25519 key pair
+	edPublicKey, edPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	_ = edPublicKey // Avoid unused variable warning
+
+	tests := []struct {
+		name      string
+		key       crypto.Signer
+		algorithm jwa.SignatureAlgorithm
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:      "nil key",
+			key:       nil,
+			algorithm: jwa.RS256,
+			wantErr:   true,
+			errMsg:    "signing key is nil",
+		},
+		{
+			name:      "RSA key with RS256",
+			key:       rsaKey,
+			algorithm: jwa.RS256,
+			wantErr:   false,
+		},
+		{
+			name:      "RSA key with PS256",
+			key:       rsaKey,
+			algorithm: jwa.PS256,
+			wantErr:   false,
+		},
+		{
+			name:      "RSA key with ES256",
+			key:       rsaKey,
+			algorithm: jwa.ES256,
+			wantErr:   true,
+			errMsg:    "ECDSA algorithm ES256 requires an ECDSA key",
+		},
+		{
+			name:      "ECDSA P-256 key with ES256",
+			key:       ecdsaP256Key,
+			algorithm: jwa.ES256,
+			wantErr:   false,
+		},
+		{
+			name:      "ECDSA P-384 key with ES384",
+			key:       ecdsaP384Key,
+			algorithm: jwa.ES384,
+			wantErr:   false,
+		},
+		{
+			name:      "ECDSA P-521 key with ES512",
+			key:       ecdsaP521Key,
+			algorithm: jwa.ES512,
+			wantErr:   false,
+		},
+		{
+			name:      "ECDSA P-256 key with ES384",
+			key:       ecdsaP256Key,
+			algorithm: jwa.ES384,
+			wantErr:   true,
+			errMsg:    "ES384 requires a P-384 curve",
+		},
+		{
+			name:      "ECDSA P-256 key with RS256",
+			key:       ecdsaP256Key,
+			algorithm: jwa.RS256,
+			wantErr:   true,
+			errMsg:    "RSA algorithm RS256 requires an RSA key",
+		},
+		{
+			name:      "Ed25519 key with EdDSA",
+			key:       edPrivateKey,
+			algorithm: jwa.EdDSA,
+			wantErr:   false,
+		},
+		{
+			name:      "Ed25519 key with ES256",
+			key:       edPrivateKey,
+			algorithm: jwa.ES256,
+			wantErr:   true,
+			errMsg:    "ECDSA algorithm ES256 requires an ECDSA key",
+		},
+		{
+			name:      "Ed25519 key with RS256",
+			key:       edPrivateKey,
+			algorithm: jwa.RS256,
+			wantErr:   true,
+			errMsg:    "RSA algorithm RS256 requires an RSA key",
+		},
+		{
+			name:      "RSA key with EdDSA",
+			key:       rsaKey,
+			algorithm: jwa.EdDSA,
+			wantErr:   true,
+			errMsg:    "EdDSA algorithm requires an Ed25519 key",
+		},
+		{
+			name:      "ECDSA key with EdDSA",
+			key:       ecdsaP256Key,
+			algorithm: jwa.EdDSA,
+			wantErr:   true,
+			errMsg:    "EdDSA algorithm requires an Ed25519 key",
+		},
+		{
+			name:      "Unsupported algorithm",
+			key:       rsaKey,
+			algorithm: "unsupported",
+			wantErr:   true,
+			errMsg:    "unsupported signature algorithm",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateKeyAlgorithmCompatibility(tt.key, tt.algorithm)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

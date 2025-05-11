@@ -16,11 +16,15 @@ package ca
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 	"fmt"
 	"reflect"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 
 	"github.com/dapr/kit/crypto/pem"
@@ -255,6 +259,54 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 			return fmt.Errorf("JWKS doesn't contain a key with matching key ID '%s'", signingKeyID)
 		}
 		return errors.New("JWKS doesn't contain a matching public key for the JWT signing key")
+	}
+
+	return nil
+}
+
+// validateKeyAlgorithmCompatibility checks if the provided key is compatible with the specified algorithm
+func validateKeyAlgorithmCompatibility(key crypto.Signer, alg jwa.SignatureAlgorithm) error {
+	if key == nil {
+		return fmt.Errorf("signing key is nil")
+	}
+
+	switch alg {
+	case jwa.RS256, jwa.RS384, jwa.RS512, jwa.PS256, jwa.PS384, jwa.PS512:
+		// RSA algorithms require an RSA key
+		_, ok := key.(*rsa.PrivateKey)
+		if !ok {
+			return fmt.Errorf("RSA algorithm %s requires an RSA key, but got %T", alg, key)
+		}
+	case jwa.ES256, jwa.ES384, jwa.ES512:
+		// ECDSA algorithms require an ECDSA key
+		ecKey, ok := key.(*ecdsa.PrivateKey)
+		if !ok {
+			return fmt.Errorf("ECDSA algorithm %s requires an ECDSA key, but got %T", alg, key)
+		}
+
+		// Also validate curve size matches algorithm
+		switch alg {
+		case jwa.ES256:
+			if ecKey.Curve != elliptic.P256() {
+				return fmt.Errorf("ES256 requires a P-256 curve, got %s", ecKey.Curve.Params().Name)
+			}
+		case jwa.ES384:
+			if ecKey.Curve != elliptic.P384() {
+				return fmt.Errorf("ES384 requires a P-384 curve, got %s", ecKey.Curve.Params().Name)
+			}
+		case jwa.ES512:
+			if ecKey.Curve != elliptic.P521() {
+				return fmt.Errorf("ES512 requires a P-521 curve, got %s", ecKey.Curve.Params().Name)
+			}
+		}
+	case jwa.EdDSA:
+		// Ed25519 algorithm requires an Ed25519 key
+		_, ok := key.(ed25519.PrivateKey)
+		if !ok {
+			return fmt.Errorf("EdDSA algorithm requires an Ed25519 key, but got %T", key)
+		}
+	default:
+		return fmt.Errorf("unsupported signature algorithm: %s", alg)
 	}
 
 	return nil
