@@ -85,9 +85,11 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		// Generate key for X.509 certificates
 		x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		require.NoError(t, err)
+
 		// Generate key for JWT signing
 		jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
 		require.NoError(t, err)
+
 		bundle, err := ca.GenerateBundle(x509RootKey, jwtRootKey, td, time.Second*5, nil, ca.CredentialGenOptions{
 			RequireX509: true,
 			RequireJWT:  true,
@@ -168,6 +170,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 
 		if opts.oidcTLSKeyFile != nil {
 			args = append(args, "-oidc-tls-key-file="+*opts.oidcTLSKeyFile)
+		}
+
+		if opts.oidcTLSInsecure {
+			args = append(args, "-oidc-tls-insecure=true")
 		}
 	}
 

@@ -19,6 +19,7 @@ import (
 	"os"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
 // selfhosted is a store that uses the file system as the secret store.
@@ -120,6 +121,10 @@ func (s *selfhosted) get(_ context.Context) (Bundle, CredentialGenOptions, error
 			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify JWKS: %w", err)
 		}
 		bundle.JWKSJson = jwks
+		bundle.JWKS, err = jwk.Parse(jwks)
+		if err != nil {
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to parse JWKS: %w", err)
+		}
 	} else if os.IsNotExist(err) {
 		// JWKS doesn't exist, need to generate it
 		requireJWT = true
