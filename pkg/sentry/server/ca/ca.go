@@ -176,7 +176,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 
 	var jwtIssuer jwtIssuer
 	if conf.JWTEnabled {
-		log.Info("JWT signing enabled")
+		log.Info("JWT issuing enabled")
 
 		if bundle.JWTSigningKey == nil {
 			return nil, fmt.Errorf("JWT signing key not found in bundle")
