@@ -13,3 +13,4 @@ scopes:
   - healthapp-http
   - healthapp-grpc
   - healthapp-h2c
+  - pubsub-subscriber-streaming
