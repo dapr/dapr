@@ -4,7 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/diagridio/go-etcd-cron/api/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/stretchr/testify/require"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -80,7 +82,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 		} {
 			_, err := client.ScheduleJobAlpha1(ctx, req)
 			require.Error(t, err)
-			require.True(t, errors.IsJobAlreadyExists(err))
+			require.Equal(t, codes.AlreadyExists, status.Code(err))
 		}
 	})
 }

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	errors2 "github.com/diagridio/go-etcd-cron/api/errors"
+
 	"github.com/diagridio/go-etcd-cron/api"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -61,6 +63,10 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	logWithField := log.WithFields(map[string]any{"overwrite": job.GetOverwrite()})
 	if err != nil {
 		logWithField.Errorf("error scheduling job %s: %s", req.GetName(), err)
+		if errors2.IsJobAlreadyExists(err) {
+			return nil, status.Errorf(codes.AlreadyExists, "%s", err.Error())
+		}
+
 		return nil, err
 	}
 
