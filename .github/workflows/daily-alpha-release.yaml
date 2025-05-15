@@ -1,0 +1,34 @@
+name: Daily Alpha Release
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  new-alpha-release:
+    name: New Alpha Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate alpha version
+        id: version
+        run: |
+          # Fetch latest tag from git
+          latest=$(git ls-remote --tags origin | \
+            grep -o 'refs/tags/v[0-9]*\.[0-9]*\.[0-9]*$' | \
+            sed 's/refs\/tags\/v//' | sort -V | tail -n1)
+
+          echo "Latest tag: ${latest}"
+          
+          major=$(echo "$latest" | cut -d. -f1)
+          minor=$(echo "$latest" | cut -d. -f2)
+          next_minor=$((minor + 1))
+          date_str=$(date +%Y%m%d)
+          alpha_version="${major}.${next_minor}.0-alpha.${date_str}"
+
+          echo "rel_version=${alpha_version}" >> "$GITHUB_OUTPUT"
+          echo "Next alpha: ${alpha_version}"
+      - name: Create Release
+        uses: ./.github/workflows/create-release.yml
+        with:
+          rel_version: ${{ steps.version.outputs.rel_version }}
