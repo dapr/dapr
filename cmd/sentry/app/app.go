@@ -15,6 +15,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"os"
 	"path/filepath"
 	"time"
@@ -82,15 +83,34 @@ func Run() {
 		log.Debugf("Using user provided root cert path: %s", opts.RootCAFilename)
 		rootCertPath = opts.RootCAFilename
 	}
+	jwtKeyPath := filepath.Join(opts.IssuerCredentialsPath, config.DefaultJWTSigningKeyFilename)
+	if filepath.IsAbs(opts.JWTSigningKeyFilename) {
+		log.Debugf("Using user provided JWT signing key path: %s", opts.JWTSigningKeyFilename)
+		jwtKeyPath = opts.JWTSigningKeyFilename
+	}
+	jwksPath := filepath.Join(opts.IssuerCredentialsPath, config.DefaultJWKSFilename)
+	if filepath.IsAbs(opts.JWKSFilename) {
+		log.Debugf("Using user provided JWKS path: %s", opts.JWKSFilename)
+		jwksPath = opts.JWKSFilename
+	}
 
 	m := make(map[string]struct{})
 	// we need to watch over all these relevant directories
-	for _, path := range []string{issuerCertPath, issuerKeyPath, rootCertPath} {
-		dir := filepath.Dir(path)
-		if _, ok := m[dir]; !ok {
-			m[dir] = struct{}{}
+	for _, path := range []string{
+		issuerCertPath,
+		issuerKeyPath,
+		rootCertPath,
+		jwtKeyPath,
+		jwksPath,
+	} {
+		if path != "" {
+			dir := filepath.Dir(path)
+			if _, ok := m[dir]; !ok {
+				m[dir] = struct{}{}
+			}
 		}
 	}
+
 	watchDirs := make([]string, 0, len(m))
 	for dir := range m {
 		watchDirs = append(watchDirs, dir)
@@ -104,10 +124,29 @@ func Run() {
 	cfg.IssuerCertPath = issuerCertPath
 	cfg.IssuerKeyPath = issuerKeyPath
 	cfg.RootCertPath = rootCertPath
+	cfg.JWTSigningKeyPath = jwtKeyPath
+	cfg.JWTEnabled = opts.JWTEnabled
+	cfg.JWKSPath = jwksPath
 	cfg.TrustDomain = opts.TrustDomain
 	cfg.Port = opts.Port
 	cfg.ListenAddress = opts.ListenAddress
 	cfg.Mode = modes.DaprMode(opts.Mode)
+
+	if opts.JWTIssuer != "" {
+		cfg.JWTIssuer = &opts.JWTIssuer
+	}
+
+	if len(opts.JWTAudiences) > 0 {
+		cfg.JWTAudiences = opts.JWTAudiences
+	}
+
+	if opts.JWTSigningAlgorithm != "" {
+		cfg.JWTSigningAlgorithm = opts.JWTSigningAlgorithm
+	}
+
+	if opts.JWTKeyID != "" {
+		cfg.JWTKeyID = opts.JWTKeyID
+	}
 
 	// We use runner manager inception here since we want the inner manager to be
 	// restarted when the CA server needs to be restarted because of file events.
@@ -122,9 +161,27 @@ func Run() {
 			Port:      opts.Metrics.Port(),
 			Healthz:   healthz,
 		})
+
+		// Configure TLS for OIDC HTTP server if needed
+		var oidcTLSConfig *tls.Config
+		if opts.OIDCTLSCertFile != "" && opts.OIDCTLSKeyFile != "" {
+			var err error
+			oidcTLSConfig, err = createOIDCTLSConfig(opts.OIDCTLSCertFile, opts.OIDCTLSKeyFile)
+			if err != nil {
+				log.Errorf("Failed to create OIDC TLS config: %v", err)
+				return err
+			}
+		}
+
 		sentry, serr := sentry.New(ctx, sentry.Options{
-			Config:  cfg,
-			Healthz: healthz,
+			Config:         cfg,
+			Healthz:        healthz,
+			OIDCHTTPPort:   opts.OIDCHTTPPort,
+			OIDCDomains:    opts.OIDCDomains,
+			OIDCJWKSURI:    opts.OIDCJWKSURI,
+			ODICPathPrefix: opts.OIDCPathPrefix,
+			OIDCTLSConfig:  oidcTLSConfig,
+			OIDCInsecure:   opts.OIDCTLSInsecure,
 		})
 		if serr != nil {
 			return serr
@@ -196,4 +253,17 @@ func Run() {
 		log.Fatal(err)
 	}
 	log.Info("Sentry shut down gracefully")
+}
+
+// createOIDCTLSConfig creates a TLS configuration for the OIDC HTTP server
+func createOIDCTLSConfig(certFile, keyFile string) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	}, nil
 }

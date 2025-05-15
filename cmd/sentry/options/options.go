@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/kit/logger"
 )
 
@@ -47,9 +48,23 @@ type Options struct {
 	Metrics               *metrics.FlagOptions
 	Mode                  string
 
-	RootCAFilename     string
-	IssuerCertFilename string
-	IssuerKeyFilename  string
+	RootCAFilename        string
+	IssuerCertFilename    string
+	IssuerKeyFilename     string
+	JWTSigningKeyFilename string
+	JWKSFilename          string
+	JWTEnabled            bool
+	JWTIssuer             string
+	JWTAudiences          []string
+	JWTSigningAlgorithm   string
+	JWTKeyID              string
+	OIDCHTTPPort          int
+	OIDCJWKSURI           string
+	OIDCPathPrefix        string
+	OIDCDomains           []string
+	OIDCTLSCertFile       string
+	OIDCTLSKeyFile        string
+	OIDCTLSInsecure       bool
 }
 
 func New(origArgs []string) *Options {
@@ -85,6 +100,20 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Sentry")
+	fs.BoolVar(&opts.JWTEnabled, "jwt-enabled", false, "Enable JWT token issuance by Sentry")
+	fs.StringVar(&opts.JWTSigningKeyFilename, "jwt-key-filename", config.DefaultJWTSigningKeyFilename, "JWT signing key filename")
+	fs.StringVar(&opts.JWKSFilename, "jwks-filename", config.DefaultJWKSFilename, "JWKS (JSON Web Key Set) filename")
+	fs.StringVar(&opts.JWTIssuer, "jwt-issuer", "", "Issuer value for JWT tokens (no issuer if empty)")
+	fs.StringSliceVar(&opts.JWTAudiences, "jwt-audiences", ca.DefaultExtraAudiences, "List of audiences to include in JWT tokens")
+	fs.StringVar(&opts.JWTSigningAlgorithm, "jwt-signing-algorithm", string(ca.DefaultJWTSignatureAlgorithm), "Algorithm used for JWT signing, must be supported by signing key")
+	fs.StringVar(&opts.JWTKeyID, "jwt-key-id", ca.DefaultJWTKeyID, "Key ID (kid) used for JWT signing")
+	fs.IntVar(&opts.OIDCHTTPPort, "oidc-http-port", 0, "The port for the OIDC HTTP server (disabled if 0)")
+	fs.StringVar(&opts.OIDCJWKSURI, "oidc-jwks-uri", "", "Custom URI where the JWKS can be accessed externally")
+	fs.StringVar(&opts.OIDCPathPrefix, "oidc-path-prefix", "", "Path prefix to add to all OIDC HTTP endpoints")
+	fs.StringSliceVar(&opts.OIDCDomains, "oidc-domains", nil, "List of allowed domains for OIDC HTTP endpoint requests")
+	fs.StringVar(&opts.OIDCTLSCertFile, "oidc-tls-cert-file", "", "TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
+	fs.StringVar(&opts.OIDCTLSKeyFile, "oidc-tls-key-file", "", "TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
+	fs.BoolVar(&opts.OIDCTLSInsecure, "oidc-tls-insecure", false, "Serve OIDC HTTP without TLS")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
@@ -107,6 +136,20 @@ func New(origArgs []string) *Options {
 func (o *Options) Validate() error {
 	if o.Mode != string(modes.KubernetesMode) && o.Mode != string(modes.StandaloneMode) {
 		return fmt.Errorf("invalid mode: %s", o.Mode)
+	}
+
+	// Validate OIDC TLS configuration when OIDC HTTP server is enabled and not in insecure mode
+	if o.OIDCHTTPPort > 0 && !o.OIDCTLSInsecure {
+		if o.OIDCTLSCertFile == "" {
+			return fmt.Errorf("oidc-tls-cert-file is required when OIDC HTTP server is enabled (unless oidc-tls-insecure is true)")
+		}
+		if o.OIDCTLSKeyFile == "" {
+			return fmt.Errorf("oidc-tls-key-file is required when OIDC HTTP server is enabled (unless oidc-tls-insecure is true)")
+		}
+	}
+
+	if o.JWTIssuer != "" && !o.JWTEnabled {
+		return fmt.Errorf("jwt-issuer cannot be set when jwt-enabled is false")
 	}
 
 	return nil
