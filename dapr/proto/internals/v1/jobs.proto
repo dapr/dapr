@@ -30,4 +30,5 @@ message JobHTTPRequest {
   optional string due_time = 4 [json_name = "dueTime"];
   optional string ttl = 5 [json_name = "ttl"];
   google.protobuf.Value data = 6 [json_name = "data"];
+  optional bool overwrite = 7 [json_name = "overwrite"];
 }

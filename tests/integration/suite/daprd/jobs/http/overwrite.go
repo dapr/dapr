@@ -1,0 +1,94 @@
+package http
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/suite"
+)
+
+func init() {
+	suite.Register(new(overwrite))
+}
+
+type overwrite struct {
+	daprd     *daprd.Daprd
+	scheduler *scheduler.Scheduler
+}
+
+func (o *overwrite) Setup(t *testing.T) []framework.Option {
+	o.scheduler = scheduler.New(t)
+
+	o.daprd = daprd.New(t,
+		daprd.WithSchedulerAddresses(o.scheduler.Address()),
+	)
+
+	return []framework.Option{
+		framework.WithProcesses(o.scheduler, o.daprd),
+	}
+}
+
+func (o *overwrite) Run(t *testing.T, ctx context.Context) {
+	o.scheduler.WaitUntilRunning(t, ctx)
+	o.daprd.WaitUntilRunning(t, ctx)
+
+	httpClient := client.HTTP(t)
+
+	t.Run("overwrite if exists", func(t *testing.T) {
+		type request struct {
+			name string
+			body string
+		}
+
+		for _, r := range []request{
+			{"overwrite1", `{"schedule": "@daily"}`},
+			{"overwrite1", `{"schedule": "@daily", "repeats": 3, "overwrite": true, "due_time": "10s", "ttl": "11s"}`},
+		} {
+			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", o.daprd.HTTPPort(), r.name)
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			assert.Empty(t, string(body))
+		}
+	})
+
+	t.Run("do not overwrite if exist", func(t *testing.T) {
+		type request struct {
+			name       string
+			body       string
+			statusCode int
+		}
+
+		for _, r := range []request{
+			{"overwrite2", `{"schedule": "@daily"}`, http.StatusNoContent},
+			{"overwrite2", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`, http.StatusInternalServerError},
+			{"overwrite2", `{"schedule": "@daily", "repeats": 3, "overwrite": false, "due_time": "10s", "ttl": "11s"}`, http.StatusInternalServerError},
+		} {
+			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", o.daprd.HTTPPort(), r.name)
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			assert.Equal(t, r.statusCode, resp.StatusCode)
+			_, err = io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+		}
+	})
+}

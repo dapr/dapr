@@ -56,11 +56,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.scheduler.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/test", b.daprd.HTTPPort())
-
 	httpClient := client.HTTP(t)
 
 	t.Run("bad json", func(t *testing.T) {
+		postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/test", b.daprd.HTTPPort())
 		for _, body := range []string{
 			"",
 			"{}",
@@ -81,13 +80,19 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("good json", func(t *testing.T) {
-		for _, body := range []string{
-			`{"schedule": "@daily"}`,
-			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`,
-			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "{\"@type\": \"type.googleapis.com/google.protobuf.StringValue\", \"value\": \"Hello, World!\"}"}`,
-			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "Hello, World!"}`,
+		type request struct {
+			name string
+			body string
+		}
+
+		for _, r := range []request{
+			{"test1", `{"schedule": "@daily"}`},
+			{"test2", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`},
+			{"test3", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "{\"@type\": \"type.googleapis.com/google.protobuf.StringValue\", \"value\": \"Hello, World!\"}"}`},
+			{"test4", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "Hello, World!"}`},
 		} {
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", b.daprd.HTTPPort(), r.name)
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
 			require.NoError(t, err)
 			resp, err := httpClient.Do(req)
 			require.NoError(t, err)

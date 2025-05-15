@@ -16,6 +16,8 @@ package errors
 import (
 	"net/http"
 
+	"google.golang.org/grpc/status"
+
 	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
@@ -36,8 +38,13 @@ func SchedulerURLName(metadata map[string]string) error {
 }
 
 func SchedulerScheduleJob(metadata map[string]string, err error) error {
+	code := status.Code(err)
+	if code == codes.Unknown {
+		code = codes.Internal
+	}
+
 	return kiterrors.NewBuilder(
-		codes.Internal,
+		code,
 		http.StatusInternalServerError,
 		"failed to schedule job due to: "+err.Error(),
 		"",
