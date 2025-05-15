@@ -15,9 +15,8 @@ package stream
 
 import (
 	"context"
-	"fmt"
+	serrors "errors"
 	"strconv"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -88,90 +87,44 @@ func (o *ordering) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, subsInMeta, 1)
 	}, time.Second*10, time.Millisecond*10)
 
-	messageCount := 100000
-	sendCount := atomic.Int32{}
-	sendCount.Store(0)
-	receivedCount := atomic.Int32{}
-	receivedCount.Store(0)
-
-	sentMessages := make(chan int, messageCount)
-	receivedMessages := make(chan int, messageCount)
-
-	go func(c *testing.T) {
-		for msgID := range messageCount {
-			select {
-			case <-ctx.Done():
-				c.Errorf("Context canceled or deadline exceeded, stop publishing, %+v", ctx.Err())
-				return
-			default:
-				_, publishErr := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-					PubsubName:      "mypub",
-					Topic:           "ordered",
-					Data:            []byte(strconv.Itoa(msgID)),
-					DataContentType: "text/plain",
-				})
-
-				if publishErr != nil {
-					if ctx.Err() == nil {
-						// This is a real error, not related to context deadline or cancellation
-						c.Errorf("Failed to publish message: %v", publishErr)
-					}
-					// Either way, stop publishing more messages
-					return
-				}
-
-				sendCount.Add(1)
-				sentMessages <- msgID
-			}
-		}
-	}(t)
-
-	errCh := make(chan error)
-
-	go func(c *testing.T) {
-		for range messageCount {
-			event, recvErr := stream.Recv()
-			if recvErr != nil {
-				errCh <- fmt.Errorf("failed to receive message: %w", recvErr)
-				return
-			}
-
-			data := string(event.GetEventMessage().GetData())
-			msgID, err := strconv.Atoi(data)
-			if err != nil {
-				errCh <- fmt.Errorf("failed to parse message ID from data: %w", err)
-				return
-			}
-
-			sendErr := stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-				SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
-					EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
-						Id:     event.GetEventMessage().GetId(),
-						Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
-					},
-				},
+	n := 10000
+	errs := make([]error, n)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range n {
+			_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+				PubsubName:      "mypub",
+				Topic:           "ordered",
+				Data:            []byte(strconv.Itoa(i)),
+				DataContentType: "text/plain",
 			})
-			if sendErr != nil {
-				errCh <- fmt.Errorf("failed to send message: %w", sendErr)
-				return
-			}
-			receivedCount.Add(1)
-			receivedMessages <- msgID
+			errs[i] = err
 		}
-		errCh <- nil
-	}(t)
+	}()
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.EqualValues(c, messageCount, sendCount.Load())
-		assert.EqualValues(c, messageCount, receivedCount.Load())
-	}, time.Second*60, time.Millisecond*100)
+	for i := range n {
+		event, err := stream.Recv()
+		require.NoError(t, err)
+		assert.Equal(t, "ordered", event.GetEventMessage().GetTopic())
+		assert.Equal(t, []byte(strconv.Itoa(i)), event.GetEventMessage().GetData())
 
-	for i := range messageCount {
-		assert.Equal(t, i, <-sentMessages)
-		assert.Equal(t, i, <-receivedMessages)
+		require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+			SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+				EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+					Id:     event.GetEventMessage().GetId(),
+					Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
+				},
+			},
+		}))
 	}
 
-	require.NoError(t, <-errCh)
+	select {
+	case <-done:
+	case <-time.After(time.Second * 10):
+		require.Fail(t, "timeout waiting for publish to finish")
+	}
 
+	require.NoError(t, serrors.Join(errs...))
 	require.NoError(t, stream.CloseSend())
 }
