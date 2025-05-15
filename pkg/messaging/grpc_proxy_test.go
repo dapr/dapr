@@ -26,7 +26,7 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
@@ -164,7 +164,7 @@ func TestIntercept(t *testing.T) {
 			}, nil
 		})
 
-		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
 		_, _, _, _, err := proxy.intercept(ctx, "/test")
 
@@ -190,7 +190,7 @@ func TestIntercept(t *testing.T) {
 
 		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
 
-		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}, securityConsts.APITokenHeader: []string{"oldtoken"}})
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"a"}, securityConsts.APITokenHeader: []string{"oldtoken"}})
 		proxy := p.(*proxy)
 		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
@@ -223,7 +223,7 @@ func TestIntercept(t *testing.T) {
 
 		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
 
-		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
 		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
@@ -263,7 +263,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 
-		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
@@ -284,7 +284,7 @@ func TestIntercept(t *testing.T) {
 			return ctx
 		})
 
-		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		ctx := metadata.NewIncomingContext(t.Context(), metadata.MD{diagConsts.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)

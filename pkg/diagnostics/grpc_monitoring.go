@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
@@ -264,7 +265,7 @@ func (g *grpcMetrics) StreamingServerInterceptor() grpc.StreamServerInterceptor 
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx := ss.Context()
 		md, _ := metadata.FromIncomingContext(ctx)
-		vals, ok := md[GRPCProxyAppIDKey]
+		vals, ok := md[diagConsts.GRPCProxyAppIDKey]
 		if !ok || len(vals) == 0 {
 			return handler(srv, ss)
 		}
@@ -285,7 +286,7 @@ func (g *grpcMetrics) StreamingClientInterceptor() grpc.StreamServerInterceptor 
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx := ss.Context()
 		md, _ := metadata.FromIncomingContext(ctx)
-		vals, ok := md[GRPCProxyAppIDKey]
+		vals, ok := md[diagConsts.GRPCProxyAppIDKey]
 		if !ok || len(vals) == 0 {
 			return handler(srv, ss)
 		}
