@@ -136,10 +136,6 @@ func Run() {
 		cfg.JWTIssuer = &opts.JWTIssuer
 	}
 
-	if len(opts.JWTAudiences) > 0 {
-		cfg.JWTAudiences = opts.JWTAudiences
-	}
-
 	if opts.JWTSigningAlgorithm != "" {
 		cfg.JWTSigningAlgorithm = opts.JWTSigningAlgorithm
 	}

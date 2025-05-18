@@ -76,7 +76,6 @@ type Config struct {
 	JWKSPath            string
 	JWTEnabled          bool
 	JWTIssuer           *string
-	JWTAudiences        []string
 	JWTSigningAlgorithm string
 	JWTKeyID            string
 	Mode                modes.DaprMode
