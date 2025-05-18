@@ -59,7 +59,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
 			request: &JWTRequest{
-				Audience:  "example.com",
+				Audiences: []string{"example.com"},
 				Namespace: "default",
 				AppID:     "test-app",
 				TTL:       time.Hour,
@@ -95,7 +95,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
 			request: &JWTRequest{
-				Audience:  "example.com",
+				Audiences: []string{"example.com"},
 				Namespace: "default",
 				AppID:     "audience-test-app",
 				TTL:       time.Hour,
@@ -118,7 +118,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			clockSkew:        time.Minute,
 			issuer:           stringPtr("https://auth.example.com"),
 			request: &JWTRequest{
-				Audience:  "example.com",
+				Audiences: []string{"example.com"},
 				Namespace: "default",
 				AppID:     "test-app",
 				TTL:       time.Hour,
@@ -138,7 +138,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
 			request: &JWTRequest{
-				Audience:  "example.com",
+				Audiences: []string{"example.com"},
 				Namespace: "default",
 				AppID:     "test-app",
 				TTL:       24 * time.Hour, // Explicitly providing a default TTL for testing
@@ -159,7 +159,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
 			request: &JWTRequest{
-				Audience:  "example.com",
+				Audiences: []string{"example.com"},
 				Namespace: "default",
 				AppID:     "test-app",
 				TTL:       time.Hour,
@@ -205,8 +205,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			issuer, err := NewJWTIssuer(
 				signKey,
 				tc.issuer,
-				tc.clockSkew,
-				[]string{})
+				tc.clockSkew)
 			require.NoError(t, err)
 
 			token, err := issuer.GenerateJWT(context.Background(), tc.request)
@@ -282,13 +281,12 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	issuer, err := NewJWTIssuer(
 		signKey,
 		nil,
-		time.Minute,
-		[]string{})
+		time.Minute)
 	require.NoError(t, err)
 
 	// Generate a JWT
 	request := &JWTRequest{
-		Audience:  "example.com",
+		Audiences: []string{"example.com"},
 		Namespace: "default",
 		AppID:     "test-app",
 		TTL:       time.Hour,
@@ -361,13 +359,12 @@ func TestCustomIssuerInToken(t *testing.T) {
 			issuer, err := NewJWTIssuer(
 				signKey,
 				tc.issuerValue,
-				time.Minute,
-				[]string{})
+				time.Minute)
 			require.NoError(t, err)
 
 			// Create a basic request
 			request := &JWTRequest{
-				Audience:  "example.com",
+				Audiences: []string{"example.com"},
 				Namespace: "default",
 				AppID:     "test-app",
 				TTL:       time.Hour,
@@ -394,88 +391,6 @@ func TestCustomIssuerInToken(t *testing.T) {
 			} else {
 				_, found := parsedToken.Get("iss")
 				assert.False(t, found, "issuer claim should not exist")
-			}
-		})
-	}
-}
-
-// TestExtraAudiencesInToken tests that extraAudiences are correctly included in the JWT token
-func TestExtraAudiencesInToken(t *testing.T) {
-	// Generate an RSA private key for JWT signing with PS256 algorithm
-	rsaSigningKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-
-	// Test cases with different audience configurations
-	testCases := []struct {
-		name           string
-		extraAudiences []string
-		expectedAuds   []string
-		mainAudience   string
-	}{
-		{
-			name:           "no extra audiences",
-			extraAudiences: []string{},
-			mainAudience:   "example.com",
-			expectedAuds:   []string{"example.com"},
-		},
-		{
-			name:           "with custom extra audiences",
-			extraAudiences: []string{"custom-audience-1", "custom-audience-2"},
-			mainAudience:   "example.com",
-			expectedAuds:   []string{"example.com", "custom-audience-1", "custom-audience-2"},
-		},
-		{
-			name:           "with default extra audiences",
-			extraAudiences: DefaultExtraAudiences,
-			mainAudience:   "example.com",
-			expectedAuds:   append([]string{"example.com"}, DefaultExtraAudiences...),
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			signKey, err := jwk.FromRaw(rsaSigningKey)
-			require.NoError(t, err)
-
-			signKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm)
-			signKey.Set(jwk.KeyIDKey, DefaultJWTKeyID)
-
-			// Create issuer with test parameters
-			issuer, err := NewJWTIssuer(
-				signKey,
-				nil, // no custom issuer
-				time.Minute,
-				tc.extraAudiences)
-			require.NoError(t, err)
-
-			// Create a basic request
-			request := &JWTRequest{
-				Audience:  tc.mainAudience,
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       time.Hour,
-			}
-
-			// Generate token
-			token, err := issuer.GenerateJWT(context.Background(), request)
-			require.NoError(t, err)
-
-			pubKey, err := issuer.signKey.PublicKey()
-			require.NoError(t, err)
-
-			// Parse token with verification
-			parsedToken, err := jwt.Parse([]byte(token),
-				jwt.WithKey(DefaultJWTSignatureAlgorithm, pubKey),
-				jwt.WithValidate(true))
-			require.NoError(t, err)
-
-			// Check audience claim
-			aud := parsedToken.Audience()
-			assert.Len(t, aud, len(tc.expectedAuds), "Should have the expected number of audiences")
-
-			// Check that each expected audience is present
-			for _, expectedAud := range tc.expectedAuds {
-				assert.Contains(t, aud, expectedAud, "Expected audience '%s' not found", expectedAud)
 			}
 		})
 	}

@@ -189,7 +189,7 @@ func TestNew(t *testing.T) {
 
 		// Generate a JWT
 		jwtToken, err := caInstance.GenerateJWT(t.Context(), &JWTRequest{
-			Audience:  "test.example.com",
+			Audiences: []string{"test.example.com"},
 			Namespace: "test-namespace",
 			AppID:     "test-app",
 			TTL:       time.Hour,
