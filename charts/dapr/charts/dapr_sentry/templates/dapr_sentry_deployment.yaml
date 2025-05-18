@@ -198,9 +198,6 @@ spec:
 {{- if .Values.jwt.issuer }}
         - "--jwt-issuer={{ .Values.jwt.issuer }}"
 {{- end }}
-{{- if .Values.jwt.audiences }}
-        - "--jwt-audiences={{ join "," .Values.jwt.audiences }}"
-{{- end }}
 {{- if .Values.jwt.signingAlgorithm }}
         - "--jwt-signing-algorithm={{ .Values.jwt.signingAlgorithm }}"
 {{- end }}

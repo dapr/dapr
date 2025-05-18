@@ -154,7 +154,7 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	log.Debugf("Processing SignCertificate request for %s/%s (validator: %s)", namespace, req.GetId(), validator.String())
 
-	trustDomain, err := s.vals[validator].Validate(ctx, req)
+	res, err := s.vals[validator].Validate(ctx, req)
 	if err != nil {
 		log.Debugf("Failed to validate request for %s/%s: %s", namespace, req.GetId(), err)
 		return nil, status.Error(codes.PermissionDenied, err.Error())
@@ -201,7 +201,7 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
 		PublicKey:          csr.PublicKey,
 		SignatureAlgorithm: csr.SignatureAlgorithm,
-		TrustDomain:        trustDomain.String(),
+		TrustDomain:        res.TrustDomain.String(),
 		Namespace:          namespace,
 		AppID:              req.GetId(),
 		DNS:                dns,
@@ -221,9 +221,14 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	var jwtToken *string
 	if s.jwtEnabled {
+		audiences := []string{res.TrustDomain.String()} // Default audience is the trust domain
+		if len(res.Audiences) > 0 {
+			audiences = append(audiences, res.Audiences...)
+		}
+
 		// Generate a JWT with the same identity
 		tkn, err := s.ca.GenerateJWT(ctx, &ca.JWTRequest{
-			Audience:  trustDomain.String(), // use the trust domain as the audience
+			Audiences: audiences,
 			Namespace: req.Namespace,
 			AppID:     req.Id,
 			TTL:       24 * time.Hour,

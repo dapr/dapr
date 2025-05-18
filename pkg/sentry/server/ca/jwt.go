@@ -24,21 +24,10 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-// By defaults we include common cloud audiences in the
-// token so that components can request the token without
-// needing to know the trust domain which is the required
-// audience.
-// Users can override these defaults via config.
-// Examples:
-// - api://AzureADTokenExchange
-// - sts.amazonaws.com
-// - iam.googleapis.com
-var DefaultExtraAudiences = []string{}
-
 // JWTRequest is the request for generating a JWT
 type JWTRequest struct {
-	// Audience is the audience of the JWT.
-	Audience string
+	// Audiences is the audience of the JWT.
+	Audiences []string
 
 	// Namespace is the namespace of the client.
 	Namespace string
@@ -59,17 +48,13 @@ type jwtIssuer struct {
 
 	// allowedClockSkew is the time allowed for clock skew
 	allowedClockSkew time.Duration
-
-	// extraAudiences are optional audiences to include in the JWT
-	extraAudiences []string
 }
 
-func NewJWTIssuer(signKey jwk.Key, issuer *string, allowedClockSkew time.Duration, extraAudiences []string) (jwtIssuer, error) {
+func NewJWTIssuer(signKey jwk.Key, issuer *string, allowedClockSkew time.Duration) (jwtIssuer, error) {
 	return jwtIssuer{
 		signKey:          signKey,
 		issuer:           issuer,
 		allowedClockSkew: allowedClockSkew,
-		extraAudiences:   extraAudiences,
 	}, nil
 }
 
@@ -80,7 +65,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	if req == nil {
 		return "", fmt.Errorf("request cannot be nil")
 	}
-	if req.Audience == "" {
+	if len(req.Audiences) == 0 {
 		return "", fmt.Errorf("audience cannot be empty")
 	}
 	if req.Namespace == "" {
@@ -94,13 +79,11 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	}
 
 	// Create SPIFFE ID format string for the subject claim
-	subject := fmt.Sprintf("spiffe://%s/ns/%s/%s", req.Audience, req.Namespace, req.AppID)
+	subject := fmt.Sprintf("spiffe://%s/ns/%s/%s", req.Audiences, req.Namespace, req.AppID)
 
 	now := time.Now()
 	notBefore := now.Add(-i.allowedClockSkew) // Account for clock skew
 	notAfter := now.Add(req.TTL)
-
-	audiences := append([]string{req.Audience}, i.extraAudiences...)
 
 	// Generate a random nonce for the token
 	nonce, err := generateNonce()
@@ -113,7 +96,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	builder := jwt.NewBuilder().
 		Subject(subject).
 		IssuedAt(now).
-		Audience(audiences).
+		Audience(req.Audiences).
 		NotBefore(notBefore).
 		Claim("nonce", nonce). // Add nonce claim for enhanced security
 		Claim("use", "sig").   // Needed for Azure
