@@ -35,9 +35,6 @@ type JWTRequest struct {
 	// AppID is the app id of the client.
 	AppID string
 
-	// Nonce is a unique identifier to tie the JWT to a specific request.
-	Nonce string
-
 	// TTL is the time-to-live for the token in seconds
 	TTL time.Duration
 }
@@ -103,10 +100,6 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 		NotBefore(notBefore).
 		Claim("use", "sig"). // Needed for Azure
 		Expiration(notAfter)
-
-	if req.Nonce != "" {
-		builder = builder.Claim("nonce", req.Nonce)
-	}
 
 	// Set issuer only if configured
 	if i.issuer != nil {
