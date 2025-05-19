@@ -35,6 +35,9 @@ type JWTRequest struct {
 	// AppID is the app id of the client.
 	AppID string
 
+	// Nonce is a unique identifier to tie the JWT to a specific request.
+	Nonce string
+
 	// TTL is the time-to-live for the token in seconds
 	TTL time.Duration
 }
@@ -85,8 +88,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	notBefore := now.Add(-i.allowedClockSkew) // Account for clock skew
 	notAfter := now.Add(req.TTL)
 
-	// Generate a random nonce for the token
-	nonce, err := generateNonce()
+	jti, err := generateJwtID()
 	if err != nil {
 		log.Errorf("Error generating nonce: %v", err)
 		return "", fmt.Errorf("error generating nonce: %w", err)
@@ -94,13 +96,17 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 
 	// Create JWT token with claims builder
 	builder := jwt.NewBuilder().
+		JwtID(jti).
 		Subject(subject).
 		IssuedAt(now).
 		Audience(req.Audiences).
 		NotBefore(notBefore).
-		Claim("nonce", nonce). // Add nonce claim for enhanced security
-		Claim("use", "sig").   // Needed for Azure
+		Claim("use", "sig"). // Needed for Azure
 		Expiration(notAfter)
+
+	if req.Nonce != "" {
+		builder = builder.Claim("nonce", req.Nonce)
+	}
 
 	// Set issuer only if configured
 	if i.issuer != nil {
@@ -123,8 +129,8 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	return string(signedToken), nil
 }
 
-// generateNonce creates a random nonce to be used in the JWT
-func generateNonce() (string, error) {
+// generateJwtID creates a random JWT ID (jti) using a cryptographically secure random number generator.
+func generateJwtID() (string, error) {
 	nonceBytes := make([]byte, 16) // 16 bytes = 128 bits
 	if _, err := rand.Read(nonceBytes); err != nil {
 		return "", fmt.Errorf("failed to generate random nonce: %w", err)
