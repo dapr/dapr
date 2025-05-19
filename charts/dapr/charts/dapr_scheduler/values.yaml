@@ -30,6 +30,10 @@ cluster:
   storageClassName: ""
   storageSize: 1Gi
   inMemoryStorage: false
+  createStorageClass: false
+  storageClass:
+    parameters: {}
+    mountOptions: []
 
 etcdSpaceQuota: 9.2E
 etcdCompactionMode: periodic
