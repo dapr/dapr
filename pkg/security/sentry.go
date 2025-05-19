@@ -16,6 +16,8 @@ package security
 import (
 	"context"
 	"crypto"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"os"
@@ -109,6 +111,9 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			return nil, fmt.Errorf("error obtaining token: %w", err)
 		}
 
+		// include a nonce in the request to prevent replay attacks when issuing JWTs.
+		nonce, _ := generateNonce()
+
 		req := &sentryv1pb.SignCertificateRequest{
 			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
 				Type: "CERTIFICATE REQUEST", Bytes: csrDER,
@@ -117,6 +122,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			Token:          token,
 			Namespace:      ns,
 			TokenValidator: tokenValidator,
+			Nonce:          &nonce,
 		}
 
 		if trustDomain != nil {
@@ -156,6 +162,17 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			if len(tkn.Audience()) == 0 {
 				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_aud")
 				return nil, fmt.Errorf("JWT audience is empty")
+			}
+
+			// check the nonce
+			nonceClaim, ok := tkn.Get("nonce")
+			if !ok {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_nonce")
+				return nil, fmt.Errorf("JWT nonce is missing")
+			}
+			if nonceClaim.(string) != nonce {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_nonce_mismatch")
+				return nil, fmt.Errorf("JWT nonce does not match request")
 			}
 
 			// TODO: Handle allowed clock skew?
@@ -217,4 +234,14 @@ func isControlPlaneService(id string) bool {
 	default:
 		return false
 	}
+}
+
+func generateNonce() (string, error) {
+	nonceBytes := make([]byte, 32)
+	_, err := rand.Read(nonceBytes)
+	if err != nil {
+		return "", fmt.Errorf("could not generate nonce")
+	}
+
+	return base64.URLEncoding.EncodeToString(nonceBytes), nil
 }
