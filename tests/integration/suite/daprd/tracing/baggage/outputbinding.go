@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package binding
+package baggage
 
 import (
 	"context"
@@ -41,16 +41,19 @@ type output struct {
 	httpapp *prochttp.HTTP
 	daprd   *daprd.Daprd
 
-	traceparent atomic.Bool
+	baggage     atomic.Bool
+	baggageVals atomic.Value
 }
 
 func (b *output) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		if tp := r.Header.Get("traceparent"); tp != "" {
-			b.traceparent.Store(true)
+		if baggage := r.Header.Get("baggage"); baggage != "" {
+			b.baggage.Store(true)
+			b.baggageVals.Store(baggage)
 		} else {
-			b.traceparent.Store(false)
+			b.baggage.Store(false)
+			b.baggageVals.Store(baggage)
 		}
 
 		w.Write([]byte(`OK`))
@@ -63,7 +66,7 @@ func (b *output) Setup(t *testing.T) []framework.Option {
 		daprd.WithResourceFiles(fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: http-binding-traceparent
+  name: http-binding-baggage
 spec:
   type: bindings.http
   version: v1
@@ -83,56 +86,60 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 	httpClient := client.HTTP(t)
 	client := b.daprd.GRPCClient(t, ctx)
 
-	t.Run("no traceparent header provided", func(t *testing.T) {
-		// invoke binding
-		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/http-binding-traceparent", b.daprd.HTTPPort())
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader("{\"operation\":\"get\"}"))
-		require.NoError(t, err)
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.True(t, b.traceparent.Load())
-
-		invokereq := runtime.InvokeBindingRequest{
-			Name:      "http-binding-traceparent",
-			Operation: "get",
-		}
-
-		// invoke binding
-		invokeresp, err := client.InvokeBinding(ctx, &invokereq)
-		require.NoError(t, err)
-		require.NotNil(t, invokeresp)
-		assert.True(t, b.traceparent.Load())
-	})
-
-	t.Run("traceparent header provided", func(t *testing.T) {
+	t.Run("no baggage header provided", func(t *testing.T) {
 		// invoke binding
 		ctx := t.Context()
-		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/http-binding-traceparent", b.daprd.HTTPPort())
+		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/http-binding-baggage", b.daprd.HTTPPort())
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader("{\"operation\":\"get\"}"))
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.False(t, b.baggage.Load())
+
+		invokereq := runtime.InvokeBindingRequest{
+			Name:      "http-binding-baggage",
+			Operation: "get",
+		}
+
+		// invoke binding
+		invokeresp, err := client.InvokeBinding(ctx, &invokereq)
+		require.NoError(t, err)
+		require.NotNil(t, invokeresp)
+		assert.False(t, b.baggage.Load())
+	})
+
+	t.Run("baggage headers provided", func(t *testing.T) {
+		// invoke binding
+		ctx := t.Context()
+		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/http-binding-baggage", b.daprd.HTTPPort())
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader("{\"operation\":\"get\"}"))
 		require.NoError(t, err)
 
-		tp := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-		req.Header.Set("traceparent", tp)
+		bag := "key1=value1,key2=value2"
+		req.Header.Set("baggage", bag)
 
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.True(t, b.traceparent.Load())
+		assert.True(t, b.baggage.Load())
+		assert.Equal(t, "key1=value1,key2=value2", b.baggageVals.Load())
 
 		invokereq := runtime.InvokeBindingRequest{
-			Name:      "http-binding-traceparent",
+			Name:      "http-binding-baggage",
 			Operation: "get",
 		}
 
 		// invoke binding
-		tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-02"
-		ctx = grpcMetadata.AppendToOutgoingContext(ctx, "traceparent", tp)
+		ctx = grpcMetadata.AppendToOutgoingContext(ctx,
+			"baggage", bag,
+		)
 		invokeresp, err := client.InvokeBinding(ctx, &invokereq)
 		require.NoError(t, err)
 		require.NotNil(t, invokeresp)
-		assert.True(t, b.traceparent.Load())
+		assert.True(t, b.baggage.Load())
+		assert.Equal(t, "key1=value1,key2=value2", b.baggageVals.Load())
 	})
 }

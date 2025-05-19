@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package serviceinvocation
+package baggage
 
 import (
 	"context"
@@ -45,17 +45,19 @@ type invoke struct {
 	daprd     *daprd.Daprd
 	grpcdaprd *daprd.Daprd
 
-	traceparent     atomic.Bool
-	grpctracectxkey atomic.Bool
+	baggage     atomic.Bool
+	baggageVals atomic.Value
 }
 
 func (i *invoke) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		if tp := r.Header.Get("traceparent"); tp != "" {
-			i.traceparent.Store(true)
+		if baggage := r.Header.Get("baggage"); baggage != "" {
+			i.baggage.Store(true)
+			i.baggageVals.Store(baggage)
 		} else {
-			i.traceparent.Store(false)
+			i.baggage.Store(false)
+			i.baggageVals.Store("")
 		}
 		w.Write([]byte(`OK`))
 	})
@@ -67,10 +69,12 @@ func (i *invoke) Setup(t *testing.T) []framework.Option {
 			switch in.GetMethod() {
 			case "test":
 				if md, ok := grpcMetadata.FromIncomingContext(ctx); ok {
-					if _, exists := md["grpc-trace-bin"]; exists {
-						i.grpctracectxkey.Store(true)
+					if baggage, exists := md["baggage"]; exists && len(baggage) > 0 {
+						i.baggage.Store(true)
+						i.baggageVals.Store(strings.Join(baggage, ","))
 					} else {
-						i.grpctracectxkey.Store(false)
+						i.baggage.Store(false)
+						i.baggageVals.Store("")
 					}
 				}
 			}
@@ -94,8 +98,9 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 	httpClient := client.HTTP(t)
 	client := i.daprd.GRPCClient(t, ctx)
 
-	t.Run("no traceparent header provided", func(t *testing.T) {
+	t.Run("no baggage header provided", func(t *testing.T) {
 		// invoke both grpc & http apps
+		ctx := t.Context()
 		appURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/test", i.daprd.HTTPPort(), i.daprd.AppID())
 		appreq, err := http.NewRequestWithContext(ctx, http.MethodPost, appURL, strings.NewReader("{\"operation\":\"get\"}"))
 		require.NoError(t, err)
@@ -103,7 +108,7 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer appresp.Body.Close()
 		assert.Equal(t, http.StatusOK, appresp.StatusCode)
-		assert.True(t, i.traceparent.Load())
+		assert.False(t, i.baggage.Load())
 
 		svcreq := runtime.InvokeServiceRequest{
 			Id: i.daprd.AppID(),
@@ -118,10 +123,11 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 
+		ctx = t.Context()
 		svcresp, err := client.InvokeService(ctx, &svcreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
-		assert.True(t, i.traceparent.Load())
+		assert.False(t, i.baggage.Load())
 
 		grpcappreq := runtime.InvokeServiceRequest{
 			Id: i.grpcdaprd.AppID(),
@@ -141,23 +147,25 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		svcresp, err = grpcclient.InvokeService(ctx, &grpcappreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
-		assert.True(t, i.grpctracectxkey.Load()) // this is set for grpc, instead of traceparent
+		assert.False(t, i.baggage.Load())
 	})
 
-	t.Run("traceparent header provided", func(t *testing.T) {
+	t.Run("baggage headers provided", func(t *testing.T) {
 		// invoke both grpc & http apps
+		ctx := t.Context()
 		appURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/test", i.daprd.HTTPPort(), i.daprd.AppID())
 		appreq, err := http.NewRequestWithContext(ctx, http.MethodPost, appURL, strings.NewReader("{\"operation\":\"get\"}"))
 		require.NoError(t, err)
 
-		tp := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-		appreq.Header.Set("traceparent", tp)
+		bag := "key1=value1,key2=value2"
+		appreq.Header.Set("baggage", bag)
 
 		appresp, err := httpClient.Do(appreq)
 		require.NoError(t, err)
 		defer appresp.Body.Close()
 		assert.Equal(t, http.StatusOK, appresp.StatusCode)
-		assert.True(t, i.traceparent.Load())
+		assert.True(t, i.baggage.Load())
+		assert.Equal(t, "key1=value1,key2=value2", i.baggageVals.Load())
 
 		svcreq := runtime.InvokeServiceRequest{
 			Id: i.daprd.AppID(),
@@ -172,12 +180,14 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 
-		tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-02"
-		tctx := grpcMetadata.AppendToOutgoingContext(ctx, "traceparent", tp)
+		tctx := grpcMetadata.AppendToOutgoingContext(t.Context(),
+			"baggage", bag,
+		)
 		svcresp, err := client.InvokeService(tctx, &svcreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
-		assert.True(t, i.traceparent.Load())
+		assert.True(t, i.baggage.Load())
+		assert.Equal(t, "key1=value1,key2=value2", i.baggageVals.Load())
 
 		grpcappreq := runtime.InvokeServiceRequest{
 			Id: i.grpcdaprd.AppID(),
@@ -192,12 +202,14 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 
-		tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-03"
-		tctx = grpcMetadata.AppendToOutgoingContext(tctx, "traceparent", tp)
+		tctx = grpcMetadata.AppendToOutgoingContext(t.Context(),
+			"baggage", bag,
+		)
 		grpcclient := i.grpcdaprd.GRPCClient(t, tctx)
 		svcresp, err = grpcclient.InvokeService(tctx, &grpcappreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
-		assert.True(t, i.grpctracectxkey.Load()) // this is set for grpc, instead of traceparent
+		assert.True(t, i.baggage.Load())
+		assert.Equal(t, "key1=value1,key2=value2", i.baggageVals.Load())
 	})
 }
