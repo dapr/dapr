@@ -46,6 +46,8 @@ message SignCertificateRequest {
   bytes certificate_signing_request = 5;
   // Name of the validator to use, if not the default for the environemtn. 
   TokenValidator token_validator = 6;
+  // Nonce is a unique identifier for the request. It is used to prevent replay when issuing JWTs.
+  optional string nonce = 7;
 }
 
 message SignCertificateResponse {
