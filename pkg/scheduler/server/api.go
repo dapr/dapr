@@ -63,7 +63,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	logWithField := log.WithFields(map[string]any{"overwrite": job.GetOverwrite()})
 	if err != nil {
 		logWithField.Errorf("error scheduling job %s: %s", req.GetName(), err)
-		if errors2.IsJobAlreadyExists(err) {
+		if apierrors.IsJobAlreadyExists(err) {
 			return nil, status.Errorf(codes.AlreadyExists, "%s", err.Error())
 		}
 
