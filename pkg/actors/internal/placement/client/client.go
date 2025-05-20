@@ -261,9 +261,9 @@ func (c *Client) connect(ctx context.Context) error {
 
 	client, err := v1pb.NewPlacementClient(c.conn).ReportDaprStatus(ctx)
 	if err != nil {
-		err = fmt.Errorf("failed to create placement client: %s", err)
+		err = fmt.Errorf("failed to create placement client: %w", err)
 		if strings.Contains(err.Error(), "connect: connection refused") {
-			// reset gRPC connenxt to reset the round robin load balancer state to
+			// reset gRPC context to reset the round robin load balancer state to
 			// ensure we connect to new hosts if all Placement hosts have been
 			// terminated.
 			log.Infof("Resetting gRPC connection to reset round robin load balancer state")
