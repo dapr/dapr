@@ -22,6 +22,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 
@@ -221,7 +224,11 @@ func (c *Client) connectRoundRobin(ctx context.Context) error {
 			return nil
 		}
 
-		log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
+		if status.Code(err) == codes.FailedPrecondition {
+			log.Debugf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
+		} else {
+			log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
+		}
 
 		select {
 		case <-time.After(time.Second / 2):
