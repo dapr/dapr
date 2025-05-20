@@ -14,6 +14,7 @@ limitations under the License.
 package errors
 
 import (
+	"github.com/dapr/kit/grpccodes"
 	"net/http"
 
 	"google.golang.org/grpc/status"
@@ -43,9 +44,11 @@ func SchedulerScheduleJob(metadata map[string]string, err error) error {
 		code = codes.Internal
 	}
 
+	httpCode := grpccodes.HTTPStatusFromCode(code)
+
 	return kiterrors.NewBuilder(
 		code,
-		http.StatusInternalServerError,
+		httpCode,
 		"failed to schedule job due to: "+err.Error(),
 		"",
 		string(errorcodes.SchedulerScheduleJob.Category),

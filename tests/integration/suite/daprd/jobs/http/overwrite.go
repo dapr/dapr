@@ -90,8 +90,8 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 
 		for _, r := range []request{
 			{"overwrite2", `{"schedule": "@daily"}`, http.StatusNoContent},
-			{"overwrite2", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`, http.StatusInternalServerError},
-			{"overwrite2", `{"schedule": "@daily", "repeats": 3, "overwrite": false, "due_time": "10s", "ttl": "11s"}`, http.StatusInternalServerError},
+			{"overwrite2", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`, http.StatusConflict},
+			{"overwrite2", `{"schedule": "@daily", "repeats": 3, "overwrite": false, "due_time": "10s", "ttl": "11s"}`, http.StatusConflict},
 		} {
 			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", o.daprd.HTTPPort(), r.name)
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
