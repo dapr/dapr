@@ -14,8 +14,9 @@ limitations under the License.
 package errors
 
 import (
-	"github.com/dapr/kit/grpccodes"
 	"net/http"
+
+	"github.com/dapr/kit/grpccodes"
 
 	"google.golang.org/grpc/status"
 
