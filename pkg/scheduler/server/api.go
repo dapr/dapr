@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	errors2 "github.com/diagridio/go-etcd-cron/api/errors"
+	apierrors "github.com/diagridio/go-etcd-cron/api/errors"
 
 	"github.com/diagridio/go-etcd-cron/api"
 	"google.golang.org/grpc/codes"
