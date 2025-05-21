@@ -17,10 +17,20 @@ import (
 	"context"
 	"sync"
 
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/connection"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
+	"github.com/dapr/kit/events/loop"
+	"github.com/dapr/kit/logger"
 )
 
+var log = logger.NewLogger("dapr.scheduler.server.pool.store")
+
+type StreamConnection struct {
+	Loop   loop.Interface[loops.Event]
+	Cancel context.CancelCauseFunc
+}
+
 type Options struct {
+	Connection *StreamConnection
 	Namespace  string
 	AppID      *string
 	ActorTypes []string
@@ -39,11 +49,9 @@ func New() *Namespace {
 	}
 }
 
-func (n *Namespace) Add(ctx context.Context, opts Options) (context.Context, *connection.Connection, context.CancelFunc) {
+func (n *Namespace) Add(opts Options) context.CancelCauseFunc {
 	n.lock.Lock()
 	defer n.lock.Unlock()
-
-	conn := connection.New()
 
 	store, ok := n.stores[opts.Namespace]
 	if !ok {
@@ -51,24 +59,26 @@ func (n *Namespace) Add(ctx context.Context, opts Options) (context.Context, *co
 		n.stores[opts.Namespace] = store
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	remove := store.add(conn, opts)
+	remove := store.add(opts.Connection, opts)
 
-	return ctx, conn, func() {
+	return func(err error) {
 		n.lock.Lock()
 		defer n.lock.Unlock()
-		cancel()
+		log.Debugf("Closing connection to %s [appID=%v] [actorTypes=%v]", opts.Namespace, opts.AppID, opts.ActorTypes)
+
+		opts.Connection.Cancel(err)
 		remove()
-		conn.Close()
+		opts.Connection.Loop.Close(new(loops.StreamShutdown))
 
 		if len(store.appIDs.entries) == 0 &&
 			len(store.actorTypes.entries) == 0 {
 			delete(n.stores, opts.Namespace)
 		}
+		log.Debugf("Closed connection to %s [appID=%v] [actorTypes=%v]", opts.Namespace, opts.AppID, opts.ActorTypes)
 	}
 }
 
-func (n *Namespace) AppID(namespace, id string) (*connection.Connection, bool) {
+func (n *Namespace) AppID(namespace, id string) (loop.Interface[loops.Event], bool) {
 	n.lock.RLock()
 	defer n.lock.RUnlock()
 
@@ -80,7 +90,7 @@ func (n *Namespace) AppID(namespace, id string) (*connection.Connection, bool) {
 	return store.appIDs.get(id)
 }
 
-func (n *Namespace) ActorType(namespace, actorType string) (*connection.Connection, bool) {
+func (n *Namespace) ActorType(namespace, actorType string) (loop.Interface[loops.Event], bool) {
 	n.lock.RLock()
 	defer n.lock.RUnlock()
 
@@ -89,6 +99,5 @@ func (n *Namespace) ActorType(namespace, actorType string) (*connection.Connecti
 		return nil, false
 	}
 
-	conn, ok := store.actorTypes.get(actorType)
-	return conn, ok
+	return store.actorTypes.get(actorType)
 }

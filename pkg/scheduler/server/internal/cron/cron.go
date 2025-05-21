@@ -27,11 +27,11 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/healthz"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/etcd"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/connection"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
@@ -115,7 +115,9 @@ func (c *cron) Run(ctx context.Context) error {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
 	}
 
-	c.connectionPool = pool.New(c.etcdcron)
+	c.connectionPool = pool.New(pool.Options{
+		Cron: c.etcdcron,
+	})
 
 	return concurrency.NewRunnerManager(
 		c.connectionPool.Run,
@@ -175,7 +177,7 @@ func (c *cron) Client(ctx context.Context) (api.Interface, error) {
 func (c *cron) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) (context.Context, error) {
 	select {
 	case <-c.readyCh:
-		return c.connectionPool.Add(req, stream)
+		return c.connectionPool.AddConnection(req, stream), nil
 	case <-stream.Context().Done():
 		return nil, stream.Context().Err()
 	}
@@ -250,7 +252,8 @@ func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) *api.Tri
 
 	defer monitoring.RecordJobsTriggeredCount(&meta)
 	return &api.TriggerResponse{
-		Result: c.connectionPool.Send(ctx, &connection.JobEvent{
+		Result: c.connectionPool.Trigger(ctx, &internalsv1pb.JobEvent{
+			Key:      req.GetName(),
 			Name:     req.GetName()[idx+2:],
 			Data:     req.GetPayload(),
 			Metadata: &meta,
