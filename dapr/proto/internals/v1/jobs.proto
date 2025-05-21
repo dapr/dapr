@@ -16,6 +16,8 @@ syntax = "proto3";
 package dapr.proto.internals.v1;
 
 import "google/protobuf/struct.proto";
+import "google/protobuf/any.proto";
+import "dapr/proto/scheduler/v1/scheduler.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1;internals";
 
@@ -31,4 +33,19 @@ message JobHTTPRequest {
   optional string ttl = 5 [json_name = "ttl"];
   google.protobuf.Value data = 6 [json_name = "data"];
   optional bool overwrite = 7 [json_name = "overwrite"];
+}
+
+// JobEvent is an event of a job to be processed by Scheduler.
+message JobEvent {
+  // key is the FQDN key of the job.
+  string key = 1;
+
+  // name is the name of the job.
+  string name = 2;
+
+  // metadata is the metadata associated with the job.
+  scheduler.v1.JobMetadata metadata = 3;
+
+  // data is the data payload of the job.
+  google.protobuf.Any data = 4;
 }

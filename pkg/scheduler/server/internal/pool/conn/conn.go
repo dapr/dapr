@@ -11,32 +11,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package connection
+package conn
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/diagridio/go-etcd-cron/api"
-	"google.golang.org/protobuf/types/known/anypb"
 
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-// JobEvent is a triggered job event.
-type JobEvent struct {
-	Name     string
-	Data     *anypb.Any
-	Metadata *schedulerv1pb.JobMetadata
-}
+// ackPool is a cache to reduce memory allocations for the ack channel.
+var ackPool = sync.Pool{New: func() any {
+	return make(chan schedulerv1pb.WatchJobsRequestResultStatus, 1)
+}}
 
-// Connection represents a single connection bidirectional stream between the
+// Conn represents a single connection bidirectional stream between the
 // scheduler and the client (daprd). conn manages sending triggered jobs to the
 // client, and receiving job process results from the client. Jobs are sent
 // serially via a channel as gRPC does not support concurrent sends. conn
 // tracks the inflight jobs and acks them when the client sends back the
 // result, releasing the job triggering.
-type Connection struct {
+type Conn struct {
 	jobCh chan *schedulerv1pb.WatchJobsResponse
 
 	// idx is the uuid of a triggered job. We can use a simple counter as there
@@ -52,8 +51,9 @@ type Connection struct {
 	closeCh chan struct{}
 }
 
-func New() *Connection {
-	return &Connection{
+func New() *Conn {
+	// TODO: @joshvanl: cache these structs to reduce memory allocations.
+	return &Conn{
 		inflight: make(map[uint64]chan schedulerv1pb.WatchJobsRequestResultStatus),
 		jobCh:    make(chan *schedulerv1pb.WatchJobsResponse, 10),
 		closeCh:  make(chan struct{}),
@@ -63,10 +63,10 @@ func New() *Connection {
 // Handle sends a job to the client and waits for the client to send back the
 // result. The job is acked when the client sends back the result with a UUID
 // corresponding to the job.
-func (c *Connection) Handle(ctx context.Context, jobEvt *JobEvent) api.TriggerResponseResult {
+func (c *Conn) Handle(ctx context.Context, jobEvt *internalsv1pb.JobEvent) api.TriggerResponseResult {
 	c.lock.Lock()
 	c.idx++
-	ackCh := make(chan schedulerv1pb.WatchJobsRequestResultStatus, 1)
+	ackCh := ackPool.Get().(chan schedulerv1pb.WatchJobsRequestResultStatus)
 	c.inflight[c.idx] = ackCh
 	job := &schedulerv1pb.WatchJobsResponse{
 		Name:     jobEvt.Name,
@@ -92,6 +92,7 @@ func (c *Connection) Handle(ctx context.Context, jobEvt *JobEvent) api.TriggerRe
 
 	select {
 	case result := <-ackCh:
+		ackPool.Put(ackCh)
 		if result == schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS {
 			return api.TriggerResponseResult_SUCCESS
 		}
@@ -105,7 +106,7 @@ func (c *Connection) Handle(ctx context.Context, jobEvt *JobEvent) api.TriggerRe
 
 // Ack acks the job with the given UUID. This is called when the client
 // sends back the result of the job to be acked.
-func (c *Connection) Ack(ctx context.Context, result *schedulerv1pb.WatchJobsRequestResult) {
+func (c *Conn) Ack(ctx context.Context, result *schedulerv1pb.WatchJobsRequestResult) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -119,11 +120,12 @@ func (c *Connection) Ack(ctx context.Context, result *schedulerv1pb.WatchJobsReq
 	delete(c.inflight, result.GetId())
 }
 
-func (c *Connection) Close() {
+func (c *Conn) Close() {
+	fmt.Printf(">>CLOSING CONNECTION\n")
 	close(c.closeCh)
 }
 
-func (c *Connection) Next(ctx context.Context) (*schedulerv1pb.WatchJobsResponse, error) {
+func (c *Conn) Next(ctx context.Context) (*schedulerv1pb.WatchJobsResponse, error) {
 	select {
 	case job := <-c.jobCh:
 		return job, nil
