@@ -16,14 +16,12 @@ package errors
 import (
 	"net/http"
 
-	"github.com/dapr/kit/grpccodes"
-
-	"google.golang.org/grpc/status"
-
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	kiterrors "github.com/dapr/kit/errors"
+	"github.com/dapr/kit/grpccodes"
 )
 
 func SchedulerURLName(metadata map[string]string) error {

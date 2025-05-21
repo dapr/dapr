@@ -17,10 +17,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/stretchr/testify/require"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -58,22 +57,30 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 	client := o.daprd.GRPCClient(t, ctx)
 
 	t.Run("overwrite if exists", func(t *testing.T) {
-		for _, req := range []*rtv1.ScheduleJobRequest{
-			{Job: &rtv1.Job{
-				Name:      "overwrite1",
-				Schedule:  ptr.Of("@daily"),
-				Repeats:   ptr.Of(uint32(1)),
-				Overwrite: true,
-			}}, {Job: &rtv1.Job{
-				Name:      "overwrite1",
-				Schedule:  ptr.Of("@daily"),
-				Repeats:   ptr.Of(uint32(1)),
-				Overwrite: true,
-			}},
-		} {
-			_, err := client.ScheduleJobAlpha1(ctx, req)
-			require.NoError(t, err)
-		}
+		jobName := "overwrite1"
+
+		_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
+			Name:     jobName,
+			Schedule: ptr.Of("@daily"),
+			Repeats:  ptr.Of(uint32(1)),
+		}})
+		require.NoError(t, err)
+
+		job, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{Name: jobName})
+		require.Equal(t, "@daily", *job.GetJob().Schedule)
+		require.NoError(t, err)
+
+		_, err = client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
+			Name:      jobName,
+			Schedule:  ptr.Of("@weekly"),
+			Repeats:   ptr.Of(uint32(1)),
+			Overwrite: true,
+		}})
+		require.NoError(t, err)
+
+		modifiedJob, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{Name: jobName})
+		require.NotEqual(t, job.GetJob().GetSchedule(), modifiedJob.GetJob().GetSchedule())
+		require.Equal(t, "@weekly", modifiedJob.GetJob().GetSchedule())
 	})
 
 	t.Run("do not overwrite if exists", func(t *testing.T) {

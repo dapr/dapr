@@ -16,6 +16,7 @@ package http
 import (
 	"context"
 	"fmt"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"io"
 	"net/http"
 	"strings"
@@ -60,13 +61,20 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("overwrite if exists", func(t *testing.T) {
 		type request struct {
-			name string
-			body string
+			name     string
+			body     string
+			assertFn func(j *runtimev1pb.Job)
 		}
 
 		for _, r := range []request{
-			{"overwrite1", `{"schedule": "@daily"}`},
-			{"overwrite1", `{"schedule": "@daily", "repeats": 3, "overwrite": true, "due_time": "10s", "ttl": "11s"}`},
+			{"overwrite1", `{"schedule": "@daily"}`, func(j *runtimev1pb.Job) {
+				assert.Equal(t, "@daily", j.GetSchedule())
+				assert.Equal(t, uint32(0), j.GetRepeats())
+			}},
+			{"overwrite1", `{"schedule": "@weekly", "repeats": 3, "overwrite": true, "due_time": "10s", "ttl": "11s"}`, func(j *runtimev1pb.Job) {
+				assert.Equal(t, "@weekly", j.GetSchedule())
+				assert.Equal(t, uint32(3), j.GetRepeats())
+			}},
 		} {
 			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", o.daprd.HTTPPort(), r.name)
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
@@ -78,6 +86,13 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
 			assert.Empty(t, string(body))
+
+			job, err := o.daprd.GRPCClient(t, ctx).GetJobAlpha1(ctx,
+				&runtimev1pb.GetJobRequest{Name: "overwrite1"},
+			)
+
+			r.assertFn(job.GetJob())
+
 		}
 	})
 
@@ -102,6 +117,13 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			_, err = io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
+
+			job, err := o.daprd.GRPCClient(t, ctx).GetJobAlpha1(ctx,
+				&runtimev1pb.GetJobRequest{Name: "overwrite2"},
+			)
+
+			assert.Equal(t, "@daily", job.GetJob().GetSchedule())
+			assert.Equal(t, uint32(0), job.GetJob().GetRepeats())
 		}
 	})
 }
