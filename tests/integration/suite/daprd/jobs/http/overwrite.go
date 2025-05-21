@@ -16,11 +16,12 @@ package http
 import (
 	"context"
 	"fmt"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,9 +91,8 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			job, err := o.daprd.GRPCClient(t, ctx).GetJobAlpha1(ctx,
 				&runtimev1pb.GetJobRequest{Name: "overwrite1"},
 			)
-
+			require.NoError(t, err)
 			r.assertFn(job.GetJob())
-
 		}
 	})
 
@@ -121,7 +121,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			job, err := o.daprd.GRPCClient(t, ctx).GetJobAlpha1(ctx,
 				&runtimev1pb.GetJobRequest{Name: "overwrite2"},
 			)
-
+			require.NoError(t, err)
 			assert.Equal(t, "@daily", job.GetJob().GetSchedule())
 			assert.Equal(t, uint32(0), job.GetJob().GetRepeats())
 		}

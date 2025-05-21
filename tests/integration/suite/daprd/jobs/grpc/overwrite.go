@@ -67,7 +67,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		job, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{Name: jobName})
-		require.Equal(t, "@daily", *job.GetJob().Schedule)
+		require.Equal(t, "@daily", job.GetJob().GetSchedule())
 		require.NoError(t, err)
 
 		_, err = client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
@@ -79,6 +79,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		modifiedJob, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{Name: jobName})
+		require.NoError(t, err)
 		require.NotEqual(t, job.GetJob().GetSchedule(), modifiedJob.GetJob().GetSchedule())
 		require.Equal(t, "@weekly", modifiedJob.GetJob().GetSchedule())
 	})
@@ -95,7 +96,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 		for _, req := range []*rtv1.ScheduleJobRequest{
 			{Job: &rtv1.Job{
 				Name:      "overwrite2",
-				Schedule:  ptr.Of("@daily"),
+				Schedule:  ptr.Of("@weekly"),
 				Repeats:   ptr.Of(uint32(1)),
 				Overwrite: false,
 			}},
@@ -103,6 +104,10 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			_, err := client.ScheduleJobAlpha1(ctx, req)
 			require.Error(t, err)
 			require.Equal(t, codes.AlreadyExists, status.Code(err))
+
+			overwrite2Job, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{Name: "overwrite2"})
+			require.NoError(t, err)
+			require.Equal(t, "@daily", overwrite2Job.GetJob().GetSchedule())
 		}
 	})
 }
