@@ -11,10 +11,10 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.15.1-0.20250409220637-70c99725fd12
+	github.com/dapr/components-contrib v1.15.1-0.20250423123324-b2c31ceba20b
 	github.com/dapr/durabletask-go v0.6.5
 	github.com/dapr/kit v0.15.2
-	github.com/diagridio/go-etcd-cron v0.6.1
+	github.com/diagridio/go-etcd-cron v0.6.2
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
@@ -286,7 +286,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
-	github.com/hamba/avro/v2 v2.25.1 // indirect
+	github.com/hamba/avro/v2 v2.28.0 // indirect
 	github.com/hashicorp/consul/api v1.25.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
