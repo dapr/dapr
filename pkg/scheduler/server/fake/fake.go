@@ -19,10 +19,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/stretchr/testify/require"
 )
 
 type Fake struct {
@@ -76,12 +77,14 @@ func New(t *testing.T) *Fake {
 		select {
 		case <-time.After(time.Second * 5):
 			require.Fail(t, "timeout waiting for server to stop")
-		case err := <-errCh:
+		case err = <-errCh:
 			require.NoError(t, err)
 		}
 	})
 
-	client, err := grpc.DialContext(t.Context(), lis.Addr().String(), grpc.WithInsecure())
+	client, err := grpc.NewClient(lis.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	require.NoError(t, err)
 	f.client = schedulerv1pb.NewSchedulerClient(client)
 

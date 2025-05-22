@@ -20,6 +20,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/diagridio/go-etcd-cron/api"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -27,7 +28,6 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
-	"github.com/diagridio/go-etcd-cron/api"
 )
 
 var log = logger.NewLogger("dapr.scheduler.server.pool.loops.stream")
