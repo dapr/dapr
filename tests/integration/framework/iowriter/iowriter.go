@@ -21,7 +21,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 // Logger is an interface that provides a Log method and a Name method. The Log
@@ -78,7 +78,7 @@ func (w *stdwriter) flush() {
 	// Don't log if the test hasn't failed and the user hasn't requested logs to
 	// always be printed.
 	if !w.t.Failed() &&
-		!utils.IsTruthy(os.Getenv("DAPR_INTEGRATION_LOGS")) {
+		!kitstrings.IsTruthy(os.Getenv("DAPR_INTEGRATION_LOGS")) {
 		return
 	}
 
