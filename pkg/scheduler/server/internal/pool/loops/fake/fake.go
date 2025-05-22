@@ -15,7 +15,6 @@ package fake
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -52,7 +51,6 @@ func New(t *testing.T) *Fake {
 }
 
 func (f *Fake) Handle(_ context.Context, event loops.Event) error {
-	fmt.Printf(">>GOT HANDLE: %#+v\n", event)
 	f.events <- event
 	return nil
 }

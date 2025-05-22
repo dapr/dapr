@@ -32,12 +32,16 @@ import (
 
 var log = logger.NewLogger("dapr.scheduler.server.pool.loops.stream")
 
-// TODO: @joshvanl: Use a universal `loops.Event` cache for all loops packages.
-//var (
-//	streamLoopCache = sync.Pool{New: func() any {
-//		return loop.Empty[loops.Event]()
-//	}}
-//)
+var (
+	StreamLoopCache = sync.Pool{New: func() any {
+		return loop.Empty[loops.Event]()
+	}}
+	streamCache = sync.Pool{New: func() any {
+		return &stream{
+			inflight: make(map[uint64]func(api.TriggerResponseResult)),
+		}
+	}}
+)
 
 type Options struct {
 	IDx      uint64
@@ -63,32 +67,32 @@ type stream struct {
 	inflight map[uint64]func(api.TriggerResponseResult)
 	lock     sync.Mutex
 
-	doneCh chan struct{}
+	wg sync.WaitGroup
 }
 
 func New(opts Options) loop.Interface[loops.Event] {
-	// TODO: @joshvanl: cache.
-	stream := &stream{
-		idx:      opts.IDx,
-		channel:  opts.Channel,
-		connLoop: opts.ConnLoop,
-		inflight: make(map[uint64]func(api.TriggerResponseResult)),
-		ns:       opts.Request.GetNamespace(),
-		appID:    opts.Request.GetAppId(),
-		doneCh:   make(chan struct{}),
-	}
+	stream := streamCache.Get().(*stream)
+	stream.idx = opts.IDx
+	stream.channel = opts.Channel
+	stream.connLoop = opts.ConnLoop
+	stream.ns = opts.Request.GetNamespace()
+	stream.appID = opts.Request.GetAppId()
 
-	//loop := jobLoopCache.Get().(loop.Interface[loops.Event])
-	loop := loop.Empty[loops.Event]().Reset(stream, 5)
+	loop := StreamLoopCache.Get().(loop.Interface[loops.Event])
+	loop.Reset(stream, 5)
 
-	go stream.recvLoop()
+	stream.wg.Add(1)
+	go func() {
+		stream.recvLoop()
+		log.Debugf("Closed receive stream to %s/%s", stream.ns, stream.appID)
+		stream.connLoop.Enqueue(&loops.ConnCloseStream{StreamIDx: stream.idx})
+		stream.wg.Done()
+	}()
 
 	return loop
 }
 
 func (s *stream) Handle(ctx context.Context, event loops.Event) error {
-	fmt.Printf(">>Handling Stream event: %T %v\n", event, event)
-
 	switch e := event.(type) {
 	case *loops.TriggerRequest:
 		s.handleTriggerRequest(e)
@@ -116,10 +120,8 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 		Metadata: req.Job.GetMetadata(),
 	}
 
-	fmt.Printf(">>SENDING JOB: %v\n", job)
 	if err := s.channel.Send(job); err != nil {
 		log.Warnf("Error sending job to stream %s/%s: %s", s.ns, s.appID, err)
-		fmt.Printf("<<<HERE1123\n")
 		s.connLoop.Enqueue(&loops.ConnCloseStream{StreamIDx: s.idx})
 	}
 }
@@ -128,21 +130,16 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 // the stream and calls all inflight result functions with an undeliverable
 // result.
 func (s *stream) handleShutdown() {
-	<-s.doneCh
-	for _, fn := range s.inflight {
+	s.wg.Wait()
+	for id, fn := range s.inflight {
 		fn(api.TriggerResponseResult_UNDELIVERABLE)
+		delete(s.inflight, id)
 	}
 }
 
 // recvLoop is the main loop for receiving messages from the stream. It
 // handles errors and calls the recv function to receive messages.
 func (s *stream) recvLoop() {
-	defer func() {
-		log.Debugf("Closed receive stream to %s/%s", s.ns, s.appID)
-		s.connLoop.Enqueue(&loops.ConnCloseStream{StreamIDx: s.idx})
-		close(s.doneCh)
-	}()
-
 	for {
 		err := s.recv()
 		if err == nil {
@@ -164,7 +161,6 @@ func (s *stream) recvLoop() {
 // the inflight result function with the appropriate result.
 func (s *stream) recv() error {
 	resp, err := s.channel.Recv()
-	fmt.Printf(">>GOT RECV: %v %v\n", resp, err)
 	if err != nil {
 		return err
 	}

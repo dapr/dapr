@@ -16,7 +16,6 @@ package connections
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 	"strconv"
 	"sync"
@@ -90,7 +89,6 @@ func newSuite(t *testing.T) *suite {
 	prefixes.Store(ptr.Of(make([]string, 0)))
 	connLoop := New(Options{
 		Cron: frameworkfake.New().WithDeliverablePrefixes(func(_ context.Context, ps ...string) (context.CancelFunc, error) {
-			fmt.Printf("<<<<%s\n", ps)
 			prefixes.Store(ptr.Of(append(*prefixes.Load(), ps...)))
 			return func() {}, nil
 		}),
