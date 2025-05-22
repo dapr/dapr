@@ -15,7 +15,6 @@ package binding
 
 import (
 	"context"
-	"crypto/x509"
 	"io"
 	"net/http"
 	"testing"
@@ -45,6 +44,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testinggrpc "github.com/dapr/dapr/pkg/testing/grpc"
+	"github.com/dapr/kit/crypto/spiffe"
 	"github.com/dapr/kit/logger"
 )
 
@@ -184,8 +184,8 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 		ControlPlaneTrustDomain: "test.example.com",
 		ControlPlaneNamespace:   "default",
 		MTLSEnabled:             false,
-		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
-			return []*x509.Certificate{nil}, nil
+		OverrideCertRequestFn: func(context.Context, []byte) (*spiffe.SVIDResponse, error) {
+			return nil, nil
 		},
 		Healthz: healthz.New(),
 	})
