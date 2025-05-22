@@ -163,9 +163,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
       enablePrivateCluster: false
     }
     addonProfiles: {
-      httpApplicationRouting: {
-        enabled: true
-      }
       azurepolicy: {
         enabled: false
       }
