@@ -191,7 +191,8 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 	return table.UnRegisterActorTypes(abe.workflowActorType, abe.activityActorType)
 }
 
-// TODO: @joshvanl
+// RerunWorkflowFromEvent implements backend.Backend and reruns a workflow from
+// a specific event ID.
 func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.RerunWorkflowFromEventRequest) (api.InstanceID, error) {
 	abe.lock.RLock()
 	ch := abe.registeredCh
@@ -221,7 +222,7 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 
 	requestBytes, err := proto.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal RerunWorkflowInstanceRequest: %w", err)
+		return "", fmt.Errorf("failed to marshal RerunWorkflowFromEvent: %w", err)
 	}
 
 	areq := internalsv1pb.NewInternalInvokeRequest(todo.ForkWorkflowHistory).

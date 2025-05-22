@@ -12,7 +12,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.15.1-0.20250522140356-026f99710af9
-	github.com/dapr/durabletask-go v0.6.5
+	github.com/dapr/durabletask-go v0.7.1
 	github.com/dapr/kit v0.15.3-0.20250522135818-baea6263991d
 	github.com/diagridio/go-etcd-cron v0.7.0
 	github.com/evanphx/json-patch/v5 v5.9.0
