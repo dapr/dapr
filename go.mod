@@ -11,7 +11,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.15.1-0.20250522140356-026f99710af9
+	github.com/dapr/components-contrib v1.15.1-0.20250522165848-88fce6a1402a
 	github.com/dapr/durabletask-go v0.7.1
 	github.com/dapr/kit v0.15.3-0.20250522135818-baea6263991d
 	github.com/diagridio/go-etcd-cron v0.7.1
