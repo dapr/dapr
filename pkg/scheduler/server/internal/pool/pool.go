@@ -15,7 +15,7 @@ package pool
 
 import (
 	"context"
-	"fmt"
+	"sync"
 
 	"github.com/diagridio/go-etcd-cron/api"
 
@@ -30,15 +30,10 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.scheduler.server.pool")
 
-//// respChPool and errChPool is a cache to reduce memory allocations for the ack channel.
-//var (
-//	respChPool = sync.Pool{New: func() any {
-//		return make(chan api.TriggerResponseResult, 1)
-//	}}
-//	errChPool = sync.Pool{New: func() any {
-//		return make(chan error, 1)
-//	}}
-//)
+// respChPool is a cache to reduce memory allocations for the ack channel.
+var respChPool = sync.Pool{New: func() any {
+	return make(chan api.TriggerResponseResult, 1)
+}}
 
 type Options struct {
 	Cron api.Interface
@@ -72,14 +67,12 @@ func (p *Pool) Run(ctx context.Context) error {
 	return concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
 			err := p.connsLoop.Run(ctx)
-			fmt.Printf(">>CONNS LOOP SHUTDOWN\n")
 			return err
 		},
 		func(ctx context.Context) error {
 			<-ctx.Done()
 			log.Info("Connection pool shutting down")
 			p.connsLoop.Close(new(loops.Shutdown))
-			fmt.Printf(">>MAIN LOOP SHUTDOWN\n")
 			return nil
 		},
 	).Run(ctx)
@@ -104,7 +97,7 @@ func (p *Pool) AddConnection(req *schedulerv1pb.WatchJobsRequestInitial, stream 
 func (p *Pool) Trigger(ctx context.Context, job *internalsv1pb.JobEvent) api.TriggerResponseResult {
 	<-p.readyCh
 
-	respCh := make(chan api.TriggerResponseResult, 1)
+	respCh := respChPool.Get().(chan api.TriggerResponseResult)
 	p.connsLoop.Enqueue(&loops.TriggerRequest{
 		Job: job,
 		ResultFn: func(resp api.TriggerResponseResult) {
@@ -112,5 +105,7 @@ func (p *Pool) Trigger(ctx context.Context, job *internalsv1pb.JobEvent) api.Tri
 		},
 	})
 
-	return <-respCh
+	resp := <-respCh
+	respChPool.Put(respCh)
+	return resp
 }

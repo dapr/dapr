@@ -16,9 +16,10 @@ package loops
 import (
 	"context"
 
+	"github.com/diagridio/go-etcd-cron/api"
+
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/diagridio/go-etcd-cron/api"
 )
 
 // Event is a generic interface for all events in the scheduler.

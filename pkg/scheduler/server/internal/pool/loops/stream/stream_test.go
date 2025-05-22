@@ -280,7 +280,7 @@ func Test_Stream(t *testing.T) {
 		suite := newSuite(t)
 
 		var called []atomic.Pointer[api.TriggerResponseResult]
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			called = append(called, atomic.Pointer[api.TriggerResponseResult]{})
 			suite.streamLoop.Enqueue(&loops.TriggerRequest{
 				Job: &internalsv1pb.JobEvent{
@@ -293,7 +293,7 @@ func Test_Stream(t *testing.T) {
 		suite.closeserver()
 		suite.streamLoop.Close(new(loops.StreamShutdown))
 		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123})
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, (*called[i].Load()))
 		}
 	})

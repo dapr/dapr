@@ -75,6 +75,7 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	for i := range n {
 		_, err := g.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+			//nolint:gosec
 			Job: &runtimev1pb.Job{
 				Name:     strconv.Itoa(i),
 				DueTime:  ptr.Of("0s"),
@@ -86,6 +87,7 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		//nolint:gosec
 		assert.Equal(c, n*rep, int(g.called.Load()))
 	}, time.Second*10, time.Millisecond*10)
 

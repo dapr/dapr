@@ -136,9 +136,9 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 	}()
 
 	c.streams[streamIDx] = c.streamPool.Add(store.Options{
-		Namespace:  add.Request.Namespace,
+		Namespace:  add.Request.GetNamespace(),
 		AppID:      appID,
-		ActorTypes: add.Request.ActorTypes,
+		ActorTypes: add.Request.GetActorTypes(),
 		Connection: &store.StreamConnection{
 			Cancel: func(err error) {
 				pcancel()
