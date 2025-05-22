@@ -56,7 +56,7 @@ func (s *Subscription) applyBulkSubscribeResiliency(ctx context.Context, bulkSub
 			Entries:  make([]contribpubsub.BulkSubscribeResponseEntry, 0, len(psm.PubSubMessages)),
 			Envelope: maps.Clone(envelope),
 		}
-		err := s.postman.DeliverBulk(ctx, &postman.DelivererBulkRequest{
+		err := s.postman.DeliverBulk(ctx, &postman.DeliverBulkRequest{
 			BulkSubCallData:      &bscData,
 			BulkSubMsg:           &psm,
 			BulkSubResiliencyRes: bsrr,

@@ -137,7 +137,7 @@ func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 // DeliverBulk publishes bulk message to a subscriber using gRPC and takes care
 // of corresponding responses.
-func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DelivererBulkRequest) error {
+func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest) error {
 	bscData := *req.BulkSubCallData
 	psm := req.BulkSubMsg
 	bulkResponses := req.BulkResponses

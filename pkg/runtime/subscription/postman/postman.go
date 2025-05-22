@@ -25,11 +25,11 @@ import (
 // to the channel sink.
 type Interface interface {
 	Deliver(context.Context, *pubsub.SubscribedMessage) error
-	DeliverBulk(context.Context, *DelivererBulkRequest) error
+	DeliverBulk(context.Context, *DeliverBulkRequest) error
 }
 
 // TODO: @joshvanl: consolidate struct types.
-type DelivererBulkRequest struct {
+type DeliverBulkRequest struct {
 	BulkSubCallData      *todo.BulkSubscribeCallData
 	BulkSubMsg           *todo.BulkSubscribedMessage
 	BulkSubResiliencyRes *todo.BulkSubscribeResiliencyRes

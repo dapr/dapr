@@ -159,7 +159,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 
 // DeliverBulk publishes bulk message to a subscriber using HTTP and takes care
 // of corresponding responses.
-func (h *http) DeliverBulk(ctx context.Context, req *postman.DelivererBulkRequest) error {
+func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest) error {
 	bscData := *req.BulkSubCallData
 	psm := req.BulkSubMsg
 	bsrr := req.BulkSubResiliencyRes

@@ -79,6 +79,6 @@ func (s *streaming) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) 
 	}
 }
 
-func (s *streaming) DeliverBulk(context.Context, *postman.DelivererBulkRequest) error {
+func (s *streaming) DeliverBulk(context.Context, *postman.DeliverBulkRequest) error {
 	return errors.New("not implemented")
 }

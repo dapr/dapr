@@ -22,7 +22,7 @@ import (
 
 type Fake struct {
 	deliverFn     func(context.Context, *pubsub.SubscribedMessage) error
-	deliverBulkFn func(context.Context, *postman.DelivererBulkRequest) error
+	deliverBulkFn func(context.Context, *postman.DeliverBulkRequest) error
 }
 
 func New() *Fake {
@@ -30,7 +30,7 @@ func New() *Fake {
 		deliverFn: func(ctx context.Context, msg *pubsub.SubscribedMessage) error {
 			return nil
 		},
-		deliverBulkFn: func(ctx context.Context, req *postman.DelivererBulkRequest) error {
+		deliverBulkFn: func(ctx context.Context, req *postman.DeliverBulkRequest) error {
 			return nil
 		},
 	}
@@ -41,7 +41,7 @@ func (f *Fake) WithDeliverFn(fn func(context.Context, *pubsub.SubscribedMessage)
 	return f
 }
 
-func (f *Fake) WithDeliverBulkFn(fn func(context.Context, *postman.DelivererBulkRequest) error) *Fake {
+func (f *Fake) WithDeliverBulkFn(fn func(context.Context, *postman.DeliverBulkRequest) error) *Fake {
 	f.deliverBulkFn = fn
 	return f
 }
@@ -50,6 +50,6 @@ func (f *Fake) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	return f.deliverFn(ctx, msg)
 }
 
-func (f *Fake) DeliverBulk(ctx context.Context, req *postman.DelivererBulkRequest) error {
+func (f *Fake) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest) error {
 	return f.deliverBulkFn(ctx, req)
 }
