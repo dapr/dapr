@@ -449,7 +449,7 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 		return ctx
 	}
 
-	return spiffecontext.With(ctx, s.spiffe)
+	return spiffecontext.WithSpiffe(ctx, s.spiffe)
 }
 
 func (s *security) IdentityDir() *string {
