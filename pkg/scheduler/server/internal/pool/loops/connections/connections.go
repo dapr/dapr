@@ -32,19 +32,13 @@ import (
 
 var log = logger.NewLogger("dapr.scheduler.server.pool.loops.connections")
 
-// TODO: @joshvanl: Use a universal `loops.Event` cache for all loops packages.
-//var (
-//	streamLoopCache = sync.Pool{New: func() any {
-//		return loop.Empty[loops.Event]()
-//	}}
-//)
-
 type Options struct {
 	Cron       api.Interface
 	CancelPool context.CancelCauseFunc
 }
 
-// TODO: @joshvanl
+// connections is a control loop that creates and manages stream connections,
+// piping trigger requests.
 type connections struct {
 	cron       api.Interface
 	cancelPool context.CancelCauseFunc
@@ -57,7 +51,6 @@ type connections struct {
 }
 
 func New(opts Options) loop.Interface[loops.Event] {
-	// TODO: @joshvanl: cache.
 	conns := &connections{
 		streams:    make(map[uint64]context.CancelCauseFunc),
 		cancelPool: opts.CancelPool,
@@ -65,15 +58,11 @@ func New(opts Options) loop.Interface[loops.Event] {
 		streamPool: store.New(),
 	}
 
-	//loop := jobLoopCache.Get().(loop.Interface[loops.Event])
-	loop := loop.Empty[loops.Event]().Reset(conns, 1024)
-	conns.loop = loop
-	return loop
+	conns.loop = loop.New(conns, 1024)
+	return conns.loop
 }
 
 func (c *connections) Handle(ctx context.Context, event loops.Event) error {
-	fmt.Printf(">>Handling Connection event: %T %v\n", event, event)
-
 	switch e := event.(type) {
 	case *loops.ConnAdd:
 		return c.handleAdd(ctx, e)
@@ -94,8 +83,6 @@ func (c *connections) Handle(ctx context.Context, event loops.Event) error {
 func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 	var prefixes []string
 	var appID *string
-
-	fmt.Printf(">>HANDLING ADD: %v\n", add)
 
 	reqNamespace := add.Request.GetNamespace()
 	reqAppID := add.Request.GetAppId()
@@ -119,8 +106,6 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 
 	log.Debugf("Marking deliverable prefixes for Sidecar connection: %s/%s: %v.",
 		add.Request.GetNamespace(), add.Request.GetAppId(), prefixes)
-
-	fmt.Printf(">>%v\n", appID)
 
 	pcancel, err := c.cron.DeliverablePrefixes(ctx, prefixes...)
 	if err != nil {

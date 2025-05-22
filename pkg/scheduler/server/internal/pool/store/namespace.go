@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/stream"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
@@ -69,6 +70,7 @@ func (n *Namespace) Add(opts Options) context.CancelCauseFunc {
 		opts.Connection.Cancel(err)
 		remove()
 		opts.Connection.Loop.Close(new(loops.StreamShutdown))
+		stream.StreamLoopCache.Put(opts.Connection.Loop)
 
 		if len(store.appIDs.entries) == 0 &&
 			len(store.actorTypes.entries) == 0 {
