@@ -22,5 +22,4 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/metrics"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/quorum"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/staging"
-	// TODO: @joshvanl: add go routine int test
 )
