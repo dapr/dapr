@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/jwt"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	secpem "github.com/dapr/kit/crypto/pem"
 	"github.com/dapr/kit/logger"
@@ -63,6 +64,9 @@ type Options struct {
 
 	// JWTEnabled indicates whether JWT support is enabled
 	JWTEnabled bool
+
+	// JWTTTL is the time to live for the JWT token.
+	JWTTTL time.Duration
 }
 
 // Server is the gRPC server for the Sentry service.
@@ -75,6 +79,7 @@ type Server struct {
 	ca               ca.Signer
 	htarget          healthz.Target
 	jwtEnabled       bool
+	jwtTTL           time.Duration
 }
 
 func New(opts Options) *Server {
@@ -87,6 +92,7 @@ func New(opts Options) *Server {
 		ca:               opts.CA,
 		htarget:          opts.Healthz.AddTarget("sentry-server"),
 		jwtEnabled:       opts.JWTEnabled,
+		jwtTTL:           opts.JWTTTL,
 	}
 }
 
@@ -221,25 +227,23 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	var jwtToken *string
 	if s.jwtEnabled {
-		audiences := []string{res.TrustDomain.String()} // Default audience is the trust domain
-		if len(res.Audiences) > 0 {
-			audiences = append(audiences, res.Audiences...)
-		}
+		audiences := append([]string{res.TrustDomain.String()}, req.GetAudiences()...) // Default audience is the trust domain
 
 		// Generate a JWT with the same identity
-		tkn, err := s.ca.GenerateJWT(ctx, &ca.JWTRequest{
-			Audiences: audiences,
-			Namespace: req.Namespace,
-			AppID:     req.Id,
-			TTL:       24 * time.Hour,
+		tkn, err := s.ca.Generate(ctx, &jwt.Request{
+			TrustDomain: res.TrustDomain,
+			Audiences:   audiences,
+			Namespace:   req.GetNamespace(),
+			AppID:       req.GetId(),
+			TTL:         s.jwtTTL,
 		})
 		if err != nil {
-			// Continue but log the error as the certificate is still valid
-			log.Errorf("Failed to generate JWT for %s/%s: %v", req.Namespace, req.Id, err)
+			return nil, status.Errorf(codes.Internal, "failed to generate JWT: %v", err)
 		}
-		if tkn != "" {
-			jwtToken = &tkn
+		if tkn == "" {
+			return nil, status.Error(codes.Internal, "failed to generate JWT: empty token")
 		}
+		jwtToken = &tkn
 	}
 
 	return &sentryv1pb.SignCertificateResponse{

@@ -138,6 +138,11 @@ spec:
           containerPort: {{ .Values.debug.port }}
           protocol: TCP
 {{- end }}
+{{- if .Values.oidc.enabled }}
+        - name: oidc
+          containerPort: 9080
+          protocol: TCP
+{{- end }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
@@ -204,8 +209,16 @@ spec:
 {{- if .Values.jwt.keyID }}
         - "--jwt-key-id={{ .Values.jwt.keyID }}"
 {{- end }}
-{{- if gt (.Values.oidc.httpPort | int) 0 }}
-        - "--oidc-http-port={{ .Values.oidc.httpPort }}"
+{{- if .Values.oidc.enabled }}
+        - "--oidc-enabled=true"
+{{- else }}
+        - "--oidc-enabled=false"
+{{- end }}
+{{- if and .Values.oidc.server .Values.oidc.server.port }}
+        - "--oidc-server-listen-port={{ .Values.oidc.server.port }}"
+{{- end }}
+{{- if and .Values.oidc.server .Values.oidc.server.address }}
+        - "--oidc-server-address={{ .Values.oidc.server.address }}"
 {{- end }}
 {{- if .Values.oidc.jwksURI }}
         - "--oidc-jwks-uri={{ .Values.oidc.jwksURI }}"
@@ -213,17 +226,17 @@ spec:
 {{- if .Values.oidc.pathPrefix }}
         - "--oidc-path-prefix={{ .Values.oidc.pathPrefix }}"
 {{- end }}
-{{- if .Values.oidc.domains }}
-        - "--oidc-domains={{ join "," .Values.oidc.domains }}"
+{{- if .Values.oidc.allowedHosts }}
+        - "--oidc-allowed-hosts={{ join "," .Values.oidc.allowedHosts }}"
 {{- end }}
 {{- if .Values.oidc.tls.certFile }}
-        - "--oidc-tls-cert-file={{ .Values.oidc.tlsCertFile }}"
+        - "--oidc-server-tls-cert-file={{ .Values.oidc.tls.certFile }}"
 {{- end }}
 {{- if .Values.oidc.tls.keyFile }}
-        - "--oidc-tls-key-file={{ .Values.oidc.tlsKeyFile }}"
+        - "--oidc-server-tls-key-file={{ .Values.oidc.tls.keyFile }}"
 {{- end }}
-{{- if .Values.oidc.tls.insecure }}
-        - "--oidc-tls-insecure={{ .Values.oidc.tls.insecure }}"
+{{- if .Values.oidc.tls.enabled }}
+        - "--oidc-server-tls-enabled={{ .Values.oidc.tls.enabled }}"
 {{- end }}
 
       serviceAccountName: dapr-sentry

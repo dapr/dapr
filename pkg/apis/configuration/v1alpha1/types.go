@@ -279,8 +279,6 @@ type AccessControlSpec struct {
 	// +optional
 	TrustDomain string `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
 	// +optional
-	Audiences []string `json:"audiences,omitempty" yaml:"audiences,omitempty"`
-	// +optional
 	AppPolicies []AppPolicySpec `json:"policies,omitempty" yaml:"policies,omitempty"`
 }
 

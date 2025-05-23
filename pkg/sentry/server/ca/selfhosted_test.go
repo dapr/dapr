@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 )
 
 var writePerm os.FileMode
@@ -54,10 +55,12 @@ func TestSelhosted_store(t *testing.T) {
 			},
 		}
 
-		require.NoError(t, s.store(t.Context(), Bundle{
-			TrustAnchors: []byte("root"),
-			IssChainPEM:  []byte("issuer"),
-			IssKeyPEM:    []byte("key"),
+		require.NoError(t, s.store(t.Context(), bundle.Bundle{
+			X509: bundle.X509{
+				TrustAnchors: []byte("root"),
+				IssChainPEM:  []byte("issuer"),
+				IssKeyPEM:    []byte("key"),
+			},
 		}))
 
 		require.FileExists(t, rootFile)
@@ -107,17 +110,17 @@ func TestSelfhosted_get(t *testing.T) {
 	require.NoError(t, err)
 
 	// Define check functions for generation flags
-	genX509Check := func(g CredentialGenOptions) bool {
-		return g.RequireX509
+	genX509Check := func(g bundle.MissingCredentials) bool {
+		return g.X509
 	}
-	genJWTCheck := func(g CredentialGenOptions) bool {
-		return g.RequireJWT
+	genJWTCheck := func(g bundle.MissingCredentials) bool {
+		return g.JWT
 	}
-	genAllCheck := func(g CredentialGenOptions) bool {
-		return g.RequireX509 && g.RequireJWT
+	genAllCheck := func(g bundle.MissingCredentials) bool {
+		return g.X509 && g.JWT
 	}
-	genNoneCheck := func(g CredentialGenOptions) bool {
-		return !g.RequireX509 && !g.RequireJWT
+	genNoneCheck := func(g bundle.MissingCredentials) bool {
+		return !g.X509 && !g.JWT
 	}
 
 	tests := map[string]struct {
@@ -126,8 +129,8 @@ func TestSelfhosted_get(t *testing.T) {
 		key         *[]byte
 		jwtKey      *[]byte
 		jwksData    *[]byte
-		expBundle   Bundle
-		expGenCheck func(CredentialGenOptions) bool
+		expBundle   bundle.Bundle
+		expGenCheck func(bundle.MissingCredentials) bool
 		expErr      bool
 	}{
 		"if no files exist, return not ok": {
@@ -136,7 +139,7 @@ func TestSelfhosted_get(t *testing.T) {
 			key:         nil,
 			jwtKey:      nil,
 			jwksData:    nil,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 			expGenCheck: nil,
 			expErr:      false,
 		},
@@ -146,7 +149,7 @@ func TestSelfhosted_get(t *testing.T) {
 			key:         &intPKPEM,
 			jwtKey:      nil,
 			jwksData:    nil,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 			expGenCheck: nil,
 			expErr:      false,
 		},
@@ -156,7 +159,7 @@ func TestSelfhosted_get(t *testing.T) {
 			key:         &intPKPEM,
 			jwtKey:      nil,
 			jwksData:    nil,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 			expGenCheck: nil,
 			expErr:      false,
 		},
@@ -166,7 +169,7 @@ func TestSelfhosted_get(t *testing.T) {
 			key:         nil,
 			jwtKey:      nil,
 			jwksData:    nil,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 			expGenCheck: nil,
 			expErr:      false,
 		},
@@ -176,7 +179,7 @@ func TestSelfhosted_get(t *testing.T) {
 			key:         &intPKPEM,
 			jwtKey:      nil,
 			jwksData:    nil,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 			expGenCheck: nil,
 			expErr:      true,
 		},
@@ -186,12 +189,14 @@ func TestSelfhosted_get(t *testing.T) {
 			key:      &intPKPEM,
 			jwtKey:   nil,
 			jwksData: nil,
-			expBundle: Bundle{
-				TrustAnchors: rootPEM,
-				IssChainPEM:  intPEM,
-				IssKeyPEM:    intPKPEM,
-				IssChain:     []*x509.Certificate{intCrt},
-				IssKey:       intPK,
+			expBundle: bundle.Bundle{
+				X509: bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
 			},
 			expGenCheck: genJWTCheck,
 			expErr:      false,
@@ -201,12 +206,14 @@ func TestSelfhosted_get(t *testing.T) {
 			issuer:   &intPEM,
 			key:      &intPKPEM,
 			jwksData: nil,
-			expBundle: Bundle{
-				TrustAnchors: rootPEM,
-				IssChainPEM:  intPEM,
-				IssKeyPEM:    intPKPEM,
-				IssChain:     []*x509.Certificate{intCrt},
-				IssKey:       intPK,
+			expBundle: bundle.Bundle{
+				X509: bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
 			},
 			expGenCheck: genJWTCheck,
 			expErr:      false,
@@ -217,7 +224,7 @@ func TestSelfhosted_get(t *testing.T) {
 			key:         &intPKPEM,
 			jwtKey:      nil,
 			jwksData:    &jwksBytes,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 			expGenCheck: nil,
 			expErr:      true,
 		},
@@ -227,7 +234,7 @@ func TestSelfhosted_get(t *testing.T) {
 			key:         &intPKPEM,
 			jwtKey:      &intPKPEM, // Using an invalid JWT key
 			jwksData:    &jwksBytes,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 			expGenCheck: nil,
 			expErr:      true,
 		},
@@ -237,7 +244,7 @@ func TestSelfhosted_get(t *testing.T) {
 			key:         &intPKPEM,
 			jwtKey:      &signingKeyPEM,
 			jwksData:    &intPKPEM, // Using invalid JWKS data
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 			expGenCheck: nil,
 			expErr:      true,
 		},
@@ -247,16 +254,20 @@ func TestSelfhosted_get(t *testing.T) {
 			key:      &intPKPEM,
 			jwtKey:   &signingKeyPEM,
 			jwksData: &jwksBytes,
-			expBundle: Bundle{
-				TrustAnchors:     rootPEM,
-				IssChainPEM:      intPEM,
-				IssKeyPEM:        intPKPEM,
-				IssChain:         []*x509.Certificate{intCrt},
-				IssKey:           intPK,
-				JWTSigningKey:    signingKey,
-				JWTSigningKeyPEM: signingKeyPEM,
-				JWKSJson:         jwksBytes,
-				JWKS:             jwks,
+			expBundle: bundle.Bundle{
+				X509: bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+				JWT: bundle.JWT{
+					SigningKey:    signingKey,
+					SigningKeyPEM: signingKeyPEM,
+					JWKSJson:      jwksBytes,
+					JWKS:          jwks,
+				},
 			},
 			expGenCheck: genNoneCheck,
 			expErr:      false,
@@ -267,11 +278,13 @@ func TestSelfhosted_get(t *testing.T) {
 			key:      nil,
 			jwtKey:   &signingKeyPEM,
 			jwksData: &jwksBytes,
-			expBundle: Bundle{
-				JWTSigningKey:    signingKey,
-				JWTSigningKeyPEM: signingKeyPEM,
-				JWKSJson:         jwksBytes,
-				JWKS:             jwks,
+			expBundle: bundle.Bundle{
+				JWT: bundle.JWT{
+					SigningKey:    signingKey,
+					SigningKeyPEM: signingKeyPEM,
+					JWKSJson:      jwksBytes,
+					JWKS:          jwks,
+				},
 			},
 			expGenCheck: genX509Check,
 			expErr:      false,
@@ -282,7 +295,7 @@ func TestSelfhosted_get(t *testing.T) {
 			key:         nil,
 			jwtKey:      nil,
 			jwksData:    nil,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 			expGenCheck: genAllCheck,
 			expErr:      false,
 		},
@@ -298,11 +311,14 @@ func TestSelfhosted_get(t *testing.T) {
 			jwksFile := filepath.Join(dir, "jwks.json")
 			s := &selfhosted{
 				config: config.Config{
-					RootCertPath:      rootFile,
-					IssuerCertPath:    issuerFile,
-					IssuerKeyPath:     keyFile,
-					JWTSigningKeyPath: jwtKeyFile,
-					JWKSPath:          jwksFile,
+					RootCertPath:   rootFile,
+					IssuerCertPath: issuerFile,
+					IssuerKeyPath:  keyFile,
+					JWT: config.ConfigJWT{
+						SigningKeyPath: jwtKeyFile,
+						JWKSPath:       jwksFile,
+						TTL:            config.DefaultJWTTTL,
+					},
 				},
 			}
 
@@ -324,7 +340,7 @@ func TestSelfhosted_get(t *testing.T) {
 
 			bundle, gen, err := s.get(t.Context())
 			assert.Equal(t, test.expErr, err != nil, "expected error: %v, but got %v", test.expErr, err)
-			assert.True(t, test.expBundle.Equals(bundle), "expected bundle %v, but got %v", test.expBundle, bundle)
+			bundlesEqual(t, test.expBundle, bundle)
 			if test.expGenCheck != nil {
 				assert.True(t, test.expGenCheck(gen), "generate check failed, got %v", gen)
 			}

@@ -1237,6 +1237,7 @@ func TestValidate(t *testing.T) {
 				Token:                     newToken(t, "my-ns", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
+				Audiences:                 []string{"custom-audience-1", "custom-audience-2"},
 			},
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1257,7 +1258,6 @@ func TestValidate(t *testing.T) {
 				Spec: configapi.ConfigurationSpec{
 					AccessControlSpec: &configapi.AccessControlSpec{
 						TrustDomain: "example.test.dapr.io",
-						Audiences:   []string{"custom-audience-1", "custom-audience-2"},
 					},
 				},
 			},
@@ -1297,9 +1297,6 @@ func TestValidate(t *testing.T) {
 			res, err := k.Validate(t.Context(), test.req)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expTD, res.TrustDomain, "%v", res.TrustDomain)
-			if test.expAud != nil {
-				assert.Equal(t, test.expAud, res.Audiences, "%v", res.Audiences)
-			}
 		})
 	}
 }

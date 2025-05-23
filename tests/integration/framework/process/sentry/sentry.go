@@ -37,22 +37,24 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+	"github.com/dapr/kit/ptr"
 )
 
 type Sentry struct {
 	exec  process.Interface
 	ports *ports.Ports
 
-	bundle      *ca.Bundle
+	bundle      *bundle.Bundle
 	port        int
 	healthzPort int
 	metricsPort int
+	oidcPort    *int
 	trustDomain *string
 	namespace   string
 
@@ -63,13 +65,16 @@ type Sentry struct {
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	fp := ports.Reserve(t, 3)
+	fp := ports.Reserve(t, 4)
 	opts := options{
 		port:        fp.Port(t),
 		healthzPort: fp.Port(t),
 		metricsPort: fp.Port(t),
 		writeBundle: true,
 		writeConfig: true,
+		oidc: oidcOptions{
+			serverListenPort: ptr.Of(fp.Port(t)),
+		},
 	}
 
 	for _, fopt := range fopts {
@@ -90,9 +95,16 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
 		require.NoError(t, err)
 
-		bundle, err := ca.GenerateBundle(x509RootKey, jwtRootKey, td, time.Second*5, nil, ca.CredentialGenOptions{
-			RequireX509: true,
-			RequireJWT:  true,
+		bundle, err := bundle.Generate(bundle.GenerateOptions{
+			X509RootKey:      x509RootKey,
+			JWTRootKey:       jwtRootKey,
+			TrustDomain:      td,
+			AllowedClockSkew: time.Second * 5,
+			OverrideCATTL:    nil, // Use default CA TTL
+			MissingCredentials: bundle.MissingCredentials{
+				X509: true,
+				JWT:  true,
+			},
 		})
 		require.NoError(t, err)
 		opts.bundle = &bundle
@@ -124,11 +136,11 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 			path string
 			data []byte
 		}{
-			{caPath, opts.bundle.TrustAnchors},
-			{issuerKeyPath, opts.bundle.IssKeyPEM},
-			{issuerCertPath, opts.bundle.IssChainPEM},
-			{jwtSigningKeyPath, opts.bundle.JWTSigningKeyPEM},
-			{jwksPath, opts.bundle.JWKSJson},
+			{caPath, opts.bundle.X509.TrustAnchors},
+			{issuerKeyPath, opts.bundle.X509.IssKeyPEM},
+			{issuerCertPath, opts.bundle.X509.IssChainPEM},
+			{jwtSigningKeyPath, opts.bundle.JWT.SigningKeyPEM},
+			{jwksPath, opts.bundle.JWT.JWKSJson},
 		} {
 			require.NoError(t, os.WriteFile(pair.path, pair.data, 0o600))
 		}
@@ -138,42 +150,71 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	}
 
 	// Handle JWT options
-	if opts.enableJWT {
+	if opts.jwt.enabled {
 		args = append(args, "-jwt-enabled=true")
 
-		if opts.jwtIssuer != nil {
-			args = append(args, "-jwt-issuer="+*opts.jwtIssuer)
+		// Check if we should automatically set the JWT issuer to the OIDC server URL
+		if opts.jwt.useOIDCAsIssuer && opts.oidc.enabled {
+			require.Nil(t, opts.jwt.issuer, "jwtIssuer must be nil when issuerAutoOIDCPort is enabled")
+			require.NotNil(t, opts.oidc.serverListenPort, "OIDC server port must be set when issuerAutoOIDCPort is enabled")
+
+			// Build the JWT issuer URL using the OIDC server configuration
+			oidcScheme := "https"
+			if opts.oidc.tlsCertFile == nil || opts.oidc.tlsKeyFile == nil {
+				oidcScheme = "http"
+			}
+
+			pathPrefix := ""
+			if opts.oidc.pathPrefix != nil {
+				pathPrefix = *opts.oidc.pathPrefix
+			}
+
+			jwtIssuer := fmt.Sprintf("%s://localhost:%d%s", oidcScheme, *opts.oidc.serverListenPort, pathPrefix)
+			args = append(args, "-jwt-issuer="+jwtIssuer)
+		} else if opts.jwt.issuer != nil {
+			args = append(args, "-jwt-issuer="+*opts.jwt.issuer)
 		}
+
+		if opts.jwt.ttl != nil {
+			args = append(args, "-jwt-ttl="+opts.jwt.ttl.String())
+		}
+	} else {
+		require.Nil(t, opts.jwt.issuer, "jwtIssuer must be nil when JWT is not enabled")
+		require.False(t, opts.jwt.useOIDCAsIssuer, "issuerAutoOIDCPort must be false when JWT is not enabled")
 	}
 
 	// Handle OIDC options
-	if opts.oidcHTTPPort != nil {
-		args = append(args, "-oidc-http-port="+strconv.Itoa(*opts.oidcHTTPPort))
+	if opts.oidc.enabled {
+		args = append(args, "-oidc-enabled=true")
+
+		if opts.oidc.serverListenPort != nil {
+			args = append(args, "-oidc-server-listen-port="+strconv.Itoa(*opts.oidc.serverListenPort))
+		}
 
 		// When OIDC HTTP server is enabled, set the other OIDC options
-		if opts.oidcJWKSURI != nil {
-			args = append(args, "-oidc-jwks-uri="+*opts.oidcJWKSURI)
+		if opts.oidc.jwksURI != nil {
+			args = append(args, "-oidc-jwks-uri="+*opts.oidc.jwksURI)
 		}
 
-		if opts.oidcPathPrefix != nil {
-			args = append(args, "-oidc-path-prefix="+*opts.oidcPathPrefix)
+		if opts.oidc.pathPrefix != nil {
+			args = append(args, "-oidc-path-prefix="+*opts.oidc.pathPrefix)
 		}
 
-		if len(opts.oidcDomains) > 0 {
-			args = append(args, "-oidc-domains="+strings.Join(opts.oidcDomains, ","))
+		if len(opts.oidc.allowedHosts) > 0 {
+			args = append(args, "-oidc-allowed-hosts="+strings.Join(opts.oidc.allowedHosts, ","))
 		}
 
 		// Handle TLS files for OIDC HTTP server
-		if opts.oidcTLSCertFile != nil {
-			args = append(args, "-oidc-tls-cert-file="+*opts.oidcTLSCertFile)
+		if opts.oidc.tlsCertFile == nil || opts.oidc.tlsKeyFile == nil {
+			args = append(args, "-oidc-server-tls-enabled=false")
 		}
 
-		if opts.oidcTLSKeyFile != nil {
-			args = append(args, "-oidc-tls-key-file="+*opts.oidcTLSKeyFile)
+		if opts.oidc.tlsCertFile != nil {
+			args = append(args, "-oidc-server-tls-cert-file="+*opts.oidc.tlsCertFile)
 		}
 
-		if opts.oidcTLSInsecure {
-			args = append(args, "-oidc-tls-insecure=true")
+		if opts.oidc.tlsKeyFile != nil {
+			args = append(args, "-oidc-server-tls-key-file="+*opts.oidc.tlsKeyFile)
 		}
 	}
 
@@ -208,6 +249,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
+		oidcPort:    opts.oidc.serverListenPort,
 		trustDomain: opts.trustDomain,
 		namespace:   ns,
 	}
@@ -243,11 +285,11 @@ func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {
 func (s *Sentry) TrustAnchorsFile(t *testing.T) string {
 	t.Helper()
 	taf := filepath.Join(t.TempDir(), "ca.pem")
-	require.NoError(t, os.WriteFile(taf, s.CABundle().TrustAnchors, 0o600))
+	require.NoError(t, os.WriteFile(taf, s.CABundle().X509.TrustAnchors, 0o600))
 	return taf
 }
 
-func (s *Sentry) CABundle() ca.Bundle {
+func (s *Sentry) CABundle() bundle.Bundle {
 	return *s.bundle
 }
 
@@ -265,6 +307,10 @@ func (s *Sentry) MetricsPort() int {
 
 func (s *Sentry) HealthzPort() int {
 	return s.healthzPort
+}
+
+func (s *Sentry) OIDCPort() *int {
+	return s.oidcPort
 }
 
 func (s *Sentry) Namespace() string {
@@ -285,7 +331,7 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 	sentrySPIFFEID, err := spiffeid.FromString(sentryID)
 	require.NoError(t, err)
 
-	x509bundle, err := x509bundle.Parse(sentrySPIFFEID.TrustDomain(), bundle.TrustAnchors)
+	x509bundle, err := x509bundle.Parse(sentrySPIFFEID.TrustDomain(), bundle.X509.TrustAnchors)
 	require.NoError(t, err)
 	transportCredentials := grpccredentials.TLSClientCredentials(x509bundle, tlsconfig.AuthorizeID(sentrySPIFFEID))
 
@@ -301,7 +347,10 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, conn.Close())
+		if err := conn.Close(); err != nil {
+			// Log the error but don't fail the test if connection is already closed
+			t.Logf("Warning: gRPC connection close error (may be already closed): %v", err)
+		}
 	})
 
 	return conn

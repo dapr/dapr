@@ -137,6 +137,9 @@ type Options struct {
 	// written to the `tls.cert` and `tls.key` files respectively in the given
 	// directory.
 	WriteIdentityToFile *string
+
+	// JwtAudiences is the list of JWT audiences to be included in the certificate request.
+	JwtAudiences []string
 }
 
 type provider struct {
@@ -158,7 +161,6 @@ type security struct {
 
 	identityDir      *string
 	trustAnchorsFile *string
-	jwksFile         *string
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {

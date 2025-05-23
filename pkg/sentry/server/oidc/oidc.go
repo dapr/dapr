@@ -17,16 +17,22 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -34,34 +40,43 @@ const (
 	JWKSEndpoint = "/jwks.json"
 	// OIDCDiscoveryEndpoint is the endpoint that serves the OIDC discovery document
 	OIDCDiscoveryEndpoint = "/.well-known/openid-configuration"
+	// AuthorizationEndpoint is the endpoint for OIDC authorization
+	AuthorizationEndpoint = "/authorize"
 )
 
-var log = logger.NewLogger("dapr.sentry.server.http")
+var log = logger.NewLogger("dapr.sentry.server.oidc.http")
 
 // Options is the configuration options for the HTTP server
 type Options struct {
 	// Port is the port that the server will listen on
 	Port int
+
 	// ListenAddress is the address the server will listen on
 	ListenAddress string
+
 	// JWKS is the JSON Web Key Set (JWKS) for the server
 	JWKS []byte
+
 	// Healthz is the health interface for the server
 	Healthz healthz.Healthz
+
 	// JWKSURI is the public URI where the JWKS can be accessed (if different from server address)
-	JWKSURI string
-	// Domains is a list of allowed domains for validation
-	Domains []string
+	JWKSURI *string
+
+	// AllowedHosts is a list of allowed hosts that a client request will be valid for.
+	AllowedHosts []string
+
 	// TLSConfig is an optional custom TLS configuration
 	TLSConfig *tls.Config
+
 	// JWTIssuer is the issuer to use for JWT tokens (if not set, issuer not set)
-	JWTIssuer string
+	JWTIssuer *string
+
 	// PathPrefix is a prefix to add to all HTTP endpoints
-	PathPrefix string
+	PathPrefix *string
+
 	// SignatureAlgorithm is the signature algorithm to use for JWT tokens
 	SignatureAlgorithm jwa.KeyAlgorithm
-	// Insecure allows using HTTP instead of HTTPS for the OIDC server and discovery document
-	Insecure bool
 }
 
 // Server is a HTTP server that partially implements the OIDC spec.
@@ -69,118 +84,150 @@ type Options struct {
 // being able to verify the JWT tokens issued by the Sentry server
 // which may be used by the Dapr runtime to authenticate to components.
 type Server struct {
-	port               int
-	listenAddress      string
-	jwks               []byte
-	htarget            healthz.Target
-	server             *http.Server
-	jwksURI            string
-	domains            []string
-	tlsConfig          *tls.Config
-	jwtIssuer          string
-	pathPrefix         string
-	signatureAlgorithm jwa.KeyAlgorithm
-	insecure           bool
+	port              int
+	listenAddress     string
+	jwks              []byte
+	htarget           healthz.Target
+	jwksURI           *string
+	allowedHosts      []string
+	tlsConfig         *tls.Config
+	jwtIssuer         *string
+	pathPrefix        *string
+	discovery         *discoveryDocument
+	oidcEndpoint      string // OIDC endpoint for authorization
+	jwksEndpoint      string // JWKS endpoint for public key retrieval
+	authorizeEndpoint string // Authorization endpoint for OIDC (not implemented in this server)
 }
 
 // New creates a new HTTP server with the given options
-func New(opts Options) *Server {
-	if opts.PathPrefix == "" {
-		opts.PathPrefix = "/"
+func New(opts Options) (*Server, error) {
+	if opts.SignatureAlgorithm == nil {
+		return nil, errors.New("signature algorithm is required")
+	}
+
+	discovery := &discoveryDocument{
+		ResponseTypesSupported:           []string{"id_token"},
+		SubjectTypesSupported:            []string{"public"},
+		IDTokenSigningAlgValuesSupported: []string{opts.SignatureAlgorithm.String()},
+		ScopesSupported:                  []string{"openid"},
+		ClaimsSupported:                  []string{"sub", "iss", "aud", "exp", "iat", "nbf", "use"},
+	}
+
+	// if the issuer is not set, we will construct it based on the request
+	if opts.JWTIssuer != nil {
+		issuer, err := url.Parse(*opts.JWTIssuer)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JWT issuer URI: %w", err)
+		}
+		discovery.Issuer = issuer.String()
+	}
+
+	if opts.JWKSURI != nil {
+		jwksURI, err := url.Parse(*opts.JWKSURI)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JWKS URI: %w", err)
+		}
+		discovery.JwksURI = jwksURI.String()
+	}
+
+	jwksEndpoint := JWKSEndpoint
+	oidcEndpoint := OIDCDiscoveryEndpoint
+	authorizeEndpoint := AuthorizationEndpoint
+	if opts.PathPrefix != nil && *opts.PathPrefix != "/" {
+		if strings.HasSuffix(*opts.PathPrefix, "/") {
+			opts.PathPrefix = ptr.Of(strings.TrimSuffix(*opts.PathPrefix, "/"))
+		}
+
+		var err error
+
+		jwksEndpoint, err = url.JoinPath(*opts.PathPrefix, JWKSEndpoint)
+		if err != nil {
+			return nil, fmt.Errorf("failed to join path for JWKS endpoint: %w", err)
+		}
+		oidcEndpoint, err = url.JoinPath(*opts.PathPrefix, OIDCDiscoveryEndpoint)
+		if err != nil {
+			return nil, fmt.Errorf("failed to join path for OIDC discovery endpoint: %w", err)
+		}
+		authorizeEndpoint, err = url.JoinPath(*opts.PathPrefix, authorizeEndpoint)
+		if err != nil {
+			return nil, fmt.Errorf("failed to join path for authorization endpoint: %w", err)
+		}
+
+		log.Infof("Using path prefix %q for OIDC HTTP endpoints", opts.PathPrefix)
 	}
 
 	return &Server{
-		port:               opts.Port,
-		listenAddress:      opts.ListenAddress,
-		jwks:               opts.JWKS,
-		htarget:            opts.Healthz.AddTarget(),
-		jwksURI:            opts.JWKSURI,
-		domains:            opts.Domains,
-		tlsConfig:          opts.TLSConfig,
-		jwtIssuer:          opts.JWTIssuer,
-		pathPrefix:         opts.PathPrefix,
-		signatureAlgorithm: opts.SignatureAlgorithm,
-		insecure:           opts.Insecure,
-	}
+		port:              opts.Port,
+		listenAddress:     opts.ListenAddress,
+		jwks:              opts.JWKS,
+		htarget:           opts.Healthz.AddTarget(),
+		jwksURI:           opts.JWKSURI,
+		allowedHosts:      opts.AllowedHosts,
+		tlsConfig:         opts.TLSConfig,
+		jwtIssuer:         opts.JWTIssuer,
+		pathPrefix:        opts.PathPrefix,
+		authorizeEndpoint: authorizeEndpoint,
+		jwksEndpoint:      jwksEndpoint,
+		oidcEndpoint:      oidcEndpoint,
+		discovery:         discovery,
+	}, nil
 }
 
-func (s *Server) Start(ctx context.Context) error {
+func (s *Server) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 
-	if !s.insecure && s.tlsConfig == nil {
-		return fmt.Errorf("TLS configuration is required when not in insecure mode")
-	}
-	_, err := url.Parse(s.jwksURI)
-	if err != nil {
-		return fmt.Errorf("invalid JWKS URI: %w", err)
-	}
-	if s.signatureAlgorithm == nil {
-		return fmt.Errorf("signature algorithm is required")
-	}
+	// Add JWKS endpoint with host validation wrapper
+	mux.HandleFunc(s.jwksEndpoint, s.allowedHostsValidationHandler(s.handleJWKS))
 
-	// Add path prefix to endpoints if configured
-	jwksEndpoint := JWKSEndpoint
-	oidcEndpoint := OIDCDiscoveryEndpoint
-	if s.pathPrefix != "" && s.pathPrefix != "/" {
-		if strings.HasSuffix(s.pathPrefix, "/") {
-			s.pathPrefix = strings.TrimSuffix(s.pathPrefix, "/")
-		}
-		jwksEndpoint = s.pathPrefix + JWKSEndpoint
-		oidcEndpoint = s.pathPrefix + OIDCDiscoveryEndpoint
-		log.Infof("Using path prefix '%s' for OIDC HTTP endpoints", s.pathPrefix)
+	// Add OIDC discovery endpoint with host validation wrapper
+	mux.HandleFunc(s.oidcEndpoint, s.allowedHostsValidationHandler(s.handleDiscovery))
+
+	addr := net.JoinHostPort(s.listenAddress, strconv.Itoa(s.port))
+
+	if len(s.allowedHosts) > 0 {
+		log.Infof("OIDC server will only accept requests for hosts: %v", s.allowedHosts)
+	} else {
+		log.Info("OIDC server will accept requests for any host")
 	}
 
-	// Add JWKS endpoint with domain validation wrapper
-	mux.HandleFunc(jwksEndpoint, s.domainValidationHandler(s.handleJWKS))
-
-	// Add OIDC discovery endpoint with domain validation wrapper
-	mux.HandleFunc(oidcEndpoint, s.domainValidationHandler(s.handleOIDCDiscovery))
-
-	addr := fmt.Sprintf("%s:%d", s.listenAddress, s.port)
-
-	if len(s.domains) > 0 {
-		log.Infof("OIDC server will only accept requests for domains: %v", s.domains)
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		TLSConfig:         s.tlsConfig,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	s.server = &http.Server{
-		Addr:      addr,
-		Handler:   mux,
-		TLSConfig: s.tlsConfig,
-	}
-
-	errCh := make(chan error, 1)
-	go func() {
-		if s.insecure {
-			log.Infof("Starting OIDC HTTP server (insecure) on %s", addr)
-			if err := s.server.ListenAndServe(); err != http.ErrServerClosed {
-				errCh <- fmt.Errorf("OIDC HTTP server error: %w", err)
-				return
+	return concurrency.NewRunnerManager(
+		func(ctx context.Context) error {
+			listener, err := net.Listen("tcp", addr)
+			if err != nil {
+				return fmt.Errorf("failed to listen on %s: %w", addr, err)
 			}
-		} else {
+			s.port = listener.Addr().(*net.TCPAddr).Port // Update port from listener in case it was not specified
+			s.htarget.Ready()
+			if s.tlsConfig == nil {
+				log.Infof("Starting OIDC HTTP server (insecure) on %s", addr)
+				if err := server.Serve(listener); err != http.ErrServerClosed {
+					return fmt.Errorf("OIDC HTTP server error: %w", err)
+				}
+				return nil
+			}
 			log.Infof("Starting OIDC HTTP server on %s", addr)
-			if err := s.server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
-				errCh <- fmt.Errorf("OIDC HTTP server error: %w", err)
-				return
+			tlsListener := tls.NewListener(listener, s.tlsConfig)
+			if err := server.Serve(tlsListener); err != http.ErrServerClosed {
+				return fmt.Errorf("OIDC HTTP server error: %w", err)
 			}
-		}
-		errCh <- nil
-	}()
-
-	// Allow time for the server to start before marking as ready
-	time.Sleep(100 * time.Millisecond)
-	s.htarget.Ready()
-
-	select {
-	case err := <-errCh:
-		s.htarget.NotReady()
-		return err
-	case <-ctx.Done():
-		s.htarget.NotReady()
-		log.Info("Shutting down OIDC HTTP server")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return s.server.Shutdown(shutdownCtx)
-	}
+			return nil
+		},
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			s.htarget.NotReady()
+			log.Info("Shutting down OIDC HTTP server")
+			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return server.Shutdown(sctx)
+		},
+	).Run(ctx)
 }
 
 // handleJWKS handles requests to the JWKS endpoint
@@ -206,12 +253,12 @@ func (s *Server) handleJWKS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// OIDCDiscoveryDocument is a partial implementation of the OIDC discovery document
+// discoveryDocument is a partial implementation of the OIDC discovery document
 // it contains only the fields that are relevant for a resource provider to validate
 // a JWT token issued by the Sentry server. We do not implement the full OIDC spec.
 //
 // reference: https://openid.net/specs/openid-connect-discovery-1_0.html
-type OIDCDiscoveryDocument struct {
+type discoveryDocument struct {
 	// REQUIRED. URL using the https scheme with no query or fragment components that the OP asserts as its Issuer Identifier. If Issuer discovery is supported (see Section 2), this value MUST be identical to the issuer value returned by WebFinger. This also MUST be identical to the iss Claim value in ID Tokens issued from this Issuer.
 	Issuer string `json:"issuer"`
 	// REQUIRED. URL using the https scheme with no query or fragment components that the OP asserts as its Issuer Identifier. If Issuer discovery is supported (see Section 2), this value MUST be identical to the issuer value returned by WebFinger. This also MUST be identical to the iss Claim value in ID Tokens issued from this Issuer.
@@ -230,8 +277,24 @@ type OIDCDiscoveryDocument struct {
 	ClaimsSupported []string `json:"claims_supported,omitempty"`
 }
 
+func (d *discoveryDocument) DeepCopy() *discoveryDocument {
+	if d == nil {
+		return nil
+	}
+	return &discoveryDocument{
+		Issuer:                           d.Issuer,
+		AuthorizationEndpoint:            d.AuthorizationEndpoint,
+		JwksURI:                          d.JwksURI,
+		ResponseTypesSupported:           slices.Clone(d.ResponseTypesSupported),
+		SubjectTypesSupported:            slices.Clone(d.SubjectTypesSupported),
+		IDTokenSigningAlgValuesSupported: slices.Clone(d.IDTokenSigningAlgValuesSupported),
+		ScopesSupported:                  slices.Clone(d.ScopesSupported),
+		ClaimsSupported:                  slices.Clone(d.ClaimsSupported),
+	}
+}
+
 // handleOIDCDiscovery handles requests to the OIDC discovery endpoint
-func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -243,128 +306,75 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use HTTP instead of HTTPS when in insecure mode
-	scheme := "https"
-	if s.insecure {
-		scheme = "http"
-		log.Infof("Using HTTP scheme for OIDC discovery document in insecure mode")
+	if s.discovery == nil {
+		log.Error("OIDC discovery document is not initialized")
+		http.Error(w, "OIDC configuration not available", http.StatusInternalServerError)
+		return
 	}
 
-	host := r.Host
-	if host == "" {
-		host = fmt.Sprintf("%s:%d", s.listenAddress, s.port)
-	}
+	discovery := s.discovery
+	if discovery.Issuer == "" || (s.jwksURI == nil && discovery.JwksURI == "") {
+		// if we are going to edit the discovery document, make a copy
+		discovery = s.discovery.DeepCopy()
 
-	var (
-		issuerURL *url.URL
-		err       error
-	)
-	if s.jwtIssuer == "" {
-		issuerURL = &url.URL{
-			Scheme: scheme,
-			Host:   host,
+		host := r.Host
+		if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
+			host = forwardedHost
 		}
-		if s.pathPrefix != "/" {
-			issuerURL.Path = s.pathPrefix
+
+		scheme := r.URL.Scheme
+		if scheme == "" {
+			if s.tlsConfig != nil {
+				scheme = "https"
+			} else {
+				scheme = "http"
+			}
 		}
-	} else {
-		issuerURL, err = url.Parse(s.jwtIssuer)
+
+		u, err := url.Parse(fmt.Sprintf("%s://%s", scheme, host))
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Errorf("Failed to parse host '%s': %v", host, err)
+			http.Error(w, "Invalid host", http.StatusBadRequest)
 			return
 		}
-		if issuerURL.Scheme == "" {
-			issuerURL.Scheme = scheme
+		if discovery.Issuer == "" {
+			discovery.Issuer = u.String()
 		}
-	}
-
-	var jwksURI *url.URL
-	switch {
-	case s.jwksURI != "":
-		// if the jwksURI is set, use that
-		uri, err := url.Parse(s.jwksURI)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if s.jwksURI == nil {
+			jwksURL, err := url.Parse(s.jwksEndpoint)
+			if err != nil {
+				log.Errorf("Failed to parse JWKS endpoint '%s': %v", s.jwksEndpoint, err)
+				http.Error(w, "Invalid JWKS endpoint", http.StatusInternalServerError)
+				return
+			}
+			baseURL := u
+			if discovery.Issuer != "" {
+				issuerURL, err := url.Parse(discovery.Issuer)
+				if err == nil {
+					baseURL = issuerURL
+				}
+			}
+			discovery.JwksURI = baseURL.ResolveReference(jwksURL).String()
 		}
-		jwksURI = uri
-		// If in insecure mode and no scheme is specified, use HTTP
-		if s.insecure && jwksURI.Scheme == "" {
-			jwksURI.Scheme = scheme
-		}
-	case s.jwtIssuer != "":
-		// if the issuer is set, use that
-		jwksURI, err = url.Parse(s.jwtIssuer)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if jwksURI.Scheme == "" {
-			jwksURI.Scheme = scheme
-		}
-		if s.pathPrefix != "/" {
-			jwksURI.Path = s.pathPrefix
-		}
-		jwksURI.Path += JWKSEndpoint
-	default:
-		// if nothing is set, use
-		// the host from the request
-		keysPath, err := url.JoinPath(s.pathPrefix, JWKSEndpoint)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		jwksURI = &url.URL{
-			Scheme: scheme,
-			Host:   r.Host,
-			Path:   keysPath,
-		}
-	}
-
-	var issuer, jwks string
-	if issuerURL != nil {
-		issuer = issuerURL.String()
-	}
-	if jwksURI != nil {
-		jwks = jwksURI.String()
-	}
-
-	var signAlg string
-	if s.signatureAlgorithm != nil {
-		signAlg = s.signatureAlgorithm.String()
-	}
-
-	// Create the OIDC discovery document that matches the JWT token implementation
-	discovery := OIDCDiscoveryDocument{
-		Issuer:                           issuer,
-		JwksURI:                          jwks,
-		AuthorizationEndpoint:            issuer + "/authorize", // WARN: not implemented
-		ResponseTypesSupported:           []string{"id_token"},
-		SubjectTypesSupported:            []string{"public"},
-		IDTokenSigningAlgValuesSupported: []string{signAlg},
-		ScopesSupported:                  []string{"openid"},
-		ClaimsSupported:                  []string{"sub", "iss", "aud", "exp", "iat", "nbf", "use"},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(discovery); err != nil {
+	if err := json.NewEncoder(w).Encode(*discovery); err != nil {
 		log.Errorf("Failed to write OIDC discovery response: %v", err)
 	}
 }
 
-// domainValidationHandler wraps a handler with domain validation logic
-func (s *Server) domainValidationHandler(h http.HandlerFunc) http.HandlerFunc {
+// allowedHostsValidationHandler wraps a handler with allowed host validation logic
+func (s *Server) allowedHostsValidationHandler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Skip domain validation if no domains are configured
-		if len(s.domains) == 0 {
-			h(w, r)
+		if len(s.allowedHosts) == 0 {
+			next(w, r)
 			return
 		}
 
-		// Check the Host header first
 		host := r.Host
 
 		// If X-Forwarded-Host header is present, use that instead
@@ -372,36 +382,24 @@ func (s *Server) domainValidationHandler(h http.HandlerFunc) http.HandlerFunc {
 			host = forwardedHost
 		}
 
-		// Extract domain from host (remove port if present)
-		domain := host
-		if i := strings.Index(host, ":"); i > 0 {
-			domain = host[:i]
-		}
-
-		// Check if the domain is in the allowed list
-		allowed := false
-		for _, allowedDomain := range s.domains {
-			if allowedDomain == domain || allowedDomain == "*" {
-				allowed = true
-				break
-			}
-		}
-
-		if !allowed {
-			log.Warnf("Request from unauthorized domain: %s", domain)
-			http.Error(w, "Forbidden: unauthorized domain", http.StatusForbidden)
+		if slices.Contains(s.allowedHosts, "*") {
+			next(w, r)
 			return
 		}
 
-		h(w, r)
-	}
-}
+		if slices.Contains(s.allowedHosts, host) {
+			next(w, r)
+			return
+		}
 
-// JWKSResponse is a test utility to parse the JWKS response for validation
-func JWKSResponse(jwksBytes []byte) (map[string]interface{}, error) {
-	var response map[string]interface{}
-	if err := json.Unmarshal(jwksBytes, &response); err != nil {
-		return nil, err
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			if slices.Contains(s.allowedHosts, h) {
+				next(w, r)
+				return
+			}
+		}
+
+		log.Warnf("Request from unauthorized domain: %s", host)
+		http.Error(w, "Forbidden: unauthorized domain", http.StatusForbidden)
 	}
-	return response, nil
 }

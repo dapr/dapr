@@ -11,21 +11,39 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ca
+package jwt
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+
+	"github.com/dapr/kit/logger"
 )
 
-// JWTRequest is the request for generating a JWT
-type JWTRequest struct {
+var log = logger.NewLogger("dapr.sentry.ca.jwt")
+
+const (
+	// DefaultKeyThumbprintAlgorithm
+	DefaultKeyThumbprintAlgorithm = crypto.SHA256
+	// DefaultJWTSignatureAlgorithm is set to RS256 by default as it is the most compatible algorithm.
+	DefaultJWTSignatureAlgorithm = jwa.RS256
+)
+
+// Request is the request for generating a JWT
+type Request struct {
+	// Trust domain is the trust domain of the JWT.
+	TrustDomain spiffeid.TrustDomain
+
 	// Audiences is the audience of the JWT.
 	Audiences []string
 
@@ -39,47 +57,77 @@ type JWTRequest struct {
 	TTL time.Duration
 }
 
-type jwtIssuer struct {
-	// signKey is the key used to sign the JWT
-	signKey jwk.Key
+type Issuer interface {
+	// Generate creates a JWT token for the given request. The token includes
+	// claims based on the identity information provided in the request.
+	Generate(context.Context, *Request) (string, error)
 
-	// issuer is the issuer of the JWT (optional)
-	issuer *string
+	// JWKS returns the JSON Web Key Set (JWKS).
+	JWKS() jwk.Set
 
-	// allowedClockSkew is the time allowed for clock skew
-	allowedClockSkew time.Duration
+	// JWTSignatureAlgorithm returns the signature algorithm used for signing JWTs.
+	JWTSignatureAlgorithm() jwa.KeyAlgorithm
 }
 
-func NewJWTIssuer(signKey jwk.Key, issuer *string, allowedClockSkew time.Duration) (jwtIssuer, error) {
-	return jwtIssuer{
-		signKey:          signKey,
-		issuer:           issuer,
-		allowedClockSkew: allowedClockSkew,
+type issuer struct {
+	// signKey is the key used to sign the JWT
+	signKey jwk.Key
+	// iss is the iss of the JWT (optional)
+	iss *string
+	// allowedClockSkew is the time allowed for clock skew
+	allowedClockSkew time.Duration
+	// jwks is the JSON Web Key Set (JWKS) used to verify JWTs
+	jwks jwk.Set
+}
+
+type IssuerOptions struct {
+	// SignKey is the key used to sign the JWT
+	SignKey jwk.Key
+	// Issuer is the Issuer of the JWT (optional)
+	Issuer *string
+	// AllowedClockSkew is the time allowed for clock skew
+	AllowedClockSkew time.Duration
+	// JWKS is the JSON Web Key Set (JWKS) used to verify JWTs
+	JWKS jwk.Set
+}
+
+func New(opts IssuerOptions) (Issuer, error) {
+	return &issuer{
+		signKey:          opts.SignKey,
+		iss:              opts.Issuer,
+		allowedClockSkew: opts.AllowedClockSkew,
+		jwks:             opts.JWKS,
 	}, nil
 }
 
-// GenerateJWT creates a JWT for the given request. The JWT is always generated and included
+// Generate creates a JWT for the given request. The JWT is always generated and included
 // in the response to SignCertificate requests, without requiring additional client configuration.
 // This provides a convenient alternative authentication method alongside X.509 certificates.
-func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, error) {
+func (i *issuer) Generate(ctx context.Context, req *Request) (string, error) {
 	if req == nil {
-		return "", fmt.Errorf("request cannot be nil")
+		return "", errors.New("request cannot be nil")
+	}
+	if req.TrustDomain.IsZero() {
+		return "", errors.New("trust domain cannot be empty")
 	}
 	if len(req.Audiences) == 0 {
-		return "", fmt.Errorf("audience cannot be empty")
+		return "", errors.New("audience cannot be empty")
 	}
 	if req.Namespace == "" {
-		return "", fmt.Errorf("namespace cannot be empty")
+		return "", errors.New("namespace cannot be empty")
 	}
 	if req.AppID == "" {
-		return "", fmt.Errorf("app ID cannot be empty")
+		return "", errors.New("app ID cannot be empty")
 	}
 	if i.signKey == nil {
-		return "", fmt.Errorf("JWT signing key is not available")
+		return "", errors.New("JWT signing key is not available")
 	}
 
 	// Create SPIFFE ID format string for the subject claim
-	subject := fmt.Sprintf("spiffe://%s/ns/%s/%s", req.Audiences, req.Namespace, req.AppID)
+	subject, err := spiffeid.FromSegments(req.TrustDomain, "ns", req.Namespace, req.AppID)
+	if err != nil {
+		return "", fmt.Errorf("error creating SPIFFE ID: %w", err)
+	}
 
 	now := time.Now()
 	notBefore := now.Add(-i.allowedClockSkew) // Account for clock skew
@@ -94,7 +142,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	// Create JWT token with claims builder
 	builder := jwt.NewBuilder().
 		JwtID(jti).
-		Subject(subject).
+		Subject(subject.String()).
 		IssuedAt(now).
 		Audience(req.Audiences).
 		NotBefore(notBefore).
@@ -102,8 +150,8 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 		Expiration(notAfter)
 
 	// Set issuer only if configured
-	if i.issuer != nil {
-		builder = builder.Issuer(*i.issuer)
+	if i.iss != nil {
+		builder = builder.Issuer(*i.iss)
 	}
 
 	// Build the token
@@ -120,6 +168,17 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	}
 
 	return string(signedToken), nil
+}
+
+func (i *issuer) JWKS() jwk.Set {
+	return i.jwks
+}
+
+func (i *issuer) JWTSignatureAlgorithm() jwa.KeyAlgorithm {
+	if i.signKey == nil {
+		return nil
+	}
+	return i.signKey.Algorithm()
 }
 
 // generateJwtID creates a random JWT ID (jti) using a cryptographically secure random number generator.

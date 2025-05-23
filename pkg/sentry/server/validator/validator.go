@@ -25,8 +25,6 @@ import (
 type ValidateResult struct {
 	// TrustDomain is the trust domain of the client.
 	TrustDomain spiffeid.TrustDomain
-	// Audiences is the audience of the client.
-	Audiences []string
 }
 
 // Validator is used to validate the identity of a certificate requester by

@@ -27,21 +27,22 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/kit/crypto/pem"
 )
 
 // verifyBundle verifies issuer certificate key pair, and trust anchor set.
 // Returns error if any of the verification fails.
 // Returned CA bundle is ready for sentry.
-func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (Bundle, error) {
+func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (bundle.Bundle, error) {
 	trustAnchorsX509, err := pem.DecodePEMCertificates(trustAnchors)
 	if err != nil {
-		return Bundle{}, fmt.Errorf("failed to decode trust anchors: %w", err)
+		return bundle.Bundle{}, fmt.Errorf("failed to decode trust anchors: %w", err)
 	}
 
 	for _, cert := range trustAnchorsX509 {
 		if err = cert.CheckSignatureFrom(cert); err != nil {
-			return Bundle{}, fmt.Errorf("certificate in trust anchor is not self-signed: %w", err)
+			return bundle.Bundle{}, fmt.Errorf("certificate in trust anchor is not self-signed: %w", err)
 		}
 	}
 
@@ -51,14 +52,14 @@ func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (Bundle, error) {
 		var trustAnchor []byte
 		trustAnchor, err = pem.EncodeX509(cert)
 		if err != nil {
-			return Bundle{}, fmt.Errorf("failed to re-encode trust anchor: %w", err)
+			return bundle.Bundle{}, fmt.Errorf("failed to re-encode trust anchor: %w", err)
 		}
 		trustAnchors = append(trustAnchors, trustAnchor...)
 	}
 
 	issChain, err := pem.DecodePEMCertificatesChain(issChainPEM)
 	if err != nil {
-		return Bundle{}, err
+		return bundle.Bundle{}, err
 	}
 
 	// If we are using an intermediate certificate for signing, ensure we do not
@@ -73,33 +74,33 @@ func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (Bundle, error) {
 	// Ensure intermediate certificate is valid for signing.
 	if !issChain[0].IsCA && !issChain[0].BasicConstraintsValid &&
 		issChain[0].KeyUsage&x509.KeyUsageCertSign == 0 {
-		return Bundle{}, errors.New("intermediate certificate is not valid for signing")
+		return bundle.Bundle{}, errors.New("intermediate certificate is not valid for signing")
 	}
 
 	// Re-encode the issuer chain to ensure it contains only the issuer chain,
 	// and strip out PEM comments since we don't want to send them to the client.
 	issChainPEM, err = pem.EncodeX509Chain(issChain)
 	if err != nil {
-		return Bundle{}, err
+		return bundle.Bundle{}, err
 	}
 
 	issKey, err := pem.DecodePEMPrivateKey(issKeyPEM)
 	if err != nil {
-		return Bundle{}, err
+		return bundle.Bundle{}, err
 	}
 
 	issKeyPEM, err = pem.EncodePrivateKey(issKey)
 	if err != nil {
-		return Bundle{}, err
+		return bundle.Bundle{}, err
 	}
 
 	// Ensure issuer key matches the issuer certificate.
 	ok, err := pem.PublicKeysEqual(issKey.Public(), issChain[0].PublicKey)
 	if err != nil {
-		return Bundle{}, err
+		return bundle.Bundle{}, err
 	}
 	if !ok {
-		return Bundle{}, errors.New("issuer key does not match issuer certificate")
+		return bundle.Bundle{}, errors.New("issuer key does not match issuer certificate")
 	}
 
 	// Ensure issuer chain belongs to one of the trust anchors.
@@ -117,15 +118,17 @@ func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (Bundle, error) {
 		Roots:         trustAnchorPool,
 		Intermediates: intPool,
 	}); err != nil {
-		return Bundle{}, fmt.Errorf("issuer chain does not belong to trust anchors: %w", err)
+		return bundle.Bundle{}, fmt.Errorf("issuer chain does not belong to trust anchors: %w", err)
 	}
 
-	return Bundle{
-		TrustAnchors: trustAnchors,
-		IssChainPEM:  issChainPEM,
-		IssChain:     issChain,
-		IssKeyPEM:    issKeyPEM,
-		IssKey:       issKey,
+	return bundle.Bundle{
+		X509: bundle.X509{
+			TrustAnchors: trustAnchors,
+			IssChainPEM:  issChainPEM,
+			IssChain:     issChain,
+			IssKeyPEM:    issKeyPEM,
+			IssKey:       issKey,
+		},
 	}, nil
 }
 
@@ -136,12 +139,7 @@ func loadJWTSigningKey(keyPEM []byte) (crypto.Signer, error) {
 		return nil, fmt.Errorf("failed to decode JWT signing key: %w", err)
 	}
 
-	signer, ok := privateKey.(crypto.Signer)
-	if !ok {
-		return nil, fmt.Errorf("JWT signing key is not a valid crypto.Signer")
-	}
-
-	return signer, nil
+	return privateKey, nil
 }
 
 // verifyJWKS verifies that the JWKS is valid and contains a corresponding
@@ -176,10 +174,10 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 	}
 
 	// Get the key ID if it exists on the signing key
-	var signingKeyID string
+	var signingKeyID *string
 	if kid, ok := publicJWK.Get(jwk.KeyIDKey); ok {
 		if s, ok := kid.(string); ok {
-			signingKeyID = s
+			signingKeyID = &s
 		}
 	}
 
@@ -187,13 +185,13 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 	found := false
 	matchAttempted := false
 
-	for i := 0; i < keySet.Len(); i++ {
+	for i := range keySet.Len() {
 		key, _ := keySet.Key(i)
 
 		// If both keys have key IDs, check if they match first (faster path)
-		if signingKeyID != "" {
+		if signingKeyID != nil {
 			if kid, ok := key.Get(jwk.KeyIDKey); ok {
-				if s, ok := kid.(string); ok && s == signingKeyID {
+				if s, ok := kid.(string); ok && s == *signingKeyID {
 					found = true
 					break
 				}
@@ -206,7 +204,7 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 		// First, ensure we're comparing public keys
 		keyPublic, err := key.PublicKey()
 		if err != nil {
-			continue
+			return fmt.Errorf("JWKS contains a none public key: %w", err)
 		}
 
 		// Check if the key has a valid "use" field (if present)
@@ -218,35 +216,42 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 		}
 
 		// Get raw representations of both keys to compare
-		var pubRaw interface{}
+		var pubRaw any
 		if err = keyPublic.Raw(&pubRaw); err != nil {
-			continue
+			return fmt.Errorf("failed to get raw public key from JWKS: %w", err)
 		}
 
 		var signerPubRaw interface{}
 		if err = publicJWK.Raw(&signerPubRaw); err != nil {
-			continue
+			return fmt.Errorf("failed to get raw public key from signing key: %w", err)
 		}
 
 		// Type-specific comparisons for different key types
 		switch pubKey := pubRaw.(type) {
 		case *ecdsa.PublicKey:
 			if signerPubKey, ok := signerPubRaw.(*ecdsa.PublicKey); ok {
-				// For ECDSA, compare the curve, X and Y values
-				if pubKey.Curve == signerPubKey.Curve &&
-					pubKey.X.Cmp(signerPubKey.X) == 0 &&
-					pubKey.Y.Cmp(signerPubKey.Y) == 0 {
+				if signerPubKey.Equal(pubKey) {
 					found = true
+					break
+				}
+			}
+		case *rsa.PublicKey:
+			if signerPubKey, ok := signerPubRaw.(*rsa.PublicKey); ok {
+				if signerPubKey.Equal(pubKey) {
+					found = true
+					break
+				}
+			}
+		case ed25519.PublicKey:
+			if signerPubKey, ok := signerPubRaw.(ed25519.PublicKey); ok {
+				if signerPubKey.Equal(pubKey) {
+					found = true
+					break
 				}
 			}
 		default:
-			// For other key types, try direct comparison
-			if reflect.TypeOf(pubRaw) == reflect.TypeOf(signerPubRaw) {
-				// If keys are the same type and same value, they are equal
-				if reflect.DeepEqual(pubRaw, signerPubRaw) {
-					found = true
-				}
-			}
+			// If the key type is not recognized, we can't compare it
+			return fmt.Errorf("unsupported key type in JWKS: %s", reflect.TypeOf(pubRaw).Name())
 		}
 
 		if found {
@@ -256,7 +261,13 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 
 	if !found {
 		if !matchAttempted {
-			return fmt.Errorf("JWKS doesn't contain a key with matching key ID '%s'", signingKeyID)
+			var sid string
+			if signingKeyID != nil {
+				sid = *signingKeyID
+			} else {
+				sid = "<no-key-id>"
+			}
+			return fmt.Errorf("JWKS doesn't contain a key with matching key ID %q", sid)
 		}
 		return errors.New("JWKS doesn't contain a matching public key for the JWT signing key")
 	}
@@ -267,7 +278,7 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 // validateKeyAlgorithmCompatibility checks if the provided key is compatible with the specified algorithm
 func validateKeyAlgorithmCompatibility(key crypto.Signer, alg jwa.SignatureAlgorithm) error {
 	if key == nil {
-		return fmt.Errorf("signing key is nil")
+		return errors.New("signing key is nil")
 	}
 
 	switch alg {

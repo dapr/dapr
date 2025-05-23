@@ -31,7 +31,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
 )
 
@@ -39,7 +39,7 @@ type Option func(*options)
 
 type Sentry struct {
 	grpc   *procgrpc.GRPC
-	bundle ca.Bundle
+	bundle bundle.Bundle
 }
 
 func New(t *testing.T, fopts ...Option) *Sentry {
@@ -50,9 +50,16 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 
 	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	bundle, err := ca.GenerateBundle(rootKey, jwtKey, "integration.test.dapr.io", time.Second*20, nil, ca.CredentialGenOptions{
-		RequireX509: true,
-		RequireJWT:  true,
+	bundle, err := bundle.Generate(bundle.GenerateOptions{
+		X509RootKey:      rootKey,
+		JWTRootKey:       jwtKey,
+		TrustDomain:      "integration.test.dapr.io",
+		AllowedClockSkew: time.Second * 20,
+		OverrideCATTL:    nil,
+		MissingCredentials: bundle.MissingCredentials{
+			X509: true,
+			JWT:  true,
+		},
 	})
 	require.NoError(t, err)
 
@@ -66,13 +73,13 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 			spiffeid.RequireFromString("spiffe://localhost/ns/default/dapr-sentry").URL(),
 		},
 	}
-	leafCertDer, err := x509.CreateCertificate(rand.Reader, leafCert, bundle.IssChain[0], &leafKey.PublicKey, bundle.IssKey)
+	leafCertDer, err := x509.CreateCertificate(rand.Reader, leafCert, bundle.X509.IssChain[0], &leafKey.PublicKey, bundle.X509.IssKey)
 	require.NoError(t, err)
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS13,
 		Certificates: []tls.Certificate{
 			{
-				Certificate: [][]byte{leafCertDer, bundle.IssChain[0].Raw},
+				Certificate: [][]byte{leafCertDer, bundle.X509.IssChain[0].Raw},
 				PrivateKey:  leafKey,
 			},
 		},
@@ -116,7 +123,7 @@ func (s *Sentry) Run(t *testing.T, ctx context.Context) {
 	s.grpc.Run(t, ctx)
 }
 
-func (s *Sentry) Bundle() ca.Bundle {
+func (s *Sentry) Bundle() bundle.Bundle {
 	return s.bundle
 }
 

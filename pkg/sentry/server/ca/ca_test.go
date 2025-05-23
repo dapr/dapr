@@ -18,20 +18,24 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	jwx_jwt "github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/sentry/config"
+	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/jwt"
 	"github.com/dapr/kit/crypto/pem"
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
 func TestNew(t *testing.T) {
@@ -49,9 +53,12 @@ func TestNew(t *testing.T) {
 			RootCertPath:   rootCertPath,
 			IssuerCertPath: issuerCertPath,
 			IssuerKeyPath:  issuerKeyPath,
-			JWTEnabled:     true,
-			TrustDomain:    "test.example.com",
-			Mode:           modes.StandaloneMode,
+			JWT: config.ConfigJWT{
+				Enabled: true,
+				TTL:     config.DefaultJWTTTL,
+			},
+			TrustDomain: "test.example.com",
+			Mode:        modes.StandaloneMode,
 		}
 
 		_, err := New(t.Context(), config)
@@ -102,16 +109,18 @@ func TestNew(t *testing.T) {
 		jwksPath := filepath.Join(dir, "jwks.json")
 		jwtKeyPath := filepath.Join(dir, "jwt.key")
 		config := config.Config{
-			RootCertPath:        rootCertPath,
-			IssuerCertPath:      issuerCertPath,
-			IssuerKeyPath:       issuerKeyPath,
-			JWTEnabled:          true,
-			JWKSPath:            jwksPath,
-			JWTSigningKeyPath:   jwtKeyPath,
-			JWTSigningAlgorithm: DefaultJWTSignatureAlgorithm.String(),
-			JWTKeyID:            DefaultJWTKeyID,
-			TrustDomain:         "test.example.com",
-			Mode:                modes.StandaloneMode,
+			RootCertPath:   rootCertPath,
+			IssuerCertPath: issuerCertPath,
+			IssuerKeyPath:  issuerKeyPath,
+			JWT: config.ConfigJWT{
+				Enabled:          true,
+				JWKSPath:         jwksPath,
+				SigningKeyPath:   jwtKeyPath,
+				SigningAlgorithm: ca_bundle.DefaultJWTSignatureAlgorithm.String(),
+				TTL:              config.DefaultJWTTTL,
+			},
+			TrustDomain: "test.example.com",
+			Mode:        modes.StandaloneMode,
 		}
 
 		caObj, err := New(t.Context(), config)
@@ -169,14 +178,16 @@ func TestNew(t *testing.T) {
 		require.NotNil(t, key)
 
 		// Key should have the expected key ID and algorithm
+		thumbprint, err := key.Thumbprint(ca_bundle.DefaultKeyThumbprintAlgorithm)
+		require.NoError(t, err)
 		kid, ok := key.Get(jwk.KeyIDKey)
 		require.True(t, ok, "Key should have a key ID")
-		require.Equal(t, DefaultJWTKeyID, kid)
+		require.Equal(t, base64.StdEncoding.EncodeToString(thumbprint), kid)
 
 		alg, ok := key.Get(jwk.AlgorithmKey)
 		require.True(t, ok, "Key should have an algorithm")
 		algStr := alg.(jwa.SignatureAlgorithm).String()
-		require.Equal(t, DefaultJWTSignatureAlgorithm.String(), algStr)
+		require.Equal(t, ca_bundle.DefaultJWTSignatureAlgorithm.String(), algStr)
 
 		// JWT key should be valid
 		jwtKeyPK, err := pem.DecodePEMPrivateKey(jwtKey)
@@ -185,22 +196,23 @@ func TestNew(t *testing.T) {
 
 		// Verify JWT functionality by generating a token
 		caInstance := caObj.(*ca)
-		require.NotNil(t, caInstance.jwtIssuer)
+		require.NotNil(t, caInstance.Issuer)
 
 		// Generate a JWT
-		jwtToken, err := caInstance.GenerateJWT(t.Context(), &JWTRequest{
-			Audiences: []string{"test.example.com"},
-			Namespace: "test-namespace",
-			AppID:     "test-app",
-			TTL:       time.Hour,
+		jwtToken, err := caInstance.Generate(t.Context(), &jwt.Request{
+			TrustDomain: spiffeid.RequireTrustDomainFromString("test.example.com"),
+			Audiences:   []string{"test.example.com"},
+			Namespace:   "test-namespace",
+			AppID:       "test-app",
+			TTL:         time.Hour,
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, jwtToken)
 
 		// Parse and verify the token using the JWKS
-		parsedToken, err := jwt.Parse([]byte(jwtToken),
-			jwt.WithKeySet(jwks),
-			jwt.WithValidate(true))
+		parsedToken, err := jwx_jwt.Parse([]byte(jwtToken),
+			jwx_jwt.WithKeySet(jwks),
+			jwx_jwt.WithValidate(true))
 		require.NoError(t, err)
 
 		// Verify token claims
@@ -252,11 +264,11 @@ func TestNew(t *testing.T) {
 
 		// Only compare the X.509 certificate fields, not the JWT fields
 		bundle := caImp.(*ca).bundle
-		assert.Equal(t, rootFileContents, bundle.TrustAnchors)
-		assert.Equal(t, issuerFileContents, bundle.IssChainPEM)
-		assert.Equal(t, issuerKeyFileContents, bundle.IssKeyPEM)
-		assert.Equal(t, []*x509.Certificate{int2Crt, int1Crt}, bundle.IssChain)
-		assert.Equal(t, int2PK, bundle.IssKey)
+		assert.Equal(t, rootFileContents, bundle.X509.TrustAnchors)
+		assert.Equal(t, issuerFileContents, bundle.X509.IssChainPEM)
+		assert.Equal(t, issuerKeyFileContents, bundle.X509.IssKeyPEM)
+		assert.Equal(t, []*x509.Certificate{int2Crt, int1Crt}, bundle.X509.IssChain)
+		assert.Equal(t, int2PK, bundle.X509.IssKey)
 	})
 }
 

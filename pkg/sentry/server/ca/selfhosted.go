@@ -18,8 +18,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+
+	"github.com/dapr/dapr/pkg/sentry/config"
+	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 )
 
 // selfhosted is a store that uses the file system as the secret store.
@@ -28,17 +30,17 @@ type selfhosted struct {
 }
 
 // store saves the certificate bundle to the local filesystem.
-func (s *selfhosted) store(_ context.Context, bundle Bundle) error {
+func (s *selfhosted) store(_ context.Context, bundle ca_bundle.Bundle) error {
 	// Files to write with their corresponding data
 	files := []struct {
 		path string
 		data []byte
 	}{
-		{s.config.RootCertPath, bundle.TrustAnchors},
-		{s.config.IssuerCertPath, bundle.IssChainPEM},
-		{s.config.IssuerKeyPath, bundle.IssKeyPEM},
-		{s.config.JWTSigningKeyPath, bundle.JWTSigningKeyPEM},
-		{s.config.JWKSPath, bundle.JWKSJson},
+		{s.config.RootCertPath, bundle.X509.TrustAnchors},
+		{s.config.IssuerCertPath, bundle.X509.IssChainPEM},
+		{s.config.IssuerKeyPath, bundle.X509.IssKeyPEM},
+		{s.config.JWT.SigningKeyPath, bundle.JWT.SigningKeyPEM},
+		{s.config.JWT.JWKSPath, bundle.JWT.JWKSJson},
 	}
 
 	// Write each file if the path is specified and data exists
@@ -56,85 +58,98 @@ func (s *selfhosted) store(_ context.Context, bundle Bundle) error {
 }
 
 // get retrieves the existing certificate bundle from the filesystem.
-func (s *selfhosted) get(_ context.Context) (Bundle, CredentialGenOptions, error) {
-	requireX509 := false
+func (s *selfhosted) get(_ context.Context) (ca_bundle.Bundle, ca_bundle.MissingCredentials, error) {
+	var bundle ca_bundle.Bundle
+	missingX509, err := s.loadAndValidateX509Bundle(&bundle)
+	if err != nil {
+		return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, err
+	}
+
+	missingJWT, err := s.loadAndValidateJWTBundle(&bundle)
+	if err != nil {
+		return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, err
+	}
+
+	return bundle, ca_bundle.MissingCredentials{
+		X509: missingX509,
+		JWT:  missingJWT,
+	}, nil
+}
+
+// loadAndValidateX509Bundle loads the X.509 certificates and keys from disk, verifies them, and updates the bundle. Returns whether any are missing.
+func (s *selfhosted) loadAndValidateX509Bundle(bundle *ca_bundle.Bundle) (bool, error) {
+	missingX509 := false
 
 	// Read trust anchors (root certificate)
 	trustAnchors, err := os.ReadFile(s.config.RootCertPath)
 	if os.IsNotExist(err) {
-		requireX509 = true
+		missingX509 = true
 	} else if err != nil {
-		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to read root certificate: %w", err)
+		return false, fmt.Errorf("failed to read root certificate: %w", err)
 	}
 
 	// Read issuer certificate chain
 	issChainPEM, err := os.ReadFile(s.config.IssuerCertPath)
 	if os.IsNotExist(err) {
-		requireX509 = true
+		missingX509 = true
 	} else if err != nil {
-		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to read issuer certificate: %w", err)
+		return false, fmt.Errorf("failed to read issuer certificate: %w", err)
 	}
 
 	// Read issuer private key
 	issKeyPEM, err := os.ReadFile(s.config.IssuerKeyPath)
 	if os.IsNotExist(err) {
-		requireX509 = true
+		missingX509 = true
 	} else if err != nil {
-		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to read issuer key: %w", err)
+		return false, fmt.Errorf("failed to read issuer key: %w", err)
 	}
 
-	// If all X.509 certificates and keys exist, verify them
-	var bundle Bundle
-	if !requireX509 {
-		bundle, err = verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
+	if !missingX509 {
+		verifiedBundle, err := verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
 		if err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify CA bundle: %w", err)
+			return false, fmt.Errorf("failed to verify CA bundle: %w", err)
 		}
+		*bundle = verifiedBundle
 	}
 
-	// Check if JWT components need to be generated
-	requireJWT := false
+	return missingX509, nil
+}
+
+// loadAndValidateJWTBundle loads the JWT signing key and JWKS from disk, verifies them, and updates the bundle. Returns whether any JWT credentials are missing.
+func (s *selfhosted) loadAndValidateJWTBundle(bundle *ca_bundle.Bundle) (bool, error) {
+	missingJWT := false
 
 	// Read JWT signing key
-	jwtKeyPEM, err := os.ReadFile(s.config.JWTSigningKeyPath)
+	jwtKeyPEM, err := os.ReadFile(s.config.JWT.SigningKeyPath)
 	if err == nil {
-		// JWT key exists, load it
-		jwtKey, err := loadJWTSigningKey(jwtKeyPEM)
-		if err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to load JWT signing key: %w", err)
+		jwtKey, jwtErr := loadJWTSigningKey(jwtKeyPEM)
+		if jwtErr != nil {
+			return false, fmt.Errorf("failed to load JWT signing key: %w", jwtErr)
 		}
-		bundle.JWTSigningKey = jwtKey
-		bundle.JWTSigningKeyPEM = jwtKeyPEM
+		bundle.JWT.SigningKey = jwtKey
+		bundle.JWT.SigningKeyPEM = jwtKeyPEM
 	} else if os.IsNotExist(err) {
-		// JWT key doesn't exist, need to generate it
-		requireJWT = true
+		missingJWT = true
 	} else {
-		// Unexpected error
-		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("error reading JWT signing key: %w", err)
+		return false, fmt.Errorf("error reading JWT signing key: %w", err)
 	}
 
 	// Read JWKS
-	jwks, err := os.ReadFile(s.config.JWKSPath)
+	jwks, err := os.ReadFile(s.config.JWT.JWKSPath)
 	if err == nil {
-		// JWKS exists, verify it
-		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify JWKS: %w", err)
+		if verifyErr := verifyJWKS(jwks, bundle.JWT.SigningKey); verifyErr != nil {
+			return false, fmt.Errorf("failed to verify JWKS: %w", verifyErr)
 		}
-		bundle.JWKSJson = jwks
-		bundle.JWKS, err = jwk.Parse(jwks)
+		bundle.JWT.JWKSJson = jwks
+		bundle.JWT.JWKS, err = jwk.Parse(jwks)
 		if err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to parse JWKS: %w", err)
+			return false, fmt.Errorf("failed to parse JWKS: %w", err)
 		}
 	} else if os.IsNotExist(err) {
-		// JWKS doesn't exist, need to generate it
-		requireJWT = true
+		missingJWT = true
 	} else {
-		// Unexpected error
-		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("error reading JWKS: %w", err)
+		return false, fmt.Errorf("error reading JWKS: %w", err)
 	}
 
-	return bundle, CredentialGenOptions{
-		RequireX509: requireX509,
-		RequireJWT:  requireJWT,
-	}, nil
+	return missingJWT, nil
 }

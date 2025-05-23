@@ -11,27 +11,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ca
+package jwt
 
 import (
-	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
-	"io"
 	"testing"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	"github.com/dapr/kit/ptr"
 )
 
-func TestJWTIssuer_GenerateJWT(t *testing.T) {
+func TestIssuer_Generate(t *testing.T) {
 	// Generate a ecdsa private key for JWT signing
 	ecSigningKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -44,7 +46,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 	testCases := []struct {
 		name             string
 		issuer           *string
-		request          *JWTRequest
+		request          *Request
 		signingKey       crypto.Signer
 		signingAlgorithm jwa.SignatureAlgorithm
 		keyID            string
@@ -58,11 +60,12 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			signingAlgorithm: jwa.ES256,
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
-			request: &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       time.Hour,
+			request: &Request{
+				TrustDomain: spiffeid.RequireTrustDomainFromString("example.com"),
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "test-app",
+				TTL:         time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -75,13 +78,13 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 				iat, found := token.Get("iat")
 				require.True(t, found, "iat claim should exist")
 				iatTime := iat.(time.Time)
-				assert.WithinDuration(t, time.Now(), iatTime, 2*time.Second)
+				assert.WithinDuration(t, iatTime, time.Now(), 2*time.Second)
 
 				// Validate expiration is properly set
 				exp, found := token.Get("exp")
 				require.True(t, found, "exp claim should exist")
 				expTime := exp.(time.Time)
-				assert.WithinDuration(t, time.Now().Add(time.Hour), expTime, 2*time.Second)
+				assert.WithinDuration(t, expTime, time.Now().Add(time.Hour), 2*time.Second)
 
 				// No issuer should be set
 				_, found = token.Get("iss")
@@ -94,11 +97,12 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			signingAlgorithm: jwa.ES256,
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
-			request: &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "audience-test-app",
-				TTL:       time.Hour,
+			request: &Request{
+				TrustDomain: spiffeid.RequireTrustDomainFromString("example.com"),
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "audience-test-app",
+				TTL:         time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -116,12 +120,13 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			signingAlgorithm: jwa.ES256,
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
-			issuer:           stringPtr("https://auth.example.com"),
-			request: &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       time.Hour,
+			issuer:           ptr.Of("https://auth.example.com"),
+			request: &Request{
+				TrustDomain: spiffeid.RequireTrustDomainFromString("example.com"),
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "test-app",
+				TTL:         time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -137,11 +142,12 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			signingAlgorithm: jwa.ES256,
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
-			request: &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       24 * time.Hour, // Explicitly providing a default TTL for testing
+			request: &Request{
+				TrustDomain: spiffeid.RequireTrustDomainFromString("example.com"),
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "test-app",
+				TTL:         24 * time.Hour, // Explicitly providing a default TTL for testing
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -149,7 +155,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 				exp, found := token.Get("exp")
 				assert.True(t, found, "expiration claim should exist")
 				expTime := exp.(time.Time)
-				assert.WithinDuration(t, time.Now().Add(24*time.Hour), expTime, 2*time.Second)
+				assert.WithinDuration(t, expTime, time.Now().Add(24*time.Hour), 2*time.Second)
 			},
 		},
 		{
@@ -158,11 +164,12 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			signingAlgorithm: jwa.RS256,
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
-			request: &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       time.Hour,
+			request: &Request{
+				TrustDomain: spiffeid.RequireTrustDomainFromString("example.com"),
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "test-app",
+				TTL:         time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -175,13 +182,13 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 				iat, found := token.Get("iat")
 				require.True(t, found, "iat claim should exist")
 				iatTime := iat.(time.Time)
-				assert.WithinDuration(t, time.Now(), iatTime, 2*time.Second)
+				assert.WithinDuration(t, iatTime, time.Now(), 2*time.Second)
 
 				// Validate expiration is properly set
 				exp, found := token.Get("exp")
 				require.True(t, found, "exp claim should exist")
 				expTime := exp.(time.Time)
-				assert.WithinDuration(t, time.Now().Add(time.Hour), expTime, 2*time.Second)
+				assert.WithinDuration(t, expTime, time.Now().Add(time.Hour), 2*time.Second)
 			},
 		},
 		{
@@ -201,24 +208,28 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			signKey.Set(jwk.KeyIDKey, tc.keyID)
 			signKey.Set(jwk.AlgorithmKey, tc.signingAlgorithm)
 
+			jwks := jwk.NewSet()
+			jwks.AddKey(signKey)
+
 			// Create issuer with test parameters
-			issuer, err := NewJWTIssuer(
-				signKey,
-				tc.issuer,
-				tc.clockSkew)
+			issuer, err := New(IssuerOptions{
+				SignKey:          signKey,
+				JWKS:             jwks,
+				Issuer:           tc.issuer,
+				AllowedClockSkew: tc.clockSkew,
+			})
 			require.NoError(t, err)
 
-			token, err := issuer.GenerateJWT(context.Background(), tc.request)
+			token, err := issuer.Generate(t.Context(), tc.request)
 
 			// Validate error expectation
 			if tc.expectedError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				return
 			}
 
-			assert.NoError(t, err)
-			assert.NotEmpty(t, token)
 			require.NoError(t, err)
+			assert.NotEmpty(t, token)
 
 			// Parse and validate the token
 			parsedToken, err := jwt.Parse([]byte(token),
@@ -257,47 +268,60 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Generate the bundle
-	bundle, err := GenerateBundle(x509RootKey, jwtRootKey, "example.com", time.Minute, nil, CredentialGenOptions{
-		RequireX509: true,
-		RequireJWT:  true,
+	bundle, err := bundle.Generate(bundle.GenerateOptions{
+		X509RootKey:      x509RootKey,
+		JWTRootKey:       jwtRootKey,
+		TrustDomain:      "example.com",
+		AllowedClockSkew: time.Minute,
+		OverrideCATTL:    nil, // Use default CA TTL
+		MissingCredentials: bundle.MissingCredentials{
+			X509: true,
+			JWT:  true,
+		},
 	})
 	require.NoError(t, err)
 
 	// Verify the JWT signing key was generated
-	require.NotNil(t, bundle.JWTSigningKey, "JWT signing key should be generated")
-	require.NotNil(t, bundle.JWTSigningKeyPEM, "JWT signing key PEM should be generated")
-	require.NotNil(t, bundle.JWKS, "JWKS should be generated")
+	require.NotNil(t, bundle.JWT.SigningKey, "JWT signing key should be generated")
+	require.NotNil(t, bundle.JWT.SigningKeyPEM, "JWT signing key PEM should be generated")
+	require.NotNil(t, bundle.JWT.JWKS, "JWKS should be generated")
 
 	// Verify the JWT signing key is the one we provided
-	require.Equal(t, jwtRootKey, bundle.JWTSigningKey)
+	require.Equal(t, jwtRootKey, bundle.JWT.SigningKey)
 
-	signKey, err := jwk.FromRaw(bundle.JWTSigningKey)
+	signKey, err := jwk.FromRaw(bundle.JWT.SigningKey)
 	require.NoError(t, err)
 
 	signKey.Set(jwk.AlgorithmKey, DefaultJWTSignatureAlgorithm)
-	signKey.Set(jwk.KeyIDKey, DefaultJWTKeyID)
 
 	// Create JWT issuer using the bundle's signing key
-	issuer, err := NewJWTIssuer(
-		signKey,
-		nil,
-		time.Minute)
+	jwks := jwk.NewSet()
+	jwks.AddKey(signKey)
+
+	// Create issuer with test parameters
+	issuer, err := New(IssuerOptions{
+		SignKey:          signKey,
+		Issuer:           nil,
+		AllowedClockSkew: time.Minute,
+		JWKS:             jwks,
+	})
 	require.NoError(t, err)
 
 	// Generate a JWT
-	request := &JWTRequest{
-		Audiences: []string{"example.com"},
-		Namespace: "default",
-		AppID:     "test-app",
-		TTL:       time.Hour,
+	request := &Request{
+		TrustDomain: spiffeid.RequireTrustDomainFromString("example.com"),
+		Audiences:   []string{"example.com"},
+		Namespace:   "default",
+		AppID:       "test-app",
+		TTL:         time.Hour,
 	}
 
-	token, err := issuer.GenerateJWT(context.Background(), request)
+	token, err := issuer.Generate(t.Context(), request)
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
 
 	parsedToken, err := jwt.Parse([]byte(token),
-		jwt.WithKey(DefaultJWTSignatureAlgorithm, bundle.JWTSigningKey.Public()),
+		jwt.WithKey(DefaultJWTSignatureAlgorithm, bundle.JWT.SigningKey.Public()),
 		jwt.WithValidate(true))
 	require.NoError(t, err)
 	require.NotNil(t, parsedToken)
@@ -328,19 +352,19 @@ func TestCustomIssuerInToken(t *testing.T) {
 		},
 		{
 			name:           "empty issuer configured",
-			issuerValue:    stringPtr(""),
+			issuerValue:    ptr.Of(""),
 			expectedIssuer: "",
 			hasIssuer:      true,
 		},
 		{
 			name:           "custom issuer URL",
-			issuerValue:    stringPtr("https://auth.example.com"),
+			issuerValue:    ptr.Of("https://auth.example.com"),
 			expectedIssuer: "https://auth.example.com",
 			hasIssuer:      true,
 		},
 		{
 			name:           "custom string issuer",
-			issuerValue:    stringPtr("dapr-sentry"),
+			issuerValue:    ptr.Of("dapr-sentry"),
 			expectedIssuer: "dapr-sentry",
 			hasIssuer:      true,
 		},
@@ -353,28 +377,33 @@ func TestCustomIssuerInToken(t *testing.T) {
 
 			// Use ES256 algorithm which is appropriate for ECDSA P-256 keys
 			signKey.Set(jwk.AlgorithmKey, jwa.ES256)
-			signKey.Set(jwk.KeyIDKey, DefaultJWTKeyID)
+
+			jwks := jwk.NewSet()
+			jwks.AddKey(signKey)
 
 			// Create issuer with test parameters
-			issuer, err := NewJWTIssuer(
-				signKey,
-				tc.issuerValue,
-				time.Minute)
+			issuer, err := New(IssuerOptions{
+				SignKey:          signKey,
+				Issuer:           tc.issuerValue,
+				AllowedClockSkew: time.Minute,
+				JWKS:             jwks,
+			})
 			require.NoError(t, err)
 
 			// Create a basic request
-			request := &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       time.Hour,
+			request := &Request{
+				TrustDomain: spiffeid.RequireTrustDomainFromString("example.com"),
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "test-app",
+				TTL:         time.Hour,
 			}
 
 			// Generate token
-			token, err := issuer.GenerateJWT(context.Background(), request)
+			token, err := issuer.Generate(t.Context(), request)
 			require.NoError(t, err)
 
-			pubKey, err := issuer.signKey.PublicKey()
+			pubKey, err := signKey.PublicKey()
 			require.NoError(t, err)
 
 			// Parse token with verification
@@ -394,20 +423,4 @@ func TestCustomIssuerInToken(t *testing.T) {
 			}
 		})
 	}
-}
-
-// mockUnsupportedSigner implements crypto.Signer but is not one of the supported types
-type mockUnsupportedSigner struct{}
-
-func (m *mockUnsupportedSigner) Public() crypto.PublicKey {
-	return nil
-}
-
-func (m *mockUnsupportedSigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
-	return nil, nil
-}
-
-// Helper method to create string pointers
-func stringPtr(s string) *string {
-	return &s
 }
