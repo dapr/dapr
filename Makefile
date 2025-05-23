@@ -404,6 +404,9 @@ test-integration-parallel: test-deps
 lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m --max-same-issues 0 --max-issues-per-linter 0
 
+.PHONY: lint-fix
+lint-fix: check-linter
+	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m --max-same-issues 0 --max-issues-per-linter 0 --fix
 
 ################################################################################
 # Target: check-linter                                                         #
