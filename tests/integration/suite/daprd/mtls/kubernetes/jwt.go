@@ -23,7 +23,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -84,17 +83,16 @@ func (j *jwtvalidation) Setup(t *testing.T) []framework.Option {
 	j.sentry = sentry.New(t,
 		sentry.WithEnableJWT(true),                     // Enable JWT token issuance
 		sentry.WithJWTIssuer("https://localhost:8443"), // Set JWT issuer
-		sentry.WithOIDCHTTPPort(8443),                  // Enable OIDC HTTP server on port 8443
 		sentry.WithOIDCTLSCertFile(j.oidcTLSCertFile),  // Provide TLS cert for OIDC server
 		sentry.WithOIDCTLSKeyFile(j.oidcTLSKeyFile),    // Provide TLS key for OIDC server
 	)
 
 	bundle := j.sentry.CABundle()
-	j.trustAnchors = bundle.TrustAnchors
+	j.trustAnchors = bundle.X509.TrustAnchors
 
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
-	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
+	require.NoError(t, os.WriteFile(taFile, bundle.X509.TrustAnchors, 0o600))
 
 	j.scheduler = scheduler.New(t,
 		scheduler.WithSentry(j.sentry),
@@ -112,7 +110,7 @@ func (j *jwtvalidation) Setup(t *testing.T) []framework.Option {
 	j.daprd = procdaprd.New(t,
 		procdaprd.WithAppID("kubernetes-app"),
 		procdaprd.WithMode("kubernetes"),
-		procdaprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
+		procdaprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.X509.TrustAnchors))),
 		procdaprd.WithSentryAddress(j.sentry.Address()),
 		procdaprd.WithControlPlaneAddress(j.operator.Address(t)),
 		procdaprd.WithDisableK8sSecretStore(true),
@@ -172,134 +170,129 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 	j.scheduler.WaitUntilRunning(t, ctx)
 	j.daprd.WaitUntilRunning(t, ctx)
 
-	t.Run("validate JWT token issued by Sentry service in kubernetes mode", func(t *testing.T) {
-		sctx, cancel := context.WithCancel(ctx)
+	sctx, cancel := context.WithCancel(ctx)
 
-		secProv, err := security.New(sctx, security.Options{
-			SentryAddress:           j.sentry.Address(),
-			ControlPlaneTrustDomain: "localhost",
-			ControlPlaneNamespace:   "default",
-			TrustAnchors:            j.trustAnchors,
-			AppID:                   "my-app",
-			MTLSEnabled:             true,
-			Healthz:                 healthz.New(),
-		})
-		require.NoError(t, err)
-
-		secProvErr := make(chan error)
-		go func() {
-			secProvErr <- secProv.Run(sctx)
-		}()
-
-		t.Cleanup(func() {
-			cancel()
-			select {
-			case <-time.After(5 * time.Second):
-				t.Fatal("timed out waiting for security provider to stop")
-			case err = <-secProvErr:
-				require.NoError(t, err)
-			}
-		})
-
-		sec, err := secProv.Handler(sctx)
-		require.NoError(t, err)
-
-		ctxWithIdentity := sec.WithSVIDContext(context.Background())
-		jwtSource, ok := spiffecontext.JWTFrom(ctxWithIdentity)
-		require.True(t, ok, "JWT source should be present in context")
-		require.NotNil(t, jwtSource, "JWT source should not be nil")
-
-		myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
-		require.NoError(t, err)
-
-		token, err := jwtSource.FetchJWTSVID(ctx, jwtsvid.Params{
-			Audience: "public",
-			Subject:  myAppID,
-		})
-		require.NoError(t, err, "JWT token should be fetched successfully")
-		require.NotEmpty(t, token, "JWT token should not be empty")
-
-		tokenRaw := token.Marshal()
-
-		// Create a custom HTTP client that skips certificate validation
-		// since we're using a self-signed certificate for the OIDC server
-		customTransport := &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		}
-		httpClient := &http.Client{
-			Transport: customTransport,
-		}
-
-		// Get OIDC discovery document from Sentry's OIDC HTTP server
-		oidcURL := fmt.Sprintf("https://localhost:8443/.well-known/openid-configuration")
-		httpResp, err := httpClient.Get(oidcURL)
-		require.NoError(t, err)
-		defer httpResp.Body.Close()
-
-		require.Equal(t, http.StatusOK, httpResp.StatusCode, "Expected 200 OK response from OIDC discovery document but got %d", httpResp.StatusCode)
-
-		var discovery oidcDiscoveryResponse
-		err = json.NewDecoder(httpResp.Body).Decode(&discovery)
-		require.NoError(t, err)
-		require.NotEmpty(t, discovery.JWKSURI, "JWKS URI should be present in discovery document")
-
-		// Get JWKS from the URL provided in the discovery document
-		jwksResp, err := httpClient.Get(discovery.JWKSURI)
-		require.NoError(t, err)
-		defer jwksResp.Body.Close()
-
-		require.Equal(t, http.StatusOK, jwksResp.StatusCode, "JWKS endpoint should be accessible")
-
-		// Parse JWKS
-		keySet, err := jwk.ParseReader(jwksResp.Body)
-		require.NoError(t, err)
-		require.True(t, keySet.Len() > 0, "JWKS should contain at least one key")
-
-		// Parse and validate the JWT token using the JWKS
-		tkn, err := jwt.Parse([]byte(tokenRaw), jwt.WithKeySet(keySet))
-		require.NoError(t, err, "JWT token should be valid and verifiable with JWKS")
-
-		// Validate expected claims
-		issuer, _ := tkn.Get("iss")
-		require.Equal(t, discovery.Issuer, issuer, "Expected issuer %s, but got %s", discovery.Issuer, issuer)
-
-		sub, _ := tkn.Get("sub")
-		require.Equal(t, myAppID.String(), sub.(string), "Expected subject %s, but got %s", myAppID, sub)
-
-		// Verify token expiration
-		expTime, _ := tkn.Get("exp")
-		require.NotNil(t, expTime, "Expiration claim should exist")
-
-		// Verify token issuance time
-		iatTime, _ := tkn.Get("iat")
-		require.NotNil(t, iatTime, "Issued at claim should exist")
-
-		// Verify token audience
-		aud, ok := tkn.Get("aud")
-		require.True(t, ok, "Audience claim should exist")
-		require.NotEmpty(t, aud, "Audience claim should not be empty")
-		audList, ok := aud.([]string)
-		require.True(t, ok, "Audience claim should be a list of strings")
-		require.Contains(t, audList, "public", "Audience claim should contain 'public'")
-
-		// Validate that expiration is in the future
-		exp, ok := expTime.(time.Time)
-		require.True(t, ok, "exp claim should be a time value")
-		require.True(t, exp.After(time.Now()), "Token should not be expired")
-
-		// Validate that issued at is in the past
-		iat, ok := iatTime.(time.Time)
-		require.True(t, ok, "iat claim should be a time value")
-		require.True(t, iat.Before(time.Now()) || iat.Equal(time.Now()), "Token should have been issued in the past or now")
-
-		// Additional validation: validate token lifetime
-		tokenLifetime := exp.Sub(iat)
-		require.True(t, tokenLifetime > 0, "Token lifetime should be positive")
-		t.Logf("Token lifetime: %v", tokenLifetime)
-
-		// Log the full token claims for debugging
-		t.Logf("JWT token claims: %+v", tkn.PrivateClaims())
+	secProv, err := security.New(sctx, security.Options{
+		SentryAddress:           j.sentry.Address(),
+		ControlPlaneTrustDomain: "localhost",
+		ControlPlaneNamespace:   "default",
+		TrustAnchors:            j.trustAnchors,
+		AppID:                   "my-app",
+		MTLSEnabled:             true,
+		Healthz:                 healthz.New(),
 	})
+	require.NoError(t, err)
+
+	secProvErr := make(chan error)
+	go func() {
+		secProvErr <- secProv.Run(sctx)
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for security provider to stop")
+		case err = <-secProvErr:
+			require.NoError(t, err)
+		}
+	})
+
+	sec, err := secProv.Handler(sctx)
+	require.NoError(t, err)
+
+	ctxWithIdentity := sec.WithSVIDContext(t.Context())
+	jwtSource, ok := spiffecontext.JWTFrom(ctxWithIdentity)
+	require.True(t, ok, "JWT source should be present in context")
+	require.NotNil(t, jwtSource, "JWT source should not be nil")
+
+	myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
+	require.NoError(t, err)
+
+	token, err := jwtSource.FetchJWTSVID(ctx, jwtsvid.Params{
+		Audience: "public",
+		Subject:  myAppID,
+	})
+	require.NoError(t, err, "JWT token should be fetched successfully")
+	require.NotEmpty(t, token, "JWT token should not be empty")
+
+	tokenRaw := token.Marshal()
+
+	// Create a custom HTTP client that skips certificate validation
+	// since we're using a self-signed certificate for the OIDC server
+	customTransport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true, //nolint: gosec
+		},
+	}
+	httpClient := &http.Client{
+		Transport: customTransport,
+	}
+
+	// Get OIDC discovery document from Sentry's OIDC HTTP server
+	oidcURL := "https://localhost:8443/.well-known/openid-configuration"
+	httpResp, err := httpClient.Get(oidcURL)
+	require.NoError(t, err)
+	defer httpResp.Body.Close()
+
+	require.Equal(t, http.StatusOK, httpResp.StatusCode, "Expected 200 OK response from OIDC discovery document but got %d", httpResp.StatusCode)
+
+	var discovery oidcDiscoveryResponse
+	err = json.NewDecoder(httpResp.Body).Decode(&discovery)
+	require.NoError(t, err)
+	require.NotEmpty(t, discovery.JWKSURI, "JWKS URI should be present in discovery document")
+
+	// Get JWKS from the URL provided in the discovery document
+	jwksResp, err := httpClient.Get(discovery.JWKSURI)
+	require.NoError(t, err)
+	defer jwksResp.Body.Close()
+
+	require.Equal(t, http.StatusOK, jwksResp.StatusCode, "JWKS endpoint should be accessible")
+
+	// Parse JWKS
+	keySet, err := jwk.ParseReader(jwksResp.Body)
+	require.NoError(t, err)
+	require.Positive(t, keySet.Len(), "JWKS should contain at least one key")
+
+	// Parse and validate the JWT token using the JWKS
+	tkn, err := jwt.Parse([]byte(tokenRaw), jwt.WithKeySet(keySet))
+	require.NoError(t, err, "JWT token should be valid and verifiable with JWKS")
+
+	// Validate expected claims
+	issuer, ok := tkn.Get("iss")
+	require.True(t, ok, "Issuer claim should exist in the token")
+	require.Equal(t, discovery.Issuer, issuer, "Expected issuer %s, but got %s", discovery.Issuer, issuer)
+
+	sub, _ := tkn.Get("sub")
+	require.Equal(t, myAppID.String(), sub.(string), "Expected subject %s, but got %s", myAppID, sub)
+
+	// Verify token expiration
+	expTime, _ := tkn.Get("exp")
+	require.NotNil(t, expTime, "Expiration claim should exist")
+
+	// Verify token issuance time
+	iatTime, _ := tkn.Get("iat")
+	require.NotNil(t, iatTime, "Issued at claim should exist")
+
+	// Verify token audience
+	aud, ok := tkn.Get("aud")
+	require.True(t, ok, "Audience claim should exist")
+	require.NotEmpty(t, aud, "Audience claim should not be empty")
+	audList, ok := aud.([]string)
+	require.True(t, ok, "Audience claim should be a list of strings")
+	require.Contains(t, audList, "public", "Audience claim should contain 'public'")
+
+	// Validate that expiration is in the future
+	exp, ok := expTime.(time.Time)
+	require.True(t, ok, "exp claim should be a time value")
+	require.True(t, exp.After(time.Now()), "Token should not be expired")
+
+	// Validate that issued at is in the past
+	iat, ok := iatTime.(time.Time)
+	require.True(t, ok, "iat claim should be a time value")
+	require.True(t, iat.Before(time.Now()) || iat.Equal(time.Now()), "Token should have been issued in the past or now")
+
+	// Additional validation: validate token lifetime
+	tokenLifetime := exp.Sub(iat)
+	require.Positive(t, tokenLifetime, "Token lifetime should be positive")
 }

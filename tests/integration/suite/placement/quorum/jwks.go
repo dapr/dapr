@@ -93,7 +93,7 @@ spec:
 	bundle := j.sentry.CABundle()
 
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
-	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
+	require.NoError(t, os.WriteFile(taFile, bundle.X509.TrustAnchors, 0o600))
 
 	fp := ports.Reserve(t, 3)
 	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
@@ -128,7 +128,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		SentryAddress:           j.sentry.Address(),
 		ControlPlaneTrustDomain: "localhost",
 		ControlPlaneNamespace:   "default",
-		TrustAnchors:            j.sentry.CABundle().TrustAnchors,
+		TrustAnchors:            j.sentry.CABundle().X509.TrustAnchors,
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
 		SentryTokenFile:         ptr.Of(j.appTokenFile),

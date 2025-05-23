@@ -18,6 +18,7 @@ import (
 	"crypto"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -46,14 +47,19 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 type Options struct {
-	Config         config.Config
-	Healthz        healthz.Healthz
-	OIDCHTTPPort   int         // HTTP port for OIDC endpoints
-	OIDCTLSConfig  *tls.Config // custom TLS configuration for the HTTP server (Optional)
-	OIDCDomains    []string    // Domains that public endpoints can be accessed from (Optional)
-	OIDCJWKSURI    string      // Force the public JWKS URI to this value (Optional)
-	ODICPathPrefix string      // Path prefix for HTTP endpoints (Optional)
-	OIDCInsecure   bool        // Allow HTTP insecure (Optional)
+	Config  config.Config
+	Healthz healthz.Healthz
+	OIDC    OIDCOptions
+}
+
+type OIDCOptions struct {
+	Enabled             bool        // Enable OIDC HTTP endpoints
+	ServerListenAddress string      // Address for OIDC HTTP server
+	ServerListenPort    *int        // Port for OIDC HTTP endpoints
+	TLSConfig           *tls.Config // custom TLS configuration for the HTTP server (Optional)
+	Domains             []string    // Domains that public endpoints can be accessed from (Optional)
+	JWKSURI             *string     // Force the public JWKS URI to this value (Optional)
+	PathPrefix          *string     // Path prefix for HTTP endpoints (Optional)
 }
 
 // CertificateAuthority is the interface for the Sentry Certificate Authority.
@@ -127,43 +133,17 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 			CA:               camngr,
 			Healthz:          opts.Healthz,
 			ListenAddress:    opts.Config.ListenAddress,
-			JWTEnabled:       opts.Config.JWTEnabled,
+			JWTEnabled:       opts.Config.JWT.Enabled,
+			JWTTTL:           opts.Config.JWT.TTL,
 		}).Start,
 	)
 
-	// Start HTTP server for OIDC endpoints if enabled
-	if opts.OIDCHTTPPort > 0 && opts.Config.JWTEnabled {
-		log.Infof("Starting OIDC HTTP server on port %d", opts.OIDCHTTPPort)
-
-		var issuer string
-		if opts.Config.JWTIssuer != nil {
-			issuer = *opts.Config.JWTIssuer
+	if oidcRunner, err := newOIDCServerRunner(opts, camngr); err != nil {
+		return nil, fmt.Errorf("error creating OIDC server: %w", err)
+	} else if oidcRunner != nil {
+		if err := runners.Add(oidcRunner); err != nil {
+			return nil, fmt.Errorf("error adding OIDC server to runners: %w", err)
 		}
-
-		signAlg := camngr.JWTSignatureAlgorithm()
-		if signAlg == nil {
-			return nil, fmt.Errorf("failed to get JWT signature algorithm from signing key")
-		}
-
-		httpServer := oidc.New(oidc.Options{
-			Port:               opts.OIDCHTTPPort,
-			ListenAddress:      opts.Config.ListenAddress,
-			JWKS:               camngr.JWKS(),
-			JWTIssuer:          issuer,
-			Healthz:            opts.Healthz,
-			JWKSURI:            opts.OIDCJWKSURI,
-			Domains:            opts.OIDCDomains,
-			TLSConfig:          opts.OIDCTLSConfig,
-			PathPrefix:         opts.ODICPathPrefix,
-			SignatureAlgorithm: signAlg,
-			Insecure:           opts.OIDCInsecure,
-		})
-
-		if err := runners.Add(httpServer.Start); err != nil {
-			return nil, fmt.Errorf("error adding HTTP server: %w", err)
-		}
-	} else {
-		log.Info("OIDC HTTP server is disabled")
 	}
 
 	for name, val := range vals {
@@ -176,6 +156,56 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 	return &sentry{
 		runners: runners,
 	}, nil
+}
+
+func newOIDCServerRunner(opts Options, camngr ca.Signer) (concurrency.Runner, error) {
+	if opts.OIDC.Enabled && opts.Config.JWT.Enabled {
+		log.Infof("Starting OIDC HTTP server on port %d", *opts.OIDC.ServerListenPort)
+
+		var issuer string
+		if opts.Config.JWT.Issuer != nil {
+			issuer = *opts.Config.JWT.Issuer
+		}
+
+		signAlg := camngr.JWTSignatureAlgorithm()
+		if signAlg == nil {
+			return nil, errors.New("failed to get JWT signature algorithm from signing key")
+		}
+
+		jwksBytes := []byte{}
+		jwks := camngr.JWKS()
+		if jwks != nil {
+			var err error
+			jwksBytes, err = json.Marshal(jwks)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal JWKS: %w", err)
+			}
+		}
+
+		oidcOpts := oidc.Options{
+			Port:               *opts.OIDC.ServerListenPort,
+			ListenAddress:      opts.OIDC.ServerListenAddress,
+			JWKS:               jwksBytes,
+			JWTIssuer:          &issuer,
+			Healthz:            opts.Healthz,
+			AllowedHosts:       opts.OIDC.Domains,
+			TLSConfig:          opts.OIDC.TLSConfig,
+			SignatureAlgorithm: signAlg,
+		}
+
+		oidcOpts.JWKSURI = opts.OIDC.JWKSURI
+		oidcOpts.PathPrefix = opts.OIDC.PathPrefix
+
+		httpServer, err := oidc.New(oidcOpts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OIDC server: %w", err)
+		}
+
+		return httpServer.Run, nil
+	} else {
+		log.Info("OIDC HTTP server is disabled")
+	}
+	return nil, nil
 }
 
 // Start the server.

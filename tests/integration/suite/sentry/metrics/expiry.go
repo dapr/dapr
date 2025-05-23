@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -54,9 +54,16 @@ func (e *expiry) Setup(t *testing.T) []framework.Option {
 	require.NoError(t, err)
 
 	onemonth := time.Hour * 24 * 30
-	bundle, err := ca.GenerateBundle(rootKey, jwtKey, "integration.test.dapr.io", time.Second*5, &onemonth, ca.CredentialGenOptions{
-		RequireX509: true,
-		RequireJWT:  false,
+	bundle, err := bundle.Generate(bundle.GenerateOptions{
+		X509RootKey:      rootKey,
+		JWTRootKey:       jwtKey,
+		TrustDomain:      "integration.test.dapr.io",
+		AllowedClockSkew: time.Second * 5,
+		OverrideCATTL:    &onemonth,
+		MissingCredentials: bundle.MissingCredentials{
+			X509: true,
+			JWT:  true,
+		},
 	})
 	require.NoError(t, err)
 

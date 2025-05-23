@@ -33,9 +33,9 @@ spec:
     targetPort: {{ .Values.global.prometheus.port }}
     protocol: TCP
 {{- end}}
-{{- if gt (.Values.oidc.httpPort | int) 0 }}
+{{- if .Values.oidc.enabled }}
   - name: oidc
-    port: {{ .Values.oidc.httpPort }}
-    targetPort: {{ .Values.oidc.httpPort }}
+    port: {{ .Values.oidc.server.port }}
+    targetPort: 9080
     protocol: TCP
 {{- end }}
