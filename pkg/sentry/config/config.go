@@ -59,29 +59,37 @@ const (
 
 	// DefaultJWKSFilename is the filename that holds the JWKS (JSON Web Key Set).
 	DefaultJWKSFilename = "jwks.json"
+
+	// DefaultJWTTTL is the default time-to-live for JWT tokens.
+	DefaultJWTTTL = time.Hour * 24
 )
 
 // Config holds the configuration for the Certificate Authority.
 type Config struct {
-	Port                int
-	ListenAddress       string
-	TrustDomain         string
-	CAStore             string
-	WorkloadCertTTL     time.Duration
-	AllowedClockSkew    time.Duration
-	RootCertPath        string
-	IssuerCertPath      string
-	IssuerKeyPath       string
-	JWTSigningKeyPath   string
-	JWKSPath            string
-	JWTEnabled          bool
-	JWTIssuer           *string
-	JWTSigningAlgorithm string
-	JWTKeyID            string
-	Mode                modes.DaprMode
-	Validators          map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
-	DefaultValidator    sentryv1pb.SignCertificateRequest_TokenValidator
-	Features            []daprGlobalConfig.FeatureSpec
+	Port             int
+	ListenAddress    string
+	TrustDomain      string
+	CAStore          string
+	WorkloadCertTTL  time.Duration
+	AllowedClockSkew time.Duration
+	RootCertPath     string
+	IssuerCertPath   string
+	IssuerKeyPath    string
+	JWT              ConfigJWT
+	Mode             modes.DaprMode
+	Validators       map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
+	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
+	Features         []daprGlobalConfig.FeatureSpec
+}
+
+type ConfigJWT struct {
+	Enabled          bool
+	SigningKeyPath   string
+	JWKSPath         string
+	Issuer           *string
+	SigningAlgorithm string
+	KeyID            *string // Key ID (kid) used for JWT signing (defaults to base64 encoded SHA-256 of the signing key)
+	TTL              time.Duration
 }
 
 // FromConfigName returns a Sentry configuration based on a configuration spec.
@@ -120,9 +128,7 @@ func getDefaultConfig() Config {
 		WorkloadCertTTL:  defaultWorkloadCertTTL,
 		AllowedClockSkew: defaultAllowedClockSkew,
 		TrustDomain:      defaultTrustDomain,
-		// Default paths for JWT keys will be set when the config is used
-		JWTSigningKeyPath: "",
-		JWKSPath:          "",
+		JWT:              ConfigJWT{},
 	}
 }
 

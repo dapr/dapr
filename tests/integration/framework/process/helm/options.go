@@ -58,6 +58,12 @@ func WithShowOnlySchedulerSTS() OptionFunc {
 	}
 }
 
+func WithShowOnlySentryDeployment() OptionFunc {
+	return func(o *options) {
+		o.showOnly = append(o.showOnly, "charts/dapr_sentry/templates/dapr_sentry_deployment.yaml")
+	}
+}
+
 func WithShowOnlyServices(t *testing.T) OptionFunc {
 	return func(o *options) {
 		require.NoError(t, filepath.Walk(
