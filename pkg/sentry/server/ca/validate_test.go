@@ -16,6 +16,7 @@ package ca
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -28,12 +29,12 @@ import (
 	"testing"
 	"time"
 
-	"crypto/ed25519"
-
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 )
 
 func genCrt(t *testing.T,
@@ -100,89 +101,91 @@ func TestVerifyBundle(t *testing.T) {
 		issKeyPEM   []byte
 		trustBundle []byte
 		expErr      bool
-		expBundle   Bundle
+		expBundle   bundle.Bundle
 	}{
 		"if issuer chain pem empty, expect error": {
 			issChainPEM: nil,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: rootPEM,
 			expErr:      true,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 		},
 		"if issuer key pem empty, expect error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   nil,
 			trustBundle: rootPEM,
 			expErr:      true,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 		},
 		"if issuer trust bundle pem empty, expect error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: nil,
 			expErr:      true,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 		},
 		"invalid issuer chain PEM should error": {
 			issChainPEM: []byte("invalid"),
 			issKeyPEM:   int1PKPEM,
 			trustBundle: rootPEM,
 			expErr:      true,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 		},
 		"invalid issuer key PEM should error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   []byte("invalid"),
 			trustBundle: rootPEM,
 			expErr:      true,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 		},
 		"invalid trust bundle PEM should error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: []byte("invalid"),
 			expErr:      true,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 		},
 		"if issuer chain is in wrong order, expect error": {
 			issChainPEM: joinPEM(int1PEM, int2PEM),
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      true,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 		},
 		"if issuer key does not belong to issuer certificate, expect error": {
 			issChainPEM: joinPEM(int2PEM, int1PEM),
 			issKeyPEM:   int1PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      true,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 		},
 		"if trust anchors contains non root certificates, exp error": {
 			issChainPEM: joinPEM(int2PEM, int1PEM),
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM, int1PEM),
 			expErr:      true,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 		},
 		"if issuer chain doesn't belong to trust anchors, expect error": {
 			issChainPEM: joinPEM(int2PEM, int1PEM),
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootBPEM),
 			expErr:      true,
-			expBundle:   Bundle{},
+			expBundle:   bundle.Bundle{},
 		},
 		"valid chain should not error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: rootPEM,
 			expErr:      false,
-			expBundle: Bundle{
-				TrustAnchors: rootPEM,
-				IssChainPEM:  joinPEM(int1PEM),
-				IssKeyPEM:    int1PKPEM,
-				IssChain:     []*x509.Certificate{int1Crt},
-				IssKey:       int1PK,
+			expBundle: bundle.Bundle{
+				X509: bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  joinPEM(int1PEM),
+					IssKeyPEM:    int1PKPEM,
+					IssChain:     []*x509.Certificate{int1Crt},
+					IssKey:       int1PK,
+				},
 			},
 		},
 		"valid long chain should not error": {
@@ -190,12 +193,14 @@ func TestVerifyBundle(t *testing.T) {
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      false,
-			expBundle: Bundle{
-				TrustAnchors: joinPEM(rootPEM, rootBPEM),
-				IssChainPEM:  joinPEM(int2PEM, int1PEM),
-				IssKeyPEM:    int2PKPEM,
-				IssChain:     []*x509.Certificate{int2Crt, int1Crt},
-				IssKey:       int2PK,
+			expBundle: bundle.Bundle{
+				X509: bundle.X509{
+					TrustAnchors: joinPEM(rootPEM, rootBPEM),
+					IssChainPEM:  joinPEM(int2PEM, int1PEM),
+					IssKeyPEM:    int2PKPEM,
+					IssChain:     []*x509.Certificate{int2Crt, int1Crt},
+					IssKey:       int2PK,
+				},
 			},
 		},
 		"is root certificate in chain, expect to be removed": {
@@ -203,12 +208,14 @@ func TestVerifyBundle(t *testing.T) {
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      false,
-			expBundle: Bundle{
-				TrustAnchors: joinPEM(rootPEM, rootBPEM),
-				IssChainPEM:  joinPEM(int2PEM, int1PEM),
-				IssKeyPEM:    int2PKPEM,
-				IssChain:     []*x509.Certificate{int2Crt, int1Crt},
-				IssKey:       int2PK,
+			expBundle: bundle.Bundle{
+				X509: bundle.X509{
+					TrustAnchors: joinPEM(rootPEM, rootBPEM),
+					IssChainPEM:  joinPEM(int2PEM, int1PEM),
+					IssKeyPEM:    int2PKPEM,
+					IssChain:     []*x509.Certificate{int2Crt, int1Crt},
+					IssKey:       int2PK,
+				},
 			},
 		},
 		"comments are removed from parsed issuer chain, private key and trust anchors": {
@@ -232,12 +239,14 @@ func TestVerifyBundle(t *testing.T) {
 				[]byte("# this is a comment\n"),
 			),
 			expErr: false,
-			expBundle: Bundle{
-				TrustAnchors: joinPEM(rootPEM, rootBPEM),
-				IssChainPEM:  joinPEM(int2PEM, int1PEM),
-				IssKeyPEM:    int2PKPEM,
-				IssChain:     []*x509.Certificate{int2Crt, int1Crt},
-				IssKey:       int2PK,
+			expBundle: bundle.Bundle{
+				X509: bundle.X509{
+					TrustAnchors: joinPEM(rootPEM, rootBPEM),
+					IssChainPEM:  joinPEM(int2PEM, int1PEM),
+					IssKeyPEM:    int2PKPEM,
+					IssChain:     []*x509.Certificate{int2Crt, int1Crt},
+					IssKey:       int2PK,
+				},
 			},
 		},
 	}
@@ -287,21 +296,21 @@ func TestVerifyJWKS(t *testing.T) {
 	t.Run("nil signing key", func(t *testing.T) {
 		jwksBytes := createJWKS(t, signingKey, "test-key")
 		err := verifyJWKS(jwksBytes, nil)
-		assert.Error(t, err, "JWKS verification should fail with nil signing key")
+		require.Error(t, err, "JWKS verification should fail with nil signing key")
 		assert.Contains(t, err.Error(), "can't verify JWKS without signing key")
 	})
 
 	t.Run("invalid JWKS format", func(t *testing.T) {
 		invalidJWKS := []byte(`{"keys": [{"invalid": "format"]}`)
 		err := verifyJWKS(invalidJWKS, signingKey)
-		assert.Error(t, err, "JWKS verification should fail with invalid JWKS format")
+		require.Error(t, err, "JWKS verification should fail with invalid JWKS format")
 		assert.Contains(t, err.Error(), "failed to parse JWKS")
 	})
 
 	t.Run("empty JWKS", func(t *testing.T) {
 		emptyJWKS := []byte(`{"keys": []}`)
 		err := verifyJWKS(emptyJWKS, signingKey)
-		assert.Error(t, err, "JWKS verification should fail with empty JWKS")
+		require.Error(t, err, "JWKS verification should fail with empty JWKS")
 		assert.Contains(t, err.Error(), "JWKS doesn't contain any keys")
 	})
 
@@ -315,7 +324,7 @@ func TestVerifyJWKS(t *testing.T) {
 
 		// Verify the JWKS with the original signing key
 		err = verifyJWKS(jwksBytes, signingKey)
-		assert.Error(t, err, "JWKS verification should fail when no matching key is found")
+		require.Error(t, err, "JWKS verification should fail when no matching key is found")
 		assert.Contains(t, err.Error(), "JWKS doesn't contain a matching public key")
 	})
 
@@ -357,7 +366,7 @@ func TestVerifyJWKS(t *testing.T) {
 		keys := make(map[string]crypto.Signer, numKeys)
 
 		// Generate many different keys
-		for i := 0; i < numKeys-1; i++ {
+		for i := range numKeys - 1 {
 			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 			require.NoError(t, err, "Failed to generate key")
 			keys[fmt.Sprintf("key-%d", i)] = key
@@ -415,7 +424,7 @@ func TestVerifyJWKS(t *testing.T) {
 		}`)
 
 		err := verifyJWKS(mixedJWKS, signingKey)
-		assert.Error(t, err, "JWKS verification should fail when no matching key is found")
+		require.Error(t, err, "JWKS verification should fail when no matching key is found")
 		assert.Contains(t, err.Error(), "JWKS doesn't contain a matching public key")
 	})
 }

@@ -46,17 +46,19 @@ jwt:
 
 
 oidc:
-  # The port for the OIDC HTTP server (disabled if 0)
-  httpPort: 0
+  enabled: false
+  server:
+    # Port for the OIDC HTTP server
+    port: 9080
   # Custom URI where the JWKS can be accessed externally
   jwksURI: ""
-  # Path prefix to add to all OIDC HTTP endpoints
+  # Path prefix to add to OIDC HTTP endpoints
   pathPrefix: ""
-  # List of allowed domains for OIDC HTTP endpoint requests
-  domains: []
+  # List of allowed hosts for OIDC HTTP endpoint requests
+  allowedHosts: []
   tls:
-    # Insecure flag for the OIDC HTTP server (default: false)
-    insecure: false
+    # Enable TLS for the OIDC HTTP server
+    enabled: true
     # TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
     certFile: ""
     # TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)

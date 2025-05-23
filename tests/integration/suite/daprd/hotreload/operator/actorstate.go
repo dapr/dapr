@@ -114,7 +114,7 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
+			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors)),
 			exec.WithStdout(a.loglineCreate.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -125,7 +125,7 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
+			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors)),
 			exec.WithStdout(a.loglineUpdate.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -136,7 +136,7 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
+			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors)),
 			exec.WithStdout(a.loglineDelete.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
