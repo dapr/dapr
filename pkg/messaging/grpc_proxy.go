@@ -132,6 +132,11 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		appMetadataToken := security.GetAppToken()
 		if appMetadataToken != "" {
 			md.Set(securityConsts.APITokenHeader, appMetadataToken)
+
+			appMetadataTokenHeader := security.GetAppTokenHeader()
+			if appMetadataTokenHeader != "" {
+				md.Set(appMetadataTokenHeader, appMetadataToken)
+			}
 		}
 
 		outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
