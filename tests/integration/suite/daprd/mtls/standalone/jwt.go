@@ -23,7 +23,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -31,7 +30,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	jwx_jwt "github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 	"github.com/stretchr/testify/require"
@@ -49,11 +48,11 @@ import (
 )
 
 func init() {
-	suite.Register(new(jwtvalidation))
+	suite.Register(new(jwt))
 }
 
-// jwtvalidation tests standalone Dapr with mTLS enabled and validates JWT tokens.
-type jwtvalidation struct {
+// jwt tests standalone Dapr with mTLS enabled and validates JWT tokens.
+type jwt struct {
 	daprd           *daprd.Daprd
 	sentry          *sentry.Sentry
 	placement       *placement.Placement
@@ -65,7 +64,7 @@ type jwtvalidation struct {
 	oidcTLSKeyFile  string
 }
 
-func (j *jwtvalidation) Setup(t *testing.T) []framework.Option {
+func (j *jwt) Setup(t *testing.T) []framework.Option {
 	// Create TLS certificate for OIDC server
 	cert, key := generateTLSCertificate(t)
 	j.oidcTLSCert = cert
@@ -83,17 +82,16 @@ func (j *jwtvalidation) Setup(t *testing.T) []framework.Option {
 		sentry.WithMode("standalone"),
 		sentry.WithEnableJWT(true),                     // Enable JWT token issuance
 		sentry.WithJWTIssuer("https://localhost:8443"), // Set JWT issuer
-		sentry.WithOIDCHTTPPort(8443),                  // Enable OIDC HTTP server on port 8443
 		sentry.WithOIDCTLSCertFile(j.oidcTLSCertFile),  // Provide TLS cert for OIDC server
 		sentry.WithOIDCTLSKeyFile(j.oidcTLSKeyFile),    // Provide TLS key for OIDC server
 	)
 
 	bundle := j.sentry.CABundle()
-	j.trustAnchors = bundle.TrustAnchors
+	j.trustAnchors = bundle.X509.TrustAnchors
 
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
-	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
+	require.NoError(t, os.WriteFile(taFile, bundle.X509.TrustAnchors, 0o600))
 
 	j.scheduler = scheduler.New(t,
 		scheduler.WithSentry(j.sentry),
@@ -109,7 +107,7 @@ func (j *jwtvalidation) Setup(t *testing.T) []framework.Option {
 	j.daprd = daprd.New(t,
 		daprd.WithAppID("standalone-app"),
 		daprd.WithMode("standalone"),
-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.X509.TrustAnchors))),
 		daprd.WithSentryAddress(j.sentry.Address()),
 		daprd.WithPlacementAddresses(j.placement.Address()),
 		daprd.WithSchedulerAddresses(j.scheduler.Address()),
@@ -161,7 +159,7 @@ type oidcDiscoveryResponse struct {
 	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
 }
 
-func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
+func (j *jwt) Run(t *testing.T, ctx context.Context) {
 	j.sentry.WaitUntilRunning(t, ctx)
 	j.placement.WaitUntilRunning(t, ctx)
 	j.scheduler.WaitUntilRunning(t, ctx)
@@ -199,7 +197,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		sec, err := secProv.Handler(sctx)
 		require.NoError(t, err)
 
-		ctxWithIdentity := sec.WithSVIDContext(context.Background())
+		ctxWithIdentity := sec.WithSVIDContext(t.Context())
 		jwtSource, ok := spiffecontext.JWTFrom(ctxWithIdentity)
 		require.True(t, ok, "JWT source should be present in context")
 		require.NotNil(t, jwtSource, "JWT source should not be nil")
@@ -219,7 +217,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		// since we're using a self-signed certificate for the OIDC server
 		customTransport := &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				InsecureSkipVerify: true, //nolint: gosec
 			},
 		}
 		httpClient := &http.Client{
@@ -227,7 +225,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Get OIDC discovery document from Sentry's OIDC HTTP server
-		oidcURL := fmt.Sprintf("https://localhost:8443/.well-known/openid-configuration")
+		oidcURL := "https://localhost:8443/.well-known/openid-configuration"
 		httpResp, err := httpClient.Get(oidcURL)
 		require.NoError(t, err)
 		defer httpResp.Body.Close()
@@ -249,10 +247,10 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		// Parse JWKS
 		keySet, err := jwk.ParseReader(jwksResp.Body)
 		require.NoError(t, err)
-		require.True(t, keySet.Len() > 0, "JWKS should contain at least one key")
+		require.Positive(t, keySet.Len(), "JWKS should contain at least one key")
 
 		// Parse and validate the JWT token using the JWKS
-		tkn, err := jwt.Parse([]byte(tokenRaw), jwt.WithKeySet(keySet))
+		tkn, err := jwx_jwt.Parse([]byte(tokenRaw), jwx_jwt.WithKeySet(keySet))
 		require.NoError(t, err, "JWT token should be valid and verifiable with JWKS")
 
 		// Validate expected claims
@@ -290,10 +288,6 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 
 		// Additional validation: validate token lifetime
 		tokenLifetime := exp.Sub(iat)
-		require.True(t, tokenLifetime > 0, "Token lifetime should be positive")
-		t.Logf("Token lifetime: %v", tokenLifetime)
-
-		// Log the full token claims for debugging
-		t.Logf("JWT token claims: %+v", tkn.PrivateClaims())
+		require.Positive(t, tokenLifetime, "Token lifetime should be positive")
 	})
 }

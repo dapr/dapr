@@ -18,11 +18,12 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
-	"github.com/lestrrat-go/jwx/v2/jwk"
+	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 )
 
 const (
@@ -40,83 +41,72 @@ type kube struct {
 }
 
 // get retrieves the existing certificate bundle from Kubernetes.
-func (k *kube) get(ctx context.Context) (Bundle, CredentialGenOptions, error) {
+func (k *kube) get(ctx context.Context) (ca_bundle.Bundle, ca_bundle.MissingCredentials, error) {
 	// Get the trust bundle secret
 	secret, err := k.client.CoreV1().Secrets(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
-		return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to get trust bundle secret: %w", err)
+		return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to get trust bundle secret: %w", err)
 	}
 
 	// Check if X.509 certificates need to be generated
-	requireX509 := false
 	trustAnchors, hasRootCert := secret.Data[filepath.Base(k.config.RootCertPath)]
 	issChainPEM, hasIssuerCert := secret.Data[filepath.Base(k.config.IssuerCertPath)]
 	issKeyPEM, hasIssuerKey := secret.Data[filepath.Base(k.config.IssuerKeyPath)]
 
-	if !hasRootCert || !hasIssuerCert || !hasIssuerKey {
-		requireX509 = true
-	}
+	generateX509 := !hasRootCert || !hasIssuerCert || !hasIssuerKey
 
 	// Also check if the ConfigMap is in sync
 	configMap, err := k.client.CoreV1().ConfigMaps(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
-		return Bundle{}, CredentialGenOptions{}, err
+		return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, err
 	}
 
 	if configMapRootCert, ok := configMap.Data[filepath.Base(k.config.RootCertPath)]; !ok || (hasRootCert && configMapRootCert != string(trustAnchors)) {
-		requireX509 = true
+		generateX509 = true
 	}
 
 	// Create a bundle if certificates are available
-	var bundle Bundle
-	if !requireX509 {
+	var bundle ca_bundle.Bundle
+	if !generateX509 {
 		bundle, err = verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
 		if err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify CA bundle: %w", err)
+			return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to verify CA bundle: %w", err)
 		}
 	}
 
 	// Check for JWT signing key and JWKS
-	requireJWT := false
+	jwtKeyPEM, hasJWTKey := secret.Data[filepath.Base(k.config.JWT.SigningKeyPath)]
+	jwks, hasJWKS := secret.Data[filepath.Base(k.config.JWT.JWKSPath)]
 
-	// Process JWT signing key if available
-	if jwtKeyPEM, ok := secret.Data[filepath.Base(k.config.JWTSigningKeyPath)]; ok {
-		jwtKey, err := loadJWTSigningKey(jwtKeyPEM)
-		if err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to load JWT signing key: %w", err)
+	generateJWT := !hasJWTKey || !hasJWKS
+
+	if hasJWTKey && hasJWKS {
+		jwtKey, jwtErr := loadJWTSigningKey(jwtKeyPEM)
+		if jwtErr != nil {
+			return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to load JWT signing key: %w", jwtErr)
 		}
-		bundle.JWTSigningKey = jwtKey
-		bundle.JWTSigningKeyPEM = jwtKeyPEM
-	} else {
-		requireJWT = true
+
+		if verifyErr := verifyJWKS(jwks, jwtKey); verifyErr != nil {
+			return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to verify JWKS: %w", verifyErr)
+		}
+
+		bundle.JWT.SigningKey = jwtKey
+		bundle.JWT.SigningKeyPEM = jwtKeyPEM
+		bundle.JWT.JWKSJson = jwks
+		bundle.JWT.JWKS, err = jwk.Parse(jwks)
+		if err != nil {
+			return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to parse JWKS: %w", err)
+		}
 	}
 
-	// Process JWKS if available
-	if jwks, ok := secret.Data[filepath.Base(k.config.JWKSPath)]; ok {
-		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify JWKS: %w", err)
-		}
-		bundle.JWKSJson = jwks
-		bundle.JWKS, err = jwk.Parse(jwks)
-		if err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to parse JWKS: %w", err)
-		}
-	} else {
-		// clear the JWT signing key if JWKS is not available
-		bundle.JWTSigningKey = nil
-		bundle.JWTSigningKeyPEM = nil
-
-		requireJWT = true
-	}
-
-	return bundle, CredentialGenOptions{
-		RequireX509: requireX509,
-		RequireJWT:  requireJWT,
+	return bundle, ca_bundle.MissingCredentials{
+		X509: generateX509,
+		JWT:  generateJWT,
 	}, nil
 }
 
 // store saves the certificate bundle to Kubernetes.
-func (k *kube) store(ctx context.Context, bundle Bundle) error {
+func (k *kube) store(ctx context.Context, bundle ca_bundle.Bundle) error {
 	// Update the Secret with all certificate data
 	secret, err := k.client.CoreV1().Secrets(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
@@ -128,16 +118,16 @@ func (k *kube) store(ctx context.Context, bundle Bundle) error {
 	}
 
 	// Add all required certificates and keys
-	secret.Data[filepath.Base(k.config.RootCertPath)] = bundle.TrustAnchors
-	secret.Data[filepath.Base(k.config.IssuerCertPath)] = bundle.IssChainPEM
-	secret.Data[filepath.Base(k.config.IssuerKeyPath)] = bundle.IssKeyPEM
+	secret.Data[filepath.Base(k.config.RootCertPath)] = bundle.X509.TrustAnchors
+	secret.Data[filepath.Base(k.config.IssuerCertPath)] = bundle.X509.IssChainPEM
+	secret.Data[filepath.Base(k.config.IssuerKeyPath)] = bundle.X509.IssKeyPEM
 
 	// Add JWT related data if available
-	if bundle.JWTSigningKeyPEM != nil {
-		secret.Data[filepath.Base(k.config.JWTSigningKeyPath)] = bundle.JWTSigningKeyPEM
+	if bundle.JWT.SigningKeyPEM != nil {
+		secret.Data[filepath.Base(k.config.JWT.SigningKeyPath)] = bundle.JWT.SigningKeyPEM
 	}
-	if bundle.JWKSJson != nil {
-		secret.Data[filepath.Base(k.config.JWKSPath)] = bundle.JWKSJson
+	if bundle.JWT.JWKSJson != nil {
+		secret.Data[filepath.Base(k.config.JWT.JWKSPath)] = bundle.JWT.JWKSJson
 	}
 
 	// Update the Secret
@@ -155,12 +145,12 @@ func (k *kube) store(ctx context.Context, bundle Bundle) error {
 		configMap.Data = make(map[string]string)
 	}
 
-	configMap.Data[filepath.Base(k.config.RootCertPath)] = string(bundle.TrustAnchors)
+	configMap.Data[filepath.Base(k.config.RootCertPath)] = string(bundle.X509.TrustAnchors)
 
 	// If the OIDC server is enabled, clients could use that to access the JWKS
 	// to verify JWTs. However, the OIDC server is not required and so it is
 	// useful to also distribute the JWKS in the configmap.
-	configMap.Data[filepath.Base(k.config.JWKSPath)] = string(bundle.JWKSJson)
+	configMap.Data[filepath.Base(k.config.JWT.JWKSPath)] = string(bundle.JWT.JWKSJson)
 
 	if _, err = k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, configMap, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("failed to update trust bundle configmap: %w", err)

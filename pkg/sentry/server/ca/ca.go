@@ -21,6 +21,8 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
+	"errors"
 	"fmt"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -33,6 +35,8 @@ import (
 	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
+	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/jwt"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
@@ -74,45 +78,20 @@ type Signer interface {
 	TrustAnchors() []byte
 
 	// Extends signing to issue JWT tokens.
-	JWTIssuer
-}
-
-type JWTIssuer interface {
-	// GenerateJWT creates a JWT token for the given request. The token includes
-	// claims based on the identity information provided in the request.
-	GenerateJWT(context.Context, *JWTRequest) (string, error)
-
-	// JWKS returns the JSON Web Key Set (JWKS).
-	JWKS() []byte
-
-	// JWTSignatureAlgorithm returns the signature algorithm used for signing JWTs.
-	JWTSignatureAlgorithm() jwa.KeyAlgorithm
-}
-
-// CredentialGenOptions represents the type of credentials that require generation.
-type CredentialGenOptions struct {
-	// RequireX509 indicates whether we need to generate X.509 certificates.
-	RequireX509 bool
-
-	// RequireJWT indicates whether we need to generate JWT signing keys.
-	RequireJWT bool
-}
-
-func (g *CredentialGenOptions) Any() bool {
-	return g.RequireX509 || g.RequireJWT
+	jwt.Issuer
 }
 
 // store is the interface for the trust bundle backend store.
 type store interface {
-	store(context.Context, Bundle) error
-	get(context.Context) (Bundle, CredentialGenOptions, error)
+	store(context.Context, ca_bundle.Bundle) error
+	get(context.Context) (ca_bundle.Bundle, ca_bundle.MissingCredentials, error)
 }
 
 // ca is the implementation of the CA Signer.
 type ca struct {
-	bundle Bundle
+	bundle ca_bundle.Bundle
 	config config.Config
-	jwtIssuer
+	jwt.Issuer
 }
 
 func New(ctx context.Context, conf config.Config) (Signer, error) {
@@ -135,12 +114,12 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		castore = &selfhosted{config: conf}
 	}
 
-	bundle, genOpts, err := castore.get(ctx)
+	bundle, missingCreds, err := castore.get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CA bundle: %w", err)
 	}
 
-	if genOpts.Any() {
+	if missingCreds.MissingRootKeys() {
 		log.Info("Root and issuer certs not found: generating self signed CA")
 
 		// Generate a key for X.509 certificates
@@ -154,14 +133,26 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate RSA key for JWT signing: %w", err)
 		}
+		conf.JWT.SigningAlgorithm = jwa.RS256.String()
 
-		genBundle, err := GenerateBundle(x509RootKey, jwtRootKey, conf.TrustDomain, conf.AllowedClockSkew, nil, genOpts)
+		generatedBundle, err := ca_bundle.Generate(ca_bundle.GenerateOptions{
+			X509RootKey:        x509RootKey,
+			JWTRootKey:         jwtRootKey,
+			TrustDomain:        conf.TrustDomain,
+			AllowedClockSkew:   conf.AllowedClockSkew,
+			OverrideCATTL:      nil,
+			MissingCredentials: missingCreds,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate CA bundle: %w", err)
 		}
 
-		// Merge the generated bundle into the provided one
-		bundle.Merge(genBundle)
+		if missingCreds.X509 {
+			bundle.X509 = generatedBundle.X509
+		}
+		if missingCreds.JWT {
+			bundle.JWT = generatedBundle.JWT
+		}
 
 		if err := castore.store(ctx, bundle); err != nil {
 			return nil, fmt.Errorf("failed to store CA bundle: %w", err)
@@ -172,52 +163,68 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	} else {
 		log.Info("Root and issuer certs found: using credentials from store")
 	}
-	monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
+	monitoring.IssuerCertExpiry(bundle.X509.IssChain[0].NotAfter)
 
-	var jwtIssuer jwtIssuer
-	if conf.JWTEnabled {
+	var jwtIss jwt.Issuer
+	if conf.JWT.Enabled {
 		log.Info("JWT issuing enabled")
 
-		if bundle.JWTSigningKey == nil {
-			return nil, fmt.Errorf("JWT signing key not found in bundle")
+		if bundle.JWT.SigningKey == nil {
+			return nil, errors.New("JWT signing key not found in bundle")
 		}
-		if bundle.JWTSigningKeyPEM == nil {
-			return nil, fmt.Errorf("JWT signing key PEM not found in bundle")
+		if bundle.JWT.SigningKeyPEM == nil {
+			return nil, errors.New("JWT signing key PEM not found in bundle")
 		}
-		if bundle.JWKS == nil {
-			return nil, fmt.Errorf("JWKS not found in bundle")
+		if bundle.JWT.JWKS == nil {
+			return nil, errors.New("JWKS not found in bundle")
 		}
-		if bundle.JWKSJson == nil {
-			return nil, fmt.Errorf("JWKS JSON not found in bundle")
+		if bundle.JWT.JWKSJson == nil {
+			return nil, errors.New("JWKS JSON not found in bundle")
 		}
 
-		signKey, err := jwk.FromRaw(bundle.JWTSigningKey)
+		signKey, err := jwk.FromRaw(bundle.JWT.SigningKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWK from key: %w", err)
 		}
 
 		// Verify that the signing key is compatible with the specified algorithm
-		jwtSignAlg := jwa.SignatureAlgorithm(conf.JWTSigningAlgorithm)
-		if err := validateKeyAlgorithmCompatibility(bundle.JWTSigningKey, jwtSignAlg); err != nil {
-			return nil, fmt.Errorf("JWT signing key is incompatible with algorithm %s: %w", jwtSignAlg, err)
+		if conf.JWT.SigningAlgorithm == "" {
+			return nil, errors.New("JWT signing algorithm required")
+		}
+		jwtSignAlg := jwa.SignatureAlgorithm(conf.JWT.SigningAlgorithm)
+		if validateErr := validateKeyAlgorithmCompatibility(bundle.JWT.SigningKey, jwtSignAlg); validateErr != nil {
+			return nil, fmt.Errorf("JWT signing key is incompatible with algorithm %s: %w", jwtSignAlg, validateErr)
 		}
 
-		signKey.Set(jwk.KeyIDKey, conf.JWTKeyID)
-		signKey.Set(jwk.AlgorithmKey, conf.JWTSigningAlgorithm)
+		var kid string
+		if conf.JWT.KeyID != nil {
+			kid = *conf.JWT.KeyID
+		} else {
+			thumbprint, thumbErr := signKey.Thumbprint(ca_bundle.DefaultKeyThumbprintAlgorithm)
+			if thumbErr != nil {
+				return nil, fmt.Errorf("failed to generate JWK thumbprint: %w", thumbErr)
+			}
+			kid = base64.StdEncoding.EncodeToString(thumbprint)
+		}
 
-		jwtIssuer, err = NewJWTIssuer(
-			signKey,
-			conf.JWTIssuer,
-			conf.AllowedClockSkew)
+		signKey.Set(jwk.KeyIDKey, kid)
+		signKey.Set(jwk.AlgorithmKey, conf.JWT.SigningAlgorithm)
+
+		jwtIss, err = jwt.New(jwt.IssuerOptions{
+			SignKey:          signKey,
+			Issuer:           conf.JWT.Issuer,
+			AllowedClockSkew: conf.AllowedClockSkew,
+			JWKS:             bundle.JWT.JWKS,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWT issuer: %w", err)
 		}
 	}
 
 	return &ca{
-		bundle:    bundle,
-		config:    conf,
-		jwtIssuer: jwtIssuer,
+		bundle: bundle,
+		config: conf,
+		Issuer: jwtIss,
 	}, nil
 }
 
@@ -232,13 +239,13 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 
-	tmpl, err := generateWorkloadCert(req.SignatureAlgorithm, c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
+	tmpl, err := ca_bundle.GenerateWorkloadCert(req.SignatureAlgorithm, c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
 	if err != nil {
 		return nil, err
 	}
 	tmpl.DNSNames = append(tmpl.DNSNames, req.DNS...)
 
-	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, c.bundle.IssChain[0], req.PublicKey, c.bundle.IssKey)
+	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, c.bundle.X509.IssChain[0], req.PublicKey, c.bundle.X509.IssKey)
 	if err != nil {
 		return nil, err
 	}
@@ -248,21 +255,10 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 
-	return append([]*x509.Certificate{cert}, c.bundle.IssChain...), nil
+	return append([]*x509.Certificate{cert}, c.bundle.X509.IssChain...), nil
 }
 
 // TODO: Remove this method in v1.12 since it is not used any more.
 func (c *ca) TrustAnchors() []byte {
-	return c.bundle.TrustAnchors
-}
-
-func (c *ca) JWKS() []byte {
-	return c.bundle.JWKSJson
-}
-
-func (c *ca) JWTSignatureAlgorithm() jwa.KeyAlgorithm {
-	if c.jwtIssuer.signKey == nil {
-		return nil
-	}
-	return c.jwtIssuer.signKey.Algorithm()
+	return c.bundle.X509.TrustAnchors
 }

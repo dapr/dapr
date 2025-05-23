@@ -229,7 +229,6 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	}
 	return validator.ValidateResult{
 		TrustDomain: td,
-		Audiences:   config.Spec.AccessControlSpec.Audiences,
 	}, nil
 }
 

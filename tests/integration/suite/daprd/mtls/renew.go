@@ -71,21 +71,21 @@ func (r *renew) Setup(t *testing.T) []framework.Option {
 				},
 			}
 
-			signed, err := x509.CreateCertificate(rand.Reader, &cert, r.sentry.Bundle().IssChain[0], csr.PublicKey, r.sentry.Bundle().IssKey)
+			signed, err := x509.CreateCertificate(rand.Reader, &cert, r.sentry.Bundle().X509.IssChain[0], csr.PublicKey, r.sentry.Bundle().X509.IssKey)
 			require.NoError(t, err)
 			signedPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: signed})
 
 			r.renewCalled.Add(1)
 
 			return &sentryv1pb.SignCertificateResponse{
-				WorkloadCertificate: append(signedPEM, r.sentry.Bundle().IssChainPEM...),
+				WorkloadCertificate: append(signedPEM, r.sentry.Bundle().X509.IssChainPEM...),
 				ValidUntil:          timestamppb.New(time.Now().Add(r.renewDuration)),
 			}, nil
 		},
 	))
 
 	r.daprd = daprd.New(t,
-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(r.sentry.Bundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(r.sentry.Bundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(r.sentry.Address(t)),
 		daprd.WithEnableMTLS(true),
 	)

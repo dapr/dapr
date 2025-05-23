@@ -46,6 +46,8 @@ message SignCertificateRequest {
   bytes certificate_signing_request = 5;
   // Name of the validator to use, if not the default for the environemtn. 
   TokenValidator token_validator = 6;
+  // List of audiences for the JWT.
+  repeated string audiences = 7;
 }
 
 message SignCertificateResponse {
