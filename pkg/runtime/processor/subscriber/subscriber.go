@@ -32,6 +32,10 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/subscription"
+	"github.com/dapr/dapr/pkg/runtime/subscription/postman"
+	postmangrpc "github.com/dapr/dapr/pkg/runtime/subscription/postman/grpc"
+	"github.com/dapr/dapr/pkg/runtime/subscription/postman/http"
+	"github.com/dapr/dapr/pkg/runtime/subscription/postman/streaming"
 	"github.com/dapr/kit/logger"
 )
 
@@ -492,24 +496,43 @@ func (s *Subscriber) initProgramaticSubscriptions(ctx context.Context) error {
 }
 
 func (s *Subscriber) startSubscription(pubsub *rtpubsub.PubsubItem, comp *compstore.NamedSubscription, isStreamer bool) (*subscription.Subscription, error) {
+	// TODO: @joshvanl
+	var postman postman.Interface
 	var streamer rtpubsub.AdapterStreamer
 	if isStreamer {
 		streamer = s.adapterStreamer
+		postman = streaming.New(streaming.Options{
+			Tracing: s.tracingSpec,
+			Channel: s.adapterStreamer,
+		})
+	} else {
+		if s.isHTTP {
+			postman = http.New(http.Options{
+				Channels: s.channels,
+				Tracing:  s.tracingSpec,
+				Adapter:  s.adapter,
+			})
+		} else {
+			postman = postmangrpc.New(postmangrpc.Options{
+				Channel: s.grpc,
+				Tracing: s.tracingSpec,
+				Adapter: s.adapter,
+			})
+		}
 	}
 	return subscription.New(subscription.Options{
 		AppID:           s.appID,
 		Namespace:       s.namespace,
 		PubSubName:      comp.PubsubName,
 		Topic:           comp.Topic,
-		IsHTTP:          s.isHTTP,
 		PubSub:          pubsub,
 		Resiliency:      s.resiliency,
 		TraceSpec:       s.tracingSpec,
 		Route:           comp.Subscription,
-		Channels:        s.channels,
 		GRPC:            s.grpc,
 		Adapter:         s.adapter,
 		AdapterStreamer: streamer,
 		ConnectionID:    comp.ConnectionID,
+		Postman:         postman,
 	})
 }
