@@ -40,6 +40,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -189,7 +190,7 @@ func (w *workflow) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 	return policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
 		resData, err := w.executeMethod(ctx, msg.GetMethod(), msg.GetData().GetValue())
 		if err != nil {
-			return nil, fmt.Errorf("error from worfklow actor: %w", err)
+			return nil, fmt.Errorf("error from workflow actor: %w", err)
 		}
 
 		return &internalsv1pb.InternalInvokeResponse{
@@ -207,6 +208,10 @@ func (w *workflow) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 
 func (w *workflow) executeMethod(ctx context.Context, methodName string, request []byte) ([]byte, error) {
 	log.Debugf("Workflow actor '%s': invoking method '%s'", w.actorID, methodName)
+
+	if w.actorState == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
 
 	switch methodName {
 	case todo.CreateWorkflowInstanceMethod:
