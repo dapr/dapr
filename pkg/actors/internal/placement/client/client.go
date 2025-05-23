@@ -22,6 +22,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 
@@ -221,7 +224,11 @@ func (c *Client) connectRoundRobin(ctx context.Context) error {
 			return nil
 		}
 
-		log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
+		if status.Code(err) == codes.FailedPrecondition {
+			log.Debugf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
+		} else {
+			log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
+		}
 
 		select {
 		case <-time.After(time.Second / 2):
@@ -254,9 +261,9 @@ func (c *Client) connect(ctx context.Context) error {
 
 	client, err := v1pb.NewPlacementClient(c.conn).ReportDaprStatus(ctx)
 	if err != nil {
-		err = fmt.Errorf("failed to create placement client: %s", err)
+		err = fmt.Errorf("failed to create placement client: %w", err)
 		if strings.Contains(err.Error(), "connect: connection refused") {
-			// reset gRPC connenxt to reset the round robin load balancer state to
+			// reset gRPC context to reset the round robin load balancer state to
 			// ensure we connect to new hosts if all Placement hosts have been
 			// terminated.
 			log.Infof("Resetting gRPC connection to reset round robin load balancer state")
