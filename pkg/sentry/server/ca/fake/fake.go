@@ -17,15 +17,18 @@ import (
 	"context"
 	"crypto/x509"
 
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+
+	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/jwt"
 )
 
 type Fake struct {
 	signIdentityFn        func(context.Context, *ca.SignRequest) ([]*x509.Certificate, error)
 	trustAnchorsFn        func() []byte
-	generateJWTFn         func(context.Context, *ca.JWTRequest) (string, error)
-	jwksFn                func() []byte
+	generateJWTFn         func(context.Context, *jwt.Request) (string, error)
+	jwksFn                func() jwk.Set
 	jwtSignatureAlgorithm func() jwa.KeyAlgorithm
 }
 
@@ -37,10 +40,10 @@ func New() *Fake {
 		trustAnchorsFn: func() []byte {
 			return nil
 		},
-		generateJWTFn: func(context.Context, *ca.JWTRequest) (string, error) {
+		generateJWTFn: func(context.Context, *jwt.Request) (string, error) {
 			return "", nil
 		},
-		jwksFn: func() []byte {
+		jwksFn: func() jwk.Set {
 			return nil
 		},
 		jwtSignatureAlgorithm: func() jwa.KeyAlgorithm {
@@ -59,12 +62,12 @@ func (f *Fake) WithTrustAnchors(fn func() []byte) *Fake {
 	return f
 }
 
-func (f *Fake) WithGenerateJWT(fn func(context.Context, *ca.JWTRequest) (string, error)) *Fake {
+func (f *Fake) WithGenerateJWT(fn func(context.Context, *jwt.Request) (string, error)) *Fake {
 	f.generateJWTFn = fn
 	return f
 }
 
-func (f *Fake) WithJWKS(fn func() []byte) *Fake {
+func (f *Fake) WithJWKS(fn func() jwk.Set) *Fake {
 	f.jwksFn = fn
 	return f
 }
@@ -82,11 +85,11 @@ func (f *Fake) TrustAnchors() []byte {
 	return f.trustAnchorsFn()
 }
 
-func (f *Fake) GenerateJWT(ctx context.Context, req *ca.JWTRequest) (string, error) {
+func (f *Fake) Generate(ctx context.Context, req *jwt.Request) (string, error) {
 	return f.generateJWTFn(ctx, req)
 }
 
-func (f *Fake) JWKS() []byte {
+func (f *Fake) JWKS() jwk.Set {
 	return f.jwksFn()
 }
 

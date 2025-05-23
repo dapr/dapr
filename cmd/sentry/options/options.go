@@ -14,8 +14,10 @@ limitations under the License.
 package options
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/pflag"
 	"k8s.io/client-go/util/homedir"
@@ -23,7 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/sentry/config"
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/kit/logger"
 )
 
@@ -48,22 +50,47 @@ type Options struct {
 	Metrics               *metrics.FlagOptions
 	Mode                  string
 
-	RootCAFilename        string
-	IssuerCertFilename    string
-	IssuerKeyFilename     string
-	JWTSigningKeyFilename string
-	JWKSFilename          string
-	JWTEnabled            bool
-	JWTIssuer             string
-	JWTSigningAlgorithm   string
-	JWTKeyID              string
-	OIDCHTTPPort          int
-	OIDCJWKSURI           string
-	OIDCPathPrefix        string
-	OIDCDomains           []string
-	OIDCTLSCertFile       string
-	OIDCTLSKeyFile        string
-	OIDCTLSInsecure       bool
+	X509 X509Options
+	JWT  JWTOptions
+	OIDC OIDCOptions
+}
+
+type X509Options struct {
+	RootCAFilename     string
+	IssuerCertFilename string
+	IssuerKeyFilename  string
+}
+
+type JWTOptions struct {
+	Enabled            bool
+	SigningKeyFilename string
+	JWKSFilename       string
+	Issuer             *string
+	SigningAlgorithm   string
+	KeyID              *string
+	TTL                time.Duration
+
+	// sentinel values used to bind to potentially nil pointers
+	issuer string // Issuer value for JWT tokens (no issuer if empty)
+	keyID  string // Key ID (kid) used for JWT signing (defaults to base64 encoded SHA-256 of the signing key)
+}
+
+type OIDCOptions struct {
+	Enabled             bool
+	ServerListenAddress string
+	ServerListenPort    *int
+	TLSEnabled          bool     // Enable TLS for the OIDC HTTP server
+	TLSCertFile         string   // TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
+	TLSKeyFile          string   // TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
+	AllowedHosts        []string // Domains that public endpoints can be accessed from (Optional)
+	JWKSURI             *string  // Force the public JWKS URI to this value (Optional)
+	PathPrefix          *string  // Path prefix for HTTP endpoints (Optional)
+	Insecure            bool     // Allow HTTP insecure (Optional)
+
+	// sentinel values used to bind to potentially nil pointers
+	serverListenPort int    // Port for the OIDC HTTP server
+	jwksURI          string // Custom URI where the JWKS can be accessed externally
+	pathPrefix       string // Path prefix to add to OIDC HTTP endpoints
 }
 
 func New(origArgs []string) *Options {
@@ -90,28 +117,31 @@ func New(origArgs []string) *Options {
 
 	fs.StringVar(&opts.ConfigName, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	fs.StringVar(&opts.IssuerCredentialsPath, "issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
-	fs.StringVar(&opts.RootCAFilename, "issuer-ca-filename", config.DefaultRootCertFilename, "Certificate Authority certificate filename")
-	fs.StringVar(&opts.IssuerCertFilename, "issuer-certificate-filename", config.DefaultIssuerCertFilename, "Issuer certificate filename")
-	fs.StringVar(&opts.IssuerKeyFilename, "issuer-key-filename", config.DefaultIssuerKeyFilename, "Issuer private key filename")
+	fs.StringVar(&opts.X509.RootCAFilename, "issuer-ca-filename", config.DefaultRootCertFilename, "Certificate Authority certificate filename")
+	fs.StringVar(&opts.X509.IssuerCertFilename, "issuer-certificate-filename", config.DefaultIssuerCertFilename, "Issuer certificate filename")
+	fs.StringVar(&opts.X509.IssuerKeyFilename, "issuer-key-filename", config.DefaultIssuerKeyFilename, "Issuer private key filename")
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
 	fs.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The listen address for the sentry server")
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Sentry")
-	fs.BoolVar(&opts.JWTEnabled, "jwt-enabled", false, "Enable JWT token issuance by Sentry")
-	fs.StringVar(&opts.JWTSigningKeyFilename, "jwt-key-filename", config.DefaultJWTSigningKeyFilename, "JWT signing key filename")
-	fs.StringVar(&opts.JWKSFilename, "jwks-filename", config.DefaultJWKSFilename, "JWKS (JSON Web Key Set) filename")
-	fs.StringVar(&opts.JWTIssuer, "jwt-issuer", "", "Issuer value for JWT tokens (no issuer if empty)")
-	fs.StringVar(&opts.JWTSigningAlgorithm, "jwt-signing-algorithm", string(ca.DefaultJWTSignatureAlgorithm), "Algorithm used for JWT signing, must be supported by signing key")
-	fs.StringVar(&opts.JWTKeyID, "jwt-key-id", ca.DefaultJWTKeyID, "Key ID (kid) used for JWT signing")
-	fs.IntVar(&opts.OIDCHTTPPort, "oidc-http-port", 0, "The port for the OIDC HTTP server (disabled if 0)")
-	fs.StringVar(&opts.OIDCJWKSURI, "oidc-jwks-uri", "", "Custom URI where the JWKS can be accessed externally")
-	fs.StringVar(&opts.OIDCPathPrefix, "oidc-path-prefix", "", "Path prefix to add to all OIDC HTTP endpoints")
-	fs.StringSliceVar(&opts.OIDCDomains, "oidc-domains", nil, "List of allowed domains for OIDC HTTP endpoint requests")
-	fs.StringVar(&opts.OIDCTLSCertFile, "oidc-tls-cert-file", "", "TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
-	fs.StringVar(&opts.OIDCTLSKeyFile, "oidc-tls-key-file", "", "TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
-	fs.BoolVar(&opts.OIDCTLSInsecure, "oidc-tls-insecure", false, "Serve OIDC HTTP without TLS")
+	fs.BoolVar(&opts.JWT.Enabled, "jwt-enabled", false, "Enable JWT token issuance by Sentry")
+	fs.StringVar(&opts.JWT.SigningKeyFilename, "jwt-key-filename", config.DefaultJWTSigningKeyFilename, "JWT signing key filename")
+	fs.StringVar(&opts.JWT.JWKSFilename, "jwks-filename", config.DefaultJWKSFilename, "JWKS (JSON Web Key Set) filename")
+	fs.StringVar(&opts.JWT.issuer, "jwt-issuer", "", "Issuer value for JWT tokens (no issuer if empty)")
+	fs.StringVar(&opts.JWT.SigningAlgorithm, "jwt-signing-algorithm", string(bundle.DefaultJWTSignatureAlgorithm), "Algorithm used for JWT signing, must be supported by signing key")
+	fs.StringVar(&opts.JWT.keyID, "jwt-key-id", "", "Key ID (kid) used for JWT signing (defaults to base64 encoded SHA-256 of the signing key)")
+	fs.DurationVar(&opts.JWT.TTL, "jwt-ttl", config.DefaultJWTTTL, "Time-to-live for JWT tokens (default 24h)")
+	fs.BoolVar(&opts.OIDC.Enabled, "oidc-enabled", false, "Enable OIDC HTTP server for Dapr Sentry")
+	fs.IntVar(&opts.OIDC.serverListenPort, "oidc-server-listen-port", 8080, "The port for the OIDC HTTP server")
+	fs.StringVar(&opts.OIDC.ServerListenAddress, "oidc-server-address", "localhost", "The address for the OIDC HTTP server (defaults to localhost)")
+	fs.BoolVar(&opts.OIDC.TLSEnabled, "oidc-server-tls-enabled", true, "Serve OIDC HTTP with TLS")
+	fs.StringVar(&opts.OIDC.TLSCertFile, "oidc-server-tls-cert-file", "", "TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
+	fs.StringVar(&opts.OIDC.TLSKeyFile, "oidc-server-tls-key-file", "", "TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
+	fs.StringVar(&opts.OIDC.jwksURI, "oidc-jwks-uri", "", "Custom URI where the JWKS can be accessed externally")
+	fs.StringVar(&opts.OIDC.pathPrefix, "oidc-path-prefix", "", "Path prefix to add to OIDC HTTP endpoints")
+	fs.StringSliceVar(&opts.OIDC.AllowedHosts, "oidc-allowed-hosts", nil, "List of allowed hosts for OIDC HTTP endpoints")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
@@ -128,6 +158,22 @@ func New(origArgs []string) *Options {
 	// Ignore errors; flagset is set for ExitOnError
 	_ = fs.Parse(args)
 
+	if fs.Changed("oidc-server-listen-port") {
+		opts.OIDC.ServerListenPort = &opts.OIDC.serverListenPort
+	}
+	if fs.Changed("oidc-jwks-uri") {
+		opts.OIDC.JWKSURI = &opts.OIDC.jwksURI
+	}
+	if fs.Changed("oidc-path-prefix") {
+		opts.OIDC.PathPrefix = &opts.OIDC.pathPrefix
+	}
+	if fs.Changed("jwt-key-id") {
+		opts.JWT.KeyID = &opts.JWT.keyID
+	}
+	if fs.Changed("jwt-issuer") {
+		opts.JWT.Issuer = &opts.JWT.issuer
+	}
+
 	return &opts
 }
 
@@ -137,17 +183,17 @@ func (o *Options) Validate() error {
 	}
 
 	// Validate OIDC TLS configuration when OIDC HTTP server is enabled and not in insecure mode
-	if o.OIDCHTTPPort > 0 && !o.OIDCTLSInsecure {
-		if o.OIDCTLSCertFile == "" {
-			return fmt.Errorf("oidc-tls-cert-file is required when OIDC HTTP server is enabled (unless oidc-tls-insecure is true)")
+	if o.OIDC.Enabled && o.OIDC.TLSEnabled {
+		if o.OIDC.TLSCertFile == "" {
+			return errors.New("oidc-server-tls-cert-file is required when OIDC HTTP server is enabled (unless oidc-server-tls-enabled is false)")
 		}
-		if o.OIDCTLSKeyFile == "" {
-			return fmt.Errorf("oidc-tls-key-file is required when OIDC HTTP server is enabled (unless oidc-tls-insecure is true)")
+		if o.OIDC.TLSKeyFile == "" {
+			return errors.New("oidc-server-tls-key-file is required when OIDC HTTP server is enabled (unless oidc-server-tls-enabled is false)")
 		}
 	}
 
-	if o.JWTIssuer != "" && !o.JWTEnabled {
-		return fmt.Errorf("jwt-issuer cannot be set when jwt-enabled is false")
+	if o.JWT.Issuer != nil && !o.JWT.Enabled {
+		return errors.New("jwt-issuer cannot be set when jwt-enabled is false")
 	}
 
 	return nil

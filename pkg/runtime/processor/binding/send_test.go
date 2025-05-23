@@ -185,7 +185,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 		ControlPlaneNamespace:   "default",
 		MTLSEnabled:             false,
 		OverrideCertRequestFn: func(context.Context, []byte) (*spiffe.SVIDResponse, error) {
-			nil, nil
+			return nil, nil
 		},
 		Healthz: healthz.New(),
 	})

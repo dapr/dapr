@@ -14,7 +14,9 @@ limitations under the License.
 package sentry
 
 import (
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"time"
+
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
@@ -22,7 +24,7 @@ import (
 type options struct {
 	execOpts []exec.Option
 
-	bundle        *ca.Bundle
+	bundle        *bundle.Bundle
 	writeBundle   bool
 	port          int
 	healthzPort   int
@@ -34,18 +36,25 @@ type options struct {
 	namespace     *string
 	mode          *string
 
-	// JWT options
-	enableJWT bool
-	jwtIssuer *string
+	jwt  jwtOptions
+	oidc oidcOptions
+}
 
-	// OIDC options
-	oidcHTTPPort    *int
-	oidcJWKSURI     *string
-	oidcPathPrefix  *string
-	oidcDomains     []string
-	oidcTLSCertFile *string
-	oidcTLSKeyFile  *string
-	oidcTLSInsecure bool
+type jwtOptions struct {
+	enabled         bool
+	issuer          *string
+	ttl             *time.Duration
+	useOIDCAsIssuer bool
+}
+
+type oidcOptions struct {
+	enabled          bool
+	serverListenPort *int
+	jwksURI          *string
+	pathPrefix       *string
+	allowedHosts     []string
+	tlsCertFile      *string
+	tlsKeyFile       *string
 }
 
 // Option is a function that configures the process.
@@ -75,7 +84,7 @@ func WithHealthzPort(port int) Option {
 	}
 }
 
-func WithCABundle(bundle ca.Bundle) Option {
+func WithCABundle(bundle bundle.Bundle) Option {
 	return func(o *options) {
 		o.bundle = &bundle
 	}
@@ -126,62 +135,76 @@ func WithMode(mode string) Option {
 // WithEnableJWT enables JWT token issuance in Sentry
 func WithEnableJWT(enable bool) Option {
 	return func(o *options) {
-		o.enableJWT = enable
+		o.jwt.enabled = enable
 	}
 }
 
 // WithJWTIssuer sets the JWT issuer for Sentry
 func WithJWTIssuer(issuer string) Option {
 	return func(o *options) {
-		o.jwtIssuer = &issuer
+		o.jwt.issuer = &issuer
 	}
 }
 
-// WithOIDCHTTPPort sets the port for the OIDC HTTP server
-func WithOIDCHTTPPort(port int) Option {
+// WithJWTTTL sets the JWT time-to-live (TTL) for Sentry
+func WithJWTTTL(ttl time.Duration) Option {
 	return func(o *options) {
-		o.oidcHTTPPort = &port
+		o.jwt.ttl = &ttl
+	}
+}
+
+// WithOIDCAsJWTIssuer uses the OIDC issuer as the JWT issuer in Sentry.
+func WithOIDCAsJWTIssuer() Option {
+	return func(o *options) {
+		o.jwt.useOIDCAsIssuer = true
+	}
+}
+
+// WithOIDCEnabled enables the OIDC HTTP server in Sentry
+func WithOIDCEnabled(enabled bool) Option {
+	return func(o *options) {
+		o.oidc.enabled = enabled
+	}
+}
+
+// WithOIDCServerListenPort sets the port for the OIDC HTTP server
+func WithOIDCServerListenPort(port int) Option {
+	return func(o *options) {
+		o.oidc.serverListenPort = &port
 	}
 }
 
 // WithOIDCJWKSURI sets the custom URI where the JWKS can be accessed externally
 func WithOIDCJWKSURI(jwksURI string) Option {
 	return func(o *options) {
-		o.oidcJWKSURI = &jwksURI
+		o.oidc.jwksURI = &jwksURI
 	}
 }
 
 // WithOIDCPathPrefix sets the path prefix to add to all OIDC HTTP endpoints
 func WithOIDCPathPrefix(prefix string) Option {
 	return func(o *options) {
-		o.oidcPathPrefix = &prefix
+		o.oidc.pathPrefix = &prefix
 	}
 }
 
-// WithOIDCDomains sets the list of allowed domains for OIDC HTTP endpoint requests
-func WithOIDCDomains(hosts []string) Option {
+// WithOIDCAllowedHosts sets the list of allowed hosts for OIDC HTTP endpoint requests
+func WithOIDCAllowedHosts(hosts []string) Option {
 	return func(o *options) {
-		o.oidcDomains = hosts
+		o.oidc.allowedHosts = hosts
 	}
 }
 
 // WithOIDCTLSCertFile sets the TLS certificate file for the OIDC HTTP server
 func WithOIDCTLSCertFile(certFile string) Option {
 	return func(o *options) {
-		o.oidcTLSCertFile = &certFile
+		o.oidc.tlsCertFile = &certFile
 	}
 }
 
 // WithOIDCTLSKeyFile sets the TLS key file for the OIDC HTTP server
 func WithOIDCTLSKeyFile(keyFile string) Option {
 	return func(o *options) {
-		o.oidcTLSKeyFile = &keyFile
-	}
-}
-
-// WithOIDCTLSInsecure sets the OIDC HTTP server to use insecure TLS
-func WithOIDCTLSInsecure(insecure bool) Option {
-	return func(o *options) {
-		o.oidcTLSInsecure = insecure
+		o.oidc.tlsKeyFile = &keyFile
 	}
 }
