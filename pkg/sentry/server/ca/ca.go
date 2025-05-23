@@ -154,6 +154,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate RSA key for JWT signing: %w", err)
 		}
+		conf.JWTSigningAlgorithm = jwa.RS256.String()
 
 		genBundle, err := GenerateBundle(x509RootKey, jwtRootKey, conf.TrustDomain, conf.AllowedClockSkew, nil, genOpts)
 		if err != nil {
@@ -197,6 +198,9 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		}
 
 		// Verify that the signing key is compatible with the specified algorithm
+		if conf.JWTSigningAlgorithm == "" {
+			return nil, fmt.Errorf("JWT signing algorithm required")
+		}
 		jwtSignAlg := jwa.SignatureAlgorithm(conf.JWTSigningAlgorithm)
 		if err := validateKeyAlgorithmCompatibility(bundle.JWTSigningKey, jwtSignAlg); err != nil {
 			return nil, fmt.Errorf("JWT signing key is incompatible with algorithm %s: %w", jwtSignAlg, err)

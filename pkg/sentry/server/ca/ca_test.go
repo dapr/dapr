@@ -189,10 +189,11 @@ func TestNew(t *testing.T) {
 
 		// Generate a JWT
 		jwtToken, err := caInstance.GenerateJWT(t.Context(), &JWTRequest{
-			Audiences: []string{"test.example.com"},
-			Namespace: "test-namespace",
-			AppID:     "test-app",
-			TTL:       time.Hour,
+			TrustDomain: "test.example.com",
+			Audiences:   []string{"test.example.com"},
+			Namespace:   "test-namespace",
+			AppID:       "test-app",
+			TTL:         time.Hour,
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, jwtToken)

@@ -26,6 +26,9 @@ import (
 
 // JWTRequest is the request for generating a JWT
 type JWTRequest struct {
+	// Trust domain is the trust domain of the JWT.
+	TrustDomain string
+
 	// Audiences is the audience of the JWT.
 	Audiences []string
 
@@ -65,6 +68,9 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	if req == nil {
 		return "", fmt.Errorf("request cannot be nil")
 	}
+	if req.TrustDomain == "" {
+		return "", fmt.Errorf("trust domain cannot be empty")
+	}
 	if len(req.Audiences) == 0 {
 		return "", fmt.Errorf("audience cannot be empty")
 	}
@@ -79,7 +85,7 @@ func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, e
 	}
 
 	// Create SPIFFE ID format string for the subject claim
-	subject := fmt.Sprintf("spiffe://%s/ns/%s/%s", req.Audiences, req.Namespace, req.AppID)
+	subject := fmt.Sprintf("spiffe://%s/ns/%s/%s", req.TrustDomain, req.Namespace, req.AppID)
 
 	now := time.Now()
 	notBefore := now.Add(-i.allowedClockSkew) // Account for clock skew

@@ -32,9 +32,8 @@ import (
 const (
 	// DefaultJWTKeyID is an identifier for the JWT signing key.
 	DefaultJWTKeyID = "dapr-sentry"
-	// DefaultJWTSignatureAlgorithm is set to PS256 as it is widely supported
-	// by OpenID Connect providers.
-	DefaultJWTSignatureAlgorithm = jwa.PS256
+	// DefaultJWTSignatureAlgorithm is set to RS256 by default as it is the most compatible algorithm.
+	DefaultJWTSignatureAlgorithm = jwa.RS256
 )
 
 // Bundle is the bundle of certificates and keys used by the CA.

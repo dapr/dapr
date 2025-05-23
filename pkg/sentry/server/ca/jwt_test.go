@@ -59,10 +59,11 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
 			request: &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       time.Hour,
+				TrustDomain: "example.com",
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "test-app",
+				TTL:         time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -95,10 +96,11 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
 			request: &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "audience-test-app",
-				TTL:       time.Hour,
+				TrustDomain: "example.com",
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "audience-test-app",
+				TTL:         time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -118,10 +120,11 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			clockSkew:        time.Minute,
 			issuer:           stringPtr("https://auth.example.com"),
 			request: &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       time.Hour,
+				TrustDomain: "example.com",
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "test-app",
+				TTL:         time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -138,10 +141,11 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
 			request: &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       24 * time.Hour, // Explicitly providing a default TTL for testing
+				TrustDomain: "example.com",
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "test-app",
+				TTL:         24 * time.Hour, // Explicitly providing a default TTL for testing
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -159,10 +163,11 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
 			request: &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       time.Hour,
+				TrustDomain: "example.com",
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "test-app",
+				TTL:         time.Hour,
 			},
 			expectedError: false,
 			validateClaims: func(t *testing.T, token jwt.Token) {
@@ -286,10 +291,11 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 
 	// Generate a JWT
 	request := &JWTRequest{
-		Audiences: []string{"example.com"},
-		Namespace: "default",
-		AppID:     "test-app",
-		TTL:       time.Hour,
+		TrustDomain: "example.com",
+		Audiences:   []string{"example.com"},
+		Namespace:   "default",
+		AppID:       "test-app",
+		TTL:         time.Hour,
 	}
 
 	token, err := issuer.GenerateJWT(context.Background(), request)
@@ -364,10 +370,11 @@ func TestCustomIssuerInToken(t *testing.T) {
 
 			// Create a basic request
 			request := &JWTRequest{
-				Audiences: []string{"example.com"},
-				Namespace: "default",
-				AppID:     "test-app",
-				TTL:       time.Hour,
+				TrustDomain: "example.com",
+				Audiences:   []string{"example.com"},
+				Namespace:   "default",
+				AppID:       "test-app",
+				TTL:         time.Hour,
 			}
 
 			// Generate token
