@@ -74,8 +74,6 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	client := r.workflow.BackendClient(t, ctx)
 
 	t.Run("not-activity", func(t *testing.T) {
-		t.Parallel()
-
 		id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
 		require.NoError(t, err)
 		time.Sleep(time.Second * 2)
@@ -89,8 +87,6 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("active-raise", func(t *testing.T) {
-		t.Parallel()
-
 		id, err := client.ScheduleNewOrchestration(ctx, "active-raise", api.WithInstanceID("xyz"))
 		require.NoError(t, err)
 		time.Sleep(time.Second * 2)
@@ -103,8 +99,6 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("completed-raise", func(t *testing.T) {
-		t.Parallel()
-
 		id, err := client.ScheduleNewOrchestration(ctx, "completed-raise", api.WithInstanceID("ijk"))
 		require.NoError(t, err)
 		time.Sleep(time.Second * 2)
