@@ -85,7 +85,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 		"ScheduleJob": {
 			funcGoodAppID: func() error {
 				_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
-					Name: "testJob",
+					Name: "goodTestJob",
 					Job:  &schedulerv1pb.Job{Schedule: ptr.Of("@daily")},
 					Metadata: &schedulerv1pb.JobMetadata{
 						AppId:     "foo",
@@ -99,7 +99,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 			},
 			funcBadAppID: func() error {
 				_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
-					Name: "testJob",
+					Name: "badTestJob",
 					Job:  &schedulerv1pb.Job{Schedule: ptr.Of("@daily")},
 					Metadata: &schedulerv1pb.JobMetadata{
 						AppId:     "not-foo",

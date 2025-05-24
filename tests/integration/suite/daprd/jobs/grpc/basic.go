@@ -103,7 +103,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			},
 			{
 				Job: &rtv1.Job{
-					Name:     "test1",
+					Name:     "test2",
 					Schedule: ptr.Of("@daily"),
 					Data: &anypb.Any{
 						Value: []byte("test"),
