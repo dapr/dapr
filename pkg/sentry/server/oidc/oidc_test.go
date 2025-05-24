@@ -65,7 +65,7 @@ func TestHandleJWKS(t *testing.T) {
 		// Verify the response contains the expected keys
 		keys, ok := jwksResp["keys"].([]interface{})
 		require.True(t, ok)
-		require.Equal(t, 1, len(keys))
+		require.Len(t, keys, 1)
 
 		key := keys[0].(map[string]interface{})
 		require.Equal(t, "EC", key["kty"])
@@ -401,7 +401,7 @@ func TestJWKSResponse(t *testing.T) {
 	require.Contains(t, resp, "keys")
 	keys, ok := resp["keys"].([]interface{})
 	require.True(t, ok)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	key := keys[0].(map[string]interface{})
 	require.Equal(t, "EC", key["kty"])

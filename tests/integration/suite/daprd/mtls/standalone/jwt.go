@@ -23,7 +23,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -219,7 +218,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		// since we're using a self-signed certificate for the OIDC server
 		customTransport := &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				InsecureSkipVerify: true, //nolint: gosec
 			},
 		}
 		httpClient := &http.Client{
@@ -227,7 +226,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Get OIDC discovery document from Sentry's OIDC HTTP server
-		oidcURL := fmt.Sprintf("https://localhost:8443/.well-known/openid-configuration")
+		oidcURL := "https://localhost:8443/.well-known/openid-configuration"
 		httpResp, err := httpClient.Get(oidcURL)
 		require.NoError(t, err)
 		defer httpResp.Body.Close()
@@ -249,7 +248,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		// Parse JWKS
 		keySet, err := jwk.ParseReader(jwksResp.Body)
 		require.NoError(t, err)
-		require.True(t, keySet.Len() > 0, "JWKS should contain at least one key")
+		require.Positive(t, keySet.Len(), "JWKS should contain at least one key")
 
 		// Parse and validate the JWT token using the JWKS
 		tkn, err := jwt.Parse([]byte(tokenRaw), jwt.WithKeySet(keySet))
@@ -290,7 +289,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 
 		// Additional validation: validate token lifetime
 		tokenLifetime := exp.Sub(iat)
-		require.True(t, tokenLifetime > 0, "Token lifetime should be positive")
+		require.Positive(t, tokenLifetime, "Token lifetime should be positive")
 		t.Logf("Token lifetime: %v", tokenLifetime)
 
 		// Log the full token claims for debugging

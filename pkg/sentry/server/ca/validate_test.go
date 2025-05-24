@@ -286,21 +286,21 @@ func TestVerifyJWKS(t *testing.T) {
 	t.Run("nil signing key", func(t *testing.T) {
 		jwksBytes := createJWKS(t, signingKey, "test-key")
 		err := verifyJWKS(jwksBytes, nil)
-		assert.Error(t, err, "JWKS verification should fail with nil signing key")
+		require.Error(t, err, "JWKS verification should fail with nil signing key")
 		assert.Contains(t, err.Error(), "can't verify JWKS without signing key")
 	})
 
 	t.Run("invalid JWKS format", func(t *testing.T) {
 		invalidJWKS := []byte(`{"keys": [{"invalid": "format"]}`)
 		err := verifyJWKS(invalidJWKS, signingKey)
-		assert.Error(t, err, "JWKS verification should fail with invalid JWKS format")
+		require.Error(t, err, "JWKS verification should fail with invalid JWKS format")
 		assert.Contains(t, err.Error(), "failed to parse JWKS")
 	})
 
 	t.Run("empty JWKS", func(t *testing.T) {
 		emptyJWKS := []byte(`{"keys": []}`)
 		err := verifyJWKS(emptyJWKS, signingKey)
-		assert.Error(t, err, "JWKS verification should fail with empty JWKS")
+		require.Error(t, err, "JWKS verification should fail with empty JWKS")
 		assert.Contains(t, err.Error(), "JWKS doesn't contain any keys")
 	})
 
@@ -314,7 +314,7 @@ func TestVerifyJWKS(t *testing.T) {
 
 		// Verify the JWKS with the original signing key
 		err = verifyJWKS(jwksBytes, signingKey)
-		assert.Error(t, err, "JWKS verification should fail when no matching key is found")
+		require.Error(t, err, "JWKS verification should fail when no matching key is found")
 		assert.Contains(t, err.Error(), "JWKS doesn't contain a matching public key")
 	})
 
@@ -356,7 +356,7 @@ func TestVerifyJWKS(t *testing.T) {
 		keys := make(map[string]crypto.Signer, numKeys)
 
 		// Generate many different keys
-		for i := 0; i < numKeys-1; i++ {
+		for i := range numKeys - 1 {
 			key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 			require.NoError(t, err, "Failed to generate key")
 			keys[fmt.Sprintf("key-%d", i)] = key
@@ -414,7 +414,7 @@ func TestVerifyJWKS(t *testing.T) {
 		}`)
 
 		err := verifyJWKS(mixedJWKS, signingKey)
-		assert.Error(t, err, "JWKS verification should fail when no matching key is found")
+		require.Error(t, err, "JWKS verification should fail when no matching key is found")
 		assert.Contains(t, err.Error(), "JWKS doesn't contain a matching public key")
 	})
 }

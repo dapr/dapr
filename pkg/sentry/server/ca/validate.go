@@ -187,7 +187,7 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 	found := false
 	matchAttempted := false
 
-	for i := 0; i < keySet.Len(); i++ {
+	for i := range keySet.Len() {
 		key, _ := keySet.Key(i)
 
 		// If both keys have key IDs, check if they match first (faster path)

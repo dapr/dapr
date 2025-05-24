@@ -74,13 +74,13 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 				iat, found := token.Get("iat")
 				require.True(t, found, "iat claim should exist")
 				iatTime := iat.(time.Time)
-				assert.WithinDuration(t, time.Now(), iatTime, 2*time.Second)
+				assert.WithinDuration(t, iatTime, time.Now(), 2*time.Second)
 
 				// Validate expiration is properly set
 				exp, found := token.Get("exp")
 				require.True(t, found, "exp claim should exist")
 				expTime := exp.(time.Time)
-				assert.WithinDuration(t, time.Now().Add(time.Hour), expTime, 2*time.Second)
+				assert.WithinDuration(t, expTime, time.Now().Add(time.Hour), 2*time.Second)
 
 				// No issuer should be set
 				_, found = token.Get("iss")
@@ -151,7 +151,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 				exp, found := token.Get("exp")
 				assert.True(t, found, "expiration claim should exist")
 				expTime := exp.(time.Time)
-				assert.WithinDuration(t, time.Now().Add(24*time.Hour), expTime, 2*time.Second)
+				assert.WithinDuration(t, expTime, time.Now().Add(24*time.Hour), 2*time.Second)
 			},
 		},
 		{
@@ -178,13 +178,13 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 				iat, found := token.Get("iat")
 				require.True(t, found, "iat claim should exist")
 				iatTime := iat.(time.Time)
-				assert.WithinDuration(t, time.Now(), iatTime, 2*time.Second)
+				assert.WithinDuration(t, iatTime, time.Now(), 2*time.Second)
 
 				// Validate expiration is properly set
 				exp, found := token.Get("exp")
 				require.True(t, found, "exp claim should exist")
 				expTime := exp.(time.Time)
-				assert.WithinDuration(t, time.Now().Add(time.Hour), expTime, 2*time.Second)
+				assert.WithinDuration(t, expTime, time.Now().Add(time.Hour), 2*time.Second)
 			},
 		},
 		{
@@ -215,13 +215,12 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 
 			// Validate error expectation
 			if tc.expectedError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				return
 			}
 
-			assert.NoError(t, err)
-			assert.NotEmpty(t, token)
 			require.NoError(t, err)
+			assert.NotEmpty(t, token)
 
 			// Parse and validate the token
 			parsedToken, err := jwt.Parse([]byte(token),

@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -155,18 +156,18 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 
 			if len(tkn.Audience()) == 0 {
 				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_aud")
-				return nil, fmt.Errorf("JWT audience is empty")
+				return nil, errors.New("JWT audience is empty")
 			}
 
 			// TODO: Handle allowed clock skew?
 			now := time.Now()
 			if tkn.IssuedAt().After(now) {
 				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_iat")
-				return nil, fmt.Errorf("JWT issued at future time")
+				return nil, errors.New("JWT issued at future time")
 			}
 			if tkn.Expiration().Before(now) {
 				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_expired")
-				return nil, fmt.Errorf("JWT token has expired")
+				return nil, errors.New("JWT token has expired")
 			}
 
 			j := resp.GetJwt()
