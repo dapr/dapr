@@ -36,6 +36,8 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 )
 
+const testHost = "example.com:8443"
+
 // TestHandleJWKS tests the JWKS endpoint handler.
 func TestHandleJWKS(t *testing.T) {
 	// Create a sample JWKS
@@ -103,7 +105,7 @@ func TestHandleOIDCDiscovery(t *testing.T) {
 		s := createTestServer(t, jwks, "", nil)
 
 		req, err := http.NewRequest(http.MethodGet, OIDCDiscoveryEndpoint, nil)
-		req.Host = "example.com:8443"
+		req.Host = testHost
 		require.NoError(t, err)
 
 		rr := httptest.NewRecorder()
@@ -125,7 +127,7 @@ func TestHandleOIDCDiscovery(t *testing.T) {
 		require.Contains(t, discovery.SubjectTypesSupported, "public")
 
 		// Check the structure is correct (host-based issuer)
-		require.Equal(t, "https://example.com:8443", discovery.Issuer)
+		require.Equal(t, "https://"+testHost, discovery.Issuer)
 
 		// The JWKS URI should match the server's configured jwksURI
 		require.Equal(t, s.jwksURI, discovery.JwksURI, "JWKS URI should match the configured URI in the server")
@@ -136,7 +138,7 @@ func TestHandleOIDCDiscovery(t *testing.T) {
 		s := createTestServer(t, jwks, customIssuer, nil)
 
 		req, err := http.NewRequest(http.MethodGet, OIDCDiscoveryEndpoint, nil)
-		req.Host = "example.com:8443"
+		req.Host = testHost
 		require.NoError(t, err)
 
 		rr := httptest.NewRecorder()
@@ -159,7 +161,7 @@ func TestHandleOIDCDiscovery(t *testing.T) {
 		s.jwksURI = customJWKSURI
 
 		req, err := http.NewRequest(http.MethodGet, OIDCDiscoveryEndpoint, nil)
-		req.Host = "example.com:8443"
+		req.Host = testHost
 		require.NoError(t, err)
 
 		rr := httptest.NewRecorder()
@@ -182,10 +184,10 @@ func TestHandleOIDCDiscovery(t *testing.T) {
 
 		// Override the JWKS URI to include the host from the request and the path prefix
 		// This simulates how the server would be configured in a real deployment
-		s.jwksURI = "https://example.com:8443/auth/jwks.json"
+		s.jwksURI = "https://" + testHost + "/auth/jwks.json"
 
 		req, err := http.NewRequest(http.MethodGet, pathPrefix+OIDCDiscoveryEndpoint, nil)
-		req.Host = "example.com:8443"
+		req.Host = testHost
 		require.NoError(t, err)
 
 		rr := httptest.NewRecorder()
@@ -198,7 +200,7 @@ func TestHandleOIDCDiscovery(t *testing.T) {
 		require.NoError(t, err)
 
 		// Path prefix should be reflected in the issuer
-		expectedIssuer := "https://example.com:8443" + pathPrefix
+		expectedIssuer := "https://" + testHost + pathPrefix
 		require.Equal(t, expectedIssuer, discovery.Issuer, "Issuer should include path prefix")
 
 		// The JWKS URI should match the configured URI
@@ -212,7 +214,7 @@ func TestHandleOIDCDiscovery(t *testing.T) {
 		s.pathPrefix = pathPrefix
 
 		req, err := http.NewRequest(http.MethodGet, pathPrefix+OIDCDiscoveryEndpoint, nil)
-		req.Host = "example.com:8443"
+		req.Host = testHost
 		require.NoError(t, err)
 
 		rr := httptest.NewRecorder()
@@ -368,7 +370,7 @@ func TestServer_Start(t *testing.T) {
 	s.jwksURI = "https://example.com/jwks.json"
 
 	// Start the server in a goroutine
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	errCh := make(chan error, 1)

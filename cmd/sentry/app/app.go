@@ -161,7 +161,6 @@ func Run() {
 		// Configure TLS for OIDC HTTP server if needed
 		var oidcTLSConfig *tls.Config
 		if opts.OIDCTLSCertFile != "" && opts.OIDCTLSKeyFile != "" {
-			var err error
 			oidcTLSConfig, err = createOIDCTLSConfig(opts.OIDCTLSCertFile, opts.OIDCTLSKeyFile)
 			if err != nil {
 				log.Errorf("Failed to create OIDC TLS config: %v", err)

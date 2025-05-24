@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -108,14 +109,14 @@ func (s *Server) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 
 	if !s.insecure && s.tlsConfig == nil {
-		return fmt.Errorf("TLS configuration is required when not in insecure mode")
+		return errors.New("TLS configuration is required when not in insecure mode")
 	}
 	_, err := url.Parse(s.jwksURI)
 	if err != nil {
 		return fmt.Errorf("invalid JWKS URI: %w", err)
 	}
 	if s.signatureAlgorithm == nil {
-		return fmt.Errorf("signature algorithm is required")
+		return errors.New("signature algorithm is required")
 	}
 
 	// Add path prefix to endpoints if configured
@@ -143,9 +144,10 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	s.server = &http.Server{
-		Addr:      addr,
-		Handler:   mux,
-		TLSConfig: s.tlsConfig,
+		Addr:              addr,
+		Handler:           mux,
+		TLSConfig:         s.tlsConfig,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	errCh := make(chan error, 1)
@@ -282,9 +284,9 @@ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case s.jwksURI != "":
 		// if the jwksURI is set, use that
-		uri, err := url.Parse(s.jwksURI)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		uri, parseErr := url.Parse(s.jwksURI)
+		if parseErr != nil {
+			http.Error(w, parseErr.Error(), http.StatusInternalServerError)
 			return
 		}
 		jwksURI = uri

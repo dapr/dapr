@@ -198,13 +198,13 @@ func TestGenerateBundle(t *testing.T) {
 		bundle1, err := GenerateBundle(x509RootKey, jwtRootKey, trustDomain, allowedClockSkew, &overrideTTL, gen)
 		require.NoError(t, err)
 
-		// Same bundle should equal itself
-		require.True(t, bundle1.Equals(bundle1))
+		// Create identical bundle for comparison (same bundle should equal itself)
+		require.True(t, bundle1.Equals(&bundle1))
 
 		// Different bundle should not equal
 		bundle2, err := GenerateBundle(x509RootKey, jwtRootKey, trustDomain, allowedClockSkew, &overrideTTL, gen)
 		require.NoError(t, err)
-		require.False(t, bundle1.Equals(bundle2))
+		require.False(t, bundle1.Equals(&bundle2))
 	})
 }
 
@@ -336,11 +336,11 @@ func TestBundleEquals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.bundle1.Equals(tt.bundle2)
+			result := tt.bundle1.Equals(&tt.bundle2)
 			require.Equal(t, tt.expected, result)
 
 			// Test symmetry - equals should work both ways
-			result = tt.bundle2.Equals(tt.bundle1)
+			result = tt.bundle2.Equals(&tt.bundle1)
 			require.Equal(t, tt.expected, result)
 		})
 	}

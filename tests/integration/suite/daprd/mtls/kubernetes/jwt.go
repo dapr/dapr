@@ -204,7 +204,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 		sec, err := secProv.Handler(sctx)
 		require.NoError(t, err)
 
-		ctxWithIdentity := sec.WithSVIDContext(context.Background())
+		ctxWithIdentity := sec.WithSVIDContext(t.Context())
 		jwtSource, ok := spiffecontext.JWTFrom(ctxWithIdentity)
 		require.True(t, ok, "JWT source should be present in context")
 		require.NotNil(t, jwtSource, "JWT source should not be nil")

@@ -99,9 +99,9 @@ func (s *selfhosted) get(_ context.Context) (Bundle, CredentialGenOptions, error
 	jwtKeyPEM, err := os.ReadFile(s.config.JWTSigningKeyPath)
 	if err == nil {
 		// JWT key exists, load it
-		jwtKey, err := loadJWTSigningKey(jwtKeyPEM)
-		if err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to load JWT signing key: %w", err)
+		jwtKey, jwtErr := loadJWTSigningKey(jwtKeyPEM)
+		if jwtErr != nil {
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to load JWT signing key: %w", jwtErr)
 		}
 		bundle.JWTSigningKey = jwtKey
 		bundle.JWTSigningKeyPEM = jwtKeyPEM
@@ -117,8 +117,8 @@ func (s *selfhosted) get(_ context.Context) (Bundle, CredentialGenOptions, error
 	jwks, err := os.ReadFile(s.config.JWKSPath)
 	if err == nil {
 		// JWKS exists, verify it
-		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify JWKS: %w", err)
+		if verifyErr := verifyJWKS(jwks, bundle.JWTSigningKey); verifyErr != nil {
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify JWKS: %w", verifyErr)
 		}
 		bundle.JWKSJson = jwks
 		bundle.JWKS, err = jwk.Parse(jwks)

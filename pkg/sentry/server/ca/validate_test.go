@@ -16,6 +16,7 @@ package ca
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -27,8 +28,6 @@ import (
 	"math/big"
 	"testing"
 	"time"
-
-	"crypto/ed25519"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"

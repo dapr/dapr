@@ -81,9 +81,9 @@ func (k *kube) get(ctx context.Context) (Bundle, CredentialGenOptions, error) {
 
 	// Process JWT signing key if available
 	if jwtKeyPEM, ok := secret.Data[filepath.Base(k.config.JWTSigningKeyPath)]; ok {
-		jwtKey, err := loadJWTSigningKey(jwtKeyPEM)
-		if err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to load JWT signing key: %w", err)
+		jwtKey, jwtErr := loadJWTSigningKey(jwtKeyPEM)
+		if jwtErr != nil {
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to load JWT signing key: %w", jwtErr)
 		}
 		bundle.JWTSigningKey = jwtKey
 		bundle.JWTSigningKeyPEM = jwtKeyPEM
@@ -93,8 +93,8 @@ func (k *kube) get(ctx context.Context) (Bundle, CredentialGenOptions, error) {
 
 	// Process JWKS if available
 	if jwks, ok := secret.Data[filepath.Base(k.config.JWKSPath)]; ok {
-		if err := verifyJWKS(jwks, bundle.JWTSigningKey); err != nil {
-			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify JWKS: %w", err)
+		if verifyErr := verifyJWKS(jwks, bundle.JWTSigningKey); verifyErr != nil {
+			return Bundle{}, CredentialGenOptions{}, fmt.Errorf("failed to verify JWKS: %w", verifyErr)
 		}
 		bundle.JWKSJson = jwks
 		bundle.JWKS, err = jwk.Parse(jwks)

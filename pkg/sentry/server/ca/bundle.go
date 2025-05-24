@@ -60,7 +60,7 @@ type Bundle struct {
 
 // Warning: this equals assumes that the serialized fields
 // and their associated keys are consistent.
-func (b Bundle) Equals(other Bundle) bool {
+func (b *Bundle) Equals(other *Bundle) bool {
 	return reflect.DeepEqual(b.TrustAnchors, other.TrustAnchors) &&
 		reflect.DeepEqual(b.IssChainPEM, other.IssChainPEM) &&
 		reflect.DeepEqual(b.IssKeyPEM, other.IssKeyPEM) &&
@@ -180,7 +180,7 @@ func GenerateBundle(x509RootKey crypto.Signer, jwtRootKey crypto.Signer, trustDo
 		jwkSet := jwk.NewSet()
 		jwkSet.AddKey(jwtPublicJWK)
 
-		jwksJson, err := json.Marshal(jwkSet)
+		jwksJSON, err := json.Marshal(jwkSet)
 		if err != nil {
 			return Bundle{}, fmt.Errorf("failed to marshal JWKS: %w", err)
 		}
@@ -188,7 +188,7 @@ func GenerateBundle(x509RootKey crypto.Signer, jwtRootKey crypto.Signer, trustDo
 		bundle.JWTSigningKey = jwtRootKey
 		bundle.JWTSigningKeyPEM = jwtKeyPEM
 		bundle.JWKS = jwkSet
-		bundle.JWKSJson = jwksJson
+		bundle.JWKSJson = jwksJSON
 	}
 
 	return bundle, nil

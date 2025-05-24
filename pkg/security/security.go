@@ -158,7 +158,6 @@ type security struct {
 
 	identityDir      *string
 	trustAnchorsFile *string
-	jwksFile         *string
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {

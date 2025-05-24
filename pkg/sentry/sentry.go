@@ -142,7 +142,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 
 		signAlg := camngr.JWTSignatureAlgorithm()
 		if signAlg == nil {
-			return nil, fmt.Errorf("failed to get JWT signature algorithm from signing key")
+			return nil, errors.New("failed to get JWT signature algorithm from signing key")
 		}
 
 		httpServer := oidc.New(oidc.Options{

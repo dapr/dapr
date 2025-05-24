@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -66,22 +67,22 @@ func NewJWTIssuer(signKey jwk.Key, issuer *string, allowedClockSkew time.Duratio
 // This provides a convenient alternative authentication method alongside X.509 certificates.
 func (i *jwtIssuer) GenerateJWT(ctx context.Context, req *JWTRequest) (string, error) {
 	if req == nil {
-		return "", fmt.Errorf("request cannot be nil")
+		return "", errors.New("request cannot be nil")
 	}
 	if req.TrustDomain == "" {
-		return "", fmt.Errorf("trust domain cannot be empty")
+		return "", errors.New("trust domain cannot be empty")
 	}
 	if len(req.Audiences) == 0 {
-		return "", fmt.Errorf("audience cannot be empty")
+		return "", errors.New("audience cannot be empty")
 	}
 	if req.Namespace == "" {
-		return "", fmt.Errorf("namespace cannot be empty")
+		return "", errors.New("namespace cannot be empty")
 	}
 	if req.AppID == "" {
-		return "", fmt.Errorf("app ID cannot be empty")
+		return "", errors.New("app ID cannot be empty")
 	}
 	if i.signKey == nil {
-		return "", fmt.Errorf("JWT signing key is not available")
+		return "", errors.New("JWT signing key is not available")
 	}
 
 	// Create SPIFFE ID format string for the subject claim

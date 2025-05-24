@@ -324,7 +324,7 @@ func TestSelfhosted_get(t *testing.T) {
 
 			bundle, gen, err := s.get(t.Context())
 			assert.Equal(t, test.expErr, err != nil, "expected error: %v, but got %v", test.expErr, err)
-			assert.True(t, test.expBundle.Equals(bundle), "expected bundle %v, but got %v", test.expBundle, bundle)
+			assert.True(t, test.expBundle.Equals(&bundle), "expected bundle %v, but got %v", test.expBundle, bundle)
 			if test.expGenCheck != nil {
 				assert.True(t, test.expGenCheck(gen), "generate check failed, got %v", gen)
 			}

@@ -230,13 +230,13 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		tkn, err := s.ca.GenerateJWT(ctx, &ca.JWTRequest{
 			TrustDomain: res.TrustDomain.String(),
 			Audiences:   audiences,
-			Namespace:   req.Namespace,
-			AppID:       req.Id,
+			Namespace:   req.GetNamespace(),
+			AppID:       req.GetId(),
 			TTL:         24 * time.Hour,
 		})
 		if err != nil {
 			// Continue but log the error as the certificate is still valid
-			log.Errorf("Failed to generate JWT for %s/%s: %v", req.Namespace, req.Id, err)
+			log.Errorf("Failed to generate JWT for %s/%s: %v", req.GetNamespace(), req.GetId(), err)
 		}
 		if tkn != "" {
 			jwtToken = &tkn

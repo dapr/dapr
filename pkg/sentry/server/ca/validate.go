@@ -138,7 +138,7 @@ func loadJWTSigningKey(keyPEM []byte) (crypto.Signer, error) {
 
 	signer, ok := privateKey.(crypto.Signer)
 	if !ok {
-		return nil, fmt.Errorf("JWT signing key is not a valid crypto.Signer")
+		return nil, errors.New("JWT signing key is not a valid crypto.Signer")
 	}
 
 	return signer, nil
@@ -267,7 +267,7 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 // validateKeyAlgorithmCompatibility checks if the provided key is compatible with the specified algorithm
 func validateKeyAlgorithmCompatibility(key crypto.Signer, alg jwa.SignatureAlgorithm) error {
 	if key == nil {
-		return fmt.Errorf("signing key is nil")
+		return errors.New("signing key is nil")
 	}
 
 	switch alg {

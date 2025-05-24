@@ -14,13 +14,11 @@ limitations under the License.
 package ca
 
 import (
-	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
-	"io"
 	"testing"
 	"time"
 
@@ -213,7 +211,7 @@ func TestJWTIssuer_GenerateJWT(t *testing.T) {
 				tc.clockSkew)
 			require.NoError(t, err)
 
-			token, err := issuer.GenerateJWT(context.Background(), tc.request)
+			token, err := issuer.GenerateJWT(t.Context(), tc.request)
 
 			// Validate error expectation
 			if tc.expectedError {
@@ -298,7 +296,7 @@ func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 		TTL:         time.Hour,
 	}
 
-	token, err := issuer.GenerateJWT(context.Background(), request)
+	token, err := issuer.GenerateJWT(t.Context(), request)
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
 
@@ -378,7 +376,7 @@ func TestCustomIssuerInToken(t *testing.T) {
 			}
 
 			// Generate token
-			token, err := issuer.GenerateJWT(context.Background(), request)
+			token, err := issuer.GenerateJWT(t.Context(), request)
 			require.NoError(t, err)
 
 			pubKey, err := issuer.signKey.PublicKey()
@@ -401,17 +399,6 @@ func TestCustomIssuerInToken(t *testing.T) {
 			}
 		})
 	}
-}
-
-// mockUnsupportedSigner implements crypto.Signer but is not one of the supported types
-type mockUnsupportedSigner struct{}
-
-func (m *mockUnsupportedSigner) Public() crypto.PublicKey {
-	return nil
-}
-
-func (m *mockUnsupportedSigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
-	return nil, nil
 }
 
 // Helper method to create string pointers

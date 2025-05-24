@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"errors"
 	"fmt"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -175,21 +176,21 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	}
 	monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 
-	var jwtIssuer jwtIssuer
+	var jwtIss jwtIssuer
 	if conf.JWTEnabled {
 		log.Info("JWT issuing enabled")
 
 		if bundle.JWTSigningKey == nil {
-			return nil, fmt.Errorf("JWT signing key not found in bundle")
+			return nil, errors.New("JWT signing key not found in bundle")
 		}
 		if bundle.JWTSigningKeyPEM == nil {
-			return nil, fmt.Errorf("JWT signing key PEM not found in bundle")
+			return nil, errors.New("JWT signing key PEM not found in bundle")
 		}
 		if bundle.JWKS == nil {
-			return nil, fmt.Errorf("JWKS not found in bundle")
+			return nil, errors.New("JWKS not found in bundle")
 		}
 		if bundle.JWKSJson == nil {
-			return nil, fmt.Errorf("JWKS JSON not found in bundle")
+			return nil, errors.New("JWKS JSON not found in bundle")
 		}
 
 		signKey, err := jwk.FromRaw(bundle.JWTSigningKey)
@@ -199,17 +200,17 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 
 		// Verify that the signing key is compatible with the specified algorithm
 		if conf.JWTSigningAlgorithm == "" {
-			return nil, fmt.Errorf("JWT signing algorithm required")
+			return nil, errors.New("JWT signing algorithm required")
 		}
 		jwtSignAlg := jwa.SignatureAlgorithm(conf.JWTSigningAlgorithm)
-		if err := validateKeyAlgorithmCompatibility(bundle.JWTSigningKey, jwtSignAlg); err != nil {
-			return nil, fmt.Errorf("JWT signing key is incompatible with algorithm %s: %w", jwtSignAlg, err)
+		if validateErr := validateKeyAlgorithmCompatibility(bundle.JWTSigningKey, jwtSignAlg); validateErr != nil {
+			return nil, fmt.Errorf("JWT signing key is incompatible with algorithm %s: %w", jwtSignAlg, validateErr)
 		}
 
 		signKey.Set(jwk.KeyIDKey, conf.JWTKeyID)
 		signKey.Set(jwk.AlgorithmKey, conf.JWTSigningAlgorithm)
 
-		jwtIssuer, err = NewJWTIssuer(
+		jwtIss, err = NewJWTIssuer(
 			signKey,
 			conf.JWTIssuer,
 			conf.AllowedClockSkew)
@@ -221,7 +222,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	return &ca{
 		bundle:    bundle,
 		config:    conf,
-		jwtIssuer: jwtIssuer,
+		jwtIssuer: jwtIss,
 	}, nil
 }
 

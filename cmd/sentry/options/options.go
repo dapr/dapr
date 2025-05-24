@@ -14,6 +14,7 @@ limitations under the License.
 package options
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -139,15 +140,15 @@ func (o *Options) Validate() error {
 	// Validate OIDC TLS configuration when OIDC HTTP server is enabled and not in insecure mode
 	if o.OIDCHTTPPort > 0 && !o.OIDCTLSInsecure {
 		if o.OIDCTLSCertFile == "" {
-			return fmt.Errorf("oidc-tls-cert-file is required when OIDC HTTP server is enabled (unless oidc-tls-insecure is true)")
+			return errors.New("oidc-tls-cert-file is required when OIDC HTTP server is enabled (unless oidc-tls-insecure is true)")
 		}
 		if o.OIDCTLSKeyFile == "" {
-			return fmt.Errorf("oidc-tls-key-file is required when OIDC HTTP server is enabled (unless oidc-tls-insecure is true)")
+			return errors.New("oidc-tls-key-file is required when OIDC HTTP server is enabled (unless oidc-tls-insecure is true)")
 		}
 	}
 
 	if o.JWTIssuer != "" && !o.JWTEnabled {
-		return fmt.Errorf("jwt-issuer cannot be set when jwt-enabled is false")
+		return errors.New("jwt-issuer cannot be set when jwt-enabled is false")
 	}
 
 	return nil
