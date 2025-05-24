@@ -55,6 +55,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	})
 	r.workflow.Registry().AddOrchestratorN("active-raise", func(ctx *task.OrchestrationContext) (any, error) {
 		as1 := ctx.WaitForSingleEvent("abc2", time.Hour)
+		time.Sleep(time.Second)
 		as2 := ctx.CallActivity("bar")
 		require.NoError(t, as2.Await(nil))
 		require.NoError(t, as1.Await(nil))
@@ -73,6 +74,8 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	client := r.workflow.BackendClient(t, ctx)
 
 	t.Run("not-activity", func(t *testing.T) {
+		t.Parallel()
+
 		id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
 		require.NoError(t, err)
 		time.Sleep(time.Second * 2)
@@ -81,10 +84,13 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		_, err = client.RerunWorkflowFromEvent(ctx, id, 0)
+		require.Error(t, err)
 		assert.Equal(t, status.Error(codes.NotFound, "'abc' target event ID '0' is not a TaskScheduled event"), err)
 	})
 
 	t.Run("active-raise", func(t *testing.T) {
+		t.Parallel()
+
 		id, err := client.ScheduleNewOrchestration(ctx, "active-raise", api.WithInstanceID("xyz"))
 		require.NoError(t, err)
 		time.Sleep(time.Second * 2)
@@ -92,10 +98,13 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		_, err = client.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
 		_, err = client.RerunWorkflowFromEvent(ctx, id, 1)
+		require.Error(t, err)
 		assert.Equal(t, status.Error(codes.Aborted, "'xyz' would have active timers, cannot rerun workflow"), err)
 	})
 
 	t.Run("completed-raise", func(t *testing.T) {
+		t.Parallel()
+
 		id, err := client.ScheduleNewOrchestration(ctx, "completed-raise", api.WithInstanceID("ijk"))
 		require.NoError(t, err)
 		time.Sleep(time.Second * 2)

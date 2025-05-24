@@ -73,6 +73,8 @@ func (i *timer) Run(t *testing.T, ctx context.Context) {
 	client := i.workflow.BackendClient(t, ctx)
 
 	t.Run("not-activity", func(t *testing.T) {
+		t.Parallel()
+
 		id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
 		require.NoError(t, err)
 		_, err = client.WaitForOrchestrationCompletion(ctx, id)
@@ -83,6 +85,8 @@ func (i *timer) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("active-timer", func(t *testing.T) {
+		t.Parallel()
+
 		id, err := client.ScheduleNewOrchestration(ctx, "active-timer", api.WithInstanceID("xyz"))
 		require.NoError(t, err)
 		_, err = client.WaitForOrchestrationCompletion(ctx, id)
@@ -92,6 +96,8 @@ func (i *timer) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("completed-timer", func(t *testing.T) {
+		t.Parallel()
+
 		id, err := client.ScheduleNewOrchestration(ctx, "completed-timer", api.WithInstanceID("ijk"))
 		require.NoError(t, err)
 		_, err = client.WaitForOrchestrationCompletion(ctx, id)
