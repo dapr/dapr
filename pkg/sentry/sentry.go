@@ -16,6 +16,7 @@ package sentry
 import (
 	"context"
 	"crypto"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -31,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/oidc"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	validatorInsecure "github.com/dapr/dapr/pkg/sentry/server/validator/insecure"
 	validatorJWKS "github.com/dapr/dapr/pkg/sentry/server/validator/jwks"
@@ -44,8 +46,14 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 type Options struct {
-	Config  config.Config
-	Healthz healthz.Healthz
+	Config         config.Config
+	Healthz        healthz.Healthz
+	OIDCHTTPPort   int         // HTTP port for OIDC endpoints
+	OIDCTLSConfig  *tls.Config // custom TLS configuration for the HTTP server (Optional)
+	OIDCDomains    []string    // Domains that public endpoints can be accessed from (Optional)
+	OIDCJWKSURI    string      // Force the public JWKS URI to this value (Optional)
+	ODICPathPrefix string      // Path prefix for HTTP endpoints (Optional)
+	OIDCInsecure   bool        // Allow HTTP insecure (Optional)
 }
 
 // CertificateAuthority is the interface for the Sentry Certificate Authority.
@@ -119,8 +127,45 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 			CA:               camngr,
 			Healthz:          opts.Healthz,
 			ListenAddress:    opts.Config.ListenAddress,
+			JWTEnabled:       opts.Config.JWTEnabled,
 		}).Start,
 	)
+
+	// Start HTTP server for OIDC endpoints if enabled
+	if opts.OIDCHTTPPort > 0 && opts.Config.JWTEnabled {
+		log.Infof("Starting OIDC HTTP server on port %d", opts.OIDCHTTPPort)
+
+		var issuer string
+		if opts.Config.JWTIssuer != nil {
+			issuer = *opts.Config.JWTIssuer
+		}
+
+		signAlg := camngr.JWTSignatureAlgorithm()
+		if signAlg == nil {
+			return nil, errors.New("failed to get JWT signature algorithm from signing key")
+		}
+
+		httpServer := oidc.New(oidc.Options{
+			Port:               opts.OIDCHTTPPort,
+			ListenAddress:      opts.Config.ListenAddress,
+			JWKS:               camngr.JWKS(),
+			JWTIssuer:          issuer,
+			Healthz:            opts.Healthz,
+			JWKSURI:            opts.OIDCJWKSURI,
+			Domains:            opts.OIDCDomains,
+			TLSConfig:          opts.OIDCTLSConfig,
+			PathPrefix:         opts.ODICPathPrefix,
+			SignatureAlgorithm: signAlg,
+			Insecure:           opts.OIDCInsecure,
+		})
+
+		if err := runners.Add(httpServer.Start); err != nil {
+			return nil, fmt.Errorf("error adding HTTP server: %w", err)
+		}
+	} else {
+		log.Info("OIDC HTTP server is disabled")
+	}
+
 	for name, val := range vals {
 		log.Infof("Using validator '%s'", strings.ToLower(name.String()))
 		if err := runners.Add(val.Start); err != nil {

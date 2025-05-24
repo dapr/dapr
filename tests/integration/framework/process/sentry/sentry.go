@@ -18,11 +18,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -80,9 +82,18 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		if opts.trustDomain != nil {
 			td = *opts.trustDomain
 		}
-		pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		// Generate key for X.509 certificates
+		x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		require.NoError(t, err)
-		bundle, err := ca.GenerateBundle(pk, td, time.Second*5, nil)
+
+		// Generate key for JWT signing
+		jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+
+		bundle, err := ca.GenerateBundle(x509RootKey, jwtRootKey, td, time.Second*5, nil, ca.CredentialGenOptions{
+			RequireX509: true,
+			RequireJWT:  true,
+		})
 		require.NoError(t, err)
 		opts.bundle = &bundle
 	}
@@ -100,11 +111,14 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		"-listen-address=127.0.0.1",
 	}
 
+	tmpDir := t.TempDir()
+
 	if opts.writeBundle {
-		tmpDir := t.TempDir()
 		caPath := filepath.Join(tmpDir, "ca.crt")
 		issuerKeyPath := filepath.Join(tmpDir, "issuer.key")
 		issuerCertPath := filepath.Join(tmpDir, "issuer.crt")
+		jwtSigningKeyPath := filepath.Join(tmpDir, "jwt.key")
+		jwksPath := filepath.Join(tmpDir, "jwks.json")
 
 		for _, pair := range []struct {
 			path string
@@ -113,12 +127,54 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 			{caPath, opts.bundle.TrustAnchors},
 			{issuerKeyPath, opts.bundle.IssKeyPEM},
 			{issuerCertPath, opts.bundle.IssChainPEM},
+			{jwtSigningKeyPath, opts.bundle.JWTSigningKeyPEM},
+			{jwksPath, opts.bundle.JWKSJson},
 		} {
 			require.NoError(t, os.WriteFile(pair.path, pair.data, 0o600))
 		}
 		args = append(args, "-issuer-credentials="+tmpDir)
 	} else {
-		args = append(args, "-issuer-credentials="+t.TempDir())
+		args = append(args, "-issuer-credentials="+tmpDir)
+	}
+
+	// Handle JWT options
+	if opts.enableJWT {
+		args = append(args, "-jwt-enabled=true")
+
+		if opts.jwtIssuer != nil {
+			args = append(args, "-jwt-issuer="+*opts.jwtIssuer)
+		}
+	}
+
+	// Handle OIDC options
+	if opts.oidcHTTPPort != nil {
+		args = append(args, "-oidc-http-port="+strconv.Itoa(*opts.oidcHTTPPort))
+
+		// When OIDC HTTP server is enabled, set the other OIDC options
+		if opts.oidcJWKSURI != nil {
+			args = append(args, "-oidc-jwks-uri="+*opts.oidcJWKSURI)
+		}
+
+		if opts.oidcPathPrefix != nil {
+			args = append(args, "-oidc-path-prefix="+*opts.oidcPathPrefix)
+		}
+
+		if len(opts.oidcDomains) > 0 {
+			args = append(args, "-oidc-domains="+strings.Join(opts.oidcDomains, ","))
+		}
+
+		// Handle TLS files for OIDC HTTP server
+		if opts.oidcTLSCertFile != nil {
+			args = append(args, "-oidc-tls-cert-file="+*opts.oidcTLSCertFile)
+		}
+
+		if opts.oidcTLSKeyFile != nil {
+			args = append(args, "-oidc-tls-key-file="+*opts.oidcTLSKeyFile)
+		}
+
+		if opts.oidcTLSInsecure {
+			args = append(args, "-oidc-tls-insecure=true")
+		}
 	}
 
 	if opts.kubeconfig != nil {

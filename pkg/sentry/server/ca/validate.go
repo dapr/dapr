@@ -14,9 +14,18 @@ limitations under the License.
 package ca
 
 import (
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"reflect"
+
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 
 	"github.com/dapr/kit/crypto/pem"
 )
@@ -118,4 +127,187 @@ func verifyBundle(trustAnchors, issChainPEM, issKeyPEM []byte) (Bundle, error) {
 		IssKeyPEM:    issKeyPEM,
 		IssKey:       issKey,
 	}, nil
+}
+
+// loadJWTSigningKey loads a JWT signing key from PEM format.
+func loadJWTSigningKey(keyPEM []byte) (crypto.Signer, error) {
+	privateKey, err := pem.DecodePEMPrivateKey(keyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode JWT signing key: %w", err)
+	}
+
+	signer, ok := privateKey.(crypto.Signer)
+	if !ok {
+		return nil, errors.New("JWT signing key is not a valid crypto.Signer")
+	}
+
+	return signer, nil
+}
+
+// verifyJWKS verifies that the JWKS is valid and contains a corresponding
+// public key for the provided signing key.
+func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
+	if signingKey == nil {
+		// If no signing key is provided but JWKS exists, we can't verify the match
+		return errors.New("can't verify JWKS without signing key")
+	}
+
+	// Parse the JWKS
+	keySet, err := jwk.Parse(jwksBytes)
+	if err != nil {
+		return fmt.Errorf("failed to parse JWKS: %w", err)
+	}
+
+	// Make sure the JWKS has at least one key
+	if keySet.Len() == 0 {
+		return errors.New("JWKS doesn't contain any keys")
+	}
+
+	// Convert signing key to JWK
+	privateJWK, err := jwk.FromRaw(signingKey)
+	if err != nil {
+		return fmt.Errorf("failed to convert signing key to JWK: %w", err)
+	}
+
+	// Get the public key part
+	publicJWK, err := privateJWK.PublicKey()
+	if err != nil {
+		return fmt.Errorf("failed to extract public key from JWT signing key: %w", err)
+	}
+
+	// Get the key ID if it exists on the signing key
+	var signingKeyID string
+	if kid, ok := publicJWK.Get(jwk.KeyIDKey); ok {
+		if s, ok := kid.(string); ok {
+			signingKeyID = s
+		}
+	}
+
+	// Verify that the public key is in the JWKS
+	found := false
+	matchAttempted := false
+
+	for i := range keySet.Len() {
+		key, _ := keySet.Key(i)
+
+		// If both keys have key IDs, check if they match first (faster path)
+		if signingKeyID != "" {
+			if kid, ok := key.Get(jwk.KeyIDKey); ok {
+				if s, ok := kid.(string); ok && s == signingKeyID {
+					found = true
+					break
+				}
+			}
+		}
+
+		// If key ID check wasn't successful, compare the key contents
+		matchAttempted = true
+
+		// First, ensure we're comparing public keys
+		keyPublic, err := key.PublicKey()
+		if err != nil {
+			continue
+		}
+
+		// Check if the key has a valid "use" field (if present)
+		if use, ok := keyPublic.Get(jwk.KeyUsageKey); ok {
+			if s, ok := use.(string); ok && s != "sig" {
+				// Skip keys not meant for signature verification
+				continue
+			}
+		}
+
+		// Get raw representations of both keys to compare
+		var pubRaw interface{}
+		if err = keyPublic.Raw(&pubRaw); err != nil {
+			continue
+		}
+
+		var signerPubRaw interface{}
+		if err = publicJWK.Raw(&signerPubRaw); err != nil {
+			continue
+		}
+
+		// Type-specific comparisons for different key types
+		switch pubKey := pubRaw.(type) {
+		case *ecdsa.PublicKey:
+			if signerPubKey, ok := signerPubRaw.(*ecdsa.PublicKey); ok {
+				// For ECDSA, compare the curve, X and Y values
+				if pubKey.Curve == signerPubKey.Curve &&
+					pubKey.X.Cmp(signerPubKey.X) == 0 &&
+					pubKey.Y.Cmp(signerPubKey.Y) == 0 {
+					found = true
+				}
+			}
+		default:
+			// For other key types, try direct comparison
+			if reflect.TypeOf(pubRaw) == reflect.TypeOf(signerPubRaw) {
+				// If keys are the same type and same value, they are equal
+				if reflect.DeepEqual(pubRaw, signerPubRaw) {
+					found = true
+				}
+			}
+		}
+
+		if found {
+			break
+		}
+	}
+
+	if !found {
+		if !matchAttempted {
+			return fmt.Errorf("JWKS doesn't contain a key with matching key ID '%s'", signingKeyID)
+		}
+		return errors.New("JWKS doesn't contain a matching public key for the JWT signing key")
+	}
+
+	return nil
+}
+
+// validateKeyAlgorithmCompatibility checks if the provided key is compatible with the specified algorithm
+func validateKeyAlgorithmCompatibility(key crypto.Signer, alg jwa.SignatureAlgorithm) error {
+	if key == nil {
+		return errors.New("signing key is nil")
+	}
+
+	switch alg {
+	case jwa.RS256, jwa.RS384, jwa.RS512, jwa.PS256, jwa.PS384, jwa.PS512:
+		// RSA algorithms require an RSA key
+		_, ok := key.(*rsa.PrivateKey)
+		if !ok {
+			return fmt.Errorf("RSA algorithm %s requires an RSA key, but got %T", alg, key)
+		}
+	case jwa.ES256, jwa.ES384, jwa.ES512:
+		// ECDSA algorithms require an ECDSA key
+		ecKey, ok := key.(*ecdsa.PrivateKey)
+		if !ok {
+			return fmt.Errorf("ECDSA algorithm %s requires an ECDSA key, but got %T", alg, key)
+		}
+
+		// Also validate curve size matches algorithm
+		switch alg {
+		case jwa.ES256:
+			if ecKey.Curve != elliptic.P256() {
+				return fmt.Errorf("ES256 requires a P-256 curve, got %s", ecKey.Curve.Params().Name)
+			}
+		case jwa.ES384:
+			if ecKey.Curve != elliptic.P384() {
+				return fmt.Errorf("ES384 requires a P-384 curve, got %s", ecKey.Curve.Params().Name)
+			}
+		case jwa.ES512:
+			if ecKey.Curve != elliptic.P521() {
+				return fmt.Errorf("ES512 requires a P-521 curve, got %s", ecKey.Curve.Params().Name)
+			}
+		}
+	case jwa.EdDSA:
+		// Ed25519 algorithm requires an Ed25519 key
+		_, ok := key.(ed25519.PrivateKey)
+		if !ok {
+			return fmt.Errorf("EdDSA algorithm requires an Ed25519 key, but got %T", key)
+		}
+	default:
+		return fmt.Errorf("unsupported signature algorithm: %s", alg)
+	}
+
+	return nil
 }

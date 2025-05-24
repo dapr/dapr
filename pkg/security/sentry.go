@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -15,13 +15,17 @@ package security
 
 import (
 	"context"
+	"crypto"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
@@ -136,12 +140,69 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			return nil, fmt.Errorf("error parsing newly signed certificate: %w", err)
 		}
 
+		var jwtVal *string
+		if resp.Jwt != nil {
+			// NOTE: We do not verify the signature of the token here
+			// as the token was passed over a secure channel. This avoids
+			// potential issues where the workload does not yet have an
+			// authority used by Sentry but that would be successfully
+			// validated by a 3rd party via the OIDC server.
+			tkn, err := jwt.Parse([]byte(resp.GetJwt()),
+				jwt.WithVerify(false))
+			if err != nil {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_parse")
+				return nil, fmt.Errorf("error parsing JWT: %w", err)
+			}
+
+			if len(tkn.Audience()) == 0 {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_aud")
+				return nil, errors.New("JWT audience is empty")
+			}
+
+			// TODO: Handle allowed clock skew?
+			now := time.Now()
+			if tkn.IssuedAt().After(now) {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_iat")
+				return nil, errors.New("JWT issued at future time")
+			}
+			if tkn.Expiration().Before(now) {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_expired")
+				return nil, errors.New("JWT token has expired")
+			}
+
+			j := resp.GetJwt()
+			jwtVal = &j
+		}
+
 		return &spiffe.SVIDResponse{
 			X509Certificates: workloadcert,
+			JWT:              jwtVal,
 		}, nil
 	}
 
 	return fn, nil
+}
+
+func JWKKeySetFromJWTAuthorities(authorities map[string]crypto.PublicKey) (jwk.Set, error) {
+	keySet := jwk.NewSet()
+
+	for keyID, publicKey := range authorities {
+		jwkKey, err := jwk.FromRaw(publicKey)
+		if err != nil {
+			return nil, fmt.Errorf("error converting crypto.PublicKey to JWK: %w", err)
+		}
+
+		err = jwkKey.Set(jwk.KeyIDKey, keyID)
+		if err != nil {
+			return nil, fmt.Errorf("error setting key ID on JWK: %w", err)
+		}
+
+		if err = keySet.AddKey(jwkKey); err != nil {
+			return nil, fmt.Errorf("error adding JWK to key set: %w", err)
+		}
+	}
+
+	return keySet, nil
 }
 
 // isControlPlaneService returns true if the app ID corresponds to a Dapr
