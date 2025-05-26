@@ -17,9 +17,11 @@ import (
 	"net/http"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	kiterrors "github.com/dapr/kit/errors"
+	"github.com/dapr/kit/grpccodes"
 )
 
 func SchedulerURLName(metadata map[string]string) error {
@@ -36,9 +38,16 @@ func SchedulerURLName(metadata map[string]string) error {
 }
 
 func SchedulerScheduleJob(metadata map[string]string, err error) error {
+	code := status.Code(err)
+	if code == codes.Unknown {
+		code = codes.Internal
+	}
+
+	httpCode := grpccodes.HTTPStatusFromCode(code)
+
 	return kiterrors.NewBuilder(
-		codes.Internal,
-		http.StatusInternalServerError,
+		code,
+		httpCode,
 		"failed to schedule job due to: "+err.Error(),
 		"",
 		string(errorcodes.SchedulerScheduleJob.Category),
