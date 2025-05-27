@@ -11,8 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package max
+package lock
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry/max/hop"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/lock/call"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/lock/reminders"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors/lock/timers"
 )
