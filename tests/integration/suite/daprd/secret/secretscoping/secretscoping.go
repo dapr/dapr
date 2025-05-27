@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,8 +27,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/file"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -39,36 +37,25 @@ func init() {
 }
 
 type secretscoping struct {
-	daprd   *procdaprd.Daprd
+	daprd   *daprd.Daprd
 	logline *logline.LogLine
-
-	secretStoreNames []string
 }
 
 func (c *secretscoping) Setup(t *testing.T) []framework.Option {
-	c.secretStoreNames = []string{"secretstore1", "secretstore2"}
-	secretFileNames := file.Paths(t, len(c.secretStoreNames))
-	files := make([]string, len(c.secretStoreNames))
-	for i, secretFileName := range secretFileNames {
-		require.NoError(t, os.WriteFile(secretFileName, []byte("{}"), 0o600))
-
-		files[i] = fmt.Sprintf(`
+	secretFileName := filepath.Join(t.TempDir(), "secret.json")
+	require.NoError(t, os.WriteFile(secretFileName, []byte("{}"), 0o600))
+	file := fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: '%s'
+  name: secretstore1
 spec:
   type: secretstores.local.file
   version: v1
   metadata:
   - name: secretsFile
     value: '%s'
-`,
-			// Escape single quotes in the store name.
-			strings.ReplaceAll(c.secretStoreNames[i], "'", "''"),
-			strings.ReplaceAll(secretFileName, "'", "''"),
-		)
-	}
+`, secretFileName)
 
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`
@@ -84,8 +71,6 @@ spec:
       deniedSecrets: ["secret-name"]
     - storeName: secretstore1
       defaultAccess: allow
-    - storeName: secretstore2
-      defaultAccess: deny
 `), 0o600))
 
 	c.logline = logline.New(t,
@@ -94,10 +79,10 @@ spec:
 		),
 	)
 
-	c.daprd = procdaprd.New(t,
-		procdaprd.WithResourceFiles(files...),
-		procdaprd.WithConfigs(configFile),
-		procdaprd.WithErrorCodeMetrics(t),
+	c.daprd = daprd.New(t,
+		daprd.WithResourceFiles(file),
+		daprd.WithConfigs(configFile),
+		daprd.WithErrorCodeMetrics(t),
 	)
 
 	return []framework.Option{
