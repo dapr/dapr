@@ -120,6 +120,7 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 			Ttl:           ttl,
 			Data:          reminder.Data,
 			FailurePolicy: failurePolicy,
+			Overwrite:     true,
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,

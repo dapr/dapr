@@ -15,7 +15,7 @@ import (
 
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	operatorConsts "github.com/dapr/dapr/pkg/operator/meta"
-	"github.com/dapr/kit/utils"
+	"github.com/dapr/kit/strings"
 )
 
 const (
@@ -205,7 +205,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 		logName := pod.Namespace + "/" + pod.Name
 
 		// Filter for pods with the dapr.io/enabled annotation
-		if daprEnabled, ok := pod.Annotations[daprEnabledAnnotationKey]; !(ok && utils.IsTruthy(daprEnabled)) {
+		if daprEnabled, ok := pod.Annotations[daprEnabledAnnotationKey]; !(ok && strings.IsTruthy(daprEnabled)) {
 			log.Debugf("Skipping pod %s: %s is not true", logName, daprEnabledAnnotationKey)
 			continue
 		}
