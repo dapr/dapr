@@ -16,7 +16,10 @@ package compstore
 import (
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.runtime.compstore")
 
 func (c *ComponentStore) AddConfiguration(name string, store configuration.Store) {
 	c.lock.Lock()
@@ -85,6 +88,10 @@ func (c *ComponentStore) AddSecretsConfiguration(name string, secretsScope confi
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.secretsConfigurations[name] = secretsScope
+	if _, ok := c.secrets[name]; !ok {
+		// best-effort check since secret store might be added later
+		log.Warnf("Secrets configuration added for '%s', but no matching secret store was found", name)
+	}
 }
 
 func (c *ComponentStore) GetSecretsConfiguration(name string) (config.SecretsScope, bool) {
