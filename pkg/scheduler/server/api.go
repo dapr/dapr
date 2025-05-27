@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	apierrors "github.com/diagridio/go-etcd-cron/api/errors"
+
 	"github.com/diagridio/go-etcd-cron/api"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -52,11 +54,22 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		FailurePolicy: schedFPToCron(job.FailurePolicy),
 	}
 
-	err = cron.Add(ctx, serialized.Name(), apiJob)
+	if job.GetOverwrite() {
+		err = cron.Add(ctx, serialized.Name(), apiJob)
+	} else {
+		err = cron.AddIfNotExists(ctx, serialized.Name(), apiJob)
+	}
+
+	logWithField := log.WithFields(map[string]any{"overwrite": job.GetOverwrite()})
 	if err != nil {
-		log.Errorf("error scheduling job %s: %s", req.GetName(), err)
+		logWithField.Errorf("error scheduling job %s: %s", req.GetName(), err)
+		if apierrors.IsJobAlreadyExists(err) {
+			return nil, status.Errorf(codes.AlreadyExists, "%s", err.Error())
+		}
+
 		return nil, err
 	}
+
 	monitoring.RecordJobsScheduledCount(req.GetMetadata())
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }

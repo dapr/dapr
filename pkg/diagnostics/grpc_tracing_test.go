@@ -19,11 +19,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
+	otelbaggage "go.opentelemetry.io/otel/baggage"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -96,6 +98,430 @@ func TestSpanContextToGRPCMetadata(t *testing.T) {
 	})
 }
 
+// runBaggageHeaderPropagationTest runs the same baggage tests across both types of interceptors
+func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
+	// handle both types of interceptors
+	var runInterceptor func(ctx context.Context) (context.Context, error)
+
+	fakeInfo := &grpc.UnaryServerInfo{
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
+	}
+	fakeReq := &runtimev1pb.GetStateRequest{
+		StoreName: "statestore",
+		Key:       "state",
+	}
+
+	switch intercept := interceptor.(type) {
+	case grpc.UnaryServerInterceptor:
+		runInterceptor = func(ctx context.Context) (context.Context, error) {
+			var handlerCtx context.Context
+			assertHandler := func(ctx context.Context, req any) (any, error) {
+				handlerCtx = ctx
+				return nil, nil
+			}
+
+			_, err := intercept(ctx, fakeReq, fakeInfo, assertHandler)
+			return handlerCtx, err
+		}
+	case grpc.StreamServerInterceptor:
+		streamInfo := &grpc.StreamServerInfo{
+			FullMethod: fakeInfo.FullMethod,
+		}
+
+		runInterceptor = func(ctx context.Context) (context.Context, error) {
+			var handlerCtx context.Context
+			fakeStream := &fakeStream{ctx: ctx}
+
+			streamHandler := func(srv interface{}, stream grpc.ServerStream) error {
+				handlerCtx = stream.Context()
+				return nil
+			}
+
+			err := intercept(nil, fakeStream, streamInfo, streamHandler)
+			return handlerCtx, err
+		}
+
+	default:
+		t.Fatalf("Unsupported interceptor type %T", interceptor)
+	}
+
+	t.Run("baggage from context only", func(t *testing.T) {
+		bag, err := otelbaggage.Parse("key1=value1")
+		require.NoError(t, err)
+		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage)
+		member := baggage.Member("key1")
+		assert.Equal(t, "value1", member.Value())
+
+		// Verify baggage is NOT propagated in response metadata
+		incomingMd, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		baggageValues := incomingMd.Get("baggage")
+		require.Empty(t, baggageValues)
+	})
+
+	t.Run("baggage from metadata only", func(t *testing.T) {
+		md := grpcMetadata.New(map[string]string{
+			"baggage": "key1=value1",
+		})
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), md)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify metadata baggage is NOT propagated in the context
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.Nil(t, baggage.Members())
+
+		// Verify baggage header is set in response metadata
+		incomingMd, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		baggageValues := incomingMd.Get("baggage")
+		require.NotEmpty(t, baggageValues, "Expected baggage header to be set in metadata")
+		assert.Equal(t, "key1=value1", baggageValues[0])
+	})
+
+	t.Run("baggage from both context and metadata", func(t *testing.T) {
+		bag, err := otelbaggage.Parse("key1=value1")
+		require.NoError(t, err)
+		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
+
+		md := grpcMetadata.New(map[string]string{
+			"baggage": "key2=value2",
+		})
+		ctx = grpcMetadata.NewIncomingContext(ctx, md)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage)
+
+		// Verify key1 from context
+		member := baggage.Member("key1")
+		assert.Equal(t, "value1", member.Value())
+
+		// Do NOT merge values
+		assert.Empty(t, baggage.Member("key2").Value())
+
+		// Verify key2 from metadata
+		incomingMd, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		baggageValues := incomingMd.Get("baggage")
+		require.NotEmpty(t, baggageValues, "Expected baggage header to be set in metadata")
+		assert.Contains(t, baggageValues[0], "key2=value2")
+	})
+
+	t.Run("baggage header propagation with same kv", func(t *testing.T) {
+		bag, err := otelbaggage.Parse("key1=value1")
+		require.NoError(t, err)
+		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
+
+		md := grpcMetadata.New(map[string]string{
+			"baggage": "key1=value1",
+		})
+		ctx = grpcMetadata.NewIncomingContext(ctx, md)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify baggage is in the context
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage)
+		member := baggage.Member("key1")
+		assert.Equal(t, "value1", member.Value())
+
+		// Verify baggage header is set in incoming metadata
+		incomingMd, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		baggageValues := incomingMd.Get("baggage")
+		require.NotEmpty(t, baggageValues, "Expected baggage header to be set in metadata")
+		assert.Equal(t, "key1=value1", baggageValues[0])
+	})
+
+	t.Run("multiple baggage values in context", func(t *testing.T) {
+		bag, err := otelbaggage.Parse("key1=value1,key2=value2,key3=value3")
+		require.NoError(t, err)
+		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify all baggage items are in the context
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage)
+		assert.Equal(t, "value1", baggage.Member("key1").Value())
+		assert.Equal(t, "value2", baggage.Member("key2").Value())
+		assert.Equal(t, "value3", baggage.Member("key3").Value())
+
+		// Verify baggage is NOT propagated in response metadata
+		incomingMd, _ := metadata.FromIncomingContext(handlerCtx)
+		baggageValues := incomingMd.Get("baggage")
+		require.Empty(t, baggageValues)
+	})
+
+	t.Run("multiple baggage values in metadata", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.New(map[string]string{
+			"baggage": "key1=value1,key2=value2,key3=value3",
+		}))
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify metadata baggage is NOT propagated in the context
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.Empty(t, baggage.Members())
+
+		// Verify baggage header is set in response metadata
+		incomingMd, _ := grpcMetadata.FromIncomingContext(handlerCtx)
+		baggageValues := incomingMd.Get("baggage")
+		require.NotEmpty(t, baggageValues, "Expected baggage header to be set in metadata")
+		assert.Equal(t, "key1=value1,key2=value2,key3=value3", baggageValues[0])
+	})
+
+	t.Run("multiple different baggage values in both context and metadata", func(t *testing.T) {
+		bag1, err := otelbaggage.Parse("ctx1=val1,ctx2=val2")
+		require.NoError(t, err)
+		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag1)
+
+		ctx = grpcMetadata.NewIncomingContext(ctx, grpcMetadata.New(map[string]string{
+			"baggage": "meta1=val1,meta2=val2",
+		}))
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage)
+		assert.Equal(t, "val1", baggage.Member("ctx1").Value())
+		assert.Equal(t, "val2", baggage.Member("ctx2").Value())
+		// Metadata baggage should not be in context
+		assert.Empty(t, baggage.Member("meta1").Value())
+		assert.Empty(t, baggage.Member("meta2").Value())
+
+		incomingMd, _ := grpcMetadata.FromIncomingContext(handlerCtx)
+		baggageValues := incomingMd.Get("baggage")
+		require.NotEmpty(t, baggageValues, "Expected baggage header to be set in metadata")
+		assert.Equal(t, "meta1=val1,meta2=val2", baggageValues[0])
+	})
+
+	t.Run("empty ctx baggage propagates", func(t *testing.T) {
+		bag, err := otelbaggage.Parse("")
+		require.NoError(t, err)
+		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify baggage is in the ctx (OpenTelemetry creates empty baggage)
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage, "baggage should be in context")
+		assert.Empty(t, baggage.Members(), "baggage should be empty")
+	})
+
+	t.Run("empty metadata baggage propagates", func(t *testing.T) {
+		md := grpcMetadata.New(map[string]string{
+			"baggage": "",
+		})
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), md)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify empty baggage is preserved in metadata
+		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		baggageValues, exists := md["baggage"]
+		require.True(t, exists, "baggage header should exist")
+		assert.Equal(t, []string{""}, baggageValues, "empty baggage should be preserved")
+	})
+
+	t.Run("metadata baggage with properties", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
+			"baggage", "key1=value1;prop1=propvalue1,key2=value2;prop2=propvalue2",
+		))
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify baggage is preserved in metadata
+		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		assert.Equal(t, "key1=value1;prop1=propvalue1,key2=value2;prop2=propvalue2", md.Get("baggage")[0])
+
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.Nil(t, baggage.Members())
+	})
+
+	t.Run("context baggage with properties", func(t *testing.T) {
+		bag, err := otelbaggage.Parse("key1=value1;prop1=propvalue1,key2=value2;prop2=propvalue2")
+		require.NoError(t, err)
+		assert.NotEmpty(t, bag)
+		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify baggage is in ctx with both members & properties
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage, "baggage should be in ctx")
+		assert.Len(t, baggage.Members(), 2, "should have 2 baggage members")
+
+		// key1
+		member := baggage.Member("key1")
+		assert.Equal(t, "value1", member.Value())
+		props := member.Properties()
+		assert.Len(t, props, 1, "should have one property")
+		assert.Equal(t, "prop1", props[0].Key())
+		propValue, exists := props[0].Value()
+		assert.True(t, exists, "property should exist")
+		assert.Equal(t, "propvalue1", propValue)
+		// key2
+		member = baggage.Member("key2")
+		assert.Equal(t, "value2", member.Value())
+		props = member.Properties()
+		assert.Len(t, props, 1, "should have one property")
+		assert.Equal(t, "prop2", props[0].Key())
+		propValue, exists = props[0].Value()
+		assert.True(t, exists, "property should exist")
+		assert.Equal(t, "propvalue2", propValue)
+	})
+
+	t.Run("metadata baggage with special characters", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
+			"baggage", "key1=value1%20with%20spaces,key2=value2%2Fwith%2Fslashes",
+		))
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify baggage is preserved in metadata with percent-encoded values per W3C & for transport
+		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		assert.Equal(t, "key1=value1%20with%20spaces,key2=value2%2Fwith%2Fslashes", md.Get("baggage")[0])
+	})
+
+	t.Run("context baggage with special characters", func(t *testing.T) {
+		bag, err := otelbaggage.Parse("key1=value1%20with%20spaces,key2=value2%2Fwith%2Fslashes")
+		require.NoError(t, err)
+		assert.NotEmpty(t, bag)
+		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// Verify baggage is in ctx with both members (URL-decoded by OpenTelemetry)
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage, "baggage should be in context")
+		assert.Len(t, baggage.Members(), 2, "should have two baggage members")
+		member := baggage.Member("key1")
+		assert.Equal(t, "value1 with spaces", member.Value())
+		member = baggage.Member("key2")
+		assert.Equal(t, "value2/with/slashes", member.Value())
+	})
+
+	t.Run("invalid metadata baggage format", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
+			"baggage", "invalid-baggage",
+		))
+
+		_, err := runInterceptor(ctx)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err), "invalid baggage should be rejected")
+	})
+
+	t.Run("multiple metadata baggage values in header", func(t *testing.T) {
+		// single baggage header with multiple values
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
+			"baggage", "key1=value1,key2=value2",
+		))
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		// baggage headers are combined in metadata
+		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		bag := md.Get("baggage")
+		require.NotEmpty(t, bag)
+		assert.Equal(t, "key1=value1,key2=value2", bag[0])
+	})
+
+	t.Run("multiple context baggage values in header", func(t *testing.T) {
+		bag, err := otelbaggage.Parse("key1=value1,key2=value2")
+		require.NoError(t, err)
+		assert.NotEmpty(t, bag)
+		ctx := otelbaggage.ContextWithBaggage(t.Context(), bag)
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.NotNil(t, baggage)
+		member := baggage.Member("key1")
+		assert.Equal(t, "value1", member.Value())
+		member = baggage.Member("key2")
+		assert.Equal(t, "value2", member.Value())
+
+		// Verify metadata baggage is NOT present
+		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		assert.Empty(t, md.Get("baggage"))
+	})
+
+	t.Run("mixed valid and invalid metadata baggage items", func(t *testing.T) {
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
+			"baggage", "key1=value1,invalid-format-no-equals,key2=value2",
+		))
+
+		_, err := runInterceptor(ctx)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err), "invalid baggage should be rejected")
+	})
+
+	t.Run("baggage at max item length", func(t *testing.T) {
+		// Create ctx with baggage header at exactly max per-member len. Member, aka, item: k=v
+		// "key1=value1,key2=" is 17 bytes, so we need MaxBaggageBytesPerMember-17 bytes of 'x's
+		existingBaggageByteCount := len("key1=value1,key2=")
+		maxBaggageBytesPerMember := 4096 // OpenTelemetry limit: https://github.com/open-telemetry/opentelemetry-go/blob/main/baggage/baggage.go
+		longValue := strings.Repeat("x", maxBaggageBytesPerMember-existingBaggageByteCount)
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
+			"baggage", "key1=value1,key2="+longValue,
+		))
+
+		handlerCtx, err := runInterceptor(ctx)
+		require.NoError(t, err)
+
+		baggage := otelbaggage.FromContext(handlerCtx)
+		assert.Empty(t, baggage.Members())
+
+		md, ok := grpcMetadata.FromIncomingContext(handlerCtx)
+		require.True(t, ok)
+		bag := md.Get("baggage")
+		require.NotEmpty(t, bag)
+		assert.Equal(t, "key1=value1,key2="+longValue, bag[0])
+	})
+
+	t.Run("baggage exceeding max item length", func(t *testing.T) {
+		// MaxBaggageLength is the maximum length of a baggage header according to W3C spec
+		// Reverence: https://www.w3.org/TR/baggage/#limits
+		maxBagLen := 8192
+		longValue := strings.Repeat("x", maxBagLen)
+		ctx := grpcMetadata.NewIncomingContext(t.Context(), grpcMetadata.Pairs(
+			"baggage", "key1=value1,key2="+longValue,
+		))
+
+		_, err := runInterceptor(ctx)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err), "invalid baggage should be rejected")
+	})
+}
+
 func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 	exp := newOtelFakeExporter()
 
@@ -106,6 +532,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 	otel.SetTracerProvider(tp)
 
 	interceptor := GRPCTraceUnaryServerInterceptor("fakeAppID", config.TracingSpec{SamplingRate: "1"})
+	runBaggageHeaderPropagationTest(t, interceptor)
 
 	testTraceParent := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 	testSpanContext, _ := SpanContextFromW3CString(testTraceParent)
@@ -243,6 +670,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 	otel.SetTracerProvider(tp)
 
 	interceptor := GRPCTraceStreamServerInterceptor("test", config.TracingSpec{SamplingRate: "1"})
+	runBaggageHeaderPropagationTest(t, interceptor)
 
 	testTraceParent := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 	testSpanContext, _ := SpanContextFromW3CString(testTraceParent)
@@ -276,7 +704,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 				return errors.New("fake error")
 			}
 
-			interceptor(nil, &fakeStream{ctx}, fakeInfo, assertHandler)
+			interceptor(nil, &fakeStream{ctx: ctx, header: grpcMetadata.MD{}, trailer: grpcMetadata.MD{}}, fakeInfo, assertHandler)
 
 			sc := span.SpanContext()
 			traceID := sc.TraceID()
@@ -334,7 +762,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 				return errors.New("fake error")
 			}
 
-			interceptor(nil, &fakeStream{ctx}, fakeInfo, assertHandler)
+			interceptor(nil, &fakeStream{ctx: ctx, header: grpcMetadata.MD{}, trailer: grpcMetadata.MD{}}, fakeInfo, assertHandler)
 
 			sc := span.SpanContext()
 			traceID := sc.TraceID()
@@ -380,8 +808,8 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			}
 
 			md := grpcMetadata.New(map[string]string{
-				GRPCProxyAppIDKey: "myapp",
-				"grpc-trace-bin":  string(testTraceBinary),
+				"dapr-app-id":    "myapp",
+				"grpc-trace-bin": string(testTraceBinary),
 			})
 			ctx := grpcMetadata.NewIncomingContext(t.Context(), md)
 			ctx, _ = metadata.SetMetadataInTapHandle(ctx, nil)
@@ -392,7 +820,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 				return nil
 			}
 
-			err := interceptor(nil, &fakeStream{ctx}, fakeInfo, assertHandler)
+			err := interceptor(nil, &fakeStream{ctx: ctx, header: grpcMetadata.MD{}, trailer: grpcMetadata.MD{}}, fakeInfo, assertHandler)
 			require.NoError(t, err)
 
 			sc := span.SpanContext()
@@ -408,7 +836,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			}
 
 			md := grpcMetadata.New(map[string]string{
-				GRPCProxyAppIDKey: "myapp",
+				"dapr-app-id": "myapp",
 			})
 			ctx := grpcMetadata.NewIncomingContext(t.Context(), md)
 			ctx, _ = metadata.SetMetadataInTapHandle(ctx, nil)
@@ -419,7 +847,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 				return nil
 			}
 
-			err := interceptor(nil, &fakeStream{ctx}, fakeInfo, assertHandler)
+			err := interceptor(nil, &fakeStream{ctx: ctx, header: grpcMetadata.MD{}, trailer: grpcMetadata.MD{}}, fakeInfo, assertHandler)
 			require.NoError(t, err)
 
 			sc := span.SpanContext()
@@ -432,7 +860,9 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 }
 
 type fakeStream struct {
-	ctx context.Context
+	ctx     context.Context
+	header  metadata.MD
+	trailer metadata.MD
 }
 
 func (f *fakeStream) Context() context.Context {
@@ -442,15 +872,18 @@ func (f *fakeStream) Context() context.Context {
 	return f.ctx
 }
 
-func (f *fakeStream) SetHeader(grpcMetadata.MD) error {
+func (f *fakeStream) SetHeader(md grpcMetadata.MD) error {
+	f.header = md
 	return nil
 }
 
-func (f *fakeStream) SendHeader(grpcMetadata.MD) error {
+func (f *fakeStream) SendHeader(md grpcMetadata.MD) error {
+	f.header = md
 	return nil
 }
 
-func (f *fakeStream) SetTrailer(grpcMetadata.MD) {
+func (f *fakeStream) SetTrailer(md grpcMetadata.MD) {
+	f.trailer = md
 }
 
 func (f *fakeStream) SendMsg(m any) error {
