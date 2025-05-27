@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -86,6 +87,9 @@ type Configuration struct {
 	metav1.ObjectMeta `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
+	// CRD configurations
+	Components  []componentsV1alpha1.Component  `json:"components,omitempty"  yaml:"components,omitempty"`
+	Replicators []componentsV1alpha1.Replicator `json:"replicators,omitempty" yaml:"replicators,omitempty"`
 
 	// Internal fields
 	featuresEnabled map[Feature]struct{}
