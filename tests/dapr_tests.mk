@@ -37,6 +37,8 @@ pubsub-bulk-subscriber \
 pubsub-subscriber_grpc \
 pubsub-subscriber-routing \
 pubsub-subscriber-routing_grpc \
+pubsub-subscriber-streaming \
+pubsub-publisher-streaming \
 actorapp \
 actorclientapp \
 actorfeatures \

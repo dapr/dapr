@@ -49,7 +49,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
+	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/queue"
@@ -76,10 +76,10 @@ type Options struct {
 }
 
 type InitOptions struct {
-	StateStoreName   string
-	Hostname         string
-	GRPC             *manager.Manager
-	SchedulerClients clients.Clients
+	StateStoreName  string
+	Hostname        string
+	GRPC            *manager.Manager
+	SchedulerClient schedclient.Client
 }
 
 // Interface is the main runtime for the actors subsystem.
@@ -613,7 +613,7 @@ func (a *actors) buildStateStore(opts InitOptions, apiLevel *apilevel.APILevel) 
 		a.reminderStore = scheduler.New(scheduler.Options{
 			Namespace:     a.namespace,
 			AppID:         a.appID,
-			Clients:       opts.SchedulerClients,
+			Client:        opts.SchedulerClient,
 			StateReminder: a.stateReminders,
 			Table:         a.table,
 			Healthz:       a.healthz,

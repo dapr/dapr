@@ -168,10 +168,8 @@ func TestOperations(t *testing.T) {
 			})
 		})
 	})
-}
 
-func TestExecution(t *testing.T) {
-	t.Run("record activity executions", func(t *testing.T) {
+	t.Run("record activity operations", func(t *testing.T) {
 		countMetricName := "runtime/workflow/activity/execution/count"
 		latencyMetricName := "runtime/workflow/activity/execution/latency"
 		activityName := "test-activity"
@@ -212,6 +210,58 @@ func TestExecution(t *testing.T) {
 			w := initWorkflowMetrics()
 
 			w.ActivityExecutionEvent(t.Context(), activityName, StatusSuccess, 1)
+
+			viewData, _ := view.RetrieveData(latencyMetricName)
+			v := view.Find(latencyMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
+			assert.InEpsilon(t, float64(1), viewData[0].Data.(*view.DistributionData).Min, 0)
+		})
+	})
+}
+
+func TestExecution(t *testing.T) {
+	t.Run("record activity executions", func(t *testing.T) {
+		countMetricName := "runtime/workflow/activity/operation/count"
+		latencyMetricName := "runtime/workflow/activity/operation/latency"
+		activityName := "test-activity"
+		t.Run("Failed with retryable error", func(t *testing.T) {
+			w := initWorkflowMetrics()
+
+			w.ActivityOperationEvent(t.Context(), activityName, StatusRecoverable, 0)
+
+			viewData, _ := view.RetrieveData(countMetricName)
+			v := view.Find(countMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
+		})
+
+		t.Run("Failed with not-retryable error", func(t *testing.T) {
+			w := initWorkflowMetrics()
+
+			w.ActivityOperationEvent(t.Context(), activityName, StatusFailed, 0)
+
+			viewData, _ := view.RetrieveData(countMetricName)
+			v := view.Find(countMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
+		})
+
+		t.Run("Successful activity request", func(t *testing.T) {
+			w := initWorkflowMetrics()
+
+			w.ActivityOperationEvent(t.Context(), activityName, StatusSuccess, 0)
+
+			viewData, _ := view.RetrieveData(countMetricName)
+			v := view.Find(countMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
+		})
+
+		t.Run("activity operation latency", func(t *testing.T) {
+			w := initWorkflowMetrics()
+
+			w.ActivityOperationEvent(t.Context(), activityName, StatusSuccess, 1)
 
 			viewData, _ := view.RetrieveData(latencyMetricName)
 			v := view.Find(latencyMetricName)
