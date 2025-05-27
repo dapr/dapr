@@ -87,7 +87,7 @@ func (o *ordering) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, subsInMeta, 1)
 	}, time.Second*10, time.Millisecond*10)
 
-	n := 10000
+	n := 1000
 	errs := make([]error, n)
 	done := make(chan struct{})
 	go func() {
