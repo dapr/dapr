@@ -154,16 +154,10 @@ jobs:
       if: matrix.mode == 'control-plane-master'
       run: |
         echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/downloads/daprd" >> $GITHUB_ENV
-        echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/dist/linux_amd64/release/placement" >> $GITHUB_ENV
-        echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/dist/linux_amd64/release/operator" >> $GITHUB_ENV
-        echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/dist/linux_amd64/release/sentry" >> $GITHUB_ENV
-        echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/dist/linux_amd64/release/injector" >> $GITHUB_ENV
-        echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/dist/linux_amd64/release/scheduler" >> $GITHUB_ENV
 
     - name: Setup DAPR_INTEGRATION_X_PATH - dapr-sidecar master
       if: matrix.mode == 'dapr-sidecar-master'
       run: |
-        echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/dist/linux_amd64/release/daprd" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/downloads/placement" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/downloads/sentry" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/downloads/operator" >> $GITHUB_ENV
