@@ -1,0 +1,40 @@
+diff --git a/tests/integration/suite/daprd/jobs/grpc/basic.go b/tests/integration/suite/daprd/jobs/grpc/basic.go
+index 3a61c6fa9..576d20669 100644
+--- a/tests/integration/suite/daprd/jobs/grpc/basic.go
++++ b/tests/integration/suite/daprd/jobs/grpc/basic.go
+@@ -103,7 +103,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
+ 			},
+ 			{
+ 				Job: &rtv1.Job{
+-					Name:     "test1",
++					Name:     "test2",
+ 					Schedule: ptr.Of("@daily"),
+ 					Data: &anypb.Any{
+ 						Value: []byte("test"),
+diff --git a/tests/integration/suite/daprd/jobs/http/basic.go b/tests/integration/suite/daprd/jobs/http/basic.go
+index d9385d11e..0551b75d9 100644
+--- a/tests/integration/suite/daprd/jobs/http/basic.go
++++ b/tests/integration/suite/daprd/jobs/http/basic.go
+@@ -18,6 +18,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"net/http"
++	"strconv"
+ 	"strings"
+ 	"testing"
+ 
+@@ -81,12 +82,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
+ 	})
+ 
+ 	t.Run("good json", func(t *testing.T) {
+-		for _, body := range []string{
++		for i, body := range []string{
+ 			`{"schedule": "@daily"}`,
+ 			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`,
+ 			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "{\"@type\": \"type.googleapis.com/google.protobuf.StringValue\", \"value\": \"Hello, World!\"}"}`,
+ 			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "Hello, World!"}`,
+ 		} {
++			postURL = fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/test-"+strconv.Itoa(i), b.daprd.HTTPPort())
+ 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+ 			require.NoError(t, err)
+ 			resp, err := httpClient.Do(req)
