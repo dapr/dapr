@@ -1,0 +1,33 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: perf-redis-store
+spec:
+  type: state.redis
+  version: v1
+  metadata:
+  - name: redisHost
+    value: localhost:6379 # Assuming Redis runs on the default port locally via Docker Compose
+  - name: redisPassword
+    value: ""
+  # Add other Redis configurations if necessary for performance tuning
+scopes:
+  - redis-writer-app # Name of the Dapr app that will use this state store
+  # Add other app IDs if they also need to directly access this Redis instance
+---
+# Optional: If a separate Redis is used for the Replicator's own state (if any), define it here.
+# For this test, we'll assume the replicator uses the same Redis or doesn't need its own explicit Dapr state component.
+# apiVersion: dapr.io/v1alpha1
+# kind: Component
+# metadata:
+#   name: replicator-internal-redis
+# spec:
+#   type: state.redis
+#   version: v1
+#   metadata:
+#   - name: redisHost
+#     value: localhost:6379
+#   - name: redisPassword
+#     value: ""
+# scopes:
+#   - redis-writer-app # Or the app where the replicator component runs

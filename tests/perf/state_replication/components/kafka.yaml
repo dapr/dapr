@@ -1,0 +1,44 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: perf-kafka-bindings # Or perf-kafka-pubsub if using pubsub model for replicator
+spec:
+  type: bindings.kafka # Or pubsub.kafka
+  version: v1
+  metadata:
+  - name: brokers
+    value: localhost:9092 # Assuming Kafka runs on the default port locally via Docker Compose
+  - name: topics
+    value: "state-replication-topic" # Topic for replicated data
+  - name: consumerGroup
+    value: "replication-perf-test-group"
+  - name: publishTopic # Required for output binding if replicator uses that
+    value: "state-replication-topic"
+  # - name: authRequired # Add if Kafka requires authentication
+  #   value: "false"
+scopes:
+  - redis-writer-app # Or the app where the replicator component runs
+  # Add other app IDs if they also need to directly interact with this Kafka component
+---
+# If the replicator is designed to consume from one topic and publish to another (e.g., for transformation)
+# you might need a separate component definition or configure it within the replicator's metadata.
+# For this test, we'll assume a single topic is used for simplicity.
+
+# Example for PubSub if the replicator uses Dapr's pubsub mechanism:
+# apiVersion: dapr.io/v1alpha1
+# kind: Component
+# metadata:
+#   name: perf-kafka-pubsub
+# spec:
+#   type: pubsub.kafka
+#   version: v1
+#   metadata:
+#   - name: brokers
+#     value: "localhost:9092"
+#   - name: consumerID # Equivalent to consumerGroup for pubsub
+#     value: "replication-perf-test-consumer"
+#   # - name: authRequired
+#   #   value: "false"
+# scopes:
+#   - redis-writer-app # Or the app where the replicator component runs
+#   # - consumer-app # If a separate Dapr app consumes from Kafka
