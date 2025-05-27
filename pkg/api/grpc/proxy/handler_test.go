@@ -44,6 +44,7 @@ import (
 	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
@@ -440,7 +441,7 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 
 		ctx, cancel := s.ctx()
 		defer cancel()
-		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagConsts.GRPCProxyAppIDKey, testAppID))
 
 		// Reset callCount before this test
 		s.service.pingCallCount.Store(0)
@@ -476,7 +477,7 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 
 		setupMetrics(s)
 
-		ctx := metadata.NewOutgoingContext(t.Context(), metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
+		ctx := metadata.NewOutgoingContext(t.Context(), metadata.Pairs(diagConsts.GRPCProxyAppIDKey, testAppID))
 
 		_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: message})
 		require.Error(t, err, "Ping should fail due to timeouts")
@@ -515,7 +516,7 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 			go func(i int) {
 				for j := range numOperations {
 					pingMsg := fmt.Sprintf("%d:%d", i, j)
-					ctx := metadata.NewOutgoingContext(t.Context(), metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
+					ctx := metadata.NewOutgoingContext(t.Context(), metadata.Pairs(diagConsts.GRPCProxyAppIDKey, testAppID))
 					res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: pingMsg})
 					require.NoErrorf(t, err, "Ping should succeed for operation %d:%d", i, j)
 					require.NotNilf(t, res, "Response should not be nil for operation %d:%d", i, j)
@@ -584,7 +585,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 		defer cancel()
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
-			diag.GRPCProxyAppIDKey, "test",
+			diagConsts.GRPCProxyAppIDKey, "test",
 			"dapr-test", t.Name(),
 		))
 
@@ -622,7 +623,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		setupMetrics(s)
 
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
-			diag.GRPCProxyAppIDKey, testAppID,
+			diagConsts.GRPCProxyAppIDKey, testAppID,
 			StreamMetadataKey, "1",
 			"dapr-test", t.Name(),
 		))
@@ -673,7 +674,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		setupMetrics(s)
 
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
-			diag.GRPCProxyAppIDKey, testAppID,
+			diagConsts.GRPCProxyAppIDKey, testAppID,
 			StreamMetadataKey, "1",
 			"dapr-test", t.Name(),
 		))
