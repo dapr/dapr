@@ -1,7 +1,7 @@
-diff --git a/tests/integration/suite/daprd/metadata/metadata.go b/tests/integration/suite/daprd/metadata/metadata.go
-index 4a0955eff..f5f95891c 100644
---- a/tests/integration/suite/daprd/metadata/metadata.go
-+++ b/tests/integration/suite/daprd/metadata/metadata.go
+diff --git a/tests/integration/suite/daprd/metadata/base.go b/tests/integration/suite/daprd/metadata/base.go
+index 4a0955eff..bcc4b80c9 100644
+--- a/tests/integration/suite/daprd/metadata/base.go
++++ b/tests/integration/suite/daprd/metadata/base.go
 @@ -19,9 +19,11 @@ import (
  	"fmt"
  	"io"
@@ -24,7 +24,7 @@ index 4a0955eff..f5f95891c 100644
  	extended, ok := bodyMap["extended"].(map[string]interface{})
  	require.True(t, ok)
 -	require.Equal(t, "edge", extended["daprRuntimeVersion"])
-+	assert.Truef(t, strings.HasPrefix(extended["daprRuntimeVersion"].(string), "1.15."), "expected daprRuntimeVersion to have version 1.14.x (actual: %s)", extended["daprRuntimeVersion"])
++	assert.Truef(t, strings.HasPrefix(extended["daprRuntimeVersion"].(string), "1.15."), "expected daprRuntimeVersion to have version 1.15.x (actual: %s)", extended["daprRuntimeVersion"])
  
  	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
  	require.True(t, ok)
