@@ -229,11 +229,7 @@ func (c *Client) connectRoundRobin(ctx context.Context) error {
 			return nil
 		}
 
-		if status.Code(err) == codes.FailedPrecondition {
-			log.Debugf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
-		} else {
-			log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
-		}
+		log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
 
 		select {
 		case <-time.After(time.Second / 2):
