@@ -166,7 +166,12 @@ func (c *Client) Run(ctx context.Context) error {
 		// Re-enable once healthz of daprd is not tired to liveness.
 		// c.htarget.NotReady()
 
-		log.Errorf("Error communicating with placement: %s", err)
+		if status.Code(err) == codes.FailedPrecondition {
+			log.Debugf("Error communicating with placement: %s", err)
+		} else {
+			log.Errorf("Error communicating with placement: %s", err)
+		}
+
 		if ctx.Err() != nil {
 			return c.table.HaltAll()
 		}
