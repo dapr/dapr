@@ -24,8 +24,8 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/internal/timers"
+	"github.com/dapr/dapr/pkg/actors/router"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
@@ -34,13 +34,13 @@ import (
 var log = logger.NewLogger("dapr.runtime.actors.timers.inmemory")
 
 type Options struct {
-	Engine engine.Interface
+	Router router.Interface
 }
 
 type inmemory struct {
 	clock clock.WithTicker
 
-	engine                engine.Interface
+	router                router.Interface
 	activeTimers          *sync.Map
 	activeTimersCount     map[string]*int64
 	activeTimersCountLock sync.RWMutex
@@ -51,13 +51,15 @@ type inmemory struct {
 // New returns a TimerProvider.
 func New(opts Options) timers.Storage {
 	i := &inmemory{
-		engine:            opts.Engine,
+		router:            opts.Router,
 		clock:             clock.RealClock{},
 		activeTimers:      &sync.Map{},
 		activeTimersCount: make(map[string]*int64),
 		runningCh:         make(chan struct{}),
 	}
-	i.processor = queue.NewProcessor[string, *api.Reminder](i.processorExecuteFn)
+	i.processor = queue.NewProcessor[string, *api.Reminder](queue.Options[string, *api.Reminder]{
+		ExecuteFn: i.processorExecuteFn,
+	})
 	return i
 }
 
@@ -70,7 +72,7 @@ func (i *inmemory) Close() error {
 
 // processorExecuteFn is invoked when the processor executes a reminder.
 func (i *inmemory) processorExecuteFn(reminder *api.Reminder) {
-	err := i.engine.CallReminder(context.TODO(), reminder)
+	err := i.router.CallReminder(context.TODO(), reminder)
 	diag.DefaultMonitoring.ActorTimerFired(reminder.ActorType, err == nil)
 	if err != nil {
 		// Successful and non-successful executions are treated as the same in

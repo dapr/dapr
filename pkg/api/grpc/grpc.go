@@ -22,10 +22,12 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	otelbaggage "go.opentelemetry.io/otel/baggage"
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -47,6 +49,7 @@ import (
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
@@ -94,9 +97,10 @@ type api struct {
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
 	processor             *processor.Processor
-	closed                atomic.Bool
-	closeCh               chan struct{}
 	wg                    sync.WaitGroup
+
+	closeCh chan struct{}
+	closed  atomic.Bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -504,23 +508,33 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	sc := span.SpanContext()
 	tp := diag.SpanContextToW3CString(sc)
 	if span != nil {
-		if _, ok := req.Metadata[diag.TraceparentHeader]; !ok {
-			req.Metadata[diag.TraceparentHeader] = tp
+		if _, ok := req.Metadata[diagConsts.TraceparentHeader]; !ok {
+			req.Metadata[diagConsts.TraceparentHeader] = tp
 		}
-		if _, ok := req.Metadata[diag.TracestateHeader]; !ok {
+		if _, ok := req.Metadata[diagConsts.TracestateHeader]; !ok {
 			if sc.TraceState().Len() > 0 {
-				req.Metadata[diag.TracestateHeader] = diag.TraceStateToW3CString(sc)
+				req.Metadata[diagConsts.TracestateHeader] = diag.TraceStateToW3CString(sc)
 			}
 		}
 	}
 
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
+		if baggageValues := incomingMD[diagConsts.BaggageHeader]; len(baggageValues) > 0 {
+			baggageString := strings.Join(baggageValues, ",")
+			baggage, err := otelbaggage.Parse(baggageString)
+			if err != nil {
+				return nil, err
+			}
+			ctx = otelbaggage.ContextWithBaggage(ctx, baggage)
+			req.Metadata[diagConsts.BaggageHeader] = baggageString
+		}
+
 		for key, val := range incomingMD {
 			sanitizedKey := invokev1.ReservedGRPCMetadataToDaprPrefixHeader(key)
 			// Not to overwrite the existing metadata
 			// But if the key is traceparent or tracestate, we allow overwrite the existing metadata.
-			if _, exist := req.Metadata[sanitizedKey]; !exist || (key == diag.TraceparentHeader || key == diag.TracestateHeader) {
+			if _, exist := req.Metadata[sanitizedKey]; !exist || (key == diagConsts.TraceparentHeader || key == diagConsts.TracestateHeader) {
 				req.Metadata[sanitizedKey] = val[0]
 			}
 		}
@@ -1147,7 +1161,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	engine, err := a.ActorEngine(ctx)
+	router, err := a.ActorRouter(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1164,7 +1178,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	policyDef := a.Universal.Resiliency().ActorPreLockPolicy(in.GetActorType(), in.GetActorId())
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
 	res, err := policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
-		return engine.Call(ctx, req)
+		return router.Call(ctx, req)
 	})
 	if err != nil {
 		if _, ok := status.FromError(err); ok {
@@ -1447,6 +1461,7 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 
 func (a *api) Close() error {
 	defer a.wg.Wait()
+
 	if a.closed.CompareAndSwap(false, true) {
 		close(a.closeCh)
 	}

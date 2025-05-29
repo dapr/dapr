@@ -38,53 +38,112 @@ type Options struct {
 	TracingSpec *config.TracingSpec
 }
 
+type Connections map[rtpubsub.ConnectionID]*conn
+
+type Subscribers map[string]Connections
+
+type ConnectionChannel map[rtpubsub.ConnectionID]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
+
+type PublishResponses map[string]ConnectionChannel
+
 type streamer struct {
 	tracingSpec *config.TracingSpec
-	subscribers map[string]*conn
+	subscribers Subscribers
 
-	lock sync.RWMutex
+	lock    sync.RWMutex
+	closeCh <-chan struct{}
 }
 
 var log = logger.NewLogger("dapr.runtime.pubsub.streamer")
 
-func New(opts Options) rtpubsub.AdapterStreamer {
+// TODO: @joshvanl: remove context after refactor.
+func New(ctx context.Context, opts Options) rtpubsub.AdapterStreamer {
 	return &streamer{
 		tracingSpec: opts.TracingSpec,
-		subscribers: make(map[string]*conn),
+		subscribers: make(Subscribers),
+		closeCh:     ctx.Done(),
 	}
 }
 
-func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, req *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1) error {
+func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, req *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1, connectionID rtpubsub.ConnectionID) error {
 	s.lock.Lock()
 	key := s.StreamerKey(req.GetPubsubName(), req.GetTopic())
-	if _, ok := s.subscribers[key]; ok {
-		s.lock.Unlock()
-		return fmt.Errorf("already subscribed to pubsub %q topic %q", req.GetPubsubName(), req.GetTopic())
-	}
 
-	conn := &conn{
+	connection := &conn{
 		stream:           stream,
-		publishResponses: make(map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1),
+		connectionID:     connectionID,
+		closeCh:          make(chan struct{}),
+		publishResponses: make(PublishResponses),
 	}
-	s.subscribers[key] = conn
+	if s.subscribers[key] == nil {
+		s.subscribers[key] = make(Connections)
+	}
+	s.subscribers[key][connectionID] = connection
 
-	log.Infof("Subscribing to pubsub '%s' topic '%s'", req.GetPubsubName(), req.GetTopic())
+	log.Infof("Subscribing to pubsub '%s' topic '%s' ConnectionID %d", req.GetPubsubName(), req.GetTopic(), connectionID)
 	s.lock.Unlock()
 
 	defer func() {
 		s.lock.Lock()
-		delete(s.subscribers, key)
+		select {
+		case <-connection.closeCh:
+		default:
+			close(connection.closeCh)
+		}
+		if connections, ok := s.subscribers[key]; ok {
+			delete(connections, connectionID)
+			if len(connections) == 0 {
+				delete(s.subscribers, key)
+			}
+		}
 		s.lock.Unlock()
 	}()
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
+	// TODO: @joshvanl: remove after pubsub refactor.
+	errCh := make(chan error, 2)
+	go func() {
+		select {
+		case <-s.closeCh:
+			connection.lock.Lock()
+			connection.closed.Store(true)
+			if len(connection.publishResponses) == 0 {
+				errCh <- errors.New("stream closed")
+			}
+			connection.lock.Unlock()
+		case <-connection.closeCh:
+		case <-stream.Context().Done():
+		}
+	}()
+
+	go func() {
+		var err error
+		select {
+		case <-connection.closeCh:
+			err = errors.New("stream closed")
+		case <-stream.Context().Done():
+			err = stream.Context().Err()
+		}
+		errCh <- err
+	}()
+
+	go func() {
+		errCh <- s.recvLoop(stream, req, connection)
+	}()
+
+	return <-errCh
+}
+
+func (s *streamer) recvLoop(
+	stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server,
+	req *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1,
+	conn *conn,
+) error {
 	for {
 		resp, err := stream.Recv()
 
-		s, ok := status.FromError(err)
+		stat, ok := status.FromError(err)
 
-		if (ok && s.Code() == codes.Canceled) ||
+		if (ok && stat.Code() == codes.Canceled) ||
 			errors.Is(err, context.Canceled) ||
 			errors.Is(err, io.EOF) {
 			log.Infof("Unsubscribed from pubsub '%s' topic '%s'", req.GetPubsubName(), req.GetTopic())
@@ -92,7 +151,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 		}
 
 		if err != nil {
-			log.Errorf("error receiving message from client stream: %s", err)
+			log.Errorf("Error receiving message from client stream: %s", err)
 			return err
 		}
 
@@ -100,21 +159,22 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 		if eventResp == nil {
 			return errors.New("duplicate initial request received")
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			conn.notifyPublishResponse(stream.Context(), eventResp)
-		}()
+
+		conn.notifyPublishResponse(eventResp)
 	}
 }
 
 func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage) error {
 	s.lock.RLock()
 	key := s.StreamerKey(msg.PubSub, msg.Topic)
-	conn, ok := s.subscribers[key]
+	connection, ok := s.subscribers[key][msg.SubscriberID]
 	s.lock.RUnlock()
 	if !ok {
 		return fmt.Errorf("no streamer subscribed to pubsub %q topic %q", msg.PubSub, msg.Topic)
+	}
+
+	if connection.closed.Load() {
+		return errors.New("subscription is closed")
 	}
 
 	envelope, span, err := rtpubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, s.tracingSpec)
@@ -122,17 +182,20 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 		return err
 	}
 
-	ch, defFn := conn.registerPublishResponse(envelope.GetId())
-	defer defFn()
+	ch, cleanup := connection.registerPublishResponse(envelope.GetId())
+	if ch == nil {
+		return fmt.Errorf("no client stream expecting publish response for id %s ConnectionID%d", envelope.GetId(), connection.connectionID)
+	}
+	defer cleanup()
 
 	start := time.Now()
-	conn.streamLock.Lock()
-	err = conn.stream.Send(&rtv1pb.SubscribeTopicEventsResponseAlpha1{
+	connection.streamLock.Lock()
+	err = connection.stream.Send(&rtv1pb.SubscribeTopicEventsResponseAlpha1{
 		SubscribeTopicEventsResponseType: &rtv1pb.SubscribeTopicEventsResponseAlpha1_EventMessage{
 			EventMessage: envelope,
 		},
 	})
-	conn.streamLock.Unlock()
+	connection.streamLock.Unlock()
 	elapsed := diag.ElapsedSince(start)
 
 	if span != nil {
@@ -153,6 +216,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-connection.closeCh:
 	case resp = <-ch:
 	}
 
@@ -179,4 +243,16 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 
 func (s *streamer) StreamerKey(pubsub, topic string) string {
 	return "___" + pubsub + "||" + topic
+}
+
+func (s *streamer) Close(key string, connectionID rtpubsub.ConnectionID) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	conns, ok := s.subscribers[key]
+	if ok {
+		if conn, ok := conns[connectionID]; ok {
+			close(conn.closeCh)
+		}
+	}
 }

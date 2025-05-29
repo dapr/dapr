@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,15 +11,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fake
+package os
 
 import (
+	"runtime"
 	"testing"
-
-	"github.com/dapr/dapr/pkg/actors/engine"
 )
 
-func Test_Fake(t *testing.T) {
-	t.Parallel()
-	var _ engine.Interface = New()
+func SkipWindows(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on windows which relies on unix process signals")
+	}
 }

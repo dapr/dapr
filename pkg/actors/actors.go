@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/locker"
@@ -37,6 +36,7 @@ import (
 	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/internal/timers/inmemory"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/router"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -49,7 +49,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
+	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/queue"
@@ -76,10 +76,10 @@ type Options struct {
 }
 
 type InitOptions struct {
-	StateStoreName   string
-	Hostname         string
-	GRPC             *manager.Manager
-	SchedulerClients clients.Clients
+	StateStoreName  string
+	Hostname        string
+	GRPC            *manager.Manager
+	SchedulerClient schedclient.Client
 }
 
 // Interface is the main runtime for the actors subsystem.
@@ -88,7 +88,7 @@ type InitOptions struct {
 type Interface interface {
 	Init(InitOptions) error
 	Run(context.Context) error
-	Engine(context.Context) (engine.Interface, error)
+	Router(context.Context) (router.Interface, error)
 	Table(context.Context) (table.Interface, error)
 	State(context.Context) (actorstate.Interface, error)
 	Timers(context.Context) (timers.Interface, error)
@@ -117,7 +117,7 @@ type actors struct {
 	reminders      reminders.Interface
 	table          table.Interface
 	placement      placement.Interface
-	engine         engine.Interface
+	router         router.Interface
 	timerStorage   internaltimers.Storage
 	timers         timers.Interface
 	idlerQueue     *queue.Processor[string, targets.Idlable]
@@ -175,7 +175,9 @@ func (a *actors) Init(opts InitOptions) error {
 		return nil
 	}
 
-	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
+	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](queue.Options[string, targets.Idlable]{
+		ExecuteFn: a.handleIdleActor,
+	})
 
 	rStore := reentrancystore.New()
 
@@ -193,12 +195,10 @@ func (a *actors) Init(opts InitOptions) error {
 
 	storeEnabled := a.buildStateStore(opts, apiLevel)
 
-	if a.reminderStore != nil {
-		a.reminders = reminders.New(reminders.Options{
-			Storage: a.reminderStore,
-			Table:   a.table,
-		})
-	}
+	a.reminders = reminders.New(reminders.Options{
+		Storage: a.reminderStore,
+		Table:   a.table,
+	})
 
 	var err error
 	a.placement, err = placement.New(placement.Options{
@@ -229,7 +229,7 @@ func (a *actors) Init(opts InitOptions) error {
 		})
 	}
 
-	a.engine = engine.New(engine.Options{
+	a.router = router.New(router.Options{
 		Namespace:          a.namespace,
 		SchedulerReminders: a.schedulerReminders,
 		Placement:          a.placement,
@@ -243,7 +243,7 @@ func (a *actors) Init(opts InitOptions) error {
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
-		Engine: a.engine,
+		Router: a.router,
 	})
 	a.timers = timers.New(timers.Options{
 		Storage: a.timerStorage,
@@ -251,7 +251,7 @@ func (a *actors) Init(opts InitOptions) error {
 	})
 
 	if a.stateReminders != nil {
-		a.stateReminders.SetEngine(a.engine)
+		a.stateReminders.SetRouter(a.router)
 	}
 
 	return nil
@@ -278,7 +278,7 @@ func (a *actors) Run(ctx context.Context) error {
 
 	log.Info("Actor runtime started")
 
-	mngr := concurrency.NewRunnerCloserManager(nil,
+	mngr := concurrency.NewRunnerCloserManager(log, nil,
 		func(ctx context.Context) error {
 			// Only wait for host registration before starting the placement client,
 			// since registering Actor host types is dependent on the Actor state
@@ -320,12 +320,12 @@ func (a *actors) Run(ctx context.Context) error {
 	return mngr.Run(ctx)
 }
 
-func (a *actors) Engine(ctx context.Context) (engine.Interface, error) {
+func (a *actors) Router(ctx context.Context) (router.Interface, error) {
 	if err := a.waitForReady(ctx); err != nil {
 		return nil, err
 	}
 
-	return a.engine, nil
+	return a.router, nil
 }
 
 func (a *actors) Table(ctx context.Context) (table.Interface, error) {
@@ -357,6 +357,10 @@ func (a *actors) Reminders(ctx context.Context) (reminders.Interface, error) {
 		return nil, err
 	}
 
+	if a.reminders == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
+
 	return a.reminders, nil
 }
 
@@ -374,7 +378,7 @@ func (a *actors) waitForReady(ctx context.Context) error {
 		}
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return messages.ErrActorRuntimeNotFound
 	}
 }
 
@@ -609,7 +613,7 @@ func (a *actors) buildStateStore(opts InitOptions, apiLevel *apilevel.APILevel) 
 		a.reminderStore = scheduler.New(scheduler.Options{
 			Namespace:     a.namespace,
 			AppID:         a.appID,
-			Clients:       opts.SchedulerClients,
+			Client:        opts.SchedulerClient,
 			StateReminder: a.stateReminders,
 			Table:         a.table,
 			Healthz:       a.healthz,

@@ -56,8 +56,8 @@ jobs:
       DAPR_NAMESPACE: dapr-tests
       # Useful for upgrade/downgrade/compatibility tests
       # TODO: Make this auto-populated based on GitHub's releases.
-      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.13.0"
-      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.12.5"
+      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.14.5"
+      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.13.6"
       # Container registry where to cache e2e test images
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent

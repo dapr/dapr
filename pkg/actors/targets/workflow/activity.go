@@ -25,9 +25,9 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -61,7 +61,7 @@ type activity struct {
 	workflowActorType string
 
 	table     table.Interface
-	engine    engine.Interface
+	router    router.Interface
 	state     state.Interface
 	reminders reminders.Interface
 
@@ -86,7 +86,7 @@ func ActivityFactory(ctx context.Context, opts ActivityOptions) (targets.Factory
 		return nil, err
 	}
 
-	engine, err := opts.Actors.Engine(ctx)
+	router, err := opts.Actors.Router(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func ActivityFactory(ctx context.Context, opts ActivityOptions) (targets.Factory
 			workflowActorType:  opts.WorkflowActorType,
 			reminderInterval:   reminderInterval,
 			table:              table,
-			engine:             engine,
+			router:             router,
 			state:              state,
 			reminders:          reminders,
 			scheduler:          opts.Scheduler,
@@ -229,16 +229,24 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
 	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
+	elapsed := float64(0)
+	start := time.Now()
 	err := a.scheduler(ctx, wi)
+	elapsed = diag.ElapsedSince(start)
+
 	if errors.Is(err, context.DeadlineExceeded) {
+		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
 		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 	} else if err != nil {
+		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
 		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
+	diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusSuccess, elapsed)
+
 	// Activity execution started
-	start := time.Now()
+	start = time.Now()
 	executionStatus := ""
-	elapsed := float64(0)
+	elapsed = float64(0)
 	// Record metrics on exit
 	defer func() {
 		if executionStatus != "" {
@@ -276,7 +284,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		WithData(resultData).
 		WithContentType(invokev1.ProtobufContentType)
 
-	_, err = a.engine.Call(ctx, req)
+	_, err = a.router.Call(ctx, req)
 	switch {
 	case err != nil:
 		// Returning recoverable error, record metrics

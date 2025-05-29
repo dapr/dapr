@@ -49,8 +49,8 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/universal"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -397,7 +397,7 @@ func TestAPIToken(t *testing.T) {
 			AppID:      "fakeAPI",
 			Resiliency: resiliency.New(nil),
 			Logger:     log,
-			Actors: fake.New().WithEngine(func(context.Context) (engine.Interface, error) {
+			Actors: fake.New().WithRouter(func(context.Context) (router.Interface, error) {
 				return nil, messages.ErrActorRuntimeNotFound
 			}),
 			WorkflowEngine: wfenginefake.New(),
