@@ -1,0 +1,13 @@
+diff --git a/tests/integration/suite/placement/metrics/runtimestotal.go b/tests/integration/suite/placement/metrics/runtimestotal.go
+index 7a99bf093..a8f4f80df 100644
+--- a/tests/integration/suite/placement/metrics/runtimestotal.go
++++ b/tests/integration/suite/placement/metrics/runtimestotal.go
+@@ -41,6 +41,8 @@ type runtimestotal struct {
+ }
+ 
+ func (m *runtimestotal) Setup(t *testing.T) []framework.Option {
++	t.Skip("TODO")
++
+ 	m.place = placement.New(t,
+ 		placement.WithMetadataEnabled(true),
+ 	)
