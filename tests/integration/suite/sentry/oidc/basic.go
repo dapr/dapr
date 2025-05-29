@@ -73,7 +73,7 @@ func (o *basicOIDCServer) Setup(t *testing.T) []framework.Option {
 		sentry.WithMode("standalone"),
 		sentry.WithEnableJWT(true),
 		sentry.WithJWTTTL(2*time.Hour),
-		sentry.WithOIDCAsJWTIssuer(),
+		sentry.WithJWTIssuerFromOIDC(),
 		sentry.WithOIDCEnabled(true),
 		sentry.WithOIDCTLSCertFile(o.tlsCertFile),
 		sentry.WithOIDCTLSKeyFile(o.tlsKeyFile),
@@ -204,7 +204,7 @@ func (o *basicOIDCServer) testJWTTokenValidation(t *testing.T) {
 	require.NoError(t, err, "Resource provider should be able to validate Sentry-issued JWT")
 
 	// Verify standard claims
-	assert.Equal(t, "https://localhost:1028", idToken.Issuer, "Issuer should match Sentry's OIDC issuer")
+	assert.Equal(t, o.oidcBaseURL, idToken.Issuer, "Issuer should match Sentry's OIDC issuer")
 	assert.Equal(t, "spiffe://localhost/ns/default/test-app", idToken.Subject, "Subject should be SPIFFE ID")
 	assert.Contains(t, idToken.Audience, "test-audience", "Audience should include requested audience")
 	assert.Contains(t, idToken.Audience, "localhost", "Audience should include trust domain as default")
@@ -269,7 +269,7 @@ func (o *basicOIDCServer) testMultipleAudienceValidation(t *testing.T) {
 			verifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: aud})
 			idToken, verifyErr := verifier.Verify(t.Context(), tokenString)
 			require.NoError(t, verifyErr, "Token should be valid for audience %s in test case %s", aud, tc.name)
-			assert.Equal(t, "https://localhost:1028", idToken.Issuer)
+			assert.Equal(t, o.oidcBaseURL, idToken.Issuer)
 			assert.Equal(t, expectedSubject, idToken.Subject)
 			assert.Contains(t, idToken.Audience, aud)
 			assert.True(t, idToken.Expiry.After(time.Now()))
@@ -393,7 +393,7 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 		require.NoError(t, verifyErr, "%s should be able to validate the token", serviceAudience)
 
 		assert.Equal(t, expectedSubject, token.Subject)
-		assert.Equal(t, "https://localhost:1028", token.Issuer)
+		assert.Equal(t, o.oidcBaseURL, token.Issuer)
 		assert.Contains(t, token.Audience, serviceAudience)
 		assert.Contains(t, token.Audience, "localhost") // Trust domain always included
 		assert.True(t, token.Expiry.After(time.Now()))

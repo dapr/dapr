@@ -41,10 +41,10 @@ type options struct {
 }
 
 type jwtOptions struct {
-	enabled         bool
-	issuer          *string
-	ttl             *time.Duration
-	useOIDCAsIssuer bool
+	enabled           bool
+	issuer            *string
+	ttl               *time.Duration
+	jwtIssuerFromOIDC bool
 }
 
 type oidcOptions struct {
@@ -153,10 +153,10 @@ func WithJWTTTL(ttl time.Duration) Option {
 	}
 }
 
-// WithOIDCAsJWTIssuer uses the OIDC issuer as the JWT issuer in Sentry.
-func WithOIDCAsJWTIssuer() Option {
+// WithJWTIssuerFromOIDC uses the OIDC issuer as the JWT issuer in Sentry.
+func WithJWTIssuerFromOIDC() Option {
 	return func(o *options) {
-		o.jwt.useOIDCAsIssuer = true
+		o.jwt.jwtIssuerFromOIDC = true
 	}
 }
 

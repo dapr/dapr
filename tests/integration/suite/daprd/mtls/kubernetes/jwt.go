@@ -23,6 +23,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -81,10 +82,11 @@ func (j *jwtvalidation) Setup(t *testing.T) []framework.Option {
 
 	// Configure Sentry with JWT and OIDC server enabled
 	j.sentry = sentry.New(t,
-		sentry.WithEnableJWT(true),                     // Enable JWT token issuance
-		sentry.WithJWTIssuer("https://localhost:8443"), // Set JWT issuer
-		sentry.WithOIDCTLSCertFile(j.oidcTLSCertFile),  // Provide TLS cert for OIDC server
-		sentry.WithOIDCTLSKeyFile(j.oidcTLSKeyFile),    // Provide TLS key for OIDC server
+		sentry.WithEnableJWT(true),                    // Enable JWT token issuance
+		sentry.WithOIDCEnabled(true),                  // Enable OIDC server
+		sentry.WithJWTIssuerFromOIDC(),                // Use OIDC for JWT issuer
+		sentry.WithOIDCTLSCertFile(j.oidcTLSCertFile), // Provide TLS cert for OIDC server
+		sentry.WithOIDCTLSKeyFile(j.oidcTLSKeyFile),   // Provide TLS key for OIDC server
 	)
 
 	bundle := j.sentry.CABundle()
@@ -201,7 +203,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 	sec, err := secProv.Handler(sctx)
 	require.NoError(t, err)
 
-	ctxWithIdentity := sec.WithSVIDContext(t.Context())
+	ctxWithIdentity := sec.WithSVIDContext(ctx)
 	jwtSource, ok := spiffecontext.JWTFrom(ctxWithIdentity)
 	require.True(t, ok, "JWT source should be present in context")
 	require.NotNil(t, jwtSource, "JWT source should not be nil")
@@ -220,17 +222,16 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 
 	// Create a custom HTTP client that skips certificate validation
 	// since we're using a self-signed certificate for the OIDC server
-	customTransport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, //nolint: gosec
-		},
-	}
 	httpClient := &http.Client{
-		Transport: customTransport,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, //nolint: gosec
+			},
+		},
 	}
 
 	// Get OIDC discovery document from Sentry's OIDC HTTP server
-	oidcURL := "https://localhost:8443/.well-known/openid-configuration"
+	oidcURL := fmt.Sprintf("https://localhost:%d/.well-known/openid-configuration", *j.sentry.OIDCPort())
 	httpResp, err := httpClient.Get(oidcURL)
 	require.NoError(t, err)
 	defer httpResp.Body.Close()

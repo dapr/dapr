@@ -101,7 +101,7 @@ func (o *oidc) Run(t *testing.T, ctx context.Context) {
 	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-server-tls-key-file=/tmp/oidc.key")
 	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-jwks-uri=/v1/jwks")
 	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-path-prefix=/v1")
-	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-domains=dapr.io")
+	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-allowed-hosts=dapr.io")
 	found := false
 	for _, port := range dep.Spec.Template.Spec.Containers[0].Ports {
 		if port.Name == "oidc" {

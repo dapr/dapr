@@ -154,7 +154,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		args = append(args, "-jwt-enabled=true")
 
 		// Check if we should automatically set the JWT issuer to the OIDC server URL
-		if opts.jwt.useOIDCAsIssuer && opts.oidc.enabled {
+		if opts.jwt.jwtIssuerFromOIDC && opts.oidc.enabled {
 			require.Nil(t, opts.jwt.issuer, "jwtIssuer must be nil when issuerAutoOIDCPort is enabled")
 			require.NotNil(t, opts.oidc.serverListenPort, "OIDC server port must be set when issuerAutoOIDCPort is enabled")
 
@@ -180,7 +180,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		}
 	} else {
 		require.Nil(t, opts.jwt.issuer, "jwtIssuer must be nil when JWT is not enabled")
-		require.False(t, opts.jwt.useOIDCAsIssuer, "issuerAutoOIDCPort must be false when JWT is not enabled")
+		require.False(t, opts.jwt.jwtIssuerFromOIDC, "jwtIssuerFromOIDC must be false when JWT is not enabled")
 	}
 
 	// Handle OIDC options

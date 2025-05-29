@@ -55,5 +55,3 @@ debug:
   initialDelaySeconds: 30000
 
 extraEnvVars: {}
-
-jwtAudiences: ""
