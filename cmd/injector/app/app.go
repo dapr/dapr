@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"os"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,7 +61,9 @@ func Run() {
 	})
 
 	err = utils.SetEnvVariables(map[string]string{
-		utils.KubeConfigVar: opts.Kubeconfig,
+		utils.KubeConfigVar:      opts.Kubeconfig,
+		utils.KubeAPIServerQPS:   fmt.Sprintf("%v", opts.KubeAPIServerQPS),
+		utils.KubeAPIServerBurst: fmt.Sprintf("%v", opts.KubeAPIServerBurst),
 	})
 	if err != nil {
 		log.Fatalf("Error set env: %v", err)

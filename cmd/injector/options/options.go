@@ -27,6 +27,8 @@ type Options struct {
 	HealthzPort          int
 	HealthzListenAddress string
 	Kubeconfig           string
+	KubeAPIServerQPS     float32
+	KubeAPIServerBurst   int
 	Port                 int
 	ListenAddress        string
 	Logger               logger.Options
@@ -59,6 +61,8 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 	fs.IntVar(&opts.Port, "port", 4000, "The port used for the injector service")
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The listen address for the injector service")
+	fs.Float32Var(&opts.KubeAPIServerQPS, "kube-api-server-qps", 0.0, "The QPS to use when connecting to the Kubernetes API server")
+	fs.IntVar(&opts.KubeAPIServerBurst, "kube-api-server-burst", 0, "The burst to use when connecting to the Kubernetes API server")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
