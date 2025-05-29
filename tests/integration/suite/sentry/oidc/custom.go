@@ -76,7 +76,7 @@ func (o *customOIDCServer) Setup(t *testing.T) []framework.Option {
 		sentry.WithMode("standalone"),
 		sentry.WithEnableJWT(true),
 		sentry.WithJWTTTL(2*time.Hour),
-		sentry.WithOIDCAsJWTIssuer(),
+		sentry.WithJWTIssuerFromOIDC(),
 		sentry.WithOIDCEnabled(true),
 		sentry.WithOIDCTLSCertFile(o.tlsCertFile),
 		sentry.WithOIDCTLSKeyFile(o.tlsKeyFile),
@@ -284,7 +284,7 @@ func (o *customOIDCServer) testInsecureHTTPMode(t *testing.T) {
 	httpSentry := sentry.New(t,
 		sentry.WithMode("standalone"),
 		sentry.WithEnableJWT(true),
-		sentry.WithJWTIssuer("http://localhost:1029"),
+		sentry.WithJWTIssuerFromOIDC(),
 		sentry.WithJWTTTL(2*time.Hour),
 		sentry.WithOIDCEnabled(true),
 	)
