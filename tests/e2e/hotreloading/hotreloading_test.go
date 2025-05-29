@@ -38,9 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	tr *runner.TestRunner
-)
+var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
 	utils.SetupLogs("hotreloading")
