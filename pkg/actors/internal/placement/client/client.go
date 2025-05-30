@@ -22,6 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/roundrobin"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -246,17 +248,37 @@ func (c *Client) connect(ctx context.Context) error {
 
 	log.Debugf("Attempting to connect to placement %s", c.addresses[c.addressIndex%len(c.addresses)])
 
+	// In Kubernetes, we use our custom round-robin implementation.
+	// gRPC library does not do the placement round-robin correctly.
+	// It seems it will not invalidate its local DNS cache and will never see a leader potentially.
+	if len(c.addresses) == 1 && strings.HasPrefix(c.addresses[0], "dns:///") {
+		dnsAddress := c.addresses[0]
+		rr, err := roundrobin.New(roundrobin.Options{
+			Address:     dnsAddress,
+			GRPCOptions: c.grpcOpts,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create roundrobin client: %w", err)
+		}
+
+		client, err := rr.Connect(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to connect to roundrobin client: %w", err)
+		}
+
+		c.client = client
+
+		log.Infof("Connected to placement %s using custom round robin connection", dnsAddress)
+		return nil
+	}
+
 	var err error
-	// If we're trying to connect to the same address, we reuse the existing
-	// connection.
-	// This is not just an optimisation, but a necessary feature for the
-	// round-robin load balancer to work correctly when connecting to the
-	// placement headless service in k8s
+	// If multiple addresses are available, we create a new connection.
 	if c.conn == nil || len(c.addresses) > 1 {
 		//nolint:staticcheck
 		c.conn, err = grpc.DialContext(ctx, c.addresses[c.addressIndex%len(c.addresses)], c.grpcOpts...)
 		if err != nil {
-			return fmt.Errorf("failed to dial placement: %s", err)
+			return fmt.Errorf("failed to dial placement: %w", err)
 		}
 	}
 
