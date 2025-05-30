@@ -14,7 +14,6 @@ limitations under the License.
 package utils
 
 import (
-	"math"
 	"os"
 
 	"k8s.io/client-go/kubernetes"
@@ -27,20 +26,6 @@ var (
 	kubeConfig    *rest.Config
 	KubeConfigVar = "KUBE_CONFIG"
 )
-
-func initKubeConfig() {
-	kubeConfig = GetConfig()
-
-	kubeConfig.RateLimiter = nil
-	kubeConfig.QPS = math.MaxFloat32
-	kubeConfig.Burst = math.MaxInt
-	clientset, err := kubernetes.NewForConfig(kubeConfig)
-	if err != nil {
-		panic(err)
-	}
-
-	clientSet = clientset
-}
 
 // GetConfig gets a kubernetes rest config.
 func GetConfig() *rest.Config {
@@ -59,9 +44,13 @@ func GetConfig() *rest.Config {
 }
 
 // GetKubeClient gets a kubernetes client.
-func GetKubeClient() *kubernetes.Clientset {
+func GetKubeClient(conf *rest.Config) *kubernetes.Clientset {
 	if clientSet == nil {
-		initKubeConfig()
+		clientset, err := kubernetes.NewForConfig(kubeConfig)
+		if err != nil {
+			panic(err)
+		}
+		clientSet = clientset
 	}
 
 	return clientSet
