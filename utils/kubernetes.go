@@ -27,16 +27,6 @@ var (
 	KubeConfigVar = "KUBE_CONFIG"
 )
 
-func initKubeConfig() {
-	kubeConfig = GetConfig()
-	clientset, err := kubernetes.NewForConfig(kubeConfig)
-	if err != nil {
-		panic(err)
-	}
-
-	clientSet = clientset
-}
-
 // GetConfig gets a kubernetes rest config.
 func GetConfig() *rest.Config {
 	if kubeConfig != nil {
@@ -54,9 +44,13 @@ func GetConfig() *rest.Config {
 }
 
 // GetKubeClient gets a kubernetes client.
-func GetKubeClient() *kubernetes.Clientset {
+func GetKubeClient(conf *rest.Config) *kubernetes.Clientset {
 	if clientSet == nil {
-		initKubeConfig()
+		clientset, err := kubernetes.NewForConfig(kubeConfig)
+		if err != nil {
+			panic(err)
+		}
+		clientSet = clientset
 	}
 
 	return clientSet
