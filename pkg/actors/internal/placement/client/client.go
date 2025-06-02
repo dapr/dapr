@@ -70,7 +70,8 @@ type Client struct {
 	sendQueue      chan *v1pb.Host
 	recvQueue      chan *v1pb.PlacementOrder
 
-	ready atomic.Bool
+	ready      atomic.Bool
+	retryCount uint32
 }
 
 // New creates a new placement client for the given dial opts.
@@ -177,13 +178,15 @@ func (c *Client) Run(ctx context.Context) error {
 
 		cancel()
 		c.ready.Store(false)
+		c.retryCount++
 		// Re-enable once healthz of daprd is not tired to liveness.
 		// c.htarget.NotReady()
 
-		if status.Code(err) == codes.FailedPrecondition {
+		if status.Code(err) == codes.FailedPrecondition && c.retryCount%100 != 0 {
 			log.Debugf("Error communicating with placement: %s", err)
 		} else {
 			log.Errorf("Error communicating with placement: %s", err)
+			c.retryCount = 0
 		}
 
 		if ctx.Err() != nil {
