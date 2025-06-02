@@ -18,8 +18,9 @@ import (
 
 	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/kit/utils"
+	"github.com/dapr/kit/strings"
 )
 
 // Metadata header used to indicate if the call should be handled as a gRPC stream.
@@ -96,7 +97,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	// Fetch the AppId so we can reference it for resiliency.
 	ctx := serverStream.Context()
 	md, _ := metadata.FromIncomingContext(ctx)
-	v := md[diagnostics.GRPCProxyAppIDKey]
+	v := md[diagConsts.GRPCProxyAppIDKey]
 
 	// The app id check is handled in the StreamDirector. If we don't have it here, we just use a NoOp policy since we know the request is impossible.
 	var policyDef *resiliency.PolicyDefinition
@@ -117,7 +118,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	var isStream bool
 	streamCheckValue := md[StreamMetadataKey]
 	if len(streamCheckValue) > 0 {
-		isStream = utils.IsTruthy(streamCheckValue[0])
+		isStream = strings.IsTruthy(streamCheckValue[0])
 	}
 
 	var replayBuffer replayBufferCh

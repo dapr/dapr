@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 const (
@@ -95,7 +95,7 @@ func (o *outboxImpl) AddOrUpdateOutbox(stateStore v1alpha1.Component) {
 		case outboxPubsubKey:
 			outboxPubsub = v.Value.String()
 		case outboxDiscardWhenMissingStateKey:
-			outboxDiscardWhenMissingState = utils.IsTruthy(v.Value.String())
+			outboxDiscardWhenMissingState = kitstrings.IsTruthy(v.Value.String())
 		}
 	}
 
@@ -154,7 +154,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 
 		if ok {
 			for k, v := range sr.Metadata {
-				if k == "outbox.projection" && utils.IsTruthy(v) {
+				if k == "outbox.projection" && kitstrings.IsTruthy(v) {
 					projections[sr.Key] = sr
 					operations = append(operations[:i], operations[i+1:]...)
 				}
