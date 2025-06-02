@@ -37,6 +37,10 @@ cluster:
 volumeclaims:
   storageSize: 1Gi
   storageClassName:
+  createStorageClass: false
+  storageClass:
+    parameters: {}
+    mountOptions: []
 
 replicationFactor: 100
 

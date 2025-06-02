@@ -25,6 +25,17 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 
 {{/*
+Create a default StorageClass name from Component value and Release name
+*/}}
+{{- define "dapr_placement.storageclass-name" -}}
+{{- if .Values.volumeclaims.storageClassName -}}
+{{- .Values.volumeclaims.storageClassName -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name .Values.component | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Create chart name and version as used by the chart label.
 */}}
 {{- define "dapr_placement.chart" -}}
