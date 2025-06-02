@@ -11,14 +11,16 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-*/package connector
+*/
+
+package connector
 
 import (
 	"context"
 
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"google.golang.org/grpc"
 )
 
 type Interface interface {
-	Connect(context.Context) (v1pb.Placement_ReportDaprStatusClient, error)
+	Connect(context.Context) (*grpc.ClientConn, error)
 }

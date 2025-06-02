@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package roundrobin
 
 import (
@@ -23,7 +24,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/kit/logger"
 )
 
@@ -57,7 +57,7 @@ func New(opts Options) (connector.Interface, error) {
 	}, nil
 }
 
-func (r *roundrobin) Connect(ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, error) {
+func (r *roundrobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	if len(r.dnsEntries) == 0 {
 		if err := r.refreshEntries(ctx); err != nil {
 			return nil, fmt.Errorf("failed to refresh DNS entries: %w", err)
@@ -77,7 +77,7 @@ func (r *roundrobin) Connect(ctx context.Context) (v1pb.Placement_ReportDaprStat
 
 	log.Infof("Connected to placement %s", hostPort)
 
-	return v1pb.NewPlacementClient(conn).ReportDaprStatus(ctx)
+	return conn, nil
 }
 
 func (r *roundrobin) refreshEntries(ctx context.Context) error {

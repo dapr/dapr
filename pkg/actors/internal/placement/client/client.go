@@ -22,6 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
+
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client/roundrobin"
 
 	"google.golang.org/grpc/codes"
@@ -62,10 +64,11 @@ type Client struct {
 	table table.Interface
 	lock  *lock.OuterCancel
 
-	conn      *grpc.ClientConn
-	client    v1pb.Placement_ReportDaprStatusClient
-	sendQueue chan *v1pb.Host
-	recvQueue chan *v1pb.PlacementOrder
+	conn           *grpc.ClientConn
+	roundRobinConn connector.Interface
+	client         v1pb.Placement_ReportDaprStatusClient
+	sendQueue      chan *v1pb.Host
+	recvQueue      chan *v1pb.PlacementOrder
 
 	ready atomic.Bool
 }
@@ -96,20 +99,29 @@ func New(opts Options) (*Client, error) {
 		)
 	}
 
+	var rr connector.Interface
 	if len(addresses) == 1 && strings.HasPrefix(addresses[0], "dns:///") {
 		// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
 		// With round robin load balancer, Dapr can find the leader automatically.
 		gopts = append(gopts, grpc.WithDefaultServiceConfig(grpcServiceConfig))
+		rr, err = roundrobin.New(roundrobin.Options{
+			Address:     addresses[0],
+			GRPCOptions: gopts,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create roundrobin client: %w", err)
+		}
 	}
 
 	return &Client{
-		lock:      opts.Lock,
-		addresses: addresses,
-		grpcOpts:  gopts,
-		sendQueue: make(chan *v1pb.Host),
-		recvQueue: make(chan *v1pb.PlacementOrder),
-		table:     opts.Table,
-		htarget:   opts.Healthz.AddTarget(),
+		lock:           opts.Lock,
+		addresses:      addresses,
+		grpcOpts:       gopts,
+		roundRobinConn: rr,
+		sendQueue:      make(chan *v1pb.Host),
+		recvQueue:      make(chan *v1pb.PlacementOrder),
+		table:          opts.Table,
+		htarget:        opts.Healthz.AddTarget(),
 	}, nil
 }
 
@@ -248,31 +260,18 @@ func (c *Client) connect(ctx context.Context) error {
 
 	log.Debugf("Attempting to connect to placement %s", c.addresses[c.addressIndex%len(c.addresses)])
 
+	var err error
+
 	// In Kubernetes, we use our custom round-robin implementation.
 	// gRPC library does not do the placement round-robin correctly.
 	// It seems it will not invalidate its local DNS cache and will never see a leader potentially.
 	if len(c.addresses) == 1 && strings.HasPrefix(c.addresses[0], "dns:///") {
-		dnsAddress := c.addresses[0]
-		rr, err := roundrobin.New(roundrobin.Options{
-			Address:     dnsAddress,
-			GRPCOptions: c.grpcOpts,
-		})
+		c.conn, err = c.roundRobinConn.Connect(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to create roundrobin client: %w", err)
+			return fmt.Errorf("failed to connect with roundrobin connector: %w", err)
 		}
-
-		client, err := rr.Connect(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to connect to roundrobin client: %w", err)
-		}
-
-		c.client = client
-
-		log.Infof("Connected to placement %s using custom round robin connection", dnsAddress)
-		return nil
 	}
 
-	var err error
 	// If multiple addresses are available, we create a new connection.
 	if c.conn == nil || len(c.addresses) > 1 {
 		//nolint:staticcheck
