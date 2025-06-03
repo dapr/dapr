@@ -51,6 +51,7 @@ func (b *remoteheaders) Setup(t *testing.T) []framework.Option {
 
 	b.daprd1 = daprd.New(t,
 		daprd.WithAppID("app-caller"),
+		daprd.WithNamespace("app-caller-namespace"),
 	)
 
 	b.daprd2 = daprd.New(t,
@@ -81,7 +82,7 @@ func (b *remoteheaders) Run(t *testing.T, ctx context.Context) {
 
 	select {
 	case header := <-b.ch:
-		require.Equal(t, "default", header.Get("dapr-caller-namespace"))
+		require.Equal(t, "app-caller-namespace", header.Get("dapr-caller-namespace"))
 		require.Equal(t, "app-caller", header.Get("dapr-caller-app-id"))
 		require.Equal(t, "app-callee", header.Get("dapr-callee-app-id"))
 	case <-time.After(5 * time.Second):

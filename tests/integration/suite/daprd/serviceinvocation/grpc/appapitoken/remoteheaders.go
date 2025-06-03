@@ -15,19 +15,20 @@ package appapitoken
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
+	testpb "github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -38,39 +39,60 @@ func init() {
 type remoteheaders struct {
 	daprd1 *daprd.Daprd
 	daprd2 *daprd.Daprd
-	ch     chan http.Header
+	ch     chan metadata.MD
 }
 
-func (b *remoteheaders) Setup(t *testing.T) []framework.Option {
-	b.ch = make(chan http.Header, 1)
+func (r *remoteheaders) Setup(t *testing.T) []framework.Option {
+	r.ch = make(chan metadata.MD, 1)
 	app := app.New(t,
-		app.WithHandlerFunc("/helloworld", func(w http.ResponseWriter, r *http.Request) {
-			b.ch <- r.Header
+		app.WithOnInvokeFn(func(ctx context.Context, _ *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
+			md, ok := metadata.FromIncomingContext(ctx)
+			require.True(t, ok)
+			r.ch <- md
+			return new(commonv1.InvokeResponse), nil
+		}),
+		app.WithPingFn(func(ctx context.Context, _ *testpb.PingRequest) (*testpb.PingResponse, error) {
+			md, _ := metadata.FromIncomingContext(ctx)
+			r.ch <- md
+			return new(testpb.PingResponse), nil
 		}),
 	)
 
-	b.daprd1 = daprd.New(t,
+	r.daprd1 = daprd.New(t,
 		daprd.WithAppID("app-caller"),
+		daprd.WithNamespace("app-caller-namespace"),
 	)
-
-	b.daprd2 = daprd.New(t,
+	r.daprd2 = daprd.New(t,
 		daprd.WithAppID("app-callee"),
-		daprd.WithAppPort(app.Port()),
+		daprd.WithAppProtocol("grpc"),
+		daprd.WithAppAPIToken(t, "abc"),
+		daprd.WithAppPort(app.Port(t)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, b.daprd1, b.daprd2),
+		framework.WithProcesses(app, r.daprd1, r.daprd2),
 	}
 }
 
-func (b *remoteheaders) Run(t *testing.T, ctx context.Context) {
-	b.daprd1.WaitUntilRunning(t, ctx)
-	b.daprd2.WaitUntilRunning(t, ctx)
-	b.daprd2.WaitUntilAppHealth(t, ctx)
+func (r *remoteheaders) Run(t *testing.T, ctx context.Context) {
+	r.daprd1.WaitUntilRunning(t, ctx)
+	r.daprd2.WaitUntilRunning(t, ctx)
 
-	dclient := b.daprd1.GRPCClient(t, ctx)
-	_, err := dclient.InvokeService(ctx, &runtimev1.InvokeServiceRequest{
-		Id: b.daprd2.AppID(),
+	client := testpb.NewTestServiceClient(r.daprd1.GRPCConn(t, ctx))
+	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", r.daprd2.AppID())
+	_, err := client.Ping(ctx, new(testpb.PingRequest))
+	require.NoError(t, err)
+
+	select {
+	case md := <-r.ch:
+		require.Equal(t, []string{"abc"}, md.Get("dapr-api-token"))
+	case <-time.After(5 * time.Second):
+		assert.Fail(t, "timed out waiting for metadata")
+	}
+
+	dclient := r.daprd1.GRPCClient(t, ctx)
+	_, err = dclient.InvokeService(ctx, &runtimev1.InvokeServiceRequest{
+		Id: r.daprd2.AppID(),
 		Message: &commonv1.InvokeRequest{
 			Method:        "helloworld",
 			Data:          new(anypb.Any),
@@ -80,10 +102,10 @@ func (b *remoteheaders) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	select {
-	case header := <-b.ch:
-		require.Equal(t, "default", header.Get("dapr-caller-namespace"))
-		require.Equal(t, "app-caller", header.Get("dapr-caller-app-id"))
-		require.Equal(t, "app-callee", header.Get("dapr-callee-app-id"))
+	case md := <-r.ch:
+		require.Equal(t, []string{"app-caller-namespace"}, md.Get("dapr-caller-namespace"))
+		require.Equal(t, []string{"app-caller"}, md.Get("dapr-caller-app-id"))
+		require.Equal(t, []string{"app-callee"}, md.Get("dapr-callee-app-id"))
 	case <-time.After(5 * time.Second):
 		assert.Fail(t, "timed out waiting for metadata")
 	}
