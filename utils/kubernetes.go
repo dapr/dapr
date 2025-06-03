@@ -40,13 +40,14 @@ func GetConfig() *rest.Config {
 		}
 	}
 
+	kubeConfig = conf
 	return conf
 }
 
 // GetKubeClient gets a kubernetes client.
 func GetKubeClient(conf *rest.Config) *kubernetes.Clientset {
 	if clientSet == nil {
-		clientset, err := kubernetes.NewForConfig(kubeConfig)
+		clientset, err := kubernetes.NewForConfig(conf)
 		if err != nil {
 			panic(err)
 		}
