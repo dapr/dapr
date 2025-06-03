@@ -85,6 +85,9 @@ func (r *roundrobin) refreshEntries(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to lookup addresses: %w", err)
 	}
+	if len(addrs) == 0 {
+		return fmt.Errorf("no addresses found for %s", r.host)
+	}
 
 	r.dnsEntries = addrs
 	return nil

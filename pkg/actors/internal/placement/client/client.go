@@ -17,14 +17,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/roundrobin"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
-
-	"github.com/dapr/dapr/pkg/actors/internal/placement/client/roundrobin"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
