@@ -58,24 +58,27 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 
 	client := m.scheduler.ClientMTLS(t, ctx, "foo")
 
-	req := &schedulerv1pb.ScheduleJobRequest{
-		Name: "testJob",
-		Job: &schedulerv1pb.Job{
-			Schedule: ptr.Of("@daily"),
-		},
-		Metadata: &schedulerv1pb.JobMetadata{
-			AppId:     "foo",
-			Namespace: "default",
-			Target: &schedulerv1pb.JobTargetMetadata{
-				Type: &schedulerv1pb.JobTargetMetadata_Job{
-					Job: new(schedulerv1pb.TargetJob),
+	createJob := func(t *testing.T) {
+		t.Helper()
+
+		_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
+			Name: "testJob",
+			Job: &schedulerv1pb.Job{
+				Schedule:  ptr.Of("@daily"),
+				Overwrite: true,
+			},
+			Metadata: &schedulerv1pb.JobMetadata{
+				AppId:     "foo",
+				Namespace: "default",
+				Target: &schedulerv1pb.JobTargetMetadata{
+					Type: &schedulerv1pb.JobTargetMetadata_Job{
+						Job: new(schedulerv1pb.TargetJob),
+					},
 				},
 			},
-		},
+		})
+		require.NoError(t, err)
 	}
-
-	_, err := client.ScheduleJob(ctx, req)
-	require.NoError(t, err)
 
 	type tcase struct {
 		funcGoodAppID func() error
@@ -217,12 +220,14 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
+			createJob(t)
 			err := test.funcBadAppID()
 			s, ok := status.FromError(err)
 			require.True(t, ok)
 			assert.Equal(t, codes.PermissionDenied, s.Code())
 			assert.Contains(t, s.Message(), "identity does not match request")
 
+			createJob(t)
 			err = test.funcGoodAppID()
 			require.NoError(t, err)
 		})
