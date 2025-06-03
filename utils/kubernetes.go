@@ -15,6 +15,7 @@ package utils
 
 import (
 	"os"
+	"sync"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -22,26 +23,28 @@ import (
 )
 
 var (
-	clientSet     *kubernetes.Clientset
-	kubeConfig    *rest.Config
-	KubeConfigVar = "KUBE_CONFIG"
+	clientSet      *kubernetes.Clientset
+	kubeConfig     *rest.Config
+	kubeConfigOnce sync.Once
+	KubeConfigVar  = "KUBE_CONFIG"
 )
 
 // GetConfig gets a kubernetes rest config.
 func GetConfig() *rest.Config {
-	if kubeConfig != nil {
-		return kubeConfig
-	}
-	conf, err := rest.InClusterConfig()
-	if err != nil {
-		conf, err = clientcmd.BuildConfigFromFlags("", os.Getenv(KubeConfigVar))
-		if err != nil {
-			panic(err)
-		}
+	if kubeConfig == nil {
+		kubeConfigOnce.Do(func() {
+			conf, err := rest.InClusterConfig()
+			if err != nil {
+				conf, err = clientcmd.BuildConfigFromFlags("", os.Getenv(KubeConfigVar))
+				if err != nil {
+					panic(err)
+				}
+			}
+			kubeConfig = conf
+		})
 	}
 
-	kubeConfig = conf
-	return conf
+	return kubeConfig
 }
 
 // GetKubeClient gets a kubernetes client.
