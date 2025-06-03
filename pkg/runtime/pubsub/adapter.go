@@ -45,7 +45,7 @@ type Adapter interface {
 
 type AdapterStreamer interface {
 	Subscribe(rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1, ConnectionID) error
-	Publish(context.Context, *SubscribedMessage) error
+	Publish(context.Context, *SubscribedMessage) (*rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, error)
 	StreamerKey(pubsub, topic string) string
 	Close(key string, connectionID ConnectionID)
 }
