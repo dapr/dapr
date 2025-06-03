@@ -32,6 +32,8 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/subscription/postman/http"
+	"github.com/dapr/dapr/pkg/runtime/subscription/todo"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -43,8 +45,8 @@ const (
 var testLogger = logger.NewLogger("dapr.runtime.test")
 
 type input struct {
-	pbsm     bulkSubscribedMessage
-	bscData  bulkSubscribeCallData
+	pbsm     todo.BulkSubscribedMessage
+	bscData  todo.BulkSubscribeCallData
 	envelope map[string]interface{}
 }
 
@@ -89,8 +91,8 @@ var (
 
 var orders []string = []string{order1, order2, order3, order4, order5, order6, order7, order8, order9, order10}
 
-func getPubSubMessages() []message {
-	pubSubMessages := make([]message, 10)
+func getPubSubMessages() []todo.Message {
+	pubSubMessages := make([]todo.Message, 10)
 
 	bulkEntries := getBulkMessageEntriesForResiliency(10)
 	i := 0
@@ -98,14 +100,14 @@ func getPubSubMessages() []message {
 		var cloudEvent map[string]interface{}
 		err := json.Unmarshal([]byte(ord), &cloudEvent)
 		if err == nil {
-			pubSubMessages[i].cloudEvent = cloudEvent
+			pubSubMessages[i].CloudEvent = cloudEvent
 		}
-		pubSubMessages[i].entry = &bulkEntries[i]
+		pubSubMessages[i].Entry = &bulkEntries[i]
 		rawData := runtimePubsub.BulkSubscribeMessageItem{
 			EntryId: bulkEntries[i].EntryId,
 			Event:   cloudEvent,
 		}
-		pubSubMessages[i].rawData = &rawData
+		pubSubMessages[i].RawData = &rawData
 		i++
 	}
 	return pubSubMessages
@@ -186,30 +188,30 @@ func getInput() input {
 	testBulkSubscribePubsub := "bulkSubscribePubSub"
 	msgArr := getBulkMessageEntriesForResiliency(10)
 	psMessages := getPubSubMessages()
-	in.pbsm = bulkSubscribedMessage{
-		pubSubMessages: psMessages,
-		topic:          "topic0",
-		pubsub:         testBulkSubscribePubsub,
-		path:           orders1,
-		length:         len(psMessages),
+	in.pbsm = todo.BulkSubscribedMessage{
+		PubSubMessages: psMessages,
+		Topic:          "topic0",
+		Pubsub:         testBulkSubscribePubsub,
+		Path:           orders1,
+		Length:         len(psMessages),
 	}
 
 	bulkResponses := make([]contribpubsub.BulkSubscribeResponseEntry, 10)
-	in.bscData.bulkResponses = &bulkResponses
+	in.bscData.BulkResponses = &bulkResponses
 	entryIdIndexMap := make(map[string]int) //nolint:stylecheck
-	in.bscData.entryIdIndexMap = &entryIdIndexMap
+	in.bscData.EntryIdIndexMap = &entryIdIndexMap
 	for i, entry := range msgArr {
-		(*in.bscData.entryIdIndexMap)[entry.EntryId] = i
+		(*in.bscData.EntryIdIndexMap)[entry.EntryId] = i
 	}
 	in.envelope = runtimePubsub.NewBulkSubscribeEnvelope(&runtimePubsub.BulkSubscribeEnvelope{
 		ID:     "",
 		Topic:  "topic0",
 		Pubsub: testBulkSubscribePubsub,
 	})
-	bulkSubDiag := newBulkSubIngressDiagnostics()
-	in.bscData.bulkSubDiag = &bulkSubDiag
-	in.bscData.topic = "topic0"
-	in.bscData.psName = testBulkSubscribePubsub
+	bulkSubDiag := todo.NewBulkSubIngressDiagnostics()
+	in.bscData.BulkSubDiag = &bulkSubDiag
+	in.bscData.Topic = "topic0"
+	in.bscData.PsName = testBulkSubscribePubsub
 	return in
 }
 
@@ -223,10 +225,11 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		ps, err := New(Options{
-			IsHTTP:     true,
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub: &runtimePubsub.PubsubItem{Component: comp},
 		})
 		require.NoError(t, err)
 
@@ -299,9 +302,10 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		mockAppChannel.Init()
 		ps, err := New(Options{
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub: &runtimePubsub.PubsubItem{Component: comp},
 		})
 		require.NoError(t, err)
 
@@ -374,9 +378,10 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		mockAppChannel.Init()
 		ps, err := New(Options{
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub: &runtimePubsub.PubsubItem{Component: comp},
 		})
 		require.NoError(t, err)
 
@@ -448,10 +453,11 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
 		ps, err := New(Options{
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
-			IsHTTP:     true,
 			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub: &runtimePubsub.PubsubItem{Component: comp},
 		})
 		require.NoError(t, err)
 
@@ -524,11 +530,13 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		mockAppChannel.Init()
 
 		ps, err := New(Options{
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
-			IsHTTP:     true,
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub: &runtimePubsub.PubsubItem{Component: comp},
 		})
+
 		require.NoError(t, err)
 
 		ts := testSettings{
@@ -590,9 +598,10 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
-			IsHTTP:     true,
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub: &runtimePubsub.PubsubItem{Component: comp},
 		})
 		require.NoError(t, err)
 
@@ -681,10 +690,11 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		mockAppChannel.Init()
 
 		ps, err := New(Options{
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			IsHTTP:     true,
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub: &runtimePubsub.PubsubItem{Component: comp},
 		})
 		require.NoError(t, err)
 
@@ -773,10 +783,11 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		mockAppChannel.Init()
 
 		ps, err := New(Options{
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			IsHTTP:     true,
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub: &runtimePubsub.PubsubItem{Component: comp},
 		})
 		require.NoError(t, err)
 
@@ -856,10 +867,11 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		mockAppChannel.Init()
 
 		ps, err := New(Options{
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			IsHTTP:     true,
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub: &runtimePubsub.PubsubItem{Component: comp},
 		})
 		require.NoError(t, err)
 
@@ -975,10 +987,11 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
 		ps, err := New(Options{
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			IsHTTP:     true,
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub: &runtimePubsub.PubsubItem{Component: comp},
 		})
 		require.NoError(t, err)
 
@@ -1055,10 +1068,11 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
 
 		ps, err := New(Options{
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
 			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			IsHTTP:     true,
 		})
 		require.NoError(t, err)
 
@@ -1228,8 +1242,9 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
 		ps, err := New(Options{
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
 			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
 			Resiliency: resiliency.New(logger.NewLogger("test")),
 		})
