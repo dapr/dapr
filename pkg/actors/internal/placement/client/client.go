@@ -182,7 +182,7 @@ func (c *Client) Run(ctx context.Context) error {
 		// Re-enable once healthz of daprd is not tired to liveness.
 		// c.htarget.NotReady()
 
-		if status.Code(err) == codes.FailedPrecondition && c.retryCount%100 != 0 {
+		if status.Code(err) == codes.FailedPrecondition && c.retryCount%10 != 0 {
 			log.Debugf("Error communicating with placement: %s", err)
 		} else {
 			log.Errorf("Error communicating with placement: %s", err)
