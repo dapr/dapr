@@ -144,7 +144,7 @@ func (m *mockHTTPSubscriptions) InvokeMethod(ctx context.Context, req *invokev1.
 func TestHTTPSubscriptions(t *testing.T) {
 	t.Run("topics received, no errors", func(t *testing.T) {
 		m := mockHTTPSubscriptions{}
-		subs, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log))
+		subs, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log), "")
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
@@ -163,7 +163,7 @@ func TestHTTPSubscriptions(t *testing.T) {
 			successThreshold: 3,
 		}
 
-		subs, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log))
+		subs, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log), "")
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
@@ -183,7 +183,7 @@ func TestHTTPSubscriptions(t *testing.T) {
 			alwaysError: true,
 		}
 
-		_, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log))
+		_, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log), "")
 		require.Error(t, err)
 	})
 
@@ -192,7 +192,7 @@ func TestHTTPSubscriptions(t *testing.T) {
 			successThreshold: 3,
 		}
 
-		subs, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log))
+		subs, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log), "")
 		assert.Equal(t, m.successThreshold, m.callCount)
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
@@ -212,7 +212,7 @@ func TestHTTPSubscriptions(t *testing.T) {
 			alwaysError: true,
 		}
 
-		_, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log))
+		_, err := GetSubscriptionsHTTP(t.Context(), &m, log, resiliency.FromConfigurations(log), "")
 		require.Error(t, err)
 	})
 }
