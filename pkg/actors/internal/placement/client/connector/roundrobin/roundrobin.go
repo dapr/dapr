@@ -30,17 +30,23 @@ func NewDNSConnector(opts DNSOptions) (connector.Interface, error) {
 		return nil, err
 	}
 
+	resolver := opts.resolver
+	if opts.resolver == nil {
+		resolver = &net.Resolver{PreferGo: true}
+	}
+
 	return &dnsroundrobin{
 		host:     host,
 		port:     port,
 		gOpts:    opts.GRPCOptions,
-		resolver: &net.Resolver{PreferGo: true},
+		resolver: resolver,
 	}, nil
 }
 
 func NewStaticConnector(opts StaticOptions) (connector.Interface, error) {
 	return &staticroundrobin{
-		addresses: opts.Addresses,
-		gOpts:     opts.GRPCOptions,
+		addresses:    opts.Addresses,
+		gOpts:        opts.GRPCOptions,
+		addressIndex: -1,
 	}, nil
 }

@@ -35,7 +35,7 @@ type StaticOptions struct {
 
 func (r *staticroundrobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	r.addressIndex++
-	if r.addressIndex > len(r.addresses) {
+	if r.addressIndex >= len(r.addresses) {
 		r.addressIndex = 0
 	}
 

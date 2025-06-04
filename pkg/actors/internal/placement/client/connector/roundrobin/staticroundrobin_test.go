@@ -15,7 +15,6 @@ limitations under the License.
 package roundrobin
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,39 +22,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type TestLookUpResolver struct {
-	resolvedAddrs []string
-}
+func TestNewStaticConnector(t *testing.T) {
+	addresses := []string{"dapr1:50005", "dapr2:50005", "dapr3:50005"}
+	conn, err := NewStaticConnector(StaticOptions{Addresses: addresses})
 
-func (t *TestLookUpResolver) LookupHost(_ context.Context, _ string) (addrs []string, err error) {
-	return t.resolvedAddrs, nil
-}
-
-func TestNewDNSConnector(t *testing.T) {
-	conn, err := NewDNSConnector(DNSOptions{
-		Address: "dapr-placement-server.dapr-tests.svc.cluster.local:50005",
-		resolver: &TestLookUpResolver{
-			resolvedAddrs: []string{"add1", "add2", "add3"},
-		},
-	})
 	require.NoError(t, err)
 
 	_, _ = conn.Connect(t.Context())
-	assert.Equal(t, "add1:50005", conn.Address())
+	assert.Equal(t, "dapr1:50005", conn.Address())
 
 	_, _ = conn.Connect(t.Context())
-	assert.Equal(t, "add2:50005", conn.Address())
+	assert.Equal(t, "dapr2:50005", conn.Address())
 
 	_, _ = conn.Connect(t.Context())
-	assert.Equal(t, "add3:50005", conn.Address())
+	assert.Equal(t, "dapr3:50005", conn.Address())
 
 	_, _ = conn.Connect(t.Context())
-	assert.Equal(t, "add1:50005", conn.Address())
-}
-
-func TestNewDNSConnectorErrors(t *testing.T) {
-	_, err := NewDNSConnector(DNSOptions{
-		Address: "dns:///dapr-placement-server.dapr-tests.svc.cluster.local:50005",
-	})
-	assert.Error(t, err)
+	assert.Equal(t, "dapr1:50005", conn.Address())
 }

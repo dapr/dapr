@@ -23,17 +23,23 @@ import (
 	"google.golang.org/grpc"
 )
 
+type LookUpResolver interface {
+	LookupHost(ctx context.Context, host string) (addrs []string, err error)
+}
+
 type dnsroundrobin struct {
 	dnsEntries []string
+	current    string
 	host       string
 	port       string
 	gOpts      []grpc.DialOption
-	resolver   *net.Resolver
+	resolver   LookUpResolver
 }
 
 type DNSOptions struct {
 	GRPCOptions []grpc.DialOption
 	Address     string
+	resolver    LookUpResolver
 }
 
 func (r *dnsroundrobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
@@ -43,7 +49,8 @@ func (r *dnsroundrobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 		}
 	}
 
-	hostPort := r.Address()
+	hostPort := net.JoinHostPort(r.dnsEntries[0], r.port)
+	r.current = hostPort
 	r.dnsEntries = r.dnsEntries[1:]
 
 	log.Debugf("Attempting to connect to placement %s", hostPort)
@@ -60,7 +67,7 @@ func (r *dnsroundrobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 }
 
 func (r *dnsroundrobin) Address() string {
-	return net.JoinHostPort(r.dnsEntries[0], r.port)
+	return r.current
 }
 
 func (r *dnsroundrobin) refreshEntries(ctx context.Context) error {
