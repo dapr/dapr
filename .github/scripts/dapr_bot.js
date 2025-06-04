@@ -84,9 +84,9 @@ async function handleIssueCommentCreate({ github, context }) {
     }
     
     // This command is used to re-trigger the failed tests.
-    if (command == '/retest-failed'){
-            await cmdRetestFailed(github, issue, isFromPulls)
-            return
+    if (command == 'retest-failed') {
+        await cmdRetestFailed(github, issue, isFromPulls)
+        return
     }
 
     // Commands that can only be executed by owners.
