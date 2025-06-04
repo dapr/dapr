@@ -27,7 +27,7 @@ type LookUpResolver interface {
 	LookupHost(ctx context.Context, host string) (addrs []string, err error)
 }
 
-type dnsroundrobin struct {
+type dnsRoundRobin struct {
 	dnsEntries []string
 	current    string
 	host       string
@@ -42,7 +42,7 @@ type DNSOptions struct {
 	resolver    LookUpResolver
 }
 
-func (r *dnsroundrobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
+func (r *dnsRoundRobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	if len(r.dnsEntries) == 0 {
 		if err := r.refreshEntries(ctx); err != nil {
 			return nil, fmt.Errorf("failed to refresh DNS addresses: %w", err)
@@ -66,11 +66,11 @@ func (r *dnsroundrobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-func (r *dnsroundrobin) Address() string {
+func (r *dnsRoundRobin) Address() string {
 	return r.current
 }
 
-func (r *dnsroundrobin) refreshEntries(ctx context.Context) error {
+func (r *dnsRoundRobin) refreshEntries(ctx context.Context) error {
 	addrs, err := r.resolver.LookupHost(ctx, r.host)
 	if err != nil {
 		return fmt.Errorf("failed to lookup addresses: %w", err)

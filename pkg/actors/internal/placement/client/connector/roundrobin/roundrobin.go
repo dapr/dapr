@@ -35,7 +35,7 @@ func NewDNSConnector(opts DNSOptions) (connector.Interface, error) {
 		resolver = &net.Resolver{PreferGo: true}
 	}
 
-	return &dnsroundrobin{
+	return &dnsRoundRobin{
 		host:     host,
 		port:     port,
 		gOpts:    opts.GRPCOptions,
@@ -44,7 +44,7 @@ func NewDNSConnector(opts DNSOptions) (connector.Interface, error) {
 }
 
 func NewStaticConnector(opts StaticOptions) (connector.Interface, error) {
-	return &staticroundrobin{
+	return &staticRoundRobin{
 		addresses:    opts.Addresses,
 		gOpts:        opts.GRPCOptions,
 		addressIndex: -1,

@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-type staticroundrobin struct {
+type staticRoundRobin struct {
 	addresses    []string
 	addressIndex int
 
@@ -33,7 +33,7 @@ type StaticOptions struct {
 	Addresses   []string
 }
 
-func (r *staticroundrobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
+func (r *staticRoundRobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	r.addressIndex++
 	if r.addressIndex >= len(r.addresses) {
 		r.addressIndex = 0
@@ -53,6 +53,6 @@ func (r *staticroundrobin) Connect(ctx context.Context) (*grpc.ClientConn, error
 	return conn, nil
 }
 
-func (r *staticroundrobin) Address() string {
+func (r *staticRoundRobin) Address() string {
 	return r.addresses[r.addressIndex]
 }
