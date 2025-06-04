@@ -82,6 +82,12 @@ async function handleIssueCommentCreate({ github, context }) {
         await cmdAssign(github, issue, username, isFromPulls)
         return
     }
+    
+    // This command is used to re-trigger the failed tests.
+    if (command == '/retest-failed'){
+            await cmdRetestFailed(github, issue, isFromPulls)
+            return
+    }
 
     // Commands that can only be executed by owners.
     if (!owners.includes(username)) {
@@ -140,10 +146,6 @@ async function handleIssueCommentCreate({ github, context }) {
                 commandParts.join(' ')
             )
             break
-        case '/retest-failed':
-            // This command is used to re-trigger the failed tests.
-            await cmdRetestFailed(github, issue, isFromPulls)
-            break;
         default:
             console.log(
                 `[handleIssueCommentCreate] command ${command} not found, exiting.`
