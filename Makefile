@@ -272,14 +272,14 @@ ADDITIONAL_HELM_SET ?= ""
 ifneq ($(ADDITIONAL_HELM_SET),)
 	ADDITIONAL_HELM_SET := --set $(ADDITIONAL_HELM_SET)
 endif
-ifneq ($(RUN_AS_NON_ROOT),)
-	ADDITIONAL_HELM_SET := --set dapr_operator.runAsNonRoot=$(RUN_AS_NON_ROOT) $(ADDITIONAL_HELM_SET)
-	ADDITIONAL_HELM_SET := --set dapr_placement.runAsNonRoot=$(RUN_AS_NON_ROOT) $(ADDITIONAL_HELM_SET)
-	ADDITIONAL_HELM_SET := --set dapr_scheduler.securityContext.runAsNonRoot=$(RUN_AS_NON_ROOT) $(ADDITIONAL_HELM_SET)
-	ADDITIONAL_HELM_SET := --set dapr_scheduler.runAsNonRoot=$(RUN_AS_NON_ROOT) $(ADDITIONAL_HELM_SET)
-	ADDITIONAL_HELM_SET := --set dapr_sentry.runAsNonRoot=$(RUN_AS_NON_ROOT) $(ADDITIONAL_HELM_SET)
-	ADDITIONAL_HELM_SET := --set dapr_sidecar_injector.runAsNonRoot=$(RUN_AS_NON_ROOT) $(ADDITIONAL_HELM_SET)
-	ADDITIONAL_HELM_SET := --set dapr_sidecar_injector.sidecarRunAsNonRoot=$(RUN_AS_NON_ROOT) $(ADDITIONAL_HELM_SET)
+ifeq ($(DEBUG),1)
+	ADDITIONAL_HELM_SET := --set dapr_operator.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_placement.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_scheduler.securityContext.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_scheduler.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_sentry.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_sidecar_injector.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_sidecar_injector.sidecarRunAsNonRoot=false $(ADDITIONAL_HELM_SET)
 endif
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	ADDITIONAL_HELM_SET := $(ADDITIONAL_HELM_SET) \
