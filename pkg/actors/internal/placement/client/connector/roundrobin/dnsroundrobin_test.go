@@ -22,17 +22,20 @@ import (
 
 func TestNewRoundRobinPlacement(t *testing.T) {
 	testCases := []struct {
-		addr string
+		addr      string
+		assertion assert.ErrorAssertionFunc
 	}{
 		{
-			addr: "dns:///dapr-placement-server.dapr-tests.svc.cluster.local:50005",
+			addr:      "dns:///dapr-placement-server.dapr-tests.svc.cluster.local:50005",
+			assertion: assert.Error,
 		},
 		{
-			addr: "dapr-placement-server.dapr-tests.svc.cluster.local:50005",
+			addr:      "dapr-placement-server.dapr-tests.svc.cluster.local:50005",
+			assertion: assert.NoError,
 		},
 	}
 	for _, tc := range testCases {
-		_, err := New(Options{Address: tc.addr})
-		assert.NoError(t, err)
+		_, err := NewDNSConnector(DNSOptions{Address: tc.addr})
+		tc.assertion(t, err)
 	}
 }

@@ -16,12 +16,7 @@ limitations under the License.
 package roundrobin
 
 import (
-	"context"
-	"fmt"
 	"net"
-	"strings"
-
-	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
 	"github.com/dapr/kit/logger"
@@ -29,27 +24,13 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.placement.client.connector.roundrobin")
 
-type Options struct {
-	Address     string
-	GRPCOptions []grpc.DialOption
-}
-
-type roundrobin struct {
-	dnsEntries []string
-	host       string
-	port       string
-	gOpts      []grpc.DialOption
-	resolver   *net.Resolver
-}
-
-func New(opts Options) (connector.Interface, error) {
-	addr := strings.TrimPrefix(opts.Address, "dns:///")
-	host, port, err := net.SplitHostPort(addr)
+func NewDNSConnector(opts DNSOptions) (connector.Interface, error) {
+	host, port, err := net.SplitHostPort(opts.Address)
 	if err != nil {
 		return nil, err
 	}
 
-	return &roundrobin{
+	return &dnsroundrobin{
 		host:     host,
 		port:     port,
 		gOpts:    opts.GRPCOptions,
@@ -57,38 +38,9 @@ func New(opts Options) (connector.Interface, error) {
 	}, nil
 }
 
-func (r *roundrobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
-	if len(r.dnsEntries) == 0 {
-		if err := r.refreshEntries(ctx); err != nil {
-			return nil, fmt.Errorf("failed to refresh DNS entries: %w", err)
-		}
-	}
-
-	hostPort := net.JoinHostPort(r.dnsEntries[0], r.port)
-	r.dnsEntries = r.dnsEntries[1:]
-
-	log.Debugf("Attempting to connect to placement %s", hostPort)
-
-	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, hostPort, r.gOpts...)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Infof("Connected to placement %s", hostPort)
-
-	return conn, nil
-}
-
-func (r *roundrobin) refreshEntries(ctx context.Context) error {
-	addrs, err := r.resolver.LookupHost(ctx, r.host)
-	if err != nil {
-		return fmt.Errorf("failed to lookup addresses: %w", err)
-	}
-	if len(addrs) == 0 {
-		return fmt.Errorf("no addresses found for %s", r.host)
-	}
-
-	r.dnsEntries = addrs
-	return nil
+func NewStaticConnector(opts StaticOptions) (connector.Interface, error) {
+	return &staticroundrobin{
+		addresses: opts.Addresses,
+		gOpts:     opts.GRPCOptions,
+	}, nil
 }

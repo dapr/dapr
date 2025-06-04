@@ -21,18 +21,24 @@ import (
 
 func TestAddDNSResolverPrefix(t *testing.T) {
 	testCases := []struct {
-		addr          []string
-		resolverAdded []string
+		addr    []string
+		k8sMode bool
 	}{
 		{
-			addr:          []string{"placement1:50005", "placement2:50005", "placement3:50005"},
-			resolverAdded: []string{"dns:///placement1:50005", "dns:///placement2:50005", "dns:///placement3:50005"},
+			addr:    []string{"placement1:50005", "placement2:50005", "placement3:50005"},
+			k8sMode: false,
 		}, {
-			addr:          []string{"192.168.0.100:50005", "192.168.0.101:50005", "192.168.0.102:50005"},
-			resolverAdded: []string{"192.168.0.100:50005", "192.168.0.101:50005", "192.168.0.102:50005"},
+			addr:    []string{"192.168.0.100:50005", "192.168.0.101:50005", "192.168.0.102:50005"},
+			k8sMode: false,
+		}, {
+			addr:    []string{"placement1:50005"},
+			k8sMode: true,
+		}, {
+			addr:    []string{"192.168.0.100:50005"},
+			k8sMode: false,
 		},
 	}
 	for _, tc := range testCases {
-		assert.EqualValues(t, tc.resolverAdded, addDNSResolverPrefix(tc.addr))
+		assert.EqualValues(t, tc.k8sMode, isKubernetesMode(tc.addr))
 	}
 }

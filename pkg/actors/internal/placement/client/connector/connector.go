@@ -23,4 +23,5 @@ import (
 
 type Interface interface {
 	Connect(context.Context) (*grpc.ClientConn, error)
+	Address() string
 }

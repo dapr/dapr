@@ -17,11 +17,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/roundrobin"
 	"net"
-	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/roundrobin"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
 
@@ -41,8 +41,6 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-const grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
-
 var log = logger.NewLogger("dapr.runtime.actors.placement.client")
 
 type Options struct {
@@ -55,15 +53,11 @@ type Options struct {
 }
 
 type Client struct {
-	grpcOpts     []grpc.DialOption
-	addressIndex int
-	addresses    []string
-	htarget      healthz.Target
+	htarget healthz.Target
 
 	table table.Interface
 	lock  *lock.OuterCancel
 
-	conn           *grpc.ClientConn
 	roundRobinConn connector.Interface
 	client         v1pb.Placement_ReportDaprStatusClient
 	sendQueue      chan *v1pb.Host
@@ -79,9 +73,6 @@ func New(opts Options) (*Client, error) {
 		return nil, errors.New("no placement addresses provided")
 	}
 
-	addresses := addDNSResolverPrefix(opts.Addresses)
-
-	var gopts []grpc.DialOption
 	placementID, err := spiffeid.FromSegments(
 		opts.Security.ControlPlaneTrustDomain(),
 		"ns", opts.Security.ControlPlaneNamespace(), "dapr-placement",
@@ -90,6 +81,7 @@ func New(opts Options) (*Client, error) {
 		return nil, err
 	}
 
+	var gopts []grpc.DialOption
 	gopts = append(gopts, opts.Security.GRPCDialOptionMTLS(placementID))
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
@@ -99,13 +91,22 @@ func New(opts Options) (*Client, error) {
 		)
 	}
 
+	k8sMode := isKubernetesMode(opts.Addresses)
 	var rr connector.Interface
-	if len(addresses) == 1 && strings.HasPrefix(addresses[0], "dns:///") {
+	if k8sMode {
 		// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
 		// With round robin load balancer, Dapr can find the leader automatically.
-		gopts = append(gopts, grpc.WithDefaultServiceConfig(grpcServiceConfig))
-		rr, err = roundrobin.New(roundrobin.Options{
-			Address:     addresses[0],
+		rr, err = roundrobin.NewDNSConnector(roundrobin.DNSOptions{
+			Address:     opts.Addresses[0],
+			GRPCOptions: gopts,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create roundrobin client: %w", err)
+		}
+	} else {
+		// In non-Kubernetes environment, will round robin over the provided addresses
+		rr, err = roundrobin.NewStaticConnector(roundrobin.StaticOptions{
+			Addresses:   opts.Addresses,
 			GRPCOptions: gopts,
 		})
 		if err != nil {
@@ -115,8 +116,6 @@ func New(opts Options) (*Client, error) {
 
 	return &Client{
 		lock:           opts.Lock,
-		addresses:      addresses,
-		grpcOpts:       gopts,
 		roundRobinConn: rr,
 		sendQueue:      make(chan *v1pb.Host),
 		recvQueue:      make(chan *v1pb.PlacementOrder),
@@ -245,7 +244,7 @@ func (c *Client) connectRoundRobin(ctx context.Context) error {
 			return nil
 		}
 
-		log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
+		log.Errorf("Failed to connect to placement %s: %s", c.roundRobinConn.Address(), err)
 
 		select {
 		case <-time.After(time.Second / 2):
@@ -256,50 +255,20 @@ func (c *Client) connectRoundRobin(ctx context.Context) error {
 }
 
 func (c *Client) connect(ctx context.Context) error {
-	defer func() {
-		c.addressIndex++
-	}()
-
-	log.Debugf("Attempting to connect to placement %s", c.addresses[c.addressIndex%len(c.addresses)])
-
-	var err error
-
-	// In Kubernetes, we use our custom round-robin implementation.
-	// gRPC library does not do the placement round-robin correctly.
-	// It seems it will not invalidate its local DNS cache and will never see a leader potentially.
-	if len(c.addresses) == 1 && strings.HasPrefix(c.addresses[0], "dns:///") {
-		c.conn, err = c.roundRobinConn.Connect(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to connect with roundrobin connector: %w", err)
-		}
+	conn, err := c.roundRobinConn.Connect(ctx)
+	if err != nil {
+		return err
 	}
 
-	// If multiple addresses are available, we create a new connection.
-	if c.conn == nil || len(c.addresses) > 1 {
-		//nolint:staticcheck
-		c.conn, err = grpc.DialContext(ctx, c.addresses[c.addressIndex%len(c.addresses)], c.grpcOpts...)
-		if err != nil {
-			return fmt.Errorf("failed to dial placement: %w", err)
-		}
-	}
-
-	client, err := v1pb.NewPlacementClient(c.conn).ReportDaprStatus(ctx)
+	client, err := v1pb.NewPlacementClient(conn).ReportDaprStatus(ctx)
 	if err != nil {
 		err = fmt.Errorf("failed to create placement client: %w", err)
-		if strings.Contains(err.Error(), "connect: connection refused") {
-			// reset gRPC context to reset the round robin load balancer state to
-			// ensure we connect to new hosts if all Placement hosts have been
-			// terminated.
-			log.Infof("Resetting gRPC connection to reset round robin load balancer state")
-			c.conn = nil
-		}
-
 		return err
 	}
 
 	c.client = client
 
-	log.Infof("Connected to placement %s", c.addresses[c.addressIndex%len(c.addresses)])
+	log.Infof("Connected to placement %s", c.roundRobinConn.Address())
 
 	return nil
 }
@@ -322,16 +291,16 @@ func (c *Client) Send(ctx context.Context, host *v1pb.Host) error {
 	}
 }
 
-// addDNSResolverPrefix add the `dns://` prefix to the given addresses
-func addDNSResolverPrefix(addr []string) []string {
-	resolvers := make([]string, 0, len(addr))
-	for _, a := range addr {
-		prefix := ""
-		host, _, err := net.SplitHostPort(a)
-		if err == nil && net.ParseIP(host) == nil {
-			prefix = "dns:///"
-		}
-		resolvers = append(resolvers, prefix+a)
+// isKubernetesMode if there is only one address, and it is not an IP address, it is in Kubernetes mode.
+func isKubernetesMode(addr []string) bool {
+	if len(addr) != 1 {
+		return false
 	}
-	return resolvers
+
+	host, _, err := net.SplitHostPort(addr[0])
+	if err == nil && net.ParseIP(host) == nil {
+		return true
+	}
+
+	return false
 }
