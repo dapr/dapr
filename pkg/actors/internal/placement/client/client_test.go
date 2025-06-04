@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAddDNSResolverPrefix(t *testing.T) {
+func TestK8sMode(t *testing.T) {
 	testCases := []struct {
 		addr    []string
 		k8sMode bool
