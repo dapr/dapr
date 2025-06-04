@@ -11,10 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package timer
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,45 +27,41 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
-	suite.Register(new(timer))
+	suite.Register(new(base))
 }
 
-type timer struct {
+type base struct {
 	workflow *workflow.Workflow
 }
 
-func (i *timer) Setup(t *testing.T) []framework.Option {
-	i.workflow = workflow.New(t)
+func (b *base) Setup(t *testing.T) []framework.Option {
+	b.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(i.workflow),
+		framework.WithProcesses(b.workflow),
 	}
 }
 
-func (i *timer) Run(t *testing.T, ctx context.Context) {
-	i.workflow.WaitUntilRunning(t, ctx)
+func (b *base) Run(t *testing.T, ctx context.Context) {
+	b.workflow.WaitUntilRunning(t, ctx)
 
-	i.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
-		if err := ctx.CreateTimer(time.Second * 4).Await(nil); err != nil {
-			return nil, err
+	var now atomic.Pointer[time.Time]
+	b.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
+		if !ctx.IsReplaying {
+			now.Store(ptr.Of(time.Now()))
 		}
-		require.NoError(t, ctx.CallActivity("abc", task.WithActivityInput("abc")).Await(nil))
-		return nil, nil
+		return nil, ctx.CreateTimer(time.Second * 4).Await(nil)
 	})
-	i.workflow.Registry().AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
-		var f string
-		require.NoError(t, ctx.GetInput(&f))
-		return nil, nil
-	})
-	client := i.workflow.BackendClient(t, ctx)
 
-	now := time.Now()
+	client := b.workflow.BackendClient(t, ctx)
+
 	id, err := client.ScheduleNewOrchestration(ctx, "timer", api.WithInstanceID("timer"))
 	require.NoError(t, err)
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, time.Since(now).Seconds(), 4.0)
+	assert.InDelta(t, time.Since(*now.Load()).Seconds(), 4.0, 1.0)
 }
