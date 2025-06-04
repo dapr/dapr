@@ -11,12 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package self
 
 import (
 	"context"
 	nethttp "net/http"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,90 +30,64 @@ import (
 )
 
 func init() {
-	suite.Register(new(remote))
+	suite.Register(new(grpc))
 }
 
-type remote struct {
-	app1     *actors.Actors
-	app2     *actors.Actors
+type grpc struct {
+	app      *actors.Actors
 	called   atomic.Int64
 	holdCall chan struct{}
 }
 
-func (r *remote) Setup(t *testing.T) []framework.Option {
-	r.holdCall = make(chan struct{})
+func (g *grpc) Setup(t *testing.T) []framework.Option {
+	g.holdCall = make(chan struct{})
 
-	r.called.Store(0)
-
-	r.app1 = actors.New(t,
+	g.app = actors.New(t,
 		actors.WithActorTypes("abc"),
-		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, req *nethttp.Request) {
-			if req.Method == nethttp.MethodDelete {
-				return
-			}
-			if r.called.Add(1) == 1 {
-				return
-			}
-			<-r.holdCall
-		}),
-	)
-
-	r.app2 = actors.New(t,
-		actors.WithActorTypes("abc"),
-		actors.WithPeerActor(r.app1),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
+			if r.Method == nethttp.MethodDelete {
+				return
+			}
+			g.called.Add(1)
+			<-g.holdCall
 		}),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(r.app1, r.app2),
+		framework.WithProcesses(g.app),
 	}
 }
 
-func (r *remote) Run(t *testing.T, ctx context.Context) {
-	r.app1.WaitUntilRunning(t, ctx)
-	r.app2.WaitUntilRunning(t, ctx)
+func (g *grpc) Run(t *testing.T, ctx context.Context) {
+	g.app.WaitUntilRunning(t, ctx)
 
-	client := r.app2.GRPCClient(t, ctx)
-
-	var i atomic.Int64
-	for {
-		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-			ActorType: "abc",
-			ActorId:   strconv.Itoa(int(i.Add(1))),
-			Method:    "foo",
-		})
-		require.NoError(t, err)
-		if r.called.Load() == 1 {
-			break
-		}
-	}
+	client := g.app.GRPCClient(t, ctx)
 
 	_, err := client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "abc",
-		ActorId:   strconv.Itoa(int(i.Load())),
-		Name:      "foo1",
+		ActorId:   "foo",
+		Name:      "foo",
 		DueTime:   "0s",
 	})
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(2), r.called.Load())
+		assert.GreaterOrEqual(c, g.called.Load(), int64(1))
 	}, time.Second*10, time.Millisecond*10)
 
 	_, err = client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "abc",
-		ActorId:   strconv.Itoa(int(i.Load())),
+		ActorId:   "foo",
 		Name:      "foo2",
 		DueTime:   "0s",
 	})
 	require.NoError(t, err)
 
 	time.Sleep(time.Second)
-	assert.Equal(t, int64(2), r.called.Load())
-	r.holdCall <- struct{}{}
+	assert.Equal(t, int64(1), g.called.Load())
+	g.holdCall <- struct{}{}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(3), r.called.Load())
+		assert.Equal(c, int64(2), g.called.Load())
 	}, time.Second*10, time.Millisecond*10)
-	close(r.holdCall)
+	g.holdCall <- struct{}{}
 }
