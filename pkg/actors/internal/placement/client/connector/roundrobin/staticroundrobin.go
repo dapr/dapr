@@ -34,10 +34,7 @@ type StaticOptions struct {
 }
 
 func (r *staticRoundRobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
-	r.addressIndex++
-	if r.addressIndex >= len(r.addresses) {
-		r.addressIndex = 0
-	}
+	r.addressIndex = (r.addressIndex+1)%len(r.addresses)
 
 	address := r.Address()
 	log.Debugf("Attempting to connect to placement %s", address)
