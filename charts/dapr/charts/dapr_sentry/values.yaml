@@ -30,6 +30,40 @@ tls:
     certPEM: ""
   trustDomain: cluster.local
 
+jwt:
+  # Enable JWT token issuance by Sentry
+  enabled: false
+  # JWT signing key filename
+  keyFilename: ""
+  # JWKS (JSON Web Key Set) filename
+  jwksFilename: ""
+  # Issuer value for JWT tokens (no issuer if empty)
+  issuer: ""
+  # Algorithm used for JWT signing (e.g., ES256, RS256)
+  signingAlgorithm: ""
+  # Key ID (kid) used for JWT signing
+  keyID: ""
+
+
+oidc:
+  enabled: false
+  server:
+    # Port for the OIDC HTTP server
+    port: 9080
+  # Custom URI where the JWKS can be accessed externally
+  jwksURI: ""
+  # Path prefix to add to OIDC HTTP endpoints
+  pathPrefix: ""
+  # List of allowed hosts for OIDC HTTP endpoint requests
+  allowedHosts: []
+  tls:
+    # Enable TLS for the OIDC HTTP server
+    enabled: true
+    # TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
+    certFile: ""
+    # TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
+    keyFile: ""
+
 livenessProbe:
   initialDelaySeconds: 3
   periodSeconds: 3

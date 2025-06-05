@@ -11,6 +11,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
+	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/dapr/components-contrib v1.15.1-0.20250522140356-026f99710af9
 	github.com/dapr/durabletask-go v0.7.1
 	github.com/dapr/kit v0.15.3-0.20250522135818-baea6263991d
@@ -66,6 +67,7 @@ require (
 	go.uber.org/ratelimit v0.3.0
 	golang.org/x/crypto v0.38.0
 	golang.org/x/net v0.40.0
+	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.14.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9
@@ -452,7 +454,6 @@ require (
 	golang.org/x/arch v0.10.0 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/mod v0.24.0 // indirect
-	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/term v0.32.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
