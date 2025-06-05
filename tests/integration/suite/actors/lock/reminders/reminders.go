@@ -14,6 +14,6 @@ limitations under the License.
 package lock
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/reminders/local"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/reminders/remote"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/reminders/self"
 )

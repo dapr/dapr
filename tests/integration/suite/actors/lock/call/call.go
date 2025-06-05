@@ -14,7 +14,7 @@ limitations under the License.
 package call
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/local"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/remote"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/self"
 )
