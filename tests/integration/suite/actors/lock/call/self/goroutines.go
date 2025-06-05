@@ -70,6 +70,6 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.InDelta(c, startGoRoutines, g.app.Metrics(c, ctx)["go_goroutines"], 10)
+		assert.InDelta(c, startGoRoutines, g.app.Metrics(t, ctx)["go_goroutines"], 10)
 	}, time.Second*20, time.Second)
 }
