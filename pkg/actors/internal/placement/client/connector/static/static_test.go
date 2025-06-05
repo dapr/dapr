@@ -15,7 +15,6 @@ limitations under the License.
 package static
 
 import (
-	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/roundrobin"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,7 +24,7 @@ import (
 
 func TestNewStaticConnector(t *testing.T) {
 	addresses := []string{"dapr1:50005", "dapr2:50005", "dapr3:50005"}
-	conn, err := roundrobin.NewStaticConnector(Options{Addresses: addresses})
+	conn, err := New(Options{Addresses: addresses})
 
 	require.NoError(t, err)
 
