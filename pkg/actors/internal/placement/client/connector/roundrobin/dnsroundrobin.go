@@ -23,9 +23,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-type LookUpResolver interface {
-	LookupHost(ctx context.Context, host string) (addrs []string, err error)
-}
+type lookupFunc (ctx context.Context, host string) (addrs []string, err error)
 
 type dnsRoundRobin struct {
 	dnsEntries []string
