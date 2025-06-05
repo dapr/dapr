@@ -11,10 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package self
+package local
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	nethttp "net/http"
 	"sync/atomic"
 	"testing"
@@ -23,75 +25,80 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(grpc))
+	suite.Register(new(http))
 }
 
-type grpc struct {
+type http struct {
 	app      *actors.Actors
 	called   atomic.Int64
 	holdCall chan struct{}
 }
 
-func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.holdCall = make(chan struct{})
+func (h *http) Setup(t *testing.T) []framework.Option {
+	h.holdCall = make(chan struct{})
 
-	g.app = actors.New(t,
+	h.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			if r.Method == nethttp.MethodDelete {
 				return
 			}
-			g.called.Add(1)
-			<-g.holdCall
+			h.called.Add(1)
+			<-h.holdCall
 		}),
 	)
 	return []framework.Option{
-		framework.WithProcesses(g.app),
+		framework.WithProcesses(h.app),
 	}
 }
 
-func (g *grpc) Run(t *testing.T, ctx context.Context) {
-	g.app.WaitUntilRunning(t, ctx)
+func (h *http) Run(t *testing.T, ctx context.Context) {
+	h.app.WaitUntilRunning(t, ctx)
 
-	client := g.app.GRPCClient(t, ctx)
+	client := client.HTTP(t)
+	url := fmt.Sprintf("http://%s/v1.0/actors/abc/123/method/foo", h.app.Daprd().HTTPAddress())
 
 	errCh := make(chan error)
 	go func() {
-		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-			ActorType: "abc",
-			ActorId:   "123",
-			Method:    "foo",
-		})
-		errCh <- err
+		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(1), g.called.Load())
+		assert.Equal(c, int64(1), h.called.Load())
 	}, time.Second*10, time.Millisecond*10)
 
 	go func() {
-		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-			ActorType: "abc",
-			ActorId:   "123",
-			Method:    "foo",
-		})
-		errCh <- err
+		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	time.Sleep(time.Second)
-	assert.Equal(t, int64(1), g.called.Load())
-	g.holdCall <- struct{}{}
+	assert.Equal(t, int64(1), h.called.Load())
+	h.holdCall <- struct{}{}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(2), g.called.Load())
+		assert.Equal(c, int64(2), h.called.Load())
 	}, time.Second*10, time.Millisecond*10)
-	g.holdCall <- struct{}{}
+	h.holdCall <- struct{}{}
 
 	for range 2 {
 		select {

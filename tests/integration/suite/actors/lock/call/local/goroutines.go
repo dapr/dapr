@@ -11,13 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package self
+package local
 
 import (
 	"context"
+	"io"
 	nethttp "net/http"
 	"strconv"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,15 +35,14 @@ func init() {
 }
 
 type goroutines struct {
-	app    *actors.Actors
-	called atomic.Int64
+	app *actors.Actors
 }
 
 func (g *goroutines) Setup(t *testing.T) []framework.Option {
 	g.app = actors.New(t,
 		actors.WithActorTypes("abc"),
-		actors.WithActorTypeHandler("abc", func(nethttp.ResponseWriter, *nethttp.Request) {
-			g.called.Add(1)
+		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
+			io.ReadAll(r.Body)
 		}),
 		actors.WithActorIdleTimeout(time.Second),
 	)
@@ -62,18 +61,13 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	const n = 1000
 	for i := range n {
-		_, err := client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "abc",
 			ActorId:   strconv.Itoa(i),
-			Name:      "reminder",
-			DueTime:   "0s",
+			Method:    "foo",
 		})
 		require.NoError(t, err)
 	}
-
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(n*2), g.called.Load())
-	}, time.Second*10, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.InDelta(c, startGoRoutines, g.app.Metrics(t, ctx)["go_goroutines"], 10)
