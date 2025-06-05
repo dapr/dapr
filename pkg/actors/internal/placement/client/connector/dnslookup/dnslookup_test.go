@@ -24,7 +24,7 @@ import (
 )
 
 func lookupHost(addrs []string) lookupFunc {
-	return func(ctx context.Context, host string) (addrs []string, err error) {
+	return func(ctx context.Context, host string) ([]string, error) {
 		return addrs, nil
 	}
 }
