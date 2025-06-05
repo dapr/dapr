@@ -36,14 +36,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(multilistener))
+	suite.Register(new(multi))
 }
 
-type multilistener struct {
+type multi struct {
 	daprd *daprd.Daprd
 }
 
-func (m *multilistener) Setup(t *testing.T) []framework.Option {
+func (m *multi) Setup(t *testing.T) []framework.Option {
 	sched := scheduler.New(t)
 	place := placement.New(t)
 	m.daprd = daprd.New(t,
@@ -57,7 +57,7 @@ func (m *multilistener) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (m *multilistener) Run(t *testing.T, ctx context.Context) {
+func (m *multi) Run(t *testing.T, ctx context.Context) {
 	m.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("connect_multiple_workers_to_single_daprd", func(t *testing.T) {
