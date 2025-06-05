@@ -13,28 +13,42 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package roundrobin
+package static
 
 import (
 	"context"
 
+	"github.com/dapr/kit/logger"
+
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
+
 	"google.golang.org/grpc"
 )
 
-type staticRoundRobin struct {
+var log = logger.NewLogger("dapr.runtime.actors.placement.client.connector.static")
+
+type staticConnector struct {
 	addresses    []string
 	addressIndex int
 
 	gOpts []grpc.DialOption
 }
 
-type StaticOptions struct {
+type Options struct {
 	GRPCOptions []grpc.DialOption
 	Addresses   []string
 }
 
-func (r *staticRoundRobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
-	r.addressIndex = (r.addressIndex+1)%len(r.addresses)
+func New(opts Options) (connector.Interface, error) {
+	return &staticConnector{
+		addresses:    opts.Addresses,
+		gOpts:        opts.GRPCOptions,
+		addressIndex: -1,
+	}, nil
+}
+
+func (r *staticConnector) Connect(ctx context.Context) (*grpc.ClientConn, error) {
+	r.addressIndex = (r.addressIndex + 1) % len(r.addresses)
 
 	address := r.Address()
 	log.Debugf("Attempting to connect to placement %s", address)
@@ -50,6 +64,6 @@ func (r *staticRoundRobin) Connect(ctx context.Context) (*grpc.ClientConn, error
 	return conn, nil
 }
 
-func (r *staticRoundRobin) Address() string {
+func (r *staticConnector) Address() string {
 	return r.addresses[r.addressIndex]
 }

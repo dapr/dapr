@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package roundrobin
+package dnslookup
 
 import (
 	"context"
@@ -23,20 +23,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type TestLookUpResolver struct {
-	resolvedAddrs []string
-}
-
-func (t *TestLookUpResolver) LookupHost(_ context.Context, _ string) (addrs []string, err error) {
-	return t.resolvedAddrs, nil
+func lookupHost(addrs []string) lookupFunc {
+	return func(ctx context.Context, host string) (addrs []string, err error) {
+		return addrs, nil
+	}
 }
 
 func TestNewDNSConnector(t *testing.T) {
-	conn, err := NewDNSConnector(DNSOptions{
-		Address: "dapr-placement-server.dapr-tests.svc.cluster.local:50005",
-		resolver: &TestLookUpResolver{
-			resolvedAddrs: []string{"add1", "add2", "add3"},
-		},
+	conn, err := New(Options{
+		Address:  "dapr-placement-server.dapr-tests.svc.cluster.local:50005",
+		resolver: lookupHost([]string{"add1", "add2", "add3"}),
 	})
 	require.NoError(t, err)
 
@@ -54,7 +50,7 @@ func TestNewDNSConnector(t *testing.T) {
 }
 
 func TestNewDNSConnectorErrors(t *testing.T) {
-	_, err := NewDNSConnector(DNSOptions{
+	_, err := New(Options{
 		Address: "dns:///dapr-placement-server.dapr-tests.svc.cluster.local:50005",
 	})
 	assert.Error(t, err)

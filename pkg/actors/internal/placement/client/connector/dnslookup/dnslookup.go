@@ -13,34 +13,59 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package roundrobin
+package dnslookup
 
 import (
 	"context"
 	"fmt"
 	"net"
 
+	"github.com/dapr/kit/logger"
+
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
+
 	"google.golang.org/grpc"
 )
 
-type lookupFunc (ctx context.Context, host string) (addrs []string, err error)
+type lookupFunc func(ctx context.Context, host string) (addrs []string, err error)
 
-type dnsRoundRobin struct {
+type dnsLookUpConnector struct {
 	dnsEntries []string
 	current    string
 	host       string
 	port       string
 	gOpts      []grpc.DialOption
-	resolver   LookUpResolver
+	resolver   lookupFunc
 }
 
-type DNSOptions struct {
+var log = logger.NewLogger("dapr.runtime.actors.placement.client.connector.dnslookup")
+
+func New(opts Options) (connector.Interface, error) {
+	host, port, err := net.SplitHostPort(opts.Address)
+	if err != nil {
+		return nil, err
+	}
+
+	resolver := opts.resolver
+	if opts.resolver == nil {
+		resolver = net.Resolver{PreferGo: true}.LookupHost
+	}
+
+	return &dnsLookUpConnector{
+		host:     host,
+		port:     port,
+		gOpts:    opts.GRPCOptions,
+		resolver: resolver,
+	}, nil
+}
+
+type Options struct {
 	GRPCOptions []grpc.DialOption
 	Address     string
-	resolver    LookUpResolver
+	resolver    lookupFunc
 }
 
-func (r *dnsRoundRobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
+func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	if len(r.dnsEntries) == 0 {
 		if err := r.refreshEntries(ctx); err != nil {
 			return nil, fmt.Errorf("failed to refresh DNS addresses: %w", err)
@@ -64,12 +89,12 @@ func (r *dnsRoundRobin) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-func (r *dnsRoundRobin) Address() string {
+func (r *dnsLookUpConnector) Address() string {
 	return r.current
 }
 
-func (r *dnsRoundRobin) refreshEntries(ctx context.Context) error {
-	addrs, err := r.resolver.LookupHost(ctx, r.host)
+func (r *dnsLookUpConnector) refreshEntries(ctx context.Context) error {
+	addrs, err := r.resolver(ctx, r.host)
 	if err != nil {
 		return fmt.Errorf("failed to lookup addresses: %w", err)
 	}

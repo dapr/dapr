@@ -21,7 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/roundrobin"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/dnslookup"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/static"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
 
@@ -31,14 +32,15 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/concurrency/lock"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/concurrency/lock"
-	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement.client")
@@ -58,10 +60,10 @@ type Client struct {
 	table table.Interface
 	lock  *lock.OuterCancel
 
-	roundRobinConn connector.Interface
-	client         v1pb.Placement_ReportDaprStatusClient
-	sendQueue      chan *v1pb.Host
-	recvQueue      chan *v1pb.PlacementOrder
+	connector connector.Interface
+	client    v1pb.Placement_ReportDaprStatusClient
+	sendQueue chan *v1pb.Host
+	recvQueue chan *v1pb.PlacementOrder
 
 	ready      atomic.Bool
 	retryCount uint32
@@ -92,11 +94,11 @@ func New(opts Options) (*Client, error) {
 	}
 
 	k8sMode := isKubernetesMode(opts.Addresses)
-	var rr connector.Interface
+	var conn connector.Interface
 	if k8sMode {
 		// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
 		// With round robin load balancer, Dapr can find the leader automatically.
-		rr, err = roundrobin.NewDNSConnector(roundrobin.DNSOptions{
+		conn, err = dnslookup.New(dnslookup.Options{
 			Address:     opts.Addresses[0],
 			GRPCOptions: gopts,
 		})
@@ -105,7 +107,7 @@ func New(opts Options) (*Client, error) {
 		}
 	} else {
 		// In non-Kubernetes environment, will round robin over the provided addresses
-		rr, err = roundrobin.NewStaticConnector(roundrobin.StaticOptions{
+		conn, err = static.New(static.Options{
 			Addresses:   opts.Addresses,
 			GRPCOptions: gopts,
 		})
@@ -115,12 +117,12 @@ func New(opts Options) (*Client, error) {
 	}
 
 	return &Client{
-		lock:           opts.Lock,
-		roundRobinConn: rr,
-		sendQueue:      make(chan *v1pb.Host),
-		recvQueue:      make(chan *v1pb.PlacementOrder),
-		table:          opts.Table,
-		htarget:        opts.Healthz.AddTarget(),
+		lock:      opts.Lock,
+		connector: conn,
+		sendQueue: make(chan *v1pb.Host),
+		recvQueue: make(chan *v1pb.PlacementOrder),
+		table:     opts.Table,
+		htarget:   opts.Healthz.AddTarget(),
 	}, nil
 }
 
@@ -244,7 +246,7 @@ func (c *Client) connectRoundRobin(ctx context.Context) error {
 			return nil
 		}
 
-		log.Errorf("Failed to connect to placement %s: %s", c.roundRobinConn.Address(), err)
+		log.Errorf("Failed to connect to placement %s: %s", c.connector.Address(), err)
 
 		select {
 		case <-time.After(time.Second / 2):
@@ -255,7 +257,7 @@ func (c *Client) connectRoundRobin(ctx context.Context) error {
 }
 
 func (c *Client) connect(ctx context.Context) error {
-	conn, err := c.roundRobinConn.Connect(ctx)
+	conn, err := c.connector.Connect(ctx)
 	if err != nil {
 		return err
 	}
@@ -268,7 +270,7 @@ func (c *Client) connect(ctx context.Context) error {
 
 	c.client = client
 
-	log.Infof("Connected to placement %s", c.roundRobinConn.Address())
+	log.Infof("Connected to placement %s", c.connector.Address())
 
 	return nil
 }
