@@ -16,12 +16,13 @@ package store
 import (
 	"context"
 
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/connection"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
+	"github.com/dapr/kit/events/loop"
 )
 
 type entry struct {
 	idx   uint64
-	conns []*connection.Connection
+	conns []*StreamConnection
 }
 
 type instance struct {
@@ -34,7 +35,7 @@ func newInstance() *instance {
 	}
 }
 
-func (i *instance) add(name string, conn *connection.Connection) context.CancelFunc {
+func (i *instance) add(name string, conn *StreamConnection) context.CancelFunc {
 	en, ok := i.entries[name]
 	if !ok {
 		en = new(entry)
@@ -56,7 +57,7 @@ func (i *instance) add(name string, conn *connection.Connection) context.CancelF
 	}
 }
 
-func (i *instance) get(name string) (*connection.Connection, bool) {
+func (i *instance) get(name string) (loop.Interface[loops.Event], bool) {
 	en, ok := i.entries[name]
 	if !ok {
 		return nil, false
@@ -64,5 +65,5 @@ func (i *instance) get(name string) (*connection.Connection, bool) {
 
 	// Increase index to load balance over connections for this instance.
 	defer func() { en.idx++ }()
-	return en.conns[en.idx%uint64(len(en.conns))], true
+	return en.conns[en.idx%uint64(len(en.conns))].Loop, true
 }
