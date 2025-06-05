@@ -48,7 +48,7 @@ func New(opts Options) (connector.Interface, error) {
 
 	resolver := opts.resolver
 	if opts.resolver == nil {
-		resolver = net.Resolver{PreferGo: true}.LookupHost
+		resolver = (&net.Resolver{PreferGo: true}).LookupHost
 	}
 
 	return &dnsLookUpConnector{

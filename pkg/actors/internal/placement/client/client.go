@@ -17,12 +17,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"sync/atomic"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/dnslookup"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/static"
+	"github.com/dapr/dapr/pkg/modes"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
 
@@ -52,6 +52,7 @@ type Options struct {
 	Table       table.Interface
 	Healthz     healthz.Healthz
 	InitialHost *v1pb.Host
+	Mode        modes.DaprMode
 }
 
 type Client struct {
@@ -93,9 +94,9 @@ func New(opts Options) (*Client, error) {
 		)
 	}
 
-	k8sMode := isKubernetesMode(opts.Addresses)
 	var conn connector.Interface
-	if k8sMode {
+	switch opts.Mode {
+	case modes.KubernetesMode:
 		// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
 		// With round robin load balancer, Dapr can find the leader automatically.
 		conn, err = dnslookup.New(dnslookup.Options{
@@ -105,7 +106,7 @@ func New(opts Options) (*Client, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create roundrobin client: %w", err)
 		}
-	} else {
+	default:
 		// In non-Kubernetes environment, will round robin over the provided addresses
 		conn, err = static.New(static.Options{
 			Addresses:   opts.Addresses,
@@ -291,18 +292,4 @@ func (c *Client) Send(ctx context.Context, host *v1pb.Host) error {
 	case c.sendQueue <- host:
 		return nil
 	}
-}
-
-// isKubernetesMode if there is only one address, and it is not an IP address, it is in Kubernetes mode.
-func isKubernetesMode(addr []string) bool {
-	if len(addr) != 1 {
-		return false
-	}
-
-	host, _, err := net.SplitHostPort(addr[0])
-	if err == nil && net.ParseIP(host) == nil {
-		return true
-	}
-
-	return false
 }

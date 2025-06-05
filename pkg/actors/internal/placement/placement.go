@@ -22,6 +22,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/concurrency/fifo"
+	"github.com/dapr/kit/concurrency/lock"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client"
@@ -31,14 +36,11 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/concurrency/fifo"
-	"github.com/dapr/kit/concurrency/lock"
-	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement")
@@ -70,6 +72,7 @@ type Options struct {
 	Table     table.Interface
 	Reminders storage.Interface
 	Healthz   healthz.Healthz
+	Mode      modes.DaprMode
 }
 
 type placement struct {
@@ -107,6 +110,7 @@ func New(opts Options) (Interface, error) {
 		Table:     opts.Table,
 		Lock:      lock,
 		Healthz:   opts.Healthz,
+		Mode:      opts.Mode,
 	})
 	if err != nil {
 		return nil, err
