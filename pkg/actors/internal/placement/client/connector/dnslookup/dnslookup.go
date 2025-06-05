@@ -20,11 +20,10 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/dapr/kit/logger"
+	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
-
-	"google.golang.org/grpc"
+	"github.com/dapr/kit/logger"
 )
 
 type lookupFunc func(ctx context.Context, host string) (addrs []string, err error)

@@ -22,11 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/concurrency/fifo"
-	"github.com/dapr/kit/concurrency/lock"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client"
@@ -41,6 +36,10 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/concurrency/fifo"
+	"github.com/dapr/kit/concurrency/lock"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement")

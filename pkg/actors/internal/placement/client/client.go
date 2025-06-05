@@ -20,27 +20,23 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/dnslookup"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/static"
-	"github.com/dapr/dapr/pkg/modes"
-
-	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
-
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	"google.golang.org/grpc"
-
-	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/concurrency/lock"
-	"github.com/dapr/kit/logger"
-
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/dnslookup"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/static"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/modes"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/concurrency/lock"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement.client")
