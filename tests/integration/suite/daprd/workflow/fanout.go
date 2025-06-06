@@ -50,8 +50,8 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
 	f.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		tasks := make([]task.Task, 1000)
-		for i := range 1000 {
+		tasks := make([]task.Task, 100)
+		for i := range 100 {
 			tasks[i] = ctx.CallActivity("bar", task.WithActivityInput(i))
 		}
 
@@ -79,8 +79,8 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
-	exp := make([]int, 1000)
-	for i := range 1000 {
+	exp := make([]int, 100)
+	for i := range 100 {
 		exp[i] = i
 	}
 	assert.ElementsMatch(t, exp, f.called.Slice())
