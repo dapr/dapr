@@ -97,7 +97,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(t, h.called.Load(), int64(2))
+		assert.GreaterOrEqual(c, h.called.Load(), int64(2))
 	}, time.Second*10, time.Millisecond*10)
 
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/foo/timers/foo", h.app.Daprd().HTTPAddress())
