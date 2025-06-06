@@ -62,7 +62,8 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 		t.Helper()
 
 		_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
-			Name: "testJob",
+			Name:      "testJob",
+			Overwrite: true,
 			Job: &schedulerv1pb.Job{
 				Schedule:  ptr.Of("@daily"),
 				DueTime:   ptr.Of("3h"),
