@@ -101,52 +101,36 @@ func New(opts Options) Interface {
 }
 
 func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	cancel, err := e.locker.LockRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	defer cancel()
-
-	var res *internalv1pb.InternalInvokeResponse
 	if e.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
-		res, err = e.callActor(ctx, req)
+		res, err := e.callActor(ctx, req)
 		// Don't bubble perminant errors up to the caller to interfere with top level
 		// retries.
 		if _, ok := err.(*backoff.PermanentError); ok {
 			err = errors.Unwrap(err)
 		}
+		return res, err
 	} else {
 		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
-		res, err = policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
+		return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 			return e.callActor(ctx, req)
 		})
 	}
-
-	return res, err
 }
 
 func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
 	if req.SkipLock {
 		return e.callReminder(ctx, req)
-	} else {
-		cancel, err := e.locker.Lock(req.ActorType, req.ActorID)
-		if err != nil {
-			return err
-		}
-		defer cancel()
 	}
 
-	var err error
 	if e.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
-		err = e.callReminder(ctx, req)
+		return e.callReminder(ctx, req)
 	} else {
 		policyRunner := resiliency.NewRunner[struct{}](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
-		_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+		_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
 			return struct{}{}, e.callReminder(ctx, req)
 		})
+		return err
 	}
-
-	return err
 }
 
 func (e *engine) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
@@ -195,6 +179,16 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
+	if !req.SkipLock {
+		// Only lock the request if it is a local call.
+		var cancel context.CancelFunc
+		cancel, err = e.locker.Lock(req.ActorType, req.ActorID)
+		if err != nil {
+			return err
+		}
+		defer cancel()
+	}
+
 	target, _, err := e.table.GetOrCreate(req.ActorType, req.ActorID)
 	if err != nil {
 		return backoff.Permanent(err)
@@ -233,6 +227,14 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if lar.Local {
+		// Only lock the request if it is a local call.
+		var cancel context.CancelFunc
+		cancel, err = e.locker.LockRequest(req)
+		if err != nil {
+			return nil, err
+		}
+		defer cancel()
+
 		var resp *internalv1pb.InternalInvokeResponse
 		resp, err = e.callLocalActor(ctx, req)
 		if err != nil {

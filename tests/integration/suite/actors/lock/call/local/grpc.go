@@ -11,12 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package self
+package local
 
 import (
 	"context"
 	nethttp "net/http"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,8 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -38,31 +35,22 @@ func init() {
 
 type grpc struct {
 	app      *actors.Actors
-	called   slice.Slice[string]
-	rid      atomic.Pointer[string]
+	called   atomic.Int64
 	holdCall chan struct{}
 }
 
 func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.called = slice.New[string]()
 	g.holdCall = make(chan struct{})
 
-	handler := func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-		if r.Method == nethttp.MethodDelete {
-			return
-		}
-		if g.rid.Load() == nil {
-			g.rid.Store(ptr.Of(r.Header.Get("Dapr-Reentrancy-Id")))
-		}
-		g.called.Append(r.URL.Path)
-		<-g.holdCall
-	}
-
 	g.app = actors.New(t,
-		actors.WithActorTypes("abc", "efg"),
-		actors.WithActorTypeHandler("abc", handler),
-		actors.WithActorTypeHandler("efg", handler),
-		actors.WithReentry(true),
+		actors.WithActorTypes("abc"),
+		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
+			if r.Method == nethttp.MethodDelete {
+				return
+			}
+			g.called.Add(1)
+			<-g.holdCall
+		}),
 	)
 	return []framework.Option{
 		framework.WithProcesses(g.app),
@@ -85,54 +73,27 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, []string{
-			"/actors/abc/123/method/foo",
-		}, g.called.Slice())
+		assert.Equal(c, int64(1), g.called.Load())
 	}, time.Second*10, time.Millisecond*10)
 
-	require.NotNil(t, g.rid.Load())
-	id := *(g.rid.Load())
+	go func() {
+		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+			ActorType: "abc",
+			ActorId:   "123",
+			Method:    "foo",
+		})
+		errCh <- err
+	}()
 
-	for i := range 20 {
-		go func() {
-			_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-				ActorType: "abc",
-				ActorId:   "123",
-				Method:    "foo",
-				Metadata:  map[string]string{"Dapr-Reentrancy-Id": id},
-			})
-			errCh <- err
-		}()
-
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, (i*2)+2, g.called.Len())
-		}, time.Second*10, time.Millisecond*10)
-
-		atype := "abc"
-		if i%2 == 0 {
-			atype = "efg"
-		}
-		go func() {
-			_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-				ActorType: atype,
-				ActorId:   strconv.Itoa(i),
-				Method:    "foo",
-				Metadata:  map[string]string{"Dapr-Reentrancy-Id": id},
-			})
-			errCh <- err
-		}()
-
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, (i*2)+3, g.called.Len())
-		}, time.Second*10, time.Millisecond*10)
-	}
-
+	time.Sleep(time.Second)
+	assert.Equal(t, int64(1), g.called.Load())
+	g.holdCall <- struct{}{}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, 41, g.called.Len())
+		assert.Equal(c, int64(2), g.called.Load())
 	}, time.Second*10, time.Millisecond*10)
+	g.holdCall <- struct{}{}
 
-	for range 41 {
-		g.holdCall <- struct{}{}
+	for range 2 {
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
