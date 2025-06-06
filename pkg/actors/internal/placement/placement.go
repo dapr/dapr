@@ -31,6 +31,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -70,6 +71,7 @@ type Options struct {
 	Table     table.Interface
 	Reminders storage.Interface
 	Healthz   healthz.Healthz
+	Mode      modes.DaprMode
 }
 
 type placement struct {
@@ -107,6 +109,7 @@ func New(opts Options) (Interface, error) {
 		Table:     opts.Table,
 		Lock:      lock,
 		Healthz:   opts.Healthz,
+		Mode:      opts.Mode,
 	})
 	if err != nil {
 		return nil, err
