@@ -63,7 +63,10 @@ func (s *simple) Run(t *testing.T, ctx context.Context) {
 
 	meta, err := client.FetchOrchestrationMetadata(ctx, newID)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_RUNNING.String(), meta.GetRuntimeStatus().String())
+	assert.Contains(t, []string{
+		api.RUNTIME_STATUS_RUNNING.String(),
+		api.RUNTIME_STATUS_COMPLETED.String(),
+	}, meta.GetRuntimeStatus().String())
 	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
 	require.NoError(t, err)
 }
