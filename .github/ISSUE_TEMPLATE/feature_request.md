@@ -22,6 +22,8 @@ assignees: ''
 
 > /area test-and-release
 
+> /area injector
+
 ## Describe the feature
 <!-- Please also discuss possible business value -->
 

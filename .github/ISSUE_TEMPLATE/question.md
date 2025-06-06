@@ -27,4 +27,6 @@ https://aka.ms/dapr-discord
 
 > /area test-and-release
 
+> /area injector
+
 ## Ask your question here
