@@ -63,5 +63,5 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.InDelta(t, time.Since(*now.Load()).Seconds(), 4.0, 1.0)
+	assert.InDelta(t, 4.0, time.Since(*now.Load()).Seconds(), 1.0)
 }

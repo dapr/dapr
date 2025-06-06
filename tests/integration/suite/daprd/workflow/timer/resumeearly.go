@@ -69,5 +69,5 @@ func (r *resumeearly) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.InDelta(t, time.Since(*now.Load()).Seconds(), 8.0, 1.0)
+	assert.InDelta(t, 8.0, time.Since(*now.Load()).Seconds(), 1.0)
 }
