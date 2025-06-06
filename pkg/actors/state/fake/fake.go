@@ -20,48 +20,48 @@ import (
 )
 
 type Fake struct {
-	getFn                         func(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error)
-	getBulkFn                     func(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error)
-	transactionalStateOperationFn func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error
+	getFn                         func(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error)
+	getBulkFn                     func(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error)
+	transactionalStateOperationFn func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error
 }
 
 func New() *Fake {
 	return &Fake{
-		getFn: func(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error) {
+		getFn: func(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error) {
 			return nil, nil
 		},
-		getBulkFn: func(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error) {
+		getBulkFn: func(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
 			return api.BulkStateResponse{}, nil
 		},
-		transactionalStateOperationFn: func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error {
+		transactionalStateOperationFn: func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error {
 			return nil
 		},
 	}
 }
 
-func (f *Fake) WithGetFn(fn func(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error)) *Fake {
+func (f *Fake) WithGetFn(fn func(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error)) *Fake {
 	f.getFn = fn
 	return f
 }
 
-func (f *Fake) WithGetBulkFn(fn func(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error)) *Fake {
+func (f *Fake) WithGetBulkFn(fn func(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error)) *Fake {
 	f.getBulkFn = fn
 	return f
 }
 
-func (f *Fake) WithTransactionalStateOperationFn(fn func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error) *Fake {
+func (f *Fake) WithTransactionalStateOperationFn(fn func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error) *Fake {
 	f.transactionalStateOperationFn = fn
 	return f
 }
 
-func (f *Fake) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error) {
-	return f.getFn(ctx, req)
+func (f *Fake) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error) {
+	return f.getFn(ctx, req, lock)
 }
 
-func (f *Fake) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error) {
-	return f.getBulkFn(ctx, req)
+func (f *Fake) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
+	return f.getBulkFn(ctx, req, lock)
 }
 
-func (f *Fake) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error {
-	return f.transactionalStateOperationFn(ctx, ignoreHosted, req)
+func (f *Fake) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error {
+	return f.transactionalStateOperationFn(ctx, ignoreHosted, req, lock)
 }
