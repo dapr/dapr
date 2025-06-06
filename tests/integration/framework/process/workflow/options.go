@@ -25,6 +25,7 @@ type Option func(*options)
 
 type options struct {
 	registry *task.TaskRegistry
+	daprds   int
 
 	enableScheduler bool
 }
@@ -48,5 +49,11 @@ func WithAddActivityN(t *testing.T, name string, a func(task.ActivityContext) (a
 
 	return func(o *options) {
 		require.NoError(t, o.registry.AddActivityN(name, a))
+	}
+}
+
+func WithDaprds(daprds int) Option {
+	return func(o *options) {
+		o.daprds = daprds
 	}
 }

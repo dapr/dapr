@@ -75,8 +75,10 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 
 	id, err := client.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
+
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
+
 	exp := make([]int, 1000)
 	for i := range 1000 {
 		exp[i] = i
