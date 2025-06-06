@@ -1,0 +1,25 @@
+apiVersion: dapr.io/v1alpha1
+kind: Replicator # Using the new CRD kind
+metadata:
+  name: perf-state-replicator
+spec:
+  type: replicator.redis-kafka # Matches the placeholder name in cmd/daprd/components/replicator_redis_kafka.go
+  version: v1
+  metadata:
+  # These are hypothetical metadata fields. The actual fields will depend on the
+  # 'redis_kafka_replicator' component's implementation in components-contrib.
+  - name: sourceStateStore # The Dapr state store component name to read from
+    value: "perf-redis-store"
+  - name: targetPubSub # The Dapr pubsub/binding component name to publish to
+    value: "perf-kafka-bindings" # Or "perf-kafka-pubsub" if using pubsub
+  - name: targetTopic # The specific topic in Kafka to publish to (if not part of pubsub/binding config)
+    value: "state-replication-topic"
+  # - name: replicationMode
+  #   value: "snapshot_and_incremental" # Example: could be "incremental_only"
+  # - name: errorThreshold
+  #   value: "10" # Example: number of tolerable errors before stopping
+scopes:
+  # This component would typically run in the context of the Dapr sidecar (daprd)
+  # that is configured to enable this replicator. If the replicator itself is a Dapr app,
+  # then that app's ID would go here. For now, we'll assume it's loaded by the 'redis-writer-app's sidecar.
+  - redis-writer-app
