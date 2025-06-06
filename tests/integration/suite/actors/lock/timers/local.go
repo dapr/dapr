@@ -30,38 +30,38 @@ import (
 )
 
 func init() {
-	suite.Register(new(self))
+	suite.Register(new(local))
 }
 
-type self struct {
+type local struct {
 	app      *actors.Actors
 	called   atomic.Int64
 	holdCall chan struct{}
 }
 
-func (s *self) Setup(t *testing.T) []framework.Option {
-	s.holdCall = make(chan struct{})
+func (l *local) Setup(t *testing.T) []framework.Option {
+	l.holdCall = make(chan struct{})
 
-	s.app = actors.New(t,
+	l.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			if r.Method == nethttp.MethodDelete {
 				return
 			}
-			s.called.Add(1)
-			<-s.holdCall
+			l.called.Add(1)
+			<-l.holdCall
 		}),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.app),
+		framework.WithProcesses(l.app),
 	}
 }
 
-func (s *self) Run(t *testing.T, ctx context.Context) {
-	s.app.WaitUntilRunning(t, ctx)
+func (l *local) Run(t *testing.T, ctx context.Context) {
+	l.app.WaitUntilRunning(t, ctx)
 
-	client := s.app.GRPCClient(t, ctx)
+	client := l.app.GRPCClient(t, ctx)
 
 	_, err := client.RegisterActorTimer(ctx, &rtv1.RegisterActorTimerRequest{
 		ActorType: "abc",
@@ -72,7 +72,7 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, s.called.Load(), int64(1))
+		assert.GreaterOrEqual(c, l.called.Load(), int64(1))
 	}, time.Second*10, time.Millisecond*10)
 
 	_, err = client.RegisterActorTimer(ctx, &rtv1.RegisterActorTimerRequest{
@@ -84,10 +84,10 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	time.Sleep(time.Second)
-	assert.Equal(t, int64(1), s.called.Load())
-	s.holdCall <- struct{}{}
+	assert.Equal(t, int64(1), l.called.Load())
+	l.holdCall <- struct{}{}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(2), s.called.Load())
+		assert.Equal(c, int64(2), l.called.Load())
 	}, time.Second*10, time.Millisecond*10)
-	s.holdCall <- struct{}{}
+	l.holdCall <- struct{}{}
 }

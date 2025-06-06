@@ -31,45 +31,45 @@ import (
 )
 
 func init() {
-	suite.Register(new(self))
+	suite.Register(new(local))
 }
 
-type self struct {
+type local struct {
 	app *actors.Actors
 	abc atomic.Int64
 	efg atomic.Int64
 }
 
-func (s *self) Setup(t *testing.T) []framework.Option {
-	s.abc.Store(0)
-	s.efg.Store(0)
+func (l *local) Setup(t *testing.T) []framework.Option {
+	l.abc.Store(0)
+	l.efg.Store(0)
 
-	s.app = actors.New(t,
+	l.app = actors.New(t,
 		actors.WithActorTypes("abc", "efg"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-			s.abc.Add(1)
+			l.abc.Add(1)
 		}),
 		actors.WithActorTypeHandler("efg", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-			s.efg.Add(1)
+			l.efg.Add(1)
 		}),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.app),
+		framework.WithProcesses(l.app),
 	}
 }
 
-func (s *self) Run(t *testing.T, ctx context.Context) {
-	s.app.WaitUntilRunning(t, ctx)
+func (l *local) Run(t *testing.T, ctx context.Context) {
+	l.app.WaitUntilRunning(t, ctx)
 
-	gclient := s.app.Daprd().GRPCClient(t, ctx)
+	gclient := l.app.Daprd().GRPCClient(t, ctx)
 	_, err := gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 		ActorType: "abc",
 		ActorId:   "a123",
 		Method:    "foo",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), s.abc.Load())
+	assert.Equal(t, int64(1), l.abc.Load())
 
 	_, err = gclient.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 		ActorType: "efg",
@@ -77,22 +77,22 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 		Method:    "foo",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), s.efg.Load())
+	assert.Equal(t, int64(1), l.efg.Load())
 
 	hclient := client.HTTP(t)
-	url := fmt.Sprintf("http://%s/v1.0/actors/abc/a123/method/foo", s.app.Daprd().HTTPAddress())
+	url := fmt.Sprintf("http://%s/v1.0/actors/abc/a123/method/foo", l.app.Daprd().HTTPAddress())
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 	require.NoError(t, err)
 	resp, err := hclient.Do(req)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, int64(2), s.abc.Load())
+	assert.Equal(t, int64(2), l.abc.Load())
 
-	url = fmt.Sprintf("http://%s/v1.0/actors/efg/a123/method/foo", s.app.Daprd().HTTPAddress())
+	url = fmt.Sprintf("http://%s/v1.0/actors/efg/a123/method/foo", l.app.Daprd().HTTPAddress())
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 	require.NoError(t, err)
 	resp, err = hclient.Do(req)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, int64(2), s.efg.Load())
+	assert.Equal(t, int64(2), l.efg.Load())
 }
