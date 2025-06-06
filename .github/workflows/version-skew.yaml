@@ -142,11 +142,13 @@ jobs:
         curl -so placement_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/placement_linux_amd64.tar.gz
         curl -so injector_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/injector_linux_amd64.tar.gz
         curl -so operator_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/operator_linux_amd64.tar.gz
+        curl -so scheduler_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/scheduler_linux_amd64.tar.gz
         tar xvf daprd_linux_amd64.tar.gz
         tar xvf sentry_linux_amd64.tar.gz
         tar xvf placement_linux_amd64.tar.gz
         tar xvf injector_linux_amd64.tar.gz
         tar xvf operator_linux_amd64.tar.gz
+        tar xvf scheduler_linux_amd64.tar.gz
 
     - name: Setup DAPR_INTEGRATION_X_PATH - control-plane master
       if: matrix.mode == 'control-plane-master'
@@ -156,6 +158,7 @@ jobs:
         echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/dist/linux_amd64/release/operator" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/dist/linux_amd64/release/sentry" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/dist/linux_amd64/release/injector" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/dist/linux_amd64/release/scheduler" >> $GITHUB_ENV
 
     - name: Setup DAPR_INTEGRATION_X_PATH - dapr-sidecar master
       if: matrix.mode == 'dapr-sidecar-master'
@@ -165,6 +168,7 @@ jobs:
         echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/downloads/sentry" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/downloads/operator" >> $GITHUB_ENV
         echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/downloads/injector" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/downloads/scheduler" >> $GITHUB_ENV
 
     - name: Run make test-integration
       run: cd latest-release && make test-integration

@@ -1,0 +1,30 @@
+diff --git a/tests/integration/framework/process/grpc/grpc.go b/tests/integration/framework/process/grpc/grpc.go
+index 8bdd1badb..b86bf9648 100644
+--- a/tests/integration/framework/process/grpc/grpc.go
++++ b/tests/integration/framework/process/grpc/grpc.go
+@@ -20,6 +20,7 @@ import (
+ 	"net/http"
+ 	"strconv"
+ 	"testing"
++	"time"
+ 
+ 	"github.com/stretchr/testify/require"
+ 	"google.golang.org/grpc"
+@@ -92,7 +93,16 @@ func (g *GRPC) Run(t *testing.T, ctx context.Context) {
+ 			g.srvErrCh <- err
+ 			return
+ 		}
+-		g.srvErrCh <- server.Serve(ln)
++		select {
++		case g.srvErrCh <- server.Serve(ln):
++			return
++		case <-ctx.Done():
++			select {
++			case g.srvErrCh <- server.Serve(ln):
++			case <-time.After(time.Second * 10):
++				g.srvErrCh <- errors.New("timeout waiting for server to stop")
++			}
++		}
+ 	}()
+ 
+ 	go func() {
