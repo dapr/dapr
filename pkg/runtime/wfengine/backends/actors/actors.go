@@ -41,7 +41,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
@@ -581,8 +580,4 @@ func (abe *Actors) NextActivityWorkItem(ctx context.Context) (*backend.ActivityW
 
 func (abe *Actors) ActivityActorType() string {
 	return abe.activityActorType
-}
-
-func (abe *Actors) RerunWorkflowFromEvent(context.Context, *protos.RerunWorkflowFromEventRequest) (api.InstanceID, error) {
-	return "", errors.New("not supported")
 }
