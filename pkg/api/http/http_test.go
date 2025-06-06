@@ -1082,7 +1082,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest) (*actorsapi.StateResponse, error) {
+			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
 				return &actorsapi.StateResponse{
 					Data: fakeData,
 					Metadata: map[string]string{
@@ -1105,7 +1105,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 204 No Content", func(t *testing.T) {
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest) (*actorsapi.StateResponse, error) {
+			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
 				return nil, nil
 			}), nil
 		})
@@ -1123,7 +1123,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 500 on GetState failure", func(t *testing.T) {
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest) (*actorsapi.StateResponse, error) {
+			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
 				return nil, errors.New("UPSTREAM_ERROR")
 			}), nil
 		})
@@ -1244,7 +1244,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return statefake.New().WithTransactionalStateOperationFn(func(context.Context, bool, *actorsapi.TransactionalRequest) error {
+			return statefake.New().WithTransactionalStateOperationFn(func(context.Context, bool, *actorsapi.TransactionalRequest, bool) error {
 				return errors.New("UPSTREAM_ERROR")
 			}), nil
 		})
@@ -1736,7 +1736,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return astate.WithGetFn(func(ctx context.Context, req *actorsapi.GetStateRequest) (*actorsapi.StateResponse, error) {
+			return astate.WithGetFn(func(ctx context.Context, req *actorsapi.GetStateRequest, _ bool) (*actorsapi.StateResponse, error) {
 				called.Add(1)
 				return &actorsapi.StateResponse{
 					Data: fakeData,
