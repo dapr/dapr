@@ -35,7 +35,7 @@ func TestGetActorState(t *testing.T) {
 
 		actors := actorsfake.New()
 		actors.WithState(func(context.Context) (state.Interface, error) {
-			return statefake.New().WithGetFn(func(ctx context.Context, req *actorsapi.GetStateRequest) (*actorsapi.StateResponse, error) {
+			return statefake.New().WithGetFn(func(ctx context.Context, req *actorsapi.GetStateRequest, _ bool) (*actorsapi.StateResponse, error) {
 				return &actorsapi.StateResponse{
 					Data: data,
 					Metadata: map[string]string{
@@ -80,7 +80,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 
 		actors := actorsfake.New()
 		actors.WithState(func(context.Context) (state.Interface, error) {
-			return statefake.New().WithTransactionalStateOperationFn(func(ctx context.Context, _ bool, req *actorsapi.TransactionalRequest) error {
+			return statefake.New().WithTransactionalStateOperationFn(func(ctx context.Context, _ bool, req *actorsapi.TransactionalRequest, _ bool) error {
 				return nil
 			}), nil
 		})
