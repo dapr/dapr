@@ -182,40 +182,40 @@ async function cmdRetestFailed(github, issue, isFromPulls) {
     // Get workflow runs filtered by the pull request head-sha and status
     // DOCS:   https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28#list-workflow-runs-for-a-repository
     // APIREF: https://octokit.github.io/rest.js/v22/#actions-list-workflow-runs-for-repo
-    const workflow_runs = await github.rest.actions.listWorkflowRunsForRepo({
+    const failed_workflow_runs = await github.rest.actions.listWorkflowRunsForRepo({
         owner: issue.owner,
         repo: issue.repo,
+        // Query parameters
         head_sha: pull.data.head.sha,
         event: `pull_request`,
         status: `failure`,
     })
 
-    // // Find failed action in the pull request
-    // const failedChecks = pull.data.checkRuns.filter(
-    //     (status) => status.state === 'failure'
-    // )
-
-    if (workflow_runs.length === 0) {
+    if (failed_workflow_runs.data.total_count === 0) {
         console.log(
-            '[cmdRetestFailed] no failed actions found, skipping command execution.'
+            '[cmdRetestFailed] no failed workflow found, skipping command execution.'
         )
         return
     }
     else {
         console.log(
-            `[cmdRetestFailed] found ${workflow_runs.length} failed actions, triggering retest.`
+            `[cmdRetestFailed] found ${failed_workflow_runs.data.total_count} failed workflows, triggering retest.`
 
         )
     } 
 
-    // // Rerun the failed jobs like what is done in the GitHub UI.
-    // // Note: This is not implemented in the GitHub API, so we cannot trigger a specific job.
-    // await github.rest.actions.reRunWorkflow({
-    //     owner: issue.owner,
-    //     repo: issue.repo,
-    //     workflow_id: pull.data.head.sha, // This is not correct, we need to find the workflow id.
-    //     run_id: pull.data.head.repo.full_name, // This is not correct, we need to find the run id.
-    // })
+    for (const workflow_run of failed_workflow_runs.data.workflow_runs) {
+        console.log(
+            `[cmdRetestFailed] re-running workflow run ${workflow_run.id} (${workflow_run.name})`
+        )
+
+        // #APIREF: https://octokit.github.io/rest.js/v22/#actions-list-workflow-runs-for-repo
+        await github.rest.rest.actions.reRunWorkflowFailedJobs({
+            owner: issue.owner,
+            repo: issue.repo,
+            run_id: workflow_run.id,
+        });
+    }
 }
 
 /**
