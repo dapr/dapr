@@ -82,7 +82,7 @@ async function handleIssueCommentCreate({ github, context }) {
         await cmdAssign(github, issue, username, isFromPulls)
         return
     }
-    
+
     // This command is used to re-trigger the failed tests.
     if (command == '/retest-failed') {
         await cmdRetestFailed(github, issue, isFromPulls)
@@ -165,7 +165,7 @@ async function cmdRetestFailed(github, issue, isFromPulls) {
         return
     }
 
-    // Get pull request
+    // Get pull request informations
     const pull = await github.rest.pulls.get({
         owner: issue.owner,
         repo: issue.repo,
@@ -179,30 +179,39 @@ async function cmdRetestFailed(github, issue, isFromPulls) {
         return
     }
 
-    // Find failed action in the pull request
-    const failedActions = pull.data.statuses.filter(
-        (status) => status.state === 'failure'
-    )
+    // Get workflow runs filtered by the pull request head-sha
+    const workflow_runs = await github.rest.actions.runs.listForRef({
+        owner: issue.owner,
+        repo: issue.repo,
+        ref: pull.data.head.sha,
+    })
 
-    if (failedActions.length === 0) {
+    // // Find failed action in the pull request
+    // const failedChecks = pull.data.checkRuns.filter(
+    //     (status) => status.state === 'failure'
+    // )
+
+    if (workflow_runs.length === 0) {
         console.log(
             '[cmdRetestFailed] no failed actions found, skipping command execution.'
         )
         return
     }
+    else {
+        console.log(
+            `[cmdRetestFailed] found ${workflow_runs.length} failed actions, triggering retest.`
 
-    console.log(
-        `[cmdRetestFailed] found ${failedActions.length} failed actions, triggering retest.`
-    )    
+        )
+    } 
 
-    // Rerun the failed jobs like what is done in the GitHub UI.
-    // Note: This is not implemented in the GitHub API, so we cannot trigger a specific job.
-    await github.rest.actions.reRunWorkflow({
-        owner: issue.owner,
-        repo: issue.repo,
-        workflow_id: pull.data.head.sha, // This is not correct, we need to find the workflow id.
-        run_id: pull.data.head.repo.full_name, // This is not correct, we need to find the run id.
-    })
+    // // Rerun the failed jobs like what is done in the GitHub UI.
+    // // Note: This is not implemented in the GitHub API, so we cannot trigger a specific job.
+    // await github.rest.actions.reRunWorkflow({
+    //     owner: issue.owner,
+    //     repo: issue.repo,
+    //     workflow_id: pull.data.head.sha, // This is not correct, we need to find the workflow id.
+    //     run_id: pull.data.head.repo.full_name, // This is not correct, we need to find the run id.
+    // })
 }
 
 /**
