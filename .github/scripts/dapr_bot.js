@@ -172,6 +172,13 @@ async function cmdRetestFailed(github, issue, isFromPulls) {
         pull_number: issue.number,
     })
 
+    if (!pull || !pull.data) {
+        console.log(
+            `[cmdRetestFailed] pull request not found for ${issue.owner}/${issue.repo}#${issue.number}, skipping command execution.`
+        )
+        return
+    }
+
     // Find failed action in the pull request
     const failedActions = pull.data.statuses.filter(
         (status) => status.state === 'failure'
