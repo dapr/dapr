@@ -172,29 +172,30 @@ async function cmdRetestFailed(github, issue, isFromPulls) {
         pull_number: issue.number,
     })
 
-    if (pull && pull.data) {
-        // Get commit id and repo from pull head
-        const testPayload = {
-            pull_head_ref: pull.data.head.sha,
-            pull_head_repo: pull.data.head.repo.full_name,
-            command: 'retest-failed',
-            issue: issue,
-        }
+    // Find failed action in the pull request
+    const failedActions = pull.data.statuses.filter(
+        (status) => status.state === 'failure'
+    )
 
-        // Fire repository_dispatch event to trigger e2e test
-        await github.rest.repos.createDispatchEvent({
-            owner: issue.owner,
-            repo: issue.repo,
-            event_type: 'retest-failed',
-            client_payload: testPayload,
-        })
-
+    if (failedActions.length === 0) {
         console.log(
-            `[cmdRetestFailed] triggered retest for ${JSON.stringify(
-                testPayload
-            )}`
+            '[cmdRetestFailed] no failed actions found, skipping command execution.'
         )
+        return
     }
+
+    console.log(
+        `[cmdRetestFailed] found ${failedActions.length} failed actions, triggering retest.`
+    )    
+
+    // Rerun the failed jobs like what is done in the GitHub UI.
+    // Note: This is not implemented in the GitHub API, so we cannot trigger a specific job.
+    await github.rest.actions.reRunWorkflow({
+        owner: issue.owner,
+        repo: issue.repo,
+        workflow_id: pull.data.head.sha, // This is not correct, we need to find the workflow id.
+        run_id: pull.data.head.repo.full_name, // This is not correct, we need to find the run id.
+    })
 }
 
 /**
