@@ -210,7 +210,7 @@ async function cmdRetestFailed(github, issue, isFromPulls) {
         )
 
         // #APIREF: https://octokit.github.io/rest.js/v22/#actions-list-workflow-runs-for-repo
-        await github.rest.rest.actions.reRunWorkflowFailedJobs({
+        await github.rest.actions.reRunWorkflowFailedJobs({
             owner: issue.owner,
             repo: issue.repo,
             run_id: workflow_run.id,
