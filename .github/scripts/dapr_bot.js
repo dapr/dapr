@@ -199,7 +199,7 @@ async function cmdRetestFailed(github, issue, isFromPulls) {
     }
     else {
         console.log(
-            `[cmdRetestFailed] found ${failed_workflow_runs.data.total_count} failed workflows, triggering retest.`
+            `[cmdRetestFailed] found ${failed_workflow_runs.data.total_count} failed workflows, triggering re-run.`
 
         )
     } 
