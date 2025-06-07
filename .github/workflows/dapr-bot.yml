@@ -23,7 +23,8 @@ jobs:
       - name: Comment analyzer
         uses: actions/github-script@v6
         with:
-          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const script = require('./.github/scripts/dapr_bot.js')
             await script({github, context})
+

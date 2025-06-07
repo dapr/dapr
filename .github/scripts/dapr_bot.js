@@ -82,6 +82,12 @@ async function handleIssueCommentCreate({ github, context }) {
         await cmdAssign(github, issue, username, isFromPulls)
         return
     }
+    
+    // This command is used to re-trigger the failed tests.
+    if (command == 'retest-failed') {
+        await cmdRetestFailed(github, issue, isFromPulls)
+        return
+    }
 
     // Commands that can only be executed by owners.
     if (!owners.includes(username)) {
@@ -145,6 +151,49 @@ async function handleIssueCommentCreate({ github, context }) {
                 `[handleIssueCommentCreate] command ${command} not found, exiting.`
             )
             break
+    }
+}
+
+/**
+ * Handle retest-failed command.
+ */
+async function cmdRetestFailed(github, issue, isFromPulls) {
+    if (!isFromPulls) {
+        console.log(
+            '[cmdRetestFailed] only pull requests supported, skipping command execution.'
+        )
+        return
+    }
+
+    // Get pull request
+    const pull = await github.rest.pulls.get({
+        owner: issue.owner,
+        repo: issue.repo,
+        pull_number: issue.number,
+    })
+
+    if (pull && pull.data) {
+        // Get commit id and repo from pull head
+        const testPayload = {
+            pull_head_ref: pull.data.head.sha,
+            pull_head_repo: pull.data.head.repo.full_name,
+            command: 'retest-failed',
+            issue: issue,
+        }
+
+        // Fire repository_dispatch event to trigger e2e test
+        await github.rest.repos.createDispatchEvent({
+            owner: issue.owner,
+            repo: issue.repo,
+            event_type: 'retest-failed',
+            client_payload: testPayload,
+        })
+
+        console.log(
+            `[cmdRetestFailed] triggered retest for ${JSON.stringify(
+                testPayload
+            )}`
+        )
     }
 }
 
