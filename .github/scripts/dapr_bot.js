@@ -180,7 +180,8 @@ async function cmdRetestFailed(github, issue, isFromPulls) {
     }
 
     // Get workflow runs filtered by the pull request head-sha and status
-    // #REF https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28#list-workflow-runs-for-a-repository
+    // DOCS:   https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28#list-workflow-runs-for-a-repository
+    // APIREF: https://octokit.github.io/rest.js/v22/#actions-list-workflow-runs-for-repo
     const workflow_runs = await github.rest.actions.listWorkflowRunsForRepo({
         owner: issue.owner,
         repo: issue.repo,
