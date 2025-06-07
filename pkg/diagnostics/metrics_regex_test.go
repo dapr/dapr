@@ -43,19 +43,24 @@ func TestRegexRulesSingle(t *testing.T) {
 	require.NoError(t, diagUtils.CreateRulesMap(metricSpec.Rules))
 
 	t.Run("single regex rule applied", func(t *testing.T) {
-		view.Register(
+		meter := view.NewMeter()
+		meter.Start()
+
+		meter.Register(
 			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution),
 		)
 		t.Cleanup(func() {
-			view.Unregister(view.Find(statName))
+			meter.Unregister(meter.Find(statName))
+			meter.Stop()
 		})
 
-		stats.RecordWithTags(t.Context(),
-			diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123"),
-			testStat.M(1))
+		stats.RecordWithOptions(t.Context(),
+			stats.WithRecorder(meter),
+			stats.WithTags(diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123")...),
+			stats.WithMeasurements(testStat.M(1)))
 
-		viewData, _ := view.RetrieveData(statName)
-		v := view.Find(statName)
+		viewData, _ := meter.RetrieveData(statName)
+		v := meter.Find(statName)
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
@@ -63,22 +68,29 @@ func TestRegexRulesSingle(t *testing.T) {
 	})
 
 	t.Run("single regex rule not applied", func(t *testing.T) {
-		view.Register(
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+
+		meter.Register(
 			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution),
 		)
 		t.Cleanup(func() {
-			view.Unregister(view.Find(statName))
+			meter.Unregister(meter.Find(statName))
 		})
 
 		s := newGRPCMetrics()
-		s.Init("test", nil)
+		s.Init(meter, "test", nil)
 
-		stats.RecordWithTags(t.Context(),
-			diagUtils.WithTags(testStat.Name(), methodKey, "/siths/123"),
-			testStat.M(1))
+		stats.RecordWithOptions(t.Context(),
+			stats.WithRecorder(meter),
+			stats.WithTags(diagUtils.WithTags(testStat.Name(), methodKey, "/siths/123")...),
+			stats.WithMeasurements(testStat.M(1)))
 
-		viewData, _ := view.RetrieveData(statName)
-		v := view.Find(statName)
+		viewData, _ := meter.RetrieveData(statName)
+		v := meter.Find(statName)
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
@@ -86,24 +98,32 @@ func TestRegexRulesSingle(t *testing.T) {
 	})
 
 	t.Run("correct regex rules applied", func(t *testing.T) {
-		view.Register(
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+
+		meter.Register(
 			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution),
 		)
 		t.Cleanup(func() {
-			view.Unregister(view.Find(statName))
+			meter.Unregister(meter.Find(statName))
 		})
 
 		s := newGRPCMetrics()
-		s.Init("test", nil)
+		s.Init(meter, "test", nil)
 
-		stats.RecordWithTags(t.Context(),
-			diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123"),
-			testStat.M(1))
-		stats.RecordWithTags(t.Context(),
-			diagUtils.WithTags(testStat.Name(), methodKey, "/lightsabers/123"),
-			testStat.M(1))
+		stats.RecordWithOptions(t.Context(),
+			stats.WithRecorder(meter),
+			stats.WithTags(diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123")...),
+			stats.WithMeasurements(testStat.M(1)))
+		stats.RecordWithOptions(t.Context(),
+			stats.WithRecorder(meter),
+			stats.WithTags(diagUtils.WithTags(testStat.Name(), methodKey, "/lightsabers/123")...),
+			stats.WithMeasurements(testStat.M(1)))
 
-		viewData, _ := view.RetrieveData(statName)
+		viewData, _ := meter.RetrieveData(statName)
 
 		orders := false
 		lightsabers := false

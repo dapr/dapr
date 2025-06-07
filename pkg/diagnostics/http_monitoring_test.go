@@ -15,14 +15,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 )
 
-func cleanupHTTPViews() {
-	CleanupRegisteredViews(
-		"http/server/latency",
-		"http/client/roundtrip_latency",
-		"http/healthprobes/roundtrip_latency",
-	)
-}
-
 func TestHTTPMiddleware(t *testing.T) {
 	requestBody := "fake_requestDaprBody"
 	responseBody := "fake_responseDaprBody"
@@ -31,9 +23,13 @@ func TestHTTPMiddleware(t *testing.T) {
 
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
-	t.Cleanup(cleanupHTTPViews)
 	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
-	require.NoError(t, testHTTP.Init("fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(func() {
+		meter.Stop()
+	})
+	require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -44,7 +40,7 @@ func TestHTTPMiddleware(t *testing.T) {
 	handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 
 	// assert
-	rows, err := view.RetrieveData("http/server/request_count")
+	rows, err := meter.RetrieveData("http/server/request_count")
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
@@ -54,19 +50,19 @@ func TestHTTPMiddleware(t *testing.T) {
 	assert.Equal(t, "status", rows[0].Tags[2].Key.Name())
 	assert.Equal(t, "200", rows[0].Tags[2].Value)
 
-	rows, err = view.RetrieveData("http/server/request_bytes")
+	rows, err = meter.RetrieveData("http/server/request_bytes")
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 	assert.Equal(t, "fakeID", rows[0].Tags[0].Value)
 	assert.InEpsilon(t, float64(len(requestBody)), (rows[0].Data).(*view.DistributionData).Min, 0)
 
-	rows, err = view.RetrieveData("http/server/response_bytes")
+	rows, err = meter.RetrieveData("http/server/response_bytes")
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 	assert.InEpsilon(t, float64(len(responseBody)), (rows[0].Data).(*view.DistributionData).Min, 0)
 
-	rows, err = view.RetrieveData("http/server/latency")
+	rows, err = meter.RetrieveData("http/server/latency")
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 	assert.GreaterOrEqual(t, (rows[0].Data).(*view.DistributionData).Min, 100.0)
@@ -81,13 +77,16 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	CleanupRegisteredViews()
 	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
-	t.Cleanup(cleanupHTTPViews)
-	require.NoError(t, testHTTP.Init("fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
-	v := view.Find("http/server/request_count")
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(func() {
+		meter.Stop()
+	})
+	require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+	v := meter.Find("http/server/request_count")
 	views := []*view.View{v}
-	view.Unregister(views...)
+	meter.Unregister(views...)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -98,7 +97,7 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 
 	// assert
-	rows, err := view.RetrieveData("http/server/request_count")
+	rows, err := meter.RetrieveData("http/server/request_count")
 	require.Error(t, err)
 	assert.Nil(t, rows)
 }
@@ -106,8 +105,12 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	t.Cleanup(cleanupHTTPViews)
-	testHTTP.Init("fakeID", HTTPMonitoringConfig{}, nil)
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", HTTPMonitoringConfig{}, nil)
 	matchedPath, ok := testHTTP.pathMatcher.match("/orders")
 	require.False(t, ok)
 	require.Equal(t, "", matchedPath)
@@ -123,8 +126,12 @@ func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
 		"/v1/orders/{orderID}/items/{itemID}",
 	}
 	configHTTP := NewHTTPMonitoringConfig(paths, true, false)
-	t.Cleanup(cleanupHTTPViews)
-	testHTTP.Init("fakeID", configHTTP, nil)
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", configHTTP, nil)
 
 	// act & assert
 
@@ -172,8 +179,12 @@ func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 		"/",
 	}
 	configHTTP := NewHTTPMonitoringConfig(paths, false, false)
-	t.Cleanup(cleanupHTTPViews)
-	testHTTP.Init("fakeID", configHTTP, nil)
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", configHTTP, nil)
 
 	// act & assert
 
@@ -223,16 +234,22 @@ func TestHTTPMetricsPathMatchingLowCardinalityRootPathRegister(t *testing.T) {
 
 	// 1 - Root path not registered fallback to ""
 	paths1 := []string{"/v1/orders/{orderID}"}
-	cleanupHTTPViews()
-	testHTTP.Init("fakeID", HTTPMonitoringConfig{paths1, false, false}, nil)
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", HTTPMonitoringConfig{paths1, false, false}, nil)
 	matchedPath, ok := testHTTP.pathMatcher.match("/thispathdoesnotexist")
 	require.True(t, ok)
 	require.Equal(t, "", matchedPath)
 
 	// 2 - Root path registered fallback to "/"
-	cleanupHTTPViews()
 	paths2 := []string{"/v1/orders/{orderID}", "/"}
-	testHTTP.Init("fakeID", HTTPMonitoringConfig{paths2, false, false}, nil)
+	meter2 := view.NewMeter()
+	meter2.Start()
+	defer meter2.Stop()
+	testHTTP.Init(meter2, "fakeID", HTTPMonitoringConfig{paths2, false, false}, nil)
 	matchedPath, ok = testHTTP.pathMatcher.match("/thispathdoesnotexist")
 	require.True(t, ok)
 	require.Equal(t, "/", matchedPath)
@@ -241,7 +258,12 @@ func TestHTTPMetricsPathMatchingLowCardinalityRootPathRegister(t *testing.T) {
 func TestGetMetricsMethod(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
-	testHTTP.Init("fakeID", configHTTP, nil)
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", configHTTP, nil)
 	assert.Equal(t, "GET", testHTTP.getMetricsMethod("GET"))
 	assert.Equal(t, "POST", testHTTP.getMetricsMethod("POST"))
 	assert.Equal(t, "PUT", testHTTP.getMetricsMethod("PUT"))
@@ -256,9 +278,13 @@ func TestGetMetricsMethod(t *testing.T) {
 
 func TestGetMetricsMethodExcludeVerbs(t *testing.T) {
 	testHTTP := newHTTPMetrics()
-	t.Cleanup(cleanupHTTPViews)
 	configHTTP := NewHTTPMonitoringConfig(nil, false, true)
-	testHTTP.Init("fakeID", configHTTP, nil)
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", configHTTP, nil)
 	assert.Equal(t, "", testHTTP.getMetricsMethod("GET"))
 	assert.Equal(t, "", testHTTP.getMetricsMethod("POST"))
 	assert.Equal(t, "", testHTTP.getMetricsMethod("PUT"))
