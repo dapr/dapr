@@ -180,10 +180,12 @@ async function cmdRetestFailed(github, issue, isFromPulls) {
     }
 
     // Get workflow runs filtered by the pull request head-sha
-    const workflow_runs = await github.rest.actions.runs.listForRef({
+    const workflow_runs = await github.rest.actions.getWorkflowRun({
         owner: issue.owner,
         repo: issue.repo,
-        ref: pull.data.head.sha,
+        head_sha: pull.data.head.sha,
+        event: `pull_request`,
+        status: `failure`,
     })
 
     // // Find failed action in the pull request
