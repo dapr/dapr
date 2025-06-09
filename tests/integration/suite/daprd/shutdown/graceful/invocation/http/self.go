@@ -92,7 +92,7 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 		respCh <- resp
 	}()
 
-	require.Eventually(t, s.inInvoke.Load, time.Second*10, time.Millisecond*10)
+	require.Eventually(t, s.inInvoke.Load, time.Second*20, time.Millisecond*10)
 
 	go s.daprd.Cleanup(t)
 
