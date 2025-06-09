@@ -55,19 +55,15 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 	s.schedulers = cluster.New(t, cluster.WithCount(3))
 
 	s.daprdA = daprd.New(t,
-		// TODO(Cassie): rm appID + ns here and log line once streaming to the proper app is tested
-		daprd.WithAppID("A"),
-		daprd.WithNamespace("A"),
 		daprd.WithSchedulerAddresses(s.schedulers.Addresses()...),
+		daprd.WithNamespace("A"),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srv.Port(t)),
 	)
 
 	s.daprdB = daprd.New(t,
-		// TODO(Cassie): rm appID + ns here and log line once streaming to the proper app is tested
-		daprd.WithAppID("B"),
-		daprd.WithNamespace("B"),
 		daprd.WithSchedulerAddresses(s.schedulers.Addresses()...),
+		daprd.WithNamespace("B"),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srv.Port(t)),
 	)
