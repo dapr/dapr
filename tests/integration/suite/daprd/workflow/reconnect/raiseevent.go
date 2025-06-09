@@ -76,7 +76,7 @@ func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client.StartWorkItemListener(cctx, r.workflow.Registry()))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NoError(t, client.RaiseEvent(ctx, id, "event1"))
+		assert.NoError(c, client.RaiseEvent(ctx, id, "event1"))
 	}, time.Second*10, time.Millisecond*10)
 
 	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
