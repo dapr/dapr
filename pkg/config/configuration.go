@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"sort"
@@ -69,8 +70,8 @@ const (
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
 
-	defaultMaxWorkflowConcurrentInvocations = 1000
-	defaultMaxActivityConcurrentInvocations = 1000
+	defaultMaxWorkflowConcurrentInvocations = math.MaxInt32
+	defaultMaxActivityConcurrentInvocations = math.MaxInt32
 )
 
 var defaultFeatures = map[Feature]bool{
