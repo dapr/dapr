@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -111,6 +112,7 @@ func New(opts Options) Interface {
 
 			return nil
 		}),
+		backend.WithStreamSendTimeout(time.Second*10),
 	)
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
