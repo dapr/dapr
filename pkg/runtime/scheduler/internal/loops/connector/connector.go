@@ -37,7 +37,6 @@ type Options struct {
 	Actors             actors.Interface
 	Channels           *channels.Channels
 	WFEngine           wfengine.Interface
-	Cancel             context.CancelCauseFunc
 	SchedulerReminders bool
 }
 
