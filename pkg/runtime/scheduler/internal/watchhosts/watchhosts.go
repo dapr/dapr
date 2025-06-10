@@ -55,7 +55,7 @@ type WatchHosts struct {
 
 func New(opts Options) *WatchHosts {
 	return &WatchHosts{
-		htarget:  opts.Healthz.AddTarget(),
+		htarget:  opts.Healthz.AddTarget("scheduler-watch-hosts"),
 		allAddrs: opts.Addresses,
 		security: opts.Security,
 		clients:  opts.Clients,
