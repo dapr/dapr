@@ -54,17 +54,16 @@ type Scheduler struct {
 	hosts      loop.Interface[loops.Event]
 	watchhosts *watchhosts.WatchHosts
 	client     client.Interface
-
-	schedulerReminders bool
 }
 
 func New(opts Options) *Scheduler {
 	connector := connector.New(connector.Options{
-		Namespace: opts.Namespace,
-		AppID:     opts.AppID,
-		Actors:    opts.Actors,
-		Channels:  opts.Channels,
-		WFEngine:  opts.WFEngine,
+		Namespace:          opts.Namespace,
+		AppID:              opts.AppID,
+		Actors:             opts.Actors,
+		Channels:           opts.Channels,
+		WFEngine:           opts.WFEngine,
+		SchedulerReminders: opts.SchedulerReminders,
 	})
 
 	hosts := hosts.New(hosts.Options{
