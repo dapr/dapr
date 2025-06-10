@@ -150,6 +150,7 @@ func (c *cron) Run(ctx context.Context) error {
 					case <-c.readyCh:
 					default:
 						close(c.readyCh)
+						log.Info("Cron is ready")
 					}
 
 					c.hostBroadcaster.Broadcast(hosts)

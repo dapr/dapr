@@ -497,8 +497,8 @@ github.com/dapr/components-contrib v1.15.3 h1:BGBAfrt4raj/MF9J+9nFCe38ls193ft2CO
 github.com/dapr/components-contrib v1.15.3/go.mod h1:Bm5+jJuJ6sV5+4PxVRKxWjvX+vRYFEG1TXRxEcZtzjI=
 github.com/dapr/durabletask-go v0.6.5 h1:aWcxMfYudojpgRjJRdUr7yyZ7rGcvLtWXUuA4cGHBR0=
 github.com/dapr/durabletask-go v0.6.5/go.mod h1:nTZ5fCbJLnZbVdi6Z2YxdDF1OgQZL3LroogGuetrwuA=
-github.com/dapr/kit v0.15.2 h1:5H9IhKScU/SpE2Hxvr5vUlmYN1e2MJN15RoT8/KSziU=
-github.com/dapr/kit v0.15.2/go.mod h1:HwFsBKEbcyLanWlDZE7u/jnaDCD/tU+n3pkFNUctQNw=
+github.com/dapr/kit v0.15.3 h1:t+pl2pk+jQpFspZ4obwbmF20fXwT4MIDPPKme7PafGs=
+github.com/dapr/kit v0.15.3/go.mod h1:HwFsBKEbcyLanWlDZE7u/jnaDCD/tU+n3pkFNUctQNw=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
