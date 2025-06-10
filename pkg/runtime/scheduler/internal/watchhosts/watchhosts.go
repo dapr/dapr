@@ -89,7 +89,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		code := status.Code(err)
 		switch code {
 		case codes.Unimplemented:
-			if err := w.clients.Reload(ctx, w.allAddrs); err != nil {
+			if err = w.clients.Reload(ctx, w.allAddrs); err != nil {
 				return err
 			}
 
@@ -119,7 +119,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 
 		log.Infof("Connected and received scheduler hosts addresses: %v", gotAddrs)
 
-		if err := w.clients.Reload(ctx, gotAddrs); err != nil {
+		if err = w.clients.Reload(ctx, gotAddrs); err != nil {
 			return err
 		}
 		w.loop.Enqueue(&loops.ReloadClients{

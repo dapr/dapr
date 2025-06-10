@@ -22,10 +22,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/events/loop"
-	"github.com/dapr/kit/logger"
 )
-
-var log = logger.NewLogger("dapr.runtime.scheduler.loops.hosts")
 
 type Options struct {
 	Security  security.Handler

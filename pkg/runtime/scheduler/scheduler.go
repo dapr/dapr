@@ -55,7 +55,6 @@ type Scheduler struct {
 	watchhosts *watchhosts.WatchHosts
 	client     client.Interface
 
-	// TODO: @joshvanl
 	schedulerReminders bool
 }
 
