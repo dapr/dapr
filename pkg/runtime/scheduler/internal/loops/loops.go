@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,17 +11,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package client
+package loops
 
 import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-type Interface interface {
-	Addresses() []string
-	schedulerv1pb.SchedulerClient
+type Event interface{}
+
+type ReloadClients struct {
+	Addresses []string
 }
 
-type Reloader interface {
-	ReloadActorTypes(actorTypes []string)
+type Connect struct {
+	Clients []schedulerv1pb.SchedulerClient
 }
+
+type Disconnect struct{}
+
+type Reconnect struct {
+	AppTarget  *bool
+	ActorTypes *[]string
+}
+
+type Close struct{}
