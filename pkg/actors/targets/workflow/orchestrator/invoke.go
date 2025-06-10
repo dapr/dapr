@@ -73,7 +73,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 func (o *orchestrator) executeMethod(ctx context.Context, methodName string, request []byte) ([]byte, error) {
 	log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
 
-	if w.actorState == nil {
+	if o.actorState == nil {
 		return nil, messages.ErrActorRuntimeNotFound
 	}
 
