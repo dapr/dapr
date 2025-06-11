@@ -212,8 +212,8 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		workflowSpec := config.GetWorkflowSpec()
 
 		// These are the documented default values. Changes to these defaults require changes to
-		assert.Equal(t, int32(1000), workflowSpec.MaxConcurrentWorkflowInvocations)
-		assert.Equal(t, int32(1000), workflowSpec.MaxConcurrentActivityInvocations)
+		assert.Equal(t, int32(2147483647), workflowSpec.MaxConcurrentWorkflowInvocations)
+		assert.Equal(t, int32(2147483647), workflowSpec.MaxConcurrentActivityInvocations)
 	})
 
 	t.Run("multiple configurations", func(t *testing.T) {
