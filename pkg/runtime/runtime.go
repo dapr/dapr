@@ -331,8 +331,8 @@ func newDaprRuntime(ctx context.Context,
 			Actors:             actors,
 			Addresses:          runtimeConfig.schedulerAddress,
 			Security:           sec,
-			Healthz:            runtimeConfig.healthz,
 			WFEngine:           wfe,
+			Healthz:            runtimeConfig.healthz,
 			SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 		}),
 		initComplete:   make(chan struct{}),
@@ -620,7 +620,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
-		Scheduler:                   a.jobsManager,
+		Scheduler:                   a.jobsManager.Client(),
 		Actors:                      a.actors,
 		WorkflowEngine:              a.wfengine,
 	})
@@ -796,7 +796,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			log.Warnf("Failed to register hosted actors: %s", err)
 		}
 
-		a.jobsManager.StartApp(ctx)
+		a.jobsManager.StartApp()
 
 	case apphealth.AppStatusUnhealthy:
 		select {
@@ -805,7 +805,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			close(a.isAppHealthy)
 		}
 
-		a.jobsManager.StopApp(ctx)
+		a.jobsManager.StopApp()
 
 		// Stop topic subscriptions and input bindings
 		a.processor.Subscriber().StopAppSubscriptions()
@@ -1072,10 +1072,11 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	}
 
 	if err := a.actors.Init(actors.InitOptions{
-		Hostname:         hostAddress,
-		StateStoreName:   actorStateStoreName,
-		GRPC:             a.grpc,
-		SchedulerClients: a.jobsManager,
+		Hostname:          hostAddress,
+		StateStoreName:    actorStateStoreName,
+		GRPC:              a.grpc,
+		SchedulerClient:   a.jobsManager.Client(),
+		SchedulerReloader: a.jobsManager,
 	}); err != nil {
 		return err
 	}
