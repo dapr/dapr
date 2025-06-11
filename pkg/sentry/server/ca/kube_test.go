@@ -14,16 +14,23 @@ limitations under the License.
 package ca
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/x509"
+	"encoding/pem"
 	"testing"
 
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
+	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 )
 
 func TestKube_get(t *testing.T) {
@@ -32,12 +39,46 @@ func TestKube_get(t *testing.T) {
 	rootPEM2, _, _, _ := genCrt(t, "root2", nil, nil)
 	intPEM, intCrt, intPKPEM, intPK := genCrt(t, "int", rootCrt, rootPK)
 
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	jwtKeyDer, err := x509.MarshalPKCS8PrivateKey(signingKey)
+	require.NoError(t, err)
+
+	signingKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: jwtKeyDer})
+
+	jwksBytes := createJWKS(t, signingKey, "kid")
+	jwks, err := jwk.Parse(jwksBytes)
+	require.NoError(t, err)
+
+	shouldGenX509 := func(g ca_bundle.MissingCredentials) bool {
+		return g.X509
+	}
+	shouldNotGenX509 := func(g ca_bundle.MissingCredentials) bool {
+		return !g.X509
+	}
+	shouldGenJWT := func(g ca_bundle.MissingCredentials) bool {
+		return g.JWT
+	}
+	shouldGenX509Exclusive := func(g ca_bundle.MissingCredentials) bool {
+		return g.X509 && !g.JWT
+	}
+	shouldGenJWTExclusive := func(g ca_bundle.MissingCredentials) bool {
+		return !g.X509 && g.JWT
+	}
+	shouldGenAll := func(g ca_bundle.MissingCredentials) bool {
+		return g.X509 && g.JWT
+	}
+	shouldNotGen := func(g ca_bundle.MissingCredentials) bool {
+		return !g.X509 && !g.JWT
+	}
+
 	tests := map[string]struct {
-		sec       *corev1.Secret
-		cm        *corev1.ConfigMap
-		expBundle Bundle
-		expOK     bool
-		expErr    bool
+		sec         *corev1.Secret
+		cm          *corev1.ConfigMap
+		expBundle   ca_bundle.Bundle
+		expGenCheck func(ca_bundle.MissingCredentials) bool
+		expErr      bool
 	}{
 		"if secret doesn't exist, expect error": {
 			sec: nil,
@@ -48,9 +89,9 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle: Bundle{},
-			expOK:     false,
-			expErr:    true,
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: nil,
+			expErr:      true,
 		},
 		"if configmap doesn't exist, expect error": {
 			sec: &corev1.Secret{
@@ -64,12 +105,12 @@ func TestKube_get(t *testing.T) {
 					"tls.crt": intPEM,
 				},
 			},
-			cm:        nil,
-			expBundle: Bundle{},
-			expOK:     false,
-			expErr:    true,
+			cm:          nil,
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: nil,
+			expErr:      true,
 		},
-		"if secret doesn't include ca.crt, expect not ok": {
+		"if secret doesn't include ca.crt, expect to generate x509": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -87,11 +128,11 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle: Bundle{},
-			expOK:     false,
-			expErr:    false,
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: shouldGenX509,
+			expErr:      false,
 		},
-		"if secret doesn't include tls.crt, expect not ok": {
+		"if secret doesn't include tls.crt, expect to generate x509": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -109,11 +150,11 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle: Bundle{},
-			expOK:     false,
-			expErr:    false,
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: shouldGenX509,
+			expErr:      false,
 		},
-		"if secret doesn't include tls.key, expect not ok": {
+		"if secret doesn't include tls.key, expect to generate x509": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -131,11 +172,11 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle: Bundle{},
-			expOK:     false,
-			expErr:    false,
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: shouldGenX509,
+			expErr:      false,
 		},
-		"if configmap doesn't include ca.crt, expect not ok": {
+		"if configmap doesn't include ca.crt, expect to generate x509": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -154,11 +195,11 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{},
 			},
-			expBundle: Bundle{},
-			expOK:     false,
-			expErr:    false,
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: shouldGenX509,
+			expErr:      false,
 		},
-		"if trust anchors do not match, expect not ok": {
+		"if trust anchors do not match, expect not to generate x509": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -177,11 +218,11 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM) + "\n" + string(rootPEM2)},
 			},
-			expBundle: Bundle{},
-			expOK:     false,
-			expErr:    false,
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: shouldGenX509,
+			expErr:      false,
 		},
-		"if bundle fails to verify, expect error": {
+		"if bundle fails to verify x509, expect error": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -200,11 +241,11 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM2)},
 			},
-			expBundle: Bundle{},
-			expOK:     false,
-			expErr:    true,
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: nil,
+			expErr:      true,
 		},
-		"if bundle is valid, expect ok and return bundle": {
+		"if x509 only bundle is valid, expect to not generate x509 and return bundle": {
 			sec: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dapr-trust-bundle",
@@ -223,15 +264,279 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle: Bundle{
-				TrustAnchors: rootPEM,
-				IssChainPEM:  intPEM,
-				IssKeyPEM:    intPKPEM,
-				IssChain:     []*x509.Certificate{intCrt},
-				IssKey:       intPK,
+			expBundle: ca_bundle.Bundle{
+				X509: ca_bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
 			},
-			expOK:  true,
-			expErr: false,
+			expGenCheck: shouldNotGenX509,
+			expErr:      false,
+		},
+		"if secret doesn't include jwt.key, expect to generate jwt": {
+			sec: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string][]byte{
+					"ca.crt":  rootPEM,
+					"tls.crt": intPEM,
+					"tls.key": intPKPEM,
+				},
+			},
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string]string{"ca.crt": string(rootPEM)},
+			},
+			expBundle: ca_bundle.Bundle{
+				X509: ca_bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expGenCheck: shouldGenJWT,
+			expErr:      false,
+		},
+		"if secret doesn't include jwks.json, expect to generate jwt": {
+			sec: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string][]byte{
+					"ca.crt":  rootPEM,
+					"tls.crt": intPEM,
+					"tls.key": intPKPEM,
+					"jwt.key": signingKeyPEM,
+				},
+			},
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string]string{"ca.crt": string(rootPEM)},
+			},
+			expBundle: ca_bundle.Bundle{
+				X509: ca_bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expGenCheck: shouldGenJWT,
+			expErr:      false,
+		},
+		"if secret doesn't include jwt.key or jwks.json, expect to generate jwt": {
+			sec: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string][]byte{
+					"ca.crt":  rootPEM,
+					"tls.crt": intPEM,
+					"tls.key": intPKPEM,
+				},
+			},
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string]string{"ca.crt": string(rootPEM)},
+			},
+			expBundle: ca_bundle.Bundle{
+				X509: ca_bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expGenCheck: shouldGenJWT,
+			expErr:      false,
+		},
+		"if jwt.key is invalid, expect error": {
+			sec: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string][]byte{
+					"ca.crt":    rootPEM,
+					"tls.crt":   intPEM,
+					"tls.key":   intPKPEM,
+					"jwt.key":   intPKPEM,
+					"jwks.json": jwksBytes,
+				},
+			},
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string]string{"ca.crt": string(rootPEM)},
+			},
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: nil,
+			expErr:      true,
+		},
+		"if jwks.json is invalid, expect error": {
+			sec: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string][]byte{
+					"ca.crt":    rootPEM,
+					"tls.crt":   intPEM,
+					"tls.key":   intPKPEM,
+					"jwt.key":   signingKeyPEM,
+					"jwks.json": intPKPEM,
+				},
+			},
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string]string{"ca.crt": string(rootPEM)},
+			},
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: nil,
+			expErr:      true,
+		},
+		"valid bundle with both x509 and jwt components": {
+			sec: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string][]byte{
+					"ca.crt":    rootPEM,
+					"tls.crt":   intPEM,
+					"tls.key":   intPKPEM,
+					"jwt.key":   signingKeyPEM,
+					"jwks.json": jwksBytes,
+				},
+			},
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string]string{"ca.crt": string(rootPEM)},
+			},
+			expBundle: ca_bundle.Bundle{
+				X509: ca_bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+				JWT: ca_bundle.JWT{
+					SigningKey:    signingKey,
+					SigningKeyPEM: signingKeyPEM,
+					JWKS:          jwks,
+					JWKSJson:      jwksBytes,
+				},
+			},
+			expGenCheck: shouldNotGen,
+			expErr:      false,
+		},
+		"missing both x509 and jwt components": {
+			sec: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string][]byte{},
+			},
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string]string{"ca.crt": string(rootPEM)},
+			},
+			expBundle:   ca_bundle.Bundle{},
+			expGenCheck: shouldGenAll,
+			expErr:      false,
+		},
+		"only jwt components present": {
+			sec: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string][]byte{
+					"jwt.key":   signingKeyPEM,
+					"jwks.json": jwksBytes,
+				},
+			},
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string]string{"ca.crt": string(rootPEM)},
+			},
+			expBundle: ca_bundle.Bundle{
+				JWT: ca_bundle.JWT{
+					SigningKey:    signingKey,
+					SigningKeyPEM: signingKeyPEM,
+					JWKS:          jwks,
+					JWKSJson:      jwksBytes,
+				},
+			},
+			expGenCheck: shouldGenX509Exclusive,
+			expErr:      false,
+		},
+		"only x509 components present with jwt keys requested": {
+			sec: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string][]byte{
+					"ca.crt":  rootPEM,
+					"tls.crt": intPEM,
+					"tls.key": intPKPEM,
+				},
+			},
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dapr-trust-bundle",
+					Namespace: "dapr-system-test",
+				},
+				Data: map[string]string{"ca.crt": string(rootPEM)},
+			},
+			expBundle: ca_bundle.Bundle{
+				X509: ca_bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expGenCheck: shouldGenJWTExclusive,
+			expErr:      false,
 		},
 	}
 
@@ -253,14 +558,35 @@ func TestKube_get(t *testing.T) {
 					RootCertPath:   "ca.crt",
 					IssuerCertPath: "tls.crt",
 					IssuerKeyPath:  "tls.key",
+					JWT: config.ConfigJWT{
+						SigningKeyPath: "jwt.key",
+						JWKSPath:       "jwks.json",
+						TTL:            config.DefaultJWTTTL,
+					},
 				},
 				namespace: "dapr-system-test",
 			}
 
-			bundle, ok, err := k.get(t.Context())
-			assert.Equal(t, test.expErr, err != nil, "%v", err)
-			assert.Equal(t, test.expOK, ok, "ok")
-			assert.Equal(t, test.expBundle, bundle)
+			bundle, gen, err := k.get(t.Context())
+			assert.Equal(t, test.expErr, err != nil, "expected error: %v, but got %v", test.expErr, err)
+			bundlesEqual(t, test.expBundle, bundle)
+			if test.expGenCheck != nil {
+				assert.True(t, test.expGenCheck(gen), "generate check failed, got %v", gen)
+			}
 		})
 	}
+}
+
+func bundlesEqual(t *testing.T, expected, actual ca_bundle.Bundle) {
+	t.Helper()
+
+	assert.Equal(t, expected.X509.TrustAnchors, actual.X509.TrustAnchors)
+	assert.Equal(t, expected.X509.IssChainPEM, actual.X509.IssChainPEM)
+	assert.Equal(t, expected.X509.IssKeyPEM, actual.X509.IssKeyPEM)
+	assert.Equal(t, len(expected.X509.IssChain), len(actual.X509.IssChain))
+	for i := range expected.X509.IssChain {
+		assert.Equal(t, expected.X509.IssChain[i].Subject, actual.X509.IssChain[i].Subject)
+	}
+	assert.Equal(t, expected.JWT.SigningKeyPEM, actual.JWT.SigningKeyPEM)
+	assert.Equal(t, expected.JWT.JWKSJson, actual.JWT.JWKSJson)
 }
