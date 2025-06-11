@@ -150,12 +150,16 @@ func (w *workflow) cleanup() {
 	defer w.lock.Unlock()
 
 	w.ometaBroadcaster.Close()
-	w.state = nil // A bit of extra caution, shouldn't be necessary
+	w.state = nil
 	w.rstate = nil
 	w.ometa = nil
 
 	if w.closed.CompareAndSwap(false, true) {
 		close(w.closeCh)
+		go func() {
+			w.wg.Wait()
+			workflowCache.Put(w)
+		}()
 	}
 }
 
