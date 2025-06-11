@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package orchestrator
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 )
 
-func (w *workflow) createReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration) (string, error) {
+func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration) (string, error) {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
@@ -35,14 +35,14 @@ func (w *workflow) createReminder(ctx context.Context, namePrefix string, data p
 	}
 
 	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
-	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", w.activityActorType, w.actorID, reminderName, delay)
+	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", o.activityActorType, o.actorID, reminderName, delay)
 
 	var period string
 	var oneshot bool
-	if w.schedulerReminders {
+	if o.schedulerReminders {
 		oneshot = true
 	} else {
-		period = w.reminderInterval.String()
+		period = o.reminderInterval.String()
 	}
 
 	var adata *anypb.Any
@@ -53,9 +53,9 @@ func (w *workflow) createReminder(ctx context.Context, namePrefix string, data p
 		}
 	}
 
-	return reminderName, w.reminders.Create(ctx, &actorapi.CreateReminderRequest{
-		ActorType: w.actorType,
-		ActorID:   w.actorID,
+	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+		ActorType: o.actorType,
+		ActorID:   o.actorID,
 		Data:      adata,
 		DueTime:   delay.String(),
 		Name:      reminderName,

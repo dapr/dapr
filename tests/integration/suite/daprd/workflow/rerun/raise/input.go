@@ -11,11 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rerun
+package raise
 
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,41 +31,38 @@ import (
 )
 
 func init() {
-	suite.Register(new(notscheduleevent))
+	suite.Register(new(input))
 }
 
-type notscheduleevent struct {
+type input struct {
 	workflow *workflow.Workflow
 }
 
-func (n *notscheduleevent) Setup(t *testing.T) []framework.Option {
-	n.workflow = workflow.New(t)
+func (i *input) Setup(t *testing.T) []framework.Option {
+	i.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(n.workflow),
+		framework.WithProcesses(i.workflow),
 	}
 }
 
-func (n *notscheduleevent) Run(t *testing.T, ctx context.Context) {
-	n.workflow.WaitUntilRunning(t, ctx)
+func (i *input) Run(t *testing.T, ctx context.Context) {
+	i.workflow.WaitUntilRunning(t, ctx)
 
-	n.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		require.NoError(t, ctx.CallActivity("bar").Await(nil))
-		return nil, nil
-	})
-	n.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	i.workflow.Registry().AddOrchestratorN("simple-event", func(ctx *task.OrchestrationContext) (any, error) {
+		require.NoError(t, ctx.WaitForSingleEvent("abc1", time.Hour).Await(nil))
 		return nil, nil
 	})
 
-	client := n.workflow.BackendClient(t, ctx)
+	client := i.workflow.BackendClient(t, ctx)
 
-	_, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewOrchestration(ctx, "simple-event")
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, api.InstanceID("abc"))
+	time.Sleep(time.Second * 2)
+	require.NoError(t, client.RaiseEvent(ctx, id, "abc1"))
+	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
-	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 1, api.WithRerunNewInstanceID("xyz"))
-	require.Error(t, err)
-
-	assert.Equal(t, status.Error(codes.NotFound, "target event '*protos.HistoryEvent_ExecutionCompleted' with ID '1' is not an event that can be rerun"), err)
+	_, err = client.RerunWorkflowFromEvent(ctx, id, 0, api.WithRerunInput("hello"))
+	assert.Equal(t, status.Error(codes.InvalidArgument, "cannot write input to timer event '0'"), err)
 }

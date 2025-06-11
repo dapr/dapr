@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package orchestrator
 
 import (
 	"context"
@@ -34,8 +34,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 )
 
-func (w *workflow) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	w.table.RemoveIdler(w)
+func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	o.table.RemoveIdler(o)
 
 	if req.GetMessage() == nil {
 		return nil, errors.New("message is nil in request")
@@ -48,11 +48,11 @@ func (w *workflow) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	}
 	defer imReq.Close()
 
-	policyDef := w.resiliency.ActorPostLockPolicy(w.actorType, w.actorID)
+	policyDef := o.resiliency.ActorPostLockPolicy(o.actorType, o.actorID)
 	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
 	msg := imReq.Message()
 	return policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
-		resData, err := w.executeMethod(ctx, msg.GetMethod(), msg.GetData().GetValue())
+		resData, err := o.executeMethod(ctx, msg.GetMethod(), msg.GetData().GetValue())
 		if err != nil {
 			return nil, err
 		}
@@ -70,69 +70,69 @@ func (w *workflow) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	})
 }
 
-func (w *workflow) executeMethod(ctx context.Context, methodName string, request []byte) ([]byte, error) {
-	log.Debugf("Workflow actor '%s': invoking method '%s'", w.actorID, methodName)
+func (o *orchestrator) executeMethod(ctx context.Context, methodName string, request []byte) ([]byte, error) {
+	log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
 
-	if w.actorState == nil {
+	if o.actorState == nil {
 		return nil, messages.ErrActorRuntimeNotFound
 	}
 
 	switch methodName {
 	case todo.CreateWorkflowInstanceMethod:
-		return nil, w.createWorkflowInstance(ctx, request)
+		return nil, o.createWorkflowInstance(ctx, request)
 
 	case todo.AddWorkflowEventMethod:
-		return nil, w.addWorkflowEvent(ctx, request)
+		return nil, o.addWorkflowEvent(ctx, request)
 
 	case todo.PurgeWorkflowStateMethod:
-		return nil, w.purgeWorkflowState(ctx)
+		return nil, o.purgeWorkflowState(ctx)
 
 	case todo.ForkWorkflowHistory:
-		return nil, backoff.Permanent(w.forkWorkflowHistory(ctx, request))
+		return nil, backoff.Permanent(o.forkWorkflowHistory(ctx, request))
 
 	case todo.RerunWorkflowInstance:
-		return nil, backoff.Permanent(w.rerunWorkflowInstanceRequest(ctx, request))
+		return nil, backoff.Permanent(o.rerunWorkflowInstanceRequest(ctx, request))
 
 	default:
 		return nil, fmt.Errorf("no such method: %s", methodName)
 	}
 }
 
-func (w *workflow) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	log.Debugf("Workflow actor '%s': invoking reminder '%s'", w.actorID, reminder.Name)
+func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
+	log.Debugf("Workflow actor '%s': invoking reminder '%s'", o.actorID, reminder.Name)
 
-	completed, err := w.runWorkflow(ctx, reminder)
+	completed, err := o.runWorkflow(ctx, reminder)
 
 	if completed == todo.RunCompletedTrue {
-		w.table.DeleteFromTableIn(w, time.Second*10)
+		o.table.DeleteFromTableIn(o, time.Second*10)
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.
 	// Returning nil signals that we want the execution to be retried in the next period interval
 	switch {
 	case err == nil:
-		if w.schedulerReminders {
+		if o.schedulerReminders {
 			return nil
 		}
 		return actorerrors.ErrReminderCanceled
 	case errors.Is(err, context.DeadlineExceeded):
-		log.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", w.actorID, err)
+		log.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", o.actorID, err)
 		return err
 	case errors.Is(err, context.Canceled):
-		log.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", w.actorID, err)
-		if w.schedulerReminders {
+		log.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", o.actorID, err)
+		if o.schedulerReminders {
 			return err
 		}
 		return nil
 	case wferrors.IsRecoverable(err):
-		log.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", w.actorID, err)
-		if w.schedulerReminders {
+		log.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", o.actorID, err)
+		if o.schedulerReminders {
 			return err
 		}
 		return nil
 	default: // Other error
-		log.Errorf("Workflow actor '%s': execution failed with an error: %v", w.actorID, err)
-		if w.schedulerReminders {
+		log.Errorf("Workflow actor '%s': execution failed with an error: %v", o.actorID, err)
+		if o.schedulerReminders {
 			return err
 		}
 		return actorerrors.ErrReminderCanceled
