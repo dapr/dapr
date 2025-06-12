@@ -40,13 +40,13 @@ var ErrTransactionsTooManyOperations = errors.New("the transaction contains more
 
 type Interface interface {
 	// Get retrieves actor state.
-	Get(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error)
+	Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error)
 
 	// GetBulk retrieves actor state in bulk.
-	GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error)
+	GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error)
 
 	// TransactionalStateOperation performs a transactional state operation with the actor state store.
-	TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error
+	TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error
 }
 
 type Backend interface {
@@ -90,12 +90,16 @@ func New(opts Options) Interface {
 	}
 }
 
-func (s *state) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error) {
-	ctx, cancel, err := s.placement.Lock(ctx)
-	if err != nil {
-		return nil, err
+func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error) {
+	if lock {
+		var cancel context.CancelFunc
+		var err error
+		ctx, cancel, err = s.placement.Lock(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer cancel()
 	}
-	defer cancel()
 
 	storeName, store, err := s.stateStore()
 	if err != nil {
@@ -133,12 +137,16 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateRe
 	}, nil
 }
 
-func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error) {
-	ctx, cancel, err := s.placement.Lock(ctx)
-	if err != nil {
-		return nil, err
+func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
+	if lock {
+		var cancel context.CancelFunc
+		var err error
+		ctx, cancel, err = s.placement.Lock(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer cancel()
 	}
-	defer cancel()
 
 	storeName, store, err := s.stateStore()
 	if err != nil {
@@ -183,12 +191,16 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.
 	return bulkRes, nil
 }
 
-func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error {
-	ctx, cancel, err := s.placement.Lock(ctx)
-	if err != nil {
-		return err
+func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error {
+	if lock {
+		var cancel context.CancelFunc
+		var err error
+		ctx, cancel, err = s.placement.Lock(ctx)
+		if err != nil {
+			return err
+		}
+		defer cancel()
 	}
-	defer cancel()
 
 	if !ignoreHosted {
 		if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
@@ -200,6 +212,7 @@ func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bo
 	baseKey := key.ConstructComposite(s.appID, req.ActorKey())
 	metadata := map[string]string{metadataPartitionKey: baseKey}
 	baseKey += api.DaprSeparator
+	var err error
 	for i, o := range req.Operations {
 		operations[i], err = o.StateOperation(baseKey, api.StateOperationOpts{
 			Metadata: metadata,

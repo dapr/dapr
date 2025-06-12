@@ -65,7 +65,7 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", w.actorID, len(req.Operations))
 
-	if err = w.actorState.TransactionalStateOperation(ctx, true, req); err != nil {
+	if err = w.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
 		return err
 	}
 
@@ -97,7 +97,7 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 	}
 
 	// This will do the purging
-	err = w.actorState.TransactionalStateOperation(ctx, true, req)
+	err = w.actorState.TransactionalStateOperation(ctx, true, req, false)
 	if err != nil {
 		return err
 	}
