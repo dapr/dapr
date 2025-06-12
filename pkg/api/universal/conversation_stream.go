@@ -84,21 +84,31 @@ func (a *Universal) ConverseStreamAlpha1(req *runtimev1pb.ConversationRequest, s
 
 // StreamingPipelineImpl handles the streaming conversation pipeline
 type StreamingPipelineImpl struct {
-	piiEnabled bool
-	scrubber   *StreamingPIIScrubber
+	middleware []StreamingMiddleware
 	logger     logger.Logger
+}
+
+// StreamingMiddleware is a simple interface for processing streaming chunks
+type StreamingMiddleware interface {
+	ProcessChunk(chunk []byte) []byte
+	Flush() []byte
 }
 
 // NewStreamingPipelineImpl creates a new streaming pipeline
 func NewStreamingPipelineImpl(piiEnabled bool, logger logger.Logger) (*StreamingPipelineImpl, error) {
-	scrubber, err := NewStreamingPIIScrubber(piiEnabled, 50) // 50 character look-ahead window
-	if err != nil {
-		return nil, fmt.Errorf("failed to create streaming PII scrubber: %w", err)
+	var middleware []StreamingMiddleware
+
+	// Add PII scrubbing middleware if enabled
+	if piiEnabled {
+		scrubber, err := NewStreamingPIIScrubber(piiEnabled, 50) // 50 character look-ahead window
+		if err != nil {
+			return nil, fmt.Errorf("failed to create streaming PII scrubber: %w", err)
+		}
+		middleware = append(middleware, scrubber)
 	}
 
 	return &StreamingPipelineImpl{
-		piiEnabled: piiEnabled,
-		scrubber:   scrubber,
+		middleware: middleware,
 		logger:     logger,
 	}, nil
 }
@@ -137,8 +147,8 @@ func (p *StreamingPipelineImpl) processRealStreaming(
 
 	// Create the streaming function that LangChain Go will call for each chunk
 	streamFunc := func(chunkCtx context.Context, chunk []byte) error {
-		// Process chunk through streaming PII scrubber
-		processedChunk := p.scrubber.ProcessChunk(chunk)
+		// Process chunk through middleware chain
+		processedChunk := p.processChunkThroughMiddleware(chunk)
 
 		// Send processed chunk immediately (if any ready)
 		if len(processedChunk) > 0 {
@@ -154,8 +164,8 @@ func (p *StreamingPipelineImpl) processRealStreaming(
 	// Call the component's streaming method
 	finalResp, streamErr = streamer.ConverseStream(ctx, request, streamFunc)
 
-	// Flush any remaining content in scrubber buffer
-	if remaining := p.scrubber.Flush(); len(remaining) > 0 {
+	// Flush any remaining content in middleware buffers
+	if remaining := p.flushMiddleware(); len(remaining) > 0 {
 		if sendErr := p.sendChunk(stream, remaining); sendErr != nil {
 			p.logger.Errorf("Failed to send final streaming chunk: %v", sendErr)
 			// Return the component error if it exists, otherwise the send error
@@ -213,13 +223,44 @@ func (p *StreamingPipelineImpl) processSimulatedStreaming(
 	return p.sendComplete(stream, resp.ConversationContext, nil) // TODO: Add usage stats
 }
 
+// processChunkThroughMiddleware processes a chunk through all middleware
+func (p *StreamingPipelineImpl) processChunkThroughMiddleware(chunk []byte) []byte {
+	processed := chunk
+	for _, middleware := range p.middleware {
+		processed = middleware.ProcessChunk(processed)
+	}
+	return processed
+}
+
+// flushMiddleware flushes all middleware and returns any remaining content
+func (p *StreamingPipelineImpl) flushMiddleware() []byte {
+	var result []byte
+	for _, middleware := range p.middleware {
+		if remaining := middleware.Flush(); len(remaining) > 0 {
+			result = append(result, remaining...)
+		}
+	}
+	return result
+}
+
+// isTokenBoundary checks if content ends at a token boundary (simple heuristic)
+func (p *StreamingPipelineImpl) isTokenBoundary(content []byte) bool {
+	if len(content) == 0 {
+		return false
+	}
+	lastChar := content[len(content)-1]
+	return lastChar == ' ' || lastChar == '.' || lastChar == ',' ||
+		lastChar == '!' || lastChar == '?' || lastChar == '\n'
+}
+
 // sendChunk sends a content chunk via the gRPC stream
 func (p *StreamingPipelineImpl) sendChunk(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, content []byte) error {
+	tokenBoundary := p.isTokenBoundary(content)
 	return stream.Send(&runtimev1pb.ConversationStreamResponse{
 		ResponseType: &runtimev1pb.ConversationStreamResponse_Chunk{
 			Chunk: &runtimev1pb.ConversationStreamChunk{
 				Content:       string(content),
-				TokenBoundary: p.scrubber.IsTokenBoundary(content),
+				TokenBoundary: &tokenBoundary,
 			},
 		},
 	})

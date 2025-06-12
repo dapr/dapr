@@ -413,14 +413,14 @@ func TestStreamingPipelineImpl(t *testing.T) {
 		pipeline, err := NewStreamingPipelineImpl(false, testLogger)
 		require.NoError(t, err)
 		assert.NotNil(t, pipeline)
-		assert.False(t, pipeline.piiEnabled)
+		assert.Empty(t, pipeline.middleware, "No middleware should be registered when PII is disabled")
 	})
 
 	t.Run("Create pipeline with PII enabled", func(t *testing.T) {
 		pipeline, err := NewStreamingPipelineImpl(true, testLogger)
 		require.NoError(t, err)
 		assert.NotNil(t, pipeline)
-		assert.True(t, pipeline.piiEnabled)
+		assert.Len(t, pipeline.middleware, 1, "PII scrubber middleware should be registered")
 	})
 }
 
