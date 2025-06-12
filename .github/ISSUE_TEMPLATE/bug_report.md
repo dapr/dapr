@@ -23,6 +23,8 @@ assignees: ''
 
 > /area test-and-release
 
+> /area injector
+
 ## What version of Dapr?
 
 <!-- Delete all but your choice -->
