@@ -33,30 +33,30 @@ import (
 )
 
 func init() {
-	suite.Register(new(self))
+	suite.Register(new(local))
 }
 
-type self struct {
+type local struct {
 	daprd *daprd.Daprd
 
 	inInvoke    atomic.Bool
 	closeInvoke chan struct{}
 }
 
-func (s *self) Setup(t *testing.T) []framework.Option {
+func (l *local) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	s.closeInvoke = make(chan struct{})
+	l.closeInvoke = make(chan struct{})
 
 	app := app.New(t,
 		app.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {}),
 		app.WithHandlerFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
-			s.inInvoke.Store(true)
-			<-s.closeInvoke
+			l.inInvoke.Store(true)
+			<-l.closeInvoke
 		}),
 	)
 
-	s.daprd = daprd.New(t,
+	l.daprd = daprd.New(t,
 		daprd.WithAppPort(app.Port()),
 		daprd.WithDaprGracefulShutdownSeconds(180),
 		daprd.WithAppHealthProbeInterval(1),
@@ -69,14 +69,14 @@ func (s *self) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (s *self) Run(t *testing.T, ctx context.Context) {
-	s.daprd.Run(t, ctx)
-	s.daprd.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { s.daprd.Cleanup(t) })
+func (l *local) Run(t *testing.T, ctx context.Context) {
+	l.daprd.Run(t, ctx)
+	l.daprd.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() { l.daprd.Cleanup(t) })
 
 	client := client.HTTP(t)
 
-	url := fmt.Sprintf("http://%s/v1.0/invoke/%s/method/foo", s.daprd.HTTPAddress(), s.daprd.AppID())
+	url := fmt.Sprintf("http://%s/v1.0/invoke/%s/method/foo", l.daprd.HTTPAddress(), l.daprd.AppID())
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	require.NoError(t, err)
 
@@ -92,9 +92,9 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 		respCh <- resp
 	}()
 
-	require.Eventually(t, s.inInvoke.Load, time.Second*20, time.Millisecond*10)
+	require.Eventually(t, l.inInvoke.Load, time.Second*20, time.Millisecond*10)
 
-	go s.daprd.Cleanup(t)
+	go l.daprd.Cleanup(t)
 
 	select {
 	case err = <-errCh:
@@ -102,7 +102,7 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(time.Second * 3):
 	}
 
-	close(s.closeInvoke)
+	close(l.closeInvoke)
 
 	select {
 	case err = <-errCh:
