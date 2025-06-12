@@ -84,14 +84,14 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 				},
 			},
 		},
+		Overwrite: job.GetOverwrite(),
 		//nolint:protogetter
 		Job: &schedulerv1pb.Job{
-			Schedule:  job.Schedule,
-			Data:      job.GetData(),
-			Repeats:   job.Repeats,
-			DueTime:   job.DueTime,
-			Ttl:       job.Ttl,
-			Overwrite: job.GetOverwrite(),
+			Schedule: job.Schedule,
+			Data:     job.GetData(),
+			Repeats:  job.Repeats,
+			DueTime:  job.DueTime,
+			Ttl:      job.Ttl,
 		},
 	}
 
