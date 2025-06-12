@@ -24,6 +24,17 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 
 {{/*
+Create a default StorageClass name from Component value and Release name
+*/}}
+{{- define "dapr_scheduler.storageclass-name" -}}
+{{- if .Values.cluster.storageClassName -}}
+{{- .Values.cluster.storageClassName -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name .Values.component | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Gets the number of replicas.
 - If `global.scheduler.enabled` is false, replicas = 0.
 - If `global.ha.enabled` is true, replicas = 3.
