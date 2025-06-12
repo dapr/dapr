@@ -1,0 +1,255 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package universal
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/dapr/components-contrib/conversation"
+	"github.com/dapr/dapr/pkg/messages"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/kit/logger"
+	kmeta "github.com/dapr/kit/metadata"
+)
+
+// ConverseStreamAlpha1 implements the streaming conversation API
+func (a *Universal) ConverseStreamAlpha1(req *runtimev1pb.ConversationRequest, stream runtimev1pb.Dapr_ConverseStreamAlpha1Server) error {
+	// Validate component exists
+	if a.compStore.ConversationsLen() == 0 {
+		err := messages.ErrConversationNotFound
+		a.logger.Debug(err)
+		return err
+	}
+
+	component, ok := a.compStore.GetConversation(req.GetName())
+	if !ok {
+		err := messages.ErrConversationNotFound.WithFormat(req.GetName())
+		a.logger.Debug(err)
+		return err
+	}
+
+	// Create streaming pipeline
+	pipelineImpl, err := NewStreamingPipelineImpl(req.GetScrubPII(), a.logger)
+	if err != nil {
+		return fmt.Errorf("failed to create streaming pipeline: %w", err)
+	}
+
+	// Prepare request (similar to non-streaming version)
+	request := &conversation.ConversationRequest{}
+	err = kmeta.DecodeMetadata(req.GetMetadata(), request)
+	if err != nil {
+		return err
+	}
+
+	if len(req.GetInputs()) == 0 {
+		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+		a.logger.Debug(err)
+		return err
+	}
+
+	// Process inputs
+	for _, i := range req.GetInputs() {
+		msg := i.GetMessage()
+
+		// TODO: Add PII scrubbing for input if needed
+
+		c := conversation.ConversationInput{
+			Message: msg,
+			Role:    conversation.Role(i.GetRole()),
+		}
+
+		request.Inputs = append(request.Inputs, c)
+	}
+
+	request.Parameters = req.GetParameters()
+	request.ConversationContext = req.GetContextID()
+	request.Temperature = req.GetTemperature()
+
+	// Process streaming request
+	ctx := stream.Context()
+	return pipelineImpl.ProcessStream(ctx, stream, component, request)
+}
+
+// StreamingPipelineImpl handles the streaming conversation pipeline
+type StreamingPipelineImpl struct {
+	piiEnabled bool
+	scrubber   *StreamingPIIScrubber
+	logger     logger.Logger
+}
+
+// NewStreamingPipelineImpl creates a new streaming pipeline
+func NewStreamingPipelineImpl(piiEnabled bool, logger logger.Logger) (*StreamingPipelineImpl, error) {
+	scrubber, err := NewStreamingPIIScrubber(piiEnabled, 50) // 50 character look-ahead window
+	if err != nil {
+		return nil, fmt.Errorf("failed to create streaming PII scrubber: %w", err)
+	}
+
+	return &StreamingPipelineImpl{
+		piiEnabled: piiEnabled,
+		scrubber:   scrubber,
+		logger:     logger,
+	}, nil
+}
+
+// ProcessStream handles the streaming pipeline from LangChain Go to gRPC stream
+func (p *StreamingPipelineImpl) ProcessStream(
+	ctx context.Context,
+	stream runtimev1pb.Dapr_ConverseStreamAlpha1Server,
+	component conversation.Conversation,
+	request *conversation.ConversationRequest,
+) error {
+	// Try to get the underlying LangChain Go model for streaming support
+	if streamer, ok := component.(StreamingCapable); ok {
+		return p.processRealStreaming(ctx, stream, streamer, request)
+	}
+
+	// Fallback: simulate streaming with existing Converse method
+	return p.processSimulatedStreaming(ctx, stream, component, request)
+}
+
+// StreamingCapable interface for components that support real streaming
+type StreamingCapable interface {
+	// ConverseStream should call LangChain Go's GenerateContent with WithStreamingFunc
+	ConverseStream(ctx context.Context, req *conversation.ConversationRequest, streamFunc func(ctx context.Context, chunk []byte) error) (*conversation.ConversationResponse, error)
+}
+
+// processRealStreaming handles true LangChain Go streaming
+func (p *StreamingPipelineImpl) processRealStreaming(
+	ctx context.Context,
+	stream runtimev1pb.Dapr_ConverseStreamAlpha1Server,
+	streamer StreamingCapable,
+	request *conversation.ConversationRequest,
+) error {
+	var finalResp *conversation.ConversationResponse
+	var streamErr error
+
+	// Create the streaming function that LangChain Go will call for each chunk
+	streamFunc := func(chunkCtx context.Context, chunk []byte) error {
+		// Process chunk through streaming PII scrubber
+		processedChunk := p.scrubber.ProcessChunk(chunk)
+
+		// Send processed chunk immediately (if any ready)
+		if len(processedChunk) > 0 {
+			if err := p.sendChunk(stream, processedChunk); err != nil {
+				p.logger.Errorf("Failed to send streaming chunk: %v", err)
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	// Call the component's streaming method
+	finalResp, streamErr = streamer.ConverseStream(ctx, request, streamFunc)
+
+	// Flush any remaining content in scrubber buffer
+	if remaining := p.scrubber.Flush(); len(remaining) > 0 {
+		if sendErr := p.sendChunk(stream, remaining); sendErr != nil {
+			p.logger.Errorf("Failed to send final streaming chunk: %v", sendErr)
+			// Return the component error if it exists, otherwise the send error
+			if streamErr != nil {
+				return streamErr
+			}
+			return sendErr
+		}
+	}
+
+	if streamErr != nil {
+		return p.sendError(stream, streamErr)
+	}
+
+	// Send completion with context and usage stats
+	contextID := ""
+	if finalResp != nil {
+		contextID = finalResp.ConversationContext
+	}
+	return p.sendComplete(stream, contextID, nil) // TODO: Add usage stats from finalResp
+}
+
+// processSimulatedStreaming falls back to chunking the complete response
+func (p *StreamingPipelineImpl) processSimulatedStreaming(
+	ctx context.Context,
+	stream runtimev1pb.Dapr_ConverseStreamAlpha1Server,
+	component conversation.Conversation,
+	request *conversation.ConversationRequest,
+) error {
+	// Call the regular Converse method
+	resp, err := component.Converse(ctx, request)
+	if err != nil {
+		return p.sendError(stream, err)
+	}
+
+	// Simulate streaming by sending the complete response as chunks
+	if resp != nil && len(resp.Outputs) > 0 {
+		for _, output := range resp.Outputs {
+			// Break the result into chunks to simulate streaming
+			content := output.Result
+			chunkSize := 50 // Send in 50-character chunks
+			for i := 0; i < len(content); i += chunkSize {
+				end := i + chunkSize
+				if end > len(content) {
+					end = len(content)
+				}
+				chunk := content[i:end]
+				if err := p.sendChunk(stream, []byte(chunk)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return p.sendComplete(stream, resp.ConversationContext, nil) // TODO: Add usage stats
+}
+
+// sendChunk sends a content chunk via the gRPC stream
+func (p *StreamingPipelineImpl) sendChunk(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, content []byte) error {
+	return stream.Send(&runtimev1pb.ConversationStreamResponse{
+		ResponseType: &runtimev1pb.ConversationStreamResponse_Chunk{
+			Chunk: &runtimev1pb.ConversationStreamChunk{
+				Content:       string(content),
+				TokenBoundary: p.scrubber.IsTokenBoundary(content),
+			},
+		},
+	})
+}
+
+// sendComplete sends the completion message
+func (p *StreamingPipelineImpl) sendComplete(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, contextID string, usage *runtimev1pb.ConversationUsage) error {
+	complete := &runtimev1pb.ConversationStreamComplete{
+		Usage: usage,
+	}
+	if contextID != "" {
+		complete.ContextID = &contextID
+	}
+
+	return stream.Send(&runtimev1pb.ConversationStreamResponse{
+		ResponseType: &runtimev1pb.ConversationStreamResponse_Complete{
+			Complete: complete,
+		},
+	})
+}
+
+// sendError sends an error message via the stream
+func (p *StreamingPipelineImpl) sendError(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, err error) error {
+	return stream.Send(&runtimev1pb.ConversationStreamResponse{
+		ResponseType: &runtimev1pb.ConversationStreamResponse_Error{
+			Error: &runtimev1pb.ConversationStreamError{
+				Code:    500, // Internal server error
+				Message: err.Error(),
+				Details: make(map[string]string),
+			},
+		},
+	})
+}
