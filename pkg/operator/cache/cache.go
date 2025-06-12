@@ -97,7 +97,12 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 					return objClone, nil
 				}
 
-				return deployDevNull, nil
+				return &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      obj.Name,
+						Namespace: obj.Namespace,
+					},
+				}, nil
 			},
 		},
 		&appsv1.StatefulSet{}: {

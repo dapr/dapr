@@ -117,12 +117,14 @@ var (
 	PubsubTopicNameEmpty  = ErrorCode{"ERR_TOPIC_NAME_EMPTY", CategoryPubsub}
 
 	// Conversation (Building block)
-	ConversationInvalidParms        = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", CategoryConversation}
-	ConversationInvoke              = ErrorCode{"ERR_CONVERSATION_INVOKE", CategoryConversation}
-	ConversationMissingInputs       = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", CategoryConversation}
-	ConversationNotFound            = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", CategoryConversation}
-	ConversationDirectInvoke        = ErrorCode{"ERR_DIRECT_INVOKE", CategoryConversation}
-	ConversationInvokeOutputBinding = ErrorCode{"ERR_INVOKE_OUTPUT_BINDING", CategoryConversation}
+	ConversationInvalidParms         = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", CategoryConversation}
+	ConversationInvoke               = ErrorCode{"ERR_CONVERSATION_INVOKE", CategoryConversation}
+	ConversationMissingInputs        = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", CategoryConversation}
+	ConversationNotFound             = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", CategoryConversation}
+	ConversationDirectInvoke         = ErrorCode{"ERR_DIRECT_INVOKE", CategoryConversation}
+	ConversationInvokeOutputBinding  = ErrorCode{"ERR_INVOKE_OUTPUT_BINDING", CategoryConversation}
+	ConversationStreamNotSupported   = ErrorCode{"ERR_CONVERSATION_STREAM_NOT_SUPPORTED", CategoryConversation}
+	ConversationStreamPipelineFailed = ErrorCode{"ERR_CONVERSATION_STREAM_PIPELINE_FAILED", CategoryConversation}
 
 	// Distributed Lock (Building block)
 	LockTry                = ErrorCode{"ERR_TRY_LOCK", CategoryLock}
