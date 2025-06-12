@@ -16,6 +16,8 @@ package workflow
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/continueasnew"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/memory"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/nostatestore"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reconnect"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
 )

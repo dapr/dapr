@@ -65,6 +65,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 			Name: "testJob",
 			Job: &schedulerv1pb.Job{
 				Schedule:  ptr.Of("@daily"),
+				DueTime:   ptr.Of("3h"),
 				Overwrite: true,
 			},
 			Metadata: &schedulerv1pb.JobMetadata{
