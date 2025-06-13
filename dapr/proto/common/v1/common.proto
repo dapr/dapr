@@ -16,6 +16,7 @@ syntax = "proto3";
 package dapr.proto.common.v1;
 
 import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "CommonProtos";
@@ -24,10 +25,10 @@ option go_package = "github.com/dapr/dapr/pkg/proto/common/v1;common";
 
 // HTTPExtension includes HTTP verb and querystring
 // when Dapr runtime delivers HTTP content.
-// 
+//
 // For example, when callers calls http invoke api
 // `POST http://localhost:3500/v1.0/invoke/<app_id>/method/<method>?query1=value1&query2=value2`
-// 
+//
 // Dapr runtime will parse POST as a verb and extract querystring to quersytring map.
 message HTTPExtension {
   // Type of HTTP 1.1 Methods
@@ -158,3 +159,26 @@ message ConfigurationItem {
   // the metadata which will be passed to/from configuration store component.
   map<string,string> metadata = 3;
 }
+
+// JobFailurePolicy defines the policy to apply when a job fails to trigger.
+message JobFailurePolicy {
+  // policy is the policy to apply when a job fails to trigger.
+  oneof policy {
+    JobFailurePolicyDrop drop = 1;
+    JobFailurePolicyConstant constant = 2;
+  }
+}
+
+// JobFailurePolicyDrop is a policy which drops the job tick when the job fails to trigger.
+message JobFailurePolicyDrop {}
+
+// JobFailurePolicyConstant is a policy which retries the job at a consistent interval when the job fails to trigger.
+message JobFailurePolicyConstant {
+  // interval is the constant delay to wait before retrying the job.
+  google.protobuf.Duration interval = 1;
+
+  // max_retries is the optional maximum number of retries to attempt before giving up.
+  // If unset, the Job will be retried indefinitely.
+  optional uint32 max_retries = 2;
+}
+

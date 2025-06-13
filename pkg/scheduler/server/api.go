@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
@@ -201,13 +202,13 @@ func (s *Server) WatchHosts(_ *schedulerv1pb.WatchHostsRequest, stream scheduler
 }
 
 //nolint:protogetter
-func schedFPToCron(fp *schedulerv1pb.FailurePolicy) *api.FailurePolicy {
+func schedFPToCron(fp *commonv1pb.JobFailurePolicy) *api.FailurePolicy {
 	if fp == nil {
 		return nil
 	}
 
 	switch fp.GetPolicy().(type) {
-	case *schedulerv1pb.FailurePolicy_Constant:
+	case *commonv1pb.JobFailurePolicy_Constant:
 		return &api.FailurePolicy{
 			Policy: &api.FailurePolicy_Constant{
 				Constant: &api.FailurePolicyConstant{
@@ -216,7 +217,7 @@ func schedFPToCron(fp *schedulerv1pb.FailurePolicy) *api.FailurePolicy {
 				},
 			},
 		}
-	case *schedulerv1pb.FailurePolicy_Drop:
+	case *commonv1pb.JobFailurePolicy_Drop:
 		return &api.FailurePolicy{
 			Policy: &api.FailurePolicy_Drop{
 				Drop: new(api.FailurePolicyDrop),
@@ -229,25 +230,25 @@ func schedFPToCron(fp *schedulerv1pb.FailurePolicy) *api.FailurePolicy {
 }
 
 //nolint:protogetter
-func cronFPToSched(fp *api.FailurePolicy) *schedulerv1pb.FailurePolicy {
+func cronFPToSched(fp *api.FailurePolicy) *commonv1pb.JobFailurePolicy {
 	if fp == nil {
 		return nil
 	}
 
 	switch fp.GetPolicy().(type) {
 	case *api.FailurePolicy_Constant:
-		return &schedulerv1pb.FailurePolicy{
-			Policy: &schedulerv1pb.FailurePolicy_Constant{
-				Constant: &schedulerv1pb.FailurePolicyConstant{
+		return &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Constant{
+				Constant: &commonv1pb.JobFailurePolicyConstant{
 					Interval:   fp.GetConstant().Interval,
 					MaxRetries: fp.GetConstant().MaxRetries,
 				},
 			},
 		}
 	case *api.FailurePolicy_Drop:
-		return &schedulerv1pb.FailurePolicy{
-			Policy: &schedulerv1pb.FailurePolicy_Drop{
-				Drop: new(schedulerv1pb.FailurePolicyDrop),
+		return &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Drop{
+				Drop: new(commonv1pb.JobFailurePolicyDrop),
 			},
 		}
 

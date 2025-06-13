@@ -15,6 +15,7 @@ package constant
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -23,10 +24,13 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	corev1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -35,52 +39,70 @@ func init() {
 
 type interval struct {
 	scheduler *scheduler.Scheduler
+	daprd     *daprd.Daprd
+	triggered chan string
 }
 
 func (i *interval) Setup(t *testing.T) []framework.Option {
+	i.triggered = make(chan string, 10)
 	i.scheduler = scheduler.New(t)
+
+	app := app.New(t,
+		app.WithOnJobEventFn(func(_ context.Context, req *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error) {
+			i.triggered <- req.GetName()
+			return nil, errors.New("an error")
+		}),
+	)
+
+	i.daprd = daprd.New(t,
+		daprd.WithAppPort(app.Port(t)),
+		daprd.WithAppProtocol("grpc"),
+		daprd.WithScheduler(i.scheduler),
+	)
+
 	return []framework.Option{
-		framework.WithProcesses(i.scheduler),
+		framework.WithProcesses(app, i.scheduler, i.daprd),
 	}
 }
 
 func (i *interval) Run(t *testing.T, ctx context.Context) {
 	i.scheduler.WaitUntilRunning(t, ctx)
+	i.daprd.WaitUntilRunning(t, ctx)
 
-	client := i.scheduler.Client(t, ctx)
-
-	job := i.scheduler.JobNowJob("test", "namespace", "appid1")
-	job.Job.FailurePolicy = &corev1.JobFailurePolicy{
-		Policy: &corev1.JobFailurePolicy_Constant{
-			Constant: &corev1.JobFailurePolicyConstant{
-				Interval:   durationpb.New(time.Second * 3),
-				MaxRetries: nil,
+	_, err := i.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+		Job: &rtv1.Job{
+			Name:    "test",
+			DueTime: ptr.Of("0s"),
+			FailurePolicy: &corev1.JobFailurePolicy{
+				Policy: &corev1.JobFailurePolicy_Constant{
+					Constant: &corev1.JobFailurePolicyConstant{
+						Interval:   durationpb.New(time.Second * 3),
+						MaxRetries: nil,
+					},
+				},
 			},
 		},
-	}
-
-	_, err := client.ScheduleJob(ctx, job)
+	})
 	require.NoError(t, err)
 
-	triggered := i.scheduler.WatchJobsFailed(t, ctx, &schedulerv1.WatchJobsRequestInitial{
-		AppId: "appid1", Namespace: "namespace",
-	})
-
+	// Should trigger once immediately
 	select {
-	case name := <-triggered:
+	case name := <-i.triggered:
 		assert.Equal(t, "test", name)
-	case <-time.After(time.Second * 5):
+	case <-time.After(time.Second * 1):
 		require.Fail(t, "timed out waiting for job")
 	}
 
+	// Should not trigger again for 2 seconds
 	select {
-	case <-triggered:
+	case <-i.triggered:
 		assert.Fail(t, "unexpected trigger")
-	case <-time.After(time.Second):
+	case <-time.After(time.Second * 2):
 	}
 
+	// Should trigger again after 3 seconds since first trigger
 	select {
-	case name := <-triggered:
+	case name := <-i.triggered:
 		assert.Equal(t, "test", name)
 	case <-time.After(time.Second * 5):
 		require.Fail(t, "timed out waiting for job")

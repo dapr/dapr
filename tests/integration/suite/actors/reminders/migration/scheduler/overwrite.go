@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	corev1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -133,9 +134,9 @@ spec:
 		Ttl:      ptr.Of("10000s"),
 		Data:     expAny,
 		Repeats:  ptr.Of(uint32(100)),
-		FailurePolicy: &schedulerv1.FailurePolicy{
-			Policy: &schedulerv1.FailurePolicy_Constant{
-				Constant: &schedulerv1.FailurePolicyConstant{
+		FailurePolicy: &corev1.JobFailurePolicy{
+			Policy: &corev1.JobFailurePolicy_Constant{
+				Constant: &corev1.JobFailurePolicyConstant{
 					Interval:   durationpb.New(time.Second * 1),
 					MaxRetries: ptr.Of(uint32(3)),
 				},
@@ -187,9 +188,9 @@ spec:
 		Ttl:      ptr.Of("10000s"),
 		Data:     expAny,
 		Repeats:  ptr.Of(uint32(100)),
-		FailurePolicy: &schedulerv1.FailurePolicy{
-			Policy: &schedulerv1.FailurePolicy_Constant{
-				Constant: &schedulerv1.FailurePolicyConstant{
+		FailurePolicy: &corev1.JobFailurePolicy{
+			Policy: &corev1.JobFailurePolicy_Constant{
+				Constant: &corev1.JobFailurePolicyConstant{
 					Interval:   durationpb.New(time.Second * 1),
 					MaxRetries: ptr.Of(uint32(3)),
 				},

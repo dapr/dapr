@@ -22,6 +22,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	anypb "google.golang.org/protobuf/types/known/anypb"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -736,6 +737,188 @@ func (x *ConfigurationItem) GetMetadata() map[string]string {
 	return nil
 }
 
+// JobFailurePolicy defines the policy to apply when a job fails to trigger.
+type JobFailurePolicy struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// policy is the policy to apply when a job fails to trigger.
+	//
+	// Types that are assignable to Policy:
+	//
+	//	*JobFailurePolicy_Drop
+	//	*JobFailurePolicy_Constant
+	Policy isJobFailurePolicy_Policy `protobuf_oneof:"policy"`
+}
+
+func (x *JobFailurePolicy) Reset() {
+	*x = JobFailurePolicy{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_common_v1_common_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *JobFailurePolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobFailurePolicy) ProtoMessage() {}
+
+func (x *JobFailurePolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_common_v1_common_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobFailurePolicy.ProtoReflect.Descriptor instead.
+func (*JobFailurePolicy) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_common_v1_common_proto_rawDescGZIP(), []int{8}
+}
+
+func (m *JobFailurePolicy) GetPolicy() isJobFailurePolicy_Policy {
+	if m != nil {
+		return m.Policy
+	}
+	return nil
+}
+
+func (x *JobFailurePolicy) GetDrop() *JobFailurePolicyDrop {
+	if x, ok := x.GetPolicy().(*JobFailurePolicy_Drop); ok {
+		return x.Drop
+	}
+	return nil
+}
+
+func (x *JobFailurePolicy) GetConstant() *JobFailurePolicyConstant {
+	if x, ok := x.GetPolicy().(*JobFailurePolicy_Constant); ok {
+		return x.Constant
+	}
+	return nil
+}
+
+type isJobFailurePolicy_Policy interface {
+	isJobFailurePolicy_Policy()
+}
+
+type JobFailurePolicy_Drop struct {
+	Drop *JobFailurePolicyDrop `protobuf:"bytes,1,opt,name=drop,proto3,oneof"`
+}
+
+type JobFailurePolicy_Constant struct {
+	Constant *JobFailurePolicyConstant `protobuf:"bytes,2,opt,name=constant,proto3,oneof"`
+}
+
+func (*JobFailurePolicy_Drop) isJobFailurePolicy_Policy() {}
+
+func (*JobFailurePolicy_Constant) isJobFailurePolicy_Policy() {}
+
+// JobFailurePolicyDrop is a policy which drops the job tick when the job fails to trigger.
+type JobFailurePolicyDrop struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *JobFailurePolicyDrop) Reset() {
+	*x = JobFailurePolicyDrop{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_common_v1_common_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *JobFailurePolicyDrop) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobFailurePolicyDrop) ProtoMessage() {}
+
+func (x *JobFailurePolicyDrop) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_common_v1_common_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobFailurePolicyDrop.ProtoReflect.Descriptor instead.
+func (*JobFailurePolicyDrop) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_common_v1_common_proto_rawDescGZIP(), []int{9}
+}
+
+// JobFailurePolicyConstant is a policy which retries the job at a consistent interval when the job fails to trigger.
+type JobFailurePolicyConstant struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// interval is the constant delay to wait before retrying the job.
+	Interval *durationpb.Duration `protobuf:"bytes,1,opt,name=interval,proto3" json:"interval,omitempty"`
+	// max_retries is the optional maximum number of retries to attempt before giving up.
+	// If unset, the Job will be retried indefinitely.
+	MaxRetries *uint32 `protobuf:"varint,2,opt,name=max_retries,json=maxRetries,proto3,oneof" json:"max_retries,omitempty"`
+}
+
+func (x *JobFailurePolicyConstant) Reset() {
+	*x = JobFailurePolicyConstant{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_common_v1_common_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *JobFailurePolicyConstant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobFailurePolicyConstant) ProtoMessage() {}
+
+func (x *JobFailurePolicyConstant) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_common_v1_common_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobFailurePolicyConstant.ProtoReflect.Descriptor instead.
+func (*JobFailurePolicyConstant) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_common_v1_common_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *JobFailurePolicyConstant) GetInterval() *durationpb.Duration {
+	if x != nil {
+		return x.Interval
+	}
+	return nil
+}
+
+func (x *JobFailurePolicyConstant) GetMaxRetries() uint32 {
+	if x != nil && x.MaxRetries != nil {
+		return *x.MaxRetries
+	}
+	return 0
+}
+
 var File_dapr_proto_common_v1_common_proto protoreflect.FileDescriptor
 
 var file_dapr_proto_common_v1_common_proto_rawDesc = []byte{
@@ -744,6 +927,8 @@ var file_dapr_proto_common_v1_common_proto_rawDesc = []byte{
 	0x6f, 0x74, 0x6f, 0x12, 0x14, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
 	0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x1a, 0x19, 0x67, 0x6f, 0x6f, 0x67, 0x6c,
 	0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x61, 0x6e, 0x79, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x1e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x64, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2e, 0x70,
 	0x72, 0x6f, 0x74, 0x6f, 0x22, 0xe3, 0x01, 0x0a, 0x0d, 0x48, 0x54, 0x54, 0x50, 0x45, 0x78, 0x74,
 	0x65, 0x6e, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x3c, 0x0a, 0x04, 0x76, 0x65, 0x72, 0x62, 0x18, 0x01,
 	0x20, 0x01, 0x28, 0x0e, 0x32, 0x28, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74,
@@ -838,15 +1023,36 @@ var file_dapr_proto_common_v1_common_proto_rawDesc = []byte{
 	0x74, 0x61, 0x1a, 0x3b, 0x0a, 0x0d, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x45, 0x6e,
 	0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
 	0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x42,
-	0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0c, 0x43,
-	0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x2f, 0x67, 0x69, 0x74,
-	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70,
-	0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x63, 0x6f, 0x6d, 0x6d,
-	0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0xaa, 0x02, 0x1b, 0x44,
-	0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67,
-	0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x33,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22,
+	0xac, 0x01, 0x0a, 0x10, 0x4a, 0x6f, 0x62, 0x46, 0x61, 0x69, 0x6c, 0x75, 0x72, 0x65, 0x50, 0x6f,
+	0x6c, 0x69, 0x63, 0x79, 0x12, 0x40, 0x0a, 0x04, 0x64, 0x72, 0x6f, 0x70, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x2a, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
+	0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x4a, 0x6f, 0x62, 0x46, 0x61, 0x69,
+	0x6c, 0x75, 0x72, 0x65, 0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x44, 0x72, 0x6f, 0x70, 0x48, 0x00,
+	0x52, 0x04, 0x64, 0x72, 0x6f, 0x70, 0x12, 0x4c, 0x0a, 0x08, 0x63, 0x6f, 0x6e, 0x73, 0x74, 0x61,
+	0x6e, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2e, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e,
+	0x4a, 0x6f, 0x62, 0x46, 0x61, 0x69, 0x6c, 0x75, 0x72, 0x65, 0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79,
+	0x43, 0x6f, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x74, 0x48, 0x00, 0x52, 0x08, 0x63, 0x6f, 0x6e, 0x73,
+	0x74, 0x61, 0x6e, 0x74, 0x42, 0x08, 0x0a, 0x06, 0x70, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x22, 0x16,
+	0x0a, 0x14, 0x4a, 0x6f, 0x62, 0x46, 0x61, 0x69, 0x6c, 0x75, 0x72, 0x65, 0x50, 0x6f, 0x6c, 0x69,
+	0x63, 0x79, 0x44, 0x72, 0x6f, 0x70, 0x22, 0x87, 0x01, 0x0a, 0x18, 0x4a, 0x6f, 0x62, 0x46, 0x61,
+	0x69, 0x6c, 0x75, 0x72, 0x65, 0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x43, 0x6f, 0x6e, 0x73, 0x74,
+	0x61, 0x6e, 0x74, 0x12, 0x35, 0x0a, 0x08, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x76, 0x61, 0x6c, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x19, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x44, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x52, 0x08, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x76, 0x61, 0x6c, 0x12, 0x24, 0x0a, 0x0b, 0x6d, 0x61,
+	0x78, 0x5f, 0x72, 0x65, 0x74, 0x72, 0x69, 0x65, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x48,
+	0x00, 0x52, 0x0a, 0x6d, 0x61, 0x78, 0x52, 0x65, 0x74, 0x72, 0x69, 0x65, 0x73, 0x88, 0x01, 0x01,
+	0x42, 0x0e, 0x0a, 0x0c, 0x5f, 0x6d, 0x61, 0x78, 0x5f, 0x72, 0x65, 0x74, 0x72, 0x69, 0x65, 0x73,
+	0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0c,
+	0x43, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x2f, 0x67, 0x69,
+	0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61,
+	0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x63, 0x6f, 0x6d,
+	0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0xaa, 0x02, 0x1b,
+	0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f,
+	0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x33,
 }
 
 var (
@@ -862,7 +1068,7 @@ func file_dapr_proto_common_v1_common_proto_rawDescGZIP() []byte {
 }
 
 var file_dapr_proto_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_dapr_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_dapr_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_dapr_proto_common_v1_common_proto_goTypes = []interface{}{
 	(HTTPExtension_Verb)(0),            // 0: dapr.proto.common.v1.HTTPExtension.Verb
 	(StateOptions_StateConcurrency)(0), // 1: dapr.proto.common.v1.StateOptions.StateConcurrency
@@ -875,26 +1081,33 @@ var file_dapr_proto_common_v1_common_proto_goTypes = []interface{}{
 	(*Etag)(nil),                       // 8: dapr.proto.common.v1.Etag
 	(*StateOptions)(nil),               // 9: dapr.proto.common.v1.StateOptions
 	(*ConfigurationItem)(nil),          // 10: dapr.proto.common.v1.ConfigurationItem
-	nil,                                // 11: dapr.proto.common.v1.StateItem.MetadataEntry
-	nil,                                // 12: dapr.proto.common.v1.ConfigurationItem.MetadataEntry
-	(*anypb.Any)(nil),                  // 13: google.protobuf.Any
+	(*JobFailurePolicy)(nil),           // 11: dapr.proto.common.v1.JobFailurePolicy
+	(*JobFailurePolicyDrop)(nil),       // 12: dapr.proto.common.v1.JobFailurePolicyDrop
+	(*JobFailurePolicyConstant)(nil),   // 13: dapr.proto.common.v1.JobFailurePolicyConstant
+	nil,                                // 14: dapr.proto.common.v1.StateItem.MetadataEntry
+	nil,                                // 15: dapr.proto.common.v1.ConfigurationItem.MetadataEntry
+	(*anypb.Any)(nil),                  // 16: google.protobuf.Any
+	(*durationpb.Duration)(nil),        // 17: google.protobuf.Duration
 }
 var file_dapr_proto_common_v1_common_proto_depIdxs = []int32{
 	0,  // 0: dapr.proto.common.v1.HTTPExtension.verb:type_name -> dapr.proto.common.v1.HTTPExtension.Verb
-	13, // 1: dapr.proto.common.v1.InvokeRequest.data:type_name -> google.protobuf.Any
+	16, // 1: dapr.proto.common.v1.InvokeRequest.data:type_name -> google.protobuf.Any
 	3,  // 2: dapr.proto.common.v1.InvokeRequest.http_extension:type_name -> dapr.proto.common.v1.HTTPExtension
-	13, // 3: dapr.proto.common.v1.InvokeResponse.data:type_name -> google.protobuf.Any
+	16, // 3: dapr.proto.common.v1.InvokeResponse.data:type_name -> google.protobuf.Any
 	8,  // 4: dapr.proto.common.v1.StateItem.etag:type_name -> dapr.proto.common.v1.Etag
-	11, // 5: dapr.proto.common.v1.StateItem.metadata:type_name -> dapr.proto.common.v1.StateItem.MetadataEntry
+	14, // 5: dapr.proto.common.v1.StateItem.metadata:type_name -> dapr.proto.common.v1.StateItem.MetadataEntry
 	9,  // 6: dapr.proto.common.v1.StateItem.options:type_name -> dapr.proto.common.v1.StateOptions
 	1,  // 7: dapr.proto.common.v1.StateOptions.concurrency:type_name -> dapr.proto.common.v1.StateOptions.StateConcurrency
 	2,  // 8: dapr.proto.common.v1.StateOptions.consistency:type_name -> dapr.proto.common.v1.StateOptions.StateConsistency
-	12, // 9: dapr.proto.common.v1.ConfigurationItem.metadata:type_name -> dapr.proto.common.v1.ConfigurationItem.MetadataEntry
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	15, // 9: dapr.proto.common.v1.ConfigurationItem.metadata:type_name -> dapr.proto.common.v1.ConfigurationItem.MetadataEntry
+	12, // 10: dapr.proto.common.v1.JobFailurePolicy.drop:type_name -> dapr.proto.common.v1.JobFailurePolicyDrop
+	13, // 11: dapr.proto.common.v1.JobFailurePolicy.constant:type_name -> dapr.proto.common.v1.JobFailurePolicyConstant
+	17, // 12: dapr.proto.common.v1.JobFailurePolicyConstant.interval:type_name -> google.protobuf.Duration
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_dapr_proto_common_v1_common_proto_init() }
@@ -999,14 +1212,55 @@ func file_dapr_proto_common_v1_common_proto_init() {
 				return nil
 			}
 		}
+		file_dapr_proto_common_v1_common_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*JobFailurePolicy); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_common_v1_common_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*JobFailurePolicyDrop); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_common_v1_common_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*JobFailurePolicyConstant); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
+	file_dapr_proto_common_v1_common_proto_msgTypes[8].OneofWrappers = []interface{}{
+		(*JobFailurePolicy_Drop)(nil),
+		(*JobFailurePolicy_Constant)(nil),
+	}
+	file_dapr_proto_common_v1_common_proto_msgTypes[10].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_common_v1_common_proto_rawDesc,
 			NumEnums:      3,
-			NumMessages:   10,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package dapr.proto.scheduler.v1;
 
-import "dapr/proto/scheduler/v1/failurepolicy.proto";
+import "dapr/proto/common/v1/common.proto";
 import "google/protobuf/any.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
@@ -45,7 +45,7 @@ message Job {
   // trigger.
   // By default, the failure policy is FailurePolicyConstant with a 1s interval
   // and 3 maximum retries.
-  optional FailurePolicy failure_policy = 6;
+  optional common.v1.JobFailurePolicy failure_policy = 6;
 
   // If true, allows this job to overwrite an existing job with the same name.
   bool overwrite = 7;

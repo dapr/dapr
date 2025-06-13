@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	corev1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -49,9 +50,9 @@ func (m *maxretires) Run(t *testing.T, ctx context.Context) {
 	client := m.scheduler.Client(t, ctx)
 
 	job := m.scheduler.JobNowJob("test", "namespace", "appid1")
-	job.Job.FailurePolicy = &schedulerv1.FailurePolicy{
-		Policy: &schedulerv1.FailurePolicy_Constant{
-			Constant: &schedulerv1.FailurePolicyConstant{
+	job.Job.FailurePolicy = &corev1.JobFailurePolicy{
+		Policy: &corev1.JobFailurePolicy_Constant{
+			Constant: &corev1.JobFailurePolicyConstant{
 				Interval:   nil,
 				MaxRetries: ptr.Of(uint32(4)),
 			},
