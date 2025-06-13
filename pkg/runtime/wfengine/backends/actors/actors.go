@@ -29,6 +29,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -221,6 +222,9 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		_, eerr := engine.Call(ctx, req)
 		status, ok := status.FromError(eerr)
 		if ok && status.Code() == codes.FailedPrecondition {
+			return eerr
+		}
+		if errors.Is(eerr, actorerrors.ErrCreatingActor) {
 			return eerr
 		}
 		return backoff.Permanent(eerr)
