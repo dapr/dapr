@@ -2915,25 +2915,27 @@ func TestV1StateEndpoints(t *testing.T) {
 	failingStore := &daprt.FailingStatestore{
 		Failure: daprt.NewFailure(
 			map[string]int{
-				"failingGetKey":        1,
-				"failingSetKey":        1,
-				"failingDeleteKey":     1,
-				"failingBulkGetKey":    1,
-				"failingBulkSetKey":    1,
-				"failingBulkDeleteKey": 1,
-				"failingMultiKey":      1,
-				"failingQueryKey":      1,
+				"failingGetKey":                 1,
+				"failingGetKeyWithKeyParameter": 1,
+				"failingSetKey":                 1,
+				"failingDeleteKey":              1,
+				"failingBulkGetKey":             1,
+				"failingBulkSetKey":             1,
+				"failingBulkDeleteKey":          1,
+				"failingMultiKey":               1,
+				"failingQueryKey":               1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":         time.Second * 30,
-				"timeoutSetKey":         time.Second * 30,
-				"timeoutDeleteKey":      time.Second * 30,
-				"timeoutBulkGetKey":     time.Second * 30,
-				"timeoutBulkGetKeyBulk": time.Second * 30,
-				"timeoutBulkSetKey":     time.Second * 30,
-				"timeoutBulkDeleteKey":  time.Second * 30,
-				"timeoutMultiKey":       time.Second * 30,
-				"timeoutQueryKey":       time.Second * 30,
+				"timeoutGetKey":                 time.Second * 30,
+				"timeoutGetKeyWithKeyParameter": time.Second * 30,
+				"timeoutSetKey":                 time.Second * 30,
+				"timeoutDeleteKey":              time.Second * 30,
+				"timeoutBulkGetKey":             time.Second * 30,
+				"timeoutBulkGetKeyBulk":         time.Second * 30,
+				"timeoutBulkSetKey":             time.Second * 30,
+				"timeoutBulkDeleteKey":          time.Second * 30,
+				"timeoutMultiKey":               time.Second * 30,
+				"timeoutQueryKey":               time.Second * 30,
 			},
 			map[string]int{},
 		),
@@ -3017,6 +3019,15 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 	})
 
+	t.Run("Get state - 204 No Content Found with Query Parameter", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s?key=bad-key", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+	})
+
 	t.Run("Get state - Good Key", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
@@ -3026,8 +3037,34 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
 	})
 
+	t.Run("Get state - Good Key with Query Parameter", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s?key=good-key", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading existing key with query parameter should succeed")
+		assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
+	})
+
+	t.Run("Get state - Bad Key with Query Parameter", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s?key=bad-key", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key with query parameter should return 204")
+	})
+
 	t.Run("Get state - Upstream error", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/error-key", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 500, resp.StatusCode, "reading existing key should succeed")
+		assert.Equal(t, "ERR_STATE_GET", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Get state - Upstream error with Query Parameter", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s?key=error-key", storeName)
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
@@ -3305,6 +3342,14 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 2, failingStore.Failure.CallCount("failingGetKey"))
 	})
 
+	t.Run("get state request retries with resiliency with query parameter", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s?key=failingGetKeyWithKeyParameter", "failStore")
+
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode) // No body in the response.
+		assert.Equal(t, 2, failingStore.Failure.CallCount("failingGetKeyWithKeyParameter"))
+	})
+
 	t.Run("get state request times out with resiliency", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/timeoutGetKey", "failStore")
 
@@ -3314,6 +3359,18 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutGetKey"))
+		assert.Less(t, end.Sub(start), time.Second*30)
+	})
+
+	t.Run("get state request times out with resiliency with query parameter", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s?key=timeoutGetKeyWithKeyParameter", "failStore")
+
+		start := time.Now()
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		end := time.Now()
+
+		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
+		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutGetKeyWithKeyParameter"))
 		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 

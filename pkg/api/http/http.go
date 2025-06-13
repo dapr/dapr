@@ -201,6 +201,16 @@ func (a *api) constructStateEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
+			Methods: []string{nethttp.MethodGet},
+			Route:   "state/{storeName}",
+			Version: apiVersionV1,
+			Group:   endpointGroupStateV1,
+			Handler: a.onGetState,
+			Settings: endpoints.EndpointSettings{
+				Name: "GetStateParameterized",
+			},
+		},
+		{
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "state/{storeName}",
 			Version: apiVersionV1,
@@ -620,6 +630,11 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	metadata := getMetadataFromRequest(r)
 
 	key := chi.URLParam(r, stateKeyParam)
+
+	if key == "" {
+		key = r.URL.Query().Get(stateKeyParam)
+	}
+
 	consistency := r.URL.Query().Get(consistencyParam)
 	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID())
 	if err != nil {
