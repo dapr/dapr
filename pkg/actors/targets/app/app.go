@@ -39,7 +39,7 @@ import (
 	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
-	"github.com/dapr/kit/utils"
+	"github.com/dapr/kit/strings"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.targets.app")
@@ -168,7 +168,7 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	// Allow stopping a recurring reminder or timer
-	if v := res.GetHeaders()["X-Daprremindercancel"]; v != nil && len(v.GetValues()) > 0 && utils.IsTruthy(v.GetValues()[0]) {
+	if v := res.GetHeaders()["X-Daprremindercancel"]; v != nil && len(v.GetValues()) > 0 && strings.IsTruthy(v.GetValues()[0]) {
 		return res, actorerrors.ErrReminderCanceled
 	}
 

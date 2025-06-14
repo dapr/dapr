@@ -5,12 +5,12 @@ import (
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
-	"github.com/dapr/kit/utils"
+	"github.com/dapr/kit/strings"
 )
 
 // IsAnnotatedForDapr whether the dapr enabled annotation is present and true.
 func IsAnnotatedForDapr(a map[string]string) bool {
-	return utils.IsTruthy(a[annotations.KeyEnabled])
+	return strings.IsTruthy(a[annotations.KeyEnabled])
 }
 
 func GetAnnotationIntValueOrDefault(a map[string]string, annotationKey string, defaultValue int32) int32 {

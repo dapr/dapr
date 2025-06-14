@@ -22,7 +22,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/utils"
+	"github.com/dapr/kit/strings"
 )
 
 const (
@@ -333,7 +333,7 @@ func (h *DaprHandler) getEnableMetrics(wrapper ObjectWrapper) bool {
 	annotationsMap := wrapper.GetTemplateAnnotations()
 	enableMetrics := defaultMetricsEnabled
 	if val := annotationsMap[annotations.KeyEnableMetrics]; val != "" {
-		enableMetrics = utils.IsTruthy(val)
+		enableMetrics = strings.IsTruthy(val)
 	}
 	return enableMetrics
 }

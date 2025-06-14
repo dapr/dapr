@@ -5,13 +5,12 @@ package diagnostics
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
-
-	"github.com/dapr/dapr/utils"
 )
 
 // NewTag is a helper to create an opencensus tag that can be used in the different helpers here
@@ -99,7 +98,7 @@ func CleanupRegisteredViews(viewNames ...string) {
 
 	// append default views to clean if not already present
 	for _, v := range defaultViewsToClean {
-		if !utils.Contains(viewNames, v) {
+		if !slices.Contains(viewNames, v) {
 			viewNames = append(viewNames, v)
 		}
 	}

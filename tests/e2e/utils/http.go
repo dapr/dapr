@@ -26,7 +26,7 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 const (
@@ -47,7 +47,7 @@ func InitHTTPClient(allowHTTP2 bool) {
 // This should not be used except in rare circumstances. Developers should use the shared httpClient instead to re-use sockets as much as possible.
 func NewHTTPClient(allowHTTP2 bool) *http.Client {
 	// HTTP/2 is allowed only if the DAPR_TESTS_HTTP2 env var is set
-	allowHTTP2 = allowHTTP2 && utils.IsTruthy(os.Getenv("DAPR_TESTS_HTTP2"))
+	allowHTTP2 = allowHTTP2 && kitstrings.IsTruthy(os.Getenv("DAPR_TESTS_HTTP2"))
 
 	if allowHTTP2 {
 		return &http.Client{

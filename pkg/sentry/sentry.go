@@ -37,6 +37,7 @@ import (
 	validatorKube "github.com/dapr/dapr/pkg/sentry/server/validator/kubernetes"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/crypto/spiffe"
 	"github.com/dapr/kit/logger"
 )
 
@@ -81,7 +82,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 		Healthz:                 opts.Healthz,
 		Mode:                    opts.Config.Mode,
 		// Override the request source to our in memory CA since _we_ are sentry!
-		OverrideCertRequestFn: func(ctx context.Context, csrDER []byte) ([]*x509.Certificate, error) {
+		OverrideCertRequestFn: func(ctx context.Context, csrDER []byte) (*spiffe.SVIDResponse, error) {
 			csr, csrErr := x509.ParseCertificateRequest(csrDER)
 			if csrErr != nil {
 				monitoring.ServerCertIssueFailed("invalid_csr")
@@ -98,7 +99,9 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 				monitoring.ServerCertIssueFailed("ca_error")
 				return nil, csrErr
 			}
-			return certs, nil
+			return &spiffe.SVIDResponse{
+				X509Certificates: certs,
+			}, nil
 		},
 	})
 	if err != nil {

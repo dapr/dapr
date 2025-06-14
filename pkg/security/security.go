@@ -36,6 +36,8 @@ import (
 	"github.com/dapr/kit/crypto/spiffe"
 	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors"
+	"github.com/dapr/kit/crypto/spiffe/trustanchors/file"
+	"github.com/dapr/kit/crypto/spiffe/trustanchors/static"
 	"github.com/dapr/kit/logger"
 )
 
@@ -179,14 +181,16 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 
 			switch {
 			case len(opts.TrustAnchors) > 0:
-				trustAnchors, err = trustanchors.FromStatic(opts.TrustAnchors)
+				trustAnchors, err = static.From(static.Options{
+					Anchors: opts.TrustAnchors,
+				})
 				if err != nil {
 					return nil, err
 				}
 			case opts.TrustAnchorsFile != nil:
-				trustAnchors = trustanchors.FromFile(trustanchors.OptionsFile{
-					Log:  log,
-					Path: *opts.TrustAnchorsFile,
+				trustAnchors = file.From(file.Options{
+					Log:    log,
+					CAPath: *opts.TrustAnchorsFile,
 				})
 			}
 		}
@@ -248,7 +252,7 @@ func (p *provider) Run(ctx context.Context) error {
 			if err := p.sec.spiffe.Ready(ctx); err != nil {
 				return err
 			}
-			id, err := p.sec.spiffe.SVIDSource().GetX509SVID()
+			id, err := p.sec.spiffe.X509SVIDSource().GetX509SVID()
 			if err != nil {
 				return err
 			}
@@ -285,7 +289,7 @@ func (s *security) GRPCDialOptionMTLS(appID spiffeid.ID) grpc.DialOption {
 	}
 
 	return grpc.WithTransportCredentials(
-		grpccredentials.MTLSClientCredentials(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(appID)),
+		grpccredentials.MTLSClientCredentials(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(appID)),
 	)
 }
 
@@ -299,7 +303,7 @@ func (s *security) GRPCServerOptionMTLS() grpc.ServerOption {
 	return grpc.Creds(
 		// TODO: It would be better if we could give a subset of trust domains in
 		// which this server authorizes.
-		grpccredentials.MTLSServerCredentials(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeAny()),
+		grpccredentials.MTLSServerCredentials(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeAny()),
 	)
 }
 
@@ -307,7 +311,7 @@ func (s *security) GRPCServerOptionMTLS() grpc.ServerOption {
 // authentication of clients using the current trust anchors. Doesn't require
 // clients to present a certificate.
 func (s *security) GRPCServerOptionNoClientAuth() grpc.ServerOption {
-	return grpc.Creds(grpccredentials.TLSServerCredentials(s.spiffe.SVIDSource()))
+	return grpc.Creds(grpccredentials.TLSServerCredentials(s.spiffe.X509SVIDSource()))
 }
 
 // GRPCDialOptionMTLSUnknownTrustDomain returns a gRPC dial option which
@@ -329,7 +333,7 @@ func (s *security) GRPCDialOptionMTLSUnknownTrustDomain(ns, appID string) grpc.D
 	}
 
 	return grpc.WithTransportCredentials(
-		grpccredentials.MTLSClientCredentials(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AdaptMatcher(matcher)),
+		grpccredentials.MTLSClientCredentials(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AdaptMatcher(matcher)),
 	)
 }
 
@@ -364,7 +368,7 @@ func (s *security) ControlPlaneNamespace() string {
 // using the current signed server certificate. Authorizes client certificate
 // chains against the trust anchors.
 func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
-	return tlsconfig.TLSServerConfig(s.spiffe.SVIDSource())
+	return tlsconfig.TLSServerConfig(s.spiffe.X509SVIDSource())
 }
 
 // NetListenerID returns a mTLS net listener which instruments using the
@@ -375,7 +379,7 @@ func (s *security) NetListenerID(lis net.Listener, id spiffeid.ID) net.Listener 
 		return lis
 	}
 	return tls.NewListener(lis,
-		tlsconfig.MTLSServerConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id)),
+		tlsconfig.MTLSServerConfig(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id)),
 	)
 }
 
@@ -388,7 +392,7 @@ func (s *security) NetDialerID(ctx context.Context, spiffeID spiffeid.ID, timeou
 	}
 	return (&tls.Dialer{
 		NetDialer: (&net.Dialer{Timeout: timeout, Cancel: ctx.Done()}),
-		Config:    tlsconfig.MTLSClientConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(spiffeID)),
+		Config:    tlsconfig.MTLSClientConfig(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(spiffeID)),
 	}).Dial
 }
 
@@ -403,7 +407,7 @@ func (s *security) MTLSClientConfig(id spiffeid.ID) *tls.Config {
 		return nil
 	}
 
-	return tlsconfig.MTLSClientConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id))
+	return tlsconfig.MTLSClientConfig(s.spiffe.X509SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id))
 }
 
 // CurrentNamespace returns the namespace of this workload.
@@ -445,7 +449,7 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 		return ctx
 	}
 
-	return spiffecontext.With(ctx, s.spiffe)
+	return spiffecontext.WithSpiffe(ctx, s.spiffe)
 }
 
 func (s *security) IdentityDir() *string {

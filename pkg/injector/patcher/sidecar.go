@@ -23,7 +23,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
-	"github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 // GetInjectedComponentContainersFn is a function that returns the list of component containers for a given appID and namespace.
@@ -190,7 +190,7 @@ func setValueFromString(rt reflect.Type, rv reflect.Value, val string, key strin
 	case reflect.String:
 		rv.SetString(val)
 	case reflect.Bool:
-		rv.SetBool(utils.IsTruthy(val))
+		rv.SetBool(kitstrings.IsTruthy(val))
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		v, err := strconv.ParseInt(val, 10, 64)
 		if err == nil {
