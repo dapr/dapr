@@ -17,7 +17,6 @@ package runtime
 import (
 	"context"
 	"crypto/rand"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -92,6 +91,7 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/crypto/spiffe"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -2178,8 +2178,8 @@ func testSecurity(t *testing.T) security.Handler {
 		ControlPlaneTrustDomain: "test.example.com",
 		ControlPlaneNamespace:   "default",
 		MTLSEnabled:             false,
-		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
-			return []*x509.Certificate{nil}, nil
+		OverrideCertRequestFn: func(context.Context, []byte) (*spiffe.SVIDResponse, error) {
+			return nil, nil
 		},
 		Healthz: healthz.New(),
 	})

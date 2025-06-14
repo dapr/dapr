@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/kit/crypto/spiffe"
 )
 
 func Test_Start(t *testing.T) {
@@ -97,8 +98,10 @@ func Test_Start(t *testing.T) {
 			ControlPlaneTrustDomain: "test.example.com",
 			ControlPlaneNamespace:   "default",
 			MTLSEnabled:             true,
-			OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
-				return []*x509.Certificate{workloadCert}, nil
+			OverrideCertRequestFn: func(context.Context, []byte) (*spiffe.SVIDResponse, error) {
+				return &spiffe.SVIDResponse{
+					X509Certificates: []*x509.Certificate{workloadCert},
+				}, nil
 			},
 			Healthz: healthz.New(),
 		})
