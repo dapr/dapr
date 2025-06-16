@@ -129,7 +129,7 @@ func New(opts Options) (Interface, error) {
 		hostname:      opts.Hostname,
 		operationLock: fifo.New(),
 		apiLevel:      opts.APILevel,
-		htarget:       opts.Healthz.AddTarget("placement-service"),
+		htarget:       opts.Healthz.AddTarget("internal-placement-service"),
 		lock:          lock,
 		readyCh:       make(chan struct{}),
 	}, nil
