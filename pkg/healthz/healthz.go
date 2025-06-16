@@ -25,7 +25,7 @@ type Healthz interface {
 }
 
 type healthz struct {
-	mu        sync.RWMutex
+	lock      sync.RWMutex
 	targets   int64
 	unhealthy map[string]struct{}
 }
@@ -38,15 +38,15 @@ func New() Healthz {
 }
 
 func (h *healthz) IsReady() bool {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.lock.RLock()
+	defer h.lock.RUnlock()
 	// If no targets are registered, the server is not ready.
 	return h.targets > 0 && len(h.unhealthy) == 0
 }
 
 func (h *healthz) GetUnhealthyTargets() []string {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.lock.RLock()
+	defer h.lock.RUnlock()
 
 	unhealthyList := make([]string, 0, len(h.unhealthy))
 	for name := range h.unhealthy {
@@ -56,8 +56,8 @@ func (h *healthz) GetUnhealthyTargets() []string {
 }
 
 func (h *healthz) AddTarget(name string) Target {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.lock.Lock()
+	defer h.lock.Unlock()
 	t := &target{
 		name:    name,
 		healthz: h,
@@ -68,13 +68,13 @@ func (h *healthz) AddTarget(name string) Target {
 }
 
 func (h *healthz) markHealthy(name string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.lock.Lock()
+	defer h.lock.Unlock()
 	delete(h.unhealthy, name)
 }
 
 func (h *healthz) markUnhealthy(name string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.lock.Lock()
+	defer h.lock.Unlock()
 	h.unhealthy[name] = struct{}{}
 }
