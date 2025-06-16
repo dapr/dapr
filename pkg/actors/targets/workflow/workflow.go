@@ -42,6 +42,7 @@ type EventSink func(*backend.OrchestrationMetadata)
 
 type workflow struct {
 	appID             string
+	namespace         string
 	actorID           string
 	actorType         string
 	activityActorType string
@@ -70,6 +71,7 @@ type workflow struct {
 
 type WorkflowOptions struct {
 	AppID             string
+	Namespace         string
 	WorkflowActorType string
 	ActivityActorType string
 	ReminderInterval  *time.Duration
@@ -111,6 +113,7 @@ func WorkflowFactory(ctx context.Context, opts WorkflowOptions) (targets.Factory
 
 		w := &workflow{
 			appID:              opts.AppID,
+			namespace:          opts.Namespace,
 			actorID:            actorID,
 			actorType:          opts.WorkflowActorType,
 			activityActorType:  opts.ActivityActorType,

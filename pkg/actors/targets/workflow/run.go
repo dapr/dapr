@@ -70,13 +70,14 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 	}
 
 	var esHistoryEvent *backend.HistoryEvent
+
 	for _, e := range state.Inbox {
 		if es := e.GetExecutionStarted(); es != nil {
 			esHistoryEvent = e
 			break
 		}
 	}
-
+	// likely need to set task router here
 	rs := w.rstate
 	wi := &backend.OrchestrationWorkItem{
 		InstanceID: api.InstanceID(rs.GetInstanceId()),
@@ -84,6 +85,11 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		RetryCount: -1, // TODO
 		State:      rs,
 		Properties: make(map[string]any, 1),
+	}
+
+	// Set the source app ID for cross-app routing in durabletask-go
+	if esHistoryEvent != nil && esHistoryEvent.Router != nil {
+		esHistoryEvent.Router.Source = w.appID
 	}
 
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
@@ -157,8 +163,16 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 				TimerEvent: t,
 				Generation: state.Generation,
 			}
+
+			// TODO: confirm if i need to check router here
+			//var targetAppID string
+			//if router := t.GetRouter(); router != nil {
+			//	targetAppID = router.GetTarget()
+			//}
+
 			log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", w.actorID, reminderPrefix)
-			if _, err = w.createReminder(ctx, reminderPrefix, data, delay); err != nil {
+			//if _, err = w.createReminder(ctx, reminderPrefix, data, delay, targetAppID); err != nil {
+			if _, err = w.createReminder(ctx, reminderPrefix, data, delay, w.appID); err != nil {
 				executionStatus = diag.StatusRecoverable
 				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", w.actorID, err))
 			}

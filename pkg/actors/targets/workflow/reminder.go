@@ -27,7 +27,7 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 )
 
-func (w *workflow) createReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration) (string, error) {
+func (w *workflow) createReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration, targetAppID string) (string, error) {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
@@ -53,8 +53,13 @@ func (w *workflow) createReminder(ctx context.Context, namePrefix string, data p
 		}
 	}
 
+	actorType := w.actorType
+	if targetAppID != "" && targetAppID != w.appID {
+		actorType = fmt.Sprintf("dapr.internal.%s.%s.workflow", w.namespace, targetAppID)
+	}
+	
 	return reminderName, w.reminders.Create(ctx, &actorapi.CreateReminderRequest{
-		ActorType: w.actorType,
+		ActorType: actorType,
 		ActorID:   w.actorID,
 		Data:      adata,
 		DueTime:   delay.String(),

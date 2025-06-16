@@ -68,6 +68,7 @@ type Options struct {
 
 type Actors struct {
 	appID             string
+	namespace         string
 	workflowActorType string
 	activityActorType string
 
@@ -87,6 +88,7 @@ type Actors struct {
 func New(opts Options) *Actors {
 	return &Actors{
 		appID:                     opts.AppID,
+		namespace:                 opts.Namespace,
 		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
 		actors:                    opts.Actors,
@@ -110,6 +112,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	workflowFactory, err := workflow.WorkflowFactory(ctx, workflow.WorkflowOptions{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		ReminderInterval:  abe.defaultReminderInterval,
@@ -133,6 +136,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	activityFactory, err := activity.ActivityFactory(ctx, activity.ActivityOptions{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
 		ReminderInterval:  abe.defaultReminderInterval,
@@ -273,6 +277,8 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		opt(policy)
 	}
 
+	// TODO: cassie this will likely need to be updated for cross app suborchestration calls
+
 	requestBytes, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{
 		Policy:     policy,
 		StartEvent: e,
@@ -283,7 +289,13 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation request.
 	// Note that this request goes directly to the actor runtime, bypassing the API layer.
+	// Determine appID for cross app scenarios
+	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
+	// Use appID from event if present, else default is the current appID
+	// actorType := abe.getTargetActorType(abe.appID, WorkflowNameLabelKey)
+
 	req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
+		//WithActor(actorType, workflowInstanceID).
 		WithActor(abe.workflowActorType, workflowInstanceID).
 		WithData(requestBytes).
 		WithContentType(invokev1.ProtobufContentType)
@@ -304,6 +316,16 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	// successful request to CREATE workflow, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusSuccess, elapsed)
 	return nil
+}
+
+// getTargetActorType builds the actor type string for a given appID and kind (workflow/activity)
+func (abe *Actors) getTargetActorType(appID, kind string) string {
+	ns := abe.namespace
+
+	if appID == "" {
+		appID = abe.appID
+	}
+	return fmt.Sprintf("%s%s.%s.%s", ActorTypePrefix, ns, appID, kind)
 }
 
 // GetOrchestrationMetadata implements backend.Backend
@@ -396,14 +418,49 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 }
 
 // CompleteActivityWorkItem implements backend.Backend
-func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (abe *Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+	// TODO: @cassie, see about using e.GetRouter instead of the following, but it works
+	// Extract router information from the specific event type
+	var sourceAppID string
+	if taskCompleted := wi.Result.GetTaskCompleted(); taskCompleted != nil && taskCompleted.GetRouter() != nil {
+		sourceAppID = taskCompleted.GetRouter().GetSource()
+	} else if taskFailed := wi.Result.GetTaskFailed(); taskFailed != nil && taskFailed.GetRouter() != nil {
+		sourceAppID = taskFailed.GetRouter().GetSource()
+	} else {
+	}
+
+	var targetAppId string
+	if sourceAppID != "" && sourceAppID != abe.appID {
+		targetAppId = sourceAppID
+	}
+
+	data, err := proto.Marshal(wi.Result)
+	if err != nil {
+		return err
+	}
+
+	actorType := abe.getTargetActorType(targetAppId, WorkflowNameLabelKey)
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
+		WithActor(actorType, string(wi.InstanceID)).
+		WithData(data).
+		WithContentType(invokev1.OctetStreamContentType)
+
+	router, err := abe.actors.Router(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = router.Call(ctx, req)
+
 	// Sending true signals the waiting activity actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
 }
 
 // CompleteOrchestrationWorkItem implements backend.Backend
-func (*Actors) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (abe *Actors) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+	// TODO : Likely route back to the originating orchestrator workflow actor here
+
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil

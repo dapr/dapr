@@ -114,7 +114,9 @@ func (w *workflow) scheduleWorkflowStart(ctx context.Context, startEvent *backen
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
-	if _, err := w.createReminder(ctx, "start", nil, 0); err != nil {
+
+	// TODO: @cassie might need to tweak this for cross orchestration calls
+	if _, err := w.createReminder(ctx, "start", nil, 0, w.appID); err != nil {
 		return err
 	}
 
