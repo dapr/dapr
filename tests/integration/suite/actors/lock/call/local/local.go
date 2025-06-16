@@ -11,10 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package call
+package local
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/local"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/remote"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/local/chain"
 )

@@ -11,8 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package self
+package lock
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/self/chain"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/reminders/local"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/reminders/remote"
 )
