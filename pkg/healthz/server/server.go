@@ -50,9 +50,7 @@ func New(opts Options) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if !opts.Healthz.IsReady() {
-			for _, name := range opts.Healthz.GetUnhealthyTargets() {
-				opts.Log.WithFields(map[string]any{"target": name}).Debug("target is unhealthy")
-			}
+			opts.Log.WithFields(map[string]any{"targets": opts.Healthz.GetUnhealthyTargets()}).Debug("targets are unhealthy")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
