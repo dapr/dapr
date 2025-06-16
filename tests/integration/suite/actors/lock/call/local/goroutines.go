@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,12 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package self
+package local
 
 import (
 	"context"
+	"io"
 	nethttp "net/http"
-	"sync/atomic"
+	"strconv"
 	"testing"
 	"time"
 
@@ -30,75 +31,45 @@ import (
 )
 
 func init() {
-	suite.Register(new(grpc))
+	suite.Register(new(goroutines))
 }
 
-type grpc struct {
-	app      *actors.Actors
-	called   atomic.Int64
-	holdCall chan struct{}
+type goroutines struct {
+	app *actors.Actors
 }
 
-func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.holdCall = make(chan struct{})
-
+func (g *goroutines) Setup(t *testing.T) []framework.Option {
 	g.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-			if r.Method == nethttp.MethodDelete {
-				return
-			}
-			g.called.Add(1)
-			<-g.holdCall
+			io.ReadAll(r.Body)
 		}),
+		actors.WithActorIdleTimeout(time.Second),
 	)
+
 	return []framework.Option{
 		framework.WithProcesses(g.app),
 	}
 }
 
-func (g *grpc) Run(t *testing.T, ctx context.Context) {
+func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 	g.app.WaitUntilRunning(t, ctx)
 
 	client := g.app.GRPCClient(t, ctx)
 
-	errCh := make(chan error)
-	go func() {
+	startGoRoutines := g.app.Metrics(t, ctx)["go_goroutines"]
+
+	const n = 1000
+	for i := range n {
 		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "abc",
-			ActorId:   "123",
+			ActorId:   strconv.Itoa(i),
 			Method:    "foo",
 		})
-		errCh <- err
-	}()
-
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(1), g.called.Load())
-	}, time.Second*10, time.Millisecond*10)
-
-	go func() {
-		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-			ActorType: "abc",
-			ActorId:   "123",
-			Method:    "foo",
-		})
-		errCh <- err
-	}()
-
-	time.Sleep(time.Second)
-	assert.Equal(t, int64(1), g.called.Load())
-	g.holdCall <- struct{}{}
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(2), g.called.Load())
-	}, time.Second*10, time.Millisecond*10)
-	g.holdCall <- struct{}{}
-
-	for range 2 {
-		select {
-		case err := <-errCh:
-			require.NoError(t, err)
-		case <-time.After(time.Second * 5):
-			assert.Fail(t, "timeout")
-		}
+		require.NoError(t, err)
 	}
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.InDelta(c, startGoRoutines, g.app.Metrics(t, ctx)["go_goroutines"], 10)
+	}, time.Second*20, time.Second)
 }
