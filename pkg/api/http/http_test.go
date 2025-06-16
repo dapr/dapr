@@ -4061,7 +4061,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	const appID = "fakeAPI"
 	healthz := healthz.New()
-	htarget := healthz.AddTarget()
+	htarget := healthz.AddTarget("test-target")
 	testAPI := &api{
 		healthz: healthz,
 		universal: universal.New(universal.Options{
