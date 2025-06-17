@@ -26,9 +26,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
@@ -261,7 +263,18 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		return err
 	}
 
-	_, err = router.Call(ctx, req)
+	err = backoff.Retry(func() error {
+		_, eerr := router.Call(ctx, req)
+		status, ok := status.FromError(eerr)
+		if ok && status.Code() == codes.FailedPrecondition {
+			return eerr
+		}
+		if errors.Is(eerr, actorerrors.ErrCreatingActor) {
+			return eerr
+		}
+		return backoff.Permanent(eerr)
+	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
+
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to CREATE workflow, record count and latency metrics.
