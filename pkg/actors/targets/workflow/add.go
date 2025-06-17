@@ -46,18 +46,14 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 		return err
 	}
 
-	// TODO: @cassie, see about using e.GetRouter instead of the following, but it works
-	var targetApp string
-	// Get target app
-	if taskCompleted := e.GetTaskCompleted(); taskCompleted != nil && taskCompleted.GetRouter() != nil {
-		targetApp = taskCompleted.GetRouter().GetTarget()
-	} else if taskFailed := e.GetTaskFailed(); taskFailed != nil && taskFailed.GetRouter() != nil {
-		targetApp = taskFailed.GetRouter().GetTarget()
-	} else if taskScheduled := e.GetTaskScheduled(); taskScheduled != nil && taskScheduled.GetRouter() != nil {
-		targetApp = taskScheduled.GetRouter().GetTarget()
-	} else {
-		// Default to current app if no router info
-		targetApp = w.appID
+	// For activity completion events, we want to create the reminder on the same app where this workflow actor is hosted
+	targetApp := w.appID
+	if e.GetRouter() != nil {
+		// For activity completion events, use the source app from the router
+		targetApp = e.GetRouter().GetSource()
+		if targetApp == "" {
+			targetApp = w.appID
+		}
 	}
 
 	if _, err := w.createReminder(ctx, "new-event", nil, 0, targetApp); err != nil {

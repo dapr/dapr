@@ -419,14 +419,9 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 
 // CompleteActivityWorkItem implements backend.Backend
 func (abe *Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
-	// TODO: @cassie, see about using e.GetRouter instead of the following, but it works
-	// Extract router information from the specific event type
-	var sourceAppID string
-	if taskCompleted := wi.Result.GetTaskCompleted(); taskCompleted != nil && taskCompleted.GetRouter() != nil {
-		sourceAppID = taskCompleted.GetRouter().GetSource()
-	} else if taskFailed := wi.Result.GetTaskFailed(); taskFailed != nil && taskFailed.GetRouter() != nil {
-		sourceAppID = taskFailed.GetRouter().GetSource()
-	} else {
+	sourceAppID := abe.appID
+	if wi.Result.GetRouter() != nil {
+		sourceAppID = wi.Result.GetRouter().GetSource()
 	}
 
 	var targetAppId string

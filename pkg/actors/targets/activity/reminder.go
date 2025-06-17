@@ -15,7 +15,6 @@ package activity
 
 import (
 	"context"
-	"fmt"
 
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -40,23 +39,11 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 		return err
 	}
 
-	actorType := a.actorType
-
-	if ts := his.GetTaskScheduled(); ts != nil {
-		router := his.GetRouter()
-		if router != nil {
-			targetAppID := router.GetTarget()
-			if targetAppID != "" && targetAppID != a.appID {
-				actorType = fmt.Sprintf("dapr.internal.%s.%s.activity", a.namespace, targetAppID)
-				log.Debugf("Cross-app activity: routing to target app %s, actorType: %s", targetAppID, actorType)
-			}
-		}
-	}
-
-	log.Debugf("Creating activity reminder for actorType %s and actorID %s", actorType, a.actorID)
+	// The activity actor should always create reminders for its own actor type and ID
+	log.Debugf("Creating activity reminder for actorType %s and actorID %s", a.actorType, a.actorID)
 
 	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
-		ActorType: actorType,
+		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		DueTime:   "0s",
 		Name:      reminderName,
