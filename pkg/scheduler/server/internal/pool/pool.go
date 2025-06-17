@@ -16,6 +16,7 @@ package pool
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -95,7 +96,7 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 
 	dcancel, err := p.cron.DeliverablePrefixes(ctx, prefixes...)
 	if err != nil {
-		cancel()
+		cancel(err)
 		return nil, err
 	}
 
@@ -110,10 +111,10 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 		case <-p.closeCh:
 		}
 
-		log.Debugf("Closing connection to %s/%s", req.GetNamespace(), req.GetAppId())
+		err := fmt.Errorf("closing connection to %s/%s", req.GetNamespace(), req.GetAppId())
 
-		dcancel()
-		cancel()
+		dcancel(err)
+		cancel(err)
 
 		log.Debugf("Closed and removed connection to %s/%s", req.GetNamespace(), req.GetAppId())
 	}()
