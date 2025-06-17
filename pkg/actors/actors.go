@@ -24,6 +24,11 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/queue"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
+
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
@@ -52,10 +57,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/events/queue"
-	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -74,6 +75,7 @@ type Options struct {
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled    bool
 	MaxRequestBodySize int
+	Mode               modes.DaprMode
 }
 
 type InitOptions struct {
@@ -136,6 +138,7 @@ type actors struct {
 	registerDoneLock sync.RWMutex
 
 	clock clock.Clock
+	mode  modes.DaprMode
 }
 
 // New create a new actors runtime with given config.
@@ -167,6 +170,7 @@ func New(opts Options) Interface {
 		initDoneCh:         make(chan struct{}),
 		registerDoneCh:     make(chan struct{}),
 		maxRequestBodySize: opts.MaxRequestBodySize,
+		mode:               opts.Mode,
 	}
 }
 
@@ -215,6 +219,7 @@ func (a *actors) Init(opts InitOptions) error {
 		APILevel:  apiLevel,
 		Healthz:   a.healthz,
 		Scheduler: opts.SchedulerReloader,
+		Mode:      a.mode,
 	})
 	if err != nil {
 		return err
