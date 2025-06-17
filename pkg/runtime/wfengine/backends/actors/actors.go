@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -81,9 +80,6 @@ type Actors struct {
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
-
-	registeredCh chan struct{}
-	lock         sync.RWMutex
 }
 
 func New(opts Options) *Actors {
@@ -96,7 +92,6 @@ func New(opts Options) *Actors {
 		schedulerReminders:        opts.SchedulerReminders,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
-		registeredCh:              make(chan struct{}),
 		eventSink:                 opts.EventSink,
 	}
 }
@@ -173,8 +168,6 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 	)
 
-	close(abe.registeredCh)
-
 	return nil
 }
 
@@ -184,28 +177,12 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 		return err
 	}
 
-	defer func() {
-		abe.lock.Lock()
-		abe.registeredCh = make(chan struct{})
-		abe.lock.Unlock()
-	}()
-
 	return table.UnRegisterActorTypes(abe.workflowActorType, abe.activityActorType)
 }
 
 // RerunWorkflowFromEvent implements backend.Backend and reruns a workflow from
 // a specific event ID.
 func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.RerunWorkflowFromEventRequest) (api.InstanceID, error) {
-	abe.lock.RLock()
-	ch := abe.registeredCh
-	abe.lock.RUnlock()
-
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
-
 	if len(req.GetSourceInstanceID()) == 0 {
 		return "", status.Error(codes.InvalidArgument, "rerun workflow source instance ID is required")
 	}
@@ -251,16 +228,6 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
 func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
-	abe.lock.RLock()
-	ch := abe.registeredCh
-	abe.lock.RUnlock()
-
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
 	var workflowInstanceID string
 	if es := e.GetExecutionStarted(); es == nil {
 		return errors.New("the history event must be an ExecutionStartedEvent")
