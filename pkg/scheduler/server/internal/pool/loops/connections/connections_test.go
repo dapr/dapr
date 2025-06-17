@@ -88,9 +88,9 @@ func newSuite(t *testing.T) *suite {
 	var prefixes atomic.Pointer[[]string]
 	prefixes.Store(ptr.Of(make([]string, 0)))
 	connLoop := New(Options{
-		Cron: frameworkfake.New().WithDeliverablePrefixes(func(_ context.Context, ps ...string) (context.CancelFunc, error) {
+		Cron: frameworkfake.New().WithDeliverablePrefixes(func(_ context.Context, ps ...string) (context.CancelCauseFunc, error) {
 			prefixes.Store(ptr.Of(append(*prefixes.Load(), ps...)))
-			return func() {}, nil
+			return func(error) {}, nil
 		}),
 		CancelPool: func(err error) {
 			cancelCalled.Store(&err)
