@@ -223,7 +223,7 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to lookup actor: %w", err)
 	}
 
 	if lar.Local {
