@@ -16,7 +16,6 @@ package constant
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -50,7 +49,6 @@ func (m *maxretries) Setup(t *testing.T) []framework.Option {
 
 	app := app.New(t,
 		app.WithOnJobEventFn(func(_ context.Context, req *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error) {
-			fmt.Println("triggered", req.GetName())
 			m.triggered.Append(req.GetName())
 			return nil, errors.New("an error")
 		}),

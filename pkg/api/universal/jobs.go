@@ -183,10 +183,10 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 			Name:          inReq.GetName(),
 			Schedule:      resp.GetJob().Schedule, //nolint:protogetter
 			Data:          resp.GetJob().GetData(),
-			Repeats:       resp.GetJob().Repeats,            //nolint:protogetter
-			DueTime:       resp.GetJob().DueTime,            //nolint:protogetter
-			Ttl:           resp.GetJob().Ttl,                //nolint:protogetter
-			FailurePolicy: resp.GetJob().GetFailurePolicy(), //nolint:protogetter
+			Repeats:       resp.GetJob().Repeats, //nolint:protogetter
+			DueTime:       resp.GetJob().DueTime, //nolint:protogetter
+			Ttl:           resp.GetJob().Ttl,     //nolint:protogetter
+			FailurePolicy: resp.GetJob().GetFailurePolicy(),
 		},
 	}, nil
 }
