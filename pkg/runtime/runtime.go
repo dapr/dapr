@@ -39,6 +39,9 @@ import (
 
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/api/grpc"
@@ -83,8 +86,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime")
@@ -236,6 +237,7 @@ func newDaprRuntime(ctx context.Context,
 		CompStore:          compStore,
 		StateTTLEnabled:    globalConfig.IsFeatureEnabled(config.ActorStateTTL),
 		MaxRequestBodySize: runtimeConfig.maxRequestBodySize,
+		Mode:               runtimeConfig.mode,
 	})
 
 	processor := processor.New(processor.Options{
