@@ -1,0 +1,17 @@
+diff --git a/tests/integration/suite/placement/quorum/jwks.go b/tests/integration/suite/placement/quorum/jwks.go
+index 078324856..cd5615d2f 100644
+--- a/tests/integration/suite/placement/quorum/jwks.go
++++ b/tests/integration/suite/placement/quorum/jwks.go
+@@ -140,7 +140,11 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
+ 
+ 	errCh := make(chan error, 1)
+ 	go func() {
+-		errCh <- secProv.Run(ctx)
++		select {
++		case errCh <- secProv.Run(ctx):
++		case <-time.After(time.Second * 10):
++			errCh <- fmt.Errorf("security provider did not start in time")
++		}
+ 	}()
+ 	t.Cleanup(func() { cancel(); require.NoError(t, <-errCh) })
+ 
