@@ -39,7 +39,7 @@ func New() *Namespace {
 	}
 }
 
-func (n *Namespace) Add(ctx context.Context, opts Options) (context.Context, *connection.Connection, context.CancelFunc) {
+func (n *Namespace) Add(ctx context.Context, opts Options) (context.Context, *connection.Connection, context.CancelCauseFunc) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
@@ -51,13 +51,13 @@ func (n *Namespace) Add(ctx context.Context, opts Options) (context.Context, *co
 		n.stores[opts.Namespace] = store
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	remove := store.add(conn, opts)
 
-	return ctx, conn, func() {
+	return ctx, conn, func(cause error) {
 		n.lock.Lock()
 		defer n.lock.Unlock()
-		cancel()
+		cancel(cause)
 		remove()
 		conn.Close()
 

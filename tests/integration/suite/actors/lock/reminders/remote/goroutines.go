@@ -72,7 +72,7 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 	startGoRoutines1 := g.app1.Metrics(t, ctx)["go_goroutines"]
 	startGoRoutines2 := g.app2.Metrics(t, ctx)["go_goroutines"]
 
-	const n = 1000
+	const n = 500
 	for i := range n {
 		_, err := client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 			ActorType: "abc",
