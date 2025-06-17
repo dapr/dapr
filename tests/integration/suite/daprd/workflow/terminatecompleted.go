@@ -64,6 +64,7 @@ func (e *terminatecompleted) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, cl.TerminateOrchestration(ctx, id))
 
+	//nolint:staticcheck
 	_, err = e.workflow.Dapr().GRPCClient(t, ctx).TerminateWorkflowAlpha1(ctx, &rtv1.TerminateWorkflowRequest{
 		InstanceId:        string(id),
 		WorkflowComponent: "dapr",
