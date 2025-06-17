@@ -32,30 +32,30 @@ import (
 )
 
 func init() {
-	suite.Register(new(self))
+	suite.Register(new(local))
 }
 
-type self struct {
+type local struct {
 	daprd *daprd.Daprd
 
 	inInvoke    atomic.Bool
 	closeInvoke chan struct{}
 }
 
-func (s *self) Setup(t *testing.T) []framework.Option {
+func (l *local) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	s.closeInvoke = make(chan struct{})
+	l.closeInvoke = make(chan struct{})
 
 	app := app.New(t,
 		app.WithOnInvokeFn(func(context.Context, *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
-			s.inInvoke.Store(true)
-			<-s.closeInvoke
+			l.inInvoke.Store(true)
+			<-l.closeInvoke
 			return nil, nil
 		}),
 	)
 
-	s.daprd = daprd.New(t,
+	l.daprd = daprd.New(t,
 		daprd.WithAppPort(app.Port(t)),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithDaprGracefulShutdownSeconds(180),
@@ -69,16 +69,16 @@ func (s *self) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (s *self) Run(t *testing.T, ctx context.Context) {
-	s.daprd.Run(t, ctx)
-	t.Cleanup(func() { s.daprd.Cleanup(t) })
+func (l *local) Run(t *testing.T, ctx context.Context) {
+	l.daprd.Run(t, ctx)
+	t.Cleanup(func() { l.daprd.Cleanup(t) })
 
-	client := s.daprd.GRPCClient(t, ctx)
+	client := l.daprd.GRPCClient(t, ctx)
 
 	errCh := make(chan error)
 	go func() {
 		_, err := client.InvokeService(ctx, &rtv1.InvokeServiceRequest{
-			Id: s.daprd.AppID(),
+			Id: l.daprd.AppID(),
 			Message: &commonv1.InvokeRequest{
 				Method:        "foo",
 				HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_POST},
@@ -88,9 +88,9 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 		errCh <- err
 	}()
 
-	require.Eventually(t, s.inInvoke.Load, time.Second*10, time.Millisecond*10)
+	require.Eventually(t, l.inInvoke.Load, time.Second*10, time.Millisecond*10)
 
-	go s.daprd.Cleanup(t)
+	go l.daprd.Cleanup(t)
 
 	select {
 	case err := <-errCh:
@@ -98,7 +98,7 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(time.Second * 3):
 	}
 
-	close(s.closeInvoke)
+	close(l.closeInvoke)
 
 	select {
 	case err := <-errCh:
