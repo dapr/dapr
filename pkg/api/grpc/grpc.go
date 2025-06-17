@@ -1071,7 +1071,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 		Key:       key,
 	}
 
-	resp, err := astate.Get(ctx, &req)
+	resp, err := astate.Get(ctx, &req, true)
 	if err != nil {
 		if _, ok := status.FromError(err); ok {
 			apiServerLogger.Debug(err)
@@ -1143,7 +1143,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		Operations: actorOps,
 	}
 
-	err = astate.TransactionalStateOperation(ctx, false, &req)
+	err = astate.TransactionalStateOperation(ctx, false, &req, true)
 	if err != nil {
 		if _, ok := status.FromError(err); ok {
 			apiServerLogger.Debug(err)

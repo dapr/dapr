@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package local
 
 import (
 	"context"
@@ -30,38 +30,38 @@ import (
 )
 
 func init() {
-	suite.Register(new(self))
+	suite.Register(new(grpc))
 }
 
-type self struct {
+type grpc struct {
 	app      *actors.Actors
 	called   atomic.Int64
 	holdCall chan struct{}
 }
 
-func (s *self) Setup(t *testing.T) []framework.Option {
-	s.holdCall = make(chan struct{})
+func (g *grpc) Setup(t *testing.T) []framework.Option {
+	g.holdCall = make(chan struct{})
 
-	s.app = actors.New(t,
+	g.app = actors.New(t,
 		actors.WithActorTypes("abc"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			if r.Method == nethttp.MethodDelete {
 				return
 			}
-			s.called.Add(1)
-			<-s.holdCall
+			g.called.Add(1)
+			<-g.holdCall
 		}),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.app),
+		framework.WithProcesses(g.app),
 	}
 }
 
-func (s *self) Run(t *testing.T, ctx context.Context) {
-	s.app.WaitUntilRunning(t, ctx)
+func (g *grpc) Run(t *testing.T, ctx context.Context) {
+	g.app.WaitUntilRunning(t, ctx)
 
-	client := s.app.GRPCClient(t, ctx)
+	client := g.app.GRPCClient(t, ctx)
 
 	_, err := client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "abc",
@@ -72,7 +72,7 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, s.called.Load(), int64(1))
+		assert.GreaterOrEqual(c, g.called.Load(), int64(1))
 	}, time.Second*10, time.Millisecond*10)
 
 	_, err = client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
@@ -84,10 +84,10 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	time.Sleep(time.Second)
-	assert.Equal(t, int64(1), s.called.Load())
-	s.holdCall <- struct{}{}
+	assert.Equal(t, int64(1), g.called.Load())
+	g.holdCall <- struct{}{}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(2), s.called.Load())
+		assert.Equal(c, int64(2), g.called.Load())
 	}, time.Second*10, time.Millisecond*10)
-	s.holdCall <- struct{}{}
+	g.holdCall <- struct{}{}
 }
