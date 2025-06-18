@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -33,10 +34,12 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/concurrency/lock"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement.client")
@@ -49,6 +52,7 @@ type Options struct {
 	Healthz     healthz.Healthz
 	InitialHost *v1pb.Host
 	Mode        modes.DaprMode
+	Scheduler   schedclient.Reloader
 }
 
 type Client struct {
@@ -61,6 +65,10 @@ type Client struct {
 	client    v1pb.Placement_ReportDaprStatusClient
 	sendQueue chan *v1pb.Host
 	recvQueue chan *v1pb.PlacementOrder
+
+	scheduler     schedclient.Reloader
+	currentReport atomic.Pointer[[]string]
+	toReport      atomic.Pointer[[]string]
 
 	ready      atomic.Bool
 	retryCount uint32
@@ -120,13 +128,15 @@ func New(opts Options) (*Client, error) {
 		recvQueue: make(chan *v1pb.PlacementOrder),
 		table:     opts.Table,
 		htarget:   opts.Healthz.AddTarget(),
+		scheduler: opts.Scheduler,
 	}, nil
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	conctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	if err := c.connectRoundRobin(conctx); err != nil {
+	c.currentReport.Store(ptr.Of([]string{}))
+	c.toReport.Store(ptr.Of([]string{}))
+
+	if err := c.connectRoundRobin(ctx); err != nil {
 		return err
 	}
 
@@ -141,6 +151,9 @@ func (c *Client) Run(ctx context.Context) error {
 					case <-ctx.Done():
 						return ctx.Err()
 					case host := <-c.sendQueue:
+
+						c.toReport.Store(ptr.Of(host.GetEntities()))
+
 						if err := c.client.Send(host); err != nil {
 							return err
 						}
@@ -157,6 +170,12 @@ func (c *Client) Run(ctx context.Context) error {
 						return err
 					}
 
+					if order.GetOperation() == "unlock" &&
+						!slices.Equal(*c.toReport.Load(), *c.currentReport.Load()) {
+						c.scheduler.ReloadActorTypes(*c.toReport.Load())
+						c.currentReport.Store(c.toReport.Load())
+					}
+
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
@@ -169,11 +188,15 @@ func (c *Client) Run(ctx context.Context) error {
 
 	for {
 		err := runner().Run(ctx)
-		if err == nil {
+
+		c.scheduler.ReloadActorTypes([]string{})
+		c.currentReport.Store(ptr.Of([]string{}))
+		c.toReport.Store(ptr.Of([]string{}))
+
+		if ctx.Err() != nil {
 			return c.table.HaltAll()
 		}
 
-		cancel()
 		c.ready.Store(false)
 		c.retryCount++
 		// Re-enable once healthz of daprd is not tired to liveness.
@@ -186,17 +209,7 @@ func (c *Client) Run(ctx context.Context) error {
 			c.retryCount = 0
 		}
 
-		if ctx.Err() != nil {
-			return c.table.HaltAll()
-		}
-
-		select {
-		case <-time.After(time.Second):
-		case <-ctx.Done():
-		}
-
-		cancel, err = c.handleReconnect(ctx)
-		if err != nil {
+		if err = c.handleReconnect(ctx); err != nil {
 			log.Errorf("Failed to reconnect to placement: %s", err)
 			return nil
 		}
@@ -207,33 +220,31 @@ func (c *Client) Ready() bool {
 	return c.ready.Load()
 }
 
-func (c *Client) handleReconnect(ctx context.Context) (context.CancelFunc, error) {
+func (c *Client) handleReconnect(ctx context.Context) error {
 	unlock := c.lock.Lock()
 	defer unlock()
 
 	log.Info("Placement stream disconnected")
 
 	if err := c.table.HaltAll(); err != nil {
-		return nil, fmt.Errorf("error whilst deactivating all actors when shutting down client: %s", err)
+		return fmt.Errorf("error whilst deactivating all actors when shutting down client: %s", err)
 	}
 
 	log.Info("Halted all actors on this host")
 
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		return ctx.Err()
 	}
 
 	log.Infof("Reconnecting to placement...")
 
-	ctx, cancel := context.WithCancel(ctx)
 	if err := c.connectRoundRobin(ctx); err != nil {
-		cancel()
-		return nil, err
+		return err
 	}
 
 	log.Infof("Reconnected to placement")
 
-	return cancel, nil
+	return nil
 }
 
 func (c *Client) connectRoundRobin(ctx context.Context) error {
