@@ -299,7 +299,7 @@ jobs:
             target_arch: arm
             job_name: "Linux/arm"
             sidecar_flavor: "stablecomponents"
-          - os: windows-2019
+          - os: windows-2025
             target_os: windows
             target_arch: amd64
             windows_version: "1809"

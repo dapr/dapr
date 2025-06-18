@@ -25,6 +25,7 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/locker"
@@ -220,7 +221,7 @@ func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, bool,
 
 	factory, ok := t.factories.Load(actorType)
 	if !ok {
-		return nil, false, fmt.Errorf("actor type %s not registered", actorType)
+		return nil, false, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, actorType)
 	}
 
 	target = factory(actorID)
