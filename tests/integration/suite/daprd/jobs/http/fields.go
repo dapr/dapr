@@ -17,12 +17,15 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	corev1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -61,7 +64,13 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 "repeats": 123,
 "dueTime": "1000s",
 "ttl": "123s",
-"data": "hello world"
+"data": "hello world",
+"failure_policy": {
+	"constant": {
+		"interval": "3s",
+		"max_retries": 5
+	}
+}
 }`))
 
 	job, err := f.daprd.GRPCClient(t, ctx).GetJobAlpha1(ctx,
@@ -83,17 +92,26 @@ func (f *fields) Run(t *testing.T, ctx context.Context) {
 				DueTime:  ptr.Of("1000s"),
 				Ttl:      ptr.Of("123s"),
 				Data:     expData,
+				FailurePolicy: &corev1.JobFailurePolicy{
+					Policy: &corev1.JobFailurePolicy_Constant{
+						Constant: &corev1.JobFailurePolicyConstant{
+							Interval:   durationpb.New(time.Second * 3),
+							MaxRetries: ptr.Of(uint32(5)),
+						},
+					},
+				},
 			},
 		},
 		//nolint:protogetter
 		&runtimev1pb.GetJobResponse{
 			Job: &runtimev1pb.Job{
-				Name:     job.Job.Name,
-				Schedule: job.Job.Schedule,
-				Repeats:  job.Job.Repeats,
-				DueTime:  job.Job.DueTime,
-				Ttl:      job.Job.Ttl,
-				Data:     job.Job.Data,
+				Name:          job.Job.Name,
+				Schedule:      job.Job.Schedule,
+				Repeats:       job.Job.Repeats,
+				DueTime:       job.Job.DueTime,
+				Ttl:           job.Job.Ttl,
+				Data:          job.Job.Data,
+				FailurePolicy: job.Job.FailurePolicy,
 			},
 		},
 	)
