@@ -50,6 +50,7 @@ func New(opts Options) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if !opts.Healthz.IsReady() {
+			opts.Log.WithFields(map[string]any{"targets": opts.Healthz.GetUnhealthyTargets()}).Debug("targets are unhealthy")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
@@ -80,7 +81,7 @@ func New(opts Options) *Server {
 		log:     opts.Log,
 		port:    opts.Port,
 		mux:     mux,
-		htarget: opts.Healthz.AddTarget(),
+		htarget: opts.Healthz.AddTarget("healthz-server"),
 	}
 }
 

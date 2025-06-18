@@ -216,7 +216,7 @@ func New(opts ServiceOpts) (*Service, error) {
 		disseminateTimeout:  opts.DisseminateTimeout,
 		port:                opts.Port,
 		listenAddress:       opts.ListenAddress,
-		htarget:             opts.Healthz.AddTarget(),
+		htarget:             opts.Healthz.AddTarget("placement-service"),
 	}, nil
 }
 
