@@ -65,7 +65,7 @@ func New(opts Options) storage.Interface {
 		appID:         opts.AppID,
 		stateReminder: opts.StateReminder,
 		table:         opts.Table,
-		htarget:       opts.Healthz.AddTarget(),
+		htarget:       opts.Healthz.AddTarget("actors-reminders-scheduler"),
 	}
 }
 
