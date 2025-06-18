@@ -22,7 +22,11 @@ allowedTopologies:
   {{- toYaml . | nindent 2 }}
   {{- end }}
 {{- end }}
+{{- if and .Values.cluster.storageClass.mountOptions ( gt ( len .Values.cluster.storageClass.mountOptions) 0 ) }} 
 mountOptions: {{- .Values.cluster.storageClass.mountOptions | toYaml | nindent 2 }}
+{{- else }}
+mountOptions: []
+{{- end }}
 {{- if .Values.cluster.storageClass.parameters }}
 parameters:
   {{- with .Values.cluster.storageClass.parameters }}
