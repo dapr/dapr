@@ -160,7 +160,7 @@ func NewInjector(opts Options) (Injector, error) {
 		authUIDs:                opts.AuthUIDs,
 		controlPlaneNamespace:   opts.ControlPlaneNamespace,
 		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
-		htarget:                 opts.Healthz.AddTarget(),
+		htarget:                 opts.Healthz.AddTarget("injector-service"),
 	}
 
 	matcher, err := createNamespaceNameMatcher(opts.Config.AllowedServiceAccountsPrefixNames)

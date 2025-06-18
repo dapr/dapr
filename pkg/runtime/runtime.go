@@ -354,7 +354,7 @@ func newDaprRuntime(ctx context.Context,
 		gracePeriod = &duration
 	}
 
-	rtHealthz := rt.runtimeConfig.healthz.AddTarget()
+	rtHealthz := rt.runtimeConfig.healthz.AddTarget("runtime")
 	rt.runnerCloser = concurrency.NewRunnerCloserManager(log, gracePeriod,
 		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
@@ -695,7 +695,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize actors: %w", err)
 	}
 
-	a.runtimeConfig.outboundHealthz.AddTarget().Ready()
+	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
 	if err := a.blockUntilAppIsReady(ctx); err != nil {
 		return err
 	}

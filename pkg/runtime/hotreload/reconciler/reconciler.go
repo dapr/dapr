@@ -61,7 +61,7 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 	return &Reconciler[compapi.Component]{
 		clock:   clock.RealClock{},
 		kind:    compapi.Kind,
-		htarget: opts.Healthz.AddTarget(),
+		htarget: opts.Healthz.AddTarget("component-reconciler"),
 		manager: &components{
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
@@ -75,7 +75,7 @@ func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subs
 	return &Reconciler[subapi.Subscription]{
 		clock:   clock.RealClock{},
 		kind:    subapi.Kind,
-		htarget: opts.Healthz.AddTarget(),
+		htarget: opts.Healthz.AddTarget("subscription-reconciler"),
 		manager: &subscriptions{
 			Loader: opts.Loader.Subscriptions(),
 			store:  opts.CompStore,

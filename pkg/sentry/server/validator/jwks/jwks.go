@@ -76,7 +76,7 @@ func New(opts Options) (validator.Validator, error) {
 	return &jwks{
 		sentryAudience: opts.SentryID.String(),
 		cache:          cache,
-		htarget:        opts.Healthz.AddTarget(),
+		htarget:        opts.Healthz.AddTarget("sentry-jwks-validator"),
 	}, nil
 }
 
