@@ -45,13 +45,14 @@ func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1p
 
 	//nolint:protogetter
 	return a.scheduleJob(ctx, &runtimev1pb.Job{
-		Name:      job.GetName(),
-		Schedule:  job.Schedule,
-		Repeats:   job.Repeats,
-		DueTime:   job.DueTime,
-		Ttl:       job.Ttl,
-		Data:      data,
-		Overwrite: job.GetOverwrite(),
+		Name:          job.GetName(),
+		Schedule:      job.Schedule,
+		Repeats:       job.Repeats,
+		DueTime:       job.DueTime,
+		Ttl:           job.Ttl,
+		Data:          data,
+		Overwrite:     job.GetOverwrite(),
+		FailurePolicy: job.GetFailurePolicy(),
 	})
 }
 
@@ -86,12 +87,13 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 		},
 		//nolint:protogetter
 		Job: &schedulerv1pb.Job{
-			Schedule:  job.Schedule,
-			Data:      job.GetData(),
-			Repeats:   job.Repeats,
-			DueTime:   job.DueTime,
-			Ttl:       job.Ttl,
-			Overwrite: job.GetOverwrite(),
+			Schedule:      job.Schedule,
+			Data:          job.GetData(),
+			Repeats:       job.Repeats,
+			DueTime:       job.DueTime,
+			Ttl:           job.Ttl,
+			Overwrite:     job.GetOverwrite(),
+			FailurePolicy: job.GetFailurePolicy(),
 		},
 	}
 
@@ -178,12 +180,13 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 
 	return &runtimev1pb.GetJobResponse{
 		Job: &runtimev1pb.Job{
-			Name:     inReq.GetName(),
-			Schedule: resp.GetJob().Schedule, //nolint:protogetter
-			Data:     resp.GetJob().GetData(),
-			Repeats:  resp.GetJob().Repeats, //nolint:protogetter
-			DueTime:  resp.GetJob().DueTime, //nolint:protogetter
-			Ttl:      resp.GetJob().Ttl,     //nolint:protogetter
+			Name:          inReq.GetName(),
+			Schedule:      resp.GetJob().Schedule, //nolint:protogetter
+			Data:          resp.GetJob().GetData(),
+			Repeats:       resp.GetJob().Repeats, //nolint:protogetter
+			DueTime:       resp.GetJob().DueTime, //nolint:protogetter
+			Ttl:           resp.GetJob().Ttl,     //nolint:protogetter
+			FailurePolicy: resp.GetJob().GetFailurePolicy(),
 		},
 	}, nil
 }
