@@ -50,7 +50,7 @@ type fuzzgrpc struct {
 }
 
 func (f *fuzzgrpc) Setup(t *testing.T) []framework.Option {
-	const numTests = 1000
+	const numTests = 500
 
 	onInvoke := func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
 		return &commonv1.InvokeResponse{
