@@ -21,13 +21,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/kit/ptr"
 )
 
 func Test_schedFPToCron(t *testing.T) {
 	tests := map[string]struct {
-		fp  *schedulerv1pb.FailurePolicy
+		fp  *commonv1pb.JobFailurePolicy
 		exp *api.FailurePolicy
 	}{
 		"nil": {
@@ -35,9 +35,9 @@ func Test_schedFPToCron(t *testing.T) {
 			exp: nil,
 		},
 		"constant nil": {
-			fp: &schedulerv1pb.FailurePolicy{
-				Policy: &schedulerv1pb.FailurePolicy_Constant{
-					Constant: &schedulerv1pb.FailurePolicyConstant{
+			fp: &commonv1pb.JobFailurePolicy{
+				Policy: &commonv1pb.JobFailurePolicy_Constant{
+					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   nil,
 						MaxRetries: nil,
 					},
@@ -53,9 +53,9 @@ func Test_schedFPToCron(t *testing.T) {
 			},
 		},
 		"constant set": {
-			fp: &schedulerv1pb.FailurePolicy{
-				Policy: &schedulerv1pb.FailurePolicy_Constant{
-					Constant: &schedulerv1pb.FailurePolicyConstant{
+			fp: &commonv1pb.JobFailurePolicy{
+				Policy: &commonv1pb.JobFailurePolicy_Constant{
+					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   durationpb.New(time.Second * 3),
 						MaxRetries: ptr.Of(uint32(123)),
 					},
@@ -71,9 +71,9 @@ func Test_schedFPToCron(t *testing.T) {
 			},
 		},
 		"constant mixed 1": {
-			fp: &schedulerv1pb.FailurePolicy{
-				Policy: &schedulerv1pb.FailurePolicy_Constant{
-					Constant: &schedulerv1pb.FailurePolicyConstant{
+			fp: &commonv1pb.JobFailurePolicy{
+				Policy: &commonv1pb.JobFailurePolicy_Constant{
+					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   durationpb.New(time.Second * 3),
 						MaxRetries: nil,
 					},
@@ -89,9 +89,9 @@ func Test_schedFPToCron(t *testing.T) {
 			},
 		},
 		"constant mixed 2": {
-			fp: &schedulerv1pb.FailurePolicy{
-				Policy: &schedulerv1pb.FailurePolicy_Constant{
-					Constant: &schedulerv1pb.FailurePolicyConstant{
+			fp: &commonv1pb.JobFailurePolicy{
+				Policy: &commonv1pb.JobFailurePolicy_Constant{
+					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   nil,
 						MaxRetries: ptr.Of(uint32(123)),
 					},
@@ -107,9 +107,9 @@ func Test_schedFPToCron(t *testing.T) {
 			},
 		},
 		"drop": {
-			fp: &schedulerv1pb.FailurePolicy{
-				Policy: &schedulerv1pb.FailurePolicy_Drop{
-					Drop: new(schedulerv1pb.FailurePolicyDrop),
+			fp: &commonv1pb.JobFailurePolicy{
+				Policy: &commonv1pb.JobFailurePolicy_Drop{
+					Drop: new(commonv1pb.JobFailurePolicyDrop),
 				},
 			},
 			exp: &api.FailurePolicy{
@@ -130,7 +130,7 @@ func Test_schedFPToCron(t *testing.T) {
 func Test_cronFPToSched(t *testing.T) {
 	tests := map[string]struct {
 		fp  *api.FailurePolicy
-		exp *schedulerv1pb.FailurePolicy
+		exp *commonv1pb.JobFailurePolicy
 	}{
 		"nil": {
 			fp:  nil,
@@ -145,9 +145,9 @@ func Test_cronFPToSched(t *testing.T) {
 					},
 				},
 			},
-			exp: &schedulerv1pb.FailurePolicy{
-				Policy: &schedulerv1pb.FailurePolicy_Constant{
-					Constant: &schedulerv1pb.FailurePolicyConstant{
+			exp: &commonv1pb.JobFailurePolicy{
+				Policy: &commonv1pb.JobFailurePolicy_Constant{
+					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   nil,
 						MaxRetries: nil,
 					},
@@ -163,9 +163,9 @@ func Test_cronFPToSched(t *testing.T) {
 					},
 				},
 			},
-			exp: &schedulerv1pb.FailurePolicy{
-				Policy: &schedulerv1pb.FailurePolicy_Constant{
-					Constant: &schedulerv1pb.FailurePolicyConstant{
+			exp: &commonv1pb.JobFailurePolicy{
+				Policy: &commonv1pb.JobFailurePolicy_Constant{
+					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   durationpb.New(time.Second * 3),
 						MaxRetries: ptr.Of(uint32(123)),
 					},
@@ -181,9 +181,9 @@ func Test_cronFPToSched(t *testing.T) {
 					},
 				},
 			},
-			exp: &schedulerv1pb.FailurePolicy{
-				Policy: &schedulerv1pb.FailurePolicy_Constant{
-					Constant: &schedulerv1pb.FailurePolicyConstant{
+			exp: &commonv1pb.JobFailurePolicy{
+				Policy: &commonv1pb.JobFailurePolicy_Constant{
+					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   durationpb.New(time.Second * 3),
 						MaxRetries: nil,
 					},
@@ -199,9 +199,9 @@ func Test_cronFPToSched(t *testing.T) {
 					},
 				},
 			},
-			exp: &schedulerv1pb.FailurePolicy{
-				Policy: &schedulerv1pb.FailurePolicy_Constant{
-					Constant: &schedulerv1pb.FailurePolicyConstant{
+			exp: &commonv1pb.JobFailurePolicy{
+				Policy: &commonv1pb.JobFailurePolicy_Constant{
+					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   nil,
 						MaxRetries: ptr.Of(uint32(123)),
 					},
@@ -214,9 +214,9 @@ func Test_cronFPToSched(t *testing.T) {
 					Drop: new(api.FailurePolicyDrop),
 				},
 			},
-			exp: &schedulerv1pb.FailurePolicy{
-				Policy: &schedulerv1pb.FailurePolicy_Drop{
-					Drop: new(schedulerv1pb.FailurePolicyDrop),
+			exp: &commonv1pb.JobFailurePolicy{
+				Policy: &commonv1pb.JobFailurePolicy_Drop{
+					Drop: new(commonv1pb.JobFailurePolicyDrop),
 				},
 			},
 		},
