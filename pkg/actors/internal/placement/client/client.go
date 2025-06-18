@@ -119,7 +119,7 @@ func New(opts Options) (*Client, error) {
 		sendQueue: make(chan *v1pb.Host),
 		recvQueue: make(chan *v1pb.PlacementOrder),
 		table:     opts.Table,
-		htarget:   opts.Healthz.AddTarget(),
+		htarget:   opts.Healthz.AddTarget("placement-client"),
 	}, nil
 }
 
