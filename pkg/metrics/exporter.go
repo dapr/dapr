@@ -55,7 +55,7 @@ type exporter struct {
 func New(opts Options) Exporter {
 	// TODO: support multiple exporters
 	return &exporter{
-		htarget:       opts.Healthz.AddTarget(),
+		htarget:       opts.Healthz.AddTarget("metrics-exporter"),
 		namespace:     opts.Namespace,
 		logger:        opts.Log,
 		enabled:       opts.Enabled,
