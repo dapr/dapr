@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -188,6 +189,10 @@ func (w *workflow) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 	msg := imReq.Message()
 	return policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
 		resData, err := w.executeMethod(ctx, msg.GetMethod(), msg.GetData().GetValue())
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			return nil, backoff.Permanent(err)
+		}
+
 		if err != nil {
 			return nil, fmt.Errorf("error from worfklow actor: %w", err)
 		}

@@ -271,7 +271,7 @@ jobs:
                 `PR_NUMBER=${testPayload.issue.number}`
               );
             }
-      # In windows-2019 images, WSL comes with bash.exe (but no distribution) and that causes issues
+      # In windows-2025 images, WSL comes with bash.exe (but no distribution) and that causes issues
       # See: https://github.community/t/wsl-not-available-for-hosted-windows-machine/124389
       - name: Remove bash.exe from WSL
         if: runner.os == 'Windows'

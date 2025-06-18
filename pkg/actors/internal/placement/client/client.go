@@ -17,25 +17,30 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"strings"
+	"slices"
 	"sync/atomic"
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/dnslookup"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector/static"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/modes"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/concurrency/lock"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
-
-const grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 
 var log = logger.NewLogger("dapr.runtime.actors.placement.client")
 
@@ -46,23 +51,27 @@ type Options struct {
 	Table       table.Interface
 	Healthz     healthz.Healthz
 	InitialHost *v1pb.Host
+	Mode        modes.DaprMode
+	Scheduler   schedclient.Reloader
 }
 
 type Client struct {
-	grpcOpts     []grpc.DialOption
-	addressIndex int
-	addresses    []string
-	htarget      healthz.Target
+	htarget healthz.Target
 
 	table table.Interface
 	lock  *lock.OuterCancel
 
-	conn      *grpc.ClientConn
+	connector connector.Interface
 	client    v1pb.Placement_ReportDaprStatusClient
 	sendQueue chan *v1pb.Host
 	recvQueue chan *v1pb.PlacementOrder
 
-	ready atomic.Bool
+	scheduler     schedclient.Reloader
+	currentReport atomic.Pointer[[]string]
+	toReport      atomic.Pointer[[]string]
+
+	ready      atomic.Bool
+	retryCount uint32
 }
 
 // New creates a new placement client for the given dial opts.
@@ -71,9 +80,6 @@ func New(opts Options) (*Client, error) {
 		return nil, errors.New("no placement addresses provided")
 	}
 
-	addresses := addDNSResolverPrefix(opts.Addresses)
-
-	var gopts []grpc.DialOption
 	placementID, err := spiffeid.FromSegments(
 		opts.Security.ControlPlaneTrustDomain(),
 		"ns", opts.Security.ControlPlaneNamespace(), "dapr-placement",
@@ -82,6 +88,7 @@ func New(opts Options) (*Client, error) {
 		return nil, err
 	}
 
+	var gopts []grpc.DialOption
 	gopts = append(gopts, opts.Security.GRPCDialOptionMTLS(placementID))
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
@@ -91,27 +98,45 @@ func New(opts Options) (*Client, error) {
 		)
 	}
 
-	if len(addresses) == 1 && strings.HasPrefix(addresses[0], "dns:///") {
+	var conn connector.Interface
+	switch opts.Mode {
+	case modes.KubernetesMode:
 		// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
 		// With round robin load balancer, Dapr can find the leader automatically.
-		gopts = append(gopts, grpc.WithDefaultServiceConfig(grpcServiceConfig))
+		conn, err = dnslookup.New(dnslookup.Options{
+			Address:     opts.Addresses[0],
+			GRPCOptions: gopts,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create roundrobin client: %w", err)
+		}
+	default:
+		// In non-Kubernetes environment, will round robin over the provided addresses
+		conn, err = static.New(static.Options{
+			Addresses:   opts.Addresses,
+			GRPCOptions: gopts,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create roundrobin client: %w", err)
+		}
 	}
 
 	return &Client{
 		lock:      opts.Lock,
-		addresses: addresses,
-		grpcOpts:  gopts,
+		connector: conn,
 		sendQueue: make(chan *v1pb.Host),
 		recvQueue: make(chan *v1pb.PlacementOrder),
 		table:     opts.Table,
 		htarget:   opts.Healthz.AddTarget(),
+		scheduler: opts.Scheduler,
 	}, nil
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	conctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	if err := c.connectRoundRobin(conctx); err != nil {
+	c.currentReport.Store(ptr.Of([]string{}))
+	c.toReport.Store(ptr.Of([]string{}))
+
+	if err := c.connectRoundRobin(ctx); err != nil {
 		return err
 	}
 
@@ -126,6 +151,9 @@ func (c *Client) Run(ctx context.Context) error {
 					case <-ctx.Done():
 						return ctx.Err()
 					case host := <-c.sendQueue:
+
+						c.toReport.Store(ptr.Of(host.GetEntities()))
+
 						if err := c.client.Send(host); err != nil {
 							return err
 						}
@@ -142,6 +170,12 @@ func (c *Client) Run(ctx context.Context) error {
 						return err
 					}
 
+					if order.GetOperation() == "unlock" &&
+						!slices.Equal(*c.toReport.Load(), *c.currentReport.Load()) {
+						c.scheduler.ReloadActorTypes(*c.toReport.Load())
+						c.currentReport.Store(c.toReport.Load())
+					}
+
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
@@ -154,27 +188,28 @@ func (c *Client) Run(ctx context.Context) error {
 
 	for {
 		err := runner().Run(ctx)
-		if err == nil {
-			return c.table.HaltAll()
-		}
 
-		cancel()
-		c.ready.Store(false)
-		// Re-enable once healthz of daprd is not tired to liveness.
-		// c.htarget.NotReady()
+		c.scheduler.ReloadActorTypes([]string{})
+		c.currentReport.Store(ptr.Of([]string{}))
+		c.toReport.Store(ptr.Of([]string{}))
 
-		log.Errorf("Error communicating with placement: %s", err)
 		if ctx.Err() != nil {
 			return c.table.HaltAll()
 		}
 
-		select {
-		case <-time.After(time.Second):
-		case <-ctx.Done():
+		c.ready.Store(false)
+		c.retryCount++
+		// Re-enable once healthz of daprd is not tired to liveness.
+		// c.htarget.NotReady()
+
+		if status.Code(err) == codes.FailedPrecondition && c.retryCount%10 != 0 {
+			log.Debugf("Error communicating with placement: %s", err)
+		} else {
+			log.Errorf("Error communicating with placement: %s", err)
+			c.retryCount = 0
 		}
 
-		cancel, err = c.handleReconnect(ctx)
-		if err != nil {
+		if err = c.handleReconnect(ctx); err != nil {
 			log.Errorf("Failed to reconnect to placement: %s", err)
 			return nil
 		}
@@ -185,33 +220,31 @@ func (c *Client) Ready() bool {
 	return c.ready.Load()
 }
 
-func (c *Client) handleReconnect(ctx context.Context) (context.CancelFunc, error) {
+func (c *Client) handleReconnect(ctx context.Context) error {
 	unlock := c.lock.Lock()
 	defer unlock()
 
 	log.Info("Placement stream disconnected")
 
 	if err := c.table.HaltAll(); err != nil {
-		return nil, fmt.Errorf("error whilst deactivating all actors when shutting down client: %s", err)
+		return fmt.Errorf("error whilst deactivating all actors when shutting down client: %s", err)
 	}
 
 	log.Info("Halted all actors on this host")
 
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		return ctx.Err()
 	}
 
 	log.Infof("Reconnecting to placement...")
 
-	ctx, cancel := context.WithCancel(ctx)
 	if err := c.connectRoundRobin(ctx); err != nil {
-		cancel()
-		return nil, err
+		return err
 	}
 
 	log.Infof("Reconnected to placement")
 
-	return cancel, nil
+	return nil
 }
 
 func (c *Client) connectRoundRobin(ctx context.Context) error {
@@ -221,7 +254,7 @@ func (c *Client) connectRoundRobin(ctx context.Context) error {
 			return nil
 		}
 
-		log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
+		log.Errorf("Failed to connect to placement %s: %s", c.connector.Address(), err)
 
 		select {
 		case <-time.After(time.Second / 2):
@@ -232,43 +265,20 @@ func (c *Client) connectRoundRobin(ctx context.Context) error {
 }
 
 func (c *Client) connect(ctx context.Context) error {
-	defer func() {
-		c.addressIndex++
-	}()
-
-	log.Debugf("Attempting to connect to placement %s", c.addresses[c.addressIndex%len(c.addresses)])
-
-	var err error
-	// If we're trying to connect to the same address, we reuse the existing
-	// connection.
-	// This is not just an optimisation, but a necessary feature for the
-	// round-robin load balancer to work correctly when connecting to the
-	// placement headless service in k8s
-	if c.conn == nil || len(c.addresses) > 1 {
-		//nolint:staticcheck
-		c.conn, err = grpc.DialContext(ctx, c.addresses[c.addressIndex%len(c.addresses)], c.grpcOpts...)
-		if err != nil {
-			return fmt.Errorf("failed to dial placement: %s", err)
-		}
+	conn, err := c.connector.Connect(ctx)
+	if err != nil {
+		return err
 	}
 
-	client, err := v1pb.NewPlacementClient(c.conn).ReportDaprStatus(ctx)
+	client, err := v1pb.NewPlacementClient(conn).ReportDaprStatus(ctx)
 	if err != nil {
-		err = fmt.Errorf("failed to create placement client: %s", err)
-		if strings.Contains(err.Error(), "connect: connection refused") {
-			// reset gRPC connenxt to reset the round robin load balancer state to
-			// ensure we connect to new hosts if all Placement hosts have been
-			// terminated.
-			log.Infof("Resetting gRPC connection to reset round robin load balancer state")
-			c.conn = nil
-		}
-
+		err = fmt.Errorf("failed to create placement client: %w", err)
 		return err
 	}
 
 	c.client = client
 
-	log.Infof("Connected to placement %s", c.addresses[c.addressIndex%len(c.addresses)])
+	log.Infof("Connected to placement %s", c.connector.Address())
 
 	return nil
 }
@@ -289,18 +299,4 @@ func (c *Client) Send(ctx context.Context, host *v1pb.Host) error {
 	case c.sendQueue <- host:
 		return nil
 	}
-}
-
-// addDNSResolverPrefix add the `dns://` prefix to the given addresses
-func addDNSResolverPrefix(addr []string) []string {
-	resolvers := make([]string, 0, len(addr))
-	for _, a := range addr {
-		prefix := ""
-		host, _, err := net.SplitHostPort(a)
-		if err == nil && net.ParseIP(host) == nil {
-			prefix = "dns:///"
-		}
-		resolvers = append(resolvers, prefix+a)
-	}
-	return resolvers
 }

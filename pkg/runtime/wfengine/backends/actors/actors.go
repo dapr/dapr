@@ -213,6 +213,9 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		WithContentType(invokev1.ProtobufContentType)
 	start := time.Now()
 
+	ctx, cancel := context.WithTimeoutCause(ctx, time.Second*15, errors.New("CreateOrchestrationInstance timeout"))
+	defer cancel()
+
 	engine, err := abe.actors.Engine(ctx)
 	if err != nil {
 		return err
@@ -243,6 +246,9 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 
 // GetOrchestrationMetadata implements backend.Backend
 func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*backend.OrchestrationMetadata, error) {
+	ctx, cancel := context.WithTimeoutCause(ctx, time.Second*15, errors.New("GetOrchestrationMetadata timeout"))
+	defer cancel()
+
 	state, err := abe.loadInternalState(ctx, id)
 	if err != nil {
 		return nil, err
@@ -356,6 +362,9 @@ func (*Actors) DeleteTaskHub(context.Context) error {
 
 // GetOrchestrationRuntimeState implements backend.Backend
 func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
+	ctx, cancel := context.WithTimeoutCause(ctx, time.Second*15, errors.New("GetOrchestrationRuntimeState timeout"))
+	defer cancel()
+
 	state, err := abe.loadInternalState(ctx, owi.InstanceID)
 	if err != nil {
 		return nil, err
