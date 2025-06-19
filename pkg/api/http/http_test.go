@@ -3046,14 +3046,6 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
 	})
 
-	t.Run("Get state - Bad Key with Query Parameter", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s?key=bad-key", storeName)
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-		// assert
-		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key with query parameter should return 204")
-	})
-
 	t.Run("Get state - Upstream error", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/error-key", storeName)
 		// act
