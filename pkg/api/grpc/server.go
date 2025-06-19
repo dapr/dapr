@@ -146,7 +146,7 @@ func NewAPIServer(opts Options) Server {
 		apiSpec:        opts.APISpec,
 		proxy:          opts.Proxy,
 		workflowEngine: opts.WorkflowEngine,
-		htarget:        opts.Healthz.AddTarget(),
+		htarget:        opts.Healthz.AddTarget("grpc-api-server"),
 		grpcServerOpts: serverOpts,
 	}
 }
@@ -188,7 +188,7 @@ func NewInternalServer(opts OptionsInternal) Server {
 		grpcServerOpts: serverOpts,
 		proxy:          opts.Proxy,
 		sec:            opts.Security,
-		htarget:        opts.Healthz.AddTarget(),
+		htarget:        opts.Healthz.AddTarget("grpc-internal-server"),
 	}
 }
 

@@ -150,7 +150,7 @@ func New(opts Options) (*Server, error) {
 			Security: opts.Security,
 		}),
 		closeCh:     make(chan struct{}),
-		hzAPIServer: opts.Healthz.AddTarget(),
+		hzAPIServer: opts.Healthz.AddTarget("scheduler-server"),
 	}, nil
 }
 

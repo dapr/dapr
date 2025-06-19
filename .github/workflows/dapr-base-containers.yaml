@@ -27,7 +27,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: "windows-2019"
+          - os: "windows-2025"
             windows-version: "1809"
           - os: "windows-2022"
             windows-version: "ltsc2022"

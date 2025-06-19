@@ -129,7 +129,7 @@ func Run() {
 		log.Fatalf("Error creating injector: %v", err)
 	}
 
-	webConfHealthTarget := healthz.AddTarget()
+	webConfHealthTarget := healthz.AddTarget("webhook-configuration")
 
 	caBundleCh := make(chan []byte)
 	mngr := concurrency.NewRunnerManager(

@@ -92,8 +92,9 @@ func CleanupRegisteredViews(viewNames ...string) {
 	var views []*view.View
 
 	defaultViewsToClean := []string{
-		"runtime/actor/timers",
 		"runtime/actor/reminders",
+		"runtime/actor/timers",
+		"runtime/actor/pending_actor_calls",
 	}
 
 	// append default views to clean if not already present

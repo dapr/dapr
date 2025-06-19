@@ -78,7 +78,7 @@ func New(opts Options) (Interface, error) {
 	}
 
 	return &etcd{
-		hz:      opts.Healthz.AddTarget(),
+		hz:      opts.Healthz.AddTarget("scheduler-etcd"),
 		config:  config,
 		mode:    opts.Mode,
 		readyCh: make(chan struct{}),

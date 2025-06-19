@@ -15,6 +15,7 @@ package drop
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -22,10 +23,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	corev1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -34,44 +38,61 @@ func init() {
 
 type failed struct {
 	scheduler *scheduler.Scheduler
+	daprd     *daprd.Daprd
+	triggered chan string
 }
 
 func (f *failed) Setup(t *testing.T) []framework.Option {
+	f.triggered = make(chan string, 10)
 	f.scheduler = scheduler.New(t)
+
+	app := app.New(t,
+		app.WithOnJobEventFn(func(_ context.Context, req *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error) {
+			f.triggered <- req.GetName()
+			return nil, errors.New("an error")
+		}),
+	)
+
+	f.daprd = daprd.New(t,
+		daprd.WithAppPort(app.Port(t)),
+		daprd.WithAppProtocol("grpc"),
+		daprd.WithScheduler(f.scheduler),
+	)
+
 	return []framework.Option{
-		framework.WithProcesses(f.scheduler),
+		framework.WithProcesses(app, f.scheduler, f.daprd),
 	}
 }
 
 func (f *failed) Run(t *testing.T, ctx context.Context) {
 	f.scheduler.WaitUntilRunning(t, ctx)
+	f.daprd.WaitUntilRunning(t, ctx)
 
-	client := f.scheduler.Client(t, ctx)
-
-	job := f.scheduler.JobNowJob("test", "namespace", "appid1")
-	job.Job.FailurePolicy = &corev1.JobFailurePolicy{
-		Policy: &corev1.JobFailurePolicy_Drop{
-			Drop: new(corev1.JobFailurePolicyDrop),
+	_, err := f.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+		Job: &rtv1.Job{
+			Name:    "test",
+			DueTime: ptr.Of("0s"),
+			FailurePolicy: &corev1.JobFailurePolicy{
+				Policy: &corev1.JobFailurePolicy_Drop{
+					Drop: &corev1.JobFailurePolicyDrop{},
+				},
+			},
 		},
-	}
-
-	_, err := client.ScheduleJob(ctx, job)
+	})
 	require.NoError(t, err)
 
-	triggered := f.scheduler.WatchJobsFailed(t, ctx, &schedulerv1.WatchJobsRequestInitial{
-		AppId: "appid1", Namespace: "namespace",
-	})
-
+	// Should trigger once immediately
 	select {
-	case name := <-triggered:
+	case name := <-f.triggered:
 		assert.Equal(t, "test", name)
-	case <-time.After(time.Second * 5):
+	case <-time.After(time.Second * 1):
 		require.Fail(t, "timed out waiting for job")
 	}
 
+	// Should not trigger any more
 	select {
-	case <-triggered:
+	case <-f.triggered:
 		assert.Fail(t, "unexpected trigger")
-	case <-time.After(time.Second * 2):
+	case <-time.After(time.Second * 3):
 	}
 }

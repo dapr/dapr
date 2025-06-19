@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	corev1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -69,9 +70,9 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 		Name: "test1", Metadata: metadata,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, &schedulerv1.FailurePolicy{
-		Policy: &schedulerv1.FailurePolicy_Constant{
-			Constant: &schedulerv1.FailurePolicyConstant{
+	assert.Equal(t, &corev1.JobFailurePolicy{
+		Policy: &corev1.JobFailurePolicy_Constant{
+			Constant: &corev1.JobFailurePolicyConstant{
 				Interval:   durationpb.New(time.Second * 1),
 				MaxRetries: ptr.Of(uint32(3)),
 			},
@@ -82,9 +83,9 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 		Name: "test2", Metadata: metadata,
 		Job: &schedulerv1.Job{
 			DueTime: ptr.Of("100s"),
-			FailurePolicy: &schedulerv1.FailurePolicy{
-				Policy: &schedulerv1.FailurePolicy_Constant{
-					Constant: &schedulerv1.FailurePolicyConstant{
+			FailurePolicy: &corev1.JobFailurePolicy{
+				Policy: &corev1.JobFailurePolicy_Constant{
+					Constant: &corev1.JobFailurePolicyConstant{
 						Interval:   durationpb.New(time.Second * 10),
 						MaxRetries: ptr.Of(uint32(1234)),
 					},
@@ -97,9 +98,9 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 		Name: "test2", Metadata: metadata,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, &schedulerv1.FailurePolicy{
-		Policy: &schedulerv1.FailurePolicy_Constant{
-			Constant: &schedulerv1.FailurePolicyConstant{
+	assert.Equal(t, &corev1.JobFailurePolicy{
+		Policy: &corev1.JobFailurePolicy_Constant{
+			Constant: &corev1.JobFailurePolicyConstant{
 				Interval:   durationpb.New(time.Second * 10),
 				MaxRetries: ptr.Of(uint32(1234)),
 			},
@@ -110,9 +111,9 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 		Name: "test3", Metadata: metadata,
 		Job: &schedulerv1.Job{
 			DueTime: ptr.Of("100s"),
-			FailurePolicy: &schedulerv1.FailurePolicy{
-				Policy: &schedulerv1.FailurePolicy_Drop{
-					Drop: new(schedulerv1.FailurePolicyDrop),
+			FailurePolicy: &corev1.JobFailurePolicy{
+				Policy: &corev1.JobFailurePolicy_Drop{
+					Drop: new(corev1.JobFailurePolicyDrop),
 				},
 			},
 		},
@@ -122,38 +123,38 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 		Name: "test3", Metadata: metadata,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, &schedulerv1.FailurePolicy{
-		Policy: &schedulerv1.FailurePolicy_Drop{
-			Drop: new(schedulerv1.FailurePolicyDrop),
+	assert.Equal(t, &corev1.JobFailurePolicy{
+		Policy: &corev1.JobFailurePolicy_Drop{
+			Drop: new(corev1.JobFailurePolicyDrop),
 		},
 	}, resp.GetJob().GetFailurePolicy())
 
 	listResp, err := client.ListJobs(ctx, &schedulerv1.ListJobsRequest{Metadata: metadata})
 	require.NoError(t, err)
-	gotFPs := make([]*schedulerv1.FailurePolicy, 0, 3)
+	gotFPs := make([]*corev1.JobFailurePolicy, 0, 3)
 	for _, j := range listResp.GetJobs() {
 		gotFPs = append(gotFPs, j.GetJob().GetFailurePolicy())
 	}
-	assert.ElementsMatch(t, []*schedulerv1.FailurePolicy{
+	assert.ElementsMatch(t, []*corev1.JobFailurePolicy{
 		{
-			Policy: &schedulerv1.FailurePolicy_Constant{
-				Constant: &schedulerv1.FailurePolicyConstant{
+			Policy: &corev1.JobFailurePolicy_Constant{
+				Constant: &corev1.JobFailurePolicyConstant{
 					Interval:   durationpb.New(time.Second * 10),
 					MaxRetries: ptr.Of(uint32(1234)),
 				},
 			},
 		},
 		{
-			Policy: &schedulerv1.FailurePolicy_Constant{
-				Constant: &schedulerv1.FailurePolicyConstant{
+			Policy: &corev1.JobFailurePolicy_Constant{
+				Constant: &corev1.JobFailurePolicyConstant{
 					Interval:   durationpb.New(time.Second * 1),
 					MaxRetries: ptr.Of(uint32(3)),
 				},
 			},
 		},
 		{
-			Policy: &schedulerv1.FailurePolicy_Drop{
-				Drop: new(schedulerv1.FailurePolicyDrop),
+			Policy: &corev1.JobFailurePolicy_Drop{
+				Drop: new(corev1.JobFailurePolicyDrop),
 			},
 		},
 	}, gotFPs)

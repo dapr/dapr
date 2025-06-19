@@ -54,7 +54,7 @@ func New(opts Options) *Handler {
 		security:  opts.Security,
 		readyCh:   make(chan struct{}),
 		cluster:   opts.Cluster,
-		htarget:   opts.Healthz.AddTarget(),
+		htarget:   opts.Healthz.AddTarget("scheduler-handler"),
 		addresses: opts.Addresses,
 	}
 

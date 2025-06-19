@@ -98,8 +98,6 @@ type operator struct {
 
 // NewOperator returns a new Dapr Operator.
 func NewOperator(ctx context.Context, opts Options) (Operator, error) {
-	htargets := opts.Healthz.AddTargetSet(5)
-
 	conf, err := ctrl.GetConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get controller runtime configuration, err: %s", err)
@@ -193,11 +191,11 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		mgr:                         mgr,
 		secProvider:                 secProvider,
 		config:                      config,
-		secHealthz:                  htargets[0],
-		apiServerHealthz:            htargets[1],
-		webhookHealthz:              htargets[2],
-		httpEndpointInformerHealthz: htargets[3],
-		subInformerHealthz:          htargets[4],
+		secHealthz:                  opts.Healthz.AddTarget("operator-security"),
+		apiServerHealthz:            opts.Healthz.AddTarget("operator-api-server"),
+		webhookHealthz:              opts.Healthz.AddTarget("operator-webhook"),
+		httpEndpointInformerHealthz: opts.Healthz.AddTarget("operator-informer"),
+		subInformerHealthz:          opts.Healthz.AddTarget("operator-sub-informer"),
 		apiServer: api.NewAPIServer(api.Options{
 			Client:        mgr.GetClient(),
 			Cache:         mgr.GetCache(),
