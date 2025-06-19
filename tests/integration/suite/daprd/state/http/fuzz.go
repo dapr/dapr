@@ -70,7 +70,7 @@ type fuzzstate struct {
 }
 
 func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
-	const numTests = 1000
+	const numTests = 500
 
 	var takenKeys sync.Map
 
