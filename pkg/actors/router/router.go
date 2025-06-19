@@ -101,13 +101,9 @@ func New(opts Options) Interface {
 }
 
 func (r *router) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	cancel, err := r.locker.LockRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	defer cancel()
-
 	var res *internalv1pb.InternalInvokeResponse
+	var err error
+
 	if r.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		res, err = r.callActor(ctx, req)
 	} else {
@@ -129,25 +125,17 @@ func (r *router) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 func (r *router) CallReminder(ctx context.Context, req *api.Reminder) error {
 	if req.SkipLock {
 		return r.callReminder(ctx, req)
-	} else {
-		cancel, err := r.locker.Lock(req.ActorType, req.ActorID)
-		if err != nil {
-			return err
-		}
-		defer cancel()
 	}
 
-	var err error
 	if r.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
-		err = r.callReminder(ctx, req)
+		return r.callReminder(ctx, req)
 	} else {
 		policyRunner := resiliency.NewRunner[struct{}](ctx, r.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
-		_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+		_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
 			return struct{}{}, r.callReminder(ctx, req)
 		})
+		return err
 	}
-
-	return err
 }
 
 func (r *router) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
@@ -196,6 +184,16 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
+	if !req.SkipLock {
+		// Only lock the request if it is a local call.
+		var cancel context.CancelFunc
+		cancel, err = r.locker.Lock(req.ActorType, req.ActorID)
+		if err != nil {
+			return err
+		}
+		defer cancel()
+	}
+
 	target, _, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
 	if err != nil {
 		return backoff.Permanent(err)
@@ -230,10 +228,18 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to lookup actor: %w", err)
 	}
 
 	if lar.Local {
+		// Only lock the request if it is a local call.
+		var cancel context.CancelFunc
+		cancel, err = r.locker.LockRequest(req)
+		if err != nil {
+			return nil, err
+		}
+		defer cancel()
+
 		var resp *internalv1pb.InternalInvokeResponse
 		resp, err = r.callLocalActor(ctx, req)
 		if err != nil {

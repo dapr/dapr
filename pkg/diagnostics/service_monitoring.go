@@ -235,7 +235,7 @@ func (s *serviceMetrics) Init(appID string, latencyDistribution *view.Aggregatio
 		diagUtils.NewMeasureView(s.actorRebalancedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.actorDeactivationTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.actorDeactivationFailedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
-		diagUtils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
+		diagUtils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 		diagUtils.NewMeasureView(s.actorTimers, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 		diagUtils.NewMeasureView(s.actorReminders, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 		diagUtils.NewMeasureView(s.actorReminderFiredTotal, []tag.Key{appIDKey, actorTypeKey, successKey}, view.Count()),
@@ -412,8 +412,6 @@ func (s *serviceMetrics) ActorTimers(actorType string, timers int64) {
 
 // ReportActorPendingCalls records the current pending actor locks.
 func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks int32) {
-	// TODO: This is growing forever, ensure metrics are removed when the value
-	// is 0.
 	if s.enabled {
 		s.pendingActorCallsLock.Lock()
 		defer s.pendingActorCallsLock.Unlock()

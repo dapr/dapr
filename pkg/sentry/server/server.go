@@ -80,7 +80,7 @@ func New(opts Options) *Server {
 		vals:             opts.Validators,
 		defaultValidator: opts.DefaultValidator,
 		ca:               opts.CA,
-		htarget:          opts.Healthz.AddTarget(),
+		htarget:          opts.Healthz.AddTarget("sentry-server"),
 	}
 }
 

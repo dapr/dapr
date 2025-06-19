@@ -89,7 +89,7 @@ func New(opts Options) (concurrency.Runner, error) {
 		return nil, fmt.Errorf("unable to complete controller: %w", err)
 	}
 
-	hzTarget := opts.Healthz.AddTarget()
+	hzTarget := opts.Healthz.AddTarget("scheduler-controller")
 
 	return concurrency.NewRunnerManager(
 		mgr.Start,
