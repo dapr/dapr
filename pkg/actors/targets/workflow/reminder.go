@@ -35,7 +35,6 @@ func (w *workflow) createReminder(ctx context.Context, namePrefix string, data p
 	}
 
 	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
-	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", w.activityActorType, w.actorID, reminderName, delay)
 
 	var period string
 	var oneshot bool
@@ -57,7 +56,8 @@ func (w *workflow) createReminder(ctx context.Context, namePrefix string, data p
 	if targetAppID != "" && targetAppID != w.appID {
 		actorType = fmt.Sprintf("dapr.internal.%s.%s.workflow", w.namespace, targetAppID)
 	}
-	
+	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, w.actorID, reminderName, delay)
+
 	return reminderName, w.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: actorType,
 		ActorID:   w.actorID,
