@@ -22,6 +22,12 @@ assignees: ''
 
 > /area test-and-release
 
+> /area injector
+
+> /area scheduler
+
+> /area sentry
+
 ## Describe the feature
 <!-- Please also discuss possible business value -->
 
