@@ -36,7 +36,7 @@ import (
 	"github.com/dapr/kit/concurrency/cmap"
 	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/events/batcher"
+	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
 )
@@ -89,7 +89,7 @@ type RegisterActorTypeOptions struct {
 type table struct {
 	factories   cmap.Map[string, targets.Factory]
 	table       cmap.Map[string, targets.Interface]
-	typeUpdates *batcher.Batcher[int, []string]
+	typeUpdates *broadcaster.Broadcaster[[]string]
 
 	// actorTypesLock is a per actor type lock to prevent concurrent access to
 	// the same actor.
@@ -116,12 +116,10 @@ func New(opts Options) Interface {
 		table:                   cmap.NewMap[string, targets.Interface](),
 		actorTypesLock:          fifo.NewMap[string](),
 		clock:                   clock.RealClock{},
-		typeUpdates: batcher.New[int, []string](batcher.Options{
-			Interval: 0,
-		}),
-		idlerQueue:      opts.IdlerQueue,
-		locker:          opts.Locker,
-		reentrancyStore: opts.ReentrancyStore,
+		typeUpdates:             broadcaster.New[[]string](),
+		idlerQueue:              opts.IdlerQueue,
+		locker:                  opts.Locker,
+		reentrancyStore:         opts.ReentrancyStore,
 	}
 }
 
@@ -245,7 +243,7 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 		t.factories.Store(opt.Type, opt.Factory)
 	}
 
-	t.typeUpdates.Batch(0, t.factories.Keys())
+	t.typeUpdates.Broadcast(t.factories.Keys())
 }
 
 func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
@@ -261,7 +259,7 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 		return slices.Contains(actorTypes, target.Type())
 	})
 
-	t.typeUpdates.Batch(0, t.factories.Keys())
+	t.typeUpdates.Broadcast(t.factories.Keys())
 
 	return err
 }
