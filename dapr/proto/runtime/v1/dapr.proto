@@ -220,6 +220,9 @@ service Dapr {
 
   // Converse with a LLM service
   rpc ConverseAlpha1(ConversationRequest) returns (ConversationResponse) {}
+
+  // Converse with a LLM service using streaming
+  rpc ConverseStreamAlpha1(ConversationRequest) returns (stream ConversationStreamResponse) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -1357,4 +1360,41 @@ message ConversationResponse {
 
   // An array of results.
   repeated ConversationResult outputs = 2;
+
+  // Usage statistics if available
+  optional ConversationUsage usage = 3;
+}
+
+// ConversationStreamResponse is the streaming response for Conversation.
+message ConversationStreamResponse {
+  oneof response_type {
+    ConversationStreamChunk chunk = 1;
+    ConversationStreamComplete complete = 2;
+  }
+}
+
+// ConversationStreamChunk represents a streaming content chunk.
+message ConversationStreamChunk {
+  // Streaming content chunk
+  string content = 1;
+}
+
+// ConversationStreamComplete indicates the streaming conversation has completed.
+message ConversationStreamComplete {
+  // Final context ID
+  optional string contextID = 1;
+  // Usage statistics if available
+  optional ConversationUsage usage = 2;
+}
+
+
+
+// ConversationUsage represents token usage statistics.
+message ConversationUsage {
+  // Number of tokens in the prompt
+  optional int32 prompt_tokens = 1 [json_name = "promptTokens"];
+  // Number of tokens in the completion
+  optional int32 completion_tokens = 2 [json_name = "completionTokens"];
+  // Total number of tokens used
+  optional int32 total_tokens = 3 [json_name = "totalTokens"];
 }

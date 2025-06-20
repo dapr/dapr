@@ -135,8 +135,11 @@ var (
 	ErrPurgeWorkflow                 = APIError{"error purging workflow %s: %s", errorcodes.WorkflowPurge, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Conversation
-	ErrConversationNotFound      = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationInvalidParams = APIError{"failed conversing with component %s: invalid params", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationInvoke        = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrConversationMissingInputs = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationNotFound             = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationInvalidParams        = APIError{"failed conversing with component %s: invalid params", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationInvoke               = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrConversationMissingInputs        = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationStreamNotSupported   = APIError{"conversation streaming not supported by component %s", errorcodes.ConversationStreamNotSupported, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationStreamPipelineFailed = APIError{"streaming pipeline failed: %s", errorcodes.ConversationStreamPipelineFailed, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrConversationStreamEmptyResponse  = APIError{"streaming response is empty: %s", errorcodes.ConversationStreamResponsEmpty, http.StatusInternalServerError, grpcCodes.Internal}
 )

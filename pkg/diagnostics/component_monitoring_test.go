@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"go.opencensus.io/tag"
 	"testing"
 	"time"
 
@@ -203,29 +204,114 @@ func TestSecrets(t *testing.T) {
 	})
 }
 
+// removeDuplicatedDataRows when dealing with counters for the same view, we need to remove the duplicated data rows that could appear in back to back calls
+func removeDuplicatedDataRows(prevData, currData []*view.Row) []*view.Row {
+	// If there are no current data, return nil
+	if len(currData) == 0 {
+		return nil
+	}
+
+	// If there are no previous data, return current data
+	if len(prevData) == 0 {
+		return currData
+	}
+
+	newData := make([]*view.Row, 0, len(currData))
+	for _, curr := range currData {
+		isDuplicate := false
+		for _, prev := range prevData {
+			if curr.Equal(prev) {
+				isDuplicate = true
+				break
+			}
+		}
+		if !isDuplicate {
+			newData = append(newData, curr)
+		}
+	}
+
+	return newData
+}
+
 func TestConversation(t *testing.T) {
 	t.Run("record conversation count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.ConversationInvoked(t.Context(), componentName, false, 0)
+		c.ConversationInvoked(t.Context(), componentName, false, 0, NonStreamingConversation, 10, 5)
 
 		viewData, _ := view.RetrieveData("component/conversation/count")
+		viewUsagePromptData, _ := view.RetrieveData("component/conversation/usage/prompt_tokens")
+		viewUsageCompletionData, _ := view.RetrieveData("component/conversation/usage/completion_tokens")
+
 		v := view.Find("component/conversation/count")
+		vUsagePrompt := view.Find("component/conversation/usage/prompt_tokens")
+		vUsageCompletion := view.Find("component/conversation/usage/completion_tokens")
 
 		allTagsPresent(t, v, viewData[0].Tags)
+		allTagsPresent(t, vUsagePrompt, viewUsagePromptData[0].Tags)
+		allTagsPresent(t, vUsageCompletion, viewUsageCompletionData[0].Tags)
+
+		assert.True(t, TagAndValuePresent(viewData[0].Tags, tag.Tag{Key: typeKey, Value: string(NonStreamingConversation)}))
+		assert.Equal(t, float64(10), viewUsagePromptData[0].Data.(*view.SumData).Value)
+		assert.Equal(t, float64(5), viewUsageCompletionData[0].Data.(*view.SumData).Value)
 	})
 
 	t.Run("record conversation latency", func(t *testing.T) {
+		time.Sleep(100 * time.Millisecond) // Ensure a delay to test latency
 		c := componentsMetrics()
 
-		c.ConversationInvoked(t.Context(), componentName, false, 1)
+		c.ConversationInvoked(t.Context(), componentName, false, 1, NonStreamingConversation, 0, 0)
 
 		viewData, _ := view.RetrieveData("component/conversation/latencies")
 		v := view.Find("component/conversation/latencies")
+		if v != nil {
+			defer view.Unregister(v)
+		}
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
 		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
+		assert.True(t, TagAndValuePresent(viewData[0].Tags, tag.Tag{Key: typeKey, Value: string(NonStreamingConversation)}))
+		assert.True(t, TagAndValuePresent(viewData[0].Tags, tag.Tag{Key: typeKey, Value: string(NonStreamingConversation)}))
+	})
+	t.Run("record streaming conversation count", func(t *testing.T) {
+		c := componentsMetrics()
+
+		viewPrevData, _ := view.RetrieveData("component/conversation/count")
+
+		c.ConversationInvoked(t.Context(), componentName, false, 0, StreamingConversation, 0, 0)
+
+		viewData, _ := view.RetrieveData("component/conversation/count")
+		v := view.Find("component/conversation/count")
+		if v != nil {
+			defer view.Unregister(v)
+		}
+
+		viewData = removeDuplicatedDataRows(viewPrevData, viewData)
+
+		allTagsPresent(t, v, viewData[0].Tags)
+		assert.True(t, TagAndValuePresent(viewData[0].Tags, tag.Tag{Key: typeKey, Value: string(StreamingConversation)}))
+	})
+
+	t.Run("record streaming conversation latency", func(t *testing.T) {
+		c := componentsMetrics()
+
+		viewPrevData, _ := view.RetrieveData("component/conversation/latencies")
+
+		c.ConversationInvoked(t.Context(), componentName, false, 1, StreamingConversation, 0, 0)
+
+		viewData, _ := view.RetrieveData("component/conversation/latencies")
+		v := view.Find("component/conversation/latencies")
+		if v != nil {
+			defer view.Unregister(v)
+		}
+
+		viewData = removeDuplicatedDataRows(viewPrevData, viewData)
+
+		allTagsPresent(t, v, viewData[0].Tags)
+
+		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
+		assert.True(t, TagAndValuePresent(viewData[0].Tags, tag.Tag{Key: typeKey, Value: string(StreamingConversation)}))
 	})
 }
 
