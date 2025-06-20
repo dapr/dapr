@@ -141,7 +141,7 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		ActorTypes: add.Request.GetActorTypes(),
 		Connection: &store.StreamConnection{
 			Cancel: func(err error) {
-				pcancel()
+				pcancel(err)
 				add.Cancel(err)
 			},
 			Loop: streamLoop,
