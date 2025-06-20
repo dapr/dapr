@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 	kittime "github.com/dapr/kit/time"
@@ -41,7 +40,7 @@ var log = logger.NewLogger("dapr.runtime.actor.reminders.scheduler")
 type Options struct {
 	Namespace     string
 	AppID         string
-	Client        client.Client
+	Client        schedulerv1pb.SchedulerClient
 	StateReminder storage.Interface
 	Table         table.Interface
 	Healthz       healthz.Healthz
@@ -51,7 +50,7 @@ type Options struct {
 type scheduler struct {
 	namespace     string
 	appID         string
-	client        client.Client
+	client        schedulerv1pb.SchedulerClient
 	table         table.Interface
 	stateReminder storage.Interface
 	htarget       healthz.Target
