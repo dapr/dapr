@@ -24,8 +24,57 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/logger"
 	kmeta "github.com/dapr/kit/metadata"
 )
+
+// needsInputScrubber checks if PII scrubbing is needed for any input
+func needsInputScrubber(req *runtimev1pb.ConversationRequest) bool {
+	for _, input := range req.GetInputs() {
+		if input.GetScrubPII() {
+			return true
+		}
+	}
+	return false
+}
+
+// needsOutputScrubber checks if PII scrubbing is needed for outputs
+func needsOutputScrubber(req *runtimev1pb.ConversationRequest) bool {
+	return req.GetScrubPII()
+}
+
+// getInputsFromRequest gets the inputs from the request and scrubs them if PII scrubbing is enabled on the input
+func getInputsFromRequest(req *runtimev1pb.ConversationRequest, scrubber piiscrubber.Scrubber, logger logger.Logger) ([]conversation.ConversationInput, error) {
+	reqInputs := req.GetInputs()
+	if reqInputs == nil {
+		return nil, messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+	}
+
+	inputs := make([]conversation.ConversationInput, 0, len(reqInputs))
+	for _, i := range reqInputs {
+		msg := i.GetContent()
+
+		if i.GetScrubPII() && scrubber != nil {
+			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetContent()})
+			if sErr != nil {
+				sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
+				logger.Debug(sErr)
+				return nil, sErr
+			}
+
+			msg = scrubbed[0]
+		}
+
+		c := conversation.ConversationInput{
+			Message: msg,
+			Role:    conversation.Role(i.GetRole()),
+		}
+
+		inputs = append(inputs, c)
+	}
+
+	return inputs, nil
+}
 
 func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) {
 	// valid component
@@ -55,34 +104,28 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		return nil, err
 	}
 
-	scrubber, err := piiscrubber.NewDefaultScrubber()
+	// prepare scrubber in case PII scrubbing is enabled (either at request level or input level)
+	var scrubber piiscrubber.Scrubber
+
+	// Check if PII scrubbing is needed for inputs or outputs
+	needsInputPIIScrubbing := needsInputScrubber(req)
+	needsOutputPIIScrubbing := needsOutputScrubber(req)
+
+	if needsInputPIIScrubbing || needsOutputPIIScrubbing {
+		scrubber, err = piiscrubber.NewDefaultScrubber()
+		if err != nil {
+			err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+			a.logger.Debug(err)
+			return &runtimev1pb.ConversationResponse{}, err
+		}
+	}
+
+	inputs, err := getInputsFromRequest(req, scrubber, a.logger)
 	if err != nil {
-		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
-		a.logger.Debug(err)
 		return &runtimev1pb.ConversationResponse{}, err
 	}
 
-	for _, i := range req.GetInputs() {
-		msg := i.GetContent()
-
-		if i.GetScrubPII() {
-			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetContent()})
-			if sErr != nil {
-				sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-				a.logger.Debug(sErr)
-				return &runtimev1pb.ConversationResponse{}, sErr
-			}
-
-			msg = scrubbed[0]
-		}
-
-		c := conversation.ConversationInput{
-			Message: msg,
-			Role:    conversation.Role(i.GetRole()),
-		}
-
-		request.Inputs = append(request.Inputs, c)
-	}
+	request.Inputs = inputs
 
 	request.Parameters = req.GetParameters()
 	request.ConversationContext = req.GetContextID()
@@ -99,7 +142,8 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		return rResp, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
-	diag.DefaultComponentMonitoring.ConversationInvoked(ctx, req.GetName(), err == nil, elapsed)
+	usage := convertUsageToProto(resp)
+	diag.DefaultComponentMonitoring.ConversationInvoked(ctx, req.GetName(), err == nil, elapsed, diag.NonStreamingConversation, int64(usage.GetPromptTokens()), int64(usage.GetCompletionTokens()))
 
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
@@ -118,7 +162,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		for _, o := range resp.Outputs {
 			res := o.Result
 
-			if req.GetScrubPII() {
+			if needsOutputPIIScrubbing {
 				scrubbed, sErr := scrubber.ScrubTexts([]string{o.Result})
 				if sErr != nil {
 					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
@@ -134,6 +178,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 				Parameters: o.Parameters,
 			})
 		}
+		response.Usage = usage
 	}
 
 	return response, nil

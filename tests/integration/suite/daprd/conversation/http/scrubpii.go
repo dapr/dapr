@@ -57,6 +57,25 @@ spec:
 	}
 }
 
+func getEchoEstimatedTokens(msg ...string) int {
+	echoEstimatedTokens := 0
+	for _, m := range msg {
+		echoEstimatedTokens += len(m) / 4 // Rough estimate of tokens, assuming 4 characters per token
+	}
+	return echoEstimatedTokens
+}
+
+func getMsgJSON(msg ...string) string {
+	echoEstimatedTokens := getEchoEstimatedTokens(msg...)
+	var outputs []string
+	for _, m := range msg {
+		outputs = append(outputs, fmt.Sprintf(`{"result":"%s"}`, m))
+	}
+	// Rough estimate of tokens, assuming 4 characters per token
+	usgMsg := fmt.Sprintf(`{"completionTokens": %[1]d, "promptTokens": %[1]d, "totalTokens": %[2]d}`, echoEstimatedTokens, 2*echoEstimatedTokens)
+	return fmt.Sprintf(`{"outputs":[%s], "usage": %s}`, strings.Join(outputs, ", "), usgMsg)
+}
+
 func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 	postURL := fmt.Sprintf("http://%s/v1.0-alpha1/conversation/echo/converse", s.daprd.HTTPAddress())
@@ -74,7 +93,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"result":"well hello there, my phone number is <PHONE_NUMBER>"}]}`, string(respBody))
+		require.JSONEq(t, getMsgJSON("well hello there, my phone number is <PHONE_NUMBER>"), string(respBody))
 	})
 
 	t.Run("scrub input email", func(t *testing.T) {
@@ -88,7 +107,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"result":"well hello there, my email is <EMAIL_ADDRESS>"}]}`, string(respBody))
+		require.JSONEq(t, getMsgJSON("well hello there, my email is <EMAIL_ADDRESS>"), string(respBody))
 	})
 
 	t.Run("scrub input ip address", func(t *testing.T) {
@@ -102,7 +121,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"result":"well hello there from <IP>"}]}`, string(respBody))
+		require.JSONEq(t, getMsgJSON("well hello there from <IP>"), string(respBody))
 	})
 
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
@@ -116,7 +135,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"result":"well hello there from <IP>"}, {"result":"well hello there, my email is <EMAIL_ADDRESS>"}]}`, string(respBody))
+		require.JSONEq(t, getMsgJSON("well hello there from <IP>", "well hello there, my email is <EMAIL_ADDRESS>"), string(respBody))
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {
@@ -130,6 +149,6 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"result":"well hello there"}]}`, string(respBody))
+		require.JSONEq(t, getMsgJSON("well hello there"), string(respBody))
 	})
 }
