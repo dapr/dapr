@@ -133,6 +133,10 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 		}
 
+		if errors.Is(err, context.Canceled) {
+			return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
+		}
+
 		if errors.Is(err, actorerrors.ErrReminderCanceled) {
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 		}
@@ -140,6 +144,9 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		// If the actor was hosted on another instance, the error will be a gRPC status error,
 		// so we need to unwrap it and match on the error message
 		if st, ok := status.FromError(err); ok {
+			if st.Code() == codes.FailedPrecondition {
+				return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
+			}
 			if st.Message() == actorerrors.ErrReminderCanceled.Error() {
 				return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 			}

@@ -11,21 +11,36 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package handler
+package wrapper
 
 import (
 	"context"
-	"errors"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	v1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/client"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
 )
 
+type Options struct {
+	Clients *clients.Clients
+}
+
 type wrapper struct {
-	h *Handler
+	clients *clients.Clients
+}
+
+func New(opts Options) client.Interface {
+	return &wrapper{
+		clients: opts.Clients,
+	}
+}
+
+func (w *wrapper) Addresses() []string {
+	return w.clients.Addresses()
 }
 
 func (w *wrapper) DeleteJob(ctx context.Context, req *v1pb.DeleteJobRequest, opts ...grpc.CallOption) (*v1pb.DeleteJobResponse, error) {
@@ -89,21 +104,11 @@ func (w *wrapper) WatchHosts(ctx context.Context, req *v1pb.WatchHostsRequest, o
 	return resp, err
 }
 
-func (w *wrapper) Addresses() []string {
-	w.h.lock.RLock()
-	defer w.h.lock.RUnlock()
-	return w.h.broadcastAddresses
-}
-
 type apiFn func(client v1pb.SchedulerClient) error
 
 func (w *wrapper) call(ctx context.Context, fn apiFn) error {
-	if w.h.NotEnabled() {
-		return errors.New("scheduler not enabled")
-	}
-
 	for {
-		client, err := w.h.next(ctx)
+		client, err := w.clients.Next(ctx)
 		if err != nil {
 			return err
 		}

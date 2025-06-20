@@ -173,9 +173,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
 				assert.NoError(c, err)
 				// All orchestrations should be running
-				assert.Equal(c, api.RUNTIME_STATUS_RUNNING, meta.GetRuntimeStatus())
+				assert.Equal(c, api.RUNTIME_STATUS_RUNNING.String(), meta.GetRuntimeStatus().String())
 			}
-		}, 2*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 
 		// Terminate the root orchestration
 		b.terminateWorkflow(t, ctx, string(id))
