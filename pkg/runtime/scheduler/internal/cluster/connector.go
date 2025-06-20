@@ -29,7 +29,6 @@ type connector struct {
 	channels *channels.Channels
 	actors   router.Interface
 	wfengine wfengine.Interface
-	readyCh  chan struct{}
 }
 
 // run starts the scheduler connector.
@@ -58,9 +57,7 @@ func (c *connector) run(ctx context.Context) error {
 		return err
 	}
 
-	log.Info("Scheduler stream connected")
-
-	close(c.readyCh)
+	log.Infof("Scheduler stream connected for %s", c.req.GetInitial().GetAcceptJobTypes())
 
 	err = (&streamer{
 		stream:   stream,
