@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dapr-scheduler-server-test
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  selector:
+    app: dapr-scheduler-server
+  ports:
+  - name: api
+    port: 18888
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-{{ .Values.component }}-test-storage-class"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dapr-scheduler-server
+    test: "true"
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['dapr-scheduler-server-test:18888/healthz']
+  restartPolicy: Never
