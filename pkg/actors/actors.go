@@ -52,6 +52,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
@@ -78,10 +79,11 @@ type Options struct {
 }
 
 type InitOptions struct {
-	StateStoreName  string
-	Hostname        string
-	GRPC            *manager.Manager
-	SchedulerClient schedclient.Client
+	StateStoreName    string
+	Hostname          string
+	GRPC              *manager.Manager
+	SchedulerClient   schedulerv1pb.SchedulerClient
+	SchedulerReloader schedclient.Reloader
 }
 
 // Interface is the main runtime for the actors subsystem.
@@ -217,6 +219,7 @@ func (a *actors) Init(opts InitOptions) error {
 		APILevel:  apiLevel,
 		Healthz:   a.healthz,
 		Mode:      a.mode,
+		Scheduler: opts.SchedulerReloader,
 	})
 	if err != nil {
 		return err
