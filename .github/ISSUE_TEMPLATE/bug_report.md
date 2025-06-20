@@ -25,6 +25,10 @@ assignees: ''
 
 > /area injector
 
+> /area scheduler
+
+> /area sentry
+
 ## What version of Dapr?
 
 <!-- Delete all but your choice -->

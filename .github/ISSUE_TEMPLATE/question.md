@@ -29,4 +29,8 @@ https://aka.ms/dapr-discord
 
 > /area injector
 
+> /area scheduler
+
+> /area sentry
+
 ## Ask your question here
