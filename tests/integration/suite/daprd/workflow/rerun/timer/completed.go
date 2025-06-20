@@ -11,16 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rerun
+package timer
 
 import (
 	"context"
 	"testing"
+	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -30,41 +28,48 @@ import (
 )
 
 func init() {
-	suite.Register(new(notscheduleevent))
+	suite.Register(new(completed))
 }
 
-type notscheduleevent struct {
+type completed struct {
 	workflow *workflow.Workflow
 }
 
-func (n *notscheduleevent) Setup(t *testing.T) []framework.Option {
-	n.workflow = workflow.New(t)
+func (c *completed) Setup(t *testing.T) []framework.Option {
+	c.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(n.workflow),
+		framework.WithProcesses(c.workflow),
 	}
 }
 
-func (n *notscheduleevent) Run(t *testing.T, ctx context.Context) {
-	n.workflow.WaitUntilRunning(t, ctx)
+func (c *completed) Run(t *testing.T, ctx context.Context) {
+	c.workflow.WaitUntilRunning(t, ctx)
 
-	n.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry().AddOrchestratorN("completed-timer", func(ctx *task.OrchestrationContext) (any, error) {
+		require.NoError(t, ctx.CreateTimer(time.Second).Await(nil))
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
-	n.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	c.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+		time.Sleep(time.Second)
 		return nil, nil
 	})
 
-	client := n.workflow.BackendClient(t, ctx)
+	client := c.workflow.BackendClient(t, ctx)
 
-	_, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewOrchestration(ctx, "completed-timer", api.WithInstanceID("ijk"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, api.InstanceID("abc"))
+	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
-	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 1, api.WithRerunNewInstanceID("xyz"))
-	require.Error(t, err)
+	newID, err := client.RerunWorkflowFromEvent(ctx, id, 0)
+	require.NoError(t, err)
+	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	require.NoError(t, err)
 
-	assert.Equal(t, status.Error(codes.NotFound, "target event '*protos.HistoryEvent_ExecutionCompleted' with ID '1' is not an event that can be rerun"), err)
+	newID, err = client.RerunWorkflowFromEvent(ctx, id, 1)
+	require.NoError(t, err)
+	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	require.NoError(t, err)
 }
