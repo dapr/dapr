@@ -108,6 +108,7 @@ type placement struct {
 
 func New(opts Options) (Interface, error) {
 	lock := lock.NewOuterCancel(errors.New("placement is disseminating"), time.Second*2)
+
 	client, err := client.New(client.Options{
 		Addresses: opts.Addresses,
 		Security:  opts.Security,
@@ -115,6 +116,12 @@ func New(opts Options) (Interface, error) {
 		Lock:      lock,
 		Healthz:   opts.Healthz,
 		Mode:      opts.Mode,
+		BaseHost: &v1pb.Host{
+			Name:      opts.Hostname + ":" + strconv.Itoa(opts.Port),
+			Id:        opts.AppID,
+			ApiLevel:  20,
+			Namespace: opts.Namespace,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -233,14 +240,7 @@ func (p *placement) Ready() bool {
 }
 
 func (p *placement) sendHost(ctx context.Context, actorTypes []string) error {
-	err := p.client.Send(ctx, &v1pb.Host{
-		Name:      p.hostname + ":" + p.port,
-		Entities:  actorTypes,
-		Id:        p.appID,
-		ApiLevel:  20,
-		Namespace: p.namespace,
-	})
-	if err != nil {
+	if err := p.client.Send(ctx, actorTypes); err != nil {
 		diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
 		return err
 	}
