@@ -47,7 +47,9 @@ type Options struct {
 	Mode             string
 	KubeConfig       *string
 
-	ID                       string
+	ID string
+
+	EtcdEmbed                bool
 	EtcdInitialCluster       []string
 	EtcdDataDir              string
 	EtcdClientPort           uint64
@@ -61,6 +63,9 @@ type Options struct {
 	EtcdBackendBatchInterval string
 	EtcdDefragThresholdMB    uint
 	EtcdMetrics              string
+
+	// TODO: @joshvanl: add Etcd client TLS enabled flag.
+	EtcdClientEndpoints []string
 
 	IdentityDirectoryWrite string
 
@@ -97,6 +102,9 @@ func New(origArgs []string) (*Options, error) {
 	}
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
+
+	fs.BoolVar(&opts.EtcdEmbed, "etcd-embed", true, "When enabled, the Etcd database will be embedded in the scheduler server. If false, the scheduler will connect to an external Etcd cluster using the --etcd-client-endpoints flag.")
+
 	fs.StringSliceVar(&opts.EtcdInitialCluster, "etcd-initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.Uint64Var(&opts.EtcdClientPort, "etcd-client-port", 2379, "Port for etcd client communication")
@@ -110,6 +118,8 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.EtcdBackendBatchInterval, "etcd-backend-batch-interval", "50ms", "Maximum time before committing the backend transaction.")
 	fs.UintVar(&opts.EtcdDefragThresholdMB, "etcd-experimental-bootstrap-defrag-threshold-megabytes", 100, "Minimum number of megabytes needed to be freed for etcd to consider running defrag during bootstrap. Needs to be set to non-zero value to take effect.")
 	fs.StringVar(&opts.EtcdMetrics, "etcd-metrics", "basic", "Level of detail for exported metrics, specify ’extensive’ to include histogram metrics.")
+
+	fs.StringArrayVar(&opts.EtcdClientEndpoints, "etcd-client-endpoints", []string{}, "Comma-separated list of etcd client endpoints to connect to. Only used when --etcd-embed is false.")
 
 	fs.StringVar(&opts.IdentityDirectoryWrite, "identity-directory-write", filepath.Join(os.TempDir(), "secrets/dapr.io/tls"), "Directory to write identity certificate certificate, private key and trust anchors")
 
@@ -144,6 +154,14 @@ func New(origArgs []string) (*Options, error) {
 
 	if fs.Changed("override-broadcast-host-port") {
 		opts.OverrideBroadcastHostPort = &opts.overrideBroadcastHostPort
+	}
+
+	if opts.EtcdEmbed && len(opts.EtcdClientEndpoints) > 0 {
+		return nil, errors.New("cannot use --etcd-client-endpoints with --etcd-embed")
+	}
+
+	if !opts.EtcdEmbed && len(opts.EtcdClientEndpoints) == 0 {
+		return nil, errors.New("must specify --etcd-client-endpoints when not using embedded etcd")
 	}
 
 	return &opts, nil

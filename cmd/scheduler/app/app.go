@@ -103,6 +103,8 @@ func Run() {
 				Healthz:  healthz,
 
 				KubeConfig:               opts.KubeConfig,
+				EtcdEmbed:                opts.EtcdEmbed,
+				EtcdClientEndpoints:      opts.EtcdClientEndpoints,
 				EtcdDataDir:              opts.EtcdDataDir,
 				EtcdName:                 opts.ID,
 				EtcdInitialCluster:       opts.EtcdInitialCluster,
