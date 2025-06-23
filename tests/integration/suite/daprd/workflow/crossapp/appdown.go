@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -131,7 +130,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() {
 		a.daprd2.Cleanup(t)
 	})
-	
+
 	wctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// Start workflow listeners for each app
@@ -140,12 +139,12 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 
 	// Start listeners for each app
 	err := client1.StartWorkItemListener(ctx, a.registry1)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	err = client2.StartWorkItemListener(wctx, a.registry2)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	id, err := client1.ScheduleNewOrchestration(ctx, "AppDownWorkflow", api.WithInput("Hello from app1"))
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	// Wait a bit for the workflow to start executing & Stop app2 to simulate app going down
 	time.Sleep(1 * time.Second)
