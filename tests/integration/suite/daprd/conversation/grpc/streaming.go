@@ -129,9 +129,8 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
-				contextID = complete.GetContextId()
+				contextID = complete.GetContextID()
 			}
-
 		}
 
 		// Verify streaming behavior
@@ -306,7 +305,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			Inputs: []*rtv1.ConversationInput{
 				{Content: "Hello with context"},
 			},
-			ContextId: &contextID,
+			ContextID: &contextID,
 		})
 		require.NoError(t, err)
 
@@ -326,7 +325,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
-				returnedContextID = complete.GetContextId()
+				returnedContextID = complete.GetContextID()
 			}
 		}
 
@@ -431,7 +430,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 
 			assert.NotEmpty(t, chunks, "Should receive chunks from "+provider.componentName)
 			assert.True(t, hasCompletion, "Should receive completion")
-			assert.Greater(t, len(chunks), 0, "Should receive at least one chunk")
+			assert.NotEmpty(t, chunks, "Should receive at least one chunk")
 
 			// Verify we got a real response from the provider
 			fullResponse := strings.Join(chunks, "")
@@ -443,7 +442,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 
 			// Verify usage information is provided
 			if usage != nil {
-				assert.Greater(t, usage.GetTotalTokens(), int32(0), "Should have token usage information")
+				assert.Positive(t, usage.GetTotalTokens(), "Should have token usage information")
 				t.Logf("Token usage - Prompt: %d, Completion: %d, Total: %d",
 					usage.GetPromptTokens(), usage.GetCompletionTokens(), usage.GetTotalTokens())
 			}

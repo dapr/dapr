@@ -1,9 +1,10 @@
 package diagnostics
 
 import (
-	"go.opencensus.io/tag"
 	"testing"
 	"time"
+
+	"go.opencensus.io/tag"
 
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
@@ -252,8 +253,8 @@ func TestConversation(t *testing.T) {
 		allTagsPresent(t, vUsageCompletion, viewUsageCompletionData[0].Tags)
 
 		assert.True(t, TagAndValuePresent(viewData[0].Tags, tag.Tag{Key: typeKey, Value: string(NonStreamingConversation)}))
-		assert.Equal(t, float64(10), viewUsagePromptData[0].Data.(*view.SumData).Value)
-		assert.Equal(t, float64(5), viewUsageCompletionData[0].Data.(*view.SumData).Value)
+		assert.InDelta(t, float64(10), viewUsagePromptData[0].Data.(*view.SumData).Value, 0.001)
+		assert.InDelta(t, float64(5), viewUsageCompletionData[0].Data.(*view.SumData).Value, 0.001)
 	})
 
 	t.Run("record conversation latency", func(t *testing.T) {

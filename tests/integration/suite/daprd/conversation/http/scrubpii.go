@@ -67,7 +67,7 @@ func getEchoEstimatedTokens(msg ...string) int {
 
 func getMsgJSON(msg ...string) string {
 	echoEstimatedTokens := getEchoEstimatedTokens(msg...)
-	var outputs []string
+	outputs := make([]string, 0, len(msg))
 	for _, m := range msg {
 		outputs = append(outputs, fmt.Sprintf(`{"result":"%s"}`, m))
 	}

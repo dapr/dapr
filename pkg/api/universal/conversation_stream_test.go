@@ -212,7 +212,7 @@ func TestConverseStreamAlpha1_ComponentValidation(t *testing.T) {
 			}
 
 			stream := &mockStreamServer{
-				ctx: context.Background(),
+				ctx: t.Context(),
 			}
 
 			err := api.ConverseStreamAlpha1(req, stream)
@@ -241,7 +241,7 @@ func TestConverseStreamAlpha1_NonStreamingComponent(t *testing.T) {
 	}
 
 	stream := &mockStreamServer{
-		ctx: context.Background(),
+		ctx: t.Context(),
 	}
 
 	err := api.ConverseStreamAlpha1(req, stream)
@@ -261,7 +261,7 @@ func TestConverseStreamAlpha1_NonStreamingComponent(t *testing.T) {
 		}
 		if complete := msg.GetComplete(); complete != nil {
 			hasCompletion = true
-			assert.Equal(t, "test-context-123", complete.GetContextId())
+			assert.Equal(t, "test-context-123", complete.GetContextID())
 		}
 	}
 
@@ -282,7 +282,7 @@ func TestConverseStreamAlpha1_StreamingComponent(t *testing.T) {
 	}
 
 	stream := &mockStreamServer{
-		ctx: context.Background(),
+		ctx: t.Context(),
 	}
 
 	err := api.ConverseStreamAlpha1(req, stream)
@@ -298,7 +298,7 @@ func TestConverseStreamAlpha1_StreamingComponent(t *testing.T) {
 		}
 		if complete := msg.GetComplete(); complete != nil {
 			hasCompletion = true
-			assert.Equal(t, "test-context-456", complete.GetContextId())
+			assert.Equal(t, "test-context-456", complete.GetContextID())
 		}
 	}
 
@@ -330,7 +330,7 @@ func TestConverseStreamAlpha1_ComponentError(t *testing.T) {
 	}
 
 	stream := &mockStreamServer{
-		ctx: context.Background(),
+		ctx: t.Context(),
 	}
 
 	err := api.ConverseStreamAlpha1(req, stream)
@@ -349,7 +349,7 @@ func TestConverseStreamAlpha1_StreamError(t *testing.T) {
 	}
 
 	stream := &mockStreamServer{
-		ctx:     context.Background(),
+		ctx:     t.Context(),
 		sendErr: errors.New("stream send error"),
 	}
 
@@ -375,7 +375,6 @@ func TestStreamingPIIScrubber(t *testing.T) {
 		result3 := scrubber.Flush()
 		assert.NotNil(t, result3, "Should return remaining buffer")
 	})
-
 }
 
 func TestStreamingPipelineImpl(t *testing.T) {
@@ -431,7 +430,7 @@ func TestRequestProcessing(t *testing.T) {
 		}
 
 		stream := &mockStreamServer{
-			ctx: context.Background(),
+			ctx: t.Context(),
 		}
 
 		err := api.ConverseStreamAlpha1(req, stream)
@@ -449,7 +448,7 @@ func TestRequestProcessing(t *testing.T) {
 		}
 
 		stream := &mockStreamServer{
-			ctx: context.Background(),
+			ctx: t.Context(),
 		}
 
 		err := api.ConverseStreamAlpha1(req, stream)
@@ -463,11 +462,11 @@ func TestRequestProcessing(t *testing.T) {
 			Inputs: []*runtimev1pb.ConversationInput{
 				{Content: "test"},
 			},
-			ContextId: &contextID,
+			ContextID: &contextID,
 		}
 
 		stream := &mockStreamServer{
-			ctx: context.Background(),
+			ctx: t.Context(),
 		}
 
 		err := api.ConverseStreamAlpha1(req, stream)

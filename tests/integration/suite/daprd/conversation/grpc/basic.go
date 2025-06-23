@@ -94,10 +94,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetResult())
 
 		// usage validation
-		estimatedTokens := getEchoEstimatedTokens("well hello there")
-		require.Equal(t, int32(2*estimatedTokens), resp.GetUsage().GetTotalTokens())
-		require.Equal(t, int32(estimatedTokens), resp.GetUsage().GetPromptTokens())
-		require.Equal(t, int32(estimatedTokens), resp.GetUsage().GetCompletionTokens())
+		estimatedTokensInt := getEchoEstimatedTokens("well hello there")
+		estimatedTokens := int32(estimatedTokensInt) //nolint:gosec // Safe conversion for test data
+		require.Equal(t, 2*estimatedTokens, resp.GetUsage().GetTotalTokens())
+		require.Equal(t, estimatedTokens, resp.GetUsage().GetPromptTokens())
+		require.Equal(t, estimatedTokens, resp.GetUsage().GetCompletionTokens())
 	})
-
 }

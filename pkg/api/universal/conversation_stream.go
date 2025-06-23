@@ -19,6 +19,7 @@ import (
 	"time"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
+
 	"github.com/dapr/components-contrib/conversation"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
@@ -81,9 +82,9 @@ func (a *Universal) ConverseStreamAlpha1(req *runtimev1pb.ConversationRequest, s
 
 		// Add PII scrubbing middleware for streaming output scrubbing
 		if needsOutputPIIScrubbing {
-			scrubberMiddleware, err := NewStreamingPIIScrubber(defaultPIIScrubberWindowSize)
-			if err != nil {
-				return fmt.Errorf("failed to create streaming PII scrubber middleware: %w", err)
+			scrubberMiddleware, scrubberErr := NewStreamingPIIScrubber(defaultPIIScrubberWindowSize)
+			if scrubberErr != nil {
+				return fmt.Errorf("failed to create streaming PII scrubber middleware: %w", scrubberErr)
 			}
 			pipelineImpl.AddMiddleware(scrubberMiddleware)
 		}
@@ -96,7 +97,7 @@ func (a *Universal) ConverseStreamAlpha1(req *runtimev1pb.ConversationRequest, s
 	}
 
 	request.Parameters = req.GetParameters()
-	request.ConversationContext = req.GetContextId()
+	request.ConversationContext = req.GetContextID()
 	request.Temperature = req.GetTemperature()
 
 	// Process streaming request
@@ -287,7 +288,7 @@ func (p *StreamingPipelineImpl) sendComplete(stream runtimev1pb.Dapr_ConverseStr
 		Usage: usage,
 	}
 	if contextID != "" {
-		complete.ContextId = &contextID
+		complete.ContextID = &contextID
 	}
 
 	return stream.Send(&runtimev1pb.ConversationStreamResponse{
