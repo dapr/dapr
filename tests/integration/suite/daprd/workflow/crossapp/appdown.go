@@ -1,0 +1,162 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package crossapp
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
+)
+
+func init() {
+	suite.Register(new(appdown))
+}
+
+// appdown tests error handling when a target app goes down during execution
+type appdown struct {
+	daprd1 *daprd.Daprd
+	daprd2 *daprd.Daprd
+	place  *placement.Placement
+	sched  *scheduler.Scheduler
+
+	registry1 *task.TaskRegistry
+	registry2 *task.TaskRegistry
+}
+
+func (a *appdown) Setup(t *testing.T) []framework.Option {
+	a.place = placement.New(t)
+	a.sched = scheduler.New(t,
+		scheduler.WithLogLevel("debug"))
+	db := sqlite.New(t,
+		sqlite.WithActorStateStore(true),
+		sqlite.WithMetadata("busyTimeout", "10s"),
+		sqlite.WithMetadata("disableWAL", "true"),
+	)
+
+	app1 := app.New(t)
+	app2 := app.New(t)
+
+	// Create registries for each app
+	a.registry1 = task.NewTaskRegistry()
+	a.registry2 = task.NewTaskRegistry()
+
+	// App2: Activity that will be called before the app goes down
+	a.registry2.AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in app2: %w", err)
+		}
+
+		// Sleep for a while to ensure the workflow is actively executing when app2 is stopped
+		time.Sleep(10 * time.Second)
+
+		return fmt.Sprintf("Processed by app2: %s", input), nil
+	})
+
+	// App1: Orchestrator that calls app2
+	a.registry1.AddOrchestratorN("AppDownWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
+		}
+
+		// Call app2 activity
+		var result string
+		err := ctx.CallActivity("ProcessData",
+			task.WithActivityInput(input),
+			task.WithAppID("app2")).
+			Await(&result)
+		if err != nil {
+			// Return error message to verify it's handled properly
+			return fmt.Sprintf("Error occurred: %v", err), nil
+		}
+
+		return result, nil
+	})
+
+	a.daprd1 = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithPlacementAddresses(a.place.Address()),
+		daprd.WithScheduler(a.sched),
+		daprd.WithAppID("app1"),
+		daprd.WithAppPort(app1.Port()),
+		daprd.WithLogLevel("debug"),
+	)
+	a.daprd2 = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithPlacementAddresses(a.place.Address()),
+		daprd.WithScheduler(a.sched),
+		daprd.WithAppID("app2"),
+		daprd.WithAppPort(app2.Port()),
+		daprd.WithLogLevel("debug"),
+	)
+
+	return []framework.Option{
+		framework.WithProcesses(a.place, a.sched, db, app1, app2, a.daprd1, a.daprd2),
+	}
+}
+
+func (a *appdown) Run(t *testing.T, ctx context.Context) {
+	a.sched.WaitUntilRunning(t, ctx)
+	a.place.WaitUntilRunning(t, ctx)
+	a.daprd1.WaitUntilRunning(t, ctx)
+	a.daprd2.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() {
+		a.daprd2.Cleanup(t)
+	})
+	
+	wctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// Start workflow listeners for each app
+	client1 := client.NewTaskHubGrpcClient(a.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2 := client.NewTaskHubGrpcClient(a.daprd2.GRPCConn(t, wctx), backend.DefaultLogger())
+
+	// Start listeners for each app
+	err := client1.StartWorkItemListener(ctx, a.registry1)
+	require.NoError(t, err)
+	err = client2.StartWorkItemListener(wctx, a.registry2)
+	require.NoError(t, err)
+
+	id, err := client1.ScheduleNewOrchestration(ctx, "AppDownWorkflow", api.WithInput("Hello from app1"))
+	require.NoError(t, err)
+
+	// Wait a bit for the workflow to start executing & Stop app2 to simulate app going down
+	time.Sleep(1 * time.Second)
+	cancel()
+	a.daprd2.Cleanup(t)
+
+	// Expect completion to hang, so timeout
+	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer waitCancel()
+
+	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+	assert.Error(t, err)
+	assert.EqualError(t, err, "context deadline exceeded")
+}
