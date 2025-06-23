@@ -25,6 +25,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -71,6 +72,10 @@ func (w *workflow) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 
 func (w *workflow) executeMethod(ctx context.Context, methodName string, request []byte) ([]byte, error) {
 	log.Debugf("Workflow actor '%s': invoking method '%s'", w.actorID, methodName)
+
+	if w.actorState == nil {
+		return nil, messages.ErrActorRuntimeNotFound
+	}
 
 	switch methodName {
 	case todo.CreateWorkflowInstanceMethod:

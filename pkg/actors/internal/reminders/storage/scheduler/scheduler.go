@@ -28,8 +28,8 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/healthz"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 	kittime "github.com/dapr/kit/time"
@@ -40,7 +40,7 @@ var log = logger.NewLogger("dapr.runtime.actor.reminders.scheduler")
 type Options struct {
 	Namespace     string
 	AppID         string
-	Client        client.Client
+	Client        schedulerv1pb.SchedulerClient
 	StateReminder storage.Interface
 	Table         table.Interface
 	Healthz       healthz.Healthz
@@ -50,7 +50,7 @@ type Options struct {
 type scheduler struct {
 	namespace     string
 	appID         string
-	client        client.Client
+	client        schedulerv1pb.SchedulerClient
 	table         table.Interface
 	stateReminder storage.Interface
 	htarget       healthz.Target
@@ -64,7 +64,7 @@ func New(opts Options) storage.Interface {
 		appID:         opts.AppID,
 		stateReminder: opts.StateReminder,
 		table:         opts.Table,
-		htarget:       opts.Healthz.AddTarget(),
+		htarget:       opts.Healthz.AddTarget("actors-reminders-scheduler"),
 	}
 }
 
@@ -99,11 +99,11 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 		return err
 	}
 
-	var failurePolicy *schedulerv1pb.FailurePolicy
+	var failurePolicy *commonv1pb.JobFailurePolicy
 	if reminder.IsOneShot {
-		failurePolicy = &schedulerv1pb.FailurePolicy{
-			Policy: &schedulerv1pb.FailurePolicy_Constant{
-				Constant: &schedulerv1pb.FailurePolicyConstant{
+		failurePolicy = &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Constant{
+				Constant: &commonv1pb.JobFailurePolicyConstant{
 					Interval:   durationpb.New(time.Second),
 					MaxRetries: nil,
 				},

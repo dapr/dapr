@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -66,6 +67,7 @@ type Options struct {
 	Port      int
 	Addresses []string
 
+	Scheduler schedclient.Reloader
 	APILevel  *apilevel.APILevel
 	Security  security.Handler
 	Table     table.Interface
@@ -81,6 +83,7 @@ type placement struct {
 	apiLevel   *apilevel.APILevel
 	htarget    healthz.Target
 
+	scheduler         schedclient.Reloader
 	hashTable         *hashing.ConsistentHashTables
 	virtualNodesCache *hashing.VirtualNodesCache
 
@@ -91,6 +94,8 @@ type placement struct {
 
 	tableUnlock context.CancelFunc
 
+	reloadTypes atomic.Bool
+
 	appID     string
 	namespace string
 	hostname  string
@@ -98,7 +103,7 @@ type placement struct {
 	isReady   atomic.Bool
 	readyCh   chan struct{}
 	wg        sync.WaitGroup
-	closed    atomic.Bool
+	closedCh  chan struct{}
 }
 
 func New(opts Options) (Interface, error) {
@@ -129,8 +134,10 @@ func New(opts Options) (Interface, error) {
 		hostname:      opts.Hostname,
 		operationLock: fifo.New(),
 		apiLevel:      opts.APILevel,
-		htarget:       opts.Healthz.AddTarget(),
+		scheduler:     opts.Scheduler,
+		htarget:       opts.Healthz.AddTarget("internal-placement-service"),
 		lock:          lock,
+		closedCh:      make(chan struct{}),
 		readyCh:       make(chan struct{}),
 	}, nil
 }
@@ -144,6 +151,10 @@ func (p *placement) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			ch, actorTypes := p.actorTable.SubscribeToTypeUpdates(ctx)
+			if len(actorTypes) > 0 {
+				p.reloadTypes.Store(true)
+			}
+
 			log.Infof("Reporting actor types: %v", actorTypes)
 			if err := p.sendHost(ctx, actorTypes); err != nil {
 				return err
@@ -155,6 +166,8 @@ func (p *placement) Run(ctx context.Context) error {
 			for {
 				select {
 				case actorTypes = <-ch:
+					p.scheduler.ReloadActorTypes([]string{})
+					p.reloadTypes.Store(true)
 					log.Infof("Updating actor types: %v", actorTypes)
 					// TODO: @joshvanl: it is a nonsense to be sending the same actor
 					// types over and over again, *every second*. This should be removed
@@ -183,7 +196,7 @@ func (p *placement) Run(ctx context.Context) error {
 		},
 	).Run(ctx)
 
-	p.closed.Store(true)
+	close(p.closedCh)
 
 	p.operationLock.Lock()
 	if p.tableUnlock != nil {
@@ -356,6 +369,11 @@ func (p *placement) handleUnlockOperation(ctx context.Context) {
 		if p.isReady.CompareAndSwap(false, true) {
 			close(p.readyCh)
 		}
+	}
+
+	if p.reloadTypes.Load() {
+		p.scheduler.ReloadActorTypes(p.actorTable.Types())
+		p.reloadTypes.Store(false)
 	}
 
 	p.htarget.Ready()
