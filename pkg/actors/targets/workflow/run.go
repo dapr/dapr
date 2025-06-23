@@ -77,7 +77,6 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 			break
 		}
 	}
-	// likely need to set task router here
 	rs := w.rstate
 	wi := &backend.OrchestrationWorkItem{
 		InstanceID: api.InstanceID(rs.GetInstanceId()),
@@ -164,14 +163,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 				Generation: state.Generation,
 			}
 
-			// TODO: confirm if i need to check router here
-			//var targetAppID string
-			//if router := t.GetRouter(); router != nil {
-			//	targetAppID = router.GetTarget()
-			//}
-
 			log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", w.actorID, reminderPrefix)
-			//if _, err = w.createReminder(ctx, reminderPrefix, data, delay, targetAppID); err != nil {
 			if _, err = w.createReminder(ctx, reminderPrefix, data, delay, w.appID); err != nil {
 				executionStatus = diag.StatusRecoverable
 				return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", w.actorID, err))
