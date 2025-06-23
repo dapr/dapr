@@ -83,25 +83,25 @@ func (sd *simpleDebug) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.ConverseAlpha1(ctx, req)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Len(t, resp.Outputs, 1)
+		require.Len(t, resp.GetOutputs(), 1)
 
-		output := resp.Outputs[0]
-		t.Logf("Response Result: %s", output.Result)
-		t.Logf("Response ToolCalls: %v", output.ToolCalls)
+		output := resp.GetOutputs()[0]
+		t.Logf("Response Result: %s", output.GetResult())
+		t.Logf("Response ToolCalls: %v", output.GetToolCalls())
 		t.Logf("Response FinishReason: %s", output.GetFinishReason())
-		t.Logf("Number of ToolCalls: %d", len(output.ToolCalls))
+		t.Logf("Number of ToolCalls: %d", len(output.GetToolCalls()))
 
 		// The echo component should detect "weather" keyword and return tool calls
 		// Let's log what we're actually getting to debug
-		if len(output.ToolCalls) > 0 {
-			t.Logf("✅ Tool calling works! First tool call: %v", output.ToolCalls[0])
+		if len(output.GetToolCalls()) > 0 {
+			t.Logf("✅ Tool calling works! First tool call: %v", output.GetToolCalls()[0])
 		} else {
 			t.Logf("❌ No tool calls returned. This suggests the tool calling flow isn't working as expected.")
 			// Still check what we got
-			if output.Result == "What's the weather like in San Francisco?" {
+			if output.GetResult() == "What's the weather like in San Francisco?" {
 				t.Logf("🔍 Got regular echo response, which means tool calling detection might not be working")
 			} else {
-				t.Logf("🔍 Got unexpected response: %s", output.Result)
+				t.Logf("🔍 Got unexpected response: %s", output.GetResult())
 			}
 		}
 	})
@@ -120,14 +120,14 @@ func (sd *simpleDebug) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.ConverseAlpha1(ctx, req)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Len(t, resp.Outputs, 1)
+		require.Len(t, resp.GetOutputs(), 1)
 
-		output := resp.Outputs[0]
-		t.Logf("Regular Response Result: %s", output.Result)
-		t.Logf("Regular Response ToolCalls: %v", output.ToolCalls)
+		output := resp.GetOutputs()[0]
+		t.Logf("Regular Response Result: %s", output.GetResult())
+		t.Logf("Regular Response ToolCalls: %v", output.GetToolCalls())
 
 		// This should work as normal echo
-		require.Equal(t, "Hello world", output.Result)
-		require.Empty(t, output.ToolCalls)
+		require.Equal(t, "Hello world", output.GetResult())
+		require.Empty(t, output.GetToolCalls())
 	})
 }

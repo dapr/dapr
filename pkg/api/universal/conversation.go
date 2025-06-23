@@ -19,6 +19,7 @@ import (
 	"time"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
+	"github.com/tmc/langchaingo/llms"
 
 	"github.com/dapr/components-contrib/conversation"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -27,7 +28,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 	kmeta "github.com/dapr/kit/metadata"
-	"github.com/tmc/langchaingo/llms"
 )
 
 // needsInputScrubber checks if PII scrubbing is needed for any input
@@ -86,30 +86,6 @@ func convertProtoToolsToLangChain(protoTools []*runtimev1pb.Tool) []llms.Tool {
 	}
 
 	return tools
-}
-
-// convertLangChainToolCallsToProto converts LangChain Go tool calls to protobuf format
-func convertLangChainToolCallsToProto(langchainResponse *llms.ContentResponse) []*runtimev1pb.ToolCall {
-	if langchainResponse == nil || len(langchainResponse.Choices) == 0 {
-		return nil
-	}
-
-	var allToolCalls []*runtimev1pb.ToolCall
-	for _, choice := range langchainResponse.Choices {
-		for _, toolCall := range choice.ToolCalls {
-			protoToolCall := &runtimev1pb.ToolCall{
-				Id:   toolCall.ID,
-				Type: toolCall.Type,
-				Function: &runtimev1pb.ToolCallFunction{
-					Name:      toolCall.FunctionCall.Name,
-					Arguments: toolCall.FunctionCall.Arguments,
-				},
-			}
-			allToolCalls = append(allToolCalls, protoToolCall)
-		}
-	}
-
-	return allToolCalls
 }
 
 // convertProtoToolsToComponentsContrib converts protobuf tools to components-contrib format

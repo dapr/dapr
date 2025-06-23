@@ -106,17 +106,17 @@ func (td *toolCallingDebug) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.ConverseAlpha1(ctx, req)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Len(t, resp.Outputs, 1)
+		require.Len(t, resp.GetOutputs(), 1)
 
-		output := resp.Outputs[0]
-		t.Logf("Echo Response - Result: %s", output.Result)
-		t.Logf("Echo Response - ToolCalls: %v", output.ToolCalls)
+		output := resp.GetOutputs()[0]
+		t.Logf("Echo Response - Result: %s", output.GetResult())
+		t.Logf("Echo Response - ToolCalls: %v", output.GetToolCalls())
 		t.Logf("Echo Response - FinishReason: %s", output.GetFinishReason())
 
 		// Echo should recognize the weather keywords and suggest tool calling
-		assert.Contains(t, output.Result, "tools")
+		assert.Contains(t, output.GetResult(), "tools")
 		// Expect tool calls to be generated for weather-related queries
-		assert.NotEmpty(t, output.ToolCalls, "Echo should generate tool calls for weather queries")
+		assert.NotEmpty(t, output.GetToolCalls(), "Echo should generate tool calls for weather queries")
 		assert.Equal(t, "tool_calls", output.GetFinishReason())
 	})
 
@@ -135,14 +135,14 @@ func (td *toolCallingDebug) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.ConverseAlpha1(ctx, req)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Len(t, resp.Outputs, 1)
+		require.Len(t, resp.GetOutputs(), 1)
 
-		output := resp.Outputs[0]
-		t.Logf("Echo Normal Response - Result: %s", output.Result)
-		t.Logf("Echo Normal Response - ToolCalls: %v", output.ToolCalls)
+		output := resp.GetOutputs()[0]
+		t.Logf("Echo Normal Response - Result: %s", output.GetResult())
+		t.Logf("Echo Normal Response - ToolCalls: %v", output.GetToolCalls())
 
-		assert.Equal(t, "Hello world", output.Result)
-		assert.Empty(t, output.ToolCalls)
+		assert.Equal(t, "Hello world", output.GetResult())
+		assert.Empty(t, output.GetToolCalls())
 	})
 
 	// Test with real AI providers if API keys are available
@@ -178,12 +178,12 @@ func (td *toolCallingDebug) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.ConverseAlpha1(ctx, req)
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Greater(t, len(resp.Outputs), 0, "Should have at least one output")
+			require.NotEmpty(t, resp.GetOutputs(), "Should have at least one output")
 
 			// Log all outputs for debugging
-			for i, output := range resp.Outputs {
-				t.Logf("%s Output[%d] - Result: %s", provider.componentName, i, output.Result)
-				t.Logf("%s Output[%d] - ToolCalls: %v", provider.componentName, i, output.ToolCalls)
+			for i, output := range resp.GetOutputs() {
+				t.Logf("%s Output[%d] - Result: %s", provider.componentName, i, output.GetResult())
+				t.Logf("%s Output[%d] - ToolCalls: %v", provider.componentName, i, output.GetToolCalls())
 				t.Logf("%s Output[%d] - FinishReason: %s", provider.componentName, i, output.GetFinishReason())
 			}
 
@@ -192,8 +192,8 @@ func (td *toolCallingDebug) Run(t *testing.T, ctx context.Context) {
 			case "anthropic":
 				// Anthropic may return multiple outputs: explanation + tool calls
 				var toolCallOutput *runtimev1pb.ConversationResult
-				for _, output := range resp.Outputs {
-					if len(output.ToolCalls) > 0 {
+				for _, output := range resp.GetOutputs() {
+					if len(output.GetToolCalls()) > 0 {
 						toolCallOutput = output
 						break
 					}
@@ -202,9 +202,9 @@ func (td *toolCallingDebug) Run(t *testing.T, ctx context.Context) {
 				if toolCallOutput != nil {
 					t.Logf("✅ Tool calling working with %s!", provider.componentName)
 					assert.Equal(t, "tool_calls", toolCallOutput.GetFinishReason())
-					toolCall := toolCallOutput.ToolCalls[0]
-					assert.Equal(t, "get_weather", toolCall.Function.Name)
-					assert.NotEmpty(t, toolCall.Id)
+					toolCall := toolCallOutput.GetToolCalls()[0]
+					assert.Equal(t, "get_weather", toolCall.GetFunction().GetName())
+					assert.NotEmpty(t, toolCall.GetId())
 					// Note: Anthropic may not populate Type field consistently via LangChain Go
 				} else {
 					t.Logf("ℹ️ %s chose not to call tools for this request (acceptable)", provider.componentName)
@@ -212,14 +212,14 @@ func (td *toolCallingDebug) Run(t *testing.T, ctx context.Context) {
 
 			case "googleai":
 				// GoogleAI through LangChain Go doesn't populate Type and ID fields consistently
-				require.Len(t, resp.Outputs, 1)
-				output := resp.Outputs[0]
+				require.Len(t, resp.GetOutputs(), 1)
+				output := resp.GetOutputs()[0]
 
-				if len(output.ToolCalls) > 0 {
+				if len(output.GetToolCalls()) > 0 {
 					t.Logf("✅ Tool calling working with %s!", provider.componentName)
 					assert.Equal(t, "tool_calls", output.GetFinishReason())
-					toolCall := output.ToolCalls[0]
-					assert.Equal(t, "get_weather", toolCall.Function.Name)
+					toolCall := output.GetToolCalls()[0]
+					assert.Equal(t, "get_weather", toolCall.GetFunction().GetName())
 					// Skip Type and ID assertions for GoogleAI due to LangChain Go implementation differences
 				} else {
 					t.Logf("ℹ️ %s chose not to call tools for this request", provider.componentName)
@@ -227,15 +227,15 @@ func (td *toolCallingDebug) Run(t *testing.T, ctx context.Context) {
 
 			default:
 				// Standard validation for other providers (OpenAI, etc.)
-				require.Len(t, resp.Outputs, 1)
-				output := resp.Outputs[0]
+				require.Len(t, resp.GetOutputs(), 1)
+				output := resp.GetOutputs()[0]
 
-				if len(output.ToolCalls) > 0 {
+				if len(output.GetToolCalls()) > 0 {
 					t.Logf("✅ Tool calling working with %s!", provider.componentName)
-					toolCall := output.ToolCalls[0]
-					assert.Equal(t, "function", toolCall.Type)
-					assert.Equal(t, "get_weather", toolCall.Function.Name)
-					assert.NotEmpty(t, toolCall.Id)
+					toolCall := output.GetToolCalls()[0]
+					assert.Equal(t, "function", toolCall.GetType())
+					assert.Equal(t, "get_weather", toolCall.GetFunction().GetName())
+					assert.NotEmpty(t, toolCall.GetId())
 					assert.Equal(t, "tool_calls", output.GetFinishReason())
 				} else {
 					t.Logf("ℹ️ %s didn't return tool calls - this might be expected depending on the model behavior", provider.componentName)
@@ -308,16 +308,16 @@ func (td *toolCallingDebug) Run(t *testing.T, ctx context.Context) {
 				}
 
 				if chunk := resp.GetChunk(); chunk != nil {
-					if chunk.Content != "" {
-						chunks = append(chunks, chunk.Content)
-						t.Logf("Received chunk: %s", chunk.Content)
+					if chunk.GetContent() != "" {
+						chunks = append(chunks, chunk.GetContent())
+						t.Logf("Received chunk: %s", chunk.GetContent())
 					}
-					if len(chunk.ToolCalls) > 0 {
-						toolCalls = append(toolCalls, chunk.ToolCalls...)
-						t.Logf("Received tool calls: %v", chunk.ToolCalls)
+					if len(chunk.GetToolCalls()) > 0 {
+						toolCalls = append(toolCalls, chunk.GetToolCalls()...)
+						t.Logf("Received tool calls: %v", chunk.GetToolCalls())
 					}
-					if chunk.FinishReason != nil {
-						finishReason = *chunk.FinishReason
+					if chunk.GetFinishReason() != "" {
+						finishReason = chunk.GetFinishReason()
 						t.Logf("Finish reason: %s", finishReason)
 					}
 				}
@@ -331,16 +331,16 @@ func (td *toolCallingDebug) Run(t *testing.T, ctx context.Context) {
 				t.Logf("✅ Streaming tool calling working with %s!", provider.componentName)
 
 				toolCall := toolCalls[0]
-				assert.Equal(t, "get_weather", toolCall.Function.Name)
-				assert.Contains(t, strings.ToLower(toolCall.Function.Arguments), "new york")
+				assert.Equal(t, "get_weather", toolCall.GetFunction().GetName())
+				assert.Contains(t, strings.ToLower(toolCall.GetFunction().GetArguments()), "new york")
 
 				// Provider-specific Type and ID field validation
 				switch provider.componentName {
 				case "googleai":
 					// Skip Type and ID assertions for GoogleAI due to LangChain Go implementation differences
 				default:
-					assert.Equal(t, "function", toolCall.Type)
-					assert.NotEmpty(t, toolCall.Id)
+					assert.Equal(t, "function", toolCall.GetType())
+					assert.NotEmpty(t, toolCall.GetId())
 				}
 			} else {
 				t.Logf("ℹ️ %s didn't return tool calls in streaming mode - this might be expected", provider.componentName)

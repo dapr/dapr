@@ -129,7 +129,6 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
 			}
-
 		}
 
 		// Verify streaming behavior
@@ -304,7 +303,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			Inputs: []*rtv1.ConversationInput{
 				{Content: "Hello with context"},
 			},
-			ContextId: &contextID,
+			ContextID: &contextID,
 		})
 		require.NoError(t, err)
 
@@ -324,7 +323,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
-				returnedContextID = complete.GetContextId()
+				returnedContextID = complete.GetContextID()
 			}
 		}
 
@@ -424,9 +423,9 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 				}
 			}
 
-			assert.NotEmpty(t, chunks, "Should receive chunks from "+provider.componentName)
+			require.NotEmpty(t, chunks, "Should receive chunks from "+provider.componentName)
 			assert.True(t, hasCompletion, "Should receive completion")
-			assert.NotEmpty(t, chunks, "Should receive at least one chunk")
+			require.NotEmpty(t, chunks, "Should receive at least one chunk")
 
 			// Verify we got a real response from the provider
 			fullResponse := strings.Join(chunks, "")

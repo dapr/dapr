@@ -57,14 +57,6 @@ spec:
 	}
 }
 
-func getEchoEstimatedTokens(msg ...string) int {
-	echoEstimatedTokens := 0
-	for _, m := range msg {
-		echoEstimatedTokens += len(m) / 4 // Rough estimate of tokens, assuming 4 characters per token
-	}
-	return echoEstimatedTokens
-}
-
 func getMsgJSON(msg ...string) string {
 	// Echo now behaves like real LLMs: combines multiple inputs into single output
 	combinedMsg := strings.Join(msg, " ")
