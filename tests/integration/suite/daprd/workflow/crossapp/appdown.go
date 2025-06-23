@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -66,6 +67,9 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 	a.registry1 = task.NewTaskRegistry()
 	a.registry2 = task.NewTaskRegistry()
 
+	appID1 := uuid.New().String()
+	appID2 := uuid.New().String()
+
 	// App2: Activity that will be called before the app goes down
 	a.registry2.AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
 		var input string
@@ -90,7 +94,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 		var result string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID("app2")).
+			task.WithAppID(appID2)).
 			Await(&result)
 		if err != nil {
 			// Return error message to verify it's handled properly
@@ -104,7 +108,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(a.place.Address()),
 		daprd.WithScheduler(a.sched),
-		daprd.WithAppID("app1"),
+		daprd.WithAppID(appID1),
 		daprd.WithAppPort(app1.Port()),
 		daprd.WithLogLevel("debug"),
 	)
@@ -112,7 +116,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(a.place.Address()),
 		daprd.WithScheduler(a.sched),
-		daprd.WithAppID("app2"),
+		daprd.WithAppID(appID2),
 		daprd.WithAppPort(app2.Port()),
 		daprd.WithLogLevel("debug"),
 	)

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -66,6 +67,9 @@ func (c *callactivity) Setup(t *testing.T) []framework.Option {
 	c.registry1 = task.NewTaskRegistry()
 	c.registry2 = task.NewTaskRegistry()
 
+	appID1 := uuid.New().String()
+	appID2 := uuid.New().String()
+
 	c.registry2.AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
@@ -83,7 +87,7 @@ func (c *callactivity) Setup(t *testing.T) []framework.Option {
 
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID("app2")).
+			task.WithAppID(appID2)).
 			Await(&output)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute activity in app2: %w", err)
@@ -95,7 +99,7 @@ func (c *callactivity) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(c.place.Address()),
 		daprd.WithScheduler(c.sched),
-		daprd.WithAppID("app1"),
+		daprd.WithAppID(appID1),
 		daprd.WithAppPort(app1.Port()),
 		daprd.WithLogLevel("debug"),
 	)
@@ -103,7 +107,7 @@ func (c *callactivity) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(c.place.Address()),
 		daprd.WithScheduler(c.sched),
-		daprd.WithAppID("app2"),
+		daprd.WithAppID(appID2),
 		daprd.WithAppPort(app2.Port()),
 		daprd.WithLogLevel("debug"),
 	)
