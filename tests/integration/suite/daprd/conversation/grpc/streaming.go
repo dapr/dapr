@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package grpc
 
 import (
 	"context"
@@ -129,7 +129,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
-				contextID = complete.GetContextID()
+				contextID = complete.GetContextId()
 			}
 
 		}
@@ -306,7 +306,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			Inputs: []*rtv1.ConversationInput{
 				{Content: "Hello with context"},
 			},
-			ContextID: &contextID,
+			ContextId: &contextID,
 		})
 		require.NoError(t, err)
 
@@ -326,7 +326,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
-				returnedContextID = complete.GetContextID()
+				returnedContextID = complete.GetContextId()
 			}
 		}
 

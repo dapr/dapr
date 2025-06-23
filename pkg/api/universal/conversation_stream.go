@@ -16,6 +16,8 @@ package universal
 import (
 	"context"
 	"fmt"
+	"time"
+
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
 	"github.com/dapr/components-contrib/conversation"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -23,7 +25,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/kit/logger"
 	kmeta "github.com/dapr/kit/metadata"
-	"time"
 )
 
 // defaultPIIScrubberWindowSize is the default window size (bytes) for PII scrubbing
@@ -95,7 +96,7 @@ func (a *Universal) ConverseStreamAlpha1(req *runtimev1pb.ConversationRequest, s
 	}
 
 	request.Parameters = req.GetParameters()
-	request.ConversationContext = req.GetContextID()
+	request.ConversationContext = req.GetContextId()
 	request.Temperature = req.GetTemperature()
 
 	// Process streaming request
@@ -286,7 +287,7 @@ func (p *StreamingPipelineImpl) sendComplete(stream runtimev1pb.Dapr_ConverseStr
 		Usage: usage,
 	}
 	if contextID != "" {
-		complete.ContextID = &contextID
+		complete.ContextId = &contextID
 	}
 
 	return stream.Send(&runtimev1pb.ConversationStreamResponse{

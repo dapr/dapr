@@ -1316,7 +1316,7 @@ message ConversationRequest {
   string name = 1;
 
   // The ID of an existing chat (like in ChatGPT)
-  optional string contextID = 2;
+  optional string context_id = 2 [json_name = "contextID"];
 
   // Inputs for the conversation, support multiple input in one time.
   repeated ConversationInput inputs = 3;
@@ -1356,7 +1356,7 @@ message ConversationResult {
 // ConversationResponse is the response for Conversation.
 message ConversationResponse {
   // The ID of an existing chat (like in ChatGPT)
-  optional string contextID = 1;
+  optional string context_id = 1 [json_name = "contextID"];
 
   // An array of results.
   repeated ConversationResult outputs = 2;
@@ -1382,7 +1382,7 @@ message ConversationStreamChunk {
 // ConversationStreamComplete indicates the streaming conversation has completed.
 message ConversationStreamComplete {
   // Final context ID
-  optional string contextID = 1;
+  optional string context_id = 1 [json_name = "contextID"];
   // Usage statistics if available
   optional ConversationUsage usage = 2;
 }

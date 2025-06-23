@@ -261,7 +261,7 @@ func TestConverseStreamAlpha1_NonStreamingComponent(t *testing.T) {
 		}
 		if complete := msg.GetComplete(); complete != nil {
 			hasCompletion = true
-			assert.Equal(t, "test-context-123", complete.GetContextID())
+			assert.Equal(t, "test-context-123", complete.GetContextId())
 		}
 	}
 
@@ -298,7 +298,7 @@ func TestConverseStreamAlpha1_StreamingComponent(t *testing.T) {
 		}
 		if complete := msg.GetComplete(); complete != nil {
 			hasCompletion = true
-			assert.Equal(t, "test-context-456", complete.GetContextID())
+			assert.Equal(t, "test-context-456", complete.GetContextId())
 		}
 	}
 
@@ -463,7 +463,7 @@ func TestRequestProcessing(t *testing.T) {
 			Inputs: []*runtimev1pb.ConversationInput{
 				{Content: "test"},
 			},
-			ContextID: &contextID,
+			ContextId: &contextID,
 		}
 
 		stream := &mockStreamServer{

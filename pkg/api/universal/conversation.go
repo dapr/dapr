@@ -128,7 +128,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	request.Inputs = inputs
 
 	request.Parameters = req.GetParameters()
-	request.ConversationContext = req.GetContextID()
+	request.ConversationContext = req.GetContextId()
 	request.Temperature = req.GetTemperature()
 
 	// do call
@@ -156,7 +156,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	a.logger.Debug(response)
 	if resp != nil {
 		if resp.ConversationContext != "" {
-			response.ContextID = &resp.ConversationContext
+			response.ContextId = &resp.ConversationContext
 		}
 
 		for _, o := range resp.Outputs {
