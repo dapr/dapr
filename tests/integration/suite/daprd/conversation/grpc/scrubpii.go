@@ -127,23 +127,22 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
 		scrubOutput := true
 
+		// Test PII scrubbing with concatenated input (since echo only returns last message)
+		combinedInput := "well hello there from 10.8.9.1 well hello there, my email is test@test.com"
 		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content: "well hello there from 10.8.9.1",
-				},
-				{
-					Content: "well hello there, my email is test@test.com",
+					Content: combinedInput,
 				},
 			},
 			ScrubPII: &scrubOutput,
 		})
 
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 2)
-		require.Equal(t, "well hello there from <IP>", resp.GetOutputs()[0].GetResult())
-		require.Equal(t, "well hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[1].GetResult())
+		require.Len(t, resp.GetOutputs(), 1) // Echo returns single output
+		// Echo component returns the input with PII scrubbed (predictable behavior)
+		require.Equal(t, "well hello there from <IP> well hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[0].GetResult())
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {

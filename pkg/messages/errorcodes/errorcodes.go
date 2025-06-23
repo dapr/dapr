@@ -139,6 +139,12 @@ var (
 	ConversationStreamPipelineFailed = ErrorCode{"ERR_CONVERSATION_STREAM_PIPELINE_FAILED", "", CategoryConversation} // Streaming pipeline failed
 	ConversationStreamResponsEmpty   = ErrorCode{"ERR_CONVERSATION_STREAM_RESPONSE_EMPTY", "", CategoryConversation}  // Empty response in streaming conversation
 
+	// ### Conversation Tool Calling API
+	ConversationToolCallNotSupported      = ErrorCode{"ERR_CONVERSATION_TOOL_CALL_NOT_SUPPORTED", "", CategoryConversation}      // Tool calling not supported by conversation component
+	ConversationToolCallInvalidDefinition = ErrorCode{"ERR_CONVERSATION_TOOL_CALL_INVALID_DEFINITION", "", CategoryConversation} // Invalid tool definition in conversation request
+	ConversationToolCallExecutionFailed   = ErrorCode{"ERR_CONVERSATION_TOOL_CALL_EXECUTION_FAILED", "", CategoryConversation}   // Tool call execution failed in conversation
+	ConversationToolCallInvalidResponse   = ErrorCode{"ERR_CONVERSATION_TOOL_CALL_INVALID_RESPONSE", "", CategoryConversation}   // Invalid tool call response format in conversation
+
 	// ### Service Invocation / Direct Messaging API
 	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service
 

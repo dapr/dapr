@@ -1343,6 +1343,16 @@ message ConversationInput {
 
   // Scrub PII data that goes into the LLM
   optional bool scrubPII = 3;
+  
+  // Tool calling support
+  // Tool definitions to send to the LLM (only sent in first message of conversation)
+  repeated Tool tools = 4;
+  
+  // For tool result messages - ID of the tool call being responded to
+  optional string tool_call_id = 5;
+  
+  // For tool result messages - name of the function that was called
+  optional string name = 6;
 }
 
 // ConversationResult is the result for one input.
@@ -1351,6 +1361,13 @@ message ConversationResult {
   string result = 1;
   // Parameters for all custom fields.
   map<string, google.protobuf.Any> parameters = 2;
+  
+  // Tool calling support
+  // Tool calls returned by the LLM
+  repeated ToolCall tool_calls = 3;
+  
+  // Reason why the LLM stopped generating (e.g., "stop", "tool_calls", "length")
+  optional string finish_reason = 4;
 }
 
 // ConversationResponse is the response for Conversation.
@@ -1377,6 +1394,13 @@ message ConversationStreamResponse {
 message ConversationStreamChunk {
   // Streaming content chunk
   string content = 1;
+  
+  // Tool calling support for streaming
+  // Tool calls in this chunk (partial or complete)
+  repeated ToolCall tool_calls = 2;
+  
+  // Reason why streaming stopped for this chunk (e.g., "stop", "tool_calls")
+  optional string finish_reason = 3;
 }
 
 // ConversationStreamComplete indicates the streaming conversation has completed.
@@ -1387,8 +1411,6 @@ message ConversationStreamComplete {
   optional ConversationUsage usage = 2;
 }
 
-
-
 // ConversationUsage represents token usage statistics.
 message ConversationUsage {
   // Number of tokens in the prompt
@@ -1397,4 +1419,40 @@ message ConversationUsage {
   optional int32 completion_tokens = 2 [json_name = "completionTokens"];
   // Total number of tokens used
   optional int32 total_tokens = 3 [json_name = "totalTokens"];
+}
+
+// Tool represents a function that can be called by the LLM
+message Tool {
+  // The type of tool (always "function" for now)
+  string type = 1;
+  // Function definition
+  ToolFunction function = 2;
+}
+
+// ToolFunction defines a function that can be called by the LLM
+message ToolFunction {
+  // The name of the function
+  string name = 1;
+  // Description of what the function does
+  string description = 2;
+  // JSON schema for the function parameters as a string
+  string parameters = 3;
+}
+
+// ToolCall represents a function call requested by the LLM
+message ToolCall {
+  // Unique identifier for this tool call
+  string id = 1;
+  // The type of tool call (always "function" for now)
+  string type = 2;
+  // Function call details
+  ToolCallFunction function = 3;
+}
+
+// ToolCallFunction contains the function call details
+message ToolCallFunction {
+  // Name of the function to call
+  string name = 1;
+  // Function arguments as a JSON string
+  string arguments = 2;
 }

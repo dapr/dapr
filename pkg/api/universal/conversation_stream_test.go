@@ -16,6 +16,7 @@ package universal
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,6 +33,7 @@ import (
 const (
 	fakeConversationComponentName = "fakeConversationComponent"
 	fakeStreamingComponentName    = "fakeStreamingComponent"
+	fakeToolCallingComponentName  = "fakeToolCallingComponent"
 )
 
 // Simple mock middleware for testing
@@ -70,6 +72,43 @@ func (m *mockConversationComponent) Converse(ctx context.Context, req *conversat
 
 func (m *mockConversationComponent) Close() error {
 	return nil
+}
+
+// Mock tool calling conversation component that simulates OpenAI-style tool calling
+type mockToolCallingConversationComponent struct {
+	*mockConversationComponent
+	simulateToolCall bool
+	toolCallResponse *conversation.ConversationResponse
+}
+
+func (m *mockToolCallingConversationComponent) Converse(ctx context.Context, req *conversation.ConversationRequest) (*conversation.ConversationResponse, error) {
+	if m.shouldError {
+		return nil, errors.New("mock conversation error")
+	}
+
+	// Check if this request has tool definitions - simulate tool calling behavior
+	if m.simulateToolCall && len(req.Inputs) > 0 {
+		// Look for a message asking about weather (simulate LLM wanting to call a tool)
+		for _, input := range req.Inputs {
+			if strings.Contains(strings.ToLower(input.Message), "weather") && input.Role == conversation.RoleUser {
+				// Return a response with tool calls like OpenAI would
+				return m.toolCallResponse, nil
+			}
+			// Check if this is a tool result message
+			if input.Role == conversation.RoleTool {
+				// Return final response after tool execution
+				return &conversation.ConversationResponse{
+					Outputs: []conversation.ConversationResult{
+						{Result: "Based on the weather data, it's 72°F and sunny in San Francisco today!"},
+					},
+					ConversationContext: "test-context-with-tools",
+				}, nil
+			}
+		}
+	}
+
+	// Default response for non-tool calling scenarios
+	return m.response, nil
 }
 
 // Mock streaming-capable conversation component
@@ -144,6 +183,25 @@ func newMockAPI() *Universal {
 			},
 		},
 		streamChunks: []string{"Hello ", "streaming ", "world!"},
+	})
+
+	// Add tool calling component
+	compStore.AddConversation(fakeToolCallingComponentName, &mockToolCallingConversationComponent{
+		mockConversationComponent: &mockConversationComponent{
+			response: &conversation.ConversationResponse{
+				Outputs: []conversation.ConversationResult{
+					{Result: "I need to call a tool to help you with that. tool_call_simulation"},
+				},
+				ConversationContext: "test-context-tools",
+			},
+		},
+		simulateToolCall: true,
+		toolCallResponse: &conversation.ConversationResponse{
+			Outputs: []conversation.ConversationResult{
+				{Result: "I need to check the weather for you. tool_call_simulation"},
+			},
+			ConversationContext: "test-context-with-tools",
+		},
 	})
 
 	return &Universal{
@@ -472,4 +530,182 @@ func TestRequestProcessing(t *testing.T) {
 		err := api.ConverseStreamAlpha1(req, stream)
 		require.NoError(t, err)
 	})
+}
+
+// NEW: Tool calling integration tests
+func TestConversationToolCalling_BasicFlow(t *testing.T) {
+	api := newMockAPI()
+
+	// Test basic tool calling request with tool definitions
+	req := &runtimev1pb.ConversationRequest{
+		Name: fakeToolCallingComponentName,
+		Inputs: []*runtimev1pb.ConversationInput{
+			{
+				Content: "What's the weather like in San Francisco?",
+				Role:    func(s string) *string { return &s }("user"),
+				Tools: []*runtimev1pb.Tool{
+					{
+						Type: "function",
+						Function: &runtimev1pb.ToolFunction{
+							Name:        "get_weather",
+							Description: "Get current weather for a location",
+							Parameters:  `{"type":"object","properties":{"location":{"type":"string","description":"City and state"}},"required":["location"]}`,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	resp, err := api.ConverseAlpha1(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.Outputs, 1)
+
+	output := resp.Outputs[0]
+	assert.Contains(t, output.Result, "tool_call_simulation")
+	assert.NotEmpty(t, output.ToolCalls, "Expected tool calls in response")
+	assert.Equal(t, "tool_calls", output.GetFinishReason())
+
+	// Verify tool call structure
+	toolCall := output.ToolCalls[0]
+	assert.Equal(t, "call_test_12345", toolCall.Id)
+	assert.Equal(t, "function", toolCall.Type)
+	assert.Equal(t, "get_weather", toolCall.Function.Name)
+	assert.Contains(t, toolCall.Function.Arguments, "San Francisco")
+}
+
+func TestConversationToolCalling_ToolResultFlow(t *testing.T) {
+	api := newMockAPI()
+
+	// Test tool result handling
+	req := &runtimev1pb.ConversationRequest{
+		Name: fakeToolCallingComponentName,
+		Inputs: []*runtimev1pb.ConversationInput{
+			{
+				Content:    `{"temperature": 72, "condition": "sunny"}`,
+				Role:       func(s string) *string { return &s }("tool"),
+				ToolCallId: func(s string) *string { return &s }("call_test_12345"),
+				Name:       func(s string) *string { return &s }("get_weather"),
+			},
+		},
+	}
+
+	resp, err := api.ConverseAlpha1(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.Outputs, 1)
+
+	output := resp.Outputs[0]
+	assert.Contains(t, output.Result, "72°F and sunny")
+	assert.Equal(t, "test-context-with-tools", resp.GetContextID())
+}
+
+func TestConversationToolCalling_ToolDefinitionConversion(t *testing.T) {
+	// Test the tool definition conversion functions directly
+	protoTools := []*runtimev1pb.Tool{
+		{
+			Type: "function",
+			Function: &runtimev1pb.ToolFunction{
+				Name:        "test_function",
+				Description: "A test function",
+				Parameters:  `{"type":"object","properties":{"param1":{"type":"string"}},"required":["param1"]}`,
+			},
+		},
+	}
+
+	langchainTools := convertProtoToolsToLangChain(protoTools)
+
+	require.Len(t, langchainTools, 1)
+	tool := langchainTools[0]
+	assert.Equal(t, "function", tool.Type)
+	assert.Equal(t, "test_function", tool.Function.Name)
+	assert.Equal(t, "A test function", tool.Function.Description)
+
+	// Verify parameters were parsed correctly
+	params, ok := tool.Function.Parameters.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "object", params["type"])
+
+	properties, ok := params["properties"].(map[string]any)
+	require.True(t, ok)
+	param1, ok := properties["param1"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "string", param1["type"])
+}
+
+func TestConversationToolCalling_InvalidToolDefinition(t *testing.T) {
+	// Test handling of invalid JSON in tool parameters
+	protoTools := []*runtimev1pb.Tool{
+		{
+			Type: "function",
+			Function: &runtimev1pb.ToolFunction{
+				Name:        "test_function",
+				Description: "A test function",
+				Parameters:  `{invalid json}`,
+			},
+		},
+	}
+
+	langchainTools := convertProtoToolsToLangChain(protoTools)
+
+	require.Len(t, langchainTools, 1)
+	tool := langchainTools[0]
+
+	// Should fall back to default empty parameters
+	params, ok := tool.Function.Parameters.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "object", params["type"])
+	assert.NotNil(t, params["properties"])
+}
+
+func TestConversationToolCalling_StreamingWithTools(t *testing.T) {
+	api := newMockAPI()
+
+	req := &runtimev1pb.ConversationRequest{
+		Name: fakeToolCallingComponentName,
+		Inputs: []*runtimev1pb.ConversationInput{
+			{
+				Content: "What's the weather like in New York?",
+				Role:    func(s string) *string { return &s }("user"),
+				Tools: []*runtimev1pb.Tool{
+					{
+						Type: "function",
+						Function: &runtimev1pb.ToolFunction{
+							Name:        "get_weather",
+							Description: "Get current weather for a location",
+							Parameters:  `{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	stream := &mockStreamServer{
+		ctx: context.Background(),
+	}
+
+	err := api.ConverseStreamAlpha1(req, stream)
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, stream.messages, "Expected streaming messages")
+
+	// Should have received content chunks and completion
+	hasContent := false
+	hasCompletion := false
+
+	for _, msg := range stream.messages {
+		if chunk := msg.GetChunk(); chunk != nil {
+			hasContent = true
+		}
+		if complete := msg.GetComplete(); complete != nil {
+			hasCompletion = true
+		}
+	}
+
+	assert.True(t, hasContent, "Expected content chunks")
+	assert.True(t, hasCompletion, "Expected completion message")
 }

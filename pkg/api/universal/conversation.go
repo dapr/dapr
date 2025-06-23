@@ -15,6 +15,7 @@ package universal
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
@@ -26,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 	kmeta "github.com/dapr/kit/metadata"
+	"github.com/tmc/langchaingo/llms"
 )
 
 // needsInputScrubber checks if PII scrubbing is needed for any input
@@ -41,6 +43,127 @@ func needsInputScrubber(req *runtimev1pb.ConversationRequest) bool {
 // needsOutputScrubber checks if PII scrubbing is needed for outputs
 func needsOutputScrubber(req *runtimev1pb.ConversationRequest) bool {
 	return req.GetScrubPII()
+}
+
+// convertProtoToolsToLangChain converts protobuf tool definitions to LangChain Go format
+func convertProtoToolsToLangChain(protoTools []*runtimev1pb.Tool) []llms.Tool {
+	if len(protoTools) == 0 {
+		return nil
+	}
+
+	tools := make([]llms.Tool, 0, len(protoTools))
+	for _, protoTool := range protoTools {
+		if protoTool.GetFunction() == nil {
+			continue
+		}
+
+		// Parse parameters JSON schema
+		var parameters map[string]any
+		if paramStr := protoTool.GetFunction().GetParameters(); paramStr != "" {
+			if err := json.Unmarshal([]byte(paramStr), &parameters); err != nil {
+				// Log error but continue with empty parameters
+				parameters = map[string]any{
+					"type":       "object",
+					"properties": map[string]any{},
+				}
+			}
+		} else {
+			parameters = map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			}
+		}
+
+		tool := llms.Tool{
+			Type: protoTool.GetType(),
+			Function: &llms.FunctionDefinition{
+				Name:        protoTool.GetFunction().GetName(),
+				Description: protoTool.GetFunction().GetDescription(),
+				Parameters:  parameters,
+			},
+		}
+		tools = append(tools, tool)
+	}
+
+	return tools
+}
+
+// convertLangChainToolCallsToProto converts LangChain Go tool calls to protobuf format
+func convertLangChainToolCallsToProto(langchainResponse *llms.ContentResponse) []*runtimev1pb.ToolCall {
+	if langchainResponse == nil || len(langchainResponse.Choices) == 0 {
+		return nil
+	}
+
+	var allToolCalls []*runtimev1pb.ToolCall
+	for _, choice := range langchainResponse.Choices {
+		for _, toolCall := range choice.ToolCalls {
+			protoToolCall := &runtimev1pb.ToolCall{
+				Id:   toolCall.ID,
+				Type: toolCall.Type,
+				Function: &runtimev1pb.ToolCallFunction{
+					Name:      toolCall.FunctionCall.Name,
+					Arguments: toolCall.FunctionCall.Arguments,
+				},
+			}
+			allToolCalls = append(allToolCalls, protoToolCall)
+		}
+	}
+
+	return allToolCalls
+}
+
+// convertProtoToolsToComponentsContrib converts protobuf tools to components-contrib format
+func convertProtoToolsToComponentsContrib(protoTools []*runtimev1pb.Tool) []conversation.Tool {
+	if len(protoTools) == 0 {
+		return nil
+	}
+
+	tools := make([]conversation.Tool, len(protoTools))
+	for i, protoTool := range protoTools {
+		tool := conversation.Tool{
+			Type: protoTool.GetType(),
+			Function: conversation.ToolFunction{
+				Name:        protoTool.GetFunction().GetName(),
+				Description: protoTool.GetFunction().GetDescription(),
+				Parameters:  protoTool.GetFunction().GetParameters(), // Keep as string for now
+			},
+		}
+		tools[i] = tool
+	}
+
+	return tools
+}
+
+// convertComponentsContribToolCallsToProto converts components-contrib tool calls to protobuf format
+func convertComponentsContribToolCallsToProto(componentToolCalls []conversation.ToolCall) []*runtimev1pb.ToolCall {
+	if len(componentToolCalls) == 0 {
+		return nil
+	}
+
+	protoToolCalls := make([]*runtimev1pb.ToolCall, len(componentToolCalls))
+	for i, componentToolCall := range componentToolCalls {
+		protoToolCall := &runtimev1pb.ToolCall{
+			Id:   componentToolCall.ID,
+			Type: componentToolCall.Type,
+			Function: &runtimev1pb.ToolCallFunction{
+				Name:      componentToolCall.Function.Name,
+				Arguments: componentToolCall.Function.Arguments,
+			},
+		}
+		protoToolCalls[i] = protoToolCall
+	}
+
+	return protoToolCalls
+}
+
+// extractToolDefinitionsFromInputs extracts tool definitions from the first input message
+func extractToolDefinitionsFromInputs(inputs []*runtimev1pb.ConversationInput) []*runtimev1pb.Tool {
+	if len(inputs) == 0 {
+		return nil
+	}
+
+	// Tool definitions should be in the first input message only
+	return inputs[0].GetTools()
 }
 
 // getInputsFromRequest gets the inputs from the request and scrubs them if PII scrubbing is enabled on the input
@@ -65,9 +188,31 @@ func getInputsFromRequest(req *runtimev1pb.ConversationRequest, scrubber piiscru
 			msg = scrubbed[0]
 		}
 
+		// Determine the role based on input type
+		role := conversation.Role(i.GetRole())
+
+		// Handle tool result messages
+		if i.GetToolCallId() != "" && i.GetName() != "" {
+			// This is a tool result message - set role to "tool"
+			role = conversation.RoleTool
+		}
+
 		c := conversation.ConversationInput{
 			Message: msg,
-			Role:    conversation.Role(i.GetRole()),
+			Role:    role,
+		}
+
+		// Add tools if present in this input (typically first input only)
+		if len(i.GetTools()) > 0 {
+			c.Tools = convertProtoToolsToComponentsContrib(i.GetTools())
+		}
+
+		// Add tool call ID and name for tool result messages
+		if i.GetToolCallId() != "" {
+			c.ToolCallID = i.GetToolCallId()
+		}
+		if i.GetName() != "" {
+			c.Name = i.GetName()
 		}
 
 		inputs = append(inputs, c)
@@ -126,10 +271,17 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	request.Inputs = inputs
-
 	request.Parameters = req.GetParameters()
 	request.ConversationContext = req.GetContextID()
 	request.Temperature = req.GetTemperature()
+
+	// NEW: Extract tool definitions and convert to LangChain format for components
+	protoTools := extractToolDefinitionsFromInputs(req.GetInputs())
+	langchainTools := convertProtoToolsToLangChain(protoTools)
+
+	if len(langchainTools) > 0 {
+		a.logger.Debugf("Tool calling request with %d tools for component %s", len(langchainTools), req.GetName())
+	}
 
 	// do call
 	start := time.Now()
@@ -138,6 +290,8 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	)
 
 	resp, err := policyRunner(func(ctx context.Context) (*conversation.ConversationResponse, error) {
+		// NEW: Call component with regular interface
+		// Components that support tool calling should handle tools from input.Tools
 		rResp, rErr := component.Converse(ctx, request)
 		return rResp, rErr
 	})
@@ -173,10 +327,23 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 				res = scrubbed[0]
 			}
 
-			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResult{
+			// NEW: Create conversation result with tool calling support
+			result := &runtimev1pb.ConversationResult{
 				Result:     res,
 				Parameters: o.Parameters,
-			})
+			}
+
+			// NEW: Convert tool calls from components-contrib format to proto format
+			if len(o.ToolCalls) > 0 {
+				result.ToolCalls = convertComponentsContribToolCallsToProto(o.ToolCalls)
+			}
+
+			// NEW: Set finish reason if provided
+			if o.FinishReason != "" {
+				result.FinishReason = func(s string) *string { return &s }(o.FinishReason)
+			}
+
+			response.Outputs = append(response.GetOutputs(), result)
 		}
 		response.Usage = usage
 	}

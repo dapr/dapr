@@ -100,6 +100,11 @@ func (a *Universal) ConverseStreamAlpha1(req *runtimev1pb.ConversationRequest, s
 	request.ConversationContext = req.GetContextID()
 	request.Temperature = req.GetTemperature()
 
+	// NEW: Extract tool definitions from first input and convert to LangChain format
+	// This prepares tool definitions for Phase 3 when components-contrib supports tool calling
+	protoTools := extractToolDefinitionsFromInputs(req.GetInputs())
+	_ = convertProtoToolsToLangChain(protoTools) // Will be used in Phase 3 for components-contrib integration
+
 	// Process streaming request
 	ctx := stream.Context()
 	start := time.Now()
@@ -202,6 +207,23 @@ func (p *StreamingPipelineImpl) processRealStreaming(
 		return nil, streamErr
 	}
 
+	// NEW: Handle tool calls in the final response
+	if finalResp != nil && len(finalResp.Outputs) > 0 {
+		for _, output := range finalResp.Outputs {
+			// Check if this output contains tool calls
+			if len(output.ToolCalls) > 0 {
+				// Convert component tool calls to proto format
+				protoToolCalls := convertComponentsContribToolCallsToProto(output.ToolCalls)
+
+				// Send tool calls as a special chunk with finish reason
+				if err := p.sendToolCallChunk(stream, protoToolCalls, output.FinishReason); err != nil {
+					p.logger.Errorf("Failed to send tool call chunk: %v", err)
+					return nil, err
+				}
+			}
+		}
+	}
+
 	// Send completion with context and usage stats
 	contextID := ""
 	var usage *runtimev1pb.ConversationUsage
@@ -232,14 +254,25 @@ func (p *StreamingPipelineImpl) processSimulatedStreaming(
 		contextID = resp.ConversationContext
 		if len(resp.Outputs) > 0 {
 			for _, output := range resp.Outputs {
-				// Break the result into chunks to simulate streaming
-				content := output.Result
-				chunkSize := 50 // Send in 50-character chunks
-				for i := 0; i < len(content); i += chunkSize {
-					end := min(i+chunkSize, len(content))
-					chunk := content[i:end]
-					if err := p.sendChunk(stream, []byte(chunk)); err != nil {
+				// NEW: Check if this output contains tool calls (prioritize tool calls over content)
+				if len(output.ToolCalls) > 0 {
+					// Convert component tool calls to proto format
+					protoToolCalls := convertComponentsContribToolCallsToProto(output.ToolCalls)
+
+					// Send tool calls as a special chunk with finish reason
+					if err := p.sendToolCallChunk(stream, protoToolCalls, output.FinishReason); err != nil {
 						return nil, err
+					}
+				} else if output.Result != "" {
+					// Break the result into chunks to simulate streaming (only if no tool calls)
+					content := output.Result
+					chunkSize := 50 // Send in 50-character chunks
+					for i := 0; i < len(content); i += chunkSize {
+						end := min(i+chunkSize, len(content))
+						chunk := content[i:end]
+						if err := p.sendChunk(stream, []byte(chunk)); err != nil {
+							return nil, err
+						}
 					}
 				}
 			}
@@ -278,6 +311,24 @@ func (p *StreamingPipelineImpl) sendChunk(stream runtimev1pb.Dapr_ConverseStream
 			Chunk: &runtimev1pb.ConversationStreamChunk{
 				Content: string(content),
 			},
+		},
+	})
+}
+
+// NEW: sendToolCallChunk sends tool calls via the gRPC stream
+func (p *StreamingPipelineImpl) sendToolCallChunk(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, toolCalls []*runtimev1pb.ToolCall, finishReason string) error {
+	chunk := &runtimev1pb.ConversationStreamChunk{
+		Content:   "", // No text content when sending tool calls
+		ToolCalls: toolCalls,
+	}
+
+	if finishReason != "" {
+		chunk.FinishReason = &finishReason
+	}
+
+	return stream.Send(&runtimev1pb.ConversationStreamResponse{
+		ResponseType: &runtimev1pb.ConversationStreamResponse_Chunk{
+			Chunk: chunk,
 		},
 	})
 }
