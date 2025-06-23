@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -163,10 +162,8 @@ func (c *callactivity) Run(t *testing.T, ctx context.Context) {
 
 	// Wait for completion with timeout
 	fmt.Println("[DEBUG] Waiting for workflow completion")
-	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 
-	metadata, err := client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+	metadata, err := client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 	if err != nil {
 		fmt.Printf("[ERROR] WaitForOrchestrationCompletion returned error: %v\n", err)
 	}

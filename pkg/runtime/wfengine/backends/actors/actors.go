@@ -418,35 +418,7 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 }
 
 // CompleteActivityWorkItem implements backend.Backend
-func (abe *Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
-	sourceAppID := abe.appID
-	if wi.Result.GetRouter() != nil {
-		sourceAppID = wi.Result.GetRouter().GetSource()
-	}
-
-	var targetAppId string
-	if sourceAppID != "" && sourceAppID != abe.appID {
-		targetAppId = sourceAppID
-	}
-
-	data, err := proto.Marshal(wi.Result)
-	if err != nil {
-		return err
-	}
-
-	actorType := abe.getTargetActorType(targetAppId, WorkflowNameLabelKey)
-	req := internalsv1pb.
-		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-		WithActor(actorType, string(wi.InstanceID)).
-		WithData(data).
-		WithContentType(invokev1.OctetStreamContentType)
-
-	router, err := abe.actors.Router(ctx)
-	if err != nil {
-		return err
-	}
-	_, err = router.Call(ctx, req)
-
+func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	// Sending true signals the waiting activity actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil

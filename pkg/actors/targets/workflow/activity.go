@@ -88,12 +88,11 @@ func (w *workflow) callActivity(ctx context.Context, e *backend.HistoryEvent, ge
 	// If target app is specified and different from current app, use cross-app actor type
 	if targetAppID != "" && targetAppID != w.appID {
 		activityActorType = fmt.Sprintf("dapr.internal.%s.%s.activity", w.namespace, targetAppID)
-		log.Debugf("Cross-app activity actor type: %s", activityActorType)
 	}
 
 	targetActorID := buildActivityActorID(w.actorID, e.GetEventId(), w.state.Generation)
 
-	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s' (type: %s)", w.actorID, targetActorID, activityActorType)
+	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", w.actorID, activityActorType, targetActorID)
 
 	_, err = w.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest("Execute").
