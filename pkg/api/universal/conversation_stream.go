@@ -100,11 +100,6 @@ func (a *Universal) ConverseStreamAlpha1(req *runtimev1pb.ConversationRequest, s
 	request.ConversationContext = req.GetContextID()
 	request.Temperature = req.GetTemperature()
 
-	// NEW: Extract tool definitions from first input and convert to LangChain format
-	// This prepares tool definitions for Phase 3 when components-contrib supports tool calling
-	protoTools := extractToolDefinitionsFromInputs(req.GetInputs())
-	_ = convertProtoToolsToLangChain(protoTools) // Will be used in Phase 3 for components-contrib integration
-
 	// Process streaming request
 	ctx := stream.Context()
 	start := time.Now()

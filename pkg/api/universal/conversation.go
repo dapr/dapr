@@ -15,11 +15,9 @@ package universal
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
-	"github.com/tmc/langchaingo/llms"
 
 	"github.com/dapr/components-contrib/conversation"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -43,49 +41,6 @@ func needsInputScrubber(req *runtimev1pb.ConversationRequest) bool {
 // needsOutputScrubber checks if PII scrubbing is needed for outputs
 func needsOutputScrubber(req *runtimev1pb.ConversationRequest) bool {
 	return req.GetScrubPII()
-}
-
-// convertProtoToolsToLangChain converts protobuf tool definitions to LangChain Go format
-func convertProtoToolsToLangChain(protoTools []*runtimev1pb.Tool) []llms.Tool {
-	if len(protoTools) == 0 {
-		return nil
-	}
-
-	tools := make([]llms.Tool, 0, len(protoTools))
-	for _, protoTool := range protoTools {
-		if protoTool.GetFunction() == nil {
-			continue
-		}
-
-		// Parse parameters JSON schema
-		var parameters map[string]any
-		if paramStr := protoTool.GetFunction().GetParameters(); paramStr != "" {
-			if err := json.Unmarshal([]byte(paramStr), &parameters); err != nil {
-				// Log error but continue with empty parameters
-				parameters = map[string]any{
-					"type":       "object",
-					"properties": map[string]any{},
-				}
-			}
-		} else {
-			parameters = map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
-			}
-		}
-
-		tool := llms.Tool{
-			Type: protoTool.GetType(),
-			Function: &llms.FunctionDefinition{
-				Name:        protoTool.GetFunction().GetName(),
-				Description: protoTool.GetFunction().GetDescription(),
-				Parameters:  parameters,
-			},
-		}
-		tools = append(tools, tool)
-	}
-
-	return tools
 }
 
 // convertProtoToolsToComponentsContrib converts protobuf tools to components-contrib format
@@ -251,12 +206,10 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	request.ConversationContext = req.GetContextID()
 	request.Temperature = req.GetTemperature()
 
-	// NEW: Extract tool definitions and convert to LangChain format for components
+	// NEW: Check if request includes tool definitions for logging
 	protoTools := extractToolDefinitionsFromInputs(req.GetInputs())
-	langchainTools := convertProtoToolsToLangChain(protoTools)
-
-	if len(langchainTools) > 0 {
-		a.logger.Debugf("Tool calling request with %d tools for component %s", len(langchainTools), req.GetName())
+	if len(protoTools) > 0 {
+		a.logger.Debugf("Tool calling request with %d tools for component %s", len(protoTools), req.GetName())
 	}
 
 	// do call

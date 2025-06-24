@@ -1421,7 +1421,7 @@ message ConversationUsage {
   optional int32 total_tokens = 3 [json_name = "totalTokens"];
 }
 
-// Tool represents a function that can be called by the LLM
+// Tool represents a function that can be called by the LLM (used on the request to the LLM)
 message Tool {
   // The type of tool (always "function" for now)
   string type = 1;
@@ -1439,7 +1439,7 @@ message ToolFunction {
   string parameters = 3;
 }
 
-// ToolCall represents a function call requested by the LLM
+// ToolCall represents a function call requested by the LLM (used on the response from the LLM)
 message ToolCall {
   // Unique identifier for this tool call
   string id = 1;

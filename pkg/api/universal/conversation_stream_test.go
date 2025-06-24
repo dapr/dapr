@@ -554,7 +554,7 @@ func TestConversationToolCalling_ToolResultRequestHandling(t *testing.T) {
 }
 
 func TestConversationToolCalling_ToolDefinitionConversion(t *testing.T) {
-	// Test the tool definition conversion functions directly
+	// Test the tool definition conversion function
 	protoTools := []*runtimev1pb.Tool{
 		{
 			Type: "function",
@@ -564,51 +564,87 @@ func TestConversationToolCalling_ToolDefinitionConversion(t *testing.T) {
 				Parameters:  `{"type":"object","properties":{"param1":{"type":"string"}},"required":["param1"]}`,
 			},
 		},
-	}
-
-	langchainTools := convertProtoToolsToLangChain(protoTools)
-
-	require.Len(t, langchainTools, 1)
-	tool := langchainTools[0]
-	assert.Equal(t, "function", tool.Type)
-	assert.Equal(t, "test_function", tool.Function.Name)
-	assert.Equal(t, "A test function", tool.Function.Description)
-
-	// Verify parameters were parsed correctly
-	params, ok := tool.Function.Parameters.(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "object", params["type"])
-
-	properties, ok := params["properties"].(map[string]any)
-	require.True(t, ok)
-	param1, ok := properties["param1"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "string", param1["type"])
-}
-
-func TestConversationToolCalling_InvalidToolDefinition(t *testing.T) {
-	// Test handling of invalid JSON in tool parameters
-	protoTools := []*runtimev1pb.Tool{
 		{
 			Type: "function",
 			Function: &runtimev1pb.ToolFunction{
-				Name:        "test_function",
-				Description: "A test function",
-				Parameters:  `{invalid json}`,
+				Name:        "weather_function",
+				Description: "Get weather for a location",
+				Parameters:  `{"type":"object","properties":{"location":{"type":"string","description":"City name"},"units":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}`,
 			},
 		},
 	}
 
-	langchainTools := convertProtoToolsToLangChain(protoTools)
+	// Test convertProtoToolsToComponentsContrib (the function we actually use)
+	componentsContribTools := convertProtoToolsToComponentsContrib(protoTools)
 
-	require.Len(t, langchainTools, 1)
-	tool := langchainTools[0]
+	require.Len(t, componentsContribTools, 2)
 
-	// Should fall back to default empty parameters
-	params, ok := tool.Function.Parameters.(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "object", params["type"])
-	assert.NotNil(t, params["properties"])
+	// Test first tool
+	tool1 := componentsContribTools[0]
+	assert.Equal(t, "function", tool1.Type)
+	assert.Equal(t, "test_function", tool1.Function.Name)
+	assert.Equal(t, "A test function", tool1.Function.Description)
+	assert.Equal(t, `{"type":"object","properties":{"param1":{"type":"string"}},"required":["param1"]}`, tool1.Function.Parameters)
+
+	// Test second tool
+	tool2 := componentsContribTools[1]
+	assert.Equal(t, "function", tool2.Type)
+	assert.Equal(t, "weather_function", tool2.Function.Name)
+	assert.Equal(t, "Get weather for a location", tool2.Function.Description)
+	assert.Equal(t, `{"type":"object","properties":{"location":{"type":"string","description":"City name"},"units":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}`, tool2.Function.Parameters)
+}
+
+func TestConversationToolCalling_ComponentsContribToolDefinitionConversion_EdgeCases(t *testing.T) {
+	t.Run("empty tools array", func(t *testing.T) {
+		result := convertProtoToolsToComponentsContrib([]*runtimev1pb.Tool{})
+		assert.Nil(t, result)
+	})
+
+	t.Run("nil tools array", func(t *testing.T) {
+		result := convertProtoToolsToComponentsContrib(nil)
+		assert.Nil(t, result)
+	})
+
+	t.Run("tool with empty fields", func(t *testing.T) {
+		protoTools := []*runtimev1pb.Tool{
+			{
+				Type: "",
+				Function: &runtimev1pb.ToolFunction{
+					Name:        "",
+					Description: "",
+					Parameters:  "",
+				},
+			},
+		}
+
+		result := convertProtoToolsToComponentsContrib(protoTools)
+		require.Len(t, result, 1)
+
+		tool := result[0]
+		assert.Equal(t, "", tool.Type)
+		assert.Equal(t, "", tool.Function.Name)
+		assert.Equal(t, "", tool.Function.Description)
+		assert.Equal(t, "", tool.Function.Parameters)
+	})
+
+	t.Run("tool with nil function", func(t *testing.T) {
+		protoTools := []*runtimev1pb.Tool{
+			{
+				Type:     "function",
+				Function: nil,
+			},
+		}
+
+		// This should not panic and should handle the nil function gracefully
+		result := convertProtoToolsToComponentsContrib(protoTools)
+		require.Len(t, result, 1)
+
+		tool := result[0]
+		assert.Equal(t, "function", tool.Type)
+		assert.Equal(t, "", tool.Function.Name)
+		assert.Equal(t, "", tool.Function.Description)
+		assert.Equal(t, "", tool.Function.Parameters)
+	})
 }
 
 func TestConversationToolCalling_StreamingWithTools(t *testing.T) {

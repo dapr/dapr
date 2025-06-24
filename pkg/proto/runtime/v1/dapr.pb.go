@@ -7533,7 +7533,7 @@ func (x *ConversationUsage) GetTotalTokens() int32 {
 	return 0
 }
 
-// Tool represents a function that can be called by the LLM
+// Tool represents a function that can be called by the LLM (used on the request to the LLM)
 type Tool struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -7658,7 +7658,7 @@ func (x *ToolFunction) GetParameters() string {
 	return ""
 }
 
-// ToolCall represents a function call requested by the LLM
+// ToolCall represents a function call requested by the LLM (used on the response from the LLM)
 type ToolCall struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
