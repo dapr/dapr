@@ -166,11 +166,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	if err = o.callAddEventStateMessage(ctx, addWorkflows); err != nil {
-		return todo.RunCompletedTrue, err
+		return todo.RunCompletedFalse, err
 	}
 
 	if err = o.callCreateWorkflowStateMessage(ctx, createWorkflows); err != nil {
-		return todo.RunCompletedTrue, err
+		return todo. RunCompletedFalse, err
 	}
 
 	state.ApplyRuntimeStateChanges(rs)
