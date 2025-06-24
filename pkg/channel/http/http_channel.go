@@ -365,46 +365,98 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	rw := &RWRecorder{
 		W: &bytes.Buffer{},
 	}
+
+	var sse bool
+
 	execPipeline := h.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Send request to user application
 		// (Body is closed below, but linter isn't detecting that)
 		//nolint:bodyclose
+
+		sse = isSSE(r)
+		if sse {
+			r.Header.Set("Accept", "text/event-stream")
+		}
+
 		clientResp, clientErr := h.client.Do(r)
 		if clientResp != nil {
-			copyHeader(w.Header(), clientResp.Header)
-			w.WriteHeader(clientResp.StatusCode)
-			_, _ = io.Copy(w, clientResp.Body)
+			if sse {
+				callerResponseWriter := req.HTTPResponseWriter()
+
+				callerResponseWriter.Header().Set("Content-Type", "text/event-stream")
+				callerResponseWriter.Header().Set("Cache-Control", "no-cache")
+				callerResponseWriter.Header().Set("Connection", "keep-alive")
+
+				flusher, ok := callerResponseWriter.(http.Flusher)
+				if !ok {
+					http.Error(callerResponseWriter, "Streaming not supported", http.StatusInternalServerError)
+					return
+				}
+
+				buf := make([]byte, 1024)
+				for {
+					n, err := clientResp.Body.Read(buf)
+					if n > 0 {
+						if _, writeErr := callerResponseWriter.Write(buf[:n]); writeErr != nil {
+							return
+						}
+						flusher.Flush()
+					}
+					if err != nil {
+						if err != io.EOF {
+							clientErr = err
+						}
+						break
+					}
+				}
+			} else {
+				copyHeader(w.Header(), clientResp.Header)
+				w.WriteHeader(clientResp.StatusCode)
+				_, _ = io.Copy(w, clientResp.Body)
+			}
 		}
 		if clientErr != nil {
 			err = clientErr
 		}
 	}))
 	execPipeline.ServeHTTP(rw, channelReq)
-	resp := rw.Result() //nolint:bodyclose
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
 	var contentLength int64
-	if resp != nil {
-		if resp.Header != nil {
-			contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+
+	if err != nil {
+		// content-length is omitted in http streaming scenarios
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		return nil, err
+	}
+
+	if sse {
+		return nil, nil
+	} else {
+		resp := rw.Result() //nolint:bodyclose
+
+		if resp != nil {
+			if resp.Header != nil {
+				contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+			}
 		}
+
+		rsp, err := h.parseChannelResponse(resp)
+		if err != nil {
+			diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+			return nil, err
+		}
+
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
+
+		return rsp, nil
 	}
+}
 
-	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
-		return nil, err
-	}
-
-	rsp, err := h.parseChannelResponse(resp)
-	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
-		return nil, err
-	}
-
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
-
-	return rsp, nil
+func isSSE(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	return strings.HasPrefix(accept, "text/event-stream")
 }
 
 func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*http.Request, error) {
