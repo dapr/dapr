@@ -170,7 +170,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	if err = o.callCreateWorkflowStateMessage(ctx, createWorkflows); err != nil {
-		return todo. RunCompletedFalse, err
+		return todo.RunCompletedFalse, err
 	}
 
 	state.ApplyRuntimeStateChanges(rs)
