@@ -17,8 +17,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"log"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -77,17 +77,21 @@ func (h *sse) Run(t *testing.T, ctx context.Context) {
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 
+		count := 0
+
 		scanner := bufio.NewScanner(resp.Body)
 		for scanner.Scan() {
-			line := scanner.Text()
-			if line != "" {
+			event := scanner.Text()
 
+			if strings.HasPrefix(event, "data:") {
+				count++
 			}
 		}
 
 		err = scanner.Err()
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
+		require.Equal(t, 10, count)
 	})
 }
 
@@ -103,10 +107,8 @@ func sseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i := 1; i <= 10; i++ {
-		fmt.Fprintf(w, "data: %v", i)
+		fmt.Fprintf(w, "data: %v\n\n", i)
 		flusher.Flush()
 		time.Sleep(100 * time.Millisecond)
 	}
-
-	log.Println("SSE stream finished")
 }
