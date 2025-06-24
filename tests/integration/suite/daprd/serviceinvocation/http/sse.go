@@ -69,7 +69,7 @@ func (h *sse) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := client.HTTP(t)
 	t.Run("invoke sse http endpoint", func(t *testing.T) {
-		req, err := http.NewRequest("GET", fmt.Sprintf("http://localhost:%d/v1.0/invoke/myserver/method/events", h.daprd.HTTPPort()), nil)
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/invoke/myserver/method/events", h.daprd.HTTPPort()), nil)
 		require.NoError(t, err)
 
 		req.Header.Set("Accept", "text/event-stream")

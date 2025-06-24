@@ -369,15 +369,14 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	var sse bool
 
 	execPipeline := h.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Send request to user application
-		// (Body is closed below, but linter isn't detecting that)
-		//nolint:bodyclose
-
 		sse = isSSE(r)
 		if sse {
 			r.Header.Set("Accept", "text/event-stream")
 		}
 
+		// Send request to user application
+		// (Body is closed below, but linter isn't detecting that)
+		//nolint:bodyclose
 		clientResp, clientErr := h.client.Do(r)
 		if clientResp != nil {
 			if sse {
@@ -395,16 +394,16 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 				buf := make([]byte, 1024)
 				for {
-					n, err := clientResp.Body.Read(buf)
+					n, cErr := clientResp.Body.Read(buf)
 					if n > 0 {
 						if _, writeErr := callerResponseWriter.Write(buf[:n]); writeErr != nil {
 							return
 						}
 						flusher.Flush()
 					}
-					if err != nil {
-						if err != io.EOF {
-							clientErr = err
+					if cErr != nil {
+						if cErr != io.EOF {
+							clientErr = cErr
 						}
 						break
 					}
