@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -213,6 +213,63 @@ func TestCloudEventPayload(t *testing.T) {
 				t.Errorf("expected CloudEvent to contain %s=%s, got: %v", k, v, cloudEvent[k])
 			}
 		}
+	})
+
+	t.Run("verify cloud event is not modified for non-raw routes", func(t *testing.T) {
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(respB).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockStreamer := &mockAdapterStreamer{}
+		mockStreamer.On("Publish", mock.Anything, mock.Anything).Return(&rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1{}, nil)
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.Init()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
+
+		// Create subscription options.
+		opts := Options{
+			AppID:      "test-app",
+			PubSubName: "fake-pubsub",
+			Topic:      "test-topic",
+			PubSub:     &runtimePubsub.PubsubItem{Component: pubSub},
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Postman: streaming.New(streaming.Options{
+				Channel: mockStreamer,
+			}),
+			Route: runtimePubsub.Subscription{
+				Metadata: map[string]string{},
+				Rules:    []*runtimePubsub.Rule{{Path: "/"}},
+			},
+		}
+
+		s, err := New(opts)
+		require.NoError(t, err)
+		defer s.Stop()
+
+		// Simulate a message
+		cloudEventInput := map[string]interface{}{
+			contribpubsub.DataContentTypeField: "application/json",
+			contribpubsub.IDField:              "123",
+			contribpubsub.SpecVersionField:     "1.0",
+			contribpubsub.TypeField:            "test",
+			contribpubsub.DataField:            "{\"foo\":\"bar\"}",
+		}
+		cloudEventBytes, err := json.Marshal(cloudEventInput)
+		require.NoError(t, err)
+		err = pubSub.Publish(t.Context(), &contribpubsub.PublishRequest{
+			PubsubName: "fake-pubsub",
+			Topic:      "test-topic",
+			Data:       cloudEventBytes,
+			Metadata:   map[string]string{"__key": "key-value"},
+		})
+		require.NoError(t, err)
+
+		// Check that the original cloud event is not modified except the extra metadata
+		cloudEventInput["_metadata___key"] = "key-value"
+		cloudEventInput["_metadata_pubsubName"] = "fake-pubsub"
+		cloudEvent := mockStreamer.receivedMessage.CloudEvent
+		assert.Equal(t, cloudEventInput, cloudEvent)
 	})
 
 	t.Run("verify payload and metadata are included in the cloud event for raw routes", func(t *testing.T) {

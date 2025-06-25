@@ -207,10 +207,29 @@ func New(opts Options) (*Subscription, error) {
 				return err
 			}
 
-			// At this point, cloudEventData is a deserialized json object.
-			cloudEvent = make(map[string]interface{})
-			cloudEvent[contribpubsub.DataField] = cloudEventData
-			cloudEvent[contribpubsub.DataContentTypeField] = "application/json"
+			// At this point, cloudEventData is a deserialized json object. If the event is a cloud event (e.g. it originated from a Dapr client)
+			// then we can use it as is. Otherwise, we assume it is a JSON object that can be used as the data field of a cloud event.
+			cloudEventIndicatorKeys := []string{
+				contribpubsub.DataContentTypeField,
+				contribpubsub.IDField,
+				contribpubsub.SpecVersionField,
+				contribpubsub.TypeField,
+			}
+
+			allKeysPresent := true
+			for _, key := range cloudEventIndicatorKeys {
+				if _, ok := cloudEventData[key]; !ok {
+					allKeysPresent = false
+					break
+				}
+			}
+			if allKeysPresent {
+				cloudEvent = cloudEventData
+			} else {
+				cloudEvent = make(map[string]interface{})
+				cloudEvent[contribpubsub.DataField] = cloudEventData
+				cloudEvent[contribpubsub.DataContentTypeField] = "application/json"
+			}
 
 			// fallback to message metadata to propagate the tracing information
 			if _, ok := cloudEvent[contribpubsub.TraceIDField]; !ok {
