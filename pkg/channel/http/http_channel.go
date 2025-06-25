@@ -54,6 +54,14 @@ const (
 	httpsScheme    = "https"
 
 	appConfigEndpoint = "/dapr/config"
+
+	headerContentType  = "Content-Type"
+	headerCacheControl = "Cache-Control"
+	headerConnection   = "Connection"
+
+	mimeEventStream     = "text/event-stream"
+	cacheNoCache        = "no-cache"
+	connectionKeepAlive = "keep-alive"
 )
 
 // Channel is an HTTP implementation of an AppChannel.
@@ -382,9 +390,9 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 			if sse {
 				callerResponseWriter := req.HTTPResponseWriter()
 
-				callerResponseWriter.Header().Set("Content-Type", "text/event-stream")
-				callerResponseWriter.Header().Set("Cache-Control", "no-cache")
-				callerResponseWriter.Header().Set("Connection", "keep-alive")
+				callerResponseWriter.Header().Set(headerContentType, mimeEventStream)
+				callerResponseWriter.Header().Set(headerCacheControl, cacheNoCache)
+				callerResponseWriter.Header().Set(headerConnection, connectionKeepAlive)
 
 				flusher, ok := callerResponseWriter.(http.Flusher)
 				if !ok {

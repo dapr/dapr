@@ -107,7 +107,7 @@ func sseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i := 1; i <= 10; i++ {
-		fmt.Fprintf(w, "data: %v\n\n", i)
+		fmt.Fprintf(w, "data: %d\n\n", i)
 		flusher.Flush()
 		time.Sleep(100 * time.Millisecond)
 	}
