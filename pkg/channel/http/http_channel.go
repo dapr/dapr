@@ -58,6 +58,7 @@ const (
 	headerContentType  = "Content-Type"
 	headerCacheControl = "Cache-Control"
 	headerConnection   = "Connection"
+	headerAccept       = "Accept"
 
 	mimeEventStream     = "text/event-stream"
 	cacheNoCache        = "no-cache"
@@ -379,7 +380,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	execPipeline := h.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sse = isSSE(r)
 		if sse {
-			r.Header.Set("Accept", "text/event-stream")
+			r.Header.Set(headerAccept, mimeEventStream)
 		}
 
 		// Send request to user application
