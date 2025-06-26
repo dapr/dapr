@@ -144,3 +144,9 @@ func (rw *responseWriter) callBefore() {
 		rw.beforeFuncs[i](rw)
 	}
 }
+
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
