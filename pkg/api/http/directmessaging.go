@@ -141,7 +141,8 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		WithRawData(r.Body).
 		WithContentType(r.Header.Get("content-type")).
 		// Save headers to internal metadata
-		WithHTTPHeaders(r.Header)
+		WithHTTPHeaders(r.Header).
+		WithHTTPResponseWriter(w)
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
 	}
@@ -170,6 +171,11 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
 			return rResp, invokeErr
+		}
+
+		if rResp == nil {
+			// Downstream channel handled and finalized the response, don't do anything
+			return nil, nil
 		}
 
 		// Construct response if not HTTP
@@ -210,10 +216,6 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		if !success.CompareAndSwap(false, true) {
 			// This error will never be returned to a client but it's here to prevent retries
 			return rResp, backoff.Permanent(errors.New("already completed"))
-		}
-
-		if rResp == nil {
-			return nil, backoff.Permanent(errors.New("response object is nil"))
 		}
 
 		headers := rResp.Headers()
