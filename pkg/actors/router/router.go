@@ -70,7 +70,6 @@ type router struct {
 	resiliency resiliency.Provider
 	reminders  reminders.Interface
 	grpc       *manager.Manager
-	locker     locker.Interface
 
 	idlerQueue *queue.Processor[string, targets.Idlable]
 
@@ -90,7 +89,6 @@ func New(opts Options) Interface {
 		grpc:               opts.GRPC,
 		idlerQueue:         opts.IdlerQueue,
 		reminders:          opts.Reminders,
-		locker:             opts.Locker,
 		lock:               fifo.New(),
 		clock:              clock.RealClock{},
 		callOptions: []grpc.CallOption{
@@ -184,16 +182,6 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
-	if !req.SkipLock {
-		// Only lock the request if it is a local call.
-		var cancel context.CancelFunc
-		cancel, err = r.locker.Lock(req.ActorType, req.ActorID)
-		if err != nil {
-			return err
-		}
-		defer cancel()
-	}
-
 	target, _, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
 	if err != nil {
 		return backoff.Permanent(err)
@@ -232,14 +220,6 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if lar.Local {
-		// Only lock the request if it is a local call.
-		var cancel context.CancelFunc
-		cancel, err = r.locker.LockRequest(req)
-		if err != nil {
-			return nil, err
-		}
-		defer cancel()
-
 		var resp *internalv1pb.InternalInvokeResponse
 		resp, err = r.callLocalActor(ctx, req)
 		if err != nil {

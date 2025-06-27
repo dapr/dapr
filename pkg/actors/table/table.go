@@ -34,7 +34,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/kit/concurrency/cmap"
-	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/events/queue"
@@ -91,10 +90,6 @@ type table struct {
 	table       cmap.Map[string, targets.Interface]
 	typeUpdates *broadcaster.Broadcaster[[]string]
 
-	// actorTypesLock is a per actor type lock to prevent concurrent access to
-	// the same actor.
-	actorTypesLock fifo.Map[string]
-
 	drainRebalancedActors   bool
 	entityConfigs           map[string]api.EntityConfig
 	drainOngoingCallTimeout time.Duration
@@ -114,7 +109,6 @@ func New(opts Options) Interface {
 		entityConfigs:           make(map[string]api.EntityConfig),
 		factories:               cmap.NewMap[string, targets.Factory](),
 		table:                   cmap.NewMap[string, targets.Interface](),
-		actorTypesLock:          fifo.NewMap[string](),
 		clock:                   clock.RealClock{},
 		typeUpdates:             broadcaster.New[[]string](),
 		idlerQueue:              opts.IdlerQueue,
@@ -190,8 +184,6 @@ func (t *table) doHaltAll(drain bool, fn func(target targets.Interface) bool) er
 func (t *table) IsActorTypeHosted(actorType string) bool {
 	t.lock.RLock()
 	defer t.lock.RUnlock()
-	t.actorTypesLock.Lock(actorType)
-	defer t.actorTypesLock.Unlock(actorType)
 	_, ok := t.factories.Load(actorType)
 	return ok
 }
@@ -199,16 +191,12 @@ func (t *table) IsActorTypeHosted(actorType string) bool {
 func (t *table) HostedTarget(actorType, actorID string) (targets.Interface, bool) {
 	t.lock.RLock()
 	defer t.lock.RUnlock()
-	t.actorTypesLock.Lock(actorType)
-	defer t.actorTypesLock.Unlock(actorType)
 	return t.table.Load(key.ConstructComposite(actorType, actorID))
 }
 
 func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, bool, error) {
 	t.lock.RLock()
 	defer t.lock.RUnlock()
-	t.actorTypesLock.Lock(actorType)
-	defer t.actorTypesLock.Unlock(actorType)
 
 	akey := key.ConstructComposite(actorType, actorID)
 

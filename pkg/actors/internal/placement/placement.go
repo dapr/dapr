@@ -273,7 +273,7 @@ func (p *placement) Lock(ctx context.Context) (context.Context, context.CancelFu
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
 	}
-	return p.lock.RLock(ctx)
+	return ctx, func() {}, nil
 }
 
 func (p *placement) handleLockOperation(ctx context.Context) {
