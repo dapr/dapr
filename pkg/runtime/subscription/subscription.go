@@ -191,9 +191,8 @@ func New(opts Options) (*Subscription, error) {
 				return err
 			}
 		} else {
-			// Deserializing the message into the "data" field of the cloud event.
-			var cloudEventData map[string]interface{}
-			err = json.Unmarshal(msg.Data, &cloudEventData)
+			// all messages consumed with "rawPayload=false" are deserialized as a CloudEvent, even when the payload is not a CloudEvent
+			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
 				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
 				if route.DeadLetterTopic != "" {
@@ -206,11 +205,6 @@ func New(opts Options) (*Subscription, error) {
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
 				return err
 			}
-
-			// At this point, cloudEventData is a deserialized json object.
-			cloudEvent = make(map[string]interface{})
-			cloudEvent[contribpubsub.DataField] = cloudEventData
-			cloudEvent[contribpubsub.DataContentTypeField] = "application/json"
 
 			// fallback to message metadata to propagate the tracing information
 			if _, ok := cloudEvent[contribpubsub.TraceIDField]; !ok {
@@ -240,15 +234,6 @@ func New(opts Options) (*Subscription, error) {
 				_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
 			}
 			return nil
-		}
-
-		// Copy all the remaining metadata into the cloud event, which
-		// will become "extensions" in the final message.
-		for k, v := range msg.Metadata {
-			// Ignore the metadata that is already in the cloud event.
-			if _, ok := cloudEvent[k]; !ok {
-				cloudEvent["_metadata_"+k] = v
-			}
 		}
 
 		routePath, shouldProcess, err := findMatchingRoute(route.Rules, cloudEvent)
