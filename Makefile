@@ -272,6 +272,15 @@ ADDITIONAL_HELM_SET ?= ""
 ifneq ($(ADDITIONAL_HELM_SET),)
 	ADDITIONAL_HELM_SET := --set $(ADDITIONAL_HELM_SET)
 endif
+ifeq ($(DEBUG),1)
+	ADDITIONAL_HELM_SET := --set dapr_operator.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_placement.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_scheduler.securityContext.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_scheduler.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_sentry.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_sidecar_injector.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_sidecar_injector.sidecarRunAsNonRoot=false $(ADDITIONAL_HELM_SET)
+endif
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	ADDITIONAL_HELM_SET := $(ADDITIONAL_HELM_SET) \
 		--set dapr_operator.image.name=$(RELEASE_NAME) \
