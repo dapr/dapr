@@ -19,6 +19,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,7 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -49,8 +50,21 @@ type expiry struct {
 func (e *expiry) Setup(t *testing.T) []framework.Option {
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
+	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
 	onemonth := time.Hour * 24 * 30
-	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, &onemonth)
+	bundle, err := bundle.Generate(bundle.GenerateOptions{
+		X509RootKey:      rootKey,
+		JWTRootKey:       jwtKey,
+		TrustDomain:      "integration.test.dapr.io",
+		AllowedClockSkew: time.Second * 5,
+		OverrideCATTL:    &onemonth,
+		MissingCredentials: bundle.MissingCredentials{
+			X509: true,
+			JWT:  true,
+		},
+	})
 	require.NoError(t, err)
 
 	e.notGiven = procsentry.New(t, procsentry.WithWriteTrustBundle(false))
