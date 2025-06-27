@@ -24,6 +24,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/config"
@@ -181,6 +182,31 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	envelope, span, err := rtpubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, s.tracingSpec)
 	if err != nil {
 		return nil, err
+	}
+
+	// Unlike the HTTP and regular gRPC adapters, the streaming adapter does not have additional
+	// mechanisms for including metadata with each request. Instead, adding all the metadata
+	// to the envelope extensions, which will produce the same effect.
+	// First, copy all the existing extensions into a new map.
+	// Second, add all the metadata to the extensions with the "_metadata_" prefix.
+	extensions := make(map[string]any)
+	envelopeExtensions := envelope.GetExtensions()
+	if envelopeExtensions != nil {
+		for k, v := range envelopeExtensions.AsMap() {
+			extensions[k] = v
+		}
+	}
+	for k, v := range msg.Metadata {
+		// Ignore the metadata that is already in the extensions.
+		metadataKey := "_metadata_" + k
+		if _, ok := extensions[metadataKey]; !ok {
+			extensions[metadataKey] = v
+		}
+	}
+
+	envelope.Extensions, err = structpb.NewStruct(extensions)
+	if err != nil {
+		return nil, fmt.Errorf("error creating extensions: %w", err)
 	}
 
 	ch, cleanup := connection.registerPublishResponse(envelope.GetId())
