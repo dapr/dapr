@@ -127,6 +127,7 @@ var endpoints = map[string][]string{
 	},
 	"conversation.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/ConverseAlpha1",
+		daprRuntimePrefix + "v1.Dapr/ConverseStreamAlpha1",
 	},
 }
 

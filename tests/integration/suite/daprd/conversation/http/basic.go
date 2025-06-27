@@ -74,7 +74,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"result":"well hello there"}]}`, string(respBody))
+		require.JSONEq(t, getMsgJSON("well hello there"), string(respBody))
 	})
 
 	t.Run("invalid json", func(t *testing.T) {

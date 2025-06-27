@@ -24,8 +24,133 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/logger"
 	kmeta "github.com/dapr/kit/metadata"
 )
+
+// needsInputScrubber checks if PII scrubbing is needed for any input
+func needsInputScrubber(req *runtimev1pb.ConversationRequest) bool {
+	for _, input := range req.GetInputs() {
+		if input.GetScrubPII() {
+			return true
+		}
+	}
+	return false
+}
+
+// needsOutputScrubber checks if PII scrubbing is needed for outputs
+func needsOutputScrubber(req *runtimev1pb.ConversationRequest) bool {
+	return req.GetScrubPII()
+}
+
+// convertProtoToolsToComponentsContrib converts protobuf tools to components-contrib format
+func convertProtoToolsToComponentsContrib(protoTools []*runtimev1pb.Tool) []conversation.Tool {
+	if len(protoTools) == 0 {
+		return nil
+	}
+
+	tools := make([]conversation.Tool, len(protoTools))
+	for i, protoTool := range protoTools {
+		tool := conversation.Tool{
+			Type: protoTool.GetType(),
+			Function: conversation.ToolFunction{
+				Name:        protoTool.GetFunction().GetName(),
+				Description: protoTool.GetFunction().GetDescription(),
+				Parameters:  protoTool.GetFunction().GetParameters(), // Keep as string for now
+			},
+		}
+		tools[i] = tool
+	}
+
+	return tools
+}
+
+// convertComponentsContribToolCallsToProto converts components-contrib tool calls to protobuf format
+func convertComponentsContribToolCallsToProto(componentToolCalls []conversation.ToolCall) []*runtimev1pb.ToolCall {
+	if len(componentToolCalls) == 0 {
+		return nil
+	}
+
+	protoToolCalls := make([]*runtimev1pb.ToolCall, len(componentToolCalls))
+	for i, componentToolCall := range componentToolCalls {
+		protoToolCall := &runtimev1pb.ToolCall{
+			Id:   componentToolCall.ID,
+			Type: componentToolCall.Type,
+			Function: &runtimev1pb.ToolCallFunction{
+				Name:      componentToolCall.Function.Name,
+				Arguments: componentToolCall.Function.Arguments,
+			},
+		}
+		protoToolCalls[i] = protoToolCall
+	}
+
+	return protoToolCalls
+}
+
+// extractToolDefinitionsFromInputs extracts tool definitions from the first input message
+func extractToolDefinitionsFromInputs(inputs []*runtimev1pb.ConversationInput) []*runtimev1pb.Tool {
+	if len(inputs) == 0 {
+		return nil
+	}
+
+	// Tool definitions should be in the first input message only
+	return inputs[0].GetTools()
+}
+
+// getInputsFromRequest gets the inputs from the request and scrubs them if PII scrubbing is enabled on the input
+func getInputsFromRequest(req *runtimev1pb.ConversationRequest, scrubber piiscrubber.Scrubber, logger logger.Logger) ([]conversation.ConversationInput, error) {
+	reqInputs := req.GetInputs()
+	if reqInputs == nil {
+		return nil, messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+	}
+
+	inputs := make([]conversation.ConversationInput, 0, len(reqInputs))
+	for _, i := range reqInputs {
+		msg := i.GetContent()
+
+		if i.GetScrubPII() && scrubber != nil {
+			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetContent()})
+			if sErr != nil {
+				sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
+				logger.Debug(sErr)
+				return nil, sErr
+			}
+
+			msg = scrubbed[0]
+		}
+
+		// Determine the role based on input type
+		role := conversation.Role(i.GetRole())
+
+		// Handle tool result messages
+		if i.GetToolCallId() != "" && i.GetName() != "" {
+			// This is a tool result message - set role to "tool"
+			role = conversation.RoleTool
+		}
+
+		c := conversation.ConversationInput{
+			Message: msg,
+			Role:    role,
+		}
+
+		// Add tools if present in this input (typically first input only)
+		if len(i.GetTools()) > 0 {
+			c.Tools = convertProtoToolsToComponentsContrib(i.GetTools())
+		}
+
+		// Add tool call ID and name for tool result messages
+		if i.GetToolCallId() != "" {
+			c.ToolCallID = i.GetToolCallId()
+		}
+		if i.GetName() != "" {
+			c.Name = i.GetName()
+		}
+
+		inputs = append(inputs, c)
+	}
+
+	return inputs, nil
+}
 
 func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) {
 	// valid component
@@ -55,38 +180,37 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		return nil, err
 	}
 
-	scrubber, err := piiscrubber.NewDefaultScrubber()
+	// prepare scrubber in case PII scrubbing is enabled (either at request level or input level)
+	var scrubber piiscrubber.Scrubber
+
+	// Check if PII scrubbing is needed for inputs or outputs
+	needsInputPIIScrubbing := needsInputScrubber(req)
+	needsOutputPIIScrubbing := needsOutputScrubber(req)
+
+	if needsInputPIIScrubbing || needsOutputPIIScrubbing {
+		scrubber, err = piiscrubber.NewDefaultScrubber()
+		if err != nil {
+			err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+			a.logger.Debug(err)
+			return &runtimev1pb.ConversationResponse{}, err
+		}
+	}
+
+	inputs, err := getInputsFromRequest(req, scrubber, a.logger)
 	if err != nil {
-		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
-		a.logger.Debug(err)
 		return &runtimev1pb.ConversationResponse{}, err
 	}
 
-	for _, i := range req.GetInputs() {
-		msg := i.GetContent()
-
-		if i.GetScrubPII() {
-			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetContent()})
-			if sErr != nil {
-				sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-				a.logger.Debug(sErr)
-				return &runtimev1pb.ConversationResponse{}, sErr
-			}
-
-			msg = scrubbed[0]
-		}
-
-		c := conversation.ConversationInput{
-			Message: msg,
-			Role:    conversation.Role(i.GetRole()),
-		}
-
-		request.Inputs = append(request.Inputs, c)
-	}
-
+	request.Inputs = inputs
 	request.Parameters = req.GetParameters()
 	request.ConversationContext = req.GetContextID()
 	request.Temperature = req.GetTemperature()
+
+	// NEW: Check if request includes tool definitions for logging
+	protoTools := extractToolDefinitionsFromInputs(req.GetInputs())
+	if len(protoTools) > 0 {
+		a.logger.Debugf("Tool calling request with %d tools for component %s", len(protoTools), req.GetName())
+	}
 
 	// do call
 	start := time.Now()
@@ -95,11 +219,14 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	)
 
 	resp, err := policyRunner(func(ctx context.Context) (*conversation.ConversationResponse, error) {
+		// NEW: Call component with regular interface
+		// Components that support tool calling should handle tools from input.Tools
 		rResp, rErr := component.Converse(ctx, request)
 		return rResp, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
-	diag.DefaultComponentMonitoring.ConversationInvoked(ctx, req.GetName(), err == nil, elapsed)
+	usage := convertUsageToProto(resp)
+	diag.DefaultComponentMonitoring.ConversationInvoked(ctx, req.GetName(), err == nil, elapsed, diag.NonStreamingConversation, int64(usage.GetPromptTokens()), int64(usage.GetCompletionTokens()))
 
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
@@ -118,7 +245,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		for _, o := range resp.Outputs {
 			res := o.Result
 
-			if req.GetScrubPII() {
+			if needsOutputPIIScrubbing {
 				scrubbed, sErr := scrubber.ScrubTexts([]string{o.Result})
 				if sErr != nil {
 					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
@@ -129,11 +256,25 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 				res = scrubbed[0]
 			}
 
-			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResult{
+			// NEW: Create conversation result with tool calling support
+			result := &runtimev1pb.ConversationResult{
 				Result:     res,
 				Parameters: o.Parameters,
-			})
+			}
+
+			// NEW: Convert tool calls from components-contrib format to proto format
+			if len(o.ToolCalls) > 0 {
+				result.ToolCalls = convertComponentsContribToolCallsToProto(o.ToolCalls)
+			}
+
+			// NEW: Set finish reason if provided
+			if o.FinishReason != "" {
+				result.FinishReason = func(s string) *string { return &s }(o.FinishReason)
+			}
+
+			response.Outputs = append(response.GetOutputs(), result)
 		}
+		response.Usage = usage
 	}
 
 	return response, nil
