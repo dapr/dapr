@@ -131,10 +131,13 @@ var (
 	PubsubPublishOutbox         = ErrorCode{"ERR_PUBLISH_OUTBOX", "", CategoryPubsub}                                              // Error publishing message to outbox
 
 	// ### Conversation API
-	ConversationInvalidParms  = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", "", CategoryConversation}  // Invalid parameters for conversation component
-	ConversationInvoke        = ErrorCode{"ERR_CONVERSATION_INVOKE", "", CategoryConversation}         // Error invoking conversation
-	ConversationMissingInputs = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", "", CategoryConversation} // Missing inputs for conversation
-	ConversationNotFound      = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}      // Conversation not found
+	ConversationInvalidParms         = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", "", CategoryConversation}          // Invalid parameters for conversation component
+	ConversationInvoke               = ErrorCode{"ERR_CONVERSATION_INVOKE", "", CategoryConversation}                 // Error invoking conversation
+	ConversationMissingInputs        = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", "", CategoryConversation}         // Missing inputs for conversation
+	ConversationNotFound             = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}              // Conversation not found
+	ConversationStreamNotSupported   = ErrorCode{"ERR_CONVERSATION_STREAM_NOT_SUPPORTED", "", CategoryConversation}   // Conversation streaming not supported by component
+	ConversationStreamPipelineFailed = ErrorCode{"ERR_CONVERSATION_STREAM_PIPELINE_FAILED", "", CategoryConversation} // Streaming pipeline failed
+	ConversationStreamResponsEmpty   = ErrorCode{"ERR_CONVERSATION_STREAM_RESPONSE_EMPTY", "", CategoryConversation}  // Empty response in streaming conversation
 
 	// ### Service Invocation / Direct Messaging API
 	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service
