@@ -29,7 +29,16 @@ import (
 	"github.com/dapr/kit/ring"
 )
 
-var ErrLockClosed = errors.New("actor lock is closed")
+var (
+	ErrLockClosed = errors.New("actor lock is closed")
+
+	lockCache = &sync.Pool{
+		New: func() any {
+			var l *lock
+			return l
+		},
+	}
+)
 
 const headerReentrancyID = "Dapr-Reentrancy-Id"
 
@@ -78,14 +87,25 @@ func newLock(opts lockOptions) *lock {
 		maxStackDepth = 1
 	}
 
-	l := &lock{
-		actorType:         opts.actorType,
-		reqCh:             make(chan *req),
-		maxStackDepth:     maxStackDepth,
-		reentrancyEnabled: opts.reentrancyEnabled,
-		inflights:         ring.NewBuffered[inflight](2, 8),
-		lock:              fifo.New(),
-		closeCh:           make(chan struct{}),
+	l := lockCache.Get().(*lock)
+	if l == nil {
+		l = &lock{
+			actorType:         opts.actorType,
+			reqCh:             make(chan *req),
+			maxStackDepth:     maxStackDepth,
+			reentrancyEnabled: opts.reentrancyEnabled,
+			inflights:         ring.NewBuffered[inflight](2, 8),
+			lock:              fifo.New(),
+			closeCh:           make(chan struct{}),
+		}
+	} else {
+		l.actorType = opts.actorType
+		l.maxStackDepth = maxStackDepth
+		l.reentrancyEnabled = opts.reentrancyEnabled
+		l.closeCh = make(chan struct{})
+		for range l.inflights.Len() {
+			l.inflights.RemoveFront()
+		}
 	}
 
 	l.wg.Add(1)
@@ -94,8 +114,6 @@ func newLock(opts lockOptions) *lock {
 		for {
 			select {
 			case <-l.closeCh:
-				// Ensure all pending requests are handled before closing.
-				l.lockRequest(nil)
 				return
 
 			case req := <-l.reqCh:
@@ -253,7 +271,9 @@ func (l *lock) idFromRequest(req *internalv1pb.InternalInvokeRequest) (string, b
 func (l *lock) close() {
 	if l.closed.CompareAndSwap(false, true) {
 		close(l.closeCh)
+		// Ensure all pending requests are handled before closing.
 		l.wg.Wait()
+		lockCache.Put(l)
 	}
 }
 

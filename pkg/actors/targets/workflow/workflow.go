@@ -36,7 +36,16 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.targets.workflow")
+var (
+	log = logger.NewLogger("dapr.runtime.actors.targets.workflow")
+
+	workflowCache = sync.Pool{
+		New: func() any {
+			var w *workflow
+			return w
+		},
+	}
+)
 
 type EventSink func(*backend.OrchestrationMetadata)
 
@@ -63,9 +72,11 @@ type workflow struct {
 	activityResultAwaited atomic.Bool
 	completed             atomic.Bool
 	schedulerReminders    bool
-	lock                  sync.Mutex
-	closeCh               chan struct{}
-	closed                atomic.Bool
+
+	lock    sync.Mutex
+	closeCh chan struct{}
+	closed  atomic.Bool
+	wg      sync.WaitGroup
 }
 
 type WorkflowOptions struct {
@@ -102,29 +113,39 @@ func WorkflowFactory(ctx context.Context, opts WorkflowOptions) (targets.Factory
 		return nil, err
 	}
 
+	reminderInterval := time.Minute * 1
+	if opts.ReminderInterval != nil {
+		reminderInterval = *opts.ReminderInterval
+	}
+
 	return func(actorID string) targets.Interface {
-		reminderInterval := time.Minute * 1
-
-		if opts.ReminderInterval != nil {
-			reminderInterval = *opts.ReminderInterval
+		w := workflowCache.Get().(*workflow)
+		if w == nil {
+			w = &workflow{
+				appID:              opts.AppID,
+				actorID:            actorID,
+				actorType:          opts.WorkflowActorType,
+				activityActorType:  opts.ActivityActorType,
+				scheduler:          opts.Scheduler,
+				reminderInterval:   reminderInterval,
+				resiliency:         opts.Resiliency,
+				table:              table,
+				reminders:          reminders,
+				router:             router,
+				actorState:         astate,
+				schedulerReminders: opts.SchedulerReminders,
+				ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
+				closeCh:            make(chan struct{}),
+			}
+		} else {
+			// Wait for any previous operations to complete before reusing the workflow
+			// instance.
+			w.actorID = actorID
+			w.ometaBroadcaster = broadcaster.New[*backend.OrchestrationMetadata]()
+			w.closeCh = make(chan struct{})
+			w.closed.Store(false)
 		}
 
-		w := &workflow{
-			appID:              opts.AppID,
-			actorID:            actorID,
-			actorType:          opts.WorkflowActorType,
-			activityActorType:  opts.ActivityActorType,
-			scheduler:          opts.Scheduler,
-			reminderInterval:   reminderInterval,
-			resiliency:         opts.Resiliency,
-			table:              table,
-			reminders:          reminders,
-			router:             router,
-			actorState:         astate,
-			schedulerReminders: opts.SchedulerReminders,
-			ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
-			closeCh:            make(chan struct{}),
-		}
 		if opts.EventSink != nil {
 			ch := make(chan *backend.OrchestrationMetadata)
 			go w.runEventSink(ch, opts.EventSink)
@@ -155,6 +176,8 @@ func (w *workflow) Completed() bool {
 }
 
 func (w *workflow) InvokeStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
+	w.wg.Add(1)
+	defer w.wg.Done()
 	return w.handleStream(ctx, req, stream)
 }
 
