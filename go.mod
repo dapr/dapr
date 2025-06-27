@@ -13,8 +13,8 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.15.1-0.20250522165848-88fce6a1402a
 	github.com/dapr/durabletask-go v0.7.2
-	github.com/dapr/kit v0.15.3-0.20250522135818-baea6263991d
-	github.com/diagridio/go-etcd-cron v0.7.1
+	github.com/dapr/kit v0.15.3-0.20250616160611-598b032bce69
+	github.com/diagridio/go-etcd-cron v0.8.1-0.20250617145313-6ddb54e54860
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
@@ -49,10 +49,10 @@ require (
 	github.com/spf13/pflag v1.0.6
 	github.com/spiffe/go-spiffe/v2 v2.5.0
 	github.com/stretchr/testify v1.10.0
-	go.etcd.io/etcd/api/v3 v3.6.0
-	go.etcd.io/etcd/client/pkg/v3 v3.6.0
-	go.etcd.io/etcd/client/v3 v3.6.0
-	go.etcd.io/etcd/server/v3 v3.6.0
+	go.etcd.io/etcd/api/v3 v3.6.1
+	go.etcd.io/etcd/client/pkg/v3 v3.6.1
+	go.etcd.io/etcd/client/v3 v3.6.1
+	go.etcd.io/etcd/server/v3 v3.6.1
 	go.mongodb.org/mongo-driver v1.14.0
 	go.opencensus.io v0.24.0
 	go.opentelemetry.io/otel v1.35.0
@@ -436,7 +436,7 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	github.com/zeebo/errs v1.4.0 // indirect
 	go.etcd.io/bbolt v1.4.0 // indirect
-	go.etcd.io/etcd/pkg/v3 v3.6.0 // indirect
+	go.etcd.io/etcd/pkg/v3 v3.6.1 // indirect
 	go.etcd.io/raft/v3 v3.6.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.34.0 // indirect
