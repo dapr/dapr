@@ -46,7 +46,17 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 		return err
 	}
 
-	if _, err := w.createReminder(ctx, "new-event", nil, 0); err != nil {
+	// For activity completion events, we want to create the reminder on the same app where this workflow actor is hosted
+	targetApp := w.appID
+	if e.GetRouter() != nil {
+		// For activity completion events, use the source app from the router
+		targetApp = e.GetRouter().GetSource()
+		if targetApp == "" {
+			targetApp = w.appID
+		}
+	}
+
+	if _, err := w.createReminder(ctx, "new-event", nil, 0, targetApp); err != nil {
 		return err
 	}
 
