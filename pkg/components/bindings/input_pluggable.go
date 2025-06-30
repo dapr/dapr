@@ -29,7 +29,6 @@ import (
 // grpcInputBinding is a implementation of a inputbinding over a gRPC Protocol.
 type grpcInputBinding struct {
 	*pluggable.GRPCConnector[proto.InputBindingClient]
-	bindings.InputBinding
 	logger logger.Logger
 
 	closed  atomic.Bool
@@ -130,7 +129,7 @@ func (b *grpcInputBinding) Read(ctx context.Context, handler bindings.Handler) e
 
 			// TODO reconnect on error
 			if err != nil {
-				b.logger.Errorf("failed to receive message: %v", err)
+				b.logger.Errorf("failed to receive binding message: %v", err)
 				return
 			}
 			b.wg.Add(1)
@@ -149,7 +148,7 @@ func (b *grpcInputBinding) Close() error {
 	if b.closed.CompareAndSwap(false, true) {
 		close(b.closeCh)
 	}
-	return b.InputBinding.Close()
+	return nil
 }
 
 // inputFromConnector creates a new GRPC inputbinding using the given underlying connector.

@@ -15,25 +15,23 @@ package scheduler
 
 import (
 	"context"
-	"errors"
-	"strings"
-	"sync"
-	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/healthz"
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/cluster"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients/wrapper"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops/connector"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops/hosts"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/watchhosts"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/events/loop"
+	"github.com/dapr/kit/ptr"
 )
-
-var log = logger.NewLogger("dapr.runtime.scheduler")
 
 type Options struct {
 	Namespace          string
@@ -49,194 +47,81 @@ type Options struct {
 
 // Scheduler manages the connection to the cluster of schedulers.
 type Scheduler struct {
-	addresses []string
-	security  security.Handler
-	htarget   healthz.Target
-
-	cluster *cluster.Cluster
-	clients *clients.Clients
-
-	broadcastAddresses []string
-
-	lock     sync.RWMutex
-	readyCh  chan struct{}
-	disabled chan struct{}
+	connector  loop.Interface[loops.Event]
+	hosts      loop.Interface[loops.Event]
+	watchhosts *watchhosts.WatchHosts
+	client     client.Interface
 }
 
 func New(opts Options) *Scheduler {
-	return &Scheduler{
-		addresses: opts.Addresses,
-		security:  opts.Security,
-		cluster: cluster.New(cluster.Options{
-			Namespace: opts.Namespace,
-			AppID:     opts.AppID,
-			Actors:    opts.Actors,
-			Channels:  opts.Channels,
-			WFEngine:  opts.WFEngine,
+	connector := connector.New(connector.Options{
+		Namespace:          opts.Namespace,
+		AppID:              opts.AppID,
+		Actors:             opts.Actors,
+		Channels:           opts.Channels,
+		WFEngine:           opts.WFEngine,
+		SchedulerReminders: opts.SchedulerReminders,
+	})
 
-			SchedulerReminders: opts.SchedulerReminders,
+	hosts := hosts.New(hosts.Options{
+		Security:  opts.Security,
+		Connector: connector,
+	})
+
+	clients := clients.New(clients.Options{
+		Security: opts.Security,
+	})
+
+	watchhosts := watchhosts.New(watchhosts.Options{
+		HostLoop:  hosts,
+		Addresses: opts.Addresses,
+		Security:  opts.Security,
+		Clients:   clients,
+		Healthz:   opts.Healthz,
+	})
+
+	return &Scheduler{
+		connector:  connector,
+		hosts:      hosts,
+		watchhosts: watchhosts,
+		client: wrapper.New(wrapper.Options{
+			Clients: clients,
 		}),
-		broadcastAddresses: opts.Addresses,
-		htarget:            opts.Healthz.AddTarget(),
-		readyCh:            make(chan struct{}),
-		disabled:           make(chan struct{}),
 	}
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {
-	if len(s.addresses) == 0 ||
-		(len(s.addresses) == 1 && strings.TrimSpace(strings.Trim(s.addresses[0], `"'`)) == "") {
-		s.htarget.Ready()
-		log.Warn("Scheduler disabled, not connecting...")
-		close(s.disabled)
-		<-ctx.Done()
-		return nil
-	}
-
-	for {
-		watchHosts := watchhosts.New(watchhosts.Options{
-			Addresses: s.addresses,
-			Security:  s.security,
-		})
-
-		err := concurrency.NewRunnerManager(
-			watchHosts.Run,
-			func(ctx context.Context) error {
-				addrsCh := watchHosts.Addresses(ctx)
-				for {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case actx := <-addrsCh:
-						if err := s.connectClients(actx, actx.Addresses); err != nil {
-							return err
-						}
-						if ctx.Err() != nil {
-							return ctx.Err()
-						}
-
-						log.Infof("Attempting to reconnect to schedulers")
-					}
-				}
-			},
-		).Run(ctx)
-		if ctx.Err() != nil {
-			return err
-		}
-
-		if err != nil {
-			log.Errorf("Error connecting to Schedulers, reconnecting: %s", err)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(time.Second):
-			}
-		}
-	}
-}
-
-func (s *Scheduler) connectClients(ctx context.Context, addresses []string) error {
-	s.lock.Lock()
-
-	var err error
-	s.clients, err = clients.New(ctx, clients.Options{
-		Addresses: addresses,
-		Security:  s.security,
-	})
-	if err != nil {
-		s.lock.Unlock()
-		return err
-	}
-
-	s.broadcastAddresses = addresses
-	readyCh := s.readyCh
-	s.lock.Unlock()
-
-	err = concurrency.NewRunnerManager(
+	return concurrency.NewRunnerManager(
+		s.connector.Run,
+		s.hosts.Run,
+		s.watchhosts.Run,
 		func(ctx context.Context) error {
-			return s.cluster.RunClients(ctx, s.clients)
-		},
-		func(ctx context.Context) error {
-			if err = s.cluster.WaitForReady(ctx); err != nil {
-				return err
-			}
-			close(readyCh)
-			s.htarget.Ready()
-
 			<-ctx.Done()
+			s.hosts.Close(new(loops.Close))
+			s.connector.Close(new(loops.Close))
 			return ctx.Err()
 		},
 	).Run(ctx)
-
-	s.lock.Lock()
-	s.readyCh = make(chan struct{})
-	s.htarget.NotReady()
-	s.clients.Close()
-	s.broadcastAddresses = nil
-	s.lock.Unlock()
-
-	return err
 }
 
-func (s *Scheduler) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, error) {
-	var client schedulerv1pb.SchedulerClient
-	if err := s.callWhenReady(ctx, func(ctx context.Context) error {
-		var err error
-		client, err = s.clients.Next()
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	return client, nil
+func (s *Scheduler) StartApp() {
+	s.connector.Enqueue(&loops.Reconnect{
+		AppTarget: ptr.Of(true),
+	})
 }
 
-func (s *Scheduler) All(ctx context.Context) ([]schedulerv1pb.SchedulerClient, error) {
-	var clients []schedulerv1pb.SchedulerClient
-	if err := s.callWhenReady(ctx, func(ctx context.Context) error {
-		clients = s.clients.All()
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return clients, nil
+func (s *Scheduler) StopApp() {
+	s.connector.Enqueue(&loops.Reconnect{
+		AppTarget: ptr.Of(false),
+	})
 }
 
-func (s *Scheduler) Addresses() []string {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.broadcastAddresses
+func (s *Scheduler) ReloadActorTypes(actorTypes []string) {
+	s.connector.Enqueue(&loops.Reconnect{
+		ActorTypes: ptr.Of(actorTypes),
+	})
 }
 
-func (s *Scheduler) StartApp(ctx context.Context) {
-	s.cluster.StartApp()
-}
-
-func (s *Scheduler) StopApp(ctx context.Context) {
-	s.cluster.StopApp()
-}
-
-func (s *Scheduler) callWhenReady(ctx context.Context, fn concurrency.Runner) error {
-	for {
-		s.lock.RLock()
-		readyCh := s.readyCh
-		s.lock.RUnlock()
-
-		select {
-		case <-s.disabled:
-			return errors.New("scheduler not enabled")
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-readyCh:
-		}
-
-		// Ensure still ready as there is a race from above.
-		s.lock.RLock()
-		select {
-		case <-s.readyCh:
-			defer s.lock.RUnlock()
-			return fn(ctx)
-		default:
-			s.lock.RUnlock()
-		}
-	}
+func (s *Scheduler) Client() client.Interface {
+	return s.client
 }

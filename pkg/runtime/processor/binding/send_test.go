@@ -15,7 +15,6 @@ package binding
 
 import (
 	"context"
-	"crypto/x509"
 	"io"
 	"net/http"
 	"testing"
@@ -45,6 +44,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testinggrpc "github.com/dapr/dapr/pkg/testing/grpc"
+	"github.com/dapr/kit/crypto/spiffe"
 	"github.com/dapr/kit/logger"
 )
 
@@ -184,8 +184,8 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 		ControlPlaneTrustDomain: "test.example.com",
 		ControlPlaneNamespace:   "default",
 		MTLSEnabled:             false,
-		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
-			return []*x509.Certificate{nil}, nil
+		OverrideCertRequestFn: func(context.Context, []byte) (*spiffe.SVIDResponse, error) {
+			return nil, nil
 		},
 		Healthz: healthz.New(),
 	})
@@ -272,11 +272,14 @@ func TestReadInputBindings(t *testing.T) {
 		b.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
 		mockBinding := rtmock.Binding{}
-		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		ch := make(chan bool, 1)
 		mockBinding.ReadErrorCh = ch
-		b.readFromBinding(ctx, testInputBindingName, &mockBinding)
-		cancel()
+		comp := componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: testInputBindingName,
+			},
+		}
+		b.startInputBinding(comp, &mockBinding)
 
 		assert.False(t, <-ch)
 	})
@@ -318,11 +321,14 @@ func TestReadInputBindings(t *testing.T) {
 		b.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
 		mockBinding := rtmock.Binding{}
-		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		ch := make(chan bool, 1)
 		mockBinding.ReadErrorCh = ch
-		b.readFromBinding(ctx, testInputBindingName, &mockBinding)
-		cancel()
+		comp := componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: testInputBindingName,
+			},
+		}
+		b.startInputBinding(comp, &mockBinding)
 
 		assert.True(t, <-ch)
 	})
@@ -364,11 +370,15 @@ func TestReadInputBindings(t *testing.T) {
 		b.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
 		mockBinding := rtmock.Binding{Metadata: map[string]string{"bindings": "input"}}
-		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		ch := make(chan bool, 1)
 		mockBinding.ReadErrorCh = ch
-		b.readFromBinding(ctx, testInputBindingName, &mockBinding)
-		cancel()
+
+		comp := componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: testInputBindingName,
+			},
+		}
+		b.startInputBinding(comp, &mockBinding)
 
 		assert.Equal(t, string(rtmock.TestInputBindingData), mockBinding.Data)
 	})
@@ -383,6 +393,18 @@ func TestReadInputBindings(t *testing.T) {
 		})
 		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
+		fakeReq := invokev1.NewInvokeMethodRequest("").
+			WithHTTPExtension(http.MethodOptions, "").
+			WithContentType("application/json")
+		defer fakeReq.Close()
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), fakeReq).Return(fakeResp, nil)
+
 		closeCh := make(chan struct{})
 		defer close(closeCh)
 
@@ -390,10 +412,18 @@ func TestReadInputBindings(t *testing.T) {
 		mockBinding.SetOnReadCloseCh(closeCh)
 		mockBinding.On("Read", mock.MatchedBy(daprt.MatchContextInterface), mock.Anything).Return(nil).Once()
 
-		ctx, cancel := context.WithCancel(t.Context())
-		b.readFromBinding(ctx, testInputBindingName, mockBinding)
+		comp := componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: testInputBindingName,
+			},
+		}
+		b.compStore.AddInputBinding(testInputBindingName, mockBinding)
+		b.startInputBinding(comp, mockBinding)
+
 		time.Sleep(80 * time.Millisecond)
-		cancel()
+
+		b.Close(comp)
+
 		select {
 		case <-closeCh:
 			// All good

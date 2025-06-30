@@ -47,7 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/responsewriter"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/utils"
+	kitstrings "github.com/dapr/kit/strings"
 )
 
 var (
@@ -140,7 +140,7 @@ func (s *server) StartNonBlocking() error {
 
 	// Create a handler with support for HTTP/2 Cleartext
 	var handler http.Handler = r
-	if !utils.IsTruthy(os.Getenv("DAPR_HTTP_DISABLE_H2C")) {
+	if !kitstrings.IsTruthy(os.Getenv("DAPR_HTTP_DISABLE_H2C")) {
 		handler = h2c.NewHandler(r, &http2.Server{})
 	}
 

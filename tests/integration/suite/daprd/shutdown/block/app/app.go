@@ -14,6 +14,7 @@ limitations under the License.
 package app
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block/app/binding"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block/app/invocation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block/app/pubsub"
 )

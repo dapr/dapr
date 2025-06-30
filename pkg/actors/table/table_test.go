@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/locker"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/table"
@@ -29,7 +30,7 @@ import (
 )
 
 func Test_HaltAll(t *testing.T) {
-	queue := queue.NewProcessor[string, targets.Idlable](nil)
+	queue := queue.NewProcessor[string, targets.Idlable](queue.Options[string, targets.Idlable]{})
 
 	tble := table.New(table.Options{
 		IdlerQueue:      queue,
@@ -116,4 +117,20 @@ func Test_HaltAll(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"test1||1", "test2||1", "test2||2", "test3||312", "test3||xyz",
 	}, deactivations.Slice())
+}
+
+func Test_GetOrCreate_NotRegistered(t *testing.T) {
+	queue := queue.NewProcessor[string, targets.Idlable](queue.Options[string, targets.Idlable]{})
+
+	tble := table.New(table.Options{
+		IdlerQueue:      queue,
+		ReentrancyStore: reentrancystore.New(),
+		Locker: locker.New(locker.Options{
+			ConfigStore: reentrancystore.New(),
+		}),
+	})
+
+	_, _, err := tble.GetOrCreate("test1", "1")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, actorerrors.ErrCreatingActor)
 }

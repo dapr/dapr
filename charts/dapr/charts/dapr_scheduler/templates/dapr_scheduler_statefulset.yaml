@@ -1,3 +1,4 @@
+{{- if (eq .Values.global.scheduler.enabled true) }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -27,7 +28,9 @@ spec:
       name: dapr-scheduler-data-dir
     spec:
       accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.cluster.storageClassName }}
       storageClassName: {{ .Values.cluster.storageClassName }}
+      {{- end }}
       resources:
         requests:
           storage: {{ .Values.cluster.storageSize }}
@@ -268,4 +271,5 @@ spec:
 {{- if .Values.global.priorityClassName }}
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
+{{- end }}
 {{- end }}

@@ -14,8 +14,8 @@ limitations under the License.
 package reentry
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry/local"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry/max"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry/pertype"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry/remote"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call/reentry/self"
 )

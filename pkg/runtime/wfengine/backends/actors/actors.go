@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -28,10 +27,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -44,6 +47,7 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.wfengine.backend.actors")
@@ -61,7 +65,7 @@ type Options struct {
 	Actors             actors.Interface
 	Resiliency         resiliency.Provider
 	SchedulerReminders bool
-	EventSink          workflow.EventSink
+	EventSink          orchestrator.EventSink
 }
 
 type Actors struct {
@@ -73,13 +77,10 @@ type Actors struct {
 	resiliency              resiliency.Provider
 	actors                  actors.Interface
 	schedulerReminders      bool
-	eventSink               workflow.EventSink
+	eventSink               orchestrator.EventSink
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
-
-	registeredCh chan struct{}
-	lock         sync.RWMutex
 }
 
 func New(opts Options) *Actors {
@@ -92,7 +93,6 @@ func New(opts Options) *Actors {
 		schedulerReminders:        opts.SchedulerReminders,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
-		registeredCh:              make(chan struct{}),
 		eventSink:                 opts.EventSink,
 	}
 }
@@ -106,7 +106,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 
-	workflowFactory, err := workflow.WorkflowFactory(ctx, workflow.WorkflowOptions{
+	oopts := orchestrator.Options{
 		AppID:             abe.appID,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
@@ -124,12 +124,9 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		SchedulerReminders: abe.schedulerReminders,
 		EventSink:          abe.eventSink,
-	})
-	if err != nil {
-		return err
 	}
 
-	activityFactory, err := workflow.ActivityFactory(ctx, workflow.ActivityOptions{
+	aopts := activity.Options{
 		AppID:             abe.appID,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
@@ -149,7 +146,9 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		Actors:             abe.actors,
 		SchedulerReminders: abe.schedulerReminders,
-	})
+	}
+
+	workflowFactory, activityFactory, err := workflow.Factories(ctx, oopts, aopts)
 	if err != nil {
 		return err
 	}
@@ -169,8 +168,6 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 	)
 
-	close(abe.registeredCh)
-
 	return nil
 }
 
@@ -180,13 +177,49 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 		return err
 	}
 
-	defer func() {
-		abe.lock.Lock()
-		abe.registeredCh = make(chan struct{})
-		abe.lock.Unlock()
-	}()
-
 	return table.UnRegisterActorTypes(abe.workflowActorType, abe.activityActorType)
+}
+
+// RerunWorkflowFromEvent implements backend.Backend and reruns a workflow from
+// a specific event ID.
+func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.RerunWorkflowFromEventRequest) (api.InstanceID, error) {
+	if len(req.GetSourceInstanceID()) == 0 {
+		return "", status.Error(codes.InvalidArgument, "rerun workflow source instance ID is required")
+	}
+
+	if req.NewInstanceID == nil {
+		u, err := uuid.NewRandom()
+		if err != nil {
+			return "", fmt.Errorf("failed to generate instance ID: %w", err)
+		}
+		req.NewInstanceID = ptr.Of(u.String())
+	}
+
+	if req.GetSourceInstanceID() == req.GetNewInstanceID() {
+		return "", status.Error(codes.InvalidArgument, "rerun workflow instance ID must be different from the original instance ID")
+	}
+
+	requestBytes, err := proto.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal RerunWorkflowFromEvent: %w", err)
+	}
+
+	areq := internalsv1pb.NewInternalInvokeRequest(todo.ForkWorkflowHistory).
+		WithActor(abe.workflowActorType, req.GetSourceInstanceID()).
+		WithData(requestBytes).
+		WithContentType(invokev1.ProtobufContentType)
+
+	engine, err := abe.actors.Router(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = engine.Call(ctx, areq)
+	if err != nil {
+		return "", err
+	}
+
+	return api.InstanceID(req.GetNewInstanceID()), nil
 }
 
 // CreateOrchestrationInstance implements backend.Backend and creates a new workflow instance.
@@ -195,16 +228,6 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
 func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
-	abe.lock.RLock()
-	ch := abe.registeredCh
-	abe.lock.RUnlock()
-
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
 	var workflowInstanceID string
 	if es := e.GetExecutionStarted(); es == nil {
 		return errors.New("the history event must be an ExecutionStartedEvent")
@@ -244,6 +267,9 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		_, eerr := router.Call(ctx, req)
 		status, ok := status.FromError(eerr)
 		if ok && status.Code() == codes.FailedPrecondition {
+			return eerr
+		}
+		if errors.Is(eerr, actorerrors.ErrCreatingActor) {
 			return eerr
 		}
 		return backoff.Permanent(eerr)

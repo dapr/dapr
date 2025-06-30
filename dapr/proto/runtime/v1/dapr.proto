@@ -205,7 +205,7 @@ service Dapr {
 
   // Raise an event to a running workflow instance
   rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
-  
+
   // Shutdown the sidecar
   rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
 
@@ -1265,6 +1265,12 @@ message Job {
   // payload is the serialized job payload that will be sent to the recipient
   // when the job is triggered.
   google.protobuf.Any data = 6 [json_name = "data"];
+
+  // If true, allows this job to overwrite an existing job with the same name.
+  bool overwrite = 7  [json_name = "overwrite"];
+
+  // failure_policy is the optional policy for handling job failures.
+  optional common.v1.JobFailurePolicy failure_policy = 8 [json_name = "failurePolicy"];
 }
 
 // ScheduleJobRequest is the message to create/schedule the job.

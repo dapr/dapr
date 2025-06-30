@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
+	otelBaggage "go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -104,7 +105,6 @@ const (
 	pubsubnameparam          = "pubsubname"
 	traceparentHeader        = "traceparent"
 	tracestateHeader         = "tracestate"
-	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
 )
 
@@ -410,7 +410,8 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 		return
 	}
 
-	b, err := json.Marshal(req.Data)
+	var b []byte
+	b, err = json.Marshal(req.Data)
 	if err != nil {
 		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrMalformedRequestData, err), errorcodes.CommonMalformedRequestData, nethttp.StatusInternalServerError)
 		respondWithError(w, resp)
@@ -431,6 +432,19 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 		if sc.TraceState().Len() > 0 {
 			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
 		}
+	}
+
+	if baggageHeaders := r.Header.Values(diagConsts.BaggageHeader); len(baggageHeaders) > 0 {
+		baggageString := strings.Join(baggageHeaders, ",")
+		if _, err = otelBaggage.Parse(baggageString); err != nil {
+			resp := messages.NewAPIErrorHTTP(fmt.Sprintf("invalid baggage header: %v", err), errorcodes.CommonMalformedRequest, nethttp.StatusBadRequest)
+			respondWithError(w, resp)
+			return
+		}
+		if req.Metadata == nil {
+			req.Metadata = map[string]string{}
+		}
+		req.Metadata[diagConsts.BaggageHeader] = baggageString
 	}
 
 	start := time.Now()

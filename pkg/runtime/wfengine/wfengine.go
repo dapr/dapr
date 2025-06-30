@@ -19,12 +19,13 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/processor"
@@ -54,7 +55,7 @@ type Options struct {
 	BackendManager     processor.WorkflowBackendManager
 	Resiliency         resiliency.Provider
 	SchedulerReminders bool
-	EventSink          workflow.EventSink
+	EventSink          orchestrator.EventSink
 }
 
 type engine struct {
@@ -111,6 +112,7 @@ func New(opts Options) Interface {
 
 			return nil
 		}),
+		backend.WithStreamSendTimeout(time.Second*10),
 	)
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities

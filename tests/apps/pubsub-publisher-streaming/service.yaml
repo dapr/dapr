@@ -1,0 +1,47 @@
+# In e2e test, this will not be used to deploy the app to test cluster.
+# This is created for testing purpose in order to deploy this app using kubectl
+# before writing e2e test.
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: pubsub-publisher-streaming
+  labels:
+    testapp: pubsub-publisher-streaming
+spec:
+  selector:
+    testapp: pubsub-publisher-streaming
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pubsub-publisher-streaming
+  labels:
+    testapp: pubsub-publisher-streaming
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      testapp: pubsub-publisher-streaming
+  template:
+    metadata:
+      labels:
+        testapp: pubsub-publisher-streaming
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "pubsub-publisher-streaming"
+        dapr.io/app-port: "3000"
+    spec:
+      containers:
+      - name: pubsub-publisher-streaming
+#        image: dapriotest/e2e-pubsub-publisher-streaming
+        image: localhost:5000/dapr/e2e-pubsub-publisher-streaming:dev-linux-arm64
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Always

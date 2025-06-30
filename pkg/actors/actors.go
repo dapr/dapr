@@ -24,6 +24,11 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/queue"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
+
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
@@ -47,14 +52,11 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
+	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/events/queue"
-	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -73,13 +75,15 @@ type Options struct {
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled    bool
 	MaxRequestBodySize int
+	Mode               modes.DaprMode
 }
 
 type InitOptions struct {
-	StateStoreName   string
-	Hostname         string
-	GRPC             *manager.Manager
-	SchedulerClients clients.Clients
+	StateStoreName    string
+	Hostname          string
+	GRPC              *manager.Manager
+	SchedulerClient   schedulerv1pb.SchedulerClient
+	SchedulerReloader schedclient.Reloader
 }
 
 // Interface is the main runtime for the actors subsystem.
@@ -134,6 +138,7 @@ type actors struct {
 	registerDoneLock sync.RWMutex
 
 	clock clock.Clock
+	mode  modes.DaprMode
 }
 
 // New create a new actors runtime with given config.
@@ -165,6 +170,7 @@ func New(opts Options) Interface {
 		initDoneCh:         make(chan struct{}),
 		registerDoneCh:     make(chan struct{}),
 		maxRequestBodySize: opts.MaxRequestBodySize,
+		mode:               opts.Mode,
 	}
 }
 
@@ -175,7 +181,9 @@ func (a *actors) Init(opts InitOptions) error {
 		return nil
 	}
 
-	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
+	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](queue.Options[string, targets.Idlable]{
+		ExecuteFn: a.handleIdleActor,
+	})
 
 	rStore := reentrancystore.New()
 
@@ -210,6 +218,8 @@ func (a *actors) Init(opts InitOptions) error {
 		Reminders: a.reminderStore,
 		APILevel:  apiLevel,
 		Healthz:   a.healthz,
+		Mode:      a.mode,
+		Scheduler: opts.SchedulerReloader,
 	})
 	if err != nil {
 		return err
@@ -276,7 +286,7 @@ func (a *actors) Run(ctx context.Context) error {
 
 	log.Info("Actor runtime started")
 
-	mngr := concurrency.NewRunnerCloserManager(nil,
+	mngr := concurrency.NewRunnerCloserManager(log, nil,
 		func(ctx context.Context) error {
 			// Only wait for host registration before starting the placement client,
 			// since registering Actor host types is dependent on the Actor state
@@ -611,7 +621,7 @@ func (a *actors) buildStateStore(opts InitOptions, apiLevel *apilevel.APILevel) 
 		a.reminderStore = scheduler.New(scheduler.Options{
 			Namespace:     a.namespace,
 			AppID:         a.appID,
-			Clients:       opts.SchedulerClients,
+			Client:        opts.SchedulerClient,
 			StateReminder: a.stateReminders,
 			Table:         a.table,
 			Healthz:       a.healthz,

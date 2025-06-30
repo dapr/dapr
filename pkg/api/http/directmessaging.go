@@ -29,6 +29,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/api/http/consts"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
@@ -140,7 +141,8 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		WithRawData(r.Body).
 		WithContentType(r.Header.Get("content-type")).
 		// Save headers to internal metadata
-		WithHTTPHeaders(r.Header)
+		WithHTTPHeaders(r.Header).
+		WithHTTPResponseWriter(w)
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
 	}
@@ -169,6 +171,11 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
 			return rResp, invokeErr
+		}
+
+		if rResp == nil {
+			// Downstream channel handled and finalized the response, don't do anything
+			return nil, nil
 		}
 
 		// Construct response if not HTTP
@@ -209,10 +216,6 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		if !success.CompareAndSwap(false, true) {
 			// This error will never be returned to a client but it's here to prevent retries
 			return rResp, backoff.Permanent(errors.New("already completed"))
-		}
-
-		if rResp == nil {
-			return nil, backoff.Permanent(errors.New("response object is nil"))
 		}
 
 		headers := rResp.Headers()
@@ -299,14 +302,14 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 // 2. Basic auth header: `http://dapr-app-id:<service-id>@localhost:3500/<method>`
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
 func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string, method string) {
-	if appID := headers.Get(daprAppID); appID != "" {
+	if appID := headers.Get(consts.DaprAppIDHeader); appID != "" {
 		return appID, strings.TrimPrefix(path.Clean(reqPath), "/")
 	}
 
 	if auth := headers.Get("Authorization"); strings.HasPrefix(auth, "Basic ") {
 		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
-			if len(pair) == 2 && pair[0] == daprAppID {
+			if len(pair) == 2 && strings.EqualFold(pair[0], consts.DaprAppIDHeader) {
 				return pair[1], strings.TrimPrefix(path.Clean(reqPath), "/")
 			}
 		}
