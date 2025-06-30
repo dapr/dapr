@@ -29,9 +29,11 @@ MAJOR_MINOR_VERSION=`echo $REL_VERSION | cut -d. -f1,2`
 RELEASE_BRANCH="release-$MAJOR_MINOR_VERSION"
 RELEASE_TAG="v$REL_VERSION"
 SUFFIX=`echo $REL_VERSION | grep \- | cut -d- -f2 | cut -d. -f1`
+
+FORCE_PUSH=false
 if [ "$SUFFIX" == "alpha" ]; then
-  # Alpha releases come from the master branch as they are not complete for an RC yet.
   RELEASE_BRANCH="master"
+  FORCE_PUSH=true
 fi
 
 if [ `git rev-parse --verify origin/$RELEASE_BRANCH 2>/dev/null` ]; then
@@ -44,15 +46,25 @@ else
 fi
 echo "$RELEASE_BRANCH branch is ready."
 
-if [ `git rev-parse --verify $RELEASE_TAG 2>/dev/null` ]; then
-  echo "$RELEASE_TAG tag already exists, aborting ..."
-  exit 2
+if git rev-parse --verify "$RELEASE_TAG" >/dev/null 2>&1; then
+  if [ "$FORCE_PUSH" = true ]; then
+    echo "$RELEASE_TAG already exists. Deleting for alpha overwrite ..."
+    git tag -d "$RELEASE_TAG" || true
+    git push origin ":refs/tags/$RELEASE_TAG"
+  else
+    echo "$RELEASE_TAG tag already exists, aborting ..."
+    exit 2
+  fi
 fi
 
 echo "Tagging $RELEASE_TAG ..."
 git tag $RELEASE_TAG
-echo "$RELEASE_TAG is tagged."
 
-echo "Pushing $RELEASE_TAG tag ..."
-git push origin $RELEASE_TAG
+if [ "$FORCE_PUSH" = true ]; then
+  echo "Force pushing $RELEASE_TAG tag ..."
+  git push origin "$RELEASE_TAG" --force
+else
+  echo "Pushing $RELEASE_TAG tag ..."
+  git push origin "$RELEASE_TAG"
+fi
 echo "$RELEASE_TAG tag is pushed."
