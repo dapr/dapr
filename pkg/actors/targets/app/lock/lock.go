@@ -11,59 +11,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package locker
+package lock
 
 import (
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/ring"
 )
 
-var ErrLockClosed = errors.New("actor lock is closed")
-
 const headerReentrancyID = "Dapr-Reentrancy-Id"
 
-type lockOptions struct {
-	actorType         string
-	reentrancyEnabled bool
-	maxStackDepth     int
-}
+var ErrLockClosed = errors.New("failed to acquire lock, actor closing")
 
-// lock is a fifo Mutex which respects reentrancy and stack depth.
-type lock struct {
-	actorType string
-
-	maxStackDepth     int
-	reentrancyEnabled bool
-
-	lock      *fifo.Mutex
-	reqCh     chan *req
-	inflights *ring.Buffered[inflight]
-
-	closeCh chan struct{}
-	closed  atomic.Bool
-	wg      sync.WaitGroup
-}
-
-type req struct {
-	msg    *internalv1pb.InternalInvokeRequest
-	respCh chan *resp
-}
-
-type resp struct {
-	startCh chan struct{}
-	cancel  context.CancelFunc
-	err     error
+type Options struct {
+	ActorType   string
+	ConfigStore *reentrancystore.Store
 }
 
 type inflight struct {
@@ -72,112 +43,107 @@ type inflight struct {
 	startCh chan struct{}
 }
 
-func newLock(opts lockOptions) *lock {
-	maxStackDepth := opts.maxStackDepth
-	if opts.reentrancyEnabled && opts.maxStackDepth < 1 {
-		maxStackDepth = 1
+type Lock struct {
+	reentrancyEnabled bool
+	maxStackDepth     int
+	actorType         string
+
+	inflights *ring.Buffered[inflight]
+	lock      chan struct{}
+	closeCh   chan struct{}
+	wg        sync.WaitGroup
+}
+
+func New(opts Options) *Lock {
+	var reentrancyEnabled bool
+	maxStackDepth := api.DefaultReentrancyStackLimit
+
+	ree, ok := opts.ConfigStore.Load(opts.ActorType)
+	if ok {
+		reentrancyEnabled = ree.Enabled
+		if ree.MaxStackDepth != nil {
+			maxStackDepth = *ree.MaxStackDepth
+		}
 	}
 
-	l := &lock{
-		actorType:         opts.actorType,
-		reqCh:             make(chan *req),
+	return &Lock{
+		reentrancyEnabled: reentrancyEnabled,
 		maxStackDepth:     maxStackDepth,
-		reentrancyEnabled: opts.reentrancyEnabled,
+		actorType:         opts.ActorType,
 		inflights:         ring.NewBuffered[inflight](2, 8),
-		lock:              fifo.New(),
+		lock:              make(chan struct{}, 1),
 		closeCh:           make(chan struct{}),
 	}
-
-	l.wg.Add(1)
-	go func() {
-		defer l.wg.Done()
-		for {
-			select {
-			case <-l.closeCh:
-				// Ensure all pending requests are handled before closing.
-				l.lockRequest(nil)
-				return
-
-			case req := <-l.reqCh:
-				resp := l.handleLock(req)
-
-				l.wg.Add(1)
-				go func() {
-					defer l.wg.Done()
-					select {
-					case req.respCh <- resp:
-					case <-l.closeCh:
-					}
-				}()
-			}
-		}
-	}()
-
-	return l
 }
 
-func (l *lock) baseLock() (context.CancelFunc, error) {
-	return l.lockRequest(nil)
+func (l *Lock) Lock(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	return l.LockRequest(ctx, nil)
 }
 
-func (l *lock) lockRequest(msg *internalv1pb.InternalInvokeRequest) (context.CancelFunc, error) {
-	select {
-	case <-l.closeCh:
-		return nil, ErrLockClosed
-	default:
-	}
-
+func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvokeRequest) (context.Context, context.CancelFunc, error) {
 	diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, 1)
 	defer diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, -1)
 
-	req := &req{msg: msg, respCh: make(chan *resp)}
-
 	select {
-	case l.reqCh <- req:
+	case l.lock <- struct{}{}:
 	case <-l.closeCh:
-		return nil, ErrLockClosed
+		return nil, nil, ErrLockClosed
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
 	}
 
-	resp := <-req.respCh
-	if resp.err != nil {
-		return nil, resp.err
-	}
-
-	select {
-	case <-resp.startCh:
-	case <-l.closeCh:
-		return nil, ErrLockClosed
-	}
-
-	return resp.cancel, nil
-}
-
-func (l *lock) handleLock(req *req) *resp {
-	l.lock.Lock()
-	defer l.lock.Unlock()
-
-	inflight, err := l.handleInflight(req)
+	flight, err := l.handleLock(msg)
+	<-l.lock
 	if err != nil {
-		return &resp{err: err}
+		return nil, nil, err
 	}
 
-	cancel := func() {
-		l.lock.Lock()
-		defer l.lock.Unlock()
+	doneCh := make(chan struct{})
+	release := func() {
+		close(doneCh)
+		l.lock <- struct{}{}
+		defer func() { <-l.lock }()
 
-		inflight.depth--
-		if inflight.depth == 0 {
+		flight.depth--
+		if flight.depth == 0 {
 			if v := l.inflights.RemoveFront(); v != nil {
 				close(v.startCh)
 			}
 		}
 	}
 
-	return &resp{startCh: inflight.startCh, cancel: cancel}
+	select {
+	case <-ctx.Done():
+		release()
+		return nil, nil, ctx.Err()
+	case <-l.closeCh:
+		release()
+		return nil, nil, ErrLockClosed
+	case <-flight.startCh:
+		cctx, cancel := context.WithCancelCause(ctx)
+
+		l.wg.Add(1)
+		go func() {
+			defer l.wg.Done()
+			select {
+			case <-doneCh:
+			case <-l.closeCh:
+			}
+			cancel(ErrLockClosed)
+		}()
+
+		return cctx, release, nil
+	}
 }
 
-func (l *lock) handleInflight(req *req) (*inflight, error) {
-	id, ok := l.idFromRequest(req.msg)
+func (l *Lock) Close(ctx context.Context) {
+	l.Lock(ctx)
+	close(l.closeCh)
+	l.wg.Wait()
+}
+
+func (l *Lock) handleLock(msg *internalv1pb.InternalInvokeRequest) (*inflight, error) {
+	id, ok := l.idFromRequest(msg)
 
 	// If this is:
 	// 1. a new request which is not accociated with any inflight (the usual base
@@ -226,11 +192,7 @@ func (l *lock) handleInflight(req *req) (*inflight, error) {
 	return flight, nil
 }
 
-func newInflight(id string) *inflight {
-	return &inflight{id: id, depth: 1, startCh: make(chan struct{})}
-}
-
-func (l *lock) idFromRequest(req *internalv1pb.InternalInvokeRequest) (string, bool) {
+func (l *Lock) idFromRequest(req *internalv1pb.InternalInvokeRequest) (string, bool) {
 	if !l.reentrancyEnabled || req == nil {
 		return uuid.New().String(), false
 	}
@@ -250,21 +212,6 @@ func (l *lock) idFromRequest(req *internalv1pb.InternalInvokeRequest) (string, b
 	return id, true
 }
 
-func (l *lock) close() {
-	if l.closed.CompareAndSwap(false, true) {
-		close(l.closeCh)
-		l.wg.Wait()
-	}
-}
-
-func (l *lock) closeUntil(d time.Duration) {
-	done := make(chan struct{})
-	go func() {
-		l.close()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(d):
-	}
+func newInflight(id string) *inflight {
+	return &inflight{id: id, depth: 1, startCh: make(chan struct{})}
 }
