@@ -11,26 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package rerun
 
 import (
-	"context"
-
-	"github.com/dapr/dapr/pkg/actors/targets"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/raise"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/timer"
 )
-
-func Factories(ctx context.Context, o orchestrator.Options, a activity.Options) (targets.Factory, targets.Factory, error) {
-	orchFactory, err := orchestrator.Factory(ctx, o)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	activityFactory, err := activity.Factory(ctx, a)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return orchFactory, activityFactory, nil
-}
