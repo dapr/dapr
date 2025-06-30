@@ -73,7 +73,7 @@ func (g *getnotfound) Run(t *testing.T, ctx context.Context) {
 
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.Equal(t, `{"errorCode":"ERR_INSTANCE_ID_NOT_FOUND","message":"unable to find workflow with the provided instance ID: not-found"}`, string(body))
+		assert.JSONEq(t, `{"errorCode":"ERR_INSTANCE_ID_NOT_FOUND","message":"unable to find workflow with the provided instance ID: not-found"}`, string(body))
 		require.NoError(t, resp.Body.Close())
 	})
 }
