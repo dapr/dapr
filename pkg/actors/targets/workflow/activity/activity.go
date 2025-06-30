@@ -48,7 +48,7 @@ type activity struct {
 	schedulerReminders bool
 }
 
-type ActivityOptions struct {
+type Options struct {
 	AppID              string
 	ActivityActorType  string
 	WorkflowActorType  string
@@ -58,7 +58,7 @@ type ActivityOptions struct {
 	SchedulerReminders bool
 }
 
-func ActivityFactory(ctx context.Context, opts ActivityOptions) (targets.Factory, error) {
+func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 	table, err := opts.Actors.Table(ctx)
 	if err != nil {
 		return nil, err
