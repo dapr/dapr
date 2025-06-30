@@ -119,7 +119,6 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 	}
 
 	return func(actorID string) targets.Interface {
-
 		o := orchestratorCache.Get().(*orchestrator)
 		if o == nil {
 			o = &orchestrator{
