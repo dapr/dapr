@@ -13,7 +13,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.15.1-0.20250522165848-88fce6a1402a
 	github.com/dapr/durabletask-go v0.7.2
-	github.com/dapr/kit v0.15.3-0.20250522135818-baea6263991d
+	github.com/dapr/kit v0.15.3-0.20250616160611-598b032bce69
 	github.com/diagridio/go-etcd-cron v0.7.1
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
