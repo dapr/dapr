@@ -289,12 +289,18 @@ func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 		})
 }
 
-// Route: POST "workflows/{workflowComponent}/{instanceID}"
+// Route: GET "workflows/{workflowComponent}/{instanceID}"
 func (a *api) onGetWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.GetWorkflow,
 		UniversalHTTPHandlerOpts[*runtimev1pb.GetWorkflowRequest, *runtimev1pb.GetWorkflowResponse]{
 			InModifier: workflowInModifier[*runtimev1pb.GetWorkflowRequest],
+			OutModifier: func(out *runtimev1pb.GetWorkflowResponse) (any, error) {
+				if out.GetProperties() == nil {
+					return nil, messages.ErrWorkflowInstanceNotFound.WithFormat(out.GetInstanceId())
+				}
+				return out, nil
+			},
 		})
 }
 

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -755,6 +756,24 @@ func TestDataTypeUrl(t *testing.T) {
 
 		// Content type should be the protobuf one
 		assert.Equal(t, ProtobufContentType, req.ContentType())
+	})
+}
+
+func TestHTTPResponseWriter(t *testing.T) {
+	t.Run("response writer not nil", func(t *testing.T) {
+		pb := &commonv1pb.InvokeRequest{
+			Method: "frominvokerequestmessage",
+			Data:   &anypb.Any{},
+		}
+
+		rr := httptest.NewRecorder()
+
+		req := FromInvokeRequestMessage(pb).
+			WithContentType("text/plain").
+			WithHTTPResponseWriter(rr)
+		defer req.Close()
+
+		require.NotNil(t, req.HTTPResponseWriter())
 	})
 }
 
