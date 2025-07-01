@@ -67,7 +67,7 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 		// Try to get a non-existent workflow instance which should trigger "ERR_GET_WORKFLOW"
 		gclient := e.daprd.GRPCClient(t, ctx)
 		for range 2 {
-			_, err := gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
+			_, err := gclient.PurgeWorkflowBeta1(ctx, &rtv1.PurgeWorkflowRequest{
 				InstanceId:        "non-existent-id",
 				WorkflowComponent: "dapr",
 			})
