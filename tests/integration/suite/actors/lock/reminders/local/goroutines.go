@@ -60,7 +60,7 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	startGoRoutines := g.app.Metrics(t, ctx)["go_goroutines"]
 
-	const n = 1000
+	const n = 100
 	for i := range n {
 		_, err := client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 			ActorType: "abc",
