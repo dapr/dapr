@@ -119,6 +119,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--reminders-service", c.RemindersService)
 	}
 
+	if c.JwtAudiences != "" {
+		args = append(args, "--jwt-audiences", c.JwtAudiences)
+	}
+
 	// --enable-api-logging is set if and only if there's an explicit value (true or false) for that
 	// This is set explicitly even if "false"
 	// This is because if this CLI flag is missing, the default specified in the Config CRD is used
