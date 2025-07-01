@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -96,7 +97,7 @@ func (i *invalidappid) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(i.place.Address()),
 		daprd.WithScheduler(i.sched),
-		daprd.WithAppID("app1"),
+		daprd.WithAppID(uuid.New().String()),
 		daprd.WithAppPort(app1.Port()),
 		daprd.WithLogLevel("debug"),
 		daprd.WithExecOptions(

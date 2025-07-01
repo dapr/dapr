@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -69,6 +70,10 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 	m.registry2 = task.NewTaskRegistry()
 	m.registry3 = task.NewTaskRegistry()
 
+	appID1 := uuid.New().String()
+	appID2 := uuid.New().String()
+	appID3 := uuid.New().String()
+
 	// App2: 1st hop - processes data
 	m.registry2.AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
 		var input string
@@ -98,7 +103,7 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 		var result1 string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID("app2")).
+			task.WithAppID(appID2)).
 			Await(&result1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute activity in app2: %w", err)
@@ -108,7 +113,7 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 		var result2 string
 		err = ctx.CallActivity("TransformData",
 			task.WithActivityInput(result1),
-			task.WithAppID("app3")).
+			task.WithAppID(appID3)).
 			Await(&result2)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute activity in app3: %w", err)
@@ -121,7 +126,7 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(m.place.Address()),
 		daprd.WithScheduler(m.sched),
-		daprd.WithAppID("app1"),
+		daprd.WithAppID(appID1),
 		daprd.WithAppPort(app1.Port()),
 		daprd.WithLogLevel("debug"),
 	)
@@ -129,7 +134,7 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(m.place.Address()),
 		daprd.WithScheduler(m.sched),
-		daprd.WithAppID("app2"),
+		daprd.WithAppID(appID2),
 		daprd.WithAppPort(app2.Port()),
 		daprd.WithLogLevel("debug"),
 	)
@@ -137,7 +142,7 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(m.place.Address()),
 		daprd.WithScheduler(m.sched),
-		daprd.WithAppID("app3"),
+		daprd.WithAppID(appID3),
 		daprd.WithAppPort(app3.Port()),
 		daprd.WithLogLevel("debug"),
 	)

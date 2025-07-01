@@ -32,6 +32,7 @@ import (
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
@@ -74,9 +75,14 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 	for _, e := range state.Inbox {
 		if es := e.GetExecutionStarted(); es != nil {
 			esHistoryEvent = e
+			// Set the source app ID for cross-app routing in durabletask-go
+			esHistoryEvent.Router = &protos.TaskRouter{
+				Source: w.appID,
+			}
 			break
 		}
 	}
+
 	rs := w.rstate
 	wi := &backend.OrchestrationWorkItem{
 		InstanceID: api.InstanceID(rs.GetInstanceId()),
@@ -84,11 +90,6 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		RetryCount: -1, // TODO
 		State:      rs,
 		Properties: make(map[string]any, 1),
-	}
-
-	// Set the source app ID for cross-app routing in durabletask-go
-	if esHistoryEvent != nil && esHistoryEvent.Router != nil {
-		esHistoryEvent.Router.Source = w.appID
 	}
 
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which

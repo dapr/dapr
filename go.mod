@@ -13,7 +13,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.15.1-0.20250522165848-88fce6a1402a
 	github.com/dapr/durabletask-go v0.7.2
-	github.com/dapr/kit v0.15.3-0.20250522135818-baea6263991d
+	github.com/dapr/kit v0.15.3-0.20250616160611-598b032bce69
 	github.com/diagridio/go-etcd-cron v0.7.1
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
@@ -513,7 +513,7 @@ replace (
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
-replace github.com/dapr/durabletask-go => github.com/cicoyle/durabletask-go v0.0.0-20250618220139-02008f613541
+replace github.com/dapr/durabletask-go => github.com/cicoyle/durabletask-go v0.0.0-20250701225234-e70f1261897e
 
 //
 // Then, run `make modtidy-all` in this repository.

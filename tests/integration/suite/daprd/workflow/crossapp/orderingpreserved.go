@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -84,46 +85,49 @@ func (o *orderingpreserved) Setup(t *testing.T) []framework.Option {
 		o.executionOrder.Store(orderSlice)
 	}
 
+	appID1 := uuid.New().String()
+	appID2 := uuid.New().String()
+
 	// App1: Local activities
 	o.registry1.AddActivityN("LocalActivity1", func(ctx task.ActivityContext) (any, error) {
-		recordExecution("LocalActivity1", "app1")
+		recordExecution("LocalActivity1", appID1)
 		time.Sleep(10 * time.Millisecond) // Small delay to ensure ordering is tested
 		return "local1", nil
 	})
 
 	o.registry1.AddActivityN("LocalActivity3", func(ctx task.ActivityContext) (any, error) {
-		recordExecution("LocalActivity3", "app1")
+		recordExecution("LocalActivity3", appID1)
 		time.Sleep(10 * time.Millisecond)
 		return "local3", nil
 	})
 
 	o.registry1.AddActivityN("LocalActivity5", func(ctx task.ActivityContext) (any, error) {
-		recordExecution("LocalActivity5", "app1")
+		recordExecution("LocalActivity5", appID1)
 		time.Sleep(10 * time.Millisecond)
 		return "local5", nil
 	})
 
 	o.registry1.AddActivityN("LocalActivity7", func(ctx task.ActivityContext) (any, error) {
-		recordExecution("LocalActivity7", "app1")
+		recordExecution("LocalActivity7", appID1)
 		time.Sleep(10 * time.Millisecond)
 		return "local7", nil
 	})
 
 	// App2: Remote activities
 	o.registry2.AddActivityN("RemoteActivity2", func(ctx task.ActivityContext) (any, error) {
-		recordExecution("RemoteActivity2", "app2")
+		recordExecution("RemoteActivity2", appID2)
 		time.Sleep(10 * time.Millisecond)
 		return "remote2", nil
 	})
 
 	o.registry2.AddActivityN("RemoteActivity4", func(ctx task.ActivityContext) (any, error) {
-		recordExecution("RemoteActivity4", "app2")
+		recordExecution("RemoteActivity4", appID2)
 		time.Sleep(10 * time.Millisecond)
 		return "remote4", nil
 	})
 
 	o.registry2.AddActivityN("RemoteActivity6", func(ctx task.ActivityContext) (any, error) {
-		recordExecution("RemoteActivity6", "app2")
+		recordExecution("RemoteActivity6", appID2)
 		time.Sleep(10 * time.Millisecond)
 		return "remote6", nil
 	})
@@ -152,7 +156,7 @@ func (o *orderingpreserved) Setup(t *testing.T) []framework.Option {
 		var result2 string
 		err = ctx.CallActivity("RemoteActivity2",
 			task.WithActivityInput(result1),
-			task.WithAppID("app2")).
+			task.WithAppID(appID2)).
 			Await(&result2)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute RemoteActivity2: %w", err)
@@ -173,7 +177,7 @@ func (o *orderingpreserved) Setup(t *testing.T) []framework.Option {
 		var result4 string
 		err = ctx.CallActivity("RemoteActivity4",
 			task.WithActivityInput(result3),
-			task.WithAppID("app2")).
+			task.WithAppID(appID2)).
 			Await(&result4)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute RemoteActivity4: %w", err)
@@ -194,7 +198,7 @@ func (o *orderingpreserved) Setup(t *testing.T) []framework.Option {
 		var result6 string
 		err = ctx.CallActivity("RemoteActivity6",
 			task.WithActivityInput(result5),
-			task.WithAppID("app2")).
+			task.WithAppID(appID2)).
 			Await(&result6)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute RemoteActivity6: %w", err)
@@ -218,7 +222,7 @@ func (o *orderingpreserved) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(o.place.Address()),
 		daprd.WithScheduler(o.sched),
-		daprd.WithAppID("app1"),
+		daprd.WithAppID(appID1),
 		daprd.WithAppPort(app1.Port()),
 		daprd.WithLogLevel("debug"),
 	)
@@ -226,7 +230,7 @@ func (o *orderingpreserved) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(o.place.Address()),
 		daprd.WithScheduler(o.sched),
-		daprd.WithAppID("app2"),
+		daprd.WithAppID(appID2),
 		daprd.WithAppPort(app2.Port()),
 		daprd.WithLogLevel("debug"),
 	)
