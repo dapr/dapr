@@ -84,19 +84,17 @@ func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(4), act.Load())
 
-	// TODO: @joshvanl: support rerunning from a sub-orchestration creation
-	// event.
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 1)
-	assert.Equal(t, status.Error(codes.NotFound, "'abc' target event ID '1' is not a TaskScheduled event"), err)
+	assert.Equal(t, status.Error(codes.NotFound, "target event '*protos.HistoryEvent_SubOrchestrationInstanceCreated' with ID '1' is not an event that can be rerun"), err)
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 2)
-	assert.Equal(t, status.Error(codes.NotFound, "'abc' target event ID '2' is not a TaskScheduled event"), err)
+	assert.Equal(t, status.Error(codes.NotFound, "target event '*protos.HistoryEvent_SubOrchestrationInstanceCreated' with ID '2' is not an event that can be rerun"), err)
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 3)
-	assert.Equal(t, status.Error(codes.NotFound, "'abc' target event ID '3' is not a TaskScheduled event"), err)
+	assert.Equal(t, status.Error(codes.NotFound, "target event '*protos.HistoryEvent_ExecutionCompleted' with ID '3' is not an event that can be rerun"), err)
 
 	// We can't rerun an event _inside_ a sub-orchestration because it is a new
 	// workflow instance!
 	_, err = client.RerunWorkflowFromEvent(ctx, id, 4)
-	assert.Equal(t, status.Error(codes.NotFound, "'abc' does not have history event with ID '4'"), err)
+	assert.Equal(t, status.Error(codes.NotFound, "does not have history event with ID '4'"), err)
 
 	// Target the sub-orchestration instance IDs.
 	act.Store(0)
