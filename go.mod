@@ -11,9 +11,9 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.15.1-0.20250626142212-fd158f97175f
+	github.com/dapr/components-contrib v1.15.1-0.20250701140252-bd6ea2e0f5b7
 	github.com/dapr/durabletask-go v0.7.2
-	github.com/dapr/kit v0.15.3-0.20250522135818-baea6263991d
+	github.com/dapr/kit v0.15.3-0.20250616160611-598b032bce69
 	github.com/diagridio/go-etcd-cron v0.7.1
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
@@ -418,7 +418,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20220101234140-673ab2c3ae75 // indirect
-`	github.com/tmc/langchaingo v0.1.13 // indirect
+	github.com/tmc/langchaingo v0.1.13 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.53.0 // indirect
 	github.com/vmware/vmware-go-kcl v1.5.1 // indirect

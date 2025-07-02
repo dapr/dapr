@@ -42,7 +42,10 @@ func NewClient() *FakeClient {
 		terminateFn: func(ctx context.Context, req *workflows.TerminateRequest) error { return nil },
 		getFn: func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
 			return &workflows.StateResponse{
-				Workflow: new(workflows.WorkflowState),
+				Workflow: &workflows.WorkflowState{
+					InstanceID: req.InstanceID,
+					Properties: map[string]string{},
+				},
 			}, nil
 		},
 		raiseEventFn: func(ctx context.Context, req *workflows.RaiseEventRequest) error { return nil },
