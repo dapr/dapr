@@ -29,14 +29,13 @@ import (
 )
 
 func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
-	if err := o.handleStreamInitial(ctx, req, stream); err != nil {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	ch, err := o.handleStreamInitial(ctx, req, stream)
+	if err != nil {
 		return err
 	}
-
-	subCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	ch := make(chan *backend.OrchestrationMetadata)
-	o.ometaBroadcaster.Subscribe(subCtx, ch)
 
 	for {
 		select {
@@ -66,20 +65,31 @@ func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.Inte
 	}
 }
 
-func (o *orchestrator) handleStreamInitial(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
+func (o *orchestrator) handleStreamInitial(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) (chan *backend.OrchestrationMetadata, error) {
 	if m := req.GetMessage().GetMethod(); m != todo.WaitForRuntimeStatus {
-		return fmt.Errorf("unsupported stream method: %s", m)
+		return nil, fmt.Errorf("unsupported stream method: %s", m)
 	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case o.lock <- struct{}{}:
+	}
+
+	ch := make(chan *backend.OrchestrationMetadata)
+	o.ometaBroadcaster.Subscribe(ctx, ch)
 
 	_, ometa, err := o.loadInternalState(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	<-o.lock
 
 	if ometa != nil {
 		arstate, err := anypb.New(ometa)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		select {
@@ -95,5 +105,5 @@ func (o *orchestrator) handleStreamInitial(ctx context.Context, req *internalsv1
 		}
 	}
 
-	return nil
+	return ch, nil
 }
