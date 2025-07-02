@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package orchestrator
 
 import (
 	"context"
@@ -28,21 +28,20 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (w *workflow) handleStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
-	if err := w.handleStreamInitial(ctx, req, stream); err != nil {
+func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	ch, err := o.handleStreamInitial(ctx, req, stream)
+	if err != nil {
 		return err
 	}
-
-	subCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	ch := make(chan *backend.OrchestrationMetadata)
-	w.ometaBroadcaster.Subscribe(subCtx, ch)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-w.closeCh:
+		case <-o.closeCh:
 			return nil
 		case val, ok := <-ch:
 			if !ok {
@@ -55,7 +54,7 @@ func (w *workflow) handleStream(ctx context.Context, req *internalsv1pb.Internal
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-w.closeCh:
+			case <-o.closeCh:
 				return nil
 			case stream <- &internalsv1pb.InternalInvokeResponse{
 				Status:  &internalsv1pb.Status{Code: http.StatusOK},
@@ -66,20 +65,31 @@ func (w *workflow) handleStream(ctx context.Context, req *internalsv1pb.Internal
 	}
 }
 
-func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
+func (o *orchestrator) handleStreamInitial(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) (chan *backend.OrchestrationMetadata, error) {
 	if m := req.GetMessage().GetMethod(); m != todo.WaitForRuntimeStatus {
-		return fmt.Errorf("unsupported stream method: %s", m)
+		return nil, fmt.Errorf("unsupported stream method: %s", m)
 	}
 
-	_, ometa, err := w.loadInternalState(ctx)
-	if err != nil {
-		return err
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case o.lock <- struct{}{}:
 	}
+
+	ch := make(chan *backend.OrchestrationMetadata)
+	o.ometaBroadcaster.Subscribe(ctx, ch)
+
+	_, ometa, err := o.loadInternalState(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	<-o.lock
 
 	if ometa != nil {
 		arstate, err := anypb.New(ometa)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		select {
@@ -91,9 +101,9 @@ func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.I
 		}
 
 		if api.OrchestrationMetadataIsComplete(ometa) {
-			w.table.DeleteFromTableIn(w, time.Second*10)
+			o.table.DeleteFromTableIn(o, time.Second*10)
 		}
 	}
 
-	return nil
+	return ch, nil
 }

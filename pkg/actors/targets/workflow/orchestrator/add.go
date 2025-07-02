@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package orchestrator
 
 import (
 	"context"
@@ -22,11 +22,12 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
-	state, _, err := w.loadInternalState(ctx)
+func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
+	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return err
 	}
+
 	if state == nil {
 		return api.ErrInstanceNotFound
 	}
@@ -34,19 +35,19 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 	var e backend.HistoryEvent
 	err = proto.Unmarshal(historyEventBytes, &e)
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
-		w.activityResultAwaited.CompareAndSwap(true, false)
+		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
 	if err != nil {
 		return err
 	}
-	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", w.actorID)
+	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
 	state.AddToInbox(&e)
 
-	if err := w.saveInternalState(ctx, state); err != nil {
+	if err := o.saveInternalState(ctx, state); err != nil {
 		return err
 	}
 
-	if _, err := w.createReminder(ctx, "new-event", nil, 0); err != nil {
+	if _, err := o.createReminder(ctx, "new-event", nil, 0); err != nil {
 		return err
 	}
 

@@ -14,6 +14,7 @@ require (
 	github.com/dapr/components-contrib v0.0.0-00010101000000-000000000000
 	github.com/dapr/durabletask-go v0.7.2
 	github.com/dapr/kit v0.15.3-0.20250616160611-598b032bce69
+	github.com/dapr/kit v0.15.3-0.20250616160611-598b032bce69
 	github.com/diagridio/go-etcd-cron v0.7.1
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
@@ -233,6 +234,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/gage-technologies/mistral-go v1.1.0 // indirect
+	github.com/gage-technologies/mistral-go v1.1.0 // indirect
 	github.com/go-errors/errors v1.4.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.0.5 // indirect
@@ -425,6 +427,7 @@ require (
 	github.com/xiang90/probing v0.0.0-20221125231312-a49e3df8f510 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
 	github.com/yashtewari/glob-intersection v0.2.0 // indirect
+	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	github.com/yuin/gopher-lua v1.1.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
