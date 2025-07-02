@@ -119,8 +119,6 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		}
 	}
 
-	log.Debugf("[DAPR] wf actor type: %s but this a cross app wf completion event, so sending the completion back to this wf actor type: %s\n", a.workflowActorType, wfActorType)
-
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
 		WithActor(wfActorType, workflowID).

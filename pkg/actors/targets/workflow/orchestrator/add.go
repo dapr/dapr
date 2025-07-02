@@ -51,9 +51,6 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if e.GetRouter() != nil {
 		// For activity completion events, use the source app from the router
 		targetApp = e.GetRouter().GetSource()
-		if targetApp == "" {
-			targetApp = o.appID
-		}
 	}
 
 	if _, err := o.createReminder(ctx, "new-event", nil, 0, targetApp); err != nil {

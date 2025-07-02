@@ -246,8 +246,6 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		opt(policy)
 	}
 
-	// TODO: cassie this will likely need to be updated for cross app suborchestration calls
-
 	requestBytes, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{
 		Policy:     policy,
 		StartEvent: e,
@@ -291,16 +289,6 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	// successful request to CREATE workflow, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusSuccess, elapsed)
 	return nil
-}
-
-// getTargetActorType builds the actor type string for a given appID and kind (workflow/activity)
-func (abe *Actors) getTargetActorType(appID, kind string) string {
-	ns := abe.namespace
-
-	if appID == "" {
-		appID = abe.appID
-	}
-	return fmt.Sprintf("%s%s.%s.%s", ActorTypePrefix, ns, appID, kind)
 }
 
 // GetOrchestrationMetadata implements backend.Backend
