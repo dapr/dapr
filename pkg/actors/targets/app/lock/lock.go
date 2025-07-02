@@ -79,9 +79,10 @@ func New(opts Options) *Lock {
 	if l == nil {
 		return &Lock{
 			actorType:         opts.ActorType,
-			maxStackDepth:     maxStackDepth,
 			reentrancyEnabled: reentrancyEnabled,
+			maxStackDepth:     maxStackDepth,
 			inflights:         ring.NewBuffered[inflight](2, 8),
+			lock:              make(chan struct{}, 1),
 			closeCh:           make(chan struct{}),
 		}
 	}
