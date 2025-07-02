@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package orchestrator
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 )
 
-func (w *workflow) createReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration, targetAppID string) (string, error) {
+func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration, targetAppID string) (string, error) {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
@@ -38,10 +38,10 @@ func (w *workflow) createReminder(ctx context.Context, namePrefix string, data p
 
 	var period string
 	var oneshot bool
-	if w.schedulerReminders {
+	if o.schedulerReminders {
 		oneshot = true
 	} else {
-		period = w.reminderInterval.String()
+		period = o.reminderInterval.String()
 	}
 
 	var adata *anypb.Any
@@ -52,15 +52,15 @@ func (w *workflow) createReminder(ctx context.Context, namePrefix string, data p
 		}
 	}
 
-	actorType := w.actorType
-	if targetAppID != "" && targetAppID != w.appID {
-		actorType = fmt.Sprintf("dapr.internal.%s.%s.workflow", w.namespace, targetAppID)
+	actorType := o.actorType
+	if targetAppID != "" && targetAppID != o.appID {
+		actorType = fmt.Sprintf("dapr.internal.%s.%s.workflow", o.namespace, targetAppID)
 	}
-	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, w.actorID, reminderName, delay)
+	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, delay)
 
-	return reminderName, w.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: actorType,
-		ActorID:   w.actorID,
+		ActorID:   o.actorID,
 		Data:      adata,
 		DueTime:   delay.String(),
 		Name:      reminderName,

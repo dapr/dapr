@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package orchestrator
 
 import (
 	"context"
@@ -28,43 +28,36 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (w *workflow) callActivities(ctx context.Context, es []*backend.HistoryEvent, generation uint64) error {
-	var wg sync.WaitGroup
-	var errs []error
-	var lock sync.Mutex
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, generation uint64) error {
+	errs := make([]error, len(es))
 
+	var wg sync.WaitGroup
 	wg.Add(len(es))
-	for _, e := range es {
-		go func(e *backend.HistoryEvent) {
+	for i, e := range es {
+		go func(i int, e *backend.HistoryEvent) {
 			defer wg.Done()
 
-			err := w.callActivity(ctx, e, generation)
+			err := o.callActivity(ctx, e, generation)
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
-				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", w.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
+				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
 				return
 			}
 
 			if err != nil {
-				lock.Lock()
-				errs = append(errs, err)
-				lock.Unlock()
+				errs[i] = err
 			}
-		}(e)
+		}(i, e)
 	}
 
 	wg.Wait()
 
-	if len(errs) > 0 {
-		return errors.Join(errs...)
-	}
-
-	return nil
+	return errors.Join(errs...)
 }
 
-func (w *workflow) callActivity(ctx context.Context, e *backend.HistoryEvent, generation uint64) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, generation uint64) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
-		log.Warnf("Workflow actor '%s': unable to process task '%v'", w.actorID, e)
+		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
 		return nil
 	}
 
@@ -74,9 +67,7 @@ func (w *workflow) callActivity(ctx context.Context, e *backend.HistoryEvent, ge
 		return err
 	}
 
-	w.activityResultAwaited.Store(true)
-
-	activityActorType := w.activityActorType
+	activityActorType := o.activityActorType
 	var targetAppID, sourceAppID string
 
 	if router := e.GetRouter(); router != nil {
@@ -86,15 +77,17 @@ func (w *workflow) callActivity(ctx context.Context, e *backend.HistoryEvent, ge
 	}
 
 	// If target app is specified and different from current app, use cross-app actor type
-	if targetAppID != "" && targetAppID != w.appID {
-		activityActorType = fmt.Sprintf("dapr.internal.%s.%s.activity", w.namespace, targetAppID)
+	if targetAppID != "" && targetAppID != o.appID {
+		activityActorType = fmt.Sprintf("dapr.internal.%s.%s.activity", o.namespace, targetAppID)
 	}
 
-	targetActorID := buildActivityActorID(w.actorID, e.GetEventId(), w.state.Generation)
+	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), o.state.Generation)
 
-	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", w.actorID, activityActorType, targetActorID)
+	o.activityResultAwaited.Store(true)
 
-	_, err = w.router.Call(ctx, internalsv1pb.
+	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
+
+	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest("Execute").
 		WithActor(activityActorType, targetActorID).
 		WithData(eventData).
