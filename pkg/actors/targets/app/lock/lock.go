@@ -114,7 +114,7 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 		return nil, nil, ctx.Err()
 	}
 
-	flight, err := l.handleLock(msg)
+	flight, err := l.handleLock(ctx, msg)
 	<-l.lock
 	if err != nil {
 		return nil, nil, err
@@ -165,7 +165,11 @@ func (l *Lock) Close(ctx context.Context) {
 	lockCache.Put(l)
 }
 
-func (l *Lock) handleLock(msg *internalv1pb.InternalInvokeRequest) (*inflight, error) {
+func (l *Lock) handleLock(ctx context.Context, msg *internalv1pb.InternalInvokeRequest) (*inflight, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	id, ok := l.idFromRequest(msg)
 
 	// If this is:
