@@ -67,15 +67,29 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		return err
 	}
 
-	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), generation)
+	activityActorType := o.activityActorType
+	var targetAppID, sourceAppID string
+
+	if router := e.GetRouter(); router != nil {
+		targetAppID = router.GetTarget()
+		sourceAppID = router.GetSource()
+		log.Debugf("Cross-app activity call: target appID=%s, source appID=%s", targetAppID, sourceAppID)
+	}
+
+	// If target app is specified and different from current app, use cross-app actor type
+	if targetAppID != "" && targetAppID != o.appID {
+		activityActorType = fmt.Sprintf("dapr.internal.%s.%s.activity", o.namespace, targetAppID)
+	}
+
+	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), o.state.Generation)
 
 	o.activityResultAwaited.Store(true)
 
-	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", o.actorID, targetActorID)
+	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest("Execute").
-		WithActor(o.activityActorType, targetActorID).
+		WithActor(activityActorType, targetActorID).
 		WithData(eventData).
 		WithContentType(invokev1.ProtobufContentType),
 	)

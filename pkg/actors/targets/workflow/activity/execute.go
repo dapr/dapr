@@ -109,9 +109,19 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		return todo.RunCompletedTrue, err
 	}
 
+	// send completed event to orchestrator wf actor
+	var wfActorType string
+	wfActorType = a.workflowActorType
+	if router := taskEvent.GetRouter(); router != nil {
+		sourceAppID := router.GetSource()
+		if sourceAppID != "" && sourceAppID != a.appID { // indicates cross app activity
+			wfActorType = fmt.Sprintf("dapr.internal.%s.%s.workflow", a.namespace, sourceAppID)
+		}
+	}
+
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-		WithActor(a.workflowActorType, workflowID).
+		WithActor(wfActorType, workflowID).
 		WithData(resultData).
 		WithContentType(invokev1.ProtobufContentType)
 

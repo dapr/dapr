@@ -61,7 +61,7 @@ func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent,
 
 	log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer, duetime=%s", o.actorID, reminderPrefix, delay)
 
-	if _, err := o.createReminder(ctx, reminderPrefix, data, delay); err != nil {
+	if _, err := o.createReminder(ctx, reminderPrefix, data, delay, o.appID); err != nil {
 		return fmt.Errorf("actor '%s' failed to create reminder for timer: %w", o.actorID, err)
 	}
 

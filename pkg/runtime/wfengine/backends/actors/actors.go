@@ -70,6 +70,7 @@ type Options struct {
 
 type Actors struct {
 	appID             string
+	namespace         string
 	workflowActorType string
 	activityActorType string
 
@@ -86,6 +87,7 @@ type Actors struct {
 func New(opts Options) *Actors {
 	return &Actors{
 		appID:                     opts.AppID,
+		namespace:                 opts.Namespace,
 		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
 		actors:                    opts.Actors,
@@ -108,6 +110,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	oopts := orchestrator.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		ReminderInterval:  abe.defaultReminderInterval,
@@ -128,6 +131,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	aopts := activity.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
 		ReminderInterval:  abe.defaultReminderInterval,
@@ -252,6 +256,7 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation request.
 	// Note that this request goes directly to the actor runtime, bypassing the API layer.
+
 	req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
 		WithActor(abe.workflowActorType, workflowInstanceID).
 		WithData(requestBytes).
@@ -383,7 +388,8 @@ func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.Activit
 }
 
 // CompleteOrchestrationWorkItem implements backend.Backend
-func (*Actors) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (abe *Actors) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+	// TODO : Likely route back to the originating orchestrator workflow actor here
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
