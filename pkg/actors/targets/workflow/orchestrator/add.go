@@ -27,6 +27,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if err != nil {
 		return err
 	}
+
 	if state == nil {
 		return api.ErrInstanceNotFound
 	}

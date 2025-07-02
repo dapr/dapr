@@ -30,7 +30,7 @@ type Interface interface {
 	InvokeReminder(ctx context.Context, reminder *api.Reminder) error
 	InvokeTimer(ctx context.Context, reminder *api.Reminder) error
 	InvokeStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error
-	Deactivate() error
+	Deactivate(context.Context) error
 }
 
 type Idlable interface {

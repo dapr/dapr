@@ -31,7 +31,7 @@ type Fake struct {
 	fnInvokeReminder func(context.Context, *api.Reminder) error
 	fnInvokeTimer    func(context.Context, *api.Reminder) error
 	fnInvokeStream   func(context.Context, *internalv1pb.InternalInvokeRequest, chan<- *internalv1pb.InternalInvokeResponse) error
-	fnDeactivate     func() error
+	fnDeactivate     func(context.Context) error
 }
 
 type Hook func(*Fake)
@@ -60,7 +60,7 @@ func New(actorType string, hooks ...func(*Fake)) targets.Factory {
 			fnInvokeStream: func(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
 				return nil
 			},
-			fnDeactivate: func() error {
+			fnDeactivate: func(context.Context) error {
 				return nil
 			},
 		}
@@ -98,7 +98,7 @@ func (f *Fake) WithInvokeStream(fn func(context.Context, *internalv1pb.InternalI
 	return f
 }
 
-func (f *Fake) WithDeactivate(fn func() error) *Fake {
+func (f *Fake) WithDeactivate(fn func(context.Context) error) *Fake {
 	f.fnDeactivate = fn
 	return f
 }
@@ -131,6 +131,6 @@ func (f *Fake) InvokeStream(ctx context.Context, req *internalv1pb.InternalInvok
 	return f.fnInvokeStream(ctx, req, stream)
 }
 
-func (f *Fake) Deactivate() error {
-	return f.fnDeactivate()
+func (f *Fake) Deactivate(ctx context.Context) error {
+	return f.fnDeactivate(ctx)
 }

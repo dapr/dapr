@@ -46,6 +46,8 @@ type activity struct {
 	scheduler          todo.ActivityScheduler
 	reminderInterval   time.Duration
 	schedulerReminders bool
+
+	lock chan struct{}
 }
 
 type Options struct {
@@ -98,6 +100,7 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 			reminders:          reminders,
 			scheduler:          opts.Scheduler,
 			schedulerReminders: opts.SchedulerReminders,
+			lock:               make(chan struct{}, 1),
 		}
 	}, nil
 }
@@ -108,11 +111,25 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 // returns immediately after creating the reminder, enabling the workflow to continue processing other events
 // in parallel.
 func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	select {
+	case a.lock <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-a.lock }()
 	return a.handleInvoke(ctx, req)
 }
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
 func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
+	if !reminder.SkipLock {
+		select {
+		case a.lock <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		defer func() { <-a.lock }()
+	}
 	return a.handleReminder(ctx, reminder)
 }
 
@@ -122,7 +139,7 @@ func (a *activity) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 }
 
 // DeactivateActor implements actors.InternalActor
-func (a *activity) Deactivate() error {
+func (a *activity) Deactivate(context.Context) error {
 	log.Debugf("Activity actor '%s': deactivated", a.actorID)
 	return nil
 }
