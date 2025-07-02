@@ -155,6 +155,9 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 		if finishReason, ok := output["finishReason"].(string); ok {
 			t.Logf("Finish reason: %s", finishReason)
 		}
+
+		assert.Equal(t, "What's the weather like in San Francisco?", output["result"])
+		assert.Empty(t, output["toolCalls"])
 	})
 
 	t.Run("echo normal conversation", func(t *testing.T) {

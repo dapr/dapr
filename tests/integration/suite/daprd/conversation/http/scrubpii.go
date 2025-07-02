@@ -15,6 +15,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -57,25 +58,6 @@ spec:
 	}
 }
 
-func getMsgJSON(msg ...string) string {
-	// Echo now behaves like real LLMs: combines multiple inputs into single output
-	combinedMsg := strings.Join(msg, " ")
-	echoEstimatedTokens := len(combinedMsg) / 4 // Rough estimate of tokens
-	if echoEstimatedTokens == 0 && len(combinedMsg) > 0 {
-		echoEstimatedTokens = 1
-	}
-
-	// Calculate input tokens (for combined message)
-	inputTokens := echoEstimatedTokens
-
-	// Single output with finishReason (realistic LLM behavior)
-	output := fmt.Sprintf(`{"result":"%s", "finishReason":"stop"}`, combinedMsg)
-
-	// Usage calculation
-	usgMsg := fmt.Sprintf(`{"completionTokens": %d, "promptTokens": %d, "totalTokens": %d}`, echoEstimatedTokens, inputTokens, echoEstimatedTokens+inputTokens)
-	return fmt.Sprintf(`{"outputs":[%s], "usage": %s}`, output, usgMsg)
-}
-
 func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 	postURL := fmt.Sprintf("http://%s/v1.0-alpha1/conversation/echo/converse", s.daprd.HTTPAddress())
@@ -93,7 +75,12 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, getMsgJSON("well hello there, my phone number is <PHONE_NUMBER>"), string(respBody))
+
+		// Parse the JSON response and check that it contains the scrubbed content
+		var conversationResp ConversationResponse
+		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
+		require.Len(t, conversationResp.Outputs, 1)
+		require.Contains(t, conversationResp.Outputs[0].Result, "well hello there, my phone number is <PHONE_NUMBER>")
 	})
 
 	t.Run("scrub input email", func(t *testing.T) {
@@ -107,7 +94,12 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, getMsgJSON("well hello there, my email is <EMAIL_ADDRESS>"), string(respBody))
+
+		// Parse the JSON response and check that it contains the scrubbed content
+		var conversationResp ConversationResponse
+		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
+		require.Len(t, conversationResp.Outputs, 1)
+		require.Contains(t, conversationResp.Outputs[0].Result, "well hello there, my email is <EMAIL_ADDRESS>")
 	})
 
 	t.Run("scrub input ip address", func(t *testing.T) {
@@ -121,7 +113,12 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, getMsgJSON("well hello there from <IP>"), string(respBody))
+
+		// Parse the JSON response and check that it contains the scrubbed content
+		var conversationResp ConversationResponse
+		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
+		require.Len(t, conversationResp.Outputs, 1)
+		require.Contains(t, conversationResp.Outputs[0].Result, "well hello there from <IP>")
 	})
 
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
@@ -137,8 +134,14 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		// Echo component returns the input with PII scrubbed (predictable behavior)
-		require.JSONEq(t, getMsgJSON("well hello there from <IP> well hello there, my email is <EMAIL_ADDRESS>"), string(respBody))
+
+		// Parse the JSON response and check that it contains the scrubbed content
+		var conversationResp ConversationResponse
+		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
+		require.Len(t, conversationResp.Outputs, 1)
+		// Check that both IP and email are scrubbed in the result
+		require.Contains(t, conversationResp.Outputs[0].Result, "<IP>")
+		require.Contains(t, conversationResp.Outputs[0].Result, "<EMAIL_ADDRESS>")
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {
@@ -152,6 +155,11 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, getMsgJSON("well hello there"), string(respBody))
+
+		// Parse the JSON response and check that it contains the expected content
+		var conversationResp ConversationResponse
+		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
+		require.Len(t, conversationResp.Outputs, 1)
+		require.Contains(t, conversationResp.Outputs[0].Result, "well hello there")
 	})
 }

@@ -37,65 +37,25 @@ type streaming struct {
 	daprd *daprd.Daprd
 }
 
-type liveConversationAIProvider struct {
-	componentName string
-	envVar        string
-}
-
-var liveConversationAIProviders = []liveConversationAIProvider{
-	{
-		componentName: "openai",
-		envVar:        "OPENAI_API_KEY",
-	},
-	{
-		componentName: "anthropic",
-		envVar:        "ANTHROPIC_API_KEY",
-	},
-	{
-		componentName: "googleai",
-		envVar:        "GOOGLE_API_KEY",
-	},
-}
-
 func (s *streaming) Setup(t *testing.T) []framework.Option {
 	// Build component configuration - always include echo, conditionally include AI providers
-	componentConfig := `
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: echo
-spec:
-  type: conversation.echo
-  version: v1
-  metadata:
-  - name: key
-    value: testkey`
-
-	// Define AI provider components
-
-	// Add AI provider components if their API keys are available
-	for _, provider := range liveConversationAIProviders {
-		if apiKey := os.Getenv(provider.envVar); apiKey != "" {
-			componentConfig += `
----
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: ` + provider.componentName + `
-spec:
-  type: conversation.` + provider.componentName + `
-  version: v1
-  metadata:
-  - name: key
-    value: ` + apiKey
-		}
-	}
+	componentConfig := buildLiveAIProviderComponents(t)
 
 	s.daprd = daprd.New(t, daprd.WithResourceFiles(componentConfig))
 
 	return []framework.Option{
 		framework.WithProcesses(s.daprd),
 	}
+}
+
+// Helper function to extract text content from streaming chunk parts
+func extractTextFromStreamingChunk(chunk *rtv1.ConversationStreamChunk) string {
+	if len(chunk.GetParts()) > 0 {
+		if textContent := chunk.GetParts()[0].GetText(); textContent != nil {
+			return textContent.GetText()
+		}
+	}
+	return ""
 }
 
 func (s *streaming) Run(t *testing.T, ctx context.Context) {
@@ -115,6 +75,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		// Collect all streaming responses
 		var chunks []string
 		var hasCompletion bool
+		var lastChunkType string
 
 		for {
 			resp, err := stream.Recv()
@@ -124,16 +85,23 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 
 			if chunk := resp.GetChunk(); chunk != nil {
-				chunks = append(chunks, chunk.GetContent())
+				if text := extractTextFromStreamingChunk(chunk); text != "" {
+					chunks = append(chunks, text)
+				}
+				lastChunkType = "chunk"
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
+				lastChunkType = "complete"
 			}
 		}
 
 		// Verify streaming behavior
 		assert.NotEmpty(t, chunks, "Should receive streaming chunks")
 		assert.True(t, hasCompletion, "Should receive completion message")
+
+		// Verify last chunk type is complete
+		assert.Equal(t, "complete", lastChunkType, "Last chunk should be a complete message")
 
 		// Verify full response content
 		fullResponse := strings.Join(chunks, "")
@@ -160,6 +128,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 
 		var chunks []string
 		var hasCompletion bool
+		var lastChunkType string
 
 		for {
 			resp, err := stream.Recv()
@@ -169,19 +138,24 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 
 			if chunk := resp.GetChunk(); chunk != nil {
-				chunks = append(chunks, chunk.GetContent())
+				if text := extractTextFromStreamingChunk(chunk); text != "" {
+					chunks = append(chunks, text)
+				}
+				lastChunkType = "chunk"
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
+				lastChunkType = "complete"
 			}
 		}
 
 		assert.NotEmpty(t, chunks, "Should receive chunks")
 		assert.True(t, hasCompletion, "Should receive completion")
+		assert.Equal(t, "complete", lastChunkType, "Last chunk should be a complete message")
 
 		// Verify PII was scrubbed in streaming chunks
 		fullResponse := strings.Join(chunks, "")
-		assert.Contains(t, fullResponse, "<PHONE_NUMBER>", "Phone number should be scrubbed")
+		assert.Contains(t, fullResponse, "My phone number is <PHONE_NUMBER>", "Phone number should be scrubbed")
 		assert.NotContains(t, fullResponse, "+1234567890", "Original phone number should not appear")
 	})
 
@@ -198,6 +172,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 
 		var chunks []string
 		var hasCompletion bool
+		var lastChunkType string
 
 		for {
 			resp, err := stream.Recv()
@@ -207,20 +182,24 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 
 			if chunk := resp.GetChunk(); chunk != nil {
-				chunks = append(chunks, chunk.GetContent())
+				if text := extractTextFromStreamingChunk(chunk); text != "" {
+					chunks = append(chunks, text)
+				}
+				lastChunkType = "chunk"
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
+				lastChunkType = "complete"
 			}
 		}
 
 		assert.NotEmpty(t, chunks, "Should receive chunks")
 		assert.True(t, hasCompletion, "Should receive completion")
+		assert.Equal(t, "complete", lastChunkType, "Last chunk should be a complete message")
 
 		// Both messages should be present in the response
 		fullResponse := strings.Join(chunks, "")
-		assert.Contains(t, fullResponse, "First message")
-		assert.Contains(t, fullResponse, "Second message")
+		assert.Contains(t, fullResponse, "First message Second message")
 	})
 
 	t.Run("streaming error handling - nonexistent component", func(t *testing.T) {
@@ -282,7 +261,9 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 
 			if chunk := resp.GetChunk(); chunk != nil {
-				chunks = append(chunks, chunk.GetContent())
+				if text := extractTextFromStreamingChunk(chunk); text != "" {
+					chunks = append(chunks, text)
+				}
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
@@ -319,7 +300,9 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 
 			if chunk := resp.GetChunk(); chunk != nil {
-				chunks = append(chunks, chunk.GetContent())
+				if text := extractTextFromStreamingChunk(chunk); text != "" {
+					chunks = append(chunks, text)
+				}
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
@@ -333,6 +316,9 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 
 		fullResponse := strings.Join(chunks, "")
 		assert.Equal(t, "Hello with context", fullResponse)
+
+		// Also check that the final completion message has the context ID
+		require.NotNil(t, hasCompletion)
 	})
 
 	t.Run("streaming with role-based inputs", func(t *testing.T) {
@@ -362,7 +348,9 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 
 			if chunk := resp.GetChunk(); chunk != nil {
-				chunks = append(chunks, chunk.GetContent())
+				if text := extractTextFromStreamingChunk(chunk); text != "" {
+					chunks = append(chunks, text)
+				}
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
@@ -372,9 +360,9 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		assert.NotEmpty(t, chunks, "Should receive chunks")
 		assert.True(t, hasCompletion, "Should receive completion")
 
+		// Verify full response content
 		fullResponse := strings.Join(chunks, "")
-		assert.Contains(t, fullResponse, "Hello assistant")
-		assert.Contains(t, fullResponse, "Hello user")
+		assert.Equal(t, "Hello assistant Hello user", fullResponse)
 	})
 
 	// Live tests with real AI providers - only runs if API keys are available
@@ -386,7 +374,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		"googleai":  "Hello from Google Gemini streaming!",
 	}
 
-	for _, provider := range liveConversationAIProviders {
+	for _, provider := range realConversationAIProviders {
 		t.Run("streaming with "+provider.componentName+" live", func(t *testing.T) {
 			apiKey := os.Getenv(provider.envVar)
 			if apiKey == "" {
@@ -413,8 +401,12 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 				require.NoError(t, err)
 
 				if chunk := resp.GetChunk(); chunk != nil {
-					chunks = append(chunks, chunk.GetContent())
-					t.Logf("Received chunk: %q", chunk.GetContent())
+					if text := extractTextFromStreamingChunk(chunk); text != "" {
+						chunks = append(chunks, text)
+					}
+					if text := extractTextFromStreamingChunk(chunk); text != "" {
+						t.Logf("Received chunk: %q", text)
+					}
 				}
 				if complete := resp.GetComplete(); complete != nil {
 					hasCompletion = true

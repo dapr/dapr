@@ -34,18 +34,7 @@ type scrubpii struct {
 }
 
 func (s *scrubpii) Setup(t *testing.T) []framework.Option {
-	s.daprd = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: echo
-spec:
-  type: conversation.echo
-  version: v1
-  metadata:
-  - name: key
-    value: testkey
-`))
+	s.daprd = daprd.New(t, daprd.WithResourceFiles(getEchoComponentConfig()))
 
 	return []framework.Option{
 		framework.WithProcesses(s.daprd),
@@ -71,7 +60,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetOutputs()[0].GetResult())
+		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("scrub input great phone number", func(t *testing.T) {
@@ -87,7 +76,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetOutputs()[0].GetResult())
+		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("scrub input email", func(t *testing.T) {
@@ -104,7 +93,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[0].GetResult())
+		require.Equal(t, "well hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("scrub input ip address", func(t *testing.T) {
@@ -121,7 +110,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there from <IP>", resp.GetOutputs()[0].GetResult())
+		require.Equal(t, "well hello there from <IP>", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
@@ -142,7 +131,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1) // Echo returns single output
 		// Echo component returns the input with PII scrubbed (predictable behavior)
-		require.Equal(t, "well hello there from <IP> well hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[0].GetResult())
+		require.Equal(t, "well hello there from <IP> well hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {
@@ -160,6 +149,6 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetResult())
+		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 }

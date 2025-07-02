@@ -1332,11 +1332,14 @@ message ConversationRequest {
 
   // Temperature for the LLM to optimize for creativity or predictability
   optional double temperature = 7;
+
+  // Tools available for the LLM to call
+  repeated Tool tools = 8;
 }
 
 message ConversationInput {
-  // The content to send to the llm
-  string content = 1;
+  // DEPRECATED: Use parts instead for new implementations
+  string content = 1 [deprecated = true];
 
   // The role to set for the message
   optional string role = 2;
@@ -1344,38 +1347,63 @@ message ConversationInput {
   // Scrub PII data that goes into the LLM
   optional bool scrubPII = 3;
   
-  // Tool calling support
-  // Tool definitions to send to the LLM (only sent in first message of conversation)
-  repeated Tool tools = 4;
-  
-  // For tool result messages - ID of the tool call being responded to
-  optional string tool_call_id = 5;
-  
-  // For tool result messages - name of the function that was called
-  optional string name = 6;
+  // Content parts for rich content within each agent's input. 
+  // In multi-turn conversations the output becomes part of the next request input
+  repeated ContentPart parts = 4;
 }
 
-// ConversationResult is the result for one input.
+// Content part supporting text and tool calling (rich media out of scope)
+message ContentPart {
+  oneof content_type {
+    TextContent text = 1;
+    ToolCallContent tool_call = 2;
+    ToolResultContent tool_result = 3;
+    // Future: ImageContent image = 4;
+    // Future: DocumentContent document = 5;
+  }
+}
+
+// Simple text content
+message TextContent {
+  string text = 1;
+}
+
+// Tool call as content part
+message ToolCallContent {
+  string id = 1;
+  string type = 2;                    // "function"
+  string name = 3;
+  string arguments = 4;               // Function arguments as JSON string
+}
+
+// Tool result as content part  
+message ToolResultContent {
+  string tool_call_id = 1;
+  string name = 2;
+  string content = 3;                 // Tool result as text
+  optional bool is_error = 4;         // Indicates tool execution error
+}
+
+// ConversationResult represents a single output from the assistant or tool in response to a conversation input.
 message ConversationResult {
-  // Result for the one conversation input.
-  string result = 1;
+  // DEPRECATED: Use parts instead for new implementations
+  string result = 1 [deprecated = true];
   // Parameters for all custom fields.
   map<string, google.protobuf.Any> parameters = 2;
   
-  // Tool calling support
-  // Tool calls returned by the LLM
-  repeated ToolCall tool_calls = 3;
-  
   // Reason why the LLM stopped generating (e.g., "stop", "tool_calls", "length")
-  optional string finish_reason = 4;
+  optional string finish_reason = 3;
+  
+  // Content parts in response
+  repeated ContentPart parts = 4;
 }
 
-// ConversationResponse is the response for Conversation.
+// ConversationResponse is the response message for a conversation request.
 message ConversationResponse {
   // The ID of an existing chat (like in ChatGPT)
   optional string contextID = 1;
 
-  // An array of results.
+  // An array of outputs. Some providers (e.g., OpenAI) return a single output with multiple parts, while others (e.g., Anthropic) may return multiple outputs with one part each.
   repeated ConversationResult outputs = 2;
 
   // Usage statistics if available
@@ -1392,15 +1420,15 @@ message ConversationStreamResponse {
 
 // ConversationStreamChunk represents a streaming content chunk.
 message ConversationStreamChunk {
-  // Streaming content chunk
-  string content = 1;
-  
-  // Tool calling support for streaming
-  // Tool calls in this chunk (partial or complete)
-  repeated ToolCall tool_calls = 2;
-  
   // Reason why streaming stopped for this chunk (e.g., "stop", "tool_calls")
-  optional string finish_reason = 3;
+  optional string finish_reason = 1;
+  
+  // Content parts in streaming
+  repeated ContentPart parts = 2;
+  
+  // Chunk metadata
+  optional int32 chunk_index = 3;
+  optional bool is_delta = 4;          // True if incremental
 }
 
 // ConversationStreamComplete indicates the streaming conversation has completed.
@@ -1409,50 +1437,40 @@ message ConversationStreamComplete {
   optional string contextID = 1;
   // Usage statistics if available
   optional ConversationUsage usage = 2;
+  // Outputs accumulated outputs/tool calls from the streaming
+  repeated ConversationResult outputs = 3;
 }
 
 // ConversationUsage represents token usage statistics.
 message ConversationUsage {
   // Number of tokens in the prompt
-  optional int32 prompt_tokens = 1 [json_name = "promptTokens"];
+  optional uint32 prompt_tokens = 1 [json_name = "promptTokens"];
   // Number of tokens in the completion
-  optional int32 completion_tokens = 2 [json_name = "completionTokens"];
+  optional uint32 completion_tokens = 2 [json_name = "completionTokens"];
   // Total number of tokens used
-  optional int32 total_tokens = 3 [json_name = "totalTokens"];
+  optional uint32 total_tokens = 3 [json_name = "totalTokens"];
 }
 
 // Tool represents a function that can be called by the LLM (used on the request to the LLM)
 message Tool {
-  // The type of tool (always "function" for now)
+  // The type of tool (e.g., "function", "web_search", etc.)
   string type = 1;
-  // Function definition
-  ToolFunction function = 2;
-}
-
-// ToolFunction defines a function that can be called by the LLM
-message ToolFunction {
   // The name of the function
-  string name = 1;
+  string name = 2;
   // Description of what the function does
-  string description = 2;
+  string description = 3;
   // JSON schema for the function parameters as a string
-  string parameters = 3;
+  string parameters = 4;
 }
 
 // ToolCall represents a function call requested by the LLM (used on the response from the LLM)
 message ToolCall {
   // Unique identifier for this tool call
   string id = 1;
-  // The type of tool call (always "function" for now)
+  // The type of tool call (e.g., "function")
   string type = 2;
-  // Function call details
-  ToolCallFunction function = 3;
-}
-
-// ToolCallFunction contains the function call details
-message ToolCallFunction {
   // Name of the function to call
-  string name = 1;
+  string name = 3;
   // Function arguments as a JSON string
-  string arguments = 2;
+  string arguments = 4;
 }

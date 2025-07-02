@@ -131,19 +131,11 @@ var (
 	PubsubPublishOutbox         = ErrorCode{"ERR_PUBLISH_OUTBOX", "", CategoryPubsub}                                              // Error publishing message to outbox
 
 	// ### Conversation API
-	ConversationInvalidParms         = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", "", CategoryConversation}          // Invalid parameters for conversation component
-	ConversationInvoke               = ErrorCode{"ERR_CONVERSATION_INVOKE", "", CategoryConversation}                 // Error invoking conversation
-	ConversationMissingInputs        = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", "", CategoryConversation}         // Missing inputs for conversation
-	ConversationNotFound             = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}              // Conversation not found
-	ConversationStreamNotSupported   = ErrorCode{"ERR_CONVERSATION_STREAM_NOT_SUPPORTED", "", CategoryConversation}   // Conversation streaming not supported by component
-	ConversationStreamPipelineFailed = ErrorCode{"ERR_CONVERSATION_STREAM_PIPELINE_FAILED", "", CategoryConversation} // Streaming pipeline failed
-	ConversationStreamResponsEmpty   = ErrorCode{"ERR_CONVERSATION_STREAM_RESPONSE_EMPTY", "", CategoryConversation}  // Empty response in streaming conversation
-
-	// ### Conversation Tool Calling API
-	ConversationToolCallNotSupported      = ErrorCode{"ERR_CONVERSATION_TOOL_CALL_NOT_SUPPORTED", "", CategoryConversation}      // Tool calling not supported by conversation component
-	ConversationToolCallInvalidDefinition = ErrorCode{"ERR_CONVERSATION_TOOL_CALL_INVALID_DEFINITION", "", CategoryConversation} // Invalid tool definition in conversation request
-	ConversationToolCallExecutionFailed   = ErrorCode{"ERR_CONVERSATION_TOOL_CALL_EXECUTION_FAILED", "", CategoryConversation}   // Tool call execution failed in conversation
-	ConversationToolCallInvalidResponse   = ErrorCode{"ERR_CONVERSATION_TOOL_CALL_INVALID_RESPONSE", "", CategoryConversation}   // Invalid tool call response format in conversation
+	ConversationInvalidParms    = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", "", CategoryConversation}    // Invalid parameters for conversation component
+	ConversationInvoke          = ErrorCode{"ERR_CONVERSATION_INVOKE", "", CategoryConversation}           // Error invoking conversation
+	ConversationMissingInputs   = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", "", CategoryConversation}   // Missing inputs for conversation
+	ConversationNotFound        = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}        // Conversation not found
+	ConversationScrubbingFailed = ErrorCode{"ERR_CONVERSATION_SCRUBBING_FAILED", "", CategoryConversation} // Error scrubbing conversation input/output
 
 	// ### Service Invocation / Direct Messaging API
 	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service

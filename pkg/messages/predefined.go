@@ -135,17 +135,9 @@ var (
 	ErrPurgeWorkflow                 = APIError{"error purging workflow %s: %s", errorcodes.WorkflowPurge, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Conversation
-	ErrConversationNotFound             = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationInvalidParams        = APIError{"failed conversing with component %s: invalid params", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationInvoke               = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrConversationMissingInputs        = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationStreamNotSupported   = APIError{"conversation streaming not supported by component %s", errorcodes.ConversationStreamNotSupported, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationStreamPipelineFailed = APIError{"streaming pipeline failed: %s", errorcodes.ConversationStreamPipelineFailed, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrConversationStreamEmptyResponse  = APIError{"streaming response is empty: %s", errorcodes.ConversationStreamResponsEmpty, http.StatusInternalServerError, grpcCodes.Internal}
-
-	// Conversation Tool Calling
-	ErrConversationToolCallNotSupported      = APIError{"tool calling not supported by conversation component %s", errorcodes.ConversationToolCallNotSupported, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationToolCallInvalidDefinition = APIError{"invalid tool definition in conversation request: %s", errorcodes.ConversationToolCallInvalidDefinition, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationToolCallExecutionFailed   = APIError{"tool call execution failed in conversation %s: %s", errorcodes.ConversationToolCallExecutionFailed, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrConversationToolCallInvalidResponse   = APIError{"invalid tool call response format in conversation %s: %s", errorcodes.ConversationToolCallInvalidResponse, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrConversationNotFound        = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationInvalidParams   = APIError{"failed conversing with component %s: invalid params", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationInvoke          = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrConversationMissingInputs   = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationScrubbingFailed = APIError{"failed scrubbing PII in conversation component %s: %s", errorcodes.ConversationScrubbingFailed, http.StatusInternalServerError, grpcCodes.Internal}
 )

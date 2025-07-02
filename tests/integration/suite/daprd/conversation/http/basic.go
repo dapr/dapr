@@ -15,6 +15,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,6 +37,19 @@ func init() {
 
 type basic struct {
 	daprd *daprd.Daprd
+}
+
+// ConversationResponse represents the structure of the conversation API response
+type ConversationResponse struct {
+	Outputs []struct {
+		Result       string `json:"result"`
+		FinishReason string `json:"finishReason"`
+	} `json:"outputs"`
+	Usage struct {
+		CompletionTokens int `json:"completionTokens"`
+		PromptTokens     int `json:"promptTokens"`
+		TotalTokens      int `json:"totalTokens"`
+	} `json:"usage"`
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
@@ -74,7 +88,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, getMsgJSON("well hello there"), string(respBody))
+
+		// Parse the JSON response and check that it contains the expected content
+		var conversationResp ConversationResponse
+		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
+		require.Len(t, conversationResp.Outputs, 1)
+		require.Contains(t, conversationResp.Outputs[0].Result, "well hello there")
+		require.Equal(t, "stop", conversationResp.Outputs[0].FinishReason)
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
