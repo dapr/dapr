@@ -16,6 +16,7 @@ package activity
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -30,7 +31,16 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.targets.activity")
+var (
+	log = logger.NewLogger("dapr.runtime.actors.targets.activity")
+
+	activityCache = &sync.Pool{
+		New: func() any {
+			var a *activity
+			return a
+		},
+	}
+)
 
 type activity struct {
 	appID             string
@@ -81,27 +91,34 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
+	reminderInterval := time.Minute * 1
+
+	if opts.ReminderInterval != nil {
+		reminderInterval = *opts.ReminderInterval
+	}
+
 	return func(actorID string) targets.Interface {
-		reminderInterval := time.Minute * 1
-
-		if opts.ReminderInterval != nil {
-			reminderInterval = *opts.ReminderInterval
+		a := activityCache.Get().(*activity)
+		if a == nil {
+			a = &activity{
+				appID:              opts.AppID,
+				actorID:            actorID,
+				actorType:          opts.ActivityActorType,
+				workflowActorType:  opts.WorkflowActorType,
+				reminderInterval:   reminderInterval,
+				table:              table,
+				router:             router,
+				state:              state,
+				reminders:          reminders,
+				scheduler:          opts.Scheduler,
+				schedulerReminders: opts.SchedulerReminders,
+				lock:               make(chan struct{}, 1),
+			}
+		} else {
+			a.actorID = actorID
 		}
 
-		return &activity{
-			appID:              opts.AppID,
-			actorID:            actorID,
-			actorType:          opts.ActivityActorType,
-			workflowActorType:  opts.WorkflowActorType,
-			reminderInterval:   reminderInterval,
-			table:              table,
-			router:             router,
-			state:              state,
-			reminders:          reminders,
-			scheduler:          opts.Scheduler,
-			schedulerReminders: opts.SchedulerReminders,
-			lock:               make(chan struct{}, 1),
-		}
+		return a
 	}, nil
 }
 
@@ -141,6 +158,7 @@ func (a *activity) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(context.Context) error {
 	log.Debugf("Activity actor '%s': deactivated", a.actorID)
+	activityCache.Put(a)
 	return nil
 }
 
