@@ -92,6 +92,7 @@ const (
 	Dapr_GetJobAlpha1_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/GetJobAlpha1"
 	Dapr_DeleteJobAlpha1_FullMethodName                = "/dapr.proto.runtime.v1.Dapr/DeleteJobAlpha1"
 	Dapr_ConverseAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
+	Dapr_ConverseStreamAlpha1_FullMethodName           = "/dapr.proto.runtime.v1.Dapr/ConverseStreamAlpha1"
 )
 
 // DaprClient is the client API for Dapr service.
@@ -225,6 +226,8 @@ type DaprClient interface {
 	DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
 	// Converse with a LLM service
 	ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error)
+	// Converse with a LLM service using streaming
+	ConverseStreamAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (Dapr_ConverseStreamAlpha1Client, error)
 }
 
 type daprClient struct {
@@ -885,6 +888,38 @@ func (c *daprClient) ConverseAlpha1(ctx context.Context, in *ConversationRequest
 	return out, nil
 }
 
+func (c *daprClient) ConverseStreamAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (Dapr_ConverseStreamAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[5], Dapr_ConverseStreamAlpha1_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprConverseStreamAlpha1Client{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Dapr_ConverseStreamAlpha1Client interface {
+	Recv() (*ConversationStreamResponse, error)
+	grpc.ClientStream
+}
+
+type daprConverseStreamAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprConverseStreamAlpha1Client) Recv() (*ConversationStreamResponse, error) {
+	m := new(ConversationStreamResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // DaprServer is the server API for Dapr service.
 // All implementations should embed UnimplementedDaprServer
 // for forward compatibility
@@ -1016,6 +1051,8 @@ type DaprServer interface {
 	DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
 	// Converse with a LLM service
 	ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error)
+	// Converse with a LLM service using streaming
+	ConverseStreamAlpha1(*ConversationRequest, Dapr_ConverseStreamAlpha1Server) error
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1198,6 +1235,9 @@ func (UnimplementedDaprServer) DeleteJobAlpha1(context.Context, *DeleteJobReques
 }
 func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConverseAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) ConverseStreamAlpha1(*ConversationRequest, Dapr_ConverseStreamAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method ConverseStreamAlpha1 not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -2303,6 +2343,27 @@ func _Dapr_ConverseAlpha1_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_ConverseStreamAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ConversationRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaprServer).ConverseStreamAlpha1(m, &daprConverseStreamAlpha1Server{stream})
+}
+
+type Dapr_ConverseStreamAlpha1Server interface {
+	Send(*ConversationStreamResponse) error
+	grpc.ServerStream
+}
+
+type daprConverseStreamAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprConverseStreamAlpha1Server) Send(m *ConversationStreamResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // Dapr_ServiceDesc is the grpc.ServiceDesc for Dapr service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2555,6 +2616,11 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _Dapr_DecryptAlpha1_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "ConverseStreamAlpha1",
+			Handler:       _Dapr_ConverseStreamAlpha1_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "dapr/proto/runtime/v1/dapr.proto",

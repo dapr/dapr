@@ -135,8 +135,9 @@ var (
 	ErrPurgeWorkflow                 = APIError{"error purging workflow %s: %s", errorcodes.WorkflowPurge, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Conversation
-	ErrConversationNotFound      = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationInvalidParams = APIError{"failed conversing with component %s: invalid params", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrConversationInvoke        = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrConversationMissingInputs = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationNotFound        = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationInvalidParams   = APIError{"failed conversing with component %s: invalid params", errorcodes.ConversationInvalidParms, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationInvoke          = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrConversationMissingInputs   = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationScrubbingFailed = APIError{"failed scrubbing PII in conversation component %s: %s", errorcodes.ConversationScrubbingFailed, http.StatusInternalServerError, grpcCodes.Internal}
 )
