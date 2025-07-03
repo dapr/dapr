@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package retries
 
 import (
 	"context"
@@ -29,14 +29,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(retries))
+	suite.Register(new(defaultretries))
 }
 
-type retries struct {
+type defaultretries struct {
 	workflow *workflow.Workflow
 }
 
-func (e *retries) Setup(t *testing.T) []framework.Option {
+func (e *defaultretries) Setup(t *testing.T) []framework.Option {
 	e.workflow = workflow.New(t)
 
 	return []framework.Option{
@@ -44,12 +44,11 @@ func (e *retries) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (e *retries) Run(t *testing.T, ctx context.Context) {
+func (e *defaultretries) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
-	e.workflow.Registry().AddOrchestratorN("retries", func(ctx *task.OrchestrationContext) (any, error) {
+	e.workflow.Registry().AddOrchestratorN("defaultretries", func(ctx *task.OrchestrationContext) (any, error) {
 		err := ctx.CallActivity("failActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
-			MaxAttempts:          3,
 			InitialRetryInterval: 10 * time.Millisecond,
 		})).Await(nil)
 		if err != nil {
@@ -65,7 +64,7 @@ func (e *retries) Run(t *testing.T, ctx context.Context) {
 	})
 
 	cl := e.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "retries")
+	id, err := cl.ScheduleNewOrchestration(ctx, "defaultretries")
 	require.NoError(t, err)
 	_, err = cl.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
@@ -77,5 +76,5 @@ func (e *retries) Run(t *testing.T, ctx context.Context) {
 		WorkflowComponent: "dapr",
 	})
 	require.NoError(t, err)
-	require.Equal(t, 3, count)
+	require.Equal(t, 1, count)
 }
