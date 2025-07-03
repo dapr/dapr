@@ -15,6 +15,7 @@ package conversation
 
 import (
 	"context"
+	"errors"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
 
@@ -91,7 +92,13 @@ func (p *StreamingPipelineImpl) ProcessStream(
 ) (*runtimev1pb.ConversationUsage, error) {
 	// Try to get the underlying LangChain Go model for streaming support
 	if streamer, ok := component.(contribConverse.StreamingConversation); ok {
-		return p.processRealStreaming(ctx, stream, streamer, request, componentName, scrubber)
+		usage, err := p.processRealStreaming(ctx, stream, streamer, request, componentName, scrubber)
+		if err == nil {
+			return usage, nil
+		}
+		if !(errors.Is(err, contribConverse.ErrStreamingNotSupported) || errors.Is(err, contribConverse.ErrToolCallStreamingNotSupported)) {
+			return nil, err
+		}
 	}
 
 	// Fallback: simulate streaming with existing Converse method

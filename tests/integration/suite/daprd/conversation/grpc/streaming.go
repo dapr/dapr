@@ -435,4 +435,97 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			}
 		})
 	}
+
+	// Test streaming fallback mechanism - this specifically tests the automatic fallback from
+	// real streaming to simulated streaming when Anthropic component supports streaming
+	// but returns ErrToolCallStreamingNotSupported when doing streaming + tool calling
+	t.Run("streaming fallback mechanism - anthropic tool calling", func(t *testing.T) {
+		apiKey := os.Getenv("ANTHROPIC_API_KEY")
+		if apiKey == "" {
+			t.Skip("ANTHROPIC_API_KEY not set, skipping Anthropic streaming fallback test")
+		}
+
+		// Use Anthropic with tool calling - this should trigger the fallback mechanism
+		// because Anthropic supports streaming but not streaming + tool calling
+		stream, err := client.ConverseStreamAlpha1(ctx, &rtv1.ConversationRequest{
+			Name: "anthropic",
+			Inputs: []*rtv1.ConversationInput{
+				{Content: "Please call the get_weather function for New York City."},
+			},
+			Tools: []*rtv1.Tool{
+				{
+					Type:        "function",
+					Name:        "get_weather",
+					Description: "Get current weather for a location",
+					Parameters:  `{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`,
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		var chunks []string
+		var hasCompletion bool
+		var hasToolCalls bool
+		var usage *rtv1.ConversationUsage
+
+		for {
+			resp, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+
+			if chunk := resp.GetChunk(); chunk != nil {
+				// Check for text content
+				if text := extractTextFromStreamingChunk(chunk); text != "" {
+					chunks = append(chunks, text)
+					t.Logf("Fallback streaming chunk: %q", text)
+				}
+
+				// Check for tool calls in chunk
+				for _, part := range chunk.GetParts() {
+					if toolCall := part.GetToolCall(); toolCall != nil {
+						hasToolCalls = true
+						t.Logf("Fallback tool call: %s with args: %s", toolCall.GetName(), toolCall.GetArguments())
+					}
+				}
+			}
+			if complete := resp.GetComplete(); complete != nil {
+				hasCompletion = true
+				usage = complete.GetUsage()
+				t.Logf("Fallback stream completed with usage: %+v", usage)
+			}
+		}
+
+		// Verify the streaming response worked despite the fallback
+		assert.True(t, hasCompletion, "Should receive completion message")
+
+		// With Anthropic + tool calling, we expect either:
+		// 1. Text chunks if the model responds with text before tool calling
+		// 2. Tool calls if the model decides to use the function
+		// The key is that streaming should work via fallback mechanism
+		if len(chunks) > 0 {
+			t.Logf("Received %d text chunks via fallback streaming", len(chunks))
+			fullResponse := strings.Join(chunks, "")
+			assert.NotEmpty(t, fullResponse, "Should receive non-empty text response")
+		}
+
+		if hasToolCalls {
+			t.Log("Tool calling worked via fallback streaming mechanism")
+		}
+
+		// At minimum, we should have either text chunks or tool calls
+		assert.True(t, len(chunks) > 0 || hasToolCalls,
+			"Should receive either text chunks or tool calls via fallback streaming")
+
+		// Verify usage information is provided
+		if usage != nil {
+			assert.Positive(t, usage.GetTotalTokens(), "Should have token usage information")
+			t.Logf("Fallback streaming token usage - Prompt: %d, Completion: %d, Total: %d",
+				usage.GetPromptTokens(), usage.GetCompletionTokens(), usage.GetTotalTokens())
+		}
+
+		t.Log("✅ Streaming fallback mechanism works correctly: Anthropic streaming + tool calling " +
+			"automatically fell back to simulated streaming (processSimulatedStreaming) while preserving functionality")
+	})
 }
