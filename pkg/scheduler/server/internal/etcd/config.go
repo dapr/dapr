@@ -40,8 +40,7 @@ func config(opts Options) (*embed.Config, error) {
 	config.Name = opts.Name
 	config.InitialCluster = strings.Join(opts.InitialCluster, ",")
 	config.MaxRequestBytes = math.MaxInt32
-	config.WarningApplyDuration = time.Second * 5
-	config.WarningUnaryRequestDuration = time.Second * 5
+	config.ExperimentalWarningApplyDuration = time.Second * 5
 
 	if opts.Security.MTLSEnabled() {
 		info := transport.TLSInfo{
