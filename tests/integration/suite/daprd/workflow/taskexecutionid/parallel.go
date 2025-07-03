@@ -16,6 +16,8 @@ package taskexecutionid
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,14 +31,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(singleActivity))
+	suite.Register(new(parallel))
 }
 
-type singleActivity struct {
+type parallel struct {
 	workflow *workflow.Workflow
 }
 
-func (e *singleActivity) Setup(t *testing.T) []framework.Option {
+func (e *parallel) Setup(t *testing.T) []framework.Option {
 	e.workflow = workflow.New(t)
 
 	return []framework.Option{
@@ -44,39 +46,67 @@ func (e *singleActivity) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (e *singleActivity) Run(t *testing.T, ctx context.Context) {
+func (e *parallel) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
-	require.NoError(t, e.workflow.Registry().AddOrchestratorN("singleActivity", func(ctx *task.OrchestrationContext) (any, error) {
-		err := ctx.CallActivity("FailActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
+	require.NoError(t, e.workflow.Registry().AddOrchestratorN("parallel", func(ctx *task.OrchestrationContext) (any, error) {
+		t1 := ctx.CallActivity("FailActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
 			MaxAttempts:          3,
 			InitialRetryInterval: 10 * time.Millisecond,
-		})).Await(nil)
+		}))
+
+		t2 := ctx.CallActivity("FailActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
+			MaxAttempts:          3,
+			InitialRetryInterval: 10 * time.Millisecond,
+		}))
+
+		t3 := ctx.CallActivity("FailActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
+			MaxAttempts:          3,
+			InitialRetryInterval: 10 * time.Millisecond,
+		}))
+
+		err := t1.Await(nil)
 		if err != nil {
 			return nil, err
 		}
+
+		err = t2.Await(nil)
+		if err != nil {
+			return nil, err
+		}
+
+		err = t3.Await(nil)
+		if err != nil {
+			return nil, err
+		}
+
 		return nil, nil
 	}))
 
-	executionMap := make(map[string]int)
-	var executionID string
+	executionMap := sync.Map{}
 
 	require.NoError(t, e.workflow.Registry().AddActivityN("FailActivity", func(ctx task.ActivityContext) (any, error) {
-		executionMap[ctx.GetTaskExecutionId()] = executionMap[ctx.GetTaskExecutionId()] + 1
-		executionID = ctx.GetTaskExecutionId()
-		if executionMap[ctx.GetTaskExecutionId()] == 3 {
+		count, _ := executionMap.LoadOrStore(ctx.GetTaskExecutionId(), &atomic.Int32{})
+		value := count.(*atomic.Int32)
+		if value.Load() == 2 {
 			return nil, nil
 		}
+		value.Add(1)
 		return nil, errors.New("activity failure")
 	}))
 
 	cl := e.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "singleActivity")
+
+	id, err := cl.ScheduleNewOrchestration(ctx, "parallel")
 	require.NoError(t, err)
+
 	_, err = cl.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	require.NoError(t, cl.TerminateOrchestration(ctx, id))
 
-	require.NotPanics(t, func() { uuid.MustParse(executionID) })
-	require.Equal(t, 3, executionMap[executionID])
+	executionMap.Range(func(k, v interface{}) bool {
+		_, err = uuid.Parse(k.(string))
+		require.NoError(t, err)
+		require.EqualValues(t, 2, v.(*atomic.Int32).Load())
+		return true
+	})
 }

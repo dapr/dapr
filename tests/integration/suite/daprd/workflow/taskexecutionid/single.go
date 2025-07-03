@@ -22,7 +22,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -30,14 +29,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(parallelActivities))
+	suite.Register(new(single))
 }
 
-type parallelActivities struct {
+type single struct {
 	workflow *workflow.Workflow
 }
 
-func (e *parallelActivities) Setup(t *testing.T) []framework.Option {
+func (e *single) Setup(t *testing.T) []framework.Option {
 	e.workflow = workflow.New(t)
 
 	return []framework.Option{
@@ -45,10 +44,10 @@ func (e *parallelActivities) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (e *parallelActivities) Run(t *testing.T, ctx context.Context) {
+func (e *single) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
-	require.NoError(t, e.workflow.Registry().AddOrchestratorN("parallelActivities", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, e.workflow.Registry().AddOrchestratorN("single", func(ctx *task.OrchestrationContext) (any, error) {
 		err := ctx.CallActivity("FailActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
 			MaxAttempts:          3,
 			InitialRetryInterval: 10 * time.Millisecond,
@@ -60,9 +59,11 @@ func (e *parallelActivities) Run(t *testing.T, ctx context.Context) {
 	}))
 
 	executionMap := make(map[string]int)
+	var executionID string
 
 	require.NoError(t, e.workflow.Registry().AddActivityN("FailActivity", func(ctx task.ActivityContext) (any, error) {
 		executionMap[ctx.GetTaskExecutionId()] = executionMap[ctx.GetTaskExecutionId()] + 1
+		executionID = ctx.GetTaskExecutionId()
 		if executionMap[ctx.GetTaskExecutionId()] == 3 {
 			return nil, nil
 		}
@@ -70,20 +71,14 @@ func (e *parallelActivities) Run(t *testing.T, ctx context.Context) {
 	}))
 
 	cl := e.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "parallelActivities")
+
+	id, err := cl.ScheduleNewOrchestration(ctx, "single")
 	require.NoError(t, err)
+
 	_, err = cl.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	require.NoError(t, cl.TerminateOrchestration(ctx, id))
 
-	//nolint:staticcheck
-	_, err = e.workflow.Dapr().GRPCClient(t, ctx).TerminateWorkflowAlpha1(ctx, &rtv1.TerminateWorkflowRequest{
-		InstanceId:        string(id),
-		WorkflowComponent: "dapr",
-	})
+	_, err = uuid.Parse(executionID)
 	require.NoError(t, err)
-	for k, v := range executionMap {
-		require.NotPanics(t, func() { uuid.MustParse(k) })
-		require.Equal(t, 3, v)
-	}
+	require.Equal(t, 3, executionMap[executionID])
 }
