@@ -31,6 +31,13 @@ const (
 	CryptoOp                 = "crypto_op"
 )
 
+type ConversationType string
+
+const (
+	NonStreamingConversation ConversationType = "non_streaming"
+	StreamingConversation    ConversationType = "streaming"
+)
+
 // componentMetrics holds dapr runtime metrics for components.
 type componentMetrics struct {
 	pubsubIngressCount          *stats.Int64Measure
@@ -60,6 +67,9 @@ type componentMetrics struct {
 
 	conversationCount   *stats.Int64Measure
 	conversationLatency *stats.Float64Measure
+
+	conversationUsagePromptTokens     *stats.Int64Measure
+	conversationUsageCompletionTokens *stats.Int64Measure
 
 	cryptoCount   *stats.Int64Measure
 	cryptoLatency *stats.Float64Measure
@@ -160,6 +170,14 @@ func newComponentMetrics() *componentMetrics {
 			"component/conversation/latencies",
 			"The latency of the response from the conversation component.",
 			stats.UnitMilliseconds),
+		conversationUsagePromptTokens: stats.Int64(
+			"component/conversation/usage/prompt_tokens",
+			"The number of prompt tokens used in a conversation.",
+			stats.UnitDimensionless),
+		conversationUsageCompletionTokens: stats.Int64(
+			"component/conversation/usage/completion_tokens",
+			"The number of completion tokens used in a conversation.",
+			stats.UnitDimensionless),
 		cryptoCount: stats.Int64(
 			"component/crypto/count",
 			"The number of operations performed on the crypto component.",
@@ -197,8 +215,10 @@ func (c *componentMetrics) Init(appID, namespace string, latencyDistribution *vi
 		diagUtils.NewMeasureView(c.configurationCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.secretLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.secretCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
-		diagUtils.NewMeasureView(c.conversationLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, latencyDistribution),
-		diagUtils.NewMeasureView(c.conversationCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, view.Count()),
+		diagUtils.NewMeasureView(c.conversationLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, typeKey}, latencyDistribution),
+		diagUtils.NewMeasureView(c.conversationCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, typeKey}, view.Count()),
+		diagUtils.NewMeasureView(c.conversationUsagePromptTokens, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, typeKey}, view.Sum()),
+		diagUtils.NewMeasureView(c.conversationUsageCompletionTokens, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, typeKey}, view.Sum()),
 		diagUtils.NewMeasureView(c.cryptoLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.cryptoCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 	)
@@ -360,18 +380,29 @@ func (c *componentMetrics) ConfigurationInvoked(ctx context.Context, component, 
 	}
 }
 
-// SecretInvoked records the metrics for a secret event.
-func (c *componentMetrics) ConversationInvoked(ctx context.Context, component string, success bool, elapsed float64) {
+// ConversationInvoked records the metrics for a conversation event.
+func (c *componentMetrics) ConversationInvoked(ctx context.Context, component string, success bool, elapsed float64, conversationType ConversationType, promptTokens, completionTokens int64) {
 	if c.enabled {
+		typeValue := string(conversationType)
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(c.conversationCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success)),
+			diagUtils.WithTags(c.conversationCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), typeKey, typeValue),
 			c.conversationCount.M(1))
+
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(c.conversationUsagePromptTokens.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), typeKey, typeValue),
+			c.conversationUsagePromptTokens.M(promptTokens))
+
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(c.conversationUsageCompletionTokens.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), typeKey, typeValue),
+			c.conversationUsageCompletionTokens.M(completionTokens))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(c.conversationLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success)),
+				diagUtils.WithTags(c.conversationLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), typeKey, typeValue),
 				c.conversationLatency.M(elapsed))
 		}
 	}
