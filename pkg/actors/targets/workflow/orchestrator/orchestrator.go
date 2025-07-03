@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,7 +36,16 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator")
+var (
+	log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator")
+
+	orchestratorCache = sync.Pool{
+		New: func() any {
+			var o *orchestrator
+			return o
+		},
+	}
+)
 
 type EventSink func(*backend.OrchestrationMetadata)
 
@@ -65,6 +75,7 @@ type orchestrator struct {
 	lock                  chan struct{}
 	closeCh               chan struct{}
 	closed                atomic.Bool
+	wg                    sync.WaitGroup
 }
 
 type Options struct {
@@ -102,28 +113,40 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 	}
 
 	reminderInterval := time.Minute * 1
+
 	if opts.ReminderInterval != nil {
 		reminderInterval = *opts.ReminderInterval
 	}
 
 	return func(actorID string) targets.Interface {
-		o := &orchestrator{
-			appID:              opts.AppID,
-			actorID:            actorID,
-			actorType:          opts.WorkflowActorType,
-			activityActorType:  opts.ActivityActorType,
-			scheduler:          opts.Scheduler,
-			reminderInterval:   reminderInterval,
-			resiliency:         opts.Resiliency,
-			table:              table,
-			reminders:          reminders,
-			router:             router,
-			actorState:         astate,
-			schedulerReminders: opts.SchedulerReminders,
-			ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
-			closeCh:            make(chan struct{}),
-			lock:               make(chan struct{}, 1),
+		o := orchestratorCache.Get().(*orchestrator)
+		if o == nil {
+			o = &orchestrator{
+				appID:              opts.AppID,
+				actorID:            actorID,
+				actorType:          opts.WorkflowActorType,
+				activityActorType:  opts.ActivityActorType,
+				scheduler:          opts.Scheduler,
+				reminderInterval:   reminderInterval,
+				resiliency:         opts.Resiliency,
+				table:              table,
+				reminders:          reminders,
+				router:             router,
+				actorState:         astate,
+				schedulerReminders: opts.SchedulerReminders,
+				ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
+				closeCh:            make(chan struct{}),
+				lock:               make(chan struct{}, 1),
+			}
+		} else {
+			// Wait for any previous operations to complete before reusing the workflow
+			// instance.
+			o.actorID = actorID
+			o.ometaBroadcaster = broadcaster.New[*backend.OrchestrationMetadata]()
+			o.closeCh = make(chan struct{})
+			o.closed.Store(false)
 		}
+
 		if opts.EventSink != nil {
 			ch := make(chan *backend.OrchestrationMetadata)
 			go o.runEventSink(ch, opts.EventSink)
@@ -168,6 +191,8 @@ func (o *orchestrator) Completed() bool {
 }
 
 func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
+	o.wg.Add(1)
+	defer o.wg.Done()
 	return o.handleStream(ctx, req, stream)
 }
 
