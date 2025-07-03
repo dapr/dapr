@@ -30,7 +30,16 @@ import (
 
 const headerReentrancyID = "Dapr-Reentrancy-Id"
 
-var ErrLockClosed = errors.New("failed to acquire lock, actor closing")
+var (
+	ErrLockClosed = errors.New("actor lock is closed")
+
+	lockCache = &sync.Pool{
+		New: func() any {
+			var l *Lock
+			return l
+		},
+	}
+)
 
 type Options struct {
 	ActorType   string
@@ -66,14 +75,27 @@ func New(opts Options) *Lock {
 		}
 	}
 
-	return &Lock{
-		reentrancyEnabled: reentrancyEnabled,
-		maxStackDepth:     maxStackDepth,
-		actorType:         opts.ActorType,
-		inflights:         ring.NewBuffered[inflight](2, 8),
-		lock:              make(chan struct{}, 1),
-		closeCh:           make(chan struct{}),
+	l := lockCache.Get().(*Lock)
+	if l == nil {
+		return &Lock{
+			actorType:         opts.ActorType,
+			reentrancyEnabled: reentrancyEnabled,
+			maxStackDepth:     maxStackDepth,
+			inflights:         ring.NewBuffered[inflight](2, 8),
+			lock:              make(chan struct{}, 1),
+			closeCh:           make(chan struct{}),
+		}
 	}
+
+	l.actorType = opts.ActorType
+	l.maxStackDepth = maxStackDepth
+	l.reentrancyEnabled = reentrancyEnabled
+	l.closeCh = make(chan struct{})
+	for range l.inflights.Len() {
+		l.inflights.RemoveFront()
+	}
+
+	return l
 }
 
 func (l *Lock) Lock(ctx context.Context) (context.Context, context.CancelFunc, error) {
@@ -92,7 +114,7 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 		return nil, nil, ctx.Err()
 	}
 
-	flight, err := l.handleLock(msg)
+	flight, err := l.handleLock(ctx, msg)
 	<-l.lock
 	if err != nil {
 		return nil, nil, err
@@ -140,9 +162,14 @@ func (l *Lock) Close(ctx context.Context) {
 	l.Lock(ctx)
 	close(l.closeCh)
 	l.wg.Wait()
+	lockCache.Put(l)
 }
 
-func (l *Lock) handleLock(msg *internalv1pb.InternalInvokeRequest) (*inflight, error) {
+func (l *Lock) handleLock(ctx context.Context, msg *internalv1pb.InternalInvokeRequest) (*inflight, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	id, ok := l.idFromRequest(msg)
 
 	// If this is:
