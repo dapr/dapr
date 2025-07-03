@@ -152,7 +152,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		// usage validation
 		estimatedTokensInt := getEchoEstimatedTokens("well hello there")
-		estimatedTokens := int32(estimatedTokensInt) //nolint:gosec // Safe conversion for test data
+		estimatedTokens := uint32(estimatedTokensInt) //nolint:gosec // Safe conversion for test data
 		require.Equal(t, 2*estimatedTokens, resp.GetUsage().GetTotalTokens())
 		require.Equal(t, estimatedTokens, resp.GetUsage().GetPromptTokens())
 		require.Equal(t, estimatedTokens, resp.GetUsage().GetCompletionTokens())
