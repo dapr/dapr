@@ -16,7 +16,6 @@ package orchestrator
 import (
 	"context"
 	"errors"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -63,7 +62,7 @@ type orchestrator struct {
 	activityResultAwaited atomic.Bool
 	completed             atomic.Bool
 	schedulerReminders    bool
-	lock                  sync.Mutex
+	lock                  chan struct{}
 	closeCh               chan struct{}
 	closed                atomic.Bool
 }
@@ -102,13 +101,12 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
+	reminderInterval := time.Minute * 1
+	if opts.ReminderInterval != nil {
+		reminderInterval = *opts.ReminderInterval
+	}
+
 	return func(actorID string) targets.Interface {
-		reminderInterval := time.Minute * 1
-
-		if opts.ReminderInterval != nil {
-			reminderInterval = *opts.ReminderInterval
-		}
-
 		o := &orchestrator{
 			appID:              opts.AppID,
 			actorID:            actorID,
@@ -124,6 +122,7 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 			schedulerReminders: opts.SchedulerReminders,
 			ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
 			closeCh:            make(chan struct{}),
+			lock:               make(chan struct{}, 1),
 		}
 		if opts.EventSink != nil {
 			ch := make(chan *backend.OrchestrationMetadata)
@@ -139,11 +138,23 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 
 // InvokeMethod implements actors.InternalActor
 func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	select {
+	case o.lock <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-o.lock }()
 	return o.handleInvoke(ctx, req)
 }
 
 // InvokeReminder implements actors.InternalActor
 func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
+	select {
+	case o.lock <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-o.lock }()
 	return o.handleReminder(ctx, reminder)
 }
 
@@ -161,7 +172,10 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 }
 
 // DeactivateActor implements actors.InternalActor
-func (o *orchestrator) Deactivate() error {
+func (o *orchestrator) Deactivate(ctx context.Context) error {
+	o.lock <- struct{}{}
+	defer func() { <-o.lock }()
+
 	o.cleanup()
 	log.Debugf("Workflow actor '%s': deactivated", o.actorID)
 	return nil
