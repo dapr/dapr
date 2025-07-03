@@ -43,12 +43,16 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/local"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
+
+var _ backend.Backend = &Actors{}
 
 var log = logger.NewLogger("dapr.wfengine.backend.actors")
 
@@ -73,6 +77,7 @@ type Actors struct {
 	workflowActorType string
 	activityActorType string
 
+	pendingTasksBackend     PendingTasksBackend
 	defaultReminderInterval *time.Duration
 	resiliency              resiliency.Provider
 	actors                  actors.Interface
@@ -91,6 +96,7 @@ func New(opts Options) *Actors {
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		schedulerReminders:        opts.SchedulerReminders,
+		pendingTasksBackend:       local.NewTasksBackend(),
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
@@ -560,4 +566,34 @@ func (abe *Actors) NextActivityWorkItem(ctx context.Context) (*backend.ActivityW
 
 func (abe *Actors) ActivityActorType() string {
 	return abe.activityActorType
+}
+
+// CancelActivityTask implements backend.Backend.
+func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
+	return abe.pendingTasksBackend.CancelActivityTask(ctx, instanceID, taskID)
+}
+
+// CancelOrchestratorTask implements backend.Backend.
+func (abe *Actors) CancelOrchestratorTask(ctx context.Context, instanceID api.InstanceID) error {
+	return abe.pendingTasksBackend.CancelOrchestratorTask(ctx, instanceID)
+}
+
+// CompleteActivityTask implements backend.Backend.
+func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.ActivityResponse) error {
+	return abe.pendingTasksBackend.CompleteActivityTask(ctx, response)
+}
+
+// CompleteOrchestratorTask implements backend.Backend.
+func (abe *Actors) CompleteOrchestratorTask(ctx context.Context, response *protos.OrchestratorResponse) error {
+	return abe.pendingTasksBackend.CompleteOrchestratorTask(ctx, response)
+}
+
+// WaitForActivityCompletion implements backend.Backend.
+func (abe *Actors) WaitForActivityCompletion(ctx context.Context, request *protos.ActivityRequest) (*protos.ActivityResponse, error) {
+	return abe.pendingTasksBackend.WaitForActivityCompletion(ctx, request)
+}
+
+// WaitForOrchestratorCompletion implements backend.Backend.
+func (abe *Actors) WaitForOrchestratorCompletion(ctx context.Context, request *protos.OrchestratorRequest) (*protos.OrchestratorResponse, error) {
+	return abe.pendingTasksBackend.WaitForOrchestratorCompletion(ctx, request)
 }
