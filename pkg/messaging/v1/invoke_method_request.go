@@ -38,9 +38,10 @@ const (
 type InvokeMethodRequest struct {
 	replayableRequest
 
-	r           *internalv1pb.InternalInvokeRequest
-	dataObject  any
-	dataTypeURL string
+	r                  *internalv1pb.InternalInvokeRequest
+	dataObject         any
+	dataTypeURL        string
+	httpResponseWriter http.ResponseWriter
 }
 
 // NewInvokeMethodRequest creates InvokeMethodRequest object for method.
@@ -179,6 +180,12 @@ func (imr *InvokeMethodRequest) WithReplay(enabled bool) *InvokeMethodRequest {
 	return imr
 }
 
+// WithHTTPResponseWriter enables downstream channel implementations to stream data back to the caller.
+func (imr *InvokeMethodRequest) WithHTTPResponseWriter(rw http.ResponseWriter) *InvokeMethodRequest {
+	imr.httpResponseWriter = rw
+	return imr
+}
+
 // CanReplay returns true if the data stream can be replayed.
 func (imr *InvokeMethodRequest) CanReplay() bool {
 	// We can replay if:
@@ -195,6 +202,10 @@ func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	}
 
 	return m.GetHttpExtension().GetQuerystring()
+}
+
+func (imr *InvokeMethodRequest) HTTPResponseWriter() http.ResponseWriter {
+	return imr.httpResponseWriter
 }
 
 // APIVersion gets API version of InvokeMethodRequest.

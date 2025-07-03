@@ -277,9 +277,13 @@ setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup
 
 setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
-e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
+build-deploy: build docker-push docker-deploy-k8s
 
-perf-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-perf-app-all push-perf-app-all test-perf-all
+init-build-deploy: create-test-namespace setup-3rd-party build-deploy
+
+e2e-build-deploy-run: init-build-deploy setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
+
+perf-build-deploy-run: init-build-deploy setup-test-components build-perf-app-all push-perf-app-all test-perf-all
 
 # Generate perf app image push targets
 $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImagePush,$(ITEM))))

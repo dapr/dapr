@@ -28,13 +28,10 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
-	"github.com/dapr/dapr/pkg/actors/locker"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/idler"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/kit/concurrency/cmap"
-	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/events/queue"
@@ -65,7 +62,6 @@ type Interface interface {
 
 type Options struct {
 	IdlerQueue      *queue.Processor[string, targets.Idlable]
-	Locker          locker.Interface
 	ReentrancyStore *reentrancystore.Store
 }
 
@@ -87,20 +83,15 @@ type RegisterActorTypeOptions struct {
 }
 
 type table struct {
-	factories   cmap.Map[string, targets.Factory]
-	table       cmap.Map[string, targets.Interface]
+	factories   sync.Map
+	table       sync.Map
 	typeUpdates *broadcaster.Broadcaster[[]string]
-
-	// actorTypesLock is a per actor type lock to prevent concurrent access to
-	// the same actor.
-	actorTypesLock fifo.Map[string]
 
 	drainRebalancedActors   bool
 	entityConfigs           map[string]api.EntityConfig
 	drainOngoingCallTimeout time.Duration
 	idlerQueue              *queue.Processor[string, targets.Idlable]
 
-	locker          locker.Interface
 	reentrancyStore *reentrancystore.Store
 
 	lock  sync.RWMutex
@@ -112,13 +103,9 @@ func New(opts Options) Interface {
 		drainRebalancedActors:   true,
 		drainOngoingCallTimeout: time.Minute,
 		entityConfigs:           make(map[string]api.EntityConfig),
-		factories:               cmap.NewMap[string, targets.Factory](),
-		table:                   cmap.NewMap[string, targets.Interface](),
-		actorTypesLock:          fifo.NewMap[string](),
 		clock:                   clock.RealClock{},
 		typeUpdates:             broadcaster.New[[]string](),
 		idlerQueue:              opts.IdlerQueue,
-		locker:                  opts.Locker,
 		reentrancyStore:         opts.ReentrancyStore,
 	}
 }
@@ -129,20 +116,22 @@ func (t *table) Close() error {
 }
 
 func (t *table) Types() []string {
-	return t.factories.Keys()
+	var keys []string
+	t.factories.Range(func(key, _ any) bool {
+		keys = append(keys, key.(string))
+		return true
+	})
+	return keys
 }
 
 func (t *table) Len() map[string]int {
-	t.lock.RLock()
-	defer t.lock.RUnlock()
-
 	alen := make(map[string]int)
-	for _, atype := range t.factories.Keys() {
+	for _, atype := range t.Types() {
 		alen[atype] = 0
 	}
 
-	t.table.Range(func(_ string, target targets.Interface) bool {
-		alen[target.Type()]++
+	t.table.Range(func(_, target any) bool {
+		alen[target.(targets.Interface).Type()]++
 		return true
 	})
 
@@ -171,14 +160,14 @@ func (t *table) doHaltAll(drain bool, fn func(target targets.Interface) bool) er
 		wg   sync.WaitGroup
 		errs = slice.New[error]()
 	)
-	wg.Add(t.table.Len())
-	t.table.Range(func(_ string, target targets.Interface) bool {
+	t.table.Range(func(_, target any) bool {
+		wg.Add(1)
 		go func(target targets.Interface) {
 			defer wg.Done()
 			if fn(target) {
 				errs.Append(t.haltSingle(target, drain))
 			}
-		}(target)
+		}(target.(targets.Interface))
 		return true
 	})
 
@@ -188,33 +177,24 @@ func (t *table) doHaltAll(drain bool, fn func(target targets.Interface) bool) er
 }
 
 func (t *table) IsActorTypeHosted(actorType string) bool {
-	t.lock.RLock()
-	defer t.lock.RUnlock()
-	t.actorTypesLock.Lock(actorType)
-	defer t.actorTypesLock.Unlock(actorType)
 	_, ok := t.factories.Load(actorType)
 	return ok
 }
 
 func (t *table) HostedTarget(actorType, actorID string) (targets.Interface, bool) {
-	t.lock.RLock()
-	defer t.lock.RUnlock()
-	t.actorTypesLock.Lock(actorType)
-	defer t.actorTypesLock.Unlock(actorType)
-	return t.table.Load(key.ConstructComposite(actorType, actorID))
+	v, ok := t.table.Load(key.ConstructComposite(actorType, actorID))
+	if ok {
+		return v.(targets.Interface), ok
+	}
+	return nil, ok
 }
 
 func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, bool, error) {
-	t.lock.RLock()
-	defer t.lock.RUnlock()
-	t.actorTypesLock.Lock(actorType)
-	defer t.actorTypesLock.Unlock(actorType)
-
 	akey := key.ConstructComposite(actorType, actorID)
 
-	target, ok := t.table.Load(akey)
+	load, ok := t.table.Load(akey)
 	if ok {
-		return target, false, nil
+		return load.(targets.Interface), false, nil
 	}
 
 	factory, ok := t.factories.Load(actorType)
@@ -222,10 +202,19 @@ func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, bool,
 		return nil, false, fmt.Errorf("%w: actor type %s not registered", actorerrors.ErrCreatingActor, actorType)
 	}
 
-	target = factory(actorID)
-	t.table.Store(akey, target)
+	target := factory.(targets.Factory)(actorID)
+	got, loaded := t.table.LoadOrStore(akey, target)
+	if loaded {
+		// We are optimizing for lock contention over actor factory creation, since
+		// we cache actor structs anyway so memory allocations is the less of a
+		// concerns.
+		// If it was the case that we lost the race to store a new target, we
+		// simply deactivate the one we made and push the struct on the cache pool
+		// via this Deactivate.
+		target.Deactivate(context.Background())
+	}
 
-	return target, true, nil
+	return got.(targets.Interface), true, nil
 }
 
 func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
@@ -243,7 +232,7 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 		t.factories.Store(opt.Type, opt.Factory)
 	}
 
-	t.typeUpdates.Broadcast(t.factories.Keys())
+	t.typeUpdates.Broadcast(t.Types())
 }
 
 func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
@@ -259,14 +248,12 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 		return slices.Contains(actorTypes, target.Type())
 	})
 
-	t.typeUpdates.Broadcast(t.factories.Keys())
+	t.typeUpdates.Broadcast(t.Types())
 
 	return err
 }
 
 func (t *table) HaltIdlable(ctx context.Context, target targets.Idlable) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
 	return t.haltSingle(target, false)
 }
 
@@ -283,12 +270,11 @@ func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []
 	defer t.lock.Unlock()
 	ch := make(chan []string)
 	t.typeUpdates.Subscribe(ctx, ch)
-	return ch, t.factories.Keys()
+	return ch, t.Types()
 }
 
 func (t *table) haltSingle(target targets.Interface, drain bool) error {
 	key := target.Key()
-	defer t.locker.Close(key)
 
 	if drain {
 		drain = t.drainRebalancedActors
@@ -297,24 +283,25 @@ func (t *table) haltSingle(target targets.Interface, drain bool) error {
 		}
 	}
 
-	if drain {
-		t.locker.CloseUntil(key, t.drainOngoingCallTimeout)
-	} else {
-		t.locker.Close(key)
-	}
-
 	diag.DefaultMonitoring.ActorRebalanced(target.Type())
 
 	log.Debugf("Halting actor '%s'", key)
-	t.idlerQueue.Dequeue(key)
 
 	// Remove the actor from the table
-	// This will forbit more state changes
-	target, ok := t.table.LoadAndDelete(key)
+	// This will forbid more state changes
+	got, ok := t.table.LoadAndDelete(key)
 
 	// If nothing was loaded, the actor was probably already deactivated
-	if !ok || target == nil {
+	if !ok || got == nil {
 		return nil
 	}
-	return target.Deactivate()
+
+	ctx, cancel := context.WithTimeout(context.Background(), t.drainOngoingCallTimeout)
+	defer cancel()
+
+	if !drain {
+		cancel()
+	}
+
+	return got.(targets.Interface).Deactivate(ctx)
 }
