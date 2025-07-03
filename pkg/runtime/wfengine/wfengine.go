@@ -25,7 +25,7 @@ import (
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/processor"
@@ -55,7 +55,7 @@ type Options struct {
 	BackendManager     processor.WorkflowBackendManager
 	Resiliency         resiliency.Provider
 	SchedulerReminders bool
-	EventSink          workflow.EventSink
+	EventSink          orchestrator.EventSink
 }
 
 type engine struct {

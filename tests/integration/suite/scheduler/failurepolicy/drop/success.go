@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	corev1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -48,9 +49,9 @@ func (s *success) Run(t *testing.T, ctx context.Context) {
 	client := s.scheduler.Client(t, ctx)
 
 	job := s.scheduler.JobNowJob("test", "namespace", "appid1")
-	job.Job.FailurePolicy = &schedulerv1.FailurePolicy{
-		Policy: &schedulerv1.FailurePolicy_Drop{
-			Drop: new(schedulerv1.FailurePolicyDrop),
+	job.Job.FailurePolicy = &corev1.JobFailurePolicy{
+		Policy: &corev1.JobFailurePolicy_Drop{
+			Drop: new(corev1.JobFailurePolicyDrop),
 		},
 	}
 

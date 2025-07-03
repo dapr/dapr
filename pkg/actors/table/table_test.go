@@ -14,12 +14,13 @@ limitations under the License.
 package table_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/actors/internal/locker"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -34,9 +35,6 @@ func Test_HaltAll(t *testing.T) {
 	tble := table.New(table.Options{
 		IdlerQueue:      queue,
 		ReentrancyStore: reentrancystore.New(),
-		Locker: locker.New(locker.Options{
-			ConfigStore: reentrancystore.New(),
-		}),
 	})
 
 	deactivations := slice.String()
@@ -45,7 +43,7 @@ func Test_HaltAll(t *testing.T) {
 			{
 				Type: "test1",
 				Factory: fake.New("test1", func(f *fake.Fake) {
-					f.WithDeactivate(func() error {
+					f.WithDeactivate(func(context.Context) error {
 						deactivations.Append(f.Key())
 						return nil
 					})
@@ -54,7 +52,7 @@ func Test_HaltAll(t *testing.T) {
 			{
 				Type: "test2",
 				Factory: fake.New("test2", func(f *fake.Fake) {
-					f.WithDeactivate(func() error {
+					f.WithDeactivate(func(context.Context) error {
 						deactivations.Append(f.Key())
 						return nil
 					})
@@ -63,7 +61,7 @@ func Test_HaltAll(t *testing.T) {
 			{
 				Type: "test3",
 				Factory: fake.New("test3", func(f *fake.Fake) {
-					f.WithDeactivate(func() error {
+					f.WithDeactivate(func(context.Context) error {
 						deactivations.Append(f.Key())
 						return nil
 					})
@@ -116,4 +114,17 @@ func Test_HaltAll(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"test1||1", "test2||1", "test2||2", "test3||312", "test3||xyz",
 	}, deactivations.Slice())
+}
+
+func Test_GetOrCreate_NotRegistered(t *testing.T) {
+	queue := queue.NewProcessor[string, targets.Idlable](queue.Options[string, targets.Idlable]{})
+
+	tble := table.New(table.Options{
+		IdlerQueue:      queue,
+		ReentrancyStore: reentrancystore.New(),
+	})
+
+	_, _, err := tble.GetOrCreate("test1", "1")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, actorerrors.ErrCreatingActor)
 }

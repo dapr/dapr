@@ -24,18 +24,19 @@ type Target interface {
 }
 
 type target struct {
+	name    string
 	healthz *healthz
 	ready   atomic.Bool
 }
 
 func (t *target) Ready() {
 	if t.ready.CompareAndSwap(false, true) {
-		t.healthz.targetsReady.Add(1)
+		t.healthz.markHealthy(t.name)
 	}
 }
 
 func (t *target) NotReady() {
 	if t.ready.CompareAndSwap(true, false) {
-		t.healthz.targetsReady.Add(-1)
+		t.healthz.markUnhealthy(t.name)
 	}
 }

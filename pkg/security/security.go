@@ -156,7 +156,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 		return nil, errors.New("control plane trust domain is required")
 	}
 
-	htarget := opts.Healthz.AddTarget()
+	htarget := opts.Healthz.AddTarget("security-provider")
 
 	cptd, err := spiffeid.TrustDomainFromString(opts.ControlPlaneTrustDomain)
 	if err != nil {
