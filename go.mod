@@ -368,6 +368,7 @@ require (
 	github.com/open-policy-agent/opa v1.4.2 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/openzipkin/zipkin-go v0.4.3 // indirect
+	github.com/oracle/coherence-go-client/v2 v2.2.0 // indirect
 	github.com/oracle/oci-go-sdk/v54 v54.0.0 // indirect
 	github.com/panjf2000/ants/v2 v2.8.1 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
