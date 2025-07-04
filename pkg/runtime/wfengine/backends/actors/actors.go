@@ -52,8 +52,6 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-var _ backend.Backend = &Actors{}
-
 var log = logger.NewLogger("dapr.wfengine.backend.actors")
 
 const (
