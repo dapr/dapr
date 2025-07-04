@@ -46,9 +46,6 @@ message Job {
   // By default, the failure policy is FailurePolicyConstant with a 1s interval
   // and 3 maximum retries.
   optional common.v1.JobFailurePolicy failure_policy = 6;
-
-  // If true, allows this job to overwrite an existing job with the same name.
-  bool overwrite = 7;
 }
 
 // TargetJob is the message used by the daprd sidecar to schedule a job
@@ -167,6 +164,9 @@ message ScheduleJobRequest {
 
   // The metadata associated with the job.
   JobMetadata metadata = 3;
+
+  // If true, allows this job to overwrite an existing job with the same name.
+  bool overwrite = 4;
 }
 
 message ScheduleJobResponse {

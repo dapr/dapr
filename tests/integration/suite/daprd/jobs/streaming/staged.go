@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -79,9 +80,11 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { s.daprdA.Cleanup(t) })
 	s.daprdA.WaitUntilRunning(t, ctx)
 
+	name1 := uuid.New().String()
+	name2 := uuid.New().String()
 	_, err := s.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
-			Name: "test", Schedule: ptr.Of("@every 1s"),
+			Name: name1, Schedule: ptr.Of("@every 1s"),
 			DueTime: ptr.Of(time.Now().Format(time.RFC3339)),
 			Repeats: ptr.Of(uint32(2)),
 		},
@@ -100,13 +103,13 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, numOf(s.triggered.Slice(), "test"), 1)
+		assert.GreaterOrEqual(c, numOf(s.triggered.Slice(), name1), 1)
 	}, 10*time.Second, 10*time.Millisecond)
 
 	s.daprdA.Cleanup(t)
 
 	_, err = s.schedulers.Client(t, ctx).ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
-		Name: "test2",
+		Name: name2,
 		Job:  &schedulerv1.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
 		Metadata: &schedulerv1.JobMetadata{
 			AppId: s.daprdB.AppID(), Namespace: s.daprdB.Namespace(),
@@ -118,8 +121,8 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	time.Sleep(2 * time.Second)
-	assert.GreaterOrEqual(t, numOf(s.triggered.Slice(), "test"), 1)
-	assert.Equal(t, 0, numOf(s.triggered.Slice(), "test2"))
+	assert.GreaterOrEqual(t, numOf(s.triggered.Slice(), name1), 1)
+	assert.Equal(t, 0, numOf(s.triggered.Slice(), name2))
 
 	s.daprdB.Run(t, ctx)
 	t.Cleanup(func() { s.daprdB.Cleanup(t) })
@@ -128,8 +131,8 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		// Allow for greater that three "test"s because a trigger may have failed
 		// on the backend due to scheduler shutting down during tick execution.
-		assert.GreaterOrEqual(c, numOf(s.triggered.Slice(), "test"), 2)
-		assert.Contains(c, s.triggered.Slice(), "test2")
+		assert.GreaterOrEqual(c, numOf(s.triggered.Slice(), name1), 2)
+		assert.Contains(c, s.triggered.Slice(), name2)
 	}, 10*time.Second, 10*time.Millisecond)
 
 	s.daprdB.Cleanup(t)
