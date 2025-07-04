@@ -45,6 +45,14 @@ var (
 		"scheduler/trigger_latency",
 		"The total time it takes to trigger a job from the scheduler service.",
 		stats.UnitMilliseconds)
+	jobsFailedTotal = stats.Int64(
+		"scheduler/jobs_failed_total",
+		"The total number of failed jobs.",
+		stats.UnitDimensionless)
+	jobsUndeliveredTotal = stats.Int64(
+		"scheduler/jobs_undelivered_total",
+		"The total number of undelivered jobs.",
+		stats.UnitDimensionless)
 )
 
 // RecordSidecarsConnectedCount records the number of dapr sidecars connected to the scheduler service
@@ -89,6 +97,36 @@ func RecordTriggerDuration(start time.Time) {
 	stats.RecordWithTags(context.Background(), utils.WithTags(triggerLatency.Name()), triggerLatency.M(float64(elapsed)))
 }
 
+// RecordJobsFailed records the total number of failed jobs
+func RecordJobsFailedCount(jobMetadata *schedulerv1pb.JobMetadata) {
+	var jobType string
+	switch jobMetadata.GetTarget().GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Job:
+		jobType = "job"
+	case *schedulerv1pb.JobTargetMetadata_Actor:
+		jobType = "actor"
+	default:
+		jobType = "unknown"
+	}
+
+	stats.RecordWithTags(context.Background(), utils.WithTags(jobsFailedTotal.Name(), jobType), jobsFailedTotal.M(1))
+}
+
+// RecordJobsUndelivered records the total number of undelivered jobs
+func RecordJobsUndeliveredCount(jobMetadata *schedulerv1pb.JobMetadata) {
+	var jobType string
+	switch jobMetadata.GetTarget().GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Job:
+		jobType = "job"
+	case *schedulerv1pb.JobTargetMetadata_Actor:
+		jobType = "actor"
+	default:
+		jobType = "unknown"
+	}
+
+	stats.RecordWithTags(context.Background(), utils.WithTags(jobsUndeliveredTotal.Name(), jobType), jobsUndeliveredTotal.M(1))
+}
+
 // InitMetrics initialize the scheduler service metrics.
 func InitMetrics() error {
 	err := view.Register(
@@ -96,6 +134,8 @@ func InitMetrics() error {
 		utils.NewMeasureView(jobsScheduledTotal, []tag.Key{}, view.Count()),
 		utils.NewMeasureView(jobsTriggeredTotal, []tag.Key{}, view.Count()),
 		utils.NewMeasureView(triggerLatency, []tag.Key{}, view.Distribution(0, 100, 500, 1000, 5000, 10000)),
+		utils.NewMeasureView(jobsFailedTotal, []tag.Key{}, view.Count()),
+		utils.NewMeasureView(jobsUndeliveredTotal, []tag.Key{}, view.Count()),
 	)
 
 	return err
