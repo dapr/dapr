@@ -42,6 +42,11 @@ etcdBackendBatchInterval: 50ms
 etcdDefragThresholdMB: 100
 etcdMetrics: "basic"
 
+etcdEmbed: true
+etcdClientEndpoints: []
+etcdClientUsername: ""
+etcdClientPassword: ""
+
 livenessProbe:
   initialDelaySeconds: 10
   periodSeconds: 3

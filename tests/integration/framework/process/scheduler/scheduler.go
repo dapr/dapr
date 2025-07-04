@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -147,6 +148,19 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 	if opts.overrideBroadcastHostPort != nil {
 		args = append(args, "--override-broadcast-host-port="+*opts.overrideBroadcastHostPort)
+	}
+
+	if opts.embed != nil {
+		args = append(args, "--etcd-embed="+strconv.FormatBool(*opts.embed))
+	}
+	if opts.clientEndpoints != nil {
+		args = append(args, "--etcd-client-endpoints="+strings.Join(*opts.clientEndpoints, ","))
+	}
+	if opts.clientUsername != nil {
+		args = append(args, "--etcd-client-username="+*opts.clientUsername)
+	}
+	if opts.clientPassword != nil {
+		args = append(args, "--etcd-client-password="+*opts.clientPassword)
 	}
 
 	return &Scheduler{

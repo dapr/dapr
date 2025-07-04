@@ -14,7 +14,12 @@ limitations under the License.
 package scheduler
 
 import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 )
 
@@ -28,6 +33,11 @@ type options struct {
 	etcdClientPort           int
 	namespace                string
 	etcdBackendBatchInterval string
+
+	embed           *bool
+	clientEndpoints *[]string
+	clientUsername  *string
+	clientPassword  *string
 
 	logLevel    string
 	port        int
@@ -124,4 +134,41 @@ func WithOverrideBroadcastHostPort(address string) Option {
 	return func(o *options) {
 		o.overrideBroadcastHostPort = &address
 	}
+}
+
+func WithEmbed(embed bool) Option {
+	return func(o *options) {
+		o.embed = &embed
+	}
+}
+
+func WithClientEndpoints(endpoints ...string) Option {
+	return func(o *options) {
+		o.clientEndpoints = &endpoints
+	}
+}
+
+func WithClientUsername(username string) Option {
+	return func(o *options) {
+		o.clientUsername = &username
+	}
+}
+
+func WithClientPassword(password string) Option {
+	return func(o *options) {
+		o.clientPassword = &password
+	}
+}
+
+func WithLogLineStdout(ll *logline.LogLine) Option {
+	return WithExecOptions(exec.WithStdout(ll.Stdout()))
+}
+
+func WithExit1() Option {
+	return WithExecOptions(
+		exec.WithExitCode(1),
+		exec.WithRunError(func(t *testing.T, err error) {
+			assert.ErrorContains(t, err, "exit status 1")
+		}),
+	)
 }
