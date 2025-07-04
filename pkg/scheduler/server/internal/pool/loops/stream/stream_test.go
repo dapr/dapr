@@ -290,6 +290,7 @@ func Test_Stream(t *testing.T) {
 			})
 		}
 
+		time.Sleep(time.Second / 2)
 		suite.closeserver()
 		suite.streamLoop.Close(new(loops.StreamShutdown))
 		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123})

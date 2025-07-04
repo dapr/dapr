@@ -37,9 +37,7 @@ var (
 		return loop.Empty[loops.Event]()
 	}}
 	streamCache = sync.Pool{New: func() any {
-		return &stream{
-			inflight: make(map[uint64]func(api.TriggerResponseResult)),
-		}
+		return new(stream)
 	}}
 )
 
@@ -64,8 +62,7 @@ type stream struct {
 	// single client.
 	triggerIDx uint64
 
-	inflight map[uint64]func(api.TriggerResponseResult)
-	lock     sync.Mutex
+	inflight sync.Map // map[uint64]func(api.TriggerResponseResult)
 
 	wg sync.WaitGroup
 }
@@ -77,9 +74,10 @@ func New(opts Options) loop.Interface[loops.Event] {
 	stream.connLoop = opts.ConnLoop
 	stream.ns = opts.Request.GetNamespace()
 	stream.appID = opts.Request.GetAppId()
+	stream.triggerIDx = 0
 
 	loop := StreamLoopCache.Get().(loop.Interface[loops.Event])
-	loop.Reset(stream, 5)
+	loop.Reset(stream, 1024)
 
 	stream.wg.Add(1)
 	go func() {
@@ -109,9 +107,7 @@ func (s *stream) Handle(ctx context.Context, event loops.Event) error {
 // the job to the stream and stores the result function in the inflight map.
 func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 	s.triggerIDx++
-	s.lock.Lock()
-	s.inflight[s.triggerIDx] = req.ResultFn
-	s.lock.Unlock()
+	s.inflight.Store(s.triggerIDx, req.ResultFn)
 
 	job := &schedulerv1pb.WatchJobsResponse{
 		Name:     req.Job.GetName(),
@@ -131,10 +127,12 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 // result.
 func (s *stream) handleShutdown() {
 	s.wg.Wait()
-	for id, fn := range s.inflight {
-		fn(api.TriggerResponseResult_UNDELIVERABLE)
-		delete(s.inflight, id)
-	}
+	s.inflight.Range(func(_, fn any) bool {
+		fn.(func(api.TriggerResponseResult))(api.TriggerResponseResult_UNDELIVERABLE)
+		return true
+	})
+	s.inflight.Clear()
+	streamCache.Put(s)
 }
 
 // recvLoop is the main loop for receiving messages from the stream. It
@@ -170,21 +168,16 @@ func (s *stream) recv() error {
 		return errors.New("received nil result from stream")
 	}
 
-	s.lock.Lock()
-	inf, ok := s.inflight[result.GetId()]
+	inf, ok := s.inflight.LoadAndDelete(result.GetId())
 	if !ok {
-		s.lock.Unlock()
 		return errors.New("received unknown trigger response from stream")
 	}
 
-	delete(s.inflight, result.GetId())
-	s.lock.Unlock()
-
 	switch result.GetStatus() {
 	case schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS:
-		inf(api.TriggerResponseResult_SUCCESS)
+		inf.(func(api.TriggerResponseResult))(api.TriggerResponseResult_SUCCESS)
 	case schedulerv1pb.WatchJobsRequestResultStatus_FAILED:
-		inf(api.TriggerResponseResult_FAILED)
+		inf.(func(api.TriggerResponseResult))(api.TriggerResponseResult_FAILED)
 	default:
 		return fmt.Errorf("unknown trigger response status: %s", result.GetStatus())
 	}

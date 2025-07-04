@@ -103,6 +103,10 @@ func (l *Lock) Lock(ctx context.Context) (context.Context, context.CancelFunc, e
 }
 
 func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvokeRequest) (context.Context, context.CancelFunc, error) {
+	if ctx.Err() != nil {
+		return nil, nil, ctx.Err()
+	}
+
 	diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, 1)
 	defer diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, -1)
 
