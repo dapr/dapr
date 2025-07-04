@@ -43,6 +43,7 @@ type Options struct {
 	Security           security.Handler
 	Healthz            healthz.Healthz
 	SchedulerReminders bool
+	SchedulerStreams   uint
 }
 
 // Scheduler manages the connection to the cluster of schedulers.
@@ -66,6 +67,7 @@ func New(opts Options) *Scheduler {
 	hosts := hosts.New(hosts.Options{
 		Security:  opts.Security,
 		Connector: connector,
+		StreamN:   opts.SchedulerStreams,
 	})
 
 	clients := clients.New(clients.Options{

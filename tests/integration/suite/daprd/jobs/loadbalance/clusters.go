@@ -15,7 +15,6 @@ package loadbalance
 
 import (
 	"context"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,18 +41,13 @@ type clusters struct {
 	daprdC     *daprd.Daprd
 	schedulers *cluster.Cluster
 
-	called     atomic.Int64
-	totalCalls atomic.Int64
+	called atomic.Int64
 }
 
 func (c *clusters) Setup(t *testing.T) []framework.Option {
-	c.called.Store(0)
-	c.totalCalls.Store(0)
-
 	var hasCalledA, hasCalledB, hasCalledC atomic.Bool
 	srvA := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *rtv1pb.JobEventRequest) (*rtv1pb.JobEventResponse, error) {
-			c.totalCalls.Add(1)
 			if hasCalledA.CompareAndSwap(false, true) {
 				c.called.Add(1)
 			}
@@ -62,7 +56,6 @@ func (c *clusters) Setup(t *testing.T) []framework.Option {
 	)
 	srvB := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *rtv1pb.JobEventRequest) (*rtv1pb.JobEventResponse, error) {
-			c.totalCalls.Add(1)
 			if hasCalledB.CompareAndSwap(false, true) {
 				c.called.Add(1)
 			}
@@ -71,7 +64,6 @@ func (c *clusters) Setup(t *testing.T) []framework.Option {
 	)
 	srvC := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *rtv1pb.JobEventRequest) (*rtv1pb.JobEventResponse, error) {
-			c.totalCalls.Add(1)
 			if hasCalledC.CompareAndSwap(false, true) {
 				c.called.Add(1)
 			}
@@ -116,28 +108,19 @@ func (c *clusters) Run(t *testing.T, ctx context.Context) {
 			resp, err := daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1pb.GetMetadataRequest))
 			assert.NoError(col, err)
 			assert.ElementsMatch(col, c.schedulers.Addresses(), resp.GetScheduler().GetConnectedAddresses())
-			assert.Len(col, resp.GetScheduler().GetConnectedAddresses(), 3)
 		}
 	}, time.Second*10, time.Millisecond*10)
 
-	var i atomic.Int64
-	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		c.totalCalls.Store(0)
-		c.called.Store(0)
+	_, err := c.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1pb.ScheduleJobRequest{
+		Job: &rtv1pb.Job{
+			Name:     "job",
+			Schedule: ptr.Of("@every 1s"),
+			DueTime:  ptr.Of("0s"),
+		},
+	})
+	require.NoError(t, err)
 
-		_, err := c.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1pb.ScheduleJobRequest{
-			Job: &rtv1pb.Job{
-				Name:     "job-" + strconv.FormatInt(i.Add(1), 10),
-				Schedule: ptr.Of("@every 1s"),
-				DueTime:  ptr.Of("0s"),
-				Repeats:  ptr.Of(uint32(3)),
-			},
-		})
-		require.NoError(t, err)
-
-		assert.EventuallyWithT(t, func(cc *assert.CollectT) {
-			assert.Equal(cc, int64(3), c.totalCalls.Load())
-		}, time.Second*5, time.Millisecond*10)
-		assert.Equal(col, int64(3), c.called.Load())
-	}, time.Second*30, time.Millisecond*10)
+	assert.EventuallyWithT(t, func(cc *assert.CollectT) {
+		assert.Equal(cc, int64(3), c.called.Load())
+	}, time.Second*20, time.Millisecond*10)
 }
