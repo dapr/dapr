@@ -1991,6 +1991,8 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockAppChannel := new(channelt.MockAppChannel)
 	rt.channels.WithAppChannel(mockAppChannel)
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+	fakeAppConfig := &config.ApplicationConfig{}
+	mockAppChannel.On("GetAppConfig").Return(fakeAppConfig, nil)
 	// Create new processor with mocked app channel.
 	rt.processor = processor.New(processor.Options{
 		ID:             rt.runtimeConfig.id,
