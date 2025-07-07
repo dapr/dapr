@@ -86,7 +86,7 @@ func (e *parallel) Run(t *testing.T, ctx context.Context) {
 	executionMap := sync.Map{}
 
 	require.NoError(t, e.workflow.Registry().AddActivityN("FailActivity", func(ctx task.ActivityContext) (any, error) {
-		count, _ := executionMap.LoadOrStore(ctx.GetTaskExecutionId(), &atomic.Int32{})
+		count, _ := executionMap.LoadOrStore(ctx.GetTaskExecutionID(), &atomic.Int32{})
 		value := count.(*atomic.Int32)
 		if value.Load() == 2 {
 			return nil, nil

@@ -62,9 +62,9 @@ func (e *single) Run(t *testing.T, ctx context.Context) {
 	var executionID string
 
 	require.NoError(t, e.workflow.Registry().AddActivityN("FailActivity", func(ctx task.ActivityContext) (any, error) {
-		executionMap[ctx.GetTaskExecutionId()] = executionMap[ctx.GetTaskExecutionId()] + 1
-		executionID = ctx.GetTaskExecutionId()
-		if executionMap[ctx.GetTaskExecutionId()] == 3 {
+		executionMap[ctx.GetTaskExecutionID()] = executionMap[ctx.GetTaskExecutionID()] + 1
+		executionID = ctx.GetTaskExecutionID()
+		if executionMap[ctx.GetTaskExecutionID()] == 3 {
 			return nil, nil
 		}
 		return nil, errors.New("activity failure")
