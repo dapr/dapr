@@ -11,18 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package locker
+package rerun
 
 import (
-	"context"
-	"time"
-
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/raise"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/timer"
 )
-
-type Interface interface {
-	Lock(actorType, actorID string) (context.CancelFunc, error)
-	LockRequest(req *internalv1pb.InternalInvokeRequest) (context.CancelFunc, error)
-	Close(actorKey string)
-	CloseUntil(actorKey string, d time.Duration)
-}

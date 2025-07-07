@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package orchestrator
 
 import (
 	"context"
@@ -25,18 +25,18 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
-func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.OrchestrationMetadata, error) {
+func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.OrchestrationMetadata, error) {
 	// See if the state for this actor is already cached in memory
-	if w.state != nil {
-		return w.state, w.ometa, nil
+	if o.state != nil {
+		return o.state, o.ometa, nil
 	}
 
 	// state is not cached, so try to load it from the state store
-	log.Debugf("Workflow actor '%s': loading workflow state", w.actorID)
-	state, err := wfenginestate.LoadWorkflowState(ctx, w.actorState, w.actorID, wfenginestate.Options{
-		AppID:             w.appID,
-		WorkflowActorType: w.actorType,
-		ActivityActorType: w.activityActorType,
+	log.Debugf("Workflow actor '%s': loading workflow state", o.actorID)
+	state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, wfenginestate.Options{
+		AppID:             o.appID,
+		WorkflowActorType: o.actorType,
+		ActivityActorType: o.activityActorType,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -46,26 +46,24 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 		return nil, nil, nil
 	}
 	// Update cached state
-	w.lock.Lock()
-	defer w.lock.Unlock()
-	w.state = state
-	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
-	w.setOrchestrationMetadata(w.rstate, w.getExecutionStartedEvent(state))
-	w.ometaBroadcaster.Broadcast(w.ometa)
+	o.state = state
+	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
+	o.setOrchestrationMetadata(o.rstate, o.getExecutionStartedEvent(state))
+	o.ometaBroadcaster.Broadcast(o.ometa)
 
-	return state, w.ometa, nil
+	return state, o.ometa, nil
 }
 
-func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
+func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
 	// generate and run a state store operation that saves all changes
-	req, err := state.GetSaveRequest(w.actorID)
+	req, err := state.GetSaveRequest(o.actorID)
 	if err != nil {
 		return err
 	}
 
-	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", w.actorID, len(req.Operations))
+	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(req.Operations))
 
-	if err = w.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
+	if err = o.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
 		return err
 	}
 
@@ -73,17 +71,15 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 	state.ResetChangeTracking()
 
 	// Update cached state
-	w.lock.Lock()
-	defer w.lock.Unlock()
-	w.state = state
-	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.CustomStatus, state.History)
-	w.setOrchestrationMetadata(w.rstate, w.getExecutionStartedEvent(state))
-	w.ometaBroadcaster.Broadcast(w.ometa)
+	o.state = state
+	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
+	o.setOrchestrationMetadata(o.rstate, o.getExecutionStartedEvent(state))
+	o.ometaBroadcaster.Broadcast(o.ometa)
 	return nil
 }
 
 // This method cleans up a workflow associated with the given actorID
-func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfenginestate.State, requiredAndNotCompleted bool) error {
+func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *wfenginestate.State, requiredAndNotCompleted bool) error {
 	// If the workflow is required to complete but it's not yet completed then return [ErrNotCompleted]
 	// This check is used by purging workflow
 	if requiredAndNotCompleted {
@@ -91,24 +87,24 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 	}
 
 	// This will create a request to purge everything
-	req, err := state.GetPurgeRequest(w.actorID)
+	req, err := state.GetPurgeRequest(o.actorID)
 	if err != nil {
 		return err
 	}
 
 	// This will do the purging
-	err = w.actorState.TransactionalStateOperation(ctx, true, req, false)
+	err = o.actorState.TransactionalStateOperation(ctx, true, req, false)
 	if err != nil {
 		return err
 	}
 
-	w.table.DeleteFromTableIn(w, 0)
-	w.cleanup()
+	o.table.DeleteFromTableIn(o, 0)
+	o.cleanup()
 
 	return nil
 }
 
-func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntimeState, startEvent *protos.ExecutionStartedEvent) {
+func (o *orchestrator) setOrchestrationMetadata(rstate *backend.OrchestrationRuntimeState, startEvent *protos.ExecutionStartedEvent) {
 	var se *protos.ExecutionStartedEvent = nil
 	if rstate.GetStartEvent() != nil {
 		se = rstate.GetStartEvent()
@@ -130,7 +126,7 @@ func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntime
 	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetOrchestrationInstance() != nil {
 		parentInstanceID = se.GetParentInstance().GetOrchestrationInstance().GetInstanceId()
 	}
-	w.ometa = &backend.OrchestrationMetadata{
+	o.ometa = &backend.OrchestrationMetadata{
 		InstanceId:       rstate.GetInstanceId(),
 		Name:             name,
 		RuntimeStatus:    runtimestate.RuntimeStatus(rstate),
@@ -145,34 +141,35 @@ func (w *workflow) setOrchestrationMetadata(rstate *backend.OrchestrationRuntime
 	}
 }
 
-func (w *workflow) cleanup() {
-	w.lock.Lock()
-	defer w.lock.Unlock()
+func (o *orchestrator) cleanup() {
+	if o.closed.CompareAndSwap(false, true) {
+		close(o.closeCh)
+		o.ometaBroadcaster.Close()
+		o.state = nil
+		o.rstate = nil
+		o.ometa = nil
 
-	w.ometaBroadcaster.Close()
-	w.state = nil // A bit of extra caution, shouldn't be necessary
-	w.rstate = nil
-	w.ometa = nil
-
-	if w.closed.CompareAndSwap(false, true) {
-		close(w.closeCh)
+		go func() {
+			o.wg.Wait()
+			orchestratorCache.Put(o)
+		}()
 	}
 }
 
 // This method purges all the completed activity data from a workflow associated with the given actorID
-func (w *workflow) purgeWorkflowState(ctx context.Context) error {
-	state, _, err := w.loadInternalState(ctx)
+func (o *orchestrator) purgeWorkflowState(ctx context.Context) error {
+	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return err
 	}
 	if state == nil {
 		return api.ErrInstanceNotFound
 	}
-	w.completed.Store(true)
-	return w.cleanupWorkflowStateInternal(ctx, state, !runtimestate.IsCompleted(w.rstate))
+	o.completed.Store(true)
+	return o.cleanupWorkflowStateInternal(ctx, state, !runtimestate.IsCompleted(o.rstate))
 }
 
-func (w *workflow) getExecutionStartedEvent(state *wfenginestate.State) *protos.ExecutionStartedEvent {
+func (o *orchestrator) getExecutionStartedEvent(state *wfenginestate.State) *protos.ExecutionStartedEvent {
 	for _, e := range state.History {
 		if es := e.GetExecutionStarted(); es != nil {
 			return es
