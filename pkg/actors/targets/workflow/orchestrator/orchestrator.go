@@ -36,7 +36,16 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator")
+var (
+	log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator")
+
+	orchestratorCache = sync.Pool{
+		New: func() any {
+			var o *orchestrator
+			return o
+		},
+	}
+)
 
 type EventSink func(*backend.OrchestrationMetadata)
 
@@ -63,9 +72,10 @@ type orchestrator struct {
 	activityResultAwaited atomic.Bool
 	completed             atomic.Bool
 	schedulerReminders    bool
-	lock                  sync.Mutex
+	lock                  chan struct{}
 	closeCh               chan struct{}
 	closed                atomic.Bool
+	wg                    sync.WaitGroup
 }
 
 type Options struct {
@@ -102,29 +112,41 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
+	reminderInterval := time.Minute * 1
+
+	if opts.ReminderInterval != nil {
+		reminderInterval = *opts.ReminderInterval
+	}
+
 	return func(actorID string) targets.Interface {
-		reminderInterval := time.Minute * 1
-
-		if opts.ReminderInterval != nil {
-			reminderInterval = *opts.ReminderInterval
+		o := orchestratorCache.Get().(*orchestrator)
+		if o == nil {
+			o = &orchestrator{
+				appID:              opts.AppID,
+				actorID:            actorID,
+				actorType:          opts.WorkflowActorType,
+				activityActorType:  opts.ActivityActorType,
+				scheduler:          opts.Scheduler,
+				reminderInterval:   reminderInterval,
+				resiliency:         opts.Resiliency,
+				table:              table,
+				reminders:          reminders,
+				router:             router,
+				actorState:         astate,
+				schedulerReminders: opts.SchedulerReminders,
+				ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
+				closeCh:            make(chan struct{}),
+				lock:               make(chan struct{}, 1),
+			}
+		} else {
+			// Wait for any previous operations to complete before reusing the workflow
+			// instance.
+			o.actorID = actorID
+			o.ometaBroadcaster = broadcaster.New[*backend.OrchestrationMetadata]()
+			o.closeCh = make(chan struct{})
+			o.closed.Store(false)
 		}
 
-		o := &orchestrator{
-			appID:              opts.AppID,
-			actorID:            actorID,
-			actorType:          opts.WorkflowActorType,
-			activityActorType:  opts.ActivityActorType,
-			scheduler:          opts.Scheduler,
-			reminderInterval:   reminderInterval,
-			resiliency:         opts.Resiliency,
-			table:              table,
-			reminders:          reminders,
-			router:             router,
-			actorState:         astate,
-			schedulerReminders: opts.SchedulerReminders,
-			ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
-			closeCh:            make(chan struct{}),
-		}
 		if opts.EventSink != nil {
 			ch := make(chan *backend.OrchestrationMetadata)
 			go o.runEventSink(ch, opts.EventSink)
@@ -139,11 +161,23 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 
 // InvokeMethod implements actors.InternalActor
 func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	select {
+	case o.lock <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-o.lock }()
 	return o.handleInvoke(ctx, req)
 }
 
 // InvokeReminder implements actors.InternalActor
 func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
+	select {
+	case o.lock <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-o.lock }()
 	return o.handleReminder(ctx, reminder)
 }
 
@@ -157,11 +191,16 @@ func (o *orchestrator) Completed() bool {
 }
 
 func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
+	o.wg.Add(1)
+	defer o.wg.Done()
 	return o.handleStream(ctx, req, stream)
 }
 
 // DeactivateActor implements actors.InternalActor
-func (o *orchestrator) Deactivate() error {
+func (o *orchestrator) Deactivate(ctx context.Context) error {
+	o.lock <- struct{}{}
+	defer func() { <-o.lock }()
+
 	o.cleanup()
 	log.Debugf("Workflow actor '%s': deactivated", o.actorID)
 	return nil

@@ -42,13 +42,13 @@ import (
 var log = logger.NewLogger("dapr.runtime.actors.placement.client")
 
 type Options struct {
-	Addresses   []string
-	Security    security.Handler
-	Lock        *lock.OuterCancel
-	Table       table.Interface
-	Healthz     healthz.Healthz
-	InitialHost *v1pb.Host
-	Mode        modes.DaprMode
+	Addresses []string
+	Security  security.Handler
+	Lock      *lock.OuterCancel
+	Table     table.Interface
+	Healthz   healthz.Healthz
+	BaseHost  *v1pb.Host
+	Mode      modes.DaprMode
 }
 
 type Client struct {
@@ -59,7 +59,8 @@ type Client struct {
 
 	connector connector.Interface
 	client    v1pb.Placement_ReportDaprStatusClient
-	sendQueue chan *v1pb.Host
+	baseHost  *v1pb.Host
+	sendQueue chan []string
 	recvQueue chan *v1pb.PlacementOrder
 
 	ready      atomic.Bool
@@ -116,10 +117,11 @@ func New(opts Options) (*Client, error) {
 	return &Client{
 		lock:      opts.Lock,
 		connector: conn,
-		sendQueue: make(chan *v1pb.Host),
+		sendQueue: make(chan []string),
 		recvQueue: make(chan *v1pb.PlacementOrder),
 		table:     opts.Table,
 		htarget:   opts.Healthz.AddTarget("placement-client"),
+		baseHost:  opts.BaseHost,
 	}, nil
 }
 
@@ -140,8 +142,9 @@ func (c *Client) Run(ctx context.Context) error {
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
-					case host := <-c.sendQueue:
-						if err := c.client.Send(host); err != nil {
+					case actorTypes := <-c.sendQueue:
+						c.baseHost.Entities = actorTypes
+						if err := c.client.Send(c.baseHost); err != nil {
 							return err
 						}
 
@@ -281,11 +284,11 @@ func (c *Client) Recv(ctx context.Context) (*v1pb.PlacementOrder, error) {
 	}
 }
 
-func (c *Client) Send(ctx context.Context, host *v1pb.Host) error {
+func (c *Client) Send(ctx context.Context, actorTypes []string) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case c.sendQueue <- host:
+	case c.sendQueue <- actorTypes:
 		return nil
 	}
 }

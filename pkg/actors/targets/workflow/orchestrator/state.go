@@ -46,8 +46,6 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		return nil, nil, nil
 	}
 	// Update cached state
-	o.lock.Lock()
-	defer o.lock.Unlock()
 	o.state = state
 	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.setOrchestrationMetadata(o.rstate, o.getExecutionStartedEvent(state))
@@ -73,8 +71,6 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	state.ResetChangeTracking()
 
 	// Update cached state
-	o.lock.Lock()
-	defer o.lock.Unlock()
 	o.state = state
 	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.setOrchestrationMetadata(o.rstate, o.getExecutionStartedEvent(state))
@@ -146,16 +142,17 @@ func (o *orchestrator) setOrchestrationMetadata(rstate *backend.OrchestrationRun
 }
 
 func (o *orchestrator) cleanup() {
-	o.lock.Lock()
-	defer o.lock.Unlock()
-
-	o.ometaBroadcaster.Close()
-	o.state = nil // A bit of extra caution, shouldn't be necessary
-	o.rstate = nil
-	o.ometa = nil
-
 	if o.closed.CompareAndSwap(false, true) {
 		close(o.closeCh)
+		o.ometaBroadcaster.Close()
+		o.state = nil
+		o.rstate = nil
+		o.ometa = nil
+
+		go func() {
+			o.wg.Wait()
+			orchestratorCache.Put(o)
+		}()
 	}
 }
 
