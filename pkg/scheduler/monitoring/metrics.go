@@ -53,89 +53,131 @@ var (
 		"scheduler/jobs_undelivered_total",
 		"The total number of undelivered jobs.",
 		stats.UnitDimensionless)
+
+	tagType = tag.MustNewKey("type")
 )
+
+var tagSidecarsConnected = utils.WithTags(sidecarsConnectedGauge.Name())
 
 // RecordSidecarsConnectedCount records the number of dapr sidecars connected to the scheduler service
 func RecordSidecarsConnectedCount(change int) {
 	current := atomic.AddInt64(&sidecarConnectionCount, int64(change))
-	stats.RecordWithTags(context.Background(), utils.WithTags(sidecarsConnectedGauge.Name()), sidecarsConnectedGauge.M(current))
+	stats.RecordWithTags(context.Background(), tagSidecarsConnected, sidecarsConnectedGauge.M(current))
 }
+
+var (
+	tagTotalJob     = utils.WithTags(jobsScheduledTotal.Name(), tagType, "job")
+	tagTotalActor   = utils.WithTags(jobsScheduledTotal.Name(), tagType, "actor")
+	tagTotalUnknown = utils.WithTags(jobsScheduledTotal.Name(), tagType, "unknown")
+)
 
 // RecordJobsScheduledCount records the number of jobs scheduled to the scheduler service
 func RecordJobsScheduledCount(jobMetadata *schedulerv1pb.JobMetadata) {
-	var jobType string
+	var tag []tag.Mutator
 	switch jobMetadata.GetTarget().GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
-		jobType = "job"
+		tag = tagTotalJob
 	case *schedulerv1pb.JobTargetMetadata_Actor:
-		jobType = "actor"
+		tag = tagTotalActor
 	default:
-		jobType = "unknown"
+		tag = tagTotalUnknown
 	}
 
-	stats.RecordWithTags(context.Background(), utils.WithTags(jobsScheduledTotal.Name(), jobType), jobsScheduledTotal.M(1))
+	stats.RecordWithTags(context.Background(), tag, jobsScheduledTotal.M(1))
 }
+
+var (
+	tagTriggeredJob     = utils.WithTags(jobsTriggeredTotal.Name(), tagType, "job")
+	tagTriggeredActor   = utils.WithTags(jobsTriggeredTotal.Name(), tagType, "actor")
+	tagTriggeredUnknown = utils.WithTags(jobsTriggeredTotal.Name(), tagType, "unknown")
+)
 
 // RecordJobsTriggeredCount records the total number of jobs successfully triggered from the scheduler service
 func RecordJobsTriggeredCount(jobMetadata *schedulerv1pb.JobMetadata) {
-	var jobType string
+	var tag []tag.Mutator
 	switch jobMetadata.GetTarget().GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
-		jobType = "job"
+		tag = tagTriggeredJob
 	case *schedulerv1pb.JobTargetMetadata_Actor:
-		jobType = "actor"
+		tag = tagTriggeredActor
 	default:
-		jobType = "unknown"
+		tag = tagTriggeredUnknown
 	}
 
-	stats.RecordWithTags(context.Background(), utils.WithTags(jobsTriggeredTotal.Name(), jobType), jobsTriggeredTotal.M(1))
+	stats.RecordWithTags(context.Background(), tag, jobsTriggeredTotal.M(1))
 }
 
+var (
+	tagTriggerLatencyJob     = utils.WithTags(triggerLatency.Name(), tagType, "job")
+	tagTriggerLatencyActor   = utils.WithTags(triggerLatency.Name(), tagType, "actor")
+	tagTriggerLatencyUnknown = utils.WithTags(triggerLatency.Name(), tagType, "unknown")
+)
+
 // RecordTriggerDuration records the time it takes to send the job to dapr from the scheduler service
-func RecordTriggerDuration(start time.Time) {
-	elapsed := time.Since(start).Milliseconds()
-	stats.RecordWithTags(context.Background(), utils.WithTags(triggerLatency.Name()), triggerLatency.M(float64(elapsed)))
+func RecordTriggerDuration(jobMetadata *schedulerv1pb.JobMetadata, duration time.Duration) {
+	var tag []tag.Mutator
+	switch jobMetadata.GetTarget().GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Job:
+		tag = tagTriggerLatencyJob
+	case *schedulerv1pb.JobTargetMetadata_Actor:
+		tag = tagTriggerLatencyActor
+	default:
+		tag = tagTriggerLatencyUnknown
+	}
+	stats.RecordWithTags(context.Background(), tag, triggerLatency.M(float64(duration.Milliseconds())))
 }
+
+var (
+	tagFailedJob     = utils.WithTags(jobsFailedTotal.Name(), tagType, "job")
+	tagFailedActor   = utils.WithTags(jobsFailedTotal.Name(), tagType, "actor")
+	tagFailedUnknown = utils.WithTags(jobsFailedTotal.Name(), tagType, "unknown")
+)
 
 // RecordJobsFailed records the total number of failed jobs
 func RecordJobsFailedCount(jobMetadata *schedulerv1pb.JobMetadata) {
-	var jobType string
+	var tag []tag.Mutator
 	switch jobMetadata.GetTarget().GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
-		jobType = "job"
+		tag = tagFailedJob
 	case *schedulerv1pb.JobTargetMetadata_Actor:
-		jobType = "actor"
+		tag = tagFailedActor
 	default:
-		jobType = "unknown"
+		tag = tagFailedUnknown
 	}
 
-	stats.RecordWithTags(context.Background(), utils.WithTags(jobsFailedTotal.Name(), jobType), jobsFailedTotal.M(1))
+	stats.RecordWithTags(context.Background(), tag, jobsFailedTotal.M(1))
 }
+
+var (
+	tagUndeliveredJob     = utils.WithTags(jobsUndeliveredTotal.Name(), tagType, "job")
+	tagUndeliveredActor   = utils.WithTags(jobsUndeliveredTotal.Name(), tagType, "actor")
+	tagUndeliveredUnknown = utils.WithTags(jobsUndeliveredTotal.Name(), tagType, "unknown")
+)
 
 // RecordJobsUndelivered records the total number of undelivered jobs
 func RecordJobsUndeliveredCount(jobMetadata *schedulerv1pb.JobMetadata) {
-	var jobType string
+	var tag []tag.Mutator
 	switch jobMetadata.GetTarget().GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
-		jobType = "job"
+		tag = tagUndeliveredJob
 	case *schedulerv1pb.JobTargetMetadata_Actor:
-		jobType = "actor"
+		tag = tagUndeliveredActor
 	default:
-		jobType = "unknown"
+		tag = tagUndeliveredUnknown
 	}
 
-	stats.RecordWithTags(context.Background(), utils.WithTags(jobsUndeliveredTotal.Name(), jobType), jobsUndeliveredTotal.M(1))
+	stats.RecordWithTags(context.Background(), tag, jobsUndeliveredTotal.M(1))
 }
 
 // InitMetrics initialize the scheduler service metrics.
 func InitMetrics() error {
 	err := view.Register(
 		utils.NewMeasureView(sidecarsConnectedGauge, []tag.Key{}, view.LastValue()),
-		utils.NewMeasureView(jobsScheduledTotal, []tag.Key{}, view.Count()),
-		utils.NewMeasureView(jobsTriggeredTotal, []tag.Key{}, view.Count()),
-		utils.NewMeasureView(triggerLatency, []tag.Key{}, view.Distribution(0, 100, 500, 1000, 5000, 10000)),
-		utils.NewMeasureView(jobsFailedTotal, []tag.Key{}, view.Count()),
-		utils.NewMeasureView(jobsUndeliveredTotal, []tag.Key{}, view.Count()),
+		utils.NewMeasureView(jobsScheduledTotal, []tag.Key{tagType}, view.Count()),
+		utils.NewMeasureView(jobsTriggeredTotal, []tag.Key{tagType}, view.Count()),
+		utils.NewMeasureView(triggerLatency, []tag.Key{tagType}, view.Distribution(0, 100, 500, 1000, 5000, 10000)),
+		utils.NewMeasureView(jobsFailedTotal, []tag.Key{tagType}, view.Count()),
+		utils.NewMeasureView(jobsUndeliveredTotal, []tag.Key{tagType}, view.Count()),
 	)
 
 	return err

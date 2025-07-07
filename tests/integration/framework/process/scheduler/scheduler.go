@@ -325,6 +325,10 @@ func (s *Scheduler) Metrics(t assert.TestingT, ctx context.Context) *metrics.Met
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 
+func (s *Scheduler) MetricsWithLabels(t *testing.T, ctx context.Context) *metrics.MetricsWithLabels {
+	return metrics.NewWithLabels(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
+}
+
 func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Client {
 	t.Helper()
 
