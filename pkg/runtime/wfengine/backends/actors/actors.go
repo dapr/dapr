@@ -55,7 +55,6 @@ import (
 var log = logger.NewLogger("dapr.wfengine.backend.actors")
 
 const (
-	defaultNamespace     = "default"
 	WorkflowNameLabelKey = "workflow"
 	ActivityNameLabelKey = "activity"
 	ActorTypePrefix      = "dapr.internal."
@@ -102,9 +101,6 @@ func New(opts Options) *Actors {
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-	defer cancel()
-
 	atable, err := abe.actors.Table(ctx)
 	if err != nil {
 		return err

@@ -98,7 +98,6 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 		return err
 	}
 
-	o.table.DeleteFromTableIn(o, 0)
 	o.cleanup()
 
 	return nil
@@ -142,18 +141,21 @@ func (o *orchestrator) setOrchestrationMetadata(rstate *backend.OrchestrationRun
 }
 
 func (o *orchestrator) cleanup() {
-	if o.closed.CompareAndSwap(false, true) {
-		close(o.closeCh)
-		o.ometaBroadcaster.Close()
-		o.state = nil
-		o.rstate = nil
-		o.ometa = nil
-
-		go func() {
-			o.wg.Wait()
-			orchestratorCache.Put(o)
-		}()
+	if !o.closed.CompareAndSwap(false, true) {
+		return
 	}
+
+	o.table.Delete(o.actorID)
+	close(o.closeCh)
+	o.ometaBroadcaster.Close()
+	o.state = nil
+	o.rstate = nil
+	o.ometa = nil
+
+	go func() {
+		o.wg.Wait()
+		orchestratorCache.Put(o)
+	}()
 }
 
 // This method purges all the completed activity data from a workflow associated with the given actorID

@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -26,6 +27,8 @@ type Option func(*options)
 type options struct {
 	registry *task.TaskRegistry
 	daprds   int
+
+	daprdopts []daprd.Option
 
 	enableScheduler bool
 }
@@ -55,5 +58,11 @@ func WithAddActivityN(t *testing.T, name string, a func(task.ActivityContext) (a
 func WithDaprds(daprds int) Option {
 	return func(o *options) {
 		o.daprds = daprds
+	}
+}
+
+func WithDaprdOptions(opts ...daprd.Option) Option {
+	return func(o *options) {
+		o.daprdopts = append(o.daprdopts, opts...)
 	}
 }

@@ -11,28 +11,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package idler
+package lock
 
-import (
-	"time"
+import "context"
 
-	"github.com/dapr/dapr/pkg/actors/targets"
-)
-
-// idler is a wrapper for an actor which should be idled in some time in the
-// future.
-type idler struct {
-	targets.Interface
-	idleTime time.Time
+type Lock struct {
+	ch chan struct{}
 }
 
-func New(actor targets.Interface, idleIn time.Duration) targets.Idlable {
-	return &idler{
-		Interface: actor,
-		idleTime:  time.Now().Add(idleIn),
+func New() *Lock {
+	return &Lock{
+		ch: make(chan struct{}, 1),
 	}
 }
 
-func (i *idler) ScheduledTime() time.Time {
-	return i.idleTime
+func (l *Lock) Lock() context.CancelFunc {
+	l.ch <- struct{}{}
+	return func() { <-l.ch }
+}
+
+func (l *Lock) ContextLock(ctx context.Context) (context.CancelFunc, error) {
+	select {
+	case l.ch <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	return func() { <-l.ch }, nil
 }
