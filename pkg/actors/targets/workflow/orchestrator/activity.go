@@ -22,6 +22,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -78,7 +79,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	// If target app is specified and different from current app, use cross-app actor type
 	if targetAppID != "" && targetAppID != o.appID {
-		activityActorType = fmt.Sprintf("dapr.internal.%s.%s.activity", o.namespace, targetAppID)
+		activityActorType = common.GetCrossAppActorType(o.namespace, targetAppID, common.WfActivityActor)
 	}
 
 	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), o.state.Generation)

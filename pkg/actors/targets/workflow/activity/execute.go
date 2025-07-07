@@ -22,6 +22,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -115,7 +116,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	if router := taskEvent.GetRouter(); router != nil {
 		sourceAppID := router.GetSource()
 		if sourceAppID != "" && sourceAppID != a.appID { // indicates cross app activity
-			wfActorType = fmt.Sprintf("dapr.internal.%s.%s.workflow", a.namespace, sourceAppID)
+			wfActorType = common.GetCrossAppActorType(a.namespace, sourceAppID, common.WfActor)
 		}
 	}
 

@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 )
 
 func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration, targetAppID string) (string, error) {
@@ -54,7 +55,7 @@ func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, da
 
 	actorType := o.actorType
 	if targetAppID != "" && targetAppID != o.appID {
-		actorType = fmt.Sprintf("dapr.internal.%s.%s.workflow", o.namespace, targetAppID)
+		actorType = common.GetCrossAppActorType(o.namespace, targetAppID, common.WfActor)
 	}
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, delay)
 
