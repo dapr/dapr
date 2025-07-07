@@ -185,6 +185,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	if err != nil {
 		return todo.RunCompletedTrue, err
 	}
+
 	if executionStatus != "" {
 		// If workflow is not completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.

@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 
@@ -43,7 +42,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/router"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/app"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
@@ -96,6 +94,7 @@ type Interface interface {
 	State(context.Context) (actorstate.Interface, error)
 	Timers(context.Context) (timers.Interface, error)
 	Reminders(context.Context) (reminders.Interface, error)
+	Placement(context.Context) (placement.Interface, error)
 	RuntimeStatus() *runtimev1pb.ActorRuntime
 	RegisterHosted(hostconfig.Config) error
 	UnRegisterHosted(actorTypes ...string)
@@ -123,7 +122,6 @@ type actors struct {
 	router          router.Interface
 	timerStorage    internaltimers.Storage
 	timers          timers.Interface
-	idlerQueue      *queue.Processor[string, targets.Idlable]
 	stateReminders  *statestore.Statestore
 	reminderStore   storage.Interface
 	state           actorstate.Interface
@@ -182,12 +180,7 @@ func (a *actors) Init(opts InitOptions) error {
 		return nil
 	}
 
-	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](queue.Options[string, targets.Idlable]{
-		ExecuteFn: a.handleIdleActor,
-	})
-
 	a.table = table.New(table.Options{
-		IdlerQueue:      a.idlerQueue,
 		ReentrancyStore: a.reentrancyStore,
 	})
 
@@ -238,7 +231,6 @@ func (a *actors) Init(opts InitOptions) error {
 		GRPC:               opts.GRPC,
 		Table:              a.table,
 		Resiliency:         a.resiliency,
-		IdlerQueue:         a.idlerQueue,
 		Reminders:          a.reminders,
 		MaxRequestBodySize: a.maxRequestBodySize,
 	})
@@ -303,7 +295,6 @@ func (a *actors) Run(ctx context.Context) error {
 	if err := mngr.AddCloser(
 		a.table,
 		a.timerStorage,
-		a.idlerQueue,
 	); err != nil {
 		return err
 	}
@@ -343,6 +334,14 @@ func (a *actors) State(ctx context.Context) (actorstate.Interface, error) {
 	}
 
 	return a.state, nil
+}
+
+func (a *actors) Placement(ctx context.Context) (placement.Interface, error) {
+	if err := a.waitForReady(ctx); err != nil {
+		return nil, err
+	}
+
+	return a.placement, nil
 }
 
 func (a *actors) Timers(ctx context.Context) (timers.Interface, error) {
@@ -452,13 +451,14 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		factories = append(factories, table.ActorTypeFactory{
 			Type:       actorType,
 			Reentrancy: reentrancy,
-			Factory: app.Factory(app.Options{
-				ActorType:   actorType,
-				AppChannel:  cfg.AppChannel,
-				Resiliency:  a.resiliency,
-				IdleQueue:   a.idlerQueue,
-				IdleTimeout: idleTimeout,
-				Reentrancy:  a.reentrancyStore,
+			Factory: app.New(app.Options{
+				ActorType:               actorType,
+				AppChannel:              cfg.AppChannel,
+				Resiliency:              a.resiliency,
+				IdleTimeout:             idleTimeout,
+				Reentrancy:              a.reentrancyStore,
+				DrainOngoingCallTimeout: drainOngoingCallTimeout,
+				Placement:               a.placement,
 			}),
 		})
 	}
@@ -509,24 +509,6 @@ func (a *actors) WaitForRegisteredHosts(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	}
-}
-
-func (a *actors) handleIdleActor(target targets.Idlable) {
-	// We don't use the placement context here as we are already deactivating the
-	// actor.
-	_, cancel, err := a.placement.Lock(context.Background())
-	if err != nil {
-		log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
-		return
-	}
-	defer cancel()
-
-	log.Debugf("Actor %s is idle, deactivating", target.Key())
-
-	if err := a.table.HaltIdlable(context.Background(), target); err != nil {
-		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
-		return
 	}
 }
 

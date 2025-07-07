@@ -21,6 +21,6 @@ import (
 )
 
 func Test_Fake(t *testing.T) {
-	var _ targets.Factory = fake.New("")
-	var _ targets.Interface = fake.New("")("")
+	var _ targets.Factory = fake.NewFactory()
+	var _ targets.Interface = fake.New("")
 }
