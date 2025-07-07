@@ -79,7 +79,10 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	// If target app is specified and different from current app, use cross-app actor type
 	if targetAppID != "" && targetAppID != o.appID {
-		activityActorType = common.GetCrossAppActorType(o.namespace, targetAppID, common.WfActivityActor)
+		activityActorType, err = common.GetCrossAppActorType(o.namespace, targetAppID, common.WfActivityActor)
+		if err != nil {
+			return err
+		}
 	}
 
 	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), o.state.Generation)

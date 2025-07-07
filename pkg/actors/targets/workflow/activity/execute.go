@@ -116,7 +116,10 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	if router := taskEvent.GetRouter(); router != nil {
 		sourceAppID := router.GetSource()
 		if sourceAppID != "" && sourceAppID != a.appID { // indicates cross app activity
-			wfActorType = common.GetCrossAppActorType(a.namespace, sourceAppID, common.WfActor)
+			wfActorType, err = common.GetCrossAppActorType(a.namespace, sourceAppID, common.WfActor)
+			if err != nil {
+				return todo.RunCompletedFalse, err
+			}
 		}
 	}
 

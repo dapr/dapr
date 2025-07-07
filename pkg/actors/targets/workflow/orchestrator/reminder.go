@@ -55,7 +55,10 @@ func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, da
 
 	actorType := o.actorType
 	if targetAppID != "" && targetAppID != o.appID {
-		actorType = common.GetCrossAppActorType(o.namespace, targetAppID, common.WfActor)
+		actorType, err = common.GetCrossAppActorType(o.namespace, targetAppID, common.WfActor)
+		if err != nil {
+			return "", err
+		}
 	}
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, delay)
 
