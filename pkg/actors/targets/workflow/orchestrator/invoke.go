@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -35,8 +34,6 @@ import (
 )
 
 func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	o.table.RemoveIdler(o)
-
 	if req.GetMessage() == nil {
 		return nil, errors.New("message is nil in request")
 	}
@@ -104,7 +101,7 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	completed, err := o.runWorkflow(ctx, reminder)
 
 	if completed == todo.RunCompletedTrue {
-		o.table.DeleteFromTableIn(o, time.Second*10)
+		o.cleanup()
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.
