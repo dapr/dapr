@@ -111,15 +111,12 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	}
 
 	// send completed event to orchestrator wf actor
-	var wfActorType string
-	wfActorType = a.workflowActorType
+	wfActorType := a.workflowActorType
 	if router := taskEvent.GetRouter(); router != nil {
 		sourceAppID := router.GetSource()
-		if sourceAppID != "" && sourceAppID != a.appID { // indicates cross app activity
-			wfActorType, err = common.GetCrossAppActorType(a.namespace, sourceAppID, common.WfActor)
-			if err != nil {
-				return todo.RunCompletedFalse, err
-			}
+		wfActorType, err = common.GetActorType(a.namespace, sourceAppID, common.WfActor)
+		if err != nil {
+			return todo.RunCompletedFalse, err
 		}
 	}
 

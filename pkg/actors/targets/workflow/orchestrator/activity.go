@@ -69,19 +69,12 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	}
 
 	activityActorType := o.activityActorType
-	var targetAppID, sourceAppID string
-
 	if router := e.GetRouter(); router != nil {
-		targetAppID = router.GetTarget()
-		sourceAppID = router.GetSource()
-		log.Debugf("Cross-app activity call: target appID=%s, source appID=%s", targetAppID, sourceAppID)
-	}
-
-	// If target app is specified and different from current app, use cross-app actor type
-	if targetAppID != "" && targetAppID != o.appID {
-		activityActorType, err = common.GetCrossAppActorType(o.namespace, targetAppID, common.WfActivityActor)
-		if err != nil {
-			return err
+		if router.Target != nil {
+			activityActorType, err = common.GetActorType(o.namespace, router.GetTarget(), common.WfActivityActor)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

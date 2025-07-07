@@ -24,7 +24,7 @@ const (
 	WfActivityActor
 )
 
-func GetCrossAppActorType(ns, appID string, wfActorType WfActorTypes) (string, error) {
+func GetActorType(ns, appID string, wfActorType WfActorTypes) (string, error) {
 	switch wfActorType {
 	case WfActor:
 		return "dapr.internal." + ns + "." + appID + ".workflow", nil

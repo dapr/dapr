@@ -100,7 +100,6 @@ func (b *basiclogline) Setup(t *testing.T) []framework.Option {
 
 	wfOrchestrationLog := logline.New(t,
 		logline.WithStdoutLineContains(
-			fmt.Sprintf("Cross-app activity call: target appID=%s, source appID=%s", appID2, appID1),
 			fmt.Sprintf("invoking execute method on activity actor 'dapr.internal.default.%s.activity||", appID2),
 			"workflow completed with status 'ORCHESTRATION_STATUS_COMPLETED' workflowName 'CrossAppWorkflow'",
 		),
