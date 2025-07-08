@@ -72,13 +72,11 @@ func (r *reconnect) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(srv, r.daprd),
+		framework.WithProcesses(srv, r.daprd, r.scheduler1),
 	}
 }
 
 func (r *reconnect) Run(t *testing.T, ctx context.Context) {
-	r.scheduler1.Run(t, ctx)
-	t.Cleanup(func() { r.scheduler1.Cleanup(t) })
 	r.scheduler1.WaitUntilRunning(t, ctx)
 	r.scheduler1.WaitUntilLeadership(t, ctx, 1)
 	r.daprd.WaitUntilRunning(t, ctx)
