@@ -47,14 +47,14 @@ func (r *reuse) Setup(t *testing.T) []framework.Option {
 func (r *reuse) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	r.workflow.Registry().AddOrchestratorN("reuse", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry(0).AddOrchestratorN("reuse", func(ctx *task.OrchestrationContext) (any, error) {
 		if err := ctx.CreateTimer(time.Second * 4).Await(nil); err != nil {
 			return nil, err
 		}
 		return nil, nil
 	})
 
-	client := r.workflow.BackendClient(t, ctx)
+	client := r.workflow.BackendClient(t, ctx, 0)
 
 	errCh := make(chan error)
 	go func() {

@@ -46,17 +46,17 @@ func (c *completed) Setup(t *testing.T) []framework.Option {
 func (c *completed) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
-	c.workflow.Registry().AddOrchestratorN("completed-timer", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry(0).AddOrchestratorN("completed-timer", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CreateTimer(time.Second).Await(nil))
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
-	c.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	c.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		time.Sleep(time.Second)
 		return nil, nil
 	})
 
-	client := c.workflow.BackendClient(t, ctx)
+	client := c.workflow.BackendClient(t, ctx, 0)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "completed-timer", api.WithInstanceID("ijk"))
 	require.NoError(t, err)

@@ -48,15 +48,15 @@ func (n *notscheduleevent) Setup(t *testing.T) []framework.Option {
 func (n *notscheduleevent) Run(t *testing.T, ctx context.Context) {
 	n.workflow.WaitUntilRunning(t, ctx)
 
-	n.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	n.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
-	n.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	n.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		return nil, nil
 	})
 
-	client := n.workflow.BackendClient(t, ctx)
+	client := n.workflow.BackendClient(t, ctx, 0)
 
 	_, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)

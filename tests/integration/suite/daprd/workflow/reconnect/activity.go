@@ -53,10 +53,10 @@ func (a *activity) Setup(t *testing.T) []framework.Option {
 func (a *activity) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	a.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		return nil, ctx.CallActivity("bar").Await(nil)
 	})
-	a.workflow.Registry().AddActivityN("bar", func(c task.ActivityContext) (any, error) {
+	a.workflow.Registry(0).AddActivityN("bar", func(c task.ActivityContext) (any, error) {
 		a.called.Add(1)
 		<-a.waitCh
 		return "", nil
@@ -66,7 +66,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
-	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
+	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry(0)))
 
 	id, err := client.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
@@ -80,7 +80,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	cctx, cancel = context.WithCancel(ctx)
 	t.Cleanup(cancel)
-	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
+	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry(0)))
 
 	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)

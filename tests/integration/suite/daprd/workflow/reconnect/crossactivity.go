@@ -56,18 +56,18 @@ func (c *crossactivity) Setup(t *testing.T) []framework.Option {
 func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
-	c.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		if err := ctx.CallActivity("bar").Await(nil); err != nil {
 			return nil, err
 		}
 		return nil, ctx.CallActivity("xyz").Await(nil)
 	})
-	c.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	c.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		c.calledA.Add(1)
 		<-c.waitCh
 		return "", nil
 	})
-	c.workflow.Registry().AddActivityN("xyz", func(task.ActivityContext) (any, error) {
+	c.workflow.Registry(0).AddActivityN("xyz", func(task.ActivityContext) (any, error) {
 		c.calledB.Add(1)
 		return "", nil
 	})
@@ -76,7 +76,7 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
-	require.NoError(t, cl.StartWorkItemListener(cctx, c.workflow.Registry()))
+	require.NoError(t, cl.StartWorkItemListener(cctx, c.workflow.Registry(0)))
 
 	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
@@ -88,10 +88,10 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	cancel()
 	close(c.waitCh)
 
-	cl = client.NewTaskHubGrpcClient(c.workflow.DaprN(1).GRPCConn(t, ctx), logger.New(t))
+	cl = client.NewTaskHubGrpcClient(c.workflow.DaprN(0).GRPCConn(t, ctx), logger.New(t))
 	cctx, cancel = context.WithCancel(ctx)
 	t.Cleanup(cancel)
-	require.NoError(t, cl.StartWorkItemListener(cctx, c.workflow.Registry()))
+	require.NoError(t, cl.StartWorkItemListener(cctx, c.workflow.Registry(0)))
 
 	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)

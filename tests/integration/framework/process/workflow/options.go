@@ -16,18 +16,25 @@ package workflow
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/dapr/durabletask-go/task"
 )
 
 type Option func(*options)
 
 type options struct {
-	registry *task.TaskRegistry
-	daprds   int
-
+	daprds          int
 	enableScheduler bool
+
+	orchestrators []struct {
+		index int
+		name  string
+		fn    func(*task.OrchestrationContext) (any, error)
+	}
+	activities []struct {
+		index int
+		name  string
+		fn    func(task.ActivityContext) (any, error)
+	}
 }
 
 func WithScheduler(enable bool) Option {
@@ -36,19 +43,27 @@ func WithScheduler(enable bool) Option {
 	}
 }
 
-func WithAddOrchestratorN(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+func WithAddOrchestratorN(t *testing.T, index int, name string, or func(*task.OrchestrationContext) (any, error)) Option {
 	t.Helper()
 
 	return func(o *options) {
-		require.NoError(t, o.registry.AddOrchestratorN(name, or))
+		o.orchestrators = append(o.orchestrators, struct {
+			index int
+			name  string
+			fn    func(*task.OrchestrationContext) (any, error)
+		}{index, name, or})
 	}
 }
 
-func WithAddActivityN(t *testing.T, name string, a func(task.ActivityContext) (any, error)) Option {
+func WithAddActivityN(t *testing.T, index int, name string, a func(task.ActivityContext) (any, error)) Option {
 	t.Helper()
 
 	return func(o *options) {
-		require.NoError(t, o.registry.AddActivityN(name, a))
+		o.activities = append(o.activities, struct {
+			index int
+			name  string
+			fn    func(task.ActivityContext) (any, error)
+		}{index, name, a})
 	}
 }
 

@@ -16,6 +16,7 @@ package workflow
 import (
 	"context"
 	"runtime"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -31,11 +32,11 @@ import (
 )
 
 type Workflow struct {
-	registry *task.TaskRegistry
-	db       *sqlite.SQLite
-	place    *placement.Placement
-	sched    *scheduler.Scheduler
-	daprds   []*daprd.Daprd
+	taskregistry atomic.Value // map[int]*task.TaskRegistry
+	db           *sqlite.SQLite
+	place        *placement.Placement
+	sched        *scheduler.Scheduler
+	daprds       []*daprd.Daprd
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -46,7 +47,6 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	}
 
 	opts := options{
-		registry:        task.NewTaskRegistry(),
 		enableScheduler: true,
 		daprds:          1,
 	}
@@ -85,20 +85,38 @@ spec:
 	}
 
 	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
-	daprds[0] = daprd.New(t, dopts...)
-	for i := range opts.daprds - 1 {
-		daprds[i+1] = daprd.New(t,
-			append(dopts, daprd.WithAppID(daprds[0].AppID()))...,
-		)
+
+	for i := range daprds {
+		daprds[i] = daprd.New(t, dopts...)
 	}
 
-	return &Workflow{
-		registry: opts.registry,
-		db:       db,
-		place:    place,
-		sched:    sched,
-		daprds:   daprds,
+	registries := make(map[int]*task.TaskRegistry)
+	for i := range daprds {
+		registries[i] = task.NewTaskRegistry()
 	}
+
+	// Apply orchestrators & activities to the registry
+	for _, orch := range opts.orchestrators {
+		if orch.index < len(daprds) {
+			require.NoError(t, registries[orch.index].AddOrchestratorN(orch.name, orch.fn))
+		}
+	}
+	for _, act := range opts.activities {
+		if act.index < len(daprds) {
+			require.NoError(t, registries[act.index].AddActivityN(act.name, act.fn))
+		}
+	}
+
+	workflow := &Workflow{
+		taskregistry: atomic.Value{},
+		db:           db,
+		place:        place,
+		sched:        sched,
+		daprds:       daprds,
+	}
+
+	workflow.taskregistry.Store(registries)
+	return workflow
 }
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {
@@ -133,20 +151,27 @@ func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}
 }
 
-func (w *Workflow) Registry() *task.TaskRegistry {
-	return w.registry
+// Registry returns the registry for a specific index
+func (w *Workflow) Registry(index int) *task.TaskRegistry {
+	registries := w.taskregistry.Load().(map[int]*task.TaskRegistry)
+	return registries[index]
 }
 
-func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
+// BackendClient returns a backend client for the specified index
+func (w *Workflow) BackendClient(t *testing.T, ctx context.Context, index int) *client.TaskHubGrpcClient {
 	t.Helper()
-	backendClient := client.NewTaskHubGrpcClient(w.daprds[0].GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.registry))
+	require.Less(t, index, len(w.daprds), "index out of range")
+
+	backendClient := client.NewTaskHubGrpcClient(w.daprds[index].GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.Registry(index)))
 	return backendClient
 }
 
-func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
+// GRPCClientForApp returns a GRPC client for the specified app index
+func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context, index int) rtv1.DaprClient {
 	t.Helper()
-	return w.daprds[0].GRPCClient(t, ctx)
+	require.Less(t, index, len(w.daprds), "index out of range")
+	return w.daprds[index].GRPCClient(t, ctx)
 }
 
 func (w *Workflow) Dapr() *daprd.Daprd {

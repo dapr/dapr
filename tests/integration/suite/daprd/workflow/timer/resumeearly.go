@@ -49,14 +49,14 @@ func (r *resumeearly) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
 	var now atomic.Pointer[time.Time]
-	r.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry(0).AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
 		if !ctx.IsReplaying {
 			now.Store(ptr.Of(time.Now()))
 		}
 		return nil, ctx.CreateTimer(time.Second * 8).Await(nil)
 	})
 
-	client := r.workflow.BackendClient(t, ctx)
+	client := r.workflow.BackendClient(t, ctx, 0)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "timer")
 	require.NoError(t, err)

@@ -50,26 +50,26 @@ func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
 	var act atomic.Int64
-	s.workflow.Registry().AddOrchestratorN("foo1", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry(0).AddOrchestratorN("foo1", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		require.NoError(t, ctx.CallSubOrchestrator("foo2").Await(nil))
 		require.NoError(t, ctx.CallSubOrchestrator("foo3").Await(nil))
 		return nil, nil
 	})
-	s.workflow.Registry().AddOrchestratorN("foo2", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry(0).AddOrchestratorN("foo2", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		require.NoError(t, ctx.CallSubOrchestrator("foo3").Await(nil))
 		return nil, nil
 	})
-	s.workflow.Registry().AddOrchestratorN("foo3", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry(0).AddOrchestratorN("foo3", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
-	s.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	s.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		act.Add(1)
 		return nil, nil
 	})
-	client := s.workflow.BackendClient(t, ctx)
+	client := s.workflow.BackendClient(t, ctx, 0)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "foo1", api.WithInstanceID("abc"))
 	require.NoError(t, err)

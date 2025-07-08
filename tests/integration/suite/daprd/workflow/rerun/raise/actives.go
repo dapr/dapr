@@ -46,7 +46,7 @@ func (a *actives) Setup(t *testing.T) []framework.Option {
 func (a *actives) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	a.workflow.Registry().AddOrchestratorN("active-events", func(ctx *task.OrchestrationContext) (any, error) {
+	a.workflow.Registry(0).AddOrchestratorN("active-events", func(ctx *task.OrchestrationContext) (any, error) {
 		as1 := ctx.WaitForSingleEvent("abc1", time.Hour)
 		as2 := ctx.WaitForSingleEvent("abc2", time.Hour)
 		as3 := ctx.WaitForSingleEvent("abc3", time.Hour)
@@ -57,12 +57,12 @@ func (a *actives) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, as1.Await(nil))
 		return nil, nil
 	})
-	a.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	a.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		time.Sleep(time.Second)
 		return nil, nil
 	})
 
-	client := a.workflow.BackendClient(t, ctx)
+	client := a.workflow.BackendClient(t, ctx, 0)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "active-events", api.WithInstanceID("xyz"))
 	require.NoError(t, err)

@@ -46,11 +46,11 @@ func (s *state) Setup(t *testing.T) []framework.Option {
 	input := bytes.Repeat([]byte("0"), 2*1024*1024)
 
 	s.workflow = workflow.New(t,
-		workflow.WithAddOrchestratorN(t, "foo", func(ctx *task.OrchestrationContext) (any, error) {
+		workflow.WithAddOrchestratorN(t, 0, "foo", func(ctx *task.OrchestrationContext) (any, error) {
 			require.NoError(t, ctx.CallActivity("bar", task.WithActivityInput(input)).Await(new([]byte)))
 			return "", nil
 		}),
-		workflow.WithAddActivityN(t, "bar", func(ctx task.ActivityContext) (any, error) { return "", nil }),
+		workflow.WithAddActivityN(t, 0, "bar", func(ctx task.ActivityContext) (any, error) { return "", nil }),
 		workflow.WithScheduler(true),
 	)
 
@@ -61,8 +61,8 @@ func (s *state) Setup(t *testing.T) []framework.Option {
 
 func (s *state) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
-	client := s.workflow.BackendClient(t, ctx)
-	gclient := s.workflow.GRPCClient(t, ctx)
+	client := s.workflow.BackendClient(t, ctx, 0)
+	gclient := s.workflow.GRPCClient(t, ctx, 0)
 
 	var actorMemBaseline float64
 

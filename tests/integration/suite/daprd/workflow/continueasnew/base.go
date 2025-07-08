@@ -49,7 +49,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 
 	var cont atomic.Bool
 	var called atomic.Int64
-	b.workflow.Registry().AddOrchestratorN("can", func(ctx *task.OrchestrationContext) (any, error) {
+	b.workflow.Registry(0).AddOrchestratorN("can", func(ctx *task.OrchestrationContext) (any, error) {
 		defer called.Add(1)
 
 		var input string
@@ -65,7 +65,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 		}
 		return nil, nil
 	})
-	client := b.workflow.BackendClient(t, ctx)
+	client := b.workflow.BackendClient(t, ctx, 0)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "can",
 		api.WithInstanceID("cani"),

@@ -47,7 +47,7 @@ func (r *raise) Setup(t *testing.T) []framework.Option {
 func (r *raise) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	r.workflow.Registry().AddOrchestratorN("raise", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry(0).AddOrchestratorN("raise", func(ctx *task.OrchestrationContext) (any, error) {
 		ctx.WaitForSingleEvent("incr", time.Minute).Await(nil)
 
 		var inc int
@@ -58,7 +58,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 
 		return inc + 1, nil
 	})
-	client := r.workflow.BackendClient(t, ctx)
+	client := r.workflow.BackendClient(t, ctx, 0)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "raise",
 		api.WithInstanceID("raisei"),

@@ -50,14 +50,14 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 	b.workflow.WaitUntilRunning(t, ctx)
 
 	var now atomic.Pointer[time.Time]
-	b.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
+	b.workflow.Registry(0).AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
 		if !ctx.IsReplaying {
 			now.Store(ptr.Of(time.Now()))
 		}
 		return nil, ctx.CreateTimer(time.Second * 4).Await(nil)
 	})
 
-	client := b.workflow.BackendClient(t, ctx)
+	client := b.workflow.BackendClient(t, ctx, 0)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "timer", api.WithInstanceID("timer"))
 	require.NoError(t, err)

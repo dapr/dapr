@@ -48,17 +48,17 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.workflow.WaitUntilRunning(t, ctx)
 
 	var act atomic.Int64
-	b.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	b.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		for range 5 {
 			require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		}
 		return nil, nil
 	})
-	b.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	b.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		act.Add(1)
 		return nil, nil
 	})
-	client := b.workflow.BackendClient(t, ctx)
+	client := b.workflow.BackendClient(t, ctx, 0)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)

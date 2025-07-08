@@ -49,17 +49,17 @@ func (n *noawait) Run(t *testing.T, ctx context.Context) {
 	n.workflow.WaitUntilRunning(t, ctx)
 
 	var barCalled atomic.Int64
-	n.workflow.Registry().AddOrchestratorN("noawait", func(ctx *task.OrchestrationContext) (any, error) {
+	n.workflow.Registry(0).AddOrchestratorN("noawait", func(ctx *task.OrchestrationContext) (any, error) {
 		for range 50 {
 			ctx.CallActivity("bar")
 		}
 		return nil, nil
 	})
-	n.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	n.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		barCalled.Add(1)
 		return nil, nil
 	})
-	client := n.workflow.BackendClient(t, ctx)
+	client := n.workflow.BackendClient(t, ctx, 0)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "noawait", api.WithInstanceID("noawait"))
 	require.NoError(t, err)
