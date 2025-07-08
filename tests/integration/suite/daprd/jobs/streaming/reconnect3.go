@@ -97,19 +97,11 @@ func (r *reconnect3) Setup(t *testing.T) []framework.Option {
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(srv, r.daprd),
+		framework.WithProcesses(srv, r.daprd, r.scheduler1, r.scheduler2, r.scheduler3),
 	}
 }
 
 func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
-	r.scheduler1.Run(t, ctx)
-	r.scheduler2.Run(t, ctx)
-	r.scheduler3.Run(t, ctx)
-	t.Cleanup(func() {
-		r.scheduler1.Cleanup(t)
-		r.scheduler2.Cleanup(t)
-		r.scheduler3.Cleanup(t)
-	})
 	r.scheduler1.WaitUntilRunning(t, ctx)
 	r.scheduler2.WaitUntilRunning(t, ctx)
 	r.scheduler3.WaitUntilRunning(t, ctx)
