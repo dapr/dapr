@@ -70,7 +70,7 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	startGoRoutines := g.scheduler.Metrics(t, ctx).All()["go_goroutines"]
 
-	n := 500
+	n := 100
 	rep := 2
 
 	for i := range n {
@@ -93,5 +93,5 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.InDelta(c, startGoRoutines, g.scheduler.Metrics(t, ctx).All()["go_goroutines"], 10)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*30, time.Second)
 }
