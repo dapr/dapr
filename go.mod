@@ -520,4 +520,4 @@ replace (
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
 
-replace github.com/dapr/kit => github.com/dapr/kit v0.15.3-0.20250708205556-7409957e9e5f
+replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20250708214905-5d1c99f274c2
