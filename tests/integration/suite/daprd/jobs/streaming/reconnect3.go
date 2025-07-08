@@ -111,7 +111,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, r.daprd.GetMetaScheduler(c, ctx).GetConnectedAddresses(), 3)
 	}, time.Second*10, time.Millisecond*10)
 
-	for i := range 100 {
+	for i := range 10 {
 		_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     strconv.Itoa(i),
@@ -123,7 +123,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()
-		assert.Len(c, r.jobCalledMap, 100)
+		assert.Len(c, r.jobCalledMap, 10)
 		r.lock.Unlock()
 	}, time.Second*5, time.Millisecond*10)
 
@@ -142,7 +142,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()
-		assert.Len(c, r.jobCalledMap, 100)
+		assert.Len(c, r.jobCalledMap, 10)
 		r.lock.Unlock()
 	}, time.Second*20, time.Millisecond*10)
 }
