@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package timer
+package workflow
 
 import (
 	"context"
@@ -29,34 +29,45 @@ import (
 )
 
 func init() {
-	suite.Register(new(base))
+	suite.Register(new(delaystart))
 }
 
-type base struct {
+type delaystart struct {
 	workflow *workflow.Workflow
 }
 
-func (b *base) Setup(t *testing.T) []framework.Option {
-	b.workflow = workflow.New(t)
+func (d *delaystart) Setup(t *testing.T) []framework.Option {
+	d.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(b.workflow),
+		framework.WithProcesses(d.workflow),
 	}
 }
 
-func (b *base) Run(t *testing.T, ctx context.Context) {
-	b.workflow.WaitUntilRunning(t, ctx)
+func (d *delaystart) Run(t *testing.T, ctx context.Context) {
+	d.workflow.WaitUntilRunning(t, ctx)
 
-	b.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
-		return nil, ctx.CreateTimer(time.Second * 7).Await(nil)
+	var executed time.Time
+	d.workflow.Registry().AddOrchestratorN("delay", func(ctx *task.OrchestrationContext) (any, error) {
+		if !ctx.IsReplaying {
+			executed = time.Now()
+		}
+		return nil, nil
 	})
 
-	client := b.workflow.BackendClient(t, ctx)
+	client := d.workflow.BackendClient(t, ctx)
 
 	start := time.Now()
-	id, err := client.ScheduleNewOrchestration(ctx, "timer", api.WithInstanceID("timer"))
+	id, err := client.ScheduleNewOrchestration(ctx, "delay", api.WithStartTime(start.Add(time.Second*7)))
 	require.NoError(t, err)
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, time.Since(start), 7*time.Second)
+	assert.InDelta(t, 7.0, executed.Sub(start).Seconds(), 1.0)
+
+	start = time.Now()
+	id, err = client.ScheduleNewOrchestration(ctx, "delay", api.WithStartTime(start.Add(0)))
+	require.NoError(t, err)
+	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, err)
+	assert.InDelta(t, 0, executed.Sub(start).Seconds(), 1.0)
 }
