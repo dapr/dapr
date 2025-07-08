@@ -122,13 +122,6 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 // ConverseStreamAlpha1 implements the streaming conversation API
 func (a *Universal) ConverseStreamAlpha1(req *runtimev1pb.ConversationRequest, stream runtimev1pb.Dapr_ConverseStreamAlpha1Server) error {
-	// Validate component exists
-	if a.compStore.ConversationsLen() == 0 {
-		err := messages.ErrConversationNotFound
-		a.logger.Debug(err)
-		return err
-	}
-
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
 		err := messages.ErrConversationNotFound.WithFormat(req.GetName())

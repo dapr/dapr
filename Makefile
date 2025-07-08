@@ -542,31 +542,6 @@ check-proto-diff:
 	git diff --exit-code ./pkg/proto/sentry/v1/sentry.pb.go # check no changes
 
 ################################################################################
-# Target: buf-break                                                            #
-################################################################################
-.PHONY: buf-break
-buf-break: ## Check for protobuf breaking changes against the master branch
-	@command -v buf >/dev/null 2>&1 || { echo "buf is not installed. Install it from https://docs.buf.build/installation"; exit 1; }
-	buf breaking --against '.git#branch=master'
-
-################################################################################
-# Target: buf-lint                                                             #
-################################################################################
-.PHONY: buf-lint
-buf-lint: ## Lint protobuf files using buf
-	@command -v buf >/dev/null 2>&1 || { echo "buf is not installed. Install it from https://docs.buf.build/installation"; exit 1; }
-	buf lint .
-
-################################################################################
-# Target: buf-format                                                           #
-################################################################################
-.PHONY: buf-format
-buf-format: ## Format protobuf files using buf
-	@command -v buf >/dev/null 2>&1 || { echo "buf is not installed. Install it from https://docs.buf.build/installation"; exit 1; }
-	buf format -w .
-
-
-################################################################################
 # Target: compile-build-tools                                                  #
 ################################################################################
 compile-build-tools:
