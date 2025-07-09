@@ -15,7 +15,7 @@ package security
 
 import (
 	"bufio"
-	"fmt"
+	"errors"
 	"os"
 	"os/user"
 	"strings"
@@ -28,16 +28,18 @@ func init() {
 
 	user, err := user.Current()
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to get current user: %s", err)
 	}
 
 	const uid = "65532"
 	if user.Uid != uid || user.Gid != uid {
-		panic(fmt.Sprintf("Current user UID/GID (%[1]s:%[2]s) does not match the required UID/GID (%[3]s:%[3]s)."+
+		log.Fatalf("Current user UID/GID (%[1]s:%[2]s) does not match the required UID/GID (%[3]s:%[3]s)."+
 			"Dapr must be run as a non-root user %[3]s:%[3]s in containerized environments. "+
 			user.Uid, user.Gid, uid,
-		))
+		)
 	}
+
+	log.Infof("Running in containerized environment as user %s:%s", user.Uid, user.Gid)
 }
 
 func isContainerized() bool {
@@ -46,8 +48,11 @@ func isContainerized() bool {
 	}
 
 	file, err := os.Open("/proc/1/cgroup")
+	if errors.Is(err, os.ErrNotExist) {
+		return false
+	}
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to open /proc/1/cgroup: %s", err)
 	}
 	defer file.Close()
 
