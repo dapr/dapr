@@ -99,6 +99,7 @@ type Config struct {
 	ActorsService                 string
 	RemindersService              string
 	SchedulerAddress              []string
+	SchedulerStreams              uint
 	DaprAPIListenAddresses        string
 	AppHealthProbeInterval        int
 	AppHealthProbeTimeout         int
@@ -134,6 +135,7 @@ type internalConfig struct {
 	actorsService                string
 	remindersService             string
 	schedulerAddress             []string
+	schedulerStreams             uint
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
@@ -314,6 +316,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		actorsService:             c.ActorsService,
 		remindersService:          c.RemindersService,
 		schedulerAddress:          c.SchedulerAddress,
+		schedulerStreams:          c.SchedulerStreams,
 		publicListenAddress:       c.DaprPublicListenAddress,
 		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
 		healthz:                   c.Healthz,

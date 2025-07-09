@@ -57,7 +57,7 @@ func (a *api) constructHealthzEndpoints() []endpoints.Endpoint {
 
 func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.healthz.IsReady() {
-		msg := messages.ErrHealthNotReady
+		msg := messages.ErrHealthNotReady.WithFormat(a.healthz.GetUnhealthyTargets())
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return

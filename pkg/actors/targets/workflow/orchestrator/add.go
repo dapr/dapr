@@ -47,7 +47,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 		return err
 	}
 
-	if _, err := o.createReminder(ctx, "new-event", nil, 0); err != nil {
+	if _, err := o.createReminder(ctx, "new-event", nil, nil); err != nil {
 		return err
 	}
 
