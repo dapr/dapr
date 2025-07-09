@@ -62,7 +62,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	)
 	place := placement.New(t)
 
-	dopts := []daprd.Option{
+	baseDopts := []daprd.Option{
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithResourceFiles(db.GetComponent(t)),
 	}
@@ -70,7 +70,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	var sched *scheduler.Scheduler
 	if opts.enableScheduler {
 		sched = scheduler.New(t)
-		dopts = append(dopts,
+		baseDopts = append(baseDopts,
 			daprd.WithScheduler(sched),
 			daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
@@ -87,7 +87,14 @@ spec:
 	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
 
 	for i := range daprds {
-		daprds[i] = daprd.New(t, dopts...)
+		for _, daprdOpt := range opts.daprdOptions {
+			if daprdOpt.index == i {
+				baseDopts = append(baseDopts, daprdOpt.opts...)
+				break
+			}
+		}
+
+		daprds[i] = daprd.New(t, baseDopts...)
 	}
 
 	registries := make(map[int]*task.TaskRegistry)

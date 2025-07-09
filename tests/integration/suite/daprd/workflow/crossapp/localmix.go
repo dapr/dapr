@@ -18,20 +18,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
-	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -41,38 +34,23 @@ func init() {
 
 // localmix demonstrates mixing local and cross-app activity calls
 type localmix struct {
-	daprd1 *daprd.Daprd
-	daprd2 *daprd.Daprd
-	place  *placement.Placement
-	sched  *scheduler.Scheduler
-
-	registry1 *task.TaskRegistry
-	registry2 *task.TaskRegistry
+	workflow *workflow.Workflow
 }
 
 func (l *localmix) Setup(t *testing.T) []framework.Option {
-	l.place = placement.New(t,
-		placement.WithLogLevel("debug"))
-	l.sched = scheduler.New(t,
-		scheduler.WithLogLevel("debug"))
-	db := sqlite.New(t,
-		sqlite.WithActorStateStore(true),
-		sqlite.WithMetadata("busyTimeout", "10s"),
-		sqlite.WithMetadata("disableWAL", "true"),
+	l.workflow = workflow.New(t,
+		workflow.WithDaprds(2),
 	)
 
-	app1 := app.New(t)
-	app2 := app.New(t)
+	return []framework.Option{
+		framework.WithProcesses(l.workflow),
+	}
+}
 
-	// Create registries for each app
-	l.registry1 = task.NewTaskRegistry()
-	l.registry2 = task.NewTaskRegistry()
+func (l *localmix) Run(t *testing.T, ctx context.Context) {
+	l.workflow.WaitUntilRunning(t, ctx)
 
-	appID1 := uuid.New().String()
-	appID2 := uuid.New().String()
-
-	// App1: Local activity (no AppID specified)
-	l.registry1.AddActivityN("LocalProcess1", func(ctx task.ActivityContext) (any, error) {
+	l.workflow.Registry(0).AddActivityN("LocalProcess1", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in local activity: %w", err)
@@ -80,8 +58,7 @@ func (l *localmix) Setup(t *testing.T) []framework.Option {
 		return fmt.Sprintf("Local processed: %s", input), nil
 	})
 
-	// App2: Cross-app activity
-	l.registry2.AddActivityN("RemoteProcess2", func(ctx task.ActivityContext) (any, error) {
+	l.workflow.Registry(1).AddActivityN("RemoteProcess2", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in remote activity: %w", err)
@@ -89,8 +66,7 @@ func (l *localmix) Setup(t *testing.T) []framework.Option {
 		return fmt.Sprintf("Remote processed: %s", input), nil
 	})
 
-	// App1: Local activity 3 (no AppID specified)
-	l.registry1.AddActivityN("LocalProcess3", func(ctx task.ActivityContext) (any, error) {
+	l.workflow.Registry(0).AddActivityN("LocalProcess3", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in local activity: %w", err)
@@ -98,8 +74,7 @@ func (l *localmix) Setup(t *testing.T) []framework.Option {
 		return fmt.Sprintf("Local processed: %s", input), nil
 	})
 
-	// App1: Local activity 4 (no AppID specified)
-	l.registry1.AddActivityN("LocalProcess4", func(ctx task.ActivityContext) (any, error) {
+	l.workflow.Registry(0).AddActivityN("LocalProcess4", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in local activity: %w", err)
@@ -107,8 +82,8 @@ func (l *localmix) Setup(t *testing.T) []framework.Option {
 		return fmt.Sprintf("Local processed: %s", input), nil
 	})
 
-	// App1: Orchestrator - mixes local & cross-app calls
-	l.registry1.AddOrchestratorN("MixedWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	// App0: Orchestrator - mixes local & cross-app calls
+	l.workflow.Registry(0).AddOrchestratorN("MixedWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
@@ -127,7 +102,7 @@ func (l *localmix) Setup(t *testing.T) []framework.Option {
 		var step2Result string
 		err = ctx.CallActivity("RemoteProcess2",
 			task.WithActivityInput(step1Result),
-			task.WithAppID(appID2)).
+			task.WithAppID(l.workflow.DaprN(1).AppID())).
 			Await(&step2Result)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute step 2 remote activity: %w", err)
@@ -146,7 +121,7 @@ func (l *localmix) Setup(t *testing.T) []framework.Option {
 		var step4Result string
 		err = ctx.CallActivity("LocalProcess4",
 			task.WithActivityInput(step3Result),
-			task.WithAppID(appID1)).
+			task.WithAppID(l.workflow.DaprN(0).AppID())).
 			Await(&step4Result)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute step 4 local activity: %w", err)
@@ -155,51 +130,17 @@ func (l *localmix) Setup(t *testing.T) []framework.Option {
 		return step4Result, nil
 	})
 
-	l.daprd1 = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(l.place.Address()),
-		daprd.WithScheduler(l.sched),
-		daprd.WithAppID(appID1),
-		daprd.WithAppPort(app1.Port()),
-		daprd.WithLogLevel("debug"),
-	)
-	l.daprd2 = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(l.place.Address()),
-		daprd.WithScheduler(l.sched),
-		daprd.WithAppID(appID2),
-		daprd.WithAppPort(app2.Port()),
-		daprd.WithLogLevel("debug"),
-	)
-
-	return []framework.Option{
-		framework.WithProcesses(l.place, l.sched, db, app1, app2, l.daprd1, l.daprd2),
-	}
-}
-
-func (l *localmix) Run(t *testing.T, ctx context.Context) {
-	l.sched.WaitUntilRunning(t, ctx)
-	l.place.WaitUntilRunning(t, ctx)
-	l.daprd1.WaitUntilRunning(t, ctx)
-	l.daprd2.WaitUntilRunning(t, ctx)
-
 	// Start workflow listeners for each app
-	client1 := client.NewTaskHubGrpcClient(l.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
-	client2 := client.NewTaskHubGrpcClient(l.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client0 := l.workflow.BackendClient(t, ctx, 0) // app0 (orchestrator)
+	l.workflow.BackendClient(t, ctx, 1)            // app1 (activity)
 
-	// Start listeners for each app
-	err := client1.StartWorkItemListener(ctx, l.registry1)
-	assert.NoError(t, err)
-	err = client2.StartWorkItemListener(ctx, l.registry2)
-	assert.NoError(t, err)
-
-	id, err := client1.ScheduleNewOrchestration(ctx, "MixedWorkflow", api.WithInput("Hello from app1"))
+	id, err := client0.ScheduleNewOrchestration(ctx, "MixedWorkflow", api.WithInput("Hello from app0"))
 	require.NoError(t, err)
-	metadata, err := client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+	metadata, err := client0.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
 
 	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
-	expectedResult := `"Local processed: Local processed: Remote processed: Local processed: Hello from app1"`
+	expectedResult := `"Local processed: Local processed: Remote processed: Local processed: Hello from app0"`
 	assert.Equal(t, expectedResult, metadata.GetOutput().GetValue())
 }

@@ -16,6 +16,7 @@ package workflow
 import (
 	"testing"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -34,6 +35,10 @@ type options struct {
 		index int
 		name  string
 		fn    func(task.ActivityContext) (any, error)
+	}
+	daprdOptions []struct {
+		index int
+		opts  []daprd.Option
 	}
 }
 
@@ -70,5 +75,14 @@ func WithAddActivityN(t *testing.T, index int, name string, a func(task.Activity
 func WithDaprds(daprds int) Option {
 	return func(o *options) {
 		o.daprds = daprds
+	}
+}
+
+func WithDaprdOptions(index int, opts ...daprd.Option) Option {
+	return func(o *options) {
+		o.daprdOptions = append(o.daprdOptions, struct {
+			index int
+			opts  []daprd.Option
+		}{index, opts})
 	}
 }

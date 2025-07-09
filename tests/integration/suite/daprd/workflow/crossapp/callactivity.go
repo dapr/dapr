@@ -78,7 +78,7 @@ func (c *callactivity) Run(t *testing.T, ctx context.Context) {
 
 	// Start workflow listeners for each app with their respective registries
 	client0 := c.workflow.BackendClient(t, ctx, 0) // app0 (orchestrator)
-	_ = c.workflow.BackendClient(t, ctx, 1)        // app1 (activity)
+	c.workflow.BackendClient(t, ctx, 1)            // app1 (activity)
 
 	id, err := client0.ScheduleNewOrchestration(ctx, "CrossAppWorkflow", api.WithInput("Hello from app0"))
 	require.NoError(t, err)

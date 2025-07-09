@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -48,9 +48,15 @@ type appdown struct {
 
 	registry1 *task.TaskRegistry
 	registry2 *task.TaskRegistry
+
+	activityStarted chan struct{}
+	activityReady   chan struct{}
 }
 
 func (a *appdown) Setup(t *testing.T) []framework.Option {
+	a.activityStarted = make(chan struct{})
+	a.activityReady = make(chan struct{})
+
 	a.place = placement.New(t)
 	a.sched = scheduler.New(t,
 		scheduler.WithLogLevel("debug"))
@@ -63,12 +69,8 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 	app1 := app.New(t)
 	app2 := app.New(t)
 
-	// Create registries for each app
 	a.registry1 = task.NewTaskRegistry()
 	a.registry2 = task.NewTaskRegistry()
-
-	appID1 := uuid.New().String()
-	appID2 := uuid.New().String()
 
 	// App2: Activity that will be called before the app goes down
 	a.registry2.AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
@@ -77,38 +79,22 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
 		}
 
-		// Sleep for a while to ensure the workflow is actively executing when app2 is stopped
-		time.Sleep(10 * time.Second)
+		select {
+		case a.activityStarted <- struct{}{}:
+		default:
+		}
+
+		// Block until allowed to proceed (which will never happen in this test)
+		// bc triggering this app to go down mid-activity execution and ensure the wf hangs
+		<-a.activityReady
 
 		return fmt.Sprintf("Processed by app2: %s", input), nil
-	})
-
-	// App1: Orchestrator that calls app2
-	a.registry1.AddOrchestratorN("AppDownWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
-		var input string
-		if err := ctx.GetInput(&input); err != nil {
-			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
-		}
-
-		// Call app2 activity
-		var result string
-		err := ctx.CallActivity("ProcessData",
-			task.WithActivityInput(input),
-			task.WithAppID(appID2)).
-			Await(&result)
-		if err != nil {
-			// Return error message to verify it's handled properly
-			return fmt.Sprintf("Error occurred: %v", err), nil
-		}
-
-		return result, nil
 	})
 
 	a.daprd1 = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(a.place.Address()),
 		daprd.WithScheduler(a.sched),
-		daprd.WithAppID(appID1),
 		daprd.WithAppPort(app1.Port()),
 		daprd.WithLogLevel("debug"),
 	)
@@ -116,10 +102,28 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(a.place.Address()),
 		daprd.WithScheduler(a.sched),
-		daprd.WithAppID(appID2),
 		daprd.WithAppPort(app2.Port()),
 		daprd.WithLogLevel("debug"),
 	)
+
+	// App1: Orchestrator, calls app2
+	a.registry1.AddOrchestratorN("AppDownWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
+		}
+
+		var result string
+		err := ctx.CallActivity("ProcessData",
+			task.WithActivityInput(input),
+			task.WithAppID(a.daprd2.AppID())).
+			Await(&result)
+		if err != nil {
+			return fmt.Sprintf("Error occurred: %v", err), nil
+		}
+
+		return result, nil
+	})
 
 	return []framework.Option{
 		framework.WithProcesses(a.place, a.sched, db, app1, app2, a.daprd1, a.daprd2),
@@ -143,15 +147,20 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 
 	// Start listeners for each app
 	err := client1.StartWorkItemListener(ctx, a.registry1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = client2.StartWorkItemListener(wctx, a.registry2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	id, err := client1.ScheduleNewOrchestration(ctx, "AppDownWorkflow", api.WithInput("Hello from app1"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	// Wait a bit for the workflow to start executing & Stop app2 to simulate app going down
-	time.Sleep(1 * time.Second)
+	select {
+	case <-a.activityStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timeout waiting for activity to start")
+	}
+
+	// Stop app2 to simulate app going down mid-execution
 	cancel()
 	a.daprd2.Cleanup(t)
 

@@ -19,22 +19,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
-	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -44,68 +38,20 @@ func init() {
 
 // basiclogline demonstrates calling activities across different Dapr applications.
 type basiclogline struct {
-	daprd1 *daprd.Daprd
-	daprd2 *daprd.Daprd
-	place  *placement.Placement
-	sched  *scheduler.Scheduler
-
-	registry1 *task.TaskRegistry
-	registry2 *task.TaskRegistry
+	workflow *workflow.Workflow
+	logline0 *logline.LogLine
+	logline1 *logline.LogLine
 }
 
 func (b *basiclogline) Setup(t *testing.T) []framework.Option {
-	b.place = placement.New(t)
-	b.sched = scheduler.New(t,
-		scheduler.WithLogLevel("debug"))
-	db := sqlite.New(t,
-		sqlite.WithActorStateStore(true),
-		sqlite.WithMetadata("busyTimeout", "10s"),
-		sqlite.WithMetadata("disableWAL", "true"),
-	)
-
-	app1 := app.New(t)
-	app2 := app.New(t)
-
-	// Create registries for each app and register orchestrator/activity
-	b.registry1 = task.NewTaskRegistry()
-	b.registry2 = task.NewTaskRegistry()
-
-	appID1 := uuid.New().String()
-	appID2 := uuid.New().String()
-
-	b.registry2.AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
-		var input string
-		if err := ctx.GetInput(&input); err != nil {
-			return nil, fmt.Errorf("failed to get input in app2 activity: %w", err)
-		}
-		return fmt.Sprintf("Processed by app2: %s", input), nil
-	})
-
-	b.registry1.AddOrchestratorN("CrossAppWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
-		var input string
-		if err := ctx.GetInput(&input); err != nil {
-			return nil, fmt.Errorf("failed to get input in app1: %w", err)
-		}
-
-		var output string
-		err := ctx.CallActivity("ProcessData",
-			task.WithActivityInput(input),
-			task.WithAppID(appID2)).
-			Await(&output)
-		if err != nil {
-			return nil, fmt.Errorf("failed to execute activity in app2: %w", err)
-		}
-		return output, nil
-	})
-
-	wfOrchestrationLog := logline.New(t,
+	// Create loglines first
+	b.logline0 = logline.New(t,
 		logline.WithStdoutLineContains(
-			fmt.Sprintf("invoking execute method on activity actor 'dapr.internal.default.%s.activity||", appID2),
+			"invoking execute method on activity actor",
 			"workflow completed with status 'ORCHESTRATION_STATUS_COMPLETED' workflowName 'CrossAppWorkflow'",
 		),
 	)
-
-	wfActivityLog := logline.New(t,
+	b.logline1 = logline.New(t,
 		logline.WithStdoutLineContains(
 			"Activity actor",
 			"::0::1': invoking method 'Execute'",
@@ -113,58 +59,66 @@ func (b *basiclogline) Setup(t *testing.T) []framework.Option {
 		),
 	)
 
-	b.daprd1 = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(b.place.Address()),
-		daprd.WithScheduler(b.sched),
-		daprd.WithAppID(appID1),
-		daprd.WithAppPort(app1.Port()),
-		daprd.WithLogLevel("debug"),
-		daprd.WithExecOptions(
-			exec.WithStdout(wfOrchestrationLog.Stdout()),
-		),
-	)
-	b.daprd2 = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(b.place.Address()),
-		daprd.WithScheduler(b.sched),
-		daprd.WithAppID(appID2),
-		daprd.WithAppPort(app2.Port()),
-		daprd.WithLogLevel("debug"),
-		daprd.WithExecOptions(
-			exec.WithStdout(wfActivityLog.Stdout()),
-		),
+	b.workflow = workflow.New(t,
+		workflow.WithDaprds(2),
+		workflow.WithDaprdOptions(0, daprd.WithExecOptions(
+			exec.WithStdout(b.logline0.Stdout()),
+		)),
+		workflow.WithDaprdOptions(1, daprd.WithExecOptions(
+			exec.WithStdout(b.logline1.Stdout()),
+		)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(wfOrchestrationLog, wfActivityLog, b.place, b.sched, db, app1, app2, b.daprd1, b.daprd2),
+		framework.WithProcesses(b.logline0, b.logline1, b.workflow),
 	}
 }
 
 func (b *basiclogline) Run(t *testing.T, ctx context.Context) {
-	b.sched.WaitUntilRunning(t, ctx)
-	b.place.WaitUntilRunning(t, ctx)
-	b.daprd1.WaitUntilRunning(t, ctx)
-	b.daprd2.WaitUntilRunning(t, ctx)
+	b.workflow.WaitUntilRunning(t, ctx)
+	
+	// Add orchestrator to app0's registry
+	b.workflow.Registry(0).AddOrchestratorN("CrossAppWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in app0: %w", err)
+		}
 
-	// Start workflow listeners for each app
-	client1 := client.NewTaskHubGrpcClient(b.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
-	client2 := client.NewTaskHubGrpcClient(b.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+		var output string
+		err := ctx.CallActivity("ProcessData",
+			task.WithActivityInput(input),
+			task.WithAppID(b.workflow.DaprN(1).AppID())).
+			Await(&output)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute activity in app1: %w", err)
+		}
+		return output, nil
+	})
 
-	err := client1.StartWorkItemListener(ctx, b.registry1)
-	assert.NoError(t, err)
-	err = client2.StartWorkItemListener(ctx, b.registry2)
-	assert.NoError(t, err)
+	// Add activity to app1's registry
+	b.workflow.Registry(1).AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in app1 activity: %w", err)
+		}
+		return fmt.Sprintf("Processed by app1: %s", input), nil
+	})
 
-	id, err := client1.ScheduleNewOrchestration(ctx, "CrossAppWorkflow", api.WithInput("Hello from app1"))
+	// Start workflow listeners for each app with their respective registries
+	client0 := b.workflow.BackendClient(t, ctx, 0) // app0 (orchestrator)
+	b.workflow.BackendClient(t, ctx, 1)            // app1 (activity)
+
+	id, err := client0.ScheduleNewOrchestration(ctx, "CrossAppWorkflow", api.WithInput("Hello from app0"))
 	require.NoError(t, err)
 
 	// Wait for completion with timeout
 	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	metadata, err := client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+	metadata, err := client0.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
 	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
-	assert.Equal(t, `"Processed by app2: Hello from app1"`, metadata.GetOutput().GetValue())
+	assert.Equal(t, `"Processed by app1: Hello from app0"`, metadata.GetOutput().GetValue())
+	b.logline0.EventuallyFoundAll(t)
+	b.logline1.EventuallyFoundAll(t)
 }

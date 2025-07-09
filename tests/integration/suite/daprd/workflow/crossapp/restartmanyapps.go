@@ -19,18 +19,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
-	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -39,70 +34,61 @@ func init() {
 }
 
 type restartmanyapps struct {
-	place     *placement.Placement
-	scheduler *scheduler.Scheduler
+	workflow *workflow.Workflow
 }
 
 func (r *restartmanyapps) Setup(t *testing.T) []framework.Option {
-	r.place = placement.New(t)
-	r.scheduler = scheduler.New(t)
+	r.workflow = workflow.New(t,
+		workflow.WithDaprds(3),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(r.place, r.scheduler),
+		framework.WithProcesses(r.workflow),
 	}
 }
 
 func (r *restartmanyapps) Run(t *testing.T, ctx context.Context) {
-	r.scheduler.WaitUntilRunning(t, ctx)
-	r.place.WaitUntilRunning(t, ctx)
+	r.workflow.WaitUntilRunning(t, ctx)
 
-	registry1 := task.NewTaskRegistry()
-	registry2 := task.NewTaskRegistry()
-	registry3 := task.NewTaskRegistry()
-
-	// App2: First activity
-	registry2.AddActivityN("process", func(c task.ActivityContext) (any, error) {
+	// App1: First activity
+	r.workflow.Registry(1).AddActivityN("process", func(c task.ActivityContext) (any, error) {
 		var input string
 		if err := c.GetInput(&input); err != nil {
 			return nil, err
 		}
-		return fmt.Sprintf("processed by app2: %s", input), nil
+		return fmt.Sprintf("processed by app1: %s", input), nil
 	})
 
-	// App3: Second activity
-	registry3.AddActivityN("transform", func(c task.ActivityContext) (any, error) {
+	// App2: Second activity
+	r.workflow.Registry(2).AddActivityN("transform", func(c task.ActivityContext) (any, error) {
 		var input string
 		if err := c.GetInput(&input); err != nil {
 			return nil, err
 		}
-		return fmt.Sprintf("transformed by app3: %s", input), nil
+		return fmt.Sprintf("transformed by app2: %s", input), nil
 	})
 
-	appID1 := uuid.New().String()
-	appID2 := uuid.New().String()
-	appID3 := uuid.New().String()
-
-	// App1: Orchestrator that calls both app2 & app3
-	registry1.AddOrchestratorN("multiapp", func(ctx *task.OrchestrationContext) (any, error) {
+	// App0: Orchestrator that calls both app1 & app2
+	r.workflow.Registry(0).AddOrchestratorN("multiapp", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
 		}
 
-		// Call app2
+		// Call app1
 		var result1 string
 		err := ctx.CallActivity("process",
 			task.WithActivityInput(input),
-			task.WithAppID(appID2)).Await(&result1)
+			task.WithAppID(r.workflow.DaprN(1).AppID())).Await(&result1)
 		if err != nil {
 			return nil, err
 		}
 
-		// Call app3
+		// Call app2
 		var result2 string
 		err = ctx.CallActivity("transform",
 			task.WithActivityInput(result1),
-			task.WithAppID(appID3)).Await(&result2)
+			task.WithAppID(r.workflow.DaprN(2).AppID())).Await(&result2)
 		if err != nil {
 			return nil, err
 		}
@@ -112,67 +98,22 @@ func (r *restartmanyapps) Run(t *testing.T, ctx context.Context) {
 
 	timeTaken := make([]time.Duration, 0, 3)
 	for range 3 {
-		// Create app1 (orchestrator)
-		daprd1 := daprd.New(t,
-			daprd.WithPlacementAddresses(r.place.Address()),
-			daprd.WithInMemoryActorStateStore("mystore"),
-			daprd.WithSchedulerAddresses(r.scheduler.Address()),
-			daprd.WithAppID(appID1),
-		)
-
-		// Create app2 (first activity host)
-		daprd2 := daprd.New(t,
-			daprd.WithPlacementAddresses(r.place.Address()),
-			daprd.WithInMemoryActorStateStore("mystore"),
-			daprd.WithSchedulerAddresses(r.scheduler.Address()),
-			daprd.WithAppID(appID2),
-		)
-
-		// Create app3 (second activity host)
-		daprd3 := daprd.New(t,
-			daprd.WithPlacementAddresses(r.place.Address()),
-			daprd.WithInMemoryActorStateStore("mystore"),
-			daprd.WithSchedulerAddresses(r.scheduler.Address()),
-			daprd.WithAppID(appID3),
-		)
-
-		daprd1.Run(t, ctx)
-		daprd2.Run(t, ctx)
-		daprd3.Run(t, ctx)
-		daprd1.WaitUntilRunning(t, ctx)
-		daprd2.WaitUntilRunning(t, ctx)
-		daprd3.WaitUntilRunning(t, ctx)
-
-		t.Cleanup(func() {
-			daprd1.Cleanup(t)
-			daprd2.Cleanup(t)
-			daprd3.Cleanup(t)
-		})
-
-		wctx, cancel := context.WithCancel(ctx)
-		client1 := client.NewTaskHubGrpcClient(daprd1.GRPCConn(t, wctx), backend.DefaultLogger())
-		client2 := client.NewTaskHubGrpcClient(daprd2.GRPCConn(t, wctx), backend.DefaultLogger())
-		client3 := client.NewTaskHubGrpcClient(daprd3.GRPCConn(t, wctx), backend.DefaultLogger())
-
-		require.NoError(t, client1.StartWorkItemListener(wctx, registry1))
-		require.NoError(t, client2.StartWorkItemListener(wctx, registry2))
-		require.NoError(t, client3.StartWorkItemListener(wctx, registry3))
+		// Start workflow listeners for each app with their respective registries
+		client0 := r.workflow.BackendClient(t, ctx, 0) // app0 (orchestrator)
+		r.workflow.BackendClient(t, ctx, 1)            // app1 (activity)
+		r.workflow.BackendClient(t, ctx, 2)            // app2 (activity)
 
 		now := time.Now()
-		id, err := client1.ScheduleNewOrchestration(wctx, "multiapp",
+		id, err := client0.ScheduleNewOrchestration(ctx, "multiapp",
 			api.WithInstanceID("multiapp-restart"),
 			api.WithInput("hello"))
 		require.NoError(t, err)
-		metadata, err := client1.WaitForOrchestrationCompletion(wctx, id, api.WithFetchPayloads(true))
+		metadata, err := client0.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		timeTaken = append(timeTaken, time.Since(now))
 
-		expected := `"transformed by app3: processed by app2: hello"`
+		expected := `"transformed by app2: processed by app1: hello"`
 		assert.Equal(t, expected, metadata.GetOutput().GetValue())
-		cancel()
-		daprd1.Cleanup(t)
-		daprd2.Cleanup(t)
-		daprd3.Cleanup(t)
 	}
 
 	// Ensure all workflows take similar amounts of time.

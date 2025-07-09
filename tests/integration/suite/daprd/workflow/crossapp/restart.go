@@ -18,18 +18,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
-	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -38,39 +33,27 @@ func init() {
 }
 
 type restart struct {
-	place     *placement.Placement
-	scheduler *scheduler.Scheduler
+	workflow *workflow.Workflow
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
-	r.place = placement.New(t)
-	r.scheduler = scheduler.New(t)
+	r.workflow = workflow.New(t,
+		workflow.WithDaprds(2),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(r.place, r.scheduler),
+		framework.WithProcesses(r.workflow),
 	}
 }
 
 func (r *restart) Run(t *testing.T, ctx context.Context) {
-	r.scheduler.WaitUntilRunning(t, ctx)
-	r.place.WaitUntilRunning(t, ctx)
+	r.workflow.WaitUntilRunning(t, ctx)
 
-	registry1 := task.NewTaskRegistry()
-	registry2 := task.NewTaskRegistry()
-
-	appID1 := uuid.New().String()
-	appID2 := uuid.New().String()
-
-	// App2: Activity that will be called by app1
-	registry2.AddActivityN("bar", func(c task.ActivityContext) (any, error) {
-		return "processed by app2", nil
-	})
-
-	// App1: Orchestrator that calls app2
-	registry1.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	// Add orchestrator to app0's registry
+	r.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		var result string
 		err := ctx.CallActivity("bar",
-			task.WithAppID(appID2),
+			task.WithAppID(r.workflow.DaprN(1).AppID()),
 		).Await(&result)
 		if err != nil {
 			return nil, err
@@ -78,49 +61,23 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		return result, nil
 	})
 
+	// Add activity to app1's registry
+	r.workflow.Registry(1).AddActivityN("bar", func(c task.ActivityContext) (any, error) {
+		return "processed by app1", nil
+	})
+
 	timeTaken := make([]time.Duration, 0, 5)
 	for range 5 {
-		// Create app1 (orchestrator)
-		daprd1 := daprd.New(t,
-			daprd.WithPlacementAddresses(r.place.Address()),
-			daprd.WithInMemoryActorStateStore("mystore"),
-			daprd.WithSchedulerAddresses(r.scheduler.Address()),
-			daprd.WithAppID(appID1),
-		)
-
-		// Create app2 (activity host)
-		daprd2 := daprd.New(t,
-			daprd.WithPlacementAddresses(r.place.Address()),
-			daprd.WithInMemoryActorStateStore("mystore"),
-			daprd.WithSchedulerAddresses(r.scheduler.Address()),
-			daprd.WithAppID(appID2),
-		)
-
-		daprd1.Run(t, ctx)
-		daprd2.Run(t, ctx)
-		daprd1.WaitUntilRunning(t, ctx)
-		daprd2.WaitUntilRunning(t, ctx)
-		t.Cleanup(func() {
-			daprd1.Cleanup(t)
-			daprd2.Cleanup(t)
-		})
-
-		wctx, cancel := context.WithCancel(ctx)
-		client1 := client.NewTaskHubGrpcClient(daprd1.GRPCConn(t, wctx), backend.DefaultLogger())
-		client2 := client.NewTaskHubGrpcClient(daprd2.GRPCConn(t, wctx), backend.DefaultLogger())
-
-		require.NoError(t, client1.StartWorkItemListener(wctx, registry1))
-		require.NoError(t, client2.StartWorkItemListener(wctx, registry2))
+		// Start workflow listeners for each app with their respective registries
+		client0 := r.workflow.BackendClient(t, ctx, 0) // app0 (orchestrator)
+		r.workflow.BackendClient(t, ctx, 1)            // app1 (activity)
 
 		now := time.Now()
-		id, err := client1.ScheduleNewOrchestration(wctx, "foo", api.WithInstanceID("crossapp-restart"))
+		id, err := client0.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("crossapp-restart"))
 		require.NoError(t, err)
-		_, err = client1.WaitForOrchestrationCompletion(wctx, id)
+		_, err = client0.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
 		timeTaken = append(timeTaken, time.Since(now))
-		cancel()
-		daprd1.Cleanup(t)
-		daprd2.Cleanup(t)
 	}
 
 	// Ensure all workflows take similar amounts of time.
