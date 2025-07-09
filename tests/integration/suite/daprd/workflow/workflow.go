@@ -24,6 +24,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/retries"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/security"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/starttime"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/taskexecutionid"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/timer"
 )
