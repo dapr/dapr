@@ -19,5 +19,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/memory"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reconnect"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/starttime"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/timer"
 )
