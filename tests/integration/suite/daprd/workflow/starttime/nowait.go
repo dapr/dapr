@@ -57,13 +57,12 @@ func (n *nowait) Run(t *testing.T, ctx context.Context) {
 
 	client := n.workflow.BackendClient(t, ctx)
 
-	start := time.Now()
 	id, err := client.ScheduleNewOrchestration(ctx, "delay")
 	require.NoError(t, err)
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
-	start = time.Now()
+	start := time.Now()
 	cctx, cancel := context.WithTimeout(ctx, time.Second*3)
 	t.Cleanup(cancel)
 	id, err = client.ScheduleNewOrchestration(cctx, "delay", api.WithStartTime(start.Add(time.Second*7)))
