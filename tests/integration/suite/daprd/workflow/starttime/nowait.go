@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package starttime
 
 import (
 	"context"
@@ -29,45 +29,45 @@ import (
 )
 
 func init() {
-	suite.Register(new(delaystart))
+	suite.Register(new(nowait))
 }
 
-type delaystart struct {
+type nowait struct {
 	workflow *workflow.Workflow
 }
 
-func (d *delaystart) Setup(t *testing.T) []framework.Option {
-	d.workflow = workflow.New(t)
+func (n *nowait) Setup(t *testing.T) []framework.Option {
+	n.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(d.workflow),
+		framework.WithProcesses(n.workflow),
 	}
 }
 
-func (d *delaystart) Run(t *testing.T, ctx context.Context) {
-	d.workflow.WaitUntilRunning(t, ctx)
+func (n *nowait) Run(t *testing.T, ctx context.Context) {
+	n.workflow.WaitUntilRunning(t, ctx)
 
 	var executed time.Time
-	d.workflow.Registry().AddOrchestratorN("delay", func(ctx *task.OrchestrationContext) (any, error) {
+	n.workflow.Registry().AddOrchestratorN("delay", func(ctx *task.OrchestrationContext) (any, error) {
 		if !ctx.IsReplaying {
 			executed = time.Now()
 		}
 		return nil, nil
 	})
 
-	client := d.workflow.BackendClient(t, ctx)
+	client := n.workflow.BackendClient(t, ctx)
+
+	id, err := client.ScheduleNewOrchestration(ctx, "delay")
+	require.NoError(t, err)
+	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, err)
 
 	start := time.Now()
-	id, err := client.ScheduleNewOrchestration(ctx, "delay", api.WithStartTime(start.Add(time.Second*7)))
+	cctx, cancel := context.WithTimeout(ctx, time.Second*3)
+	t.Cleanup(cancel)
+	id, err = client.ScheduleNewOrchestration(cctx, "delay", api.WithStartTime(start.Add(time.Second*7)))
 	require.NoError(t, err)
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.InDelta(t, 7.0, executed.Sub(start).Seconds(), 1.0)
-
-	start = time.Now()
-	id, err = client.ScheduleNewOrchestration(ctx, "delay", api.WithStartTime(start.Add(0)))
-	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
-	require.NoError(t, err)
-	assert.InDelta(t, 0, executed.Sub(start).Seconds(), 1.0)
 }
