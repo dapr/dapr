@@ -36,9 +36,9 @@ func checkUIDGID(mode modes.DaprMode) error {
 
 	const expuid = 65532
 	if uid != expuid || gid != expuid {
-		return fmt.Errorf("Current user UID/GID (%[1]d:%[2]d) does not match the required UID/GID (%[3]d:%[3]d). "+
+		return fmt.Errorf("current user UID/GID (%[1]d:%[2]d) does not match the required UID/GID (%[3]d:%[3]d). "+
 			"Dapr must be run as a non-root user %[3]d:%[3]d in Kubernetes environments. "+
-			"To override this check, set the environment variable 'DAPR_UNSAFE_SKIP_CONTAINER_UID_CHECK=true'.",
+			"To override this check, set the environment variable 'DAPR_UNSAFE_SKIP_CONTAINER_UID_CHECK=true'",
 			uid, gid, expuid,
 		)
 	}
