@@ -14,57 +14,36 @@ limitations under the License.
 package security
 
 import (
-	"bufio"
-	"errors"
+	"fmt"
 	"os"
-	"os/user"
-	"strings"
+	"syscall"
+
+	"github.com/dapr/dapr/pkg/modes"
 )
 
-func init() {
-	if !isContainerized() {
-		return
+func checkUIDGID(mode modes.DaprMode) error {
+	if mode != modes.KubernetesMode {
+		return nil
 	}
 
-	user, err := user.Current()
-	if err != nil {
-		log.Fatalf("Failed to get current user: %s", err)
+	if os.Getenv("DAPR_UNSAFE_SKIP_CONTAINER_UID_CHECK") == "true" {
+		log.Warn("Skipping container UID/GID check due to env override.")
+		return nil
 	}
 
-	const uid = "65532"
-	if user.Uid != uid || user.Gid != uid {
-		log.Fatalf("Current user UID/GID (%[1]s:%[2]s) does not match the required UID/GID (%[3]s:%[3]s)."+
-			"Dapr must be run as a non-root user %[3]s:%[3]s in containerized environments. "+
-			user.Uid, user.Gid, uid,
+	uid := syscall.Geteuid()
+	gid := syscall.Getegid()
+
+	const expuid = 65532
+	if uid != expuid || gid != expuid {
+		return fmt.Errorf("Current user UID/GID (%[1]d:%[2]d) does not match the required UID/GID (%[3]d:%[3]d). "+
+			"Dapr must be run as a non-root user %[3]d:%[3]d in Kubernetes environments. "+
+			"To override this check, set the environment variable 'DAPR_UNSAFE_SKIP_CONTAINER_UID_CHECK=true'.",
+			uid, gid, expuid,
 		)
 	}
 
-	log.Infof("Running in containerized environment as user %s:%s", user.Uid, user.Gid)
-}
+	log.Infof("Running in Kubernetes environment as user %d:%d", uid, gid)
 
-func isContainerized() bool {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		return true
-	}
-
-	file, err := os.Open("/proc/1/cgroup")
-	if errors.Is(err, os.ErrNotExist) {
-		return false
-	}
-	if err != nil {
-		log.Fatalf("Failed to open /proc/1/cgroup: %s", err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.Contains(line, "docker") ||
-			strings.Contains(line, "kubepods") ||
-			strings.Contains(line, "containerd") {
-			return true
-		}
-	}
-
-	return false
+	return nil
 }
