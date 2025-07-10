@@ -88,7 +88,7 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	cancel()
 	close(c.waitCh)
 
-	cl = client.NewTaskHubGrpcClient(c.workflow.DaprN(0).GRPCConn(t, ctx), logger.New(t))
+	cl = client.NewTaskHubGrpcClient(c.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
 	cctx, cancel = context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, cl.StartWorkItemListener(cctx, c.workflow.Registry()))

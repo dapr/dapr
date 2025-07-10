@@ -48,6 +48,11 @@ func WithScheduler(enable bool) Option {
 	}
 }
 
+func WithAddOrchestrator(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+	t.Helper()
+	return WithAddOrchestratorN(t, 0, name, or)
+}
+
 func WithAddOrchestratorN(t *testing.T, index int, name string, or func(*task.OrchestrationContext) (any, error)) Option {
 	t.Helper()
 
@@ -58,6 +63,11 @@ func WithAddOrchestratorN(t *testing.T, index int, name string, or func(*task.Or
 			fn    func(*task.OrchestrationContext) (any, error)
 		}{index, name, or})
 	}
+}
+
+func WithAddActivity(t *testing.T, name string, a func(task.ActivityContext) (any, error)) Option {
+	t.Helper()
+	return WithAddActivityN(t, 0, name, a)
 }
 
 func WithAddActivityN(t *testing.T, index int, name string, a func(task.ActivityContext) (any, error)) Option {
