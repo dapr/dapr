@@ -49,21 +49,21 @@ func (e *terminated) Run(t *testing.T, ctx context.Context) {
 
 	var act atomic.Int64
 	waitCh := make(chan struct{})
-	e.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	e.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("wait").Await(nil))
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
-	e.workflow.Registry(0).AddActivityN("wait", func(ctx task.ActivityContext) (any, error) {
+	e.workflow.Registry().AddActivityN("wait", func(ctx task.ActivityContext) (any, error) {
 		<-waitCh
 		return nil, nil
 	})
-	e.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	e.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		act.Add(1)
 		return nil, nil
 	})
 
-	client := e.workflow.BackendClient(t, ctx, 0)
+	client := e.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)

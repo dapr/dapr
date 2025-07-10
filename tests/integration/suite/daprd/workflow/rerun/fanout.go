@@ -49,7 +49,7 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
 	var act atomic.Int64
-	f.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	f.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		as := make([]task.Task, 5)
 		for i := range 3 {
 			as[i] = ctx.CallActivity("bar")
@@ -65,12 +65,12 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 		}
 		return nil, nil
 	})
-	f.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	f.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		time.Sleep(time.Second)
 		act.Add(1)
 		return nil, nil
 	})
-	client := f.workflow.BackendClient(t, ctx, 0)
+	client := f.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)

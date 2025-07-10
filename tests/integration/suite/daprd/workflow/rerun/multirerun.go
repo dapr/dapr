@@ -48,16 +48,16 @@ func (m *multirerun) Run(t *testing.T, ctx context.Context) {
 	m.workflow.WaitUntilRunning(t, ctx)
 
 	var act atomic.Int64
-	m.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	m.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
-	m.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	m.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		act.Add(1)
 		return nil, nil
 	})
 
-	client := m.workflow.BackendClient(t, ctx, 0)
+	client := m.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)

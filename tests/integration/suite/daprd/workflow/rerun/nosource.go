@@ -45,7 +45,7 @@ func (n *nosource) Setup(t *testing.T) []framework.Option {
 func (n *nosource) Run(t *testing.T, ctx context.Context) {
 	n.workflow.WaitUntilRunning(t, ctx)
 
-	client := n.workflow.BackendClient(t, ctx, 0)
+	client := n.workflow.BackendClient(t, ctx)
 	_, err := client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 0)
 
 	assert.Equal(t, status.Error(codes.NotFound, "workflow instance does not exist with ID 'abc'"), err)

@@ -63,7 +63,7 @@ func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 	i.workflow.WaitUntilRunning(t, ctx)
 
 	// Add orchestrator to app0's registry that tries to call non-existent apps
-	i.workflow.Registry(0).AddOrchestratorN("InvalidAppWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	i.workflow.Registry().AddOrchestratorN("InvalidAppWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
@@ -84,7 +84,7 @@ func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// Start workflow listener for app0
-	client0 := i.workflow.BackendClient(t, ctx, 0)
+	client0 := i.workflow.BackendClient(t, ctx)
 
 	// ctx cancel bc it will hang
 	wCtx, wcancel := context.WithTimeout(ctx, 15*time.Second)

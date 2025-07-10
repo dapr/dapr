@@ -50,7 +50,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
 	// Add orchestrator to app0's registry
-	r.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		var result string
 		err := ctx.CallActivity("bar",
 			task.WithAppID(r.workflow.DaprN(1).AppID()),
@@ -62,15 +62,15 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// Add activity to app1's registry
-	r.workflow.Registry(1).AddActivityN("bar", func(c task.ActivityContext) (any, error) {
+	r.workflow.RegistryN(1).AddActivityN("bar", func(c task.ActivityContext) (any, error) {
 		return "processed by app1", nil
 	})
 
 	timeTaken := make([]time.Duration, 0, 5)
 	for range 5 {
 		// Start workflow listeners for each app with their respective registries
-		client0 := r.workflow.BackendClient(t, ctx, 0) // app0 (orchestrator)
-		r.workflow.BackendClient(t, ctx, 1)            // app1 (activity)
+		client0 := r.workflow.BackendClient(t, ctx) // app0 (orchestrator)
+		r.workflow.BackendClientN(t, ctx, 1)        // app1 (activity)
 
 		now := time.Now()
 		id, err := client0.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("crossapp-restart"))

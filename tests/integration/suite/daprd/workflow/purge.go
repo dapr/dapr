@@ -45,15 +45,15 @@ func (p *purge) Setup(t *testing.T) []framework.Option {
 func (p *purge) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
-	p.workflow.Registry(0).AddOrchestratorN("purge", func(ctx *task.OrchestrationContext) (any, error) {
+	p.workflow.Registry().AddOrchestratorN("purge", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("abc").Await(nil))
 		return nil, nil
 	})
-	p.workflow.Registry(0).AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
+	p.workflow.Registry().AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
 		return nil, nil
 	})
 
-	client := p.workflow.BackendClient(t, ctx, 0)
+	client := p.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "purge")
 	require.NoError(t, err)

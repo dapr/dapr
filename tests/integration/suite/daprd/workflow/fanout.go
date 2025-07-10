@@ -49,7 +49,7 @@ func (f *fanout) Setup(t *testing.T) []framework.Option {
 func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
-	f.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	f.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		tasks := make([]task.Task, 100)
 		for i := range 100 {
 			tasks[i] = ctx.CallActivity("bar", task.WithActivityInput(i))
@@ -62,7 +62,7 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 		return nil, errors.Join(errs...)
 	})
 
-	f.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	f.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		var ii int
 		if err := ctx.GetInput(&ii); err != nil {
 			return nil, err
@@ -71,7 +71,7 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	client := f.workflow.BackendClient(t, ctx, 0)
+	client := f.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)

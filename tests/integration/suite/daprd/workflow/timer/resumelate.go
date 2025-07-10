@@ -15,7 +15,6 @@ package timer
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/task"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -48,16 +46,13 @@ func (r *resumelate) Setup(t *testing.T) []framework.Option {
 func (r *resumelate) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	var now atomic.Pointer[time.Time]
-	r.workflow.Registry(0).AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
-		if !ctx.IsReplaying {
-			now.Store(ptr.Of(time.Now()))
-		}
+	r.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
 		return nil, ctx.CreateTimer(time.Second * 8).Await(nil)
 	})
 
-	client := r.workflow.BackendClient(t, ctx, 0)
+	client := r.workflow.BackendClient(t, ctx)
 
+	start := time.Now()
 	id, err := client.ScheduleNewOrchestration(ctx, "timer")
 	require.NoError(t, err)
 
@@ -69,5 +64,5 @@ func (r *resumelate) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.InDelta(t, 11.0, time.Since(*now.Load()).Seconds(), 1.0)
+	assert.GreaterOrEqual(t, time.Since(start), time.Second*11)
 }

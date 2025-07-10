@@ -50,7 +50,7 @@ func (g *getnotfound) Run(t *testing.T, ctx context.Context) {
 	g.workflow.WaitUntilRunning(t, ctx)
 
 	t.Run("grpc", func(t *testing.T) {
-		gclient := g.workflow.GRPCClient(t, ctx, 0)
+		gclient := g.workflow.GRPCClient(t, ctx)
 		resp, err := gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
 			InstanceId:        "not-found",
 			WorkflowComponent: "dapr",

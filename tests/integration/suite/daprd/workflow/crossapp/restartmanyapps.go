@@ -51,7 +51,7 @@ func (r *restartmanyapps) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
 	// App1: First activity
-	r.workflow.Registry(1).AddActivityN("process", func(c task.ActivityContext) (any, error) {
+	r.workflow.RegistryN(1).AddActivityN("process", func(c task.ActivityContext) (any, error) {
 		var input string
 		if err := c.GetInput(&input); err != nil {
 			return nil, err
@@ -60,7 +60,7 @@ func (r *restartmanyapps) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// App2: Second activity
-	r.workflow.Registry(2).AddActivityN("transform", func(c task.ActivityContext) (any, error) {
+	r.workflow.RegistryN(2).AddActivityN("transform", func(c task.ActivityContext) (any, error) {
 		var input string
 		if err := c.GetInput(&input); err != nil {
 			return nil, err
@@ -69,7 +69,7 @@ func (r *restartmanyapps) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// App0: Orchestrator that calls both app1 & app2
-	r.workflow.Registry(0).AddOrchestratorN("multiapp", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddOrchestratorN("multiapp", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -99,9 +99,9 @@ func (r *restartmanyapps) Run(t *testing.T, ctx context.Context) {
 	timeTaken := make([]time.Duration, 0, 3)
 	for range 3 {
 		// Start workflow listeners for each app with their respective registries
-		client0 := r.workflow.BackendClient(t, ctx, 0) // app0 (orchestrator)
-		r.workflow.BackendClient(t, ctx, 1)            // app1 (activity)
-		r.workflow.BackendClient(t, ctx, 2)            // app2 (activity)
+		client0 := r.workflow.BackendClient(t, ctx) // app0 (orchestrator)
+		r.workflow.BackendClientN(t, ctx, 1)        // app1 (activity)
+		r.workflow.BackendClientN(t, ctx, 2)        // app2 (activity)
 
 		now := time.Now()
 		id, err := client0.ScheduleNewOrchestration(ctx, "multiapp",

@@ -158,24 +158,40 @@ func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}
 }
 
+func (w *Workflow) Registry() *task.TaskRegistry {
+	registries := w.taskregistry.Load().(map[int]*task.TaskRegistry)
+	return registries[0]
+}
+
 // Registry returns the registry for a specific index
-func (w *Workflow) Registry(index int) *task.TaskRegistry {
+func (w *Workflow) RegistryN(index int) *task.TaskRegistry {
 	registries := w.taskregistry.Load().(map[int]*task.TaskRegistry)
 	return registries[index]
 }
 
+func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
+	backendClient := client.NewTaskHubGrpcClient(w.daprds[0].GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.Registry()))
+	return backendClient
+}
+
 // BackendClient returns a backend client for the specified index
-func (w *Workflow) BackendClient(t *testing.T, ctx context.Context, index int) *client.TaskHubGrpcClient {
+func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) *client.TaskHubGrpcClient {
 	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
 
 	backendClient := client.NewTaskHubGrpcClient(w.daprds[index].GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.Registry(index)))
+	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.RegistryN(index)))
 	return backendClient
 }
 
+func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
+	t.Helper()
+	return w.daprds[0].GRPCClient(t, ctx)
+}
+
 // GRPCClientForApp returns a GRPC client for the specified app index
-func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context, index int) rtv1.DaprClient {
+func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv1.DaprClient {
 	t.Helper()
 	require.Less(t, index, len(w.daprds), "index out of range")
 	return w.daprds[index].GRPCClient(t, ctx)

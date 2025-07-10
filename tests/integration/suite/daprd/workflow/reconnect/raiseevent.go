@@ -51,7 +51,7 @@ func (r *raiseevent) Setup(t *testing.T) []framework.Option {
 func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	r.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		r.called.Add(1)
 		return nil, ctx.WaitForSingleEvent("event1", 1*time.Minute).Await(nil)
 	})
@@ -60,7 +60,7 @@ func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
-	require.NoError(t, client.StartWorkItemListener(cctx, r.workflow.Registry(0)))
+	require.NoError(t, client.StartWorkItemListener(cctx, r.workflow.Registry()))
 
 	id, err := client.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
@@ -73,7 +73,7 @@ func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 
 	cctx, cancel = context.WithCancel(ctx)
 	t.Cleanup(cancel)
-	require.NoError(t, client.StartWorkItemListener(cctx, r.workflow.Registry(0)))
+	require.NoError(t, client.StartWorkItemListener(cctx, r.workflow.Registry()))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.NoError(c, client.RaiseEvent(ctx, id, "event1"))

@@ -50,7 +50,7 @@ func (m *multihop) Run(t *testing.T, ctx context.Context) {
 	m.workflow.WaitUntilRunning(t, ctx)
 
 	// App1: 1st hop - processes data
-	m.workflow.Registry(1).AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
+	m.workflow.RegistryN(1).AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app1: %w", err)
@@ -59,7 +59,7 @@ func (m *multihop) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// App2: 2nd hop - transforms data
-	m.workflow.Registry(2).AddActivityN("TransformData", func(ctx task.ActivityContext) (any, error) {
+	m.workflow.RegistryN(2).AddActivityN("TransformData", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
@@ -68,7 +68,7 @@ func (m *multihop) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// App0: Orchestrator - coordinates the multi-hop workflow
-	m.workflow.Registry(0).AddOrchestratorN("MultiHopWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	m.workflow.Registry().AddOrchestratorN("MultiHopWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
@@ -98,9 +98,9 @@ func (m *multihop) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// Start workflow listeners for each app
-	client0 := m.workflow.BackendClient(t, ctx, 0) // app0 (orchestrator)
-	m.workflow.BackendClient(t, ctx, 1)            // app1 (activity)
-	m.workflow.BackendClient(t, ctx, 2)            // app2 (activity)
+	client0 := m.workflow.BackendClient(t, ctx) // app0 (orchestrator)
+	m.workflow.BackendClientN(t, ctx, 1)        // app1 (activity)
+	m.workflow.BackendClientN(t, ctx, 2)        // app2 (activity)
 
 	// Start the multi-hop workflow
 	id, err := client0.ScheduleNewOrchestration(ctx, "MultiHopWorkflow", api.WithInput("Hello from app0"))

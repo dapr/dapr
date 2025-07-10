@@ -61,8 +61,8 @@ func (s *state) Setup(t *testing.T) []framework.Option {
 
 func (s *state) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
-	client := s.workflow.BackendClient(t, ctx, 0)
-	gclient := s.workflow.GRPCClient(t, ctx, 0)
+	client := s.workflow.BackendClient(t, ctx)
+	gclient := s.workflow.GRPCClient(t, ctx)
 
 	var actorMemBaseline float64
 

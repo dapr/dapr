@@ -47,12 +47,12 @@ func (p *pause) Setup(t *testing.T) []framework.Option {
 func (p *pause) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
-	p.workflow.Registry(0).AddOrchestratorN("pauser", func(ctx *task.OrchestrationContext) (any, error) {
+	p.workflow.Registry().AddOrchestratorN("pauser", func(ctx *task.OrchestrationContext) (any, error) {
 		ctx.WaitForSingleEvent("abc", time.Minute).Await(nil)
 		return nil, nil
 	})
 
-	client := p.workflow.BackendClient(t, ctx, 0)
+	client := p.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "pauser", api.WithInstanceID("pauser"))
 	require.NoError(t, err)

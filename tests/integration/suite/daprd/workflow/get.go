@@ -51,12 +51,12 @@ func (g *get) Setup(t *testing.T) []framework.Option {
 func (g *get) Run(t *testing.T, ctx context.Context) {
 	g.workflow.WaitUntilRunning(t, ctx)
 
-	g.workflow.Registry(0).AddOrchestratorN("getter", func(ctx *task.OrchestrationContext) (any, error) {
+	g.workflow.Registry().AddOrchestratorN("getter", func(ctx *task.OrchestrationContext) (any, error) {
 		ctx.SetCustomStatus("my custom status")
 		return "return value", nil
 	})
 
-	client := g.workflow.BackendClient(t, ctx, 0)
+	client := g.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "getter", api.WithInput("input value"))
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"return value"`, meta.GetOutput().GetValue())
 	assert.Equal(t, `my custom status`, meta.GetCustomStatus().GetValue())
 
-	gclient := g.workflow.GRPCClient(t, ctx, 0)
+	gclient := g.workflow.GRPCClient(t, ctx)
 	resp, err := gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
 		InstanceId:        string(id),
 		WorkflowComponent: "dapr",

@@ -47,11 +47,11 @@ func (s *simple) Setup(t *testing.T) []framework.Option {
 func (s *simple) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
-	s.workflow.Registry(0).AddOrchestratorN("simple-timer", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry().AddOrchestratorN("simple-timer", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CreateTimer(time.Second*3).Await(nil))
 		return nil, nil
 	})
-	client := s.workflow.BackendClient(t, ctx, 0)
+	client := s.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "simple-timer", api.WithInstanceID("abc"))
 	require.NoError(t, err)

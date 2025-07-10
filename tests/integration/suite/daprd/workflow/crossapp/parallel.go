@@ -58,7 +58,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 	p.workflow.WaitUntilRunning(t, ctx)
 
 	// App1: First parallel activity
-	p.workflow.Registry(1).AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
+	p.workflow.RegistryN(1).AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app1: %w", err)
@@ -75,7 +75,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// App1: Additional parallel activity
-	p.workflow.Registry(1).AddActivityN("ProcessData2", func(ctx task.ActivityContext) (any, error) {
+	p.workflow.RegistryN(1).AddActivityN("ProcessData2", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app1: %w", err)
@@ -92,7 +92,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// App2: Second parallel activity
-	p.workflow.Registry(2).AddActivityN("TransformData", func(ctx task.ActivityContext) (any, error) {
+	p.workflow.RegistryN(2).AddActivityN("TransformData", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
@@ -109,7 +109,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// App2: Additional parallel activity
-	p.workflow.Registry(2).AddActivityN("TransformData2", func(ctx task.ActivityContext) (any, error) {
+	p.workflow.RegistryN(2).AddActivityN("TransformData2", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
@@ -126,7 +126,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// App0: Orchestrator - calls activities in parallel
-	p.workflow.Registry(0).AddOrchestratorN("ParallelWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	p.workflow.Registry().AddOrchestratorN("ParallelWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
@@ -174,9 +174,9 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// Start workflow listeners for each app
-	client0 := p.workflow.BackendClient(t, ctx, 0) // app0 (orchestrator)
-	p.workflow.BackendClient(t, ctx, 1)            // app1 (activities)
-	p.workflow.BackendClient(t, ctx, 2)            // app2 (activities)
+	client0 := p.workflow.BackendClient(t, ctx) // app0 (orchestrator)
+	p.workflow.BackendClientN(t, ctx, 1)        // app1 (activities)
+	p.workflow.BackendClientN(t, ctx, 2)        // app2 (activities)
 
 	id, err := client0.ScheduleNewOrchestration(ctx, "ParallelWorkflow", api.WithInput("test input"))
 	require.NoError(t, err)

@@ -48,15 +48,15 @@ func (e *targetexists) Setup(t *testing.T) []framework.Option {
 func (e *targetexists) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
-	e.workflow.Registry(0).AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	e.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
-	e.workflow.Registry(0).AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	e.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		return nil, nil
 	})
 
-	client := e.workflow.BackendClient(t, ctx, 0)
+	client := e.workflow.BackendClient(t, ctx)
 
 	_, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)

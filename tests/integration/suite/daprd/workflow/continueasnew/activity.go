@@ -51,7 +51,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	var cont atomic.Bool
 	var barCalled atomic.Int64
 
-	reg := a.workflow.Registry(0)
+	reg := a.workflow.Registry()
 	require.NoError(t, reg.AddOrchestratorN("can", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		require.NoError(t, ctx.GetInput(&input))
@@ -113,7 +113,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		return "", nil
 	}))
 
-	client := a.workflow.BackendClient(t, ctx, 0)
+	client := a.workflow.BackendClient(t, ctx)
 
 	barCalled.Store(0)
 	cont.Store(false)
