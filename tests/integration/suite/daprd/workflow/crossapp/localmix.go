@@ -55,7 +55,7 @@ func (l *localmix) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in local activity: %w", err)
 		}
-		return fmt.Sprintf("Local processed: %s", input), nil
+		return "Local processed: " + input, nil
 	})
 
 	l.workflow.RegistryN(1).AddActivityN("RemoteProcess2", func(ctx task.ActivityContext) (any, error) {
@@ -63,7 +63,7 @@ func (l *localmix) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in remote activity: %w", err)
 		}
-		return fmt.Sprintf("Remote processed: %s", input), nil
+		return "Remote processed: " + input, nil
 	})
 
 	l.workflow.Registry().AddActivityN("LocalProcess3", func(ctx task.ActivityContext) (any, error) {
@@ -71,7 +71,7 @@ func (l *localmix) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in local activity: %w", err)
 		}
-		return fmt.Sprintf("Local processed: %s", input), nil
+		return "Local processed: " + input, nil
 	})
 
 	l.workflow.Registry().AddActivityN("LocalProcess4", func(ctx task.ActivityContext) (any, error) {

@@ -86,7 +86,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 		select {
 		case <-p.releaseCh:
 		case <-time.After(10 * time.Second):
-			return nil, fmt.Errorf("timeout waiting for release")
+			return nil, errors.New("timeout waiting for release")
 		}
 
 		return fmt.Sprintf("Processed2 by app1: %s", input), nil
@@ -103,7 +103,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 		select {
 		case <-p.releaseCh:
 		case <-time.After(10 * time.Second):
-			return nil, fmt.Errorf("timeout waiting for release")
+			return nil, errors.New("timeout waiting for release")
 		}
 
 		return fmt.Sprintf("Transformed by app2: %s", input), nil
@@ -120,7 +120,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 		select {
 		case <-p.releaseCh:
 		case <-time.After(10 * time.Second):
-			return nil, fmt.Errorf("timeout waiting for release")
+			return nil, errors.New("timeout waiting for release")
 		}
 
 		return fmt.Sprintf("Transformed2 by app2: %s", input), nil

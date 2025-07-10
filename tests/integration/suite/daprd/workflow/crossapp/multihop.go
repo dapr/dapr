@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -104,10 +105,10 @@ func (m *multihop) Run(t *testing.T, ctx context.Context) {
 
 	// Start the multi-hop workflow
 	id, err := client0.ScheduleNewOrchestration(ctx, "MultiHopWorkflow", api.WithInput("Hello from app0"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	metadata, err := client0.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
