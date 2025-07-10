@@ -76,7 +76,7 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app2 activity: %w", err)
 		}
-		return fmt.Sprintf("Processed by app2: %s", input), nil
+		return "Processed by app2: " + input, nil
 	})
 
 	// App1: Orchestrator that tries to call app2 in different namespace

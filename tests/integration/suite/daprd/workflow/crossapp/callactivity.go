@@ -73,7 +73,7 @@ func (c *callactivity) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app1 activity: %w", err)
 		}
-		return fmt.Sprintf("Processed by app1: %s", input), nil
+		return "Processed by app1: " + input, nil
 	})
 
 	// Start workflow listeners for each app with their respective registries

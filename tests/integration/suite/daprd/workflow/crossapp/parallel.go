@@ -15,6 +15,7 @@ package crossapp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -68,7 +69,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 		select {
 		case <-p.releaseCh:
 		case <-time.After(10 * time.Second):
-			return nil, fmt.Errorf("timeout waiting for release")
+			return nil, errors.New("timeout waiting for release")
 		}
 
 		return fmt.Sprintf("Processed by app1: %s", input), nil

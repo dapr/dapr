@@ -15,6 +15,7 @@ package crossapp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -78,7 +79,7 @@ func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 
 		// This should fail, so we expect an error
 		if err == nil {
-			return nil, fmt.Errorf("expected error when calling non-existent app, but got none")
+			return nil, errors.New("expected error when calling non-existent app, but got none")
 		}
 		return fmt.Sprintf("Error handled: %v", err), nil
 	})

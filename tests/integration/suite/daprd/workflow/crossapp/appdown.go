@@ -88,7 +88,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 		// bc triggering this app to go down mid-activity execution and ensure the wf hangs
 		<-a.activityReady
 
-		return fmt.Sprintf("Processed by app2: %s", input), nil
+		return "Processed by app2: " + input, nil
 	})
 
 	a.daprd1 = daprd.New(t,

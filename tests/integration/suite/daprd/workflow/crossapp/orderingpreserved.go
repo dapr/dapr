@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -252,13 +253,13 @@ func (o *orderingpreserved) Run(t *testing.T, ctx context.Context) {
 
 	// Start listeners for each app
 	err := client1.StartWorkItemListener(ctx, o.registry1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = client2.StartWorkItemListener(ctx, o.registry2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Start the ordering workflow
 	id, err := client1.ScheduleNewOrchestration(ctx, "OrderingWorkflow", api.WithInput("start"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	metadata, err := client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 	assert.NoError(t, err)
