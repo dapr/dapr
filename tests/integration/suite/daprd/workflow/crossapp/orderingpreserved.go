@@ -206,7 +206,7 @@ func (o *orderingpreserved) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	metadata, err := client0.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)

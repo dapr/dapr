@@ -47,7 +47,7 @@ func (m *manyapps) Setup(t *testing.T) []framework.Option {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app1: %w", err)
 		}
-		return fmt.Sprintf("Processed by app1: %s", input), nil
+		return "Processed by app1: " + input, nil
 	})
 
 	// App2: Data validation
@@ -56,7 +56,7 @@ func (m *manyapps) Setup(t *testing.T) []framework.Option {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
 		}
-		return fmt.Sprintf("Validated by app2: %s", input), nil
+		return "Validated by app2: " + input, nil
 	})
 
 	// App3: Data transformation

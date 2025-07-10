@@ -169,6 +169,6 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	defer waitCancel()
 
 	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.EqualError(t, err, "context deadline exceeded")
 }

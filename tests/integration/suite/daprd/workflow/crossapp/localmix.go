@@ -79,7 +79,7 @@ func (l *localmix) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in local activity: %w", err)
 		}
-		return fmt.Sprintf("Local processed: %s", input), nil
+		return "Local processed: " + input, nil
 	})
 
 	// App0: Orchestrator - mixes local & cross-app calls

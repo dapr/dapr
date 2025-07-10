@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -91,7 +92,7 @@ func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 	wCtx, wcancel := context.WithTimeout(ctx, 15*time.Second)
 	defer wcancel()
 	_, err := client0.ScheduleNewOrchestration(wCtx, "InvalidAppWorkflow", api.WithInput("Hello from app0"))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.EqualError(t, err, "context deadline exceeded")
 
 	i.actorNotFoundLogLine.EventuallyFoundAll(t)
