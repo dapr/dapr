@@ -18,20 +18,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
-	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -41,128 +34,91 @@ func init() {
 
 // manyapps demonstrates complex cross-app workflows with many apps
 type manyapps struct {
-	daprd1 *daprd.Daprd
-	daprd2 *daprd.Daprd
-	daprd3 *daprd.Daprd
-	daprd4 *daprd.Daprd
-	daprd5 *daprd.Daprd
-	place  *placement.Placement
-	sched  *scheduler.Scheduler
-
-	registry1 *task.TaskRegistry
-	registry2 *task.TaskRegistry
-	registry3 *task.TaskRegistry
-	registry4 *task.TaskRegistry
-	registry5 *task.TaskRegistry
+	workflow *workflow.Workflow
 }
 
 func (m *manyapps) Setup(t *testing.T) []framework.Option {
-	m.place = placement.New(t)
-	m.sched = scheduler.New(t,
-		scheduler.WithLogLevel("debug"))
-	db := sqlite.New(t,
-		sqlite.WithActorStateStore(true),
-		sqlite.WithMetadata("busyTimeout", "10s"),
-		sqlite.WithMetadata("disableWAL", "true"),
-	)
+	m.workflow = workflow.New(t,
+		workflow.WithDaprds(5))
 
-	app1 := app.New(t)
-	app2 := app.New(t)
-	app3 := app.New(t)
-	app4 := app.New(t)
-	app5 := app.New(t)
+	// App1: Data processing
+	m.workflow.RegistryN(1).AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in app1: %w", err)
+		}
+		return fmt.Sprintf("Processed by app1: %s", input), nil
+	})
 
-	// Create registries for each app
-	m.registry1 = task.NewTaskRegistry()
-	m.registry2 = task.NewTaskRegistry()
-	m.registry3 = task.NewTaskRegistry()
-	m.registry4 = task.NewTaskRegistry()
-	m.registry5 = task.NewTaskRegistry()
-
-	appID1 := uuid.New().String()
-	appID2 := uuid.New().String()
-	appID3 := uuid.New().String()
-	appID4 := uuid.New().String()
-	appID5 := uuid.New().String()
-
-	// App2: Data processing
-	m.registry2.AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
+	// App2: Data validation
+	m.workflow.RegistryN(2).AddActivityN("ValidateData", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
 		}
-		return fmt.Sprintf("Processed by app2: %s", input), nil
+		return fmt.Sprintf("Validated by app2: %s", input), nil
 	})
 
-	// App3: Data validation
-	m.registry3.AddActivityN("ValidateData", func(ctx task.ActivityContext) (any, error) {
+	// App3: Data transformation
+	m.workflow.RegistryN(3).AddActivityN("TransformData", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app3: %w", err)
 		}
-		return fmt.Sprintf("Validated by app3: %s", input), nil
+		return fmt.Sprintf("Transformed by app3: %s", input), nil
 	})
 
-	// App4: Data transformation
-	m.registry4.AddActivityN("TransformData", func(ctx task.ActivityContext) (any, error) {
+	// App4: Data enrichment
+	m.workflow.RegistryN(4).AddActivityN("EnrichData", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app4: %w", err)
 		}
-		return fmt.Sprintf("Transformed by app4: %s", input), nil
+		return fmt.Sprintf("Enriched by app4: %s", input), nil
 	})
 
-	// App5: Data enrichment
-	m.registry5.AddActivityN("EnrichData", func(ctx task.ActivityContext) (any, error) {
-		var input string
-		if err := ctx.GetInput(&input); err != nil {
-			return nil, fmt.Errorf("failed to get input in app5: %w", err)
-		}
-		return fmt.Sprintf("Enriched by app5: %s", input), nil
-	})
-
-	// App1: Orchestrator that coordinates all apps
-	m.registry1.AddOrchestratorN("ManyAppsWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	// App0: Orchestrator that coordinates all apps
+	err := m.workflow.Registry().AddOrchestratorN("ManyAppsWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
 		}
 
-		// Step 1: Process data in app2
+		// Step 1: Process data in app1
 		var result1 string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID(appID2)).
+			task.WithAppID(m.workflow.DaprN(1).AppID())).
 			Await(&result1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute ProcessData: %w", err)
 		}
 
-		// Step 2: Validate data in app3
+		// Step 2: Validate data in app2
 		var result2 string
 		err = ctx.CallActivity("ValidateData",
 			task.WithActivityInput(result1),
-			task.WithAppID(appID3)).
+			task.WithAppID(m.workflow.DaprN(2).AppID())).
 			Await(&result2)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute ValidateData: %w", err)
 		}
 
-		// Step 3: Transform data in app4
+		// Step 3: Transform data in app3
 		var result3 string
 		err = ctx.CallActivity("TransformData",
 			task.WithActivityInput(result2),
-			task.WithAppID(appID4)).
+			task.WithAppID(m.workflow.DaprN(3).AppID())).
 			Await(&result3)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute TransformData: %w", err)
 		}
 
-		// Step 4: Enrich data in app5
+		// Step 4: Enrich data in app4
 		var result4 string
 		err = ctx.CallActivity("EnrichData",
 			task.WithActivityInput(result3),
-			task.WithAppID(appID5)).
+			task.WithAppID(m.workflow.DaprN(4).AppID())).
 			Await(&result4)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute EnrichData: %w", err)
@@ -170,90 +126,29 @@ func (m *manyapps) Setup(t *testing.T) []framework.Option {
 
 		return result4, nil
 	})
-
-	m.daprd1 = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(m.place.Address()),
-		daprd.WithScheduler(m.sched),
-		daprd.WithAppID(appID1),
-		daprd.WithAppPort(app1.Port()),
-		daprd.WithLogLevel("debug"),
-	)
-	m.daprd2 = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(m.place.Address()),
-		daprd.WithScheduler(m.sched),
-		daprd.WithAppID(appID2),
-		daprd.WithAppPort(app2.Port()),
-		daprd.WithLogLevel("debug"),
-	)
-	m.daprd3 = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(m.place.Address()),
-		daprd.WithScheduler(m.sched),
-		daprd.WithAppID(appID3),
-		daprd.WithAppPort(app3.Port()),
-		daprd.WithLogLevel("debug"),
-	)
-	m.daprd4 = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(m.place.Address()),
-		daprd.WithScheduler(m.sched),
-		daprd.WithAppID(appID4),
-		daprd.WithAppPort(app4.Port()),
-		daprd.WithLogLevel("debug"),
-	)
-	m.daprd5 = daprd.New(t,
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(m.place.Address()),
-		daprd.WithScheduler(m.sched),
-		daprd.WithAppID(appID5),
-		daprd.WithAppPort(app5.Port()),
-		daprd.WithLogLevel("debug"),
-	)
+	require.NoError(t, err)
 
 	return []framework.Option{
-		framework.WithProcesses(m.place, m.sched, db, app1, app2, app3, app4, app5, m.daprd1, m.daprd2, m.daprd3, m.daprd4, m.daprd5),
+		framework.WithProcesses(m.workflow),
 	}
 }
 
 func (m *manyapps) Run(t *testing.T, ctx context.Context) {
-	m.sched.WaitUntilRunning(t, ctx)
-	m.place.WaitUntilRunning(t, ctx)
-	m.daprd1.WaitUntilRunning(t, ctx)
-	m.daprd2.WaitUntilRunning(t, ctx)
-	m.daprd3.WaitUntilRunning(t, ctx)
-	m.daprd4.WaitUntilRunning(t, ctx)
-	m.daprd5.WaitUntilRunning(t, ctx)
+	m.workflow.WaitUntilRunning(t, ctx)
 
-	// Start workflow listeners for each app
-	client1 := client.NewTaskHubGrpcClient(m.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
-	client2 := client.NewTaskHubGrpcClient(m.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
-	client3 := client.NewTaskHubGrpcClient(m.daprd3.GRPCConn(t, ctx), backend.DefaultLogger())
-	client4 := client.NewTaskHubGrpcClient(m.daprd4.GRPCConn(t, ctx), backend.DefaultLogger())
-	client5 := client.NewTaskHubGrpcClient(m.daprd5.GRPCConn(t, ctx), backend.DefaultLogger())
+	// Start workflow listeners for each app with their respective registries
+	client0 := m.workflow.BackendClient(t, ctx) // app0 (orchestrator)
+	m.workflow.BackendClientN(t, ctx, 1)        // app1 (ProcessData)
+	m.workflow.BackendClientN(t, ctx, 2)        // app2 (ValidateData)
+	m.workflow.BackendClientN(t, ctx, 3)        // app3 (TransformData)
+	m.workflow.BackendClientN(t, ctx, 4)        // app4 (EnrichData)
 
-	// Start listeners for each app
-	err := client1.StartWorkItemListener(ctx, m.registry1)
+	id, err := client0.ScheduleNewOrchestration(ctx, "ManyAppsWorkflow", api.WithInput("Hello from app0"))
 	require.NoError(t, err)
-	err = client2.StartWorkItemListener(ctx, m.registry2)
+	metadata, err := client0.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	err = client3.StartWorkItemListener(ctx, m.registry3)
-	require.NoError(t, err)
-	err = client4.StartWorkItemListener(ctx, m.registry4)
-	require.NoError(t, err)
-	err = client5.StartWorkItemListener(ctx, m.registry5)
-	require.NoError(t, err)
-
-	// Start the many apps wf
-	id, err := client1.ScheduleNewOrchestration(ctx, "ManyAppsWorkflow", api.WithInput("Hello from app1"))
-	require.NoError(t, err)
-
-	metadata, err := client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
-	require.NoError(t, err)
-
 	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
-	expectedResult := `"Enriched by app5: Transformed by app4: Validated by app3: Processed by app2: Hello from app1"`
+	expectedResult := `"Enriched by app4: Transformed by app3: Validated by app2: Processed by app1: Hello from app0"`
 	assert.Equal(t, expectedResult, metadata.GetOutput().GetValue())
 }
