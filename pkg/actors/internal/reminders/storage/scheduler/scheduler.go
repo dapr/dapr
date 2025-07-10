@@ -112,7 +112,8 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 	}
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
-		Name: reminder.Name,
+		Name:      reminder.Name,
+		Overwrite: true,
 		Job: &schedulerv1pb.Job{
 			Schedule:      schedule,
 			Repeats:       repeats,
@@ -120,7 +121,6 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 			Ttl:           ttl,
 			Data:          reminder.Data,
 			FailurePolicy: failurePolicy,
-			Overwrite:     true,
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,

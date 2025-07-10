@@ -27,6 +27,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if err != nil {
 		return err
 	}
+
 	if state == nil {
 		return api.ErrInstanceNotFound
 	}
@@ -53,7 +54,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 		targetApp = e.GetRouter().GetSource()
 	}
 
-	if _, err := o.createReminder(ctx, "new-event", nil, 0, targetApp); err != nil {
+	if _, err := o.createReminder(ctx, "new-event", nil, nil, targetApp); err != nil {
 		return err
 	}
 

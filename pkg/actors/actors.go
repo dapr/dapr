@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
-	"github.com/dapr/dapr/pkg/actors/internal/locker"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
@@ -118,16 +117,17 @@ type actors struct {
 	stateTTLEnabled    bool
 	maxRequestBodySize int
 
-	reminders      reminders.Interface
-	table          table.Interface
-	placement      placement.Interface
-	router         router.Interface
-	timerStorage   internaltimers.Storage
-	timers         timers.Interface
-	idlerQueue     *queue.Processor[string, targets.Idlable]
-	stateReminders *statestore.Statestore
-	reminderStore  storage.Interface
-	state          actorstate.Interface
+	reminders       reminders.Interface
+	table           table.Interface
+	placement       placement.Interface
+	router          router.Interface
+	timerStorage    internaltimers.Storage
+	timers          timers.Interface
+	idlerQueue      *queue.Processor[string, targets.Idlable]
+	stateReminders  *statestore.Statestore
+	reminderStore   storage.Interface
+	state           actorstate.Interface
+	reentrancyStore *reentrancystore.Store
 
 	disabled   *atomic.Pointer[error]
 	readyCh    chan struct{}
@@ -171,6 +171,7 @@ func New(opts Options) Interface {
 		registerDoneCh:     make(chan struct{}),
 		maxRequestBodySize: opts.MaxRequestBodySize,
 		mode:               opts.Mode,
+		reentrancyStore:    reentrancystore.New(),
 	}
 }
 
@@ -185,16 +186,9 @@ func (a *actors) Init(opts InitOptions) error {
 		ExecuteFn: a.handleIdleActor,
 	})
 
-	rStore := reentrancystore.New()
-
-	locker := locker.New(locker.Options{
-		ConfigStore: rStore,
-	})
-
 	a.table = table.New(table.Options{
 		IdlerQueue:      a.idlerQueue,
-		Locker:          locker,
-		ReentrancyStore: rStore,
+		ReentrancyStore: a.reentrancyStore,
 	})
 
 	apiLevel := apilevel.New()
@@ -246,7 +240,6 @@ func (a *actors) Init(opts InitOptions) error {
 		Resiliency:         a.resiliency,
 		IdlerQueue:         a.idlerQueue,
 		Reminders:          a.reminders,
-		Locker:             locker,
 		MaxRequestBodySize: a.maxRequestBodySize,
 	})
 
@@ -465,6 +458,7 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 				Resiliency:  a.resiliency,
 				IdleQueue:   a.idlerQueue,
 				IdleTimeout: idleTimeout,
+				Reentrancy:  a.reentrancyStore,
 			}),
 		})
 	}

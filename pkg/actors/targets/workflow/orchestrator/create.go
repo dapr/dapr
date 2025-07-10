@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
+	"github.com/dapr/kit/ptr"
 )
 
 func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byte) error {
@@ -57,10 +59,8 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 			WorkflowActorType: o.actorType,
 			ActivityActorType: o.activityActorType,
 		})
-		o.lock.Lock()
 		o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
 		o.setOrchestrationMetadata(o.rstate, startEvent.GetExecutionStarted())
-		o.lock.Unlock()
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 
@@ -111,10 +111,15 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 		return err
 	}
 
+	var start *time.Time
+	if ts := startEvent.GetExecutionStarted().GetScheduledStartTimestamp(); ts != nil {
+		start = ptr.Of(ts.AsTime())
+	}
+
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
-	if _, err := o.createReminder(ctx, "start", nil, 0, o.appID); err != nil {
+	if _, err := o.createReminder(ctx, "start", nil, start, o.appID); err != nil {
 		return err
 	}
 

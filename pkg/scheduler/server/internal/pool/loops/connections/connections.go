@@ -141,7 +141,7 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		ActorTypes: add.Request.GetActorTypes(),
 		Connection: &store.StreamConnection{
 			Cancel: func(err error) {
-				pcancel()
+				pcancel(err)
 				add.Cancel(err)
 			},
 			Loop: streamLoop,
@@ -169,7 +169,7 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) erro
 		return errors.New("catastrophic state machine error: lost connection stream reference")
 	}
 
-	cancel(nil)
+	cancel(errors.New("stream closed by scheduler"))
 	delete(c.streams, closeStream.StreamIDx)
 	return nil
 }
@@ -179,7 +179,7 @@ func (c *connections) handleShutdown() {
 	defer c.wg.Wait()
 
 	for _, cancel := range c.streams {
-		cancel(nil)
+		cancel(errors.New("connections loop shutdown"))
 	}
 
 	c.streams = make(map[uint64]context.CancelCauseFunc)

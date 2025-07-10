@@ -103,6 +103,7 @@ func Run() {
 				Healthz:  healthz,
 
 				KubeConfig:               opts.KubeConfig,
+				EtcdEmbed:                opts.EtcdEmbed,
 				EtcdDataDir:              opts.EtcdDataDir,
 				EtcdName:                 opts.ID,
 				EtcdInitialCluster:       opts.EtcdInitialCluster,
@@ -117,6 +118,10 @@ func Run() {
 				EtcdBackendBatchInterval: opts.EtcdBackendBatchInterval,
 				EtcdDefrabThresholdMB:    opts.EtcdDefragThresholdMB,
 				EtcdMetrics:              opts.EtcdMetrics,
+
+				EtcdClientEndpoints: opts.EtcdClientEndpoints,
+				EtcdClientUsername:  opts.EtcdClientUsername,
+				EtcdClientPassword:  opts.EtcdClientPassword,
 			})
 			if serr != nil {
 				return serr

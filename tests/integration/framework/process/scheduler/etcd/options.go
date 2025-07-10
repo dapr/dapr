@@ -11,18 +11,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package locker
+package etcd
 
-import (
-	"context"
-	"time"
+type Option func(*options)
 
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-)
+type options struct {
+	username *string
+	password *string
+}
 
-type Interface interface {
-	Lock(actorType, actorID string) (context.CancelFunc, error)
-	LockRequest(req *internalv1pb.InternalInvokeRequest) (context.CancelFunc, error)
-	Close(actorKey string)
-	CloseUntil(actorKey string, d time.Duration)
+func WithUsername(username string) Option {
+	return func(o *options) {
+		o.username = &username
+	}
+}
+
+func WithPassword(password string) Option {
+	return func(o *options) {
+		o.password = &password
+	}
 }

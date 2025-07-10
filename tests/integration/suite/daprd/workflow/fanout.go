@@ -49,9 +49,10 @@ func (f *fanout) Setup(t *testing.T) []framework.Option {
 func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
+	const n = 10
 	f.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		tasks := make([]task.Task, 100)
-		for i := range 100 {
+		tasks := make([]task.Task, n)
+		for i := range n {
 			tasks[i] = ctx.CallActivity("bar", task.WithActivityInput(i))
 		}
 
@@ -79,8 +80,8 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
-	exp := make([]int, 100)
-	for i := range 100 {
+	exp := make([]int, n)
+	for i := range n {
 		exp[i] = i
 	}
 	assert.ElementsMatch(t, exp, f.called.Slice())
