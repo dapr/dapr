@@ -3,7 +3,7 @@ Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://wwb.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -36,10 +37,11 @@ import (
 )
 
 func init() {
-	suite.Register(new(security))
+	suite.Register(new(crossnamespace))
 }
 
-type security struct {
+// crossnamespace tests that calling activities across different namespaces fails
+type crossnamespace struct {
 	daprd1 *daprd.Daprd
 	daprd2 *daprd.Daprd
 	place  *placement.Placement
@@ -49,7 +51,7 @@ type security struct {
 	registry2 *task.TaskRegistry
 }
 
-func (c *security) Setup(t *testing.T) []framework.Option {
+func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 	c.place = placement.New(t)
 	c.sched = scheduler.New(t,
 		scheduler.WithLogLevel("debug"))
@@ -62,13 +64,13 @@ func (c *security) Setup(t *testing.T) []framework.Option {
 	app1 := app.New(t)
 	app2 := app.New(t)
 
-	// Create registries for each app and register orchestrator/activity
 	c.registry1 = task.NewTaskRegistry()
 	c.registry2 = task.NewTaskRegistry()
 
 	appID1 := uuid.New().String()
 	appID2 := uuid.New().String()
 
+	// App2: Activity in different namespace
 	c.registry2.AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
@@ -77,23 +79,27 @@ func (c *security) Setup(t *testing.T) []framework.Option {
 		return fmt.Sprintf("Processed by app2: %s", input), nil
 	})
 
-	c.registry1.AddOrchestratorN("CrossAppWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	// App1: Orchestrator that tries to call app2 in different namespace
+	c.registry1.AddOrchestratorN("CrossNamespaceWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app1: %w", err)
 		}
-		var output string
 
+		// Try to call activity on app2 in different namespace - this should fail
+		var output string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
 			task.WithAppID(appID2)).
 			Await(&output)
 		if err != nil {
-			return nil, fmt.Errorf("failed to execute activity in app2: %w", err)
+			// Expected to fail due to namespace isolation
+			return fmt.Sprintf("Cross-namespace call failed as expected: %v", err), nil
 		}
 		return output, nil
 	})
 
+	// App1: In "default" namespace
 	c.daprd1 = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(c.place.Address()),
@@ -101,7 +107,10 @@ func (c *security) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppID(appID1),
 		daprd.WithAppPort(app1.Port()),
 		daprd.WithLogLevel("debug"),
+		daprd.WithNamespace("default"),
 	)
+
+	// App2: In "other" namespace
 	c.daprd2 = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(c.place.Address()),
@@ -109,6 +118,7 @@ func (c *security) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppID(appID2),
 		daprd.WithAppPort(app2.Port()),
 		daprd.WithLogLevel("debug"),
+		daprd.WithNamespace("other"),
 	)
 
 	return []framework.Option{
@@ -116,35 +126,27 @@ func (c *security) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (c *security) Run(t *testing.T, ctx context.Context) {
+func (c *crossnamespace) Run(t *testing.T, ctx context.Context) {
 	c.sched.WaitUntilRunning(t, ctx)
 	c.place.WaitUntilRunning(t, ctx)
 	c.daprd1.WaitUntilRunning(t, ctx)
 	c.daprd2.WaitUntilRunning(t, ctx)
 
-	// Start workflow listeners for each app
 	client1 := client.NewTaskHubGrpcClient(c.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
 	client2 := client.NewTaskHubGrpcClient(c.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 
 	err := client1.StartWorkItemListener(ctx, c.registry1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = client2.StartWorkItemListener(ctx, c.registry2)
-	assert.NoError(t, err)
-
-	id, err := client1.ScheduleNewOrchestration(ctx, "CrossAppWorkflow", api.WithInput("Hello from app1"))
 	require.NoError(t, err)
 
-	_, err = client1.WaitForOrchestrationStart(ctx, id)
-	require.NoError(t, err)
+	// Expect completion to hang, so timeout
+	// dapr will log about 'did not find address for actor'
+	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer waitCancel()
 
-	// this is key, and should fail
-	_, err = client2.FetchOrchestrationMetadata(ctx, id, api.WithFetchPayloads(true))
-	require.Error(t, err, "no such instance exists", "security breach, this should err out")
-	err = client2.SuspendOrchestration(ctx, id, "myreason")
-	require.Error(t, err, "no such instance exists", "security breach, this should err out")
-
-	metadata, err := client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
-	require.NoError(t, err)
-	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
-	assert.Equal(t, `"Processed by app2: Hello from app1"`, metadata.GetOutput().GetValue())
+	// Start workflow from app1 (default namespace)
+	_, err = client1.ScheduleNewOrchestration(waitCtx, "CrossNamespaceWorkflow", api.WithInput("Hello from app1"))
+	assert.Error(t, err)
+	assert.EqualError(t, err, "context deadline exceeded")
 }
