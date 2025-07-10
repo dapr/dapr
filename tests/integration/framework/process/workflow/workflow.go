@@ -170,6 +170,7 @@ func (w *Workflow) RegistryN(index int) *task.TaskRegistry {
 }
 
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
+	t.Helper()
 	backendClient := client.NewTaskHubGrpcClient(w.daprds[0].GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.Registry()))
 	return backendClient
