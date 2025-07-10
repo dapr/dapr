@@ -56,7 +56,7 @@ func (m *multihop) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app1: %w", err)
 		}
-		return fmt.Sprintf("Processed by app1: %s", input), nil
+		return "Processed by app1: " + input, nil
 	})
 
 	// App2: 2nd hop - transforms data
@@ -65,7 +65,7 @@ func (m *multihop) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
 		}
-		return fmt.Sprintf("Transformed by app2: %s", input), nil
+		return "Transformed by app2: " + input, nil
 	})
 
 	// App0: Orchestrator - coordinates the multi-hop workflow

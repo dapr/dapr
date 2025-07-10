@@ -72,7 +72,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 			return nil, errors.New("timeout waiting for release")
 		}
 
-		return fmt.Sprintf("Processed by app1: %s", input), nil
+		return "Processed by app1: " + input, nil
 	})
 
 	// App1: Additional parallel activity
@@ -89,7 +89,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 			return nil, errors.New("timeout waiting for release")
 		}
 
-		return fmt.Sprintf("Processed2 by app1: %s", input), nil
+		return "Processed2 by app1: " + input, nil
 	})
 
 	// App2: Second parallel activity
@@ -106,7 +106,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 			return nil, errors.New("timeout waiting for release")
 		}
 
-		return fmt.Sprintf("Transformed by app2: %s", input), nil
+		return "Transformed by app2: " + input, nil
 	})
 
 	// App2: Additional parallel activity
@@ -123,7 +123,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 			return nil, errors.New("timeout waiting for release")
 		}
 
-		return fmt.Sprintf("Transformed2 by app2: %s", input), nil
+		return "Transformed2 by app2: " + input, nil
 	})
 
 	// App0: Orchestrator - calls activities in parallel
@@ -171,7 +171,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute TransformData2: %w", err)
 		}
-		return fmt.Sprintf("Combined: %s | %s | %s | %s", result1, result2, result3, result4), nil
+		return "Combined: " + result1 + " | " + result2 + " | " + result3 + " | " + result4, nil
 	})
 
 	// Start workflow listeners for each app

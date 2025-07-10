@@ -65,7 +65,7 @@ func (m *manyapps) Setup(t *testing.T) []framework.Option {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app3: %w", err)
 		}
-		return fmt.Sprintf("Transformed by app3: %s", input), nil
+		return "Transformed by app3: " + input, nil
 	})
 
 	// App4: Data enrichment
@@ -74,7 +74,7 @@ func (m *manyapps) Setup(t *testing.T) []framework.Option {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app4: %w", err)
 		}
-		return fmt.Sprintf("Enriched by app4: %s", input), nil
+		return "Enriched by app4: " + input, nil
 	})
 
 	// App0: Orchestrator that coordinates all apps

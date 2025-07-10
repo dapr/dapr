@@ -15,7 +15,6 @@ package crossapp
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -56,7 +55,7 @@ func (r *restartmanyapps) Run(t *testing.T, ctx context.Context) {
 		if err := c.GetInput(&input); err != nil {
 			return nil, err
 		}
-		return fmt.Sprintf("processed by app1: %s", input), nil
+		return "processed by app1: " + input, nil
 	})
 
 	// App2: Second activity
@@ -65,7 +64,7 @@ func (r *restartmanyapps) Run(t *testing.T, ctx context.Context) {
 		if err := c.GetInput(&input); err != nil {
 			return nil, err
 		}
-		return fmt.Sprintf("transformed by app2: %s", input), nil
+		return "transformed by app2: " + input, nil
 	})
 
 	// App0: Orchestrator that calls both app1 & app2
