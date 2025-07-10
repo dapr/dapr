@@ -260,7 +260,6 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation request.
 	// Note that this request goes directly to the actor runtime, bypassing the API layer.
-
 	req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
 		WithActor(abe.workflowActorType, workflowInstanceID).
 		WithData(requestBytes).
@@ -393,7 +392,6 @@ func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.Activit
 
 // CompleteOrchestrationWorkItem implements backend.Backend
 func (abe *Actors) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
-	// TODO : Likely route back to the originating orchestrator workflow actor here
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil

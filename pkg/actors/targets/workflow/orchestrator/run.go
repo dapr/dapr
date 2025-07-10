@@ -66,7 +66,6 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	var esHistoryEvent *backend.HistoryEvent
-
 	for _, e := range state.Inbox {
 		if es := e.GetExecutionStarted(); es != nil {
 			esHistoryEvent = e
