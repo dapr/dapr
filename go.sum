@@ -493,10 +493,10 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/durabletask-go v0.7.3-0.20250705135742-20fd7583dc03 h1:/Sl6sJE3jdPh96KfGShshIF0xZlAjN36Buq9mcNFV7Q=
-github.com/dapr/durabletask-go v0.7.3-0.20250705135742-20fd7583dc03/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
-github.com/dapr/kit v0.15.3-0.20250703145131-34f8820d2a4a h1:2LOx+qPc+6oq6O9WjTJDmhAU7yI9TRyqz7w4POrV76I=
-github.com/dapr/kit v0.15.3-0.20250703145131-34f8820d2a4a/go.mod h1:6w2Pr38zOAtBn+ld/jknwI4kgMfwanCIcFVnPykdPZQ=
+github.com/dapr/durabletask-go v0.7.3-0.20250709154301-00ff61ed902f h1:FuON+GrglBOyHorX/ktbJp720FAMv6n44nHzY7x8Yzs=
+github.com/dapr/durabletask-go v0.7.3-0.20250709154301-00ff61ed902f/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
+github.com/dapr/kit v0.15.3-0.20250616160611-598b032bce69 h1:I1Uoy3fn906AZZdG8+n8fHitgY7Wn9c+smz4WQdOy1Q=
+github.com/dapr/kit v0.15.3-0.20250616160611-598b032bce69/go.mod h1:6w2Pr38zOAtBn+ld/jknwI4kgMfwanCIcFVnPykdPZQ=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -519,8 +519,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cu
 github.com/dgryski/go-sip13 v0.0.0-20181026042036-e10d5fee7954/go.mod h1:vAd38F8PWV+bWy6jNmig1y/TA+kYO4g3RSRF0IAv0no=
 github.com/dgryski/trifles v0.0.0-20230903005119-f50d829f2e54 h1:SG7nF6SRlWhcT7cNTs5R6Hk4V2lcmLz2NsG2VnInyNo=
 github.com/dgryski/trifles v0.0.0-20230903005119-f50d829f2e54/go.mod h1:if7Fbed8SFyPtHLHbg49SI7NAdJiC5WIA09pe59rfAA=
-github.com/diagridio/go-etcd-cron v0.8.3-0.20250704082745-6b45119148c2 h1:GUfP+S2xIRbWxsg12QE50yor2XHwvRibIc90er9M3s0=
-github.com/diagridio/go-etcd-cron v0.8.3-0.20250704082745-6b45119148c2/go.mod h1:/yQI+t0D3xdxqtwfcdZa6V2ypQMlsY+4CHSVIJiEK+g=
+github.com/diagridio/go-etcd-cron v0.7.1 h1:4PB7jRBSEPCnLn2Pwzkx/eCLgAuCTEtEqaQcR/p+SDQ=
+github.com/diagridio/go-etcd-cron v0.7.1/go.mod h1:pQcqEAssyfNvFttbFQjtdLaGRe4EdQ9Wi47oyRnarsw=
 github.com/didip/tollbooth/v7 v7.0.1 h1:TkT4sBKoQoHQFPf7blQ54iHrZiTDnr8TceU+MulVAog=
 github.com/didip/tollbooth/v7 v7.0.1/go.mod h1:VZhDSGl5bDSPj4wPsih3PFa4Uh9Ghv8hgacaTm5PRT4=
 github.com/dimfeld/httptreemux v5.0.1+incompatible h1:Qj3gVcDNoOthBAqftuD596rm4wg/adLLz5xh5CmpiCA=
