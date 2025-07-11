@@ -62,10 +62,11 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	)
 	place := placement.New(t)
 
-	dopts := []daprd.Option{
+	dopts := opts.daprdopts
+	dopts = append(dopts,
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithResourceFiles(db.GetComponent(t)),
-	}
+	)
 
 	var sched *scheduler.Scheduler
 	if opts.enableScheduler {

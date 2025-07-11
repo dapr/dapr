@@ -18,6 +18,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
+	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
 	"github.com/dapr/dapr/pkg/actors/router"
@@ -38,6 +39,7 @@ type Fake struct {
 	fnState                  func(context.Context) (state.Interface, error)
 	fnTimers                 func(context.Context) (timers.Interface, error)
 	fnReminders              func(context.Context) (reminders.Interface, error)
+	fnPlacement              func(context.Context) (placement.Interface, error)
 	fnRuntimeStatus          func() *runtimev1pb.ActorRuntime
 	fnRegisterHosted         func(hostconfig.Config) error
 	fnUnRegisterHosted       func(actorTypes ...string)
@@ -66,6 +68,9 @@ func New() *Fake {
 		},
 		fnReminders: func(context.Context) (reminders.Interface, error) {
 			return remindersfake.New(), nil
+		},
+		fnPlacement: func(context.Context) (placement.Interface, error) {
+			return nil, nil
 		},
 		fnRuntimeStatus: func() *runtimev1pb.ActorRuntime {
 			return nil
@@ -115,6 +120,11 @@ func (f *Fake) WithReminders(fn func(context.Context) (reminders.Interface, erro
 	return f
 }
 
+func (f *Fake) WithPlacement(fn func(context.Context) (placement.Interface, error)) *Fake {
+	f.fnPlacement = fn
+	return f
+}
+
 func (f *Fake) WithRuntimeStatus(fn func() *runtimev1pb.ActorRuntime) *Fake {
 	f.fnRuntimeStatus = fn
 	return f
@@ -161,6 +171,10 @@ func (f *Fake) Timers(ctx context.Context) (timers.Interface, error) {
 
 func (f *Fake) Reminders(ctx context.Context) (reminders.Interface, error) {
 	return f.fnReminders(ctx)
+}
+
+func (f *Fake) Placement(ctx context.Context) (placement.Interface, error) {
+	return f.fnPlacement(ctx)
 }
 
 func (f *Fake) RuntimeStatus() *runtimev1pb.ActorRuntime {

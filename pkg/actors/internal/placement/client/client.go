@@ -173,7 +173,7 @@ func (c *Client) Run(ctx context.Context) error {
 	for {
 		err := runner().Run(ctx)
 		if err == nil {
-			return c.table.HaltAll()
+			return c.table.HaltAll(ctx)
 		}
 
 		cancel()
@@ -190,12 +190,13 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 
 		if ctx.Err() != nil {
-			return c.table.HaltAll()
+			return c.table.HaltAll(context.Background())
 		}
 
 		select {
 		case <-time.After(time.Second):
 		case <-ctx.Done():
+			return ctx.Err()
 		}
 
 		cancel, err = c.handleReconnect(ctx)
@@ -216,7 +217,7 @@ func (c *Client) handleReconnect(ctx context.Context) (context.CancelFunc, error
 
 	log.Info("Placement stream disconnected")
 
-	if err := c.table.HaltAll(); err != nil {
+	if err := c.table.HaltAll(context.Background()); err != nil {
 		return nil, fmt.Errorf("error whilst deactivating all actors when shutting down client: %s", err)
 	}
 
