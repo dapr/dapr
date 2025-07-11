@@ -173,5 +173,4 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 		require.Error(t, err)
 		assert.EqualError(t, err, "context deadline exceeded")
 	}, 20*time.Second, 100*time.Millisecond)
-
 }
