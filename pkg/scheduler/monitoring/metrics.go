@@ -41,10 +41,6 @@ var (
 		"scheduler/jobs_triggered_total",
 		"The total number of successfully triggered jobs.",
 		stats.UnitDimensionless)
-	triggerLatency = stats.Float64(
-		"scheduler/trigger_latency",
-		"The total time it takes to trigger a job from the scheduler service.",
-		stats.UnitMilliseconds)
 	jobsFailedTotal = stats.Int64(
 		"scheduler/jobs_failed_total",
 		"The total number of failed jobs.",
@@ -53,6 +49,10 @@ var (
 		"scheduler/jobs_undelivered_total",
 		"The total number of undelivered jobs.",
 		stats.UnitDimensionless)
+	triggerLatency = stats.Float64(
+		"scheduler/trigger_latency",
+		"The total time it takes to trigger a job from the scheduler service.",
+		stats.UnitMilliseconds)
 
 	tagType = tag.MustNewKey("type")
 )
