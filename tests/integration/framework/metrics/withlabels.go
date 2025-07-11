@@ -38,7 +38,7 @@ func NewWithLabels(t *testing.T, ctx context.Context, url string) *MetricsWithLa
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	httpclient := client.HTTP(t) // or http.DefaultClient
+	httpclient := client.HTTP(t)
 	resp, err := httpclient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
