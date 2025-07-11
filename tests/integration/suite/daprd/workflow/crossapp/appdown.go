@@ -126,7 +126,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 	})
 
 	return []framework.Option{
-		framework.WithProcesses(a.place, a.sched, db, app1, app2, a.daprd1, a.daprd2),
+		framework.WithProcesses(a.place, a.sched, db, app1, app2, a.daprd1),
 	}
 }
 
@@ -134,35 +134,41 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	a.sched.WaitUntilRunning(t, ctx)
 	a.place.WaitUntilRunning(t, ctx)
 	a.daprd1.WaitUntilRunning(t, ctx)
-	wctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	a.daprd2.WaitUntilRunning(t, wctx)
-	t.Cleanup(func() {
-		a.daprd2.Cleanup(t)
-	})
 
-	// Start workflow listeners for each app
+	daprd2Ctx, daprd2Cancel := context.WithCancel(t.Context())
+	t.Cleanup(daprd2Cancel)
+	a.daprd2.Run(t, daprd2Ctx)
+	a.daprd2.WaitUntilRunning(t, daprd2Ctx)
+
 	client1 := client.NewTaskHubGrpcClient(a.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
-	client2 := client.NewTaskHubGrpcClient(a.daprd2.GRPCConn(t, wctx), backend.DefaultLogger())
+	client2 := client.NewTaskHubGrpcClient(a.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 
 	// Start listeners for each app
-	err := client1.StartWorkItemListener(ctx, a.registry1)
-	require.NoError(t, err)
-	err = client2.StartWorkItemListener(wctx, a.registry2)
+	err := client1.StartWorkItemListener(t.Context(), a.registry1)
 	require.NoError(t, err)
 
-	id, err := client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
+	cctx, ccancel := context.WithCancel(t.Context())
+	t.Cleanup(ccancel)
+	err = client2.StartWorkItemListener(cctx, a.registry2)
 	require.NoError(t, err)
 
-	select {
-	case <-a.activityStarted:
-	case <-time.After(15 * time.Second):
-		t.Fatal("Timeout waiting for activity to start")
-	}
+	var id api.InstanceID
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		var err error
+		id, err = client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
+		require.NoError(c, err)
+
+		// Wait for activity to start
+		select {
+		case <-a.activityStarted:
+		case <-time.After(5 * time.Second):
+			c.Errorf("Timeout waiting for activity to start")
+		}
+	}, 20*time.Second, 100*time.Millisecond)
 
 	// Stop app2 to simulate app going down mid-execution
-	cancel()
-	a.daprd2.Cleanup(t)
+	ccancel()
+	daprd2Cancel()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		// Expect completion to hang, so timeout
