@@ -134,10 +134,10 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.sched.WaitUntilRunning(t, ctx)
 	r.place.WaitUntilRunning(t, ctx)
 	r.daprd1.WaitUntilRunning(t, ctx)
-	r.daprd2.WaitUntilRunning(t, ctx)
-
 	wctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
+	r.daprd2.WaitUntilRunning(t, wctx)
+
 	// Start workflow listeners for each app
 	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
 	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, wctx), backend.DefaultLogger())
@@ -182,7 +182,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	client2Restart := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client2Restart.StartWorkItemListener(ctx, r.registry2))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		completionCtx, completionCancel := context.WithTimeout(ctx, 5*time.Second)
+		completionCtx, completionCancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer completionCancel()
 
 		_, err := client1.WaitForOrchestrationCompletion(completionCtx, id, api.WithFetchPayloads(true))

@@ -151,12 +151,12 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	err = client2.StartWorkItemListener(wctx, a.registry2)
 	require.NoError(t, err)
 
-	id, err := client1.ScheduleNewOrchestration(ctx, "AppDownWorkflow", api.WithInput("Hello from app1"))
+	id, err := client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
 	require.NoError(t, err)
 
 	select {
 	case <-a.activityStarted:
-	case <-time.After(20 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("Timeout waiting for activity to start")
 	}
 
@@ -164,11 +164,14 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	cancel()
 	a.daprd2.Cleanup(t)
 
-	// Expect completion to hang, so timeout
-	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Second)
-	defer waitCancel()
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		// Expect completion to hang, so timeout
+		waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer waitCancel()
 
-	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
-	require.Error(t, err)
-	assert.EqualError(t, err, "context deadline exceeded")
+		_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+		require.Error(t, err)
+		assert.EqualError(t, err, "context deadline exceeded")
+	}, 20*time.Second, 100*time.Millisecond)
+
 }
