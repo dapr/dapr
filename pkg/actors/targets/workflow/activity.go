@@ -308,7 +308,7 @@ func (a *activity) purgeActivityState(ctx context.Context) error {
 				Key: activityStateKey,
 			},
 		}},
-	})
+	}, false)
 	if err != nil {
 		return fmt.Errorf("failed to delete activity state with error: %w", err)
 	}

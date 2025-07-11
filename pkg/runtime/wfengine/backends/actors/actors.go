@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -30,6 +29,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -77,9 +77,6 @@ type Actors struct {
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
-
-	registeredCh chan struct{}
-	lock         sync.RWMutex
 }
 
 func New(opts Options) *Actors {
@@ -92,7 +89,6 @@ func New(opts Options) *Actors {
 		schedulerReminders:        opts.SchedulerReminders,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
-		registeredCh:              make(chan struct{}),
 		eventSink:                 opts.EventSink,
 	}
 }
@@ -169,8 +165,6 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 	)
 
-	close(abe.registeredCh)
-
 	return nil
 }
 
@@ -179,12 +173,6 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	defer func() {
-		abe.lock.Lock()
-		abe.registeredCh = make(chan struct{})
-		abe.lock.Unlock()
-	}()
 
 	return table.UnRegisterActorTypes(abe.workflowActorType, abe.activityActorType)
 }
@@ -195,16 +183,6 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
 func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
-	abe.lock.RLock()
-	ch := abe.registeredCh
-	abe.lock.RUnlock()
-
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
 	var workflowInstanceID string
 	if es := e.GetExecutionStarted(); es == nil {
 		return errors.New("the history event must be an ExecutionStartedEvent")
@@ -235,6 +213,9 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		WithContentType(invokev1.ProtobufContentType)
 	start := time.Now()
 
+	ctx, cancel := context.WithTimeoutCause(ctx, time.Second*15, errors.New("CreateOrchestrationInstance timeout"))
+	defer cancel()
+
 	engine, err := abe.actors.Engine(ctx)
 	if err != nil {
 		return err
@@ -244,6 +225,9 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		_, eerr := engine.Call(ctx, req)
 		status, ok := status.FromError(eerr)
 		if ok && status.Code() == codes.FailedPrecondition {
+			return eerr
+		}
+		if errors.Is(eerr, actorerrors.ErrCreatingActor) {
 			return eerr
 		}
 		return backoff.Permanent(eerr)
@@ -262,6 +246,9 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 
 // GetOrchestrationMetadata implements backend.Backend
 func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*backend.OrchestrationMetadata, error) {
+	ctx, cancel := context.WithTimeoutCause(ctx, time.Second*15, errors.New("GetOrchestrationMetadata timeout"))
+	defer cancel()
+
 	state, err := abe.loadInternalState(ctx, id)
 	if err != nil {
 		return nil, err
@@ -375,6 +362,9 @@ func (*Actors) DeleteTaskHub(context.Context) error {
 
 // GetOrchestrationRuntimeState implements backend.Backend
 func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
+	ctx, cancel := context.WithTimeoutCause(ctx, time.Second*15, errors.New("GetOrchestrationRuntimeState timeout"))
+	defer cancel()
+
 	state, err := abe.loadInternalState(ctx, owi.InstanceID)
 	if err != nil {
 		return nil, err

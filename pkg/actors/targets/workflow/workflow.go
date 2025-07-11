@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -53,6 +54,7 @@ import (
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.targets.workflow")
@@ -188,6 +190,10 @@ func (w *workflow) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 	msg := imReq.Message()
 	return policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
 		resData, err := w.executeMethod(ctx, msg.GetMethod(), msg.GetData().GetValue())
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			return nil, backoff.Permanent(err)
+		}
+
 		if err != nil {
 			return nil, fmt.Errorf("error from worfklow actor: %w", err)
 		}
@@ -368,10 +374,16 @@ func (w *workflow) scheduleWorkflowStart(ctx context.Context, startEvent *backen
 		return err
 	}
 
-	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
-	// workflow execution. This is preferable to using the current thread so that we don't block the client
-	// while the workflow logic is running.
-	if _, err := w.createReliableReminder(ctx, "start", nil, 0); err != nil {
+	var start *time.Time
+	if ts := startEvent.GetExecutionStarted().GetScheduledStartTimestamp(); ts != nil {
+		start = ptr.Of(ts.AsTime())
+	}
+
+	// Schedule a reminder to execute immediately after this operation. The
+	// reminder will trigger the actual workflow execution. This is preferable to
+	// using the current thread so that we don't block the client while the
+	// workflow logic is running.
+	if _, err := w.createReliableReminder(ctx, "start", nil, start); err != nil {
 		return err
 	}
 
@@ -397,7 +409,7 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 		return err
 	}
 	// This will do the purging
-	err = w.actorState.TransactionalStateOperation(ctx, true, req)
+	err = w.actorState.TransactionalStateOperation(ctx, true, req, false)
 	if err != nil {
 		return err
 	}
@@ -443,7 +455,7 @@ func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byt
 		return err
 	}
 
-	if _, err := w.createReliableReminder(ctx, "new-event", nil, 0); err != nil {
+	if _, err := w.createReliableReminder(ctx, "new-event", nil, nil); err != nil {
 		return err
 	}
 
@@ -539,7 +551,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 				ActorType:  w.activityActorType,
 				ActorID:    activityActorID,
 				Operations: operations,
-			})
+			}, false)
 			if aerr != nil {
 				lock.Lock()
 				errs = append(errs, fmt.Errorf("failed to delete activity state for activity actor '%s' with error: %w", activityActorID, aerr))
@@ -624,17 +636,13 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 			if tf == nil {
 				return runCompletedTrue, errors.New("invalid event in the PendingTimers list")
 			}
-			delay := time.Until(tf.GetFireAt().AsTime())
-			if delay < 0 {
-				delay = 0
-			}
 			reminderPrefix := "timer-" + strconv.Itoa(int(tf.GetTimerId()))
 			data := &backend.DurableTimer{
 				TimerEvent: t,
 				Generation: state.Generation,
 			}
 			log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", w.actorID, reminderPrefix)
-			if _, err = w.createReliableReminder(ctx, reminderPrefix, data, delay); err != nil {
+			if _, err = w.createReliableReminder(ctx, reminderPrefix, data, ptr.Of(tf.GetFireAt().AsTime())); err != nil {
 				executionStatus = diag.StatusRecoverable
 				return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", w.actorID, err))
 			}
@@ -864,7 +872,7 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", w.actorID, len(req.Operations))
 
-	if err = w.actorState.TransactionalStateOperation(ctx, true, req); err != nil {
+	if err = w.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
 		return err
 	}
 
@@ -881,15 +889,20 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 	return nil
 }
 
-func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration) (string, error) {
+func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string, data proto.Message, start *time.Time) (string, error) {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 
+	dueTime := "0s"
+	if start != nil {
+		dueTime = start.UTC().Format(time.RFC3339)
+	}
+
 	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
-	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", w.activityActorType, w.actorID, reminderName, delay)
+	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", w.activityActorType, w.actorID, reminderName, dueTime)
 
 	var period string
 	var oneshot bool
@@ -911,7 +924,7 @@ func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string
 		ActorType: w.actorType,
 		ActorID:   w.actorID,
 		Data:      adata,
-		DueTime:   delay.String(),
+		DueTime:   dueTime,
 		Name:      reminderName,
 		Period:    period,
 		IsOneShot: oneshot,
@@ -953,7 +966,7 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 					},
 				}},
 			}
-			if terr := w.actorState.TransactionalStateOperation(ctx, true, &req); terr != nil {
+			if terr := w.actorState.TransactionalStateOperation(ctx, true, &req, false); terr != nil {
 				lock.Lock()
 				errs = append(errs, fmt.Errorf("failed to delete activity state with error: %w", terr))
 				lock.Unlock()

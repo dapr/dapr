@@ -66,8 +66,10 @@ type informerEvent[T meta.Resource] struct {
 func New[T meta.Resource](opts Options) Interface[T] {
 	var zero T
 	return &informer[T]{
-		log:     logger.NewLogger("dapr.operator.informer." + strings.ToLower(zero.Kind())),
-		batcher: batcher.New[int, *informerEvent[T]](0),
+		log: logger.NewLogger("dapr.operator.informer." + strings.ToLower(zero.Kind())),
+		batcher: batcher.New[int, *informerEvent[T]](batcher.Options{
+			Interval: 0,
+		}),
 		cache:   opts.Cache,
 		closeCh: make(chan struct{}),
 	}

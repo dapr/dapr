@@ -58,7 +58,9 @@ func New(opts Options) (loader.Interface, error) {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 
-	batcher := batcher.New[int, struct{}](0)
+	batcher := batcher.New[int, struct{}](batcher.Options{
+		Interval: 0,
+	})
 
 	return &disk{
 		fs: fs,

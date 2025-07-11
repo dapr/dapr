@@ -260,7 +260,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		ActorID:   actorID,
 		Key:       metadataKey,
 	}
-	res, err := state.Get(ctx, &req)
+	res, err := state.Get(ctx, &req, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load workflow metadata: %w", err)
 	}
@@ -308,7 +308,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	}
 
 	// Perform the request
-	bulkRes, err := state.GetBulk(ctx, bulkReq)
+	bulkRes, err := state.GetBulk(ctx, bulkReq, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load workflow state: %w", err)
 	}

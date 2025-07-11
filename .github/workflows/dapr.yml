@@ -144,7 +144,7 @@ jobs:
         target_os: ["linux"]
         target_arch: ["amd64"]
     env:
-      GOLANGCILINT_VER: "v1.61.0"
+      GOLANGCILINT_VER: "v1.64.6"
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
@@ -162,6 +162,7 @@ jobs:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
           args: --build-tags allcomponents --timeout=15m
+          only-new-issues: true
 
   unit-tests:
     name: Unit tests
@@ -299,7 +300,7 @@ jobs:
             target_arch: arm
             job_name: "Linux/arm"
             sidecar_flavor: "stablecomponents"
-          - os: windows-2019
+          - os: windows-2025
             target_os: windows
             target_arch: amd64
             windows_version: "1809"

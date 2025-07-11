@@ -31,8 +31,10 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -65,11 +67,13 @@ type Options struct {
 	Port      int
 	Addresses []string
 
+	Scheduler schedclient.Reloader
 	APILevel  *apilevel.APILevel
 	Security  security.Handler
 	Table     table.Interface
 	Reminders storage.Interface
 	Healthz   healthz.Healthz
+	Mode      modes.DaprMode
 }
 
 type placement struct {
@@ -96,7 +100,9 @@ type placement struct {
 	isReady   atomic.Bool
 	readyCh   chan struct{}
 	wg        sync.WaitGroup
-	closed    atomic.Bool
+	closedCh  chan struct{}
+
+	cancelAll context.CancelCauseFunc
 }
 
 func New(opts Options) (Interface, error) {
@@ -107,6 +113,8 @@ func New(opts Options) (Interface, error) {
 		Table:     opts.Table,
 		Lock:      lock,
 		Healthz:   opts.Healthz,
+		Mode:      opts.Mode,
+		Scheduler: opts.Scheduler,
 	})
 	if err != nil {
 		return nil, err
@@ -128,11 +136,15 @@ func New(opts Options) (Interface, error) {
 		apiLevel:      opts.APILevel,
 		htarget:       opts.Healthz.AddTarget(),
 		lock:          lock,
+		closedCh:      make(chan struct{}),
 		readyCh:       make(chan struct{}),
 	}, nil
 }
 
 func (p *placement) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	p.cancelAll = cancel
+
 	err := concurrency.NewRunnerManager(
 		p.client.Run,
 		func(ctx context.Context) error {
@@ -141,6 +153,7 @@ func (p *placement) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			ch, actorTypes := p.actorTable.SubscribeToTypeUpdates(ctx)
+
 			log.Infof("Reporting actor types: %v", actorTypes)
 			if err := p.sendHost(ctx, actorTypes); err != nil {
 				return err
@@ -180,7 +193,7 @@ func (p *placement) Run(ctx context.Context) error {
 		},
 	).Run(ctx)
 
-	p.closed.Store(true)
+	close(p.closedCh)
 
 	p.operationLock.Lock()
 	if p.tableUnlock != nil {
@@ -273,16 +286,13 @@ func (p *placement) handleLockOperation(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 		case <-time.After(time.Second * 15):
-			p.operationLock.Lock()
-			defer p.operationLock.Unlock()
-			if p.updateVersion.Load() < lockVersion {
-				p.updateVersion.Store(lockVersion)
-				clear(p.hashTable.Entries)
-				if p.tableUnlock != nil {
-					p.tableUnlock()
-					p.tableUnlock = nil
-				}
-			}
+		}
+
+		p.operationLock.Lock()
+		defer p.operationLock.Unlock()
+		if p.updateVersion.Load() < lockVersion {
+			log.Errorf("Placement lock timeout, shutting down")
+			p.cancelAll(errors.New("placement lock timeout"))
 		}
 	}()
 }

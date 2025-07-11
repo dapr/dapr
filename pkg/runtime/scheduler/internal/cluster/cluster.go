@@ -18,12 +18,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 
 	"github.com/dapr/dapr/pkg/actors"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -32,120 +30,47 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler.cluster")
 
 type Options struct {
-	Namespace string
-	AppID     string
-	Actors    actors.Interface
-	Channels  *channels.Channels
-	WFEngine  wfengine.Interface
+	Namespace  string
+	AppID      string
+	AppTarget  bool
+	ActorTypes []string
 
-	SchedulerReminders bool
+	Clients  []schedulerv1pb.SchedulerClient
+	Actors   actors.Interface
+	Channels *channels.Channels
+	WFEngine wfengine.Interface
 }
 
 // Cluster manages connections to multiple schedulers.
 type Cluster struct {
-	actors    actors.Interface
-	namespace string
-	appID     string
-	channels  *channels.Channels
-	wfengine  wfengine.Interface
+	namespace  string
+	appID      string
+	appTarget  bool
+	actorTypes []string
 
-	schedulerReminders bool
-
-	lock sync.Mutex
-
-	appCh      chan struct{}
-	appRunning bool
-	readyCh    chan struct{}
-
-	wg sync.WaitGroup
+	clients  []schedulerv1pb.SchedulerClient
+	actors   actors.Interface
+	channels *channels.Channels
+	wfengine wfengine.Interface
 }
 
 func New(opts Options) *Cluster {
 	return &Cluster{
-		namespace: opts.Namespace,
-		appID:     opts.AppID,
-		actors:    opts.Actors,
-		wfengine:  opts.WFEngine,
-		channels:  opts.Channels,
-		appCh:     make(chan struct{}),
-		readyCh:   make(chan struct{}),
-
-		schedulerReminders: opts.SchedulerReminders,
+		namespace:  opts.Namespace,
+		appID:      opts.AppID,
+		appTarget:  opts.AppTarget,
+		actorTypes: opts.ActorTypes,
+		clients:    opts.Clients,
+		actors:     opts.Actors,
+		channels:   opts.Channels,
+		wfengine:   opts.WFEngine,
 	}
 }
 
-// Run starts watching for job triggers from all scheduler clients.
-func (c *Cluster) RunClients(ctx context.Context, clients *clients.Clients) error {
-	defer c.wg.Wait()
-
-	var typeUpdateCh <-chan []string = make(chan []string)
-	var actorTypes []string
-
-	// Only subscribe to actor types to watch if we are using Scheduler actor
-	// reminders.
-	if c.schedulerReminders {
-		if table, err := c.actors.Table(ctx); err == nil {
-			typeUpdateCh, actorTypes = table.SubscribeToTypeUpdates(ctx)
-		}
-	}
-
-	for {
-		c.lock.Lock()
-		appRunning := c.appRunning
-		appCh := c.appCh
-		c.lock.Unlock()
-
-		if !appRunning && len(actorTypes) == 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-appCh:
-			case actorTypes = <-typeUpdateCh:
-			}
-		}
-
-		c.lock.Lock()
-		appCh = c.appCh
-		appRunning = c.appRunning
-		c.lock.Unlock()
-
-		if !appRunning && len(actorTypes) == 0 {
-			continue
-		}
-
-		lctx, cancel := context.WithCancel(ctx)
-
-		c.wg.Add(1)
-		go func() {
-			select {
-			case <-lctx.Done():
-			case actorTypes = <-typeUpdateCh:
-			case <-appCh:
-			}
-			cancel()
-			c.wg.Done()
-		}()
-
-		err := c.loop(lctx, clients, appRunning, actorTypes)
-		cancel()
-		if cerr := ctx.Err(); cerr != nil {
-			return cerr
-		}
-
-		if err != nil {
-			return fmt.Errorf("error watching scheduler jobs: %w", err)
-		}
-	}
-}
-
-func (c *Cluster) loop(ctx context.Context, clients *clients.Clients, appTarget bool, actorTypes []string) error {
-	err := c.watchJobs(ctx, clients, appTarget, actorTypes)
+func (c *Cluster) Run(ctx context.Context) error {
+	err := c.watchJobs(ctx)
 	if err == nil {
 		return nil
-	}
-
-	if ctx.Err() != nil {
-		return ctx.Err()
 	}
 
 	if err == io.EOF {
@@ -161,7 +86,7 @@ func (c *Cluster) loop(ctx context.Context, clients *clients.Clients, appTarget 
 }
 
 // watchJobs watches for job triggers from all scheduler clients.
-func (c *Cluster) watchJobs(ctx context.Context, clients *clients.Clients, appTarget bool, actorTypes []string) error {
+func (c *Cluster) watchJobs(ctx context.Context) error {
 	req := &schedulerv1pb.WatchJobsRequest{
 		WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Initial{
 			Initial: &schedulerv1pb.WatchJobsRequestInitial{
@@ -172,91 +97,38 @@ func (c *Cluster) watchJobs(ctx context.Context, clients *clients.Clients, appTa
 	}
 
 	var acceptJobTypes []schedulerv1pb.JobTargetType
-	if appTarget {
+	if c.appTarget {
 		acceptJobTypes = append(acceptJobTypes, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_JOB)
 	}
 
-	if len(actorTypes) > 0 {
+	if len(c.actorTypes) > 0 {
 		acceptJobTypes = append(acceptJobTypes, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER)
-		req.GetInitial().ActorTypes = actorTypes
+		req.GetInitial().ActorTypes = c.actorTypes
 	}
 
 	req.GetInitial().AcceptJobTypes = acceptJobTypes
 
-	cls := clients.All()
-
-	if len(cls) == 0 {
+	if len(c.clients) == 0 {
 		log.Debug("No scheduler clients available, not watching jobs")
 		<-ctx.Done()
 		return ctx.Err()
 	}
 
-	runners := make([]concurrency.Runner, len(cls)+1)
-	connectors := make([]*connector, len(cls))
+	runners := make([]concurrency.Runner, len(c.clients))
+	connectors := make([]*connector, len(c.clients))
 
 	// Accept engine to be nil, and ignore the disabled error.
 	engine, _ := c.actors.Engine(ctx)
-	for i := range cls {
+	for i := range c.clients {
 		connectors[i] = &connector{
 			req:      req,
-			client:   cls[i],
+			client:   c.clients[i],
 			channels: c.channels,
 			actors:   engine,
 			wfengine: c.wfengine,
-			readyCh:  make(chan struct{}),
 		}
 		runners[i] = connectors[i].run
 	}
 
-	runners[len(cls)] = func(ctx context.Context) error {
-		for _, conn := range connectors {
-			select {
-			case <-conn.readyCh:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-
-		c.lock.Lock()
-		close(c.readyCh)
-		c.lock.Unlock()
-
-		<-ctx.Done()
-
-		c.lock.Lock()
-		c.readyCh = make(chan struct{})
-		c.lock.Unlock()
-		return ctx.Err()
-	}
-
 	return concurrency.NewRunnerManager(runners...).Run(ctx)
-}
-
-func (c *Cluster) StartApp() {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.appRunning = true
-	close(c.appCh)
-	c.appCh = make(chan struct{}, 1)
-}
-
-func (c *Cluster) StopApp() {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.appRunning = false
-	close(c.appCh)
-	c.appCh = make(chan struct{}, 1)
-}
-
-func (c *Cluster) WaitForReady(ctx context.Context) error {
-	c.lock.Lock()
-	readyCh := c.readyCh
-	c.lock.Unlock()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-readyCh:
-		return nil
-	}
 }
