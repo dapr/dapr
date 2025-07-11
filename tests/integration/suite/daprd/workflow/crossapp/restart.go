@@ -136,7 +136,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.daprd1.WaitUntilRunning(t, ctx)
 	r.daprd2.WaitUntilRunning(t, ctx)
 
-	wctx, cancel := context.WithCancel(context.Background())
+	wctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	// Start workflow listeners for each app
 	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
@@ -144,7 +144,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client1.StartWorkItemListener(ctx, r.registry1))
 	require.NoError(t, client2.StartWorkItemListener(wctx, r.registry2))
 
-	id, err := client1.ScheduleNewOrchestration(context.Background(), "restartWorkflow", api.WithInput("Hello from app1"))
+	id, err := client1.ScheduleNewOrchestration(t.Context(), "restartWorkflow", api.WithInput("Hello from app1"))
 	require.NoError(t, err)
 	select {
 	case <-r.activityStarted:
@@ -157,11 +157,11 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.daprd2.Cleanup(t)
 
 	// Expect completion to hang, so timeout
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer waitCancel()
 	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
 	require.Error(t, err)
-	assert.EqualError(t, err, "context deadline exceeded")
+	require.EqualError(t, err, "context deadline exceeded")
 
 	// Create a new daprd2 instance, for restart
 	r.daprd2 = daprd.New(t,
@@ -179,10 +179,10 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// Restart the listener for app2 & ensure wf completion
-	client2Restart := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, context.Background()), backend.DefaultLogger())
-	require.NoError(t, client2Restart.StartWorkItemListener(context.Background(), r.registry2))
+	client2Restart := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	require.NoError(t, client2Restart.StartWorkItemListener(ctx, r.registry2))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		completionCtx, completionCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		completionCtx, completionCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer completionCancel()
 
 		_, err := client1.WaitForOrchestrationCompletion(completionCtx, id, api.WithFetchPayloads(true))

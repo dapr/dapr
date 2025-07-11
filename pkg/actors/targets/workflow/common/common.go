@@ -16,6 +16,7 @@ package common
 func GetWorkflowActorType(ns, appID string) string {
 	return "dapr.internal." + ns + "." + appID + ".workflow"
 }
+
 func GetActivityActorType(ns, appID string) string {
 	return "dapr.internal." + ns + "." + appID + ".activity"
 }

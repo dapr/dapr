@@ -86,8 +86,8 @@ spec:
 	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
 
 	for i := range daprds {
-		dopts := make([]daprd.Option, len(baseDopts))
-		copy(dopts, baseDopts)
+		dopts := make([]daprd.Option, 0, len(baseDopts))
+		dopts = append(dopts, baseDopts...)
 
 		// Add specific opts for this daprd
 		for _, daprdOpt := range opts.daprdOptions {

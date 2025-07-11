@@ -134,7 +134,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	a.sched.WaitUntilRunning(t, ctx)
 	a.place.WaitUntilRunning(t, ctx)
 	a.daprd1.WaitUntilRunning(t, ctx)
-	wctx, cancel := context.WithCancel(context.Background())
+	wctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	a.daprd2.WaitUntilRunning(t, wctx)
 	t.Cleanup(func() {

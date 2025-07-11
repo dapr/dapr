@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -107,6 +106,6 @@ func (c *crossnamespace) Run(t *testing.T, ctx context.Context) {
 	// Start workflow from app0 (default namespace)
 	_, err := client0.ScheduleNewOrchestration(waitCtx, "CrossNamespaceWorkflow", api.WithInput("Hello from app0"))
 	require.Error(t, err)
-	assert.EqualError(t, err, "context deadline exceeded")
+	require.EqualError(t, err, "context deadline exceeded")
 	c.actorNotFoundLogLine.EventuallyFoundAll(t)
 }
