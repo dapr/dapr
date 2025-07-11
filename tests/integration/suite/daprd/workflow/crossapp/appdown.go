@@ -154,7 +154,6 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 
 	var id api.InstanceID
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
 		id, err = client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
 		require.NoError(c, err)
 
