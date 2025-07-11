@@ -422,8 +422,12 @@ func (d *Daprd) GetMetaActorRuntime(t assert.TestingT, ctx context.Context) *Met
 	return d.meta(t, ctx).ActorRuntime
 }
 
-// metaResponse is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
-type metaResponse struct {
+func (d *Daprd) GetMetadata(t assert.TestingT, ctx context.Context) *Metadata {
+	return d.meta(t, ctx)
+}
+
+// Metadata is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
+type Metadata struct {
 	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
 	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
 	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
@@ -458,22 +462,22 @@ type MetadataActorRuntimeActiveActor struct {
 	Count int    `json:"count"`
 }
 
-func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {
+func (d *Daprd) meta(t assert.TestingT, ctx context.Context) *Metadata {
 	url := fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	//nolint:testifylint
 	if !assert.NoError(t, err) {
-		return metaResponse{}
+		return nil
 	}
 
-	var meta metaResponse
+	var meta Metadata
 	resp, err := d.httpClient.Do(req)
 	if assert.NoError(t, err) {
 		defer resp.Body.Close()
 		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
 	}
 
-	return meta
+	return &meta
 }
 
 func (d *Daprd) ActorInvokeURL(actorType, actorID, method string) string {
