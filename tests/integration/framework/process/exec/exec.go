@@ -69,6 +69,9 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 			}
 		},
 		exitCode: defaultExitCode,
+		envs: map[string]string{
+			"DAPR_UNSAFE_SKIP_CONTAINER_UID_GID_CHECK": "true",
+		},
 	}
 
 	for _, fopt := range fopts {

@@ -72,7 +72,7 @@ func (r *reconnect) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(srv, r.daprd, r.scheduler1),
+		framework.WithProcesses(srv, r.scheduler1, r.daprd),
 	}
 }
 
