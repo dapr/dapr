@@ -152,7 +152,7 @@ type security struct {
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {
-	if err := checkUIDGID(opts.Mode); err != nil {
+	if err := checkUserIDGroupID(opts.Mode); err != nil {
 		return nil, err
 	}
 

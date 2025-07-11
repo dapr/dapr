@@ -21,12 +21,12 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 )
 
-func checkUIDGID(mode modes.DaprMode) error {
+func checkUserIDGroupID(mode modes.DaprMode) error {
 	if mode != modes.KubernetesMode {
 		return nil
 	}
 
-	if os.Getenv("DAPR_UNSAFE_SKIP_CONTAINER_UID_CHECK") == "true" {
+	if os.Getenv("DAPR_UNSAFE_SKIP_CONTAINER_UID_GID_CHECK") == "true" {
 		log.Warn("Skipping container UID/GID check due to env override.")
 		return nil
 	}
@@ -34,12 +34,12 @@ func checkUIDGID(mode modes.DaprMode) error {
 	uid := syscall.Geteuid()
 	gid := syscall.Getegid()
 
-	const expuid = 65532
-	if uid != expuid || gid != expuid {
+	const expid = 65532
+	if uid != expid || gid != expid {
 		return fmt.Errorf("current user UID/GID (%[1]d:%[2]d) does not match the required UID/GID (%[3]d:%[3]d). "+
 			"Dapr must be run as a non-root user %[3]d:%[3]d in Kubernetes environments. "+
-			"To override this check, set the environment variable 'DAPR_UNSAFE_SKIP_CONTAINER_UID_CHECK=true'",
-			uid, gid, expuid,
+			"To override this check, set the environment variable 'DAPR_UNSAFE_SKIP_CONTAINER_UID_GID_CHECK=true'",
+			uid, gid, expid,
 		)
 	}
 
