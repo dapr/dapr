@@ -13,24 +13,9 @@ limitations under the License.
 
 package common
 
-import (
-	"errors"
-)
-
-type WfActorTypes int
-
-const (
-	WfActor WfActorTypes = iota
-	WfActivityActor
-)
-
-func GetActorType(ns, appID string, wfActorType WfActorTypes) (string, error) {
-	switch wfActorType {
-	case WfActor:
-		return "dapr.internal." + ns + "." + appID + ".workflow", nil
-	case WfActivityActor:
-		return "dapr.internal." + ns + "." + appID + ".activity", nil
-	default:
-		return "", errors.New("unknown workflow actor type")
-	}
+func GetWorkflowActorType(ns, appID string) string {
+	return "dapr.internal." + ns + "." + appID + ".workflow"
+}
+func GetActivityActorType(ns, appID string) string {
+	return "dapr.internal." + ns + "." + appID + ".activity"
 }

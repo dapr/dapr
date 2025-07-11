@@ -114,10 +114,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	wfActorType := a.workflowActorType
 	if router := taskEvent.GetRouter(); router != nil {
 		sourceAppID := router.GetSource()
-		wfActorType, err = common.GetActorType(a.namespace, sourceAppID, common.WfActor)
-		if err != nil {
-			return todo.RunCompletedFalse, err
-		}
+		wfActorType = common.GetWorkflowActorType(a.namespace, sourceAppID)
 	}
 
 	req := internalsv1pb.

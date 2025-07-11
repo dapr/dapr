@@ -71,10 +71,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	activityActorType := o.activityActorType
 	if router := e.GetRouter(); router != nil {
 		if router.Target != nil {
-			activityActorType, err = common.GetActorType(o.namespace, router.GetTarget(), common.WfActivityActor)
-			if err != nil {
-				return err
-			}
+			activityActorType = common.GetActivityActorType(o.namespace, router.GetTarget())
 		}
 	}
 

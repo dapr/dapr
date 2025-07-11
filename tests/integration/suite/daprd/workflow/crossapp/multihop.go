@@ -32,15 +32,101 @@ func init() {
 	suite.Register(new(multihop))
 }
 
-// multihop demonstrates multi-hop cross-app workflow: app0 → app1 → app2
+// multihop demonstrates complex cross-app workflows with multiple hops
 type multihop struct {
 	workflow *workflow.Workflow
 }
 
 func (m *multihop) Setup(t *testing.T) []framework.Option {
 	m.workflow = workflow.New(t,
-		workflow.WithDaprds(3),
-	)
+		workflow.WithDaprds(5))
+
+	// App1: Data processing
+	m.workflow.RegistryN(1).AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in app1: %w", err)
+		}
+		return "Processed by app1: " + input, nil
+	})
+
+	// App2: Data validation
+	m.workflow.RegistryN(2).AddActivityN("ValidateData", func(ctx task.ActivityContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in app2: %w", err)
+		}
+		return "Validated by app2: " + input, nil
+	})
+
+	// App3: Data transformation
+	m.workflow.RegistryN(3).AddActivityN("TransformData", func(ctx task.ActivityContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in app3: %w", err)
+		}
+		return "Transformed by app3: " + input, nil
+	})
+
+	// App4: Data enrichment
+	m.workflow.RegistryN(4).AddActivityN("EnrichData", func(ctx task.ActivityContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in app4: %w", err)
+		}
+		return "Enriched by app4: " + input, nil
+	})
+
+	// App0: Orchestrator that coordinates all apps
+	err := m.workflow.Registry().AddOrchestratorN("ManyAppsWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
+		}
+
+		// Step 1: Process data in app1
+		var result1 string
+		err := ctx.CallActivity("ProcessData",
+			task.WithActivityInput(input),
+			task.WithAppID(m.workflow.DaprN(1).AppID())).
+			Await(&result1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute ProcessData: %w", err)
+		}
+
+		// Step 2: Validate data in app2
+		var result2 string
+		err = ctx.CallActivity("ValidateData",
+			task.WithActivityInput(result1),
+			task.WithAppID(m.workflow.DaprN(2).AppID())).
+			Await(&result2)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute ValidateData: %w", err)
+		}
+
+		// Step 3: Transform data in app3
+		var result3 string
+		err = ctx.CallActivity("TransformData",
+			task.WithActivityInput(result2),
+			task.WithAppID(m.workflow.DaprN(3).AppID())).
+			Await(&result3)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute TransformData: %w", err)
+		}
+
+		// Step 4: Enrich data in app4
+		var result4 string
+		err = ctx.CallActivity("EnrichData",
+			task.WithActivityInput(result3),
+			task.WithAppID(m.workflow.DaprN(4).AppID())).
+			Await(&result4)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute EnrichData: %w", err)
+		}
+
+		return result4, nil
+	})
+	require.NoError(t, err)
 
 	return []framework.Option{
 		framework.WithProcesses(m.workflow),
@@ -50,70 +136,19 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 func (m *multihop) Run(t *testing.T, ctx context.Context) {
 	m.workflow.WaitUntilRunning(t, ctx)
 
-	// App1: 1st hop - processes data
-	m.workflow.RegistryN(1).AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
-		var input string
-		if err := ctx.GetInput(&input); err != nil {
-			return nil, fmt.Errorf("failed to get input in app1: %w", err)
-		}
-		return "Processed by app1: " + input, nil
-	})
-
-	// App2: 2nd hop - transforms data
-	m.workflow.RegistryN(2).AddActivityN("TransformData", func(ctx task.ActivityContext) (any, error) {
-		var input string
-		if err := ctx.GetInput(&input); err != nil {
-			return nil, fmt.Errorf("failed to get input in app2: %w", err)
-		}
-		return "Transformed by app2: " + input, nil
-	})
-
-	// App0: Orchestrator - coordinates the multi-hop workflow
-	m.workflow.Registry().AddOrchestratorN("MultiHopWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
-		var input string
-		if err := ctx.GetInput(&input); err != nil {
-			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
-		}
-
-		// Step 1: Call app1 to process data
-		var result1 string
-		err := ctx.CallActivity("ProcessData",
-			task.WithActivityInput(input),
-			task.WithAppID(m.workflow.DaprN(1).AppID())).
-			Await(&result1)
-		if err != nil {
-			return nil, fmt.Errorf("failed to execute activity in app1: %w", err)
-		}
-
-		// Step 2: Call app2 to transform the processed data
-		var result2 string
-		err = ctx.CallActivity("TransformData",
-			task.WithActivityInput(result1),
-			task.WithAppID(m.workflow.DaprN(2).AppID())).
-			Await(&result2)
-		if err != nil {
-			return nil, fmt.Errorf("failed to execute activity in app2: %w", err)
-		}
-
-		return result2, nil
-	})
-
-	// Start workflow listeners for each app
+	// Start workflow listeners for each app with their respective registries
 	client0 := m.workflow.BackendClient(t, ctx) // app0 (orchestrator)
-	m.workflow.BackendClientN(t, ctx, 1)        // app1 (activity)
-	m.workflow.BackendClientN(t, ctx, 2)        // app2 (activity)
+	m.workflow.BackendClientN(t, ctx, 1)        // app1 (ProcessData)
+	m.workflow.BackendClientN(t, ctx, 2)        // app2 (ValidateData)
+	m.workflow.BackendClientN(t, ctx, 3)        // app3 (TransformData)
+	m.workflow.BackendClientN(t, ctx, 4)        // app4 (EnrichData)
 
-	// Start the multi-hop workflow
-	id, err := client0.ScheduleNewOrchestration(ctx, "MultiHopWorkflow", api.WithInput("Hello from app0"))
+	id, err := client0.ScheduleNewOrchestration(ctx, "ManyAppsWorkflow", api.WithInput("Hello from app0"))
 	require.NoError(t, err)
-
 	metadata, err := client0.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-
 	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
-
-	// Verify the final result shows the complete chain
-	expectedResult := `"Transformed by app2: Processed by app1: Hello from app0"`
+	expectedResult := `"Enriched by app4: Transformed by app3: Validated by app2: Processed by app1: Hello from app0"`
 	assert.Equal(t, expectedResult, metadata.GetOutput().GetValue())
 }

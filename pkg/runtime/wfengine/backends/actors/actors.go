@@ -391,7 +391,7 @@ func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.Activit
 }
 
 // CompleteOrchestrationWorkItem implements backend.Backend
-func (abe *Actors) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (*Actors) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil

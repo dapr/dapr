@@ -15,16 +15,24 @@ package crossapp
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -32,58 +40,154 @@ func init() {
 	suite.Register(new(restart))
 }
 
+// restart tests when a target app goes down during activity
+// execution and eventually comes back up, testing transient issues
 type restart struct {
-	workflow *workflow.Workflow
+	daprd1   *daprd.Daprd
+	daprd2   *daprd.Daprd
+	place    *placement.Placement
+	sched    *scheduler.Scheduler
+	appID2   string
+	app2Port int
+
+	registry1 *task.TaskRegistry
+	registry2 *task.TaskRegistry
+
+	activityStarted chan struct{}
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t,
-		workflow.WithDaprds(2),
+	r.activityStarted = make(chan struct{})
+
+	r.place = placement.New(t)
+	r.sched = scheduler.New(t,
+		scheduler.WithLogLevel("debug"))
+	db := sqlite.New(t,
+		sqlite.WithActorStateStore(true),
+		sqlite.WithMetadata("busyTimeout", "10s"),
+		sqlite.WithMetadata("disableWAL", "true"),
 	)
 
-	return []framework.Option{
-		framework.WithProcesses(r.workflow),
-	}
-}
+	app1 := app.New(t)
+	app2 := app.New(t)
 
-func (r *restart) Run(t *testing.T, ctx context.Context) {
-	r.workflow.WaitUntilRunning(t, ctx)
+	r.registry1 = task.NewTaskRegistry()
+	r.registry2 = task.NewTaskRegistry()
 
-	// Add orchestrator to app0's registry
-	r.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	r.appID2 = uuid.New().String()
+	r.app2Port = app2.Port()
+
+	// App2
+	r.registry2.AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in app2: %w", err)
+		}
+
+		select {
+		case r.activityStarted <- struct{}{}:
+		default:
+		}
+		return "Processed by app2: " + input, nil
+	})
+
+	r.daprd1 = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithPlacementAddresses(r.place.Address()),
+		daprd.WithScheduler(r.sched),
+		daprd.WithAppPort(app1.Port()),
+		daprd.WithLogLevel("debug"),
+	)
+	r.daprd2 = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithPlacementAddresses(r.place.Address()),
+		daprd.WithScheduler(r.sched),
+		daprd.WithAppPort(app2.Port()),
+		daprd.WithLogLevel("debug"),
+		daprd.WithAppID(r.appID2),
+	)
+
+	// App1: Orchestrator, calls app2
+	r.registry1.AddOrchestratorN("restartWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
+		}
+
 		var result string
-		err := ctx.CallActivity("bar",
-			task.WithAppID(r.workflow.DaprN(1).AppID()),
-		).Await(&result)
+		err := ctx.CallActivity("ProcessData",
+			task.WithActivityInput(input),
+			task.WithAppID(r.daprd2.AppID())).
+			Await(&result)
 		if err != nil {
-			return nil, err
+			return fmt.Sprintf("Error occurred: %v", err), nil
 		}
 		return result, nil
 	})
 
-	// Add activity to app1's registry
-	r.workflow.RegistryN(1).AddActivityN("bar", func(c task.ActivityContext) (any, error) {
-		return "processed by app1", nil
+	return []framework.Option{
+		framework.WithProcesses(r.place, r.sched, db, app1, app2, r.daprd1, r.daprd2),
+	}
+}
+
+func (r *restart) Run(t *testing.T, ctx context.Context) {
+	r.sched.WaitUntilRunning(t, ctx)
+	r.place.WaitUntilRunning(t, ctx)
+	r.daprd1.WaitUntilRunning(t, ctx)
+	r.daprd2.WaitUntilRunning(t, ctx)
+
+	wctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Start workflow listeners for each app
+	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, wctx), backend.DefaultLogger())
+	require.NoError(t, client1.StartWorkItemListener(ctx, r.registry1))
+	require.NoError(t, client2.StartWorkItemListener(wctx, r.registry2))
+
+	id, err := client1.ScheduleNewOrchestration(context.Background(), "restartWorkflow", api.WithInput("Hello from app1"))
+	require.NoError(t, err)
+	select {
+	case <-r.activityStarted:
+	case <-time.After(20 * time.Second):
+		t.Fatal("Timeout waiting for activity to start")
+	}
+
+	// Stop app2 to simulate app going down mid-execution
+	cancel()
+	r.daprd2.Cleanup(t)
+
+	// Expect completion to hang, so timeout
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer waitCancel()
+	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+	require.Error(t, err)
+	assert.EqualError(t, err, "context deadline exceeded")
+
+	// Create a new daprd2 instance, for restart
+	r.daprd2 = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithPlacementAddresses(r.place.Address()),
+		daprd.WithScheduler(r.sched),
+		daprd.WithAppPort(r.app2Port),
+		daprd.WithAppID(r.appID2),
+		daprd.WithLogLevel("debug"),
+	)
+	r.daprd2.Run(t, ctx)
+	r.daprd2.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() {
+		r.daprd2.Cleanup(t)
 	})
 
-	timeTaken := make([]time.Duration, 0, 5)
-	for range 5 {
-		// Start workflow listeners for each app with their respective registries
-		client0 := r.workflow.BackendClient(t, ctx) // app0 (orchestrator)
-		r.workflow.BackendClientN(t, ctx, 1)        // app1 (activity)
+	// Restart the listener for app2 & ensure wf completion
+	client2Restart := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, context.Background()), backend.DefaultLogger())
+	require.NoError(t, client2Restart.StartWorkItemListener(context.Background(), r.registry2))
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		completionCtx, completionCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer completionCancel()
 
-		now := time.Now()
-		id, err := client0.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("crossapp-restart"))
-		require.NoError(t, err)
-		_, err = client0.WaitForOrchestrationCompletion(ctx, id)
-		require.NoError(t, err)
-		timeTaken = append(timeTaken, time.Since(now))
-	}
-
-	// Ensure all workflows take similar amounts of time.
-	for _, d1 := range timeTaken {
-		for _, d2 := range timeTaken {
-			assert.InDelta(t, d1.Seconds(), d2.Seconds(), float64(time.Second))
+		_, err := client1.WaitForOrchestrationCompletion(completionCtx, id, api.WithFetchPayloads(true))
+		if err != nil {
+			return
 		}
-	}
+	}, 20*time.Second, 100*time.Millisecond)
 }

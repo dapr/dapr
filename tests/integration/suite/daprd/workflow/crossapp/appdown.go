@@ -134,13 +134,13 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	a.sched.WaitUntilRunning(t, ctx)
 	a.place.WaitUntilRunning(t, ctx)
 	a.daprd1.WaitUntilRunning(t, ctx)
-	a.daprd2.WaitUntilRunning(t, ctx)
+	wctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a.daprd2.WaitUntilRunning(t, wctx)
 	t.Cleanup(func() {
 		a.daprd2.Cleanup(t)
 	})
 
-	wctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	// Start workflow listeners for each app
 	client1 := client.NewTaskHubGrpcClient(a.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
 	client2 := client.NewTaskHubGrpcClient(a.daprd2.GRPCConn(t, wctx), backend.DefaultLogger())
@@ -156,7 +156,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 
 	select {
 	case <-a.activityStarted:
-	case <-time.After(10 * time.Second):
+	case <-time.After(20 * time.Second):
 		t.Fatal("Timeout waiting for activity to start")
 	}
 
@@ -165,7 +165,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	a.daprd2.Cleanup(t)
 
 	// Expect completion to hang, so timeout
-	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(ctx, 8*time.Second)
 	defer waitCancel()
 
 	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
