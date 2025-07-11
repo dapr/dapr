@@ -24,6 +24,8 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -36,13 +38,23 @@ func init() {
 
 // crossnamespace tests that calling activities across different namespaces fails
 type crossnamespace struct {
-	workflow *workflow.Workflow
+	workflow             *workflow.Workflow
+	actorNotFoundLogLine *logline.LogLine
 }
 
 func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
+	c.actorNotFoundLogLine = logline.New(t,
+		logline.WithStdoutLineContains(
+			"failed to lookup actor: api error: code = FailedPrecondition desc = did not find address for actor",
+		),
+	)
+
 	c.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithDaprdOptions(0, daprd.WithNamespace("default")),
+		workflow.WithDaprdOptions(0, daprd.WithNamespace("default"),
+			daprd.WithExecOptions(
+				exec.WithStdout(c.actorNotFoundLogLine.Stdout()),
+			)),
 		workflow.WithDaprdOptions(1, daprd.WithNamespace("other")),
 	)
 
@@ -76,7 +88,7 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 	})
 
 	return []framework.Option{
-		framework.WithProcesses(c.workflow),
+		framework.WithProcesses(c.actorNotFoundLogLine, c.workflow),
 	}
 }
 
@@ -96,4 +108,5 @@ func (c *crossnamespace) Run(t *testing.T, ctx context.Context) {
 	_, err := client0.ScheduleNewOrchestration(waitCtx, "CrossNamespaceWorkflow", api.WithInput("Hello from app0"))
 	require.Error(t, err)
 	assert.EqualError(t, err, "context deadline exceeded")
+	c.actorNotFoundLogLine.EventuallyFoundAll(t)
 }
