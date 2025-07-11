@@ -88,7 +88,7 @@ func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 	client0 := i.workflow.BackendClient(t, ctx)
 
 	// ctx cancel bc it will hang
-	wCtx, wcancel := context.WithTimeout(ctx, 15*time.Second)
+	wCtx, wcancel := context.WithTimeout(ctx, 5*time.Second)
 	defer wcancel()
 	_, err := client0.ScheduleNewOrchestration(wCtx, "InvalidAppWorkflow", api.WithInput("Hello from app0"))
 	require.Error(t, err)

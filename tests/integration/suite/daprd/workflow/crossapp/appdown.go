@@ -165,7 +165,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	a.daprd2.Cleanup(t)
 
 	// Expect completion to hang, so timeout
-	waitCtx, waitCancel := context.WithTimeout(ctx, 8*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer waitCancel()
 
 	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
