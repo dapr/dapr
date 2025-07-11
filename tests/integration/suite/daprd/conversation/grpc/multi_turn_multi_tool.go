@@ -21,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/kit/ptr"
@@ -66,25 +67,25 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 			t.Logf("🧪 Testing multi-turn multi-tool workflow with %s", provider.componentName)
 
 			// Define multiple tools that could be called in parallel
-			weatherTool := &runtimev1pb.Tool{
-				Type:        "function",
-				Name:        "get_weather",
-				Description: "Get current weather information for a specific location",
-				Parameters:  `{"type":"object","properties":{"location":{"type":"string","description":"The city and state/country for weather lookup"}},"required":["location"]}`,
+			weatherTool := &runtimev1pb.ConversationTool{
+				Type:        wrapperspb.String("function"),
+				Name:        wrapperspb.String("get_weather"),
+				Description: wrapperspb.String("Get current weather information for a specific location"),
+				Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string","description":"The city and state/country for weather lookup"}},"required":["location"]}`),
 			}
 
-			timeTool := &runtimev1pb.Tool{
-				Type:        "function",
-				Name:        "get_time",
-				Description: "Get current time for a specific location or timezone",
-				Parameters:  `{"type":"object","properties":{"location":{"type":"string","description":"The city and state/country for time lookup"}},"required":["location"]}`,
+			timeTool := &runtimev1pb.ConversationTool{
+				Type:        wrapperspb.String("function"),
+				Name:        wrapperspb.String("get_time"),
+				Description: wrapperspb.String("Get current time for a specific location or timezone"),
+				Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string","description":"The city and state/country for time lookup"}},"required":["location"]}`),
 			}
 
-			exchangeRateTool := &runtimev1pb.Tool{
-				Type:        "function",
-				Name:        "get_exchange_rate",
-				Description: "Get current exchange rate between two currencies",
-				Parameters:  `{"type":"object","properties":{"from_currency":{"type":"string","description":"Source currency code (e.g., USD)"},"to_currency":{"type":"string","description":"Target currency code (e.g., EUR)"}},"required":["from_currency","to_currency"]}`,
+			exchangeRateTool := &runtimev1pb.ConversationTool{
+				Type:        wrapperspb.String("function"),
+				Name:        wrapperspb.String("get_exchange_rate"),
+				Description: wrapperspb.String("Get current exchange rate between two currencies"),
+				Parameters:  wrapperspb.String(`{"type":"object","properties":{"from_currency":{"type":"string","description":"Source currency code (e.g., USD)"},"to_currency":{"type":"string","description":"Target currency code (e.g., EUR)"}},"required":["from_currency","to_currency"]}`),
 			}
 
 			// ========== TURN 1: Request that should trigger multiple tools ==========
@@ -92,14 +93,14 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 
 			turn1Req := &runtimev1pb.ConversationRequest{
 				Name:  provider.componentName,
-				Tools: []*runtimev1pb.Tool{weatherTool, timeTool, exchangeRateTool},
+				Tools: []*runtimev1pb.ConversationTool{weatherTool, timeTool, exchangeRateTool},
 				Inputs: []*runtimev1pb.ConversationInput{
 					{
 						Role: ptr.Of("system"),
-						Parts: []*runtimev1pb.ContentPart{
+						Content: []*runtimev1pb.ConversationContent{
 							{
-								ContentType: &runtimev1pb.ContentPart_Text{
-									Text: &runtimev1pb.TextContent{
+								ContentType: &runtimev1pb.ConversationContent_Text{
+									Text: &runtimev1pb.ConversationText{
 										Text: "You are a helpful assistant with access to tools. " +
 											"When the user requests information that requires using available tools, call all appropriate tools (for maximum efficiency, whenever you need to perform multiple independent operations, invoke all relevant tools simultaneously rather than sequentially) " +
 											"Do not provide status updates like 'I'll check that for you' or 'Let me get that information'. " +
@@ -111,10 +112,10 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 					},
 					{
 						Role: ptr.Of("user"),
-						Parts: []*runtimev1pb.ContentPart{
+						Content: []*runtimev1pb.ConversationContent{
 							{
-								ContentType: &runtimev1pb.ContentPart_Text{
-									Text: &runtimev1pb.TextContent{
+								ContentType: &runtimev1pb.ConversationContent_Text{
+									Text: &runtimev1pb.ConversationText{
 										Text: "I'm planning a trip to Tokyo. Can you get me the current weather in Tokyo, the current time there, and the USD to JPY exchange rate?",
 									},
 								},
@@ -126,35 +127,35 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 
 			turn1Resp, err := client.ConverseAlpha1(ctx, turn1Req)
 			require.NoError(t, err)
-			require.NotEmpty(t, turn1Resp.GetOutputs())
+			require.NotEmpty(t, turn1Resp.GetResults())
 
-			t.Logf("📤 Turn 1 Response: %d outputs", len(turn1Resp.GetOutputs()))
+			t.Logf("📤 Turn 1 Response: %d outputs", len(turn1Resp.GetResults()))
 
 			// Collect tool calls from ALL outputs
-			var allTurn1ToolCalls []*runtimev1pb.ToolCallContent
+			var allTurn1ToolCalls []*runtimev1pb.ConversationToolCall
 			var allTurn1Text strings.Builder
 
-			for i, output := range turn1Resp.GetOutputs() {
-				t.Logf("📋 Output %d: %d parts", i+1, len(output.GetParts()))
+			for i, output := range turn1Resp.GetResults() {
+				t.Logf("📋 Output %d: %d parts", i+1, len(output.GetContent()))
 
 				// Debug: Log each part type and content
-				for j, part := range output.GetParts() {
+				for j, part := range output.GetContent() {
 					switch content := part.GetContentType().(type) {
-					case *runtimev1pb.ContentPart_Text:
+					case *runtimev1pb.ConversationContent_Text:
 						t.Logf("🔍 Output %d, Part %d: Text=%s", i+1, j+1, content.Text.GetText())
-					case *runtimev1pb.ContentPart_ToolCall:
+					case *runtimev1pb.ConversationContent_ToolCall:
 						t.Logf("🔍 Output %d, Part %d: ToolCall=%s(%s)", i+1, j+1, content.ToolCall.GetName(), content.ToolCall.GetArguments())
 					default:
 						t.Logf("🔍 Output %d, Part %d: Type=%T", i+1, j+1, content)
 					}
 				}
 
-				outputText := extractTextFromParts(output.GetParts())
-				outputToolCalls := extractToolCallsFromParts(output.GetParts())
+				outputText := extractTextFromParts(output.GetContent())
+				outputToolCalls := extractToolCallsFromParts(output.GetContent())
 
 				if outputText != "" {
 					allTurn1Text.WriteString(outputText)
-					if i < len(turn1Resp.GetOutputs())-1 {
+					if i < len(turn1Resp.GetResults())-1 {
 						allTurn1Text.WriteString(" ")
 					}
 				}
@@ -180,10 +181,10 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 				// User's question
 				{
 					Role: ptr.Of("user"),
-					Parts: []*runtimev1pb.ContentPart{
+					Content: []*runtimev1pb.ConversationContent{
 						{
-							ContentType: &runtimev1pb.ContentPart_Text{
-								Text: &runtimev1pb.TextContent{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
 									Text: "I'm planning a trip to Tokyo. Can you get me the current weather in Tokyo, the current time there, and the USD to JPY exchange rate?",
 								},
 							},
@@ -193,11 +194,11 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 			}
 
 			// Add each output separately to conversation history
-			for i, output := range turn1Resp.GetOutputs() {
-				t.Logf("🔄 Adding assistant output %d with %d parts to conversation history", i+1, len(output.GetParts()))
+			for i, output := range turn1Resp.GetResults() {
+				t.Logf("🔄 Adding assistant output %d with %d parts to conversation history", i+1, len(output.GetContent()))
 				conversationHistory = append(conversationHistory, &runtimev1pb.ConversationInput{
-					Role:  ptr.Of("assistant"),
-					Parts: output.GetParts(), // Each output separately
+					Role:    ptr.Of("assistant"),
+					Content: output.GetContent(), // Each output separately
 				})
 			}
 
@@ -208,7 +209,7 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 				// Add tool results for each tool call
 				for _, toolCall := range turn1ToolCalls {
 					var toolResult string
-					switch toolCall.GetName() {
+					switch toolCall.GetName().GetValue() {
 					case "get_weather":
 						toolResult = `{"temperature": 22, "condition": "sunny", "humidity": 60, "location": "Tokyo, Japan"}`
 					case "get_time":
@@ -221,15 +222,12 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 
 					conversationHistory = append(conversationHistory, &runtimev1pb.ConversationInput{
 						Role: ptr.Of("tool"),
-						Parts: []*runtimev1pb.ContentPart{
+						ToolResults: []*runtimev1pb.ConversationToolResult{
 							{
-								ContentType: &runtimev1pb.ContentPart_ToolResult{
-									ToolResult: &runtimev1pb.ToolResultContent{
-										ToolCallId: toolCall.GetId(),
-										Name:       toolCall.GetName(),
-										Content:    toolResult,
-										IsError:    func(b bool) *bool { return &b }(false),
-									},
+								Id:   toolCall.GetId().GetValue(),
+								Name: toolCall.GetName().GetValue(),
+								Result: &runtimev1pb.ConversationToolResult_OutputText{
+									OutputText: toolResult,
 								},
 							},
 						},
@@ -241,23 +239,22 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 
 				turn2Req := &runtimev1pb.ConversationRequest{
 					Name:   provider.componentName,
-					Tools:  []*runtimev1pb.Tool{weatherTool, timeTool, exchangeRateTool},
+					Tools:  []*runtimev1pb.ConversationTool{weatherTool, timeTool, exchangeRateTool},
 					Inputs: conversationHistory,
 				}
 				turn2Resp, err2 := client.ConverseAlpha1(ctx, turn2Req)
 				require.NoError(t, err2)
 
-				// Process Turn 2 outputs
-				var allTurn2ToolCalls []*runtimev1pb.ToolCallContent
+				var allTurn2ToolCalls []*runtimev1pb.ConversationToolCall
 				var allTurn2Text strings.Builder
 
-				for i, output := range turn2Resp.GetOutputs() {
-					outputText := extractTextFromParts(output.GetParts())
-					outputToolCalls := extractToolCallsFromParts(output.GetParts())
+				for i, output := range turn2Resp.GetResults() {
+					outputText := extractTextFromParts(output.GetContent())
+					outputToolCalls := extractToolCallsFromParts(output.GetContent())
 
 					if outputText != "" {
 						allTurn2Text.WriteString(outputText)
-						if i < len(turn2Resp.GetOutputs())-1 {
+						if i < len(turn2Resp.GetResults())-1 {
 							allTurn2Text.WriteString(" ")
 						}
 					}
@@ -269,8 +266,8 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 
 					// Add each assistant output separately to conversation history
 					conversationHistory = append(conversationHistory, &runtimev1pb.ConversationInput{
-						Role:  ptr.Of("assistant"),
-						Parts: output.GetParts(),
+						Role:    ptr.Of("assistant"),
+						Content: output.GetContent(),
 					})
 				}
 
@@ -287,7 +284,7 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 					// Process additional tool calls (same pattern as conformance tests)
 					for _, toolCall := range turn2ToolCalls {
 						var toolResult string
-						switch toolCall.GetName() {
+						switch toolCall.GetName().GetValue() {
 						case "get_weather":
 							toolResult = `{"temperature": 22, "condition": "sunny", "humidity": 60, "location": "Tokyo, Japan"}`
 						case "get_time":
@@ -300,15 +297,12 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 
 						conversationHistory = append(conversationHistory, &runtimev1pb.ConversationInput{
 							Role: ptr.Of("tool"),
-							Parts: []*runtimev1pb.ContentPart{
+							ToolResults: []*runtimev1pb.ConversationToolResult{
 								{
-									ContentType: &runtimev1pb.ContentPart_ToolResult{
-										ToolResult: &runtimev1pb.ToolResultContent{
-											ToolCallId: toolCall.GetId(),
-											Name:       toolCall.GetName(),
-											Content:    toolResult,
-											IsError:    func(b bool) *bool { return &b }(false),
-										},
+									Id:   toolCall.GetId().GetValue(),
+									Name: toolCall.GetName().GetValue(),
+									Result: &runtimev1pb.ConversationToolResult_OutputText{
+										OutputText: toolResult,
 									},
 								},
 							},
@@ -325,7 +319,7 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 					turn3Resp, err3 := client.ConverseAlpha1(ctx, turn3Req)
 					require.NoError(t, err3)
 
-					turn3Text := extractTextFromParts(turn3Resp.GetOutputs()[0].GetParts())
+					turn3Text := extractTextFromParts(turn3Resp.GetResults()[0].GetContent())
 					t.Logf("📤 Turn 3 Response: %q", turn3Text)
 
 					// Validate comprehensive response
@@ -367,10 +361,10 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 
 				conversationHistory = append(conversationHistory, &runtimev1pb.ConversationInput{
 					Role: ptr.Of("user"),
-					Parts: []*runtimev1pb.ContentPart{
+					Content: []*runtimev1pb.ConversationContent{
 						{
-							ContentType: &runtimev1pb.ContentPart_Text{
-								Text: &runtimev1pb.TextContent{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
 									Text: "Based on that weather and time information, what would be the best time to visit Tokyo today?",
 								},
 							},
@@ -385,7 +379,7 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 				turn4Resp, err4 := client.ConverseAlpha1(ctx, turn4Req)
 				require.NoError(t, err4, "Failed to converse with %s: %v", provider.componentName, err4)
 
-				turn4Text := extractTextFromParts(turn4Resp.GetOutputs()[0].GetParts())
+				turn4Text := extractTextFromParts(turn4Resp.GetResults()[0].GetContent())
 				t.Logf("📤 Turn 4 Response: %q", turn4Text)
 
 				// Validate conversation memory and logical recommendations
@@ -413,10 +407,10 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 			// Add follow-up to encourage tool usage
 			conversationHistory = append(conversationHistory, &runtimev1pb.ConversationInput{
 				Role: ptr.Of("user"),
-				Parts: []*runtimev1pb.ContentPart{
+				Content: []*runtimev1pb.ConversationContent{
 					{
-						ContentType: &runtimev1pb.ContentPart_Text{
-							Text: &runtimev1pb.TextContent{
+						ContentType: &runtimev1pb.ConversationContent_Text{
+							Text: &runtimev1pb.ConversationText{
 								Text: "Please get that information for me using the available tools.",
 							},
 						},
@@ -431,8 +425,8 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 			turn2Resp, err5 := client.ConverseAlpha1(ctx, turn2Req)
 			require.NoError(t, err5)
 
-			turn2ToolCalls := extractToolCallsFromParts(turn2Resp.GetOutputs()[0].GetParts())
-			turn2Text := extractTextFromParts(turn2Resp.GetOutputs()[0].GetParts())
+			turn2ToolCalls := extractToolCallsFromParts(turn2Resp.GetResults()[0].GetContent())
+			turn2Text := extractTextFromParts(turn2Resp.GetResults()[0].GetContent())
 
 			t.Logf("📤 Turn 2 Response: %q", turn2Text)
 			t.Logf("🔧 Turn 2 Tool Calls: %d", len(turn2ToolCalls))
@@ -457,7 +451,7 @@ func (mt *multiTurnMultiTool) Run(t *testing.T, ctx context.Context) {
 }
 
 // Helper function to extract text content from parts
-func extractTextFromParts(parts []*runtimev1pb.ContentPart) string {
+func extractTextFromParts(parts []*runtimev1pb.ConversationContent) string {
 	var textParts []string
 	for _, part := range parts {
 		if textContent := part.GetText(); textContent != nil {

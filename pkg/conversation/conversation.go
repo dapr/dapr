@@ -18,8 +18,31 @@ import (
 	contribConverse "github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	kmeta "github.com/dapr/kit/metadata"
 	"github.com/dapr/kit/ptr"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
+
+func CreateComponentRequest(req *runtimev1pb.ConversationRequest, scrubber piiscrubber.Scrubber) (*contribConverse.ConversationRequest, error) {
+	reqTools := ConvertProtoToolsToComponentsContrib(req.GetTools())
+	componentRequest := &contribConverse.ConversationRequest{
+		Context:     req.GetContextID(),
+		Parameters:  req.GetParameters(),
+		Temperature: req.GetTemperature(),
+		Tools:       reqTools,
+	}
+	err := kmeta.DecodeMetadata(req.GetMetadata(), componentRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	componentRequest.Inputs, err = GetInputsFromRequest(req, scrubber)
+	if err != nil {
+		return nil, err
+	}
+
+	return componentRequest, nil
+}
 
 // ConvertUsageToProto converts components-contrib UsageInfo to Dapr protobuf ConversationUsage
 func ConvertUsageToProto(resp *contribConverse.ConversationResponse) *runtimev1pb.ConversationUsage {
@@ -27,12 +50,10 @@ func ConvertUsageToProto(resp *contribConverse.ConversationResponse) *runtimev1p
 		return nil
 	}
 
-	// Safely convert uint64 to uint32 for token counts
-	// Token counts realistically never exceed uint32 range (~4.3 billion)
 	return &runtimev1pb.ConversationUsage{
-		PromptTokens:     ptr.Of(uint32(resp.Usage.PromptTokens)),
-		CompletionTokens: ptr.Of(uint32(resp.Usage.CompletionTokens)),
-		TotalTokens:      ptr.Of(uint32(resp.Usage.TotalTokens)),
+		PromptTokens:     ptr.Of(resp.Usage.PromptTokens),
+		CompletionTokens: ptr.Of(resp.Usage.CompletionTokens),
+		TotalTokens:      ptr.Of(resp.Usage.TotalTokens),
 	}
 }
 
@@ -52,7 +73,7 @@ func NeedsOutputScrubber(req *runtimev1pb.ConversationRequest) bool {
 }
 
 // ConvertProtoToolsToComponentsContrib converts protobuf tools to components-contrib format
-func ConvertProtoToolsToComponentsContrib(protoTools []*runtimev1pb.Tool) []contribConverse.Tool {
+func ConvertProtoToolsToComponentsContrib(protoTools []*runtimev1pb.ConversationTool) []contribConverse.Tool {
 	if len(protoTools) == 0 {
 		return nil
 	}
@@ -60,11 +81,11 @@ func ConvertProtoToolsToComponentsContrib(protoTools []*runtimev1pb.Tool) []cont
 	tools := make([]contribConverse.Tool, len(protoTools))
 	for i, protoTool := range protoTools {
 		tool := contribConverse.Tool{
-			ToolType: protoTool.GetType(),
+			Type: protoTool.GetType().GetValue(),
 			Function: contribConverse.ToolFunction{
-				Name:        protoTool.GetName(),
-				Description: protoTool.GetDescription(),
-				Parameters:  protoTool.GetParameters(), // Keep as string for now
+				Name:        protoTool.GetName().GetValue(),
+				Description: protoTool.GetDescription().GetValue(),
+				Parameters:  protoTool.GetParameters().GetValue(),
 			},
 		}
 		tools[i] = tool
@@ -74,18 +95,18 @@ func ConvertProtoToolsToComponentsContrib(protoTools []*runtimev1pb.Tool) []cont
 }
 
 // ConvertComponentsContribToolCallsToProto converts components-contrib tool calls to protobuf format
-func ConvertComponentsContribToolCallsToProto(componentToolCalls []contribConverse.ToolCall) []*runtimev1pb.ToolCall {
+func ConvertComponentsContribToolCallsToProto(componentToolCalls []contribConverse.ToolCall) []*runtimev1pb.ConversationToolCall {
 	if len(componentToolCalls) == 0 {
 		return nil
 	}
 
-	protoToolCalls := make([]*runtimev1pb.ToolCall, len(componentToolCalls))
+	protoToolCalls := make([]*runtimev1pb.ConversationToolCall, len(componentToolCalls))
 	for i, componentToolCall := range componentToolCalls {
-		protoToolCall := &runtimev1pb.ToolCall{
-			Id:        componentToolCall.ID,
-			Type:      componentToolCall.CallType,
-			Name:      componentToolCall.Function.Name,
-			Arguments: componentToolCall.Function.Arguments,
+		protoToolCall := &runtimev1pb.ConversationToolCall{
+			Id:        wrapperspb.String(componentToolCall.ID),
+			Type:      wrapperspb.String(componentToolCall.CallType),
+			Name:      wrapperspb.String(componentToolCall.Function.Name),
+			Arguments: wrapperspb.String(componentToolCall.Function.Arguments),
 		}
 		protoToolCalls[i] = protoToolCall
 	}
@@ -93,34 +114,14 @@ func ConvertComponentsContribToolCallsToProto(componentToolCalls []contribConver
 	return protoToolCalls
 }
 
-// extractToolCallIDFromParts extracts tool call ID from tool result parts
-func extractToolCallIDFromParts(parts []*runtimev1pb.ContentPart) string {
-	for _, part := range parts {
-		if toolResult := part.GetToolResult(); toolResult != nil {
-			return toolResult.GetToolCallId()
-		}
-	}
-	return ""
-}
-
-// extractToolNameFromParts extracts tool name from tool result parts
-func extractToolNameFromParts(parts []*runtimev1pb.ContentPart) string {
-	for _, part := range parts {
-		if toolResult := part.GetToolResult(); toolResult != nil {
-			return toolResult.GetName()
-		}
-	}
-	return ""
-}
-
 // convertComponentsContribPartsToProto converts components-contrib content parts to protobuf format
-func convertComponentsContribPartsToProto(result string) []*runtimev1pb.ContentPart {
+func convertComponentsContribPartsToProto(result string) []*runtimev1pb.ConversationContent {
 	// Add text content if present
 	if result != "" {
-		return []*runtimev1pb.ContentPart{
+		return []*runtimev1pb.ConversationContent{
 			{
-				ContentType: &runtimev1pb.ContentPart_Text{
-					Text: &runtimev1pb.TextContent{
+				ContentType: &runtimev1pb.ConversationContent_Text{
+					Text: &runtimev1pb.ConversationText{
 						Text: result,
 					},
 				},
@@ -131,49 +132,39 @@ func convertComponentsContribPartsToProto(result string) []*runtimev1pb.ContentP
 	return nil
 }
 
-// convertProtoPartsToComponentsContrib converts protobuf content parts to components-contrib format
-func convertProtoPartsToComponentsContrib(protoParts []*runtimev1pb.ContentPart) []contribConverse.ContentPart {
-	if len(protoParts) == 0 {
-		return nil
-	}
+// convertProtoPartsToComponentsContrib converts protobuf parts to components-contrib parts
+func convertProtoPartsToComponentsContrib(protoParts []*runtimev1pb.ConversationContent) []contribConverse.ConversationContent {
+	parts := make([]contribConverse.ConversationContent, 0, len(protoParts))
 
-	parts := make([]contribConverse.ContentPart, 0, len(protoParts))
-	for _, protoPart := range protoParts {
-		switch content := protoPart.GetContentType().(type) {
-		case *runtimev1pb.ContentPart_Text:
+	for _, part := range protoParts {
+		switch content := part.GetContentType().(type) {
+		case *runtimev1pb.ConversationContent_Text:
 			parts = append(parts, contribConverse.TextContentPart{
 				Text: content.Text.GetText(),
 			})
-		case *runtimev1pb.ContentPart_ToolCall:
-			parts = append(parts, contribConverse.ToolCallContentPart{
-				ID:       content.ToolCall.GetId(),
-				CallType: content.ToolCall.GetType(),
+		case *runtimev1pb.ConversationContent_ToolCall:
+			parts = append(parts, contribConverse.ToolCallRequest{
+				ID:       content.ToolCall.GetId().GetValue(),
+				CallType: content.ToolCall.GetType().GetValue(),
 				Function: contribConverse.ToolCallFunction{
-					Name:      content.ToolCall.GetName(),
-					Arguments: content.ToolCall.GetArguments(),
+					Name:      content.ToolCall.GetName().GetValue(),
+					Arguments: content.ToolCall.GetArguments().GetValue(),
 				},
 			})
-		case *runtimev1pb.ContentPart_ToolResult:
-			parts = append(parts, contribConverse.ToolResultContentPart{
-				ToolCallID: content.ToolResult.GetToolCallId(),
-				Name:       content.ToolResult.GetName(),
-				Content:    content.ToolResult.GetContent(),
-				IsError:    content.ToolResult.GetIsError(),
-			})
-			// Removed ToolDefinitionsContent handling - tools are now at request level
 		}
+		// TODO(@Sicoyle): add tool result part???
 	}
 
 	return parts
 }
 
 // convertComponentsContribContentPartsToProto converts components-contrib content parts to protobuf format
-func convertComponentsContribContentPartsToProto(parts []contribConverse.ContentPart, scrubber piiscrubber.Scrubber, componentName string) ([]*runtimev1pb.ContentPart, error) {
+func convertComponentsContribContentPartsToProto(parts []contribConverse.ConversationContent, scrubber piiscrubber.Scrubber, componentName string) ([]*runtimev1pb.ConversationContent, error) {
 	if len(parts) == 0 {
 		return nil, nil
 	}
 
-	protoParts := make([]*runtimev1pb.ContentPart, 0, len(parts))
+	protoParts := make([]*runtimev1pb.ConversationContent, 0, len(parts))
 	for _, part := range parts {
 		switch p := part.(type) {
 		case contribConverse.TextContentPart:
@@ -184,34 +175,22 @@ func convertComponentsContribContentPartsToProto(parts []contribConverse.Content
 				}
 				p.Text = scrubbed[0]
 			}
-			protoParts = append(protoParts, &runtimev1pb.ContentPart{
-				ContentType: &runtimev1pb.ContentPart_Text{
-					Text: &runtimev1pb.TextContent{
+			protoParts = append(protoParts, &runtimev1pb.ConversationContent{
+				ContentType: &runtimev1pb.ConversationContent_Text{
+					Text: &runtimev1pb.ConversationText{
 						Text: p.Text,
 					},
 				},
 			})
-		case contribConverse.ToolCallContentPart:
-			protoParts = append(protoParts, &runtimev1pb.ContentPart{
-				ContentType: &runtimev1pb.ContentPart_ToolCall{
-					ToolCall: &runtimev1pb.ToolCallContent{
-						Id:   p.ID,
-						Type: p.CallType,
-						Name: p.Function.Name,
+		case contribConverse.ToolCallRequest:
+			protoParts = append(protoParts, &runtimev1pb.ConversationContent{
+				ContentType: &runtimev1pb.ConversationContent_ToolCall{
+					ToolCall: &runtimev1pb.ConversationToolCall{
+						Id:   wrapperspb.String(p.ID),
+						Type: wrapperspb.String(p.CallType),
+						Name: wrapperspb.String(p.Function.Name),
 						// TODO: add another option to scrub arguments from LLM
-						Arguments: p.Function.Arguments,
-					},
-				},
-			})
-		case contribConverse.ToolResultContentPart:
-			protoParts = append(protoParts, &runtimev1pb.ContentPart{
-				ContentType: &runtimev1pb.ContentPart_ToolResult{
-					// TODO: add another option to scrub arguments to LLM
-					ToolResult: &runtimev1pb.ToolResultContent{
-						ToolCallId: p.ToolCallID,
-						Name:       p.Name,
-						Content:    p.Content,
-						IsError:    ptr.Of(p.IsError),
+						Arguments: wrapperspb.String(p.Function.Arguments),
 					},
 				},
 			})
@@ -225,6 +204,8 @@ func convertComponentsContribContentPartsToProto(parts []contribConverse.Content
 }
 
 // GetInputsFromRequest gets the inputs from the request and scrubs them if PII scrubbing is enabled on the input
+// TODO(@Sicoyle): get with josh on this. I believe we just had a single PII scrubber before? Now we have two,
+// but it is the case now that as part of our input, we include ToolCallResponse potentially, so kind of backwards thinking on just an input vs output scrubber.
 func GetInputsFromRequest(req *runtimev1pb.ConversationRequest, scrubber piiscrubber.Scrubber) ([]contribConverse.ConversationInput, error) {
 	reqInputs := req.GetInputs()
 	if reqInputs == nil {
@@ -233,22 +214,17 @@ func GetInputsFromRequest(req *runtimev1pb.ConversationRequest, scrubber piiscru
 
 	inputs := make([]contribConverse.ConversationInput, 0, len(reqInputs))
 	for _, i := range reqInputs {
+		if i == nil {
+			continue
+		}
 		role := contribConverse.Role(i.GetRole())
 		var msg string
 
 		// Process content parts if available
-		if len(i.GetParts()) > 0 {
-			for _, part := range i.GetParts() {
-				// Extract text content from parts
-				msg = part.GetText().GetText()
-
-				// Extract tool call ID and name from parts for role detection
-				toolCallID := extractToolCallIDFromParts([]*runtimev1pb.ContentPart{part})
-				toolName := extractToolNameFromParts([]*runtimev1pb.ContentPart{part})
-
-				// Handle tool result messages - determine role based on tool call ID and name
-				if toolCallID != "" && toolName != "" && (role == contribConverse.RoleUser || role == "") {
-					role = contribConverse.RoleTool
+		if len(i.GetContent()) > 0 {
+			for _, part := range i.GetContent() {
+				if textContent := part.GetText(); textContent != nil {
+					msg = textContent.GetText()
 				}
 
 				// Apply PII scrubbing to text content
@@ -260,38 +236,32 @@ func GetInputsFromRequest(req *runtimev1pb.ConversationRequest, scrubber piiscru
 					msg = scrubbed[0]
 				}
 			}
-		} else {
-			// Fallback to legacy content processing (BACKWARD COMPATIBILITY)
-			msg = i.GetContent() //nolint:staticcheck // Intentional use of deprecated field for backward compatibility
+		}
 
-			if i.GetScrubPII() && scrubber != nil {
-				scrubbed, err := scrubber.ScrubTexts([]string{i.GetContent()}) //nolint:staticcheck // Intentional use of deprecated field for backward compatibility
-				if err != nil {
-					return nil, messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-				}
-				msg = scrubbed[0]
-			}
+		if len(i.GetToolResults()) > 0 {
+			role = contribConverse.RoleTool
 		}
 
 		// Convert protobuf parts directly to components-contrib content parts
-		var parts []contribConverse.ContentPart
+		var parts []contribConverse.ConversationContent
+		parts = convertProtoPartsToComponentsContrib(i.GetContent())
 
-		if len(i.GetParts()) > 0 {
-			// Convert protobuf parts to components-contrib parts directly
-			parts = convertProtoPartsToComponentsContrib(i.GetParts())
-		} else if msg != "" {
-			// Legacy mode: convert string content to text part
-			parts = append(parts, contribConverse.TextContentPart{Text: msg})
+		for _, toolResult := range i.GetToolResults() {
+			// TODO(@Sicoyle): right here I don't think we should combine a ToolCallResponse into ConversationInput.Content.
+			// It should be a separate field.
+			parts = append(parts, contribConverse.ToolCallResponse{
+				ToolCallID: toolResult.GetId(),
+				Name:       toolResult.GetName(),
+				Content:    toolResult.GetOutputText(),
+				IsError:    toolResult.GetError() != nil,
+			})
 		}
 
 		// Create conversation input with content parts
-		inputs = append(
-			inputs,
-			contribConverse.ConversationInput{
-				Message: msg, // Keep for backward compatibility. TODO: remove this field
-				Role:    role,
-				Parts:   parts,
-			})
+		inputs = append(inputs, contribConverse.ConversationInput{
+			Role:    role,
+			Content: parts,
+		})
 	}
 
 	return inputs, nil
@@ -299,39 +269,21 @@ func GetInputsFromRequest(req *runtimev1pb.ConversationRequest, scrubber piiscru
 
 func ConvertComponentsContribOutputToProto(conversationOutputs []contribConverse.ConversationOutput, scrubber piiscrubber.Scrubber, componentName string) ([]*runtimev1pb.ConversationResult, error) {
 	if len(conversationOutputs) == 0 {
-		return nil, nil // No outputs to convert
+		return nil, nil
 	}
 	outputs := make([]*runtimev1pb.ConversationResult, 0, len(conversationOutputs))
 	for _, o := range conversationOutputs {
-		// TODO: remove on next api version
-		res := o.Result //nolint:staticcheck // Intentional use of deprecated field for backward compatibility
-		if res != "" && scrubber != nil {
-			scrubbed, err := scrubber.ScrubTexts([]string{res})
-			if err != nil {
-				return nil, messages.ErrConversationInvoke.WithFormat(componentName, err.Error())
-			}
-			res = scrubbed[0]
-		}
-
 		// Create conversation result with tool calling support and parts
 		output := &runtimev1pb.ConversationResult{
-			Result:     res, // Legacy field for backward compatibility
 			Parameters: o.Parameters,
 		}
 
-		// Tool calls are now handled through the parts system only
-
-		// Generate parts for rich content support
-		if len(o.Parts) > 0 {
-			// Convert components-contrib parts to protobuf parts
+		if len(o.Content) > 0 {
 			var err error
-			output.Parts, err = convertComponentsContribContentPartsToProto(o.Parts, scrubber, componentName)
+			output.Content, err = convertComponentsContribContentPartsToProto(o.Content, scrubber, componentName)
 			if err != nil {
 				return nil, err
 			}
-		} else {
-			// Fallback to legacy conversion
-			output.Parts = convertComponentsContribPartsToProto(res)
 		}
 
 		finishReason := o.FinishReason
@@ -339,9 +291,9 @@ func ConvertComponentsContribOutputToProto(conversationOutputs []contribConverse
 			// Set finish reason (hardcoded for now, components don't provide this yet)
 			finishReason = "stop"
 			// Check if there are tool calls in the parts
-			if len(o.Parts) > 0 {
-				for _, part := range o.Parts {
-					if _, ok := part.(contribConverse.ToolCallContentPart); ok {
+			if len(o.Content) > 0 {
+				for _, part := range o.Content {
+					if _, ok := part.(contribConverse.ToolCallResponse); ok {
 						finishReason = "tool_calls"
 					}
 				}

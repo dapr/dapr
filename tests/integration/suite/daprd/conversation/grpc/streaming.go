@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -50,8 +51,8 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 
 // Helper function to extract text content from streaming chunk parts
 func extractTextFromStreamingChunk(chunk *rtv1.ConversationStreamChunk) string {
-	if len(chunk.GetParts()) > 0 {
-		if textContent := chunk.GetParts()[0].GetText(); textContent != nil {
+	if len(chunk.GetContent()) > 0 {
+		if textContent := chunk.GetContent()[0].GetText(); textContent != nil {
 			return textContent.GetText()
 		}
 	}
@@ -67,7 +68,17 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.ConverseStreamAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
-				{Content: "Hello streaming world"},
+				{
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "Hello streaming world",
+								},
+							},
+						},
+					},
+				},
 			},
 		})
 		require.NoError(t, err)
@@ -119,7 +130,15 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content: "My phone number is +1234567890",
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "My phone number is +1234567890",
+								},
+							},
+						},
+					},
 				},
 			},
 			ScrubPII: &scrubPII,
@@ -165,7 +184,17 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.ConverseStreamAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
-				{Content: combinedInput},
+				{
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: combinedInput,
+								},
+							},
+						},
+					},
+				},
 			},
 		})
 		require.NoError(t, err)
@@ -206,7 +235,17 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.ConverseStreamAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "nonexistent",
 			Inputs: []*rtv1.ConversationInput{
-				{Content: "test"},
+				{
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "test",
+								},
+							},
+						},
+					},
+				},
 			},
 		})
 		// Should get a gRPC error either during stream creation or first receive
@@ -244,7 +283,17 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.ConverseStreamAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
-				{Content: "Hello with temperature"},
+				{
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "Hello with temperature",
+								},
+							},
+						},
+					},
+				},
 			},
 			Temperature: &temperature,
 		})
@@ -282,7 +331,17 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.ConverseStreamAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
-				{Content: "Hello with context"},
+				{
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "Hello with context",
+								},
+							},
+						},
+					},
+				},
 			},
 			ContextID: &contextID,
 		})
@@ -306,7 +365,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			}
 			if complete := resp.GetComplete(); complete != nil {
 				hasCompletion = true
-				returnedContextID = complete.GetContextID()
+				returnedContextID = complete.GetContextId()
 			}
 		}
 
@@ -330,8 +389,16 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content: combinedInput,
-					Role:    &userRole,
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: combinedInput,
+								},
+							},
+						},
+					},
+					Role: &userRole,
 				},
 			},
 		})
@@ -384,7 +451,17 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			stream, err := client.ConverseStreamAlpha1(ctx, &rtv1.ConversationRequest{
 				Name: provider.componentName,
 				Inputs: []*rtv1.ConversationInput{
-					{Content: "Say '" + providersExpectedText[provider.componentName] + "' and nothing else."},
+					{
+						Content: []*rtv1.ConversationContent{
+							{
+								ContentType: &rtv1.ConversationContent_Text{
+									Text: &rtv1.ConversationText{
+										Text: "Say '" + providersExpectedText[provider.componentName] + "' and nothing else.",
+									},
+								},
+							},
+						},
+					},
 				},
 			})
 			require.NoError(t, err)
@@ -450,14 +527,24 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		stream, err := client.ConverseStreamAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "anthropic",
 			Inputs: []*rtv1.ConversationInput{
-				{Content: "Please call the get_weather function for New York City."},
-			},
-			Tools: []*rtv1.Tool{
 				{
-					Type:        "function",
-					Name:        "get_weather",
-					Description: "Get current weather for a location",
-					Parameters:  `{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`,
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "Please call the get_weather function for New York City.",
+								},
+							},
+						},
+					},
+				},
+			},
+			Tools: []*rtv1.ConversationTool{
+				{
+					Type:        wrapperspb.String("function"),
+					Name:        wrapperspb.String("get_weather"),
+					Description: wrapperspb.String("Get current weather for a location"),
+					Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`),
 				},
 			},
 		})
@@ -483,7 +570,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 				}
 
 				// Check for tool calls in chunk
-				for _, part := range chunk.GetParts() {
+				for _, part := range chunk.GetContent() {
 					if toolCall := part.GetToolCall(); toolCall != nil {
 						hasToolCalls = true
 						t.Logf("Fallback tool call: %s with args: %s", toolCall.GetName(), toolCall.GetArguments())

@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func init() {
@@ -67,14 +68,22 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 				Name: "echo",
 				Inputs: []*rtv1.ConversationInput{
 					{
-						Content: "Hello from metrics test",
-						Role:    ptr.Of("user"),
+						Content: []*rtv1.ConversationContent{
+							{
+								ContentType: &rtv1.ConversationContent_Text{
+									Text: &rtv1.ConversationText{
+										Text: "Hello from metrics test",
+									},
+								},
+							},
+						},
+						Role: ptr.Of("user"),
 					},
 				},
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Len(t, resp.GetOutputs(), 1)
+			require.Len(t, resp.GetResults(), 1)
 			require.NotNil(t, resp.GetUsage())
 		}
 
@@ -102,8 +111,16 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 				Name: "echo",
 				Inputs: []*rtv1.ConversationInput{
 					{
-						Content: "Streaming test message",
-						Role:    ptr.Of("user"),
+						Content: []*rtv1.ConversationContent{
+							{
+								ContentType: &rtv1.ConversationContent_Text{
+									Text: &rtv1.ConversationText{
+										Text: "Streaming test message",
+									},
+								},
+							},
+						},
+						Role: ptr.Of("user"),
 					},
 				},
 			})
@@ -145,33 +162,41 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 		for range 2 {
 			resp, err := gclient.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
 				Name: "echo",
-				Tools: []*rtv1.Tool{
+				Tools: []*rtv1.ConversationTool{
 					{
-						Type:        "function",
-						Name:        "get_weather",
-						Description: "Get current weather for a location",
-						Parameters:  `{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`,
+						Type:        wrapperspb.String("function"),
+						Name:        wrapperspb.String("get_weather"),
+						Description: wrapperspb.String("Get current weather for a location"),
+						Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`),
 					},
 				},
 				Inputs: []*rtv1.ConversationInput{
 					{
-						Content: "What's the weather like in San Francisco?",
-						Role:    ptr.Of("user"),
+						Content: []*rtv1.ConversationContent{
+							{
+								ContentType: &rtv1.ConversationContent_Text{
+									Text: &rtv1.ConversationText{
+										Text: "What's the weather like in San Francisco?",
+									},
+								},
+							},
+						},
+						Role: ptr.Of("user"),
 					},
 				},
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Len(t, resp.GetOutputs(), 1)
+			require.Len(t, resp.GetResults(), 1)
 			require.NotNil(t, resp.GetUsage())
 
 			// Verify the echo component generated a tool call (it does for weather queries)
-			output := resp.GetOutputs()[0]
+			output := resp.GetResults()[0]
 			if output.GetFinishReason() == "tool_calls" {
 				// Tool calling worked - metrics should include this
-				require.NotEmpty(t, output.GetParts())
+				require.NotEmpty(t, output.GetContent())
 				hasToolCall := false
-				for _, part := range output.GetParts() {
+				for _, part := range output.GetContent() {
 					if part.GetToolCall() != nil {
 						hasToolCall = true
 						break

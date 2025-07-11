@@ -22,36 +22,10 @@ import (
 	contribConverse "github.com/dapr/components-contrib/conversation"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/kit/logger"
-	kmeta "github.com/dapr/kit/metadata"
 )
 
-func GetComponentRequest(req *runtimev1pb.ConversationRequest, scrubber piiscrubber.Scrubber) (*contribConverse.ConversationRequest, error) {
-	// Prepare component conversation componentRequest (similar to non-streaming version)
-	componentRequest := &contribConverse.ConversationRequest{}
-	err := kmeta.DecodeMetadata(req.GetMetadata(), componentRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	// get inputs from request and scrub them if PII scrubbing is enabled
-	componentRequest.Inputs, err = GetInputsFromRequest(req, scrubber)
-	if err != nil {
-		return nil, err
-	}
-
-	componentRequest.Parameters = req.GetParameters()
-	componentRequest.ConversationContext = req.GetContextID()
-	componentRequest.Temperature = req.GetTemperature()
-	// Add tools from request level to components-contrib request
-	if len(req.GetTools()) > 0 {
-		componentRequest.Tools = ConvertProtoToolsToComponentsContrib(req.GetTools())
-	}
-
-	return componentRequest, nil
-}
-
-// StreamingPipelineImpl handles the streaming conversation pipeline
-type StreamingPipelineImpl struct {
+// StreamingPipeline handles the streaming conversation pipeline
+type StreamingPipeline struct {
 	Middleware         []StreamingMiddleware
 	logger             logger.Logger
 	simulatedChunkSize int
@@ -64,8 +38,8 @@ type StreamingMiddleware interface {
 }
 
 // NewStreamingPipelineImpl creates a new streaming pipeline
-func NewStreamingPipelineImpl(logger logger.Logger) *StreamingPipelineImpl {
-	return &StreamingPipelineImpl{
+func NewStreamingPipelineImpl(logger logger.Logger) *StreamingPipeline {
+	return &StreamingPipeline{
 		Middleware:         make([]StreamingMiddleware, 0),
 		logger:             logger,
 		simulatedChunkSize: SimulatedStreamingChunkSize,
@@ -73,7 +47,7 @@ func NewStreamingPipelineImpl(logger logger.Logger) *StreamingPipelineImpl {
 }
 
 // AddMiddleware adds a Middleware to the pipeline
-func (p *StreamingPipelineImpl) AddMiddleware(middleware StreamingMiddleware) {
+func (p *StreamingPipeline) AddMiddleware(middleware StreamingMiddleware) {
 	if middleware == nil {
 		return
 	}
@@ -82,7 +56,7 @@ func (p *StreamingPipelineImpl) AddMiddleware(middleware StreamingMiddleware) {
 }
 
 // ProcessStream handles the streaming pipeline from LangChain Go to gRPC stream
-func (p *StreamingPipelineImpl) ProcessStream(
+func (p *StreamingPipeline) ProcessStream(
 	ctx context.Context,
 	stream runtimev1pb.Dapr_ConverseStreamAlpha1Server,
 	component contribConverse.Conversation,
@@ -106,7 +80,7 @@ func (p *StreamingPipelineImpl) ProcessStream(
 }
 
 // processRealStreaming handles true LangChain Go streaming
-func (p *StreamingPipelineImpl) processRealStreaming(
+func (p *StreamingPipeline) processRealStreaming(
 	ctx context.Context,
 	stream runtimev1pb.Dapr_ConverseStreamAlpha1Server,
 	streamer contribConverse.StreamingConversation,
@@ -196,11 +170,11 @@ func (p *StreamingPipelineImpl) processRealStreaming(
 	// Send completion with context and usage stats
 	usage := ConvertUsageToProto(finalResp)
 
-	return usage, p.sendComplete(stream, finalResp.ConversationContext, usage, outputs)
+	return usage, p.sendComplete(stream, finalResp.Context, usage, outputs)
 }
 
 // processSimulatedStreaming falls back to chunking the complete response
-func (p *StreamingPipelineImpl) processSimulatedStreaming(
+func (p *StreamingPipeline) processSimulatedStreaming(
 	ctx context.Context,
 	stream runtimev1pb.Dapr_ConverseStreamAlpha1Server,
 	component contribConverse.Conversation,
@@ -221,7 +195,7 @@ func (p *StreamingPipelineImpl) processSimulatedStreaming(
 	var contextID string
 
 	// Simulate streaming by sending the complete response as chunks
-	contextID = resp.ConversationContext
+	contextID = resp.Context
 	if len(resp.Outputs) > 0 {
 		for _, output := range resp.Outputs {
 			for _, part := range output.Parts {
@@ -249,7 +223,7 @@ func (p *StreamingPipelineImpl) processSimulatedStreaming(
 }
 
 // processChunkThroughMiddleware processes a chunk through all Middleware (eg PII scrubber)
-func (p *StreamingPipelineImpl) processChunkThroughMiddleware(chunk []byte) ([]byte, error) {
+func (p *StreamingPipeline) processChunkThroughMiddleware(chunk []byte) ([]byte, error) {
 	processed := chunk
 	for _, middleware := range p.Middleware {
 		var err error
@@ -263,7 +237,7 @@ func (p *StreamingPipelineImpl) processChunkThroughMiddleware(chunk []byte) ([]b
 }
 
 // flushMiddleware flushes all Middleware and returns any remaining content
-func (p *StreamingPipelineImpl) flushMiddleware() ([]byte, error) {
+func (p *StreamingPipeline) flushMiddleware() ([]byte, error) {
 	var result []byte
 	for _, middleware := range p.Middleware {
 		if remaining, err := middleware.Flush(); err != nil {
@@ -277,17 +251,17 @@ func (p *StreamingPipelineImpl) flushMiddleware() ([]byte, error) {
 }
 
 // sendChunk sends a content chunk via the gRPC stream
-func (p *StreamingPipelineImpl) sendChunk(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, content []byte) error {
+func (p *StreamingPipeline) sendChunk(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, content []byte) error {
 	chunk := &runtimev1pb.ConversationStreamChunk{}
 
 	// Add content as parts for rich content support
 	// TODO: properly handle tool calls in the content parts
 	// we are only sending the text content for now
 	if len(content) > 0 {
-		chunk.Parts = []*runtimev1pb.ContentPart{
+		chunk.Content = []*runtimev1pb.ConversationContent{
 			{
-				ContentType: &runtimev1pb.ContentPart_Text{
-					Text: &runtimev1pb.TextContent{
+				ContentType: &runtimev1pb.ConversationContent_Text{
+					Text: &runtimev1pb.ConversationText{
 						Text: string(content),
 					},
 				},
@@ -303,24 +277,19 @@ func (p *StreamingPipelineImpl) sendChunk(stream runtimev1pb.Dapr_ConverseStream
 }
 
 // sendToolCallChunk sends tool calls via the gRPC stream
-func (p *StreamingPipelineImpl) sendToolCallChunk(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, toolCalls []*runtimev1pb.ToolCall, finishReason string) error {
+func (p *StreamingPipeline) sendToolCallChunk(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, toolCalls []*runtimev1pb.ConversationToolCall, finishReason string) error {
 	chunk := &runtimev1pb.ConversationStreamChunk{}
 
 	// Add tool calls as parts for rich content support
-	parts := make([]*runtimev1pb.ContentPart, 0, len(toolCalls)) // Pre-allocate with exact capacity
+	parts := make([]*runtimev1pb.ConversationContent, 0, len(toolCalls)) // Pre-allocate with exact capacity
 	for _, toolCall := range toolCalls {
-		parts = append(parts, &runtimev1pb.ContentPart{
-			ContentType: &runtimev1pb.ContentPart_ToolCall{
-				ToolCall: &runtimev1pb.ToolCallContent{
-					Id:        toolCall.GetId(),
-					Type:      toolCall.GetType(),
-					Name:      toolCall.GetName(),
-					Arguments: toolCall.GetArguments(),
-				},
+		parts = append(parts, &runtimev1pb.ConversationContent{
+			ContentType: &runtimev1pb.ConversationContent_ToolCall{
+				ToolCall: toolCall,
 			},
 		})
 	}
-	chunk.Parts = parts
+	chunk.Content = parts
 
 	if finishReason != "" {
 		chunk.FinishReason = &finishReason
@@ -335,13 +304,13 @@ func (p *StreamingPipelineImpl) sendToolCallChunk(stream runtimev1pb.Dapr_Conver
 
 // sendComplete sends the completion message with usage stats and outputs
 // should be the last message sent to the client
-func (p *StreamingPipelineImpl) sendComplete(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, contextID string, usage *runtimev1pb.ConversationUsage, outputs []*runtimev1pb.ConversationResult) error {
-	complete := &runtimev1pb.ConversationStreamComplete{
+func (p *StreamingPipeline) sendComplete(stream runtimev1pb.Dapr_ConverseStreamAlpha1Server, contextID string, usage *runtimev1pb.ConversationUsage, outputs []*runtimev1pb.ConversationResult) error {
+	complete := &runtimev1pb.ConversationStreamEOF{
 		Usage:   usage,
-		Outputs: outputs,
+		Results: outputs,
 	}
 	if contextID != "" {
-		complete.ContextID = &contextID
+		complete.ContextId = &contextID
 	}
 
 	return stream.Send(&runtimev1pb.ConversationStreamResponse{

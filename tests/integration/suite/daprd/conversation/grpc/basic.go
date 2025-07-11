@@ -35,14 +35,6 @@ type basic struct {
 	daprd *daprd.Daprd
 }
 
-func getEchoEstimatedTokens(msg ...string) int {
-	echoEstimatedTokens := 0
-	for _, m := range msg {
-		echoEstimatedTokens += len(m) / 4 // Rough estimate of tokens, assuming 4 characters per token
-	}
-	return echoEstimatedTokens
-}
-
 func (b *basic) Setup(t *testing.T) []framework.Option {
 	b.daprd = daprd.New(t, daprd.WithResourceFiles(getEchoComponentConfig()))
 
@@ -69,13 +61,22 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content: "well hello there",
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "well hello there",
+								},
+							},
+						},
+					},
 				},
 			},
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1)
-		require.Contains(t, resp.GetOutputs()[0].GetResult(), "well hello there") //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		require.Len(t, resp.GetResults(), 1)
+		// TODO(@Sicoyle): later see what of this i need to remove of those deprecated fields...
+		require.Contains(t, resp.GetResults()[0].GetContent()[0].GetText().GetText(), "well hello there")
 	})
 
 	t.Run("good input with usage", func(t *testing.T) {
@@ -83,17 +84,25 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content: "well hello there",
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "well hello there",
+								},
+							},
+						},
+					},
 				},
 			},
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1)
-		require.Contains(t, resp.GetOutputs()[0].GetResult(), "well hello there") //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		require.Len(t, resp.GetResults(), 1)
+		require.Contains(t, resp.GetResults()[0].GetContent()[0].GetText().GetText(), "well hello there")
 
 		// usage validation
 		inputText := "well hello there"
-		outputText := resp.GetOutputs()[0].GetResult()                 //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		outputText := resp.GetResults()[0].GetContent()[0].GetText().GetText()
 		promptTokens := uint32(getEchoEstimatedTokens(inputText))      //nolint:gosec // Test code with safe conversion
 		completionTokens := uint32(getEchoEstimatedTokens(outputText)) //nolint:gosec // Test code with safe conversion
 		require.Equal(t, promptTokens+completionTokens, resp.GetUsage().GetTotalTokens())
@@ -106,22 +115,46 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content: "Hello",
-					Role:    ptr.Of("user"),
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "Hello",
+								},
+							},
+						},
+					},
+					Role: ptr.Of("user"),
 				},
 				{
-					Content: "Hi there! How can I help you?",
-					Role:    ptr.Of("assistant"),
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "Hi there! How can I help you?",
+								},
+							},
+						},
+					},
+					Role: ptr.Of("assistant"),
 				},
 				{
-					Content: "What's the weather like?",
-					Role:    ptr.Of("user"),
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "What's the weather like?",
+								},
+							},
+						},
+					},
+					Role: ptr.Of("user"),
 				},
 			},
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1)
-		require.Contains(t, resp.GetOutputs()[0].GetResult(), "What's the weather like?") //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		require.Len(t, resp.GetResults(), 1)
+		require.Contains(t, resp.GetResults()[0].GetContent()[0].GetText().GetText(), "What's the weather like?") //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("bad component name", func(t *testing.T) {
@@ -129,7 +162,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Name: "nonexistent-component",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content: "Hello",
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "Hello",
+								},
+							},
+						},
+					},
 				},
 			},
 		})
@@ -142,13 +183,21 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content: "well hello there",
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "well hello there",
+								},
+							},
+						},
+					},
 				},
 			},
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetResult())
+		require.Len(t, resp.GetResults(), 1)
+		require.Equal(t, "well hello there", resp.GetResults()[0].GetContent()[0].GetText().GetText())
 
 		// usage validation
 		estimatedTokensInt := getEchoEstimatedTokens("well hello there")

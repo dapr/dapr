@@ -104,8 +104,8 @@ spec:
 }
 
 // Helper function to extract tool calls from content parts for debugging
-func extractToolCallsFromParts(parts []*runtimev1pb.ContentPart) []*runtimev1pb.ToolCallContent {
-	var toolCalls []*runtimev1pb.ToolCallContent
+func extractToolCallsFromParts(parts []*runtimev1pb.ConversationContent) []*runtimev1pb.ConversationToolCall {
+	var toolCalls []*runtimev1pb.ConversationToolCall
 	for _, part := range parts {
 		if toolCall := part.GetToolCall(); toolCall != nil {
 			toolCalls = append(toolCalls, toolCall)

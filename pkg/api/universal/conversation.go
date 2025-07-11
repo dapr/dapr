@@ -29,13 +29,6 @@ import (
 )
 
 func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) {
-	// valid component
-	if a.compStore.ConversationsLen() == 0 {
-		err := messages.ErrConversationNotFound
-		a.logger.Debug(err)
-		return nil, err
-	}
-
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
 		err := messages.ErrConversationNotFound.WithFormat(req.GetName())
@@ -47,10 +40,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		return nil, messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 	}
 
-	// prepare inputScrubber in case PII scrubbing is enabled (either at request level or input level)
 	var inputScrubber, outputScrubber piiscrubber.Scrubber
-
-	// Check if PII scrubbing is needed for inputs or outputs
 	needsInputPIIScrubbing := conversation.NeedsInputScrubber(req)
 	needsOutputPIIScrubbing := conversation.NeedsOutputScrubber(req)
 
@@ -67,56 +57,46 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		}
 	}
 
-	// Prepare component conversation componentRequest (similar to non-streaming version)
-	componentRequest, err := conversation.GetComponentRequest(req, inputScrubber)
+	componentReq, err := conversation.CreateComponentRequest(req, inputScrubber)
 	if err != nil {
 		return nil, err
 	}
 
-	// do call
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*contribConverse.ConversationResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(req.GetName(), resiliency.Conversation),
 	)
 
 	resp, err := policyRunner(func(ctx context.Context) (*contribConverse.ConversationResponse, error) {
-		// Call component with regular interface
-		// Components that support tool calling should handle tools from input.Tools
-		rResp, rErr := component.Converse(ctx, componentRequest)
+		rResp, rErr := component.Converse(ctx, componentReq)
 		return rResp, rErr
 	})
-	elapsed := diag.ElapsedSince(start)
-	usage := conversation.ConvertUsageToProto(resp)
 
-	// Safe usage extraction for monitoring
-	var promptTokens, completionTokens int64
-	if usage != nil {
-		promptTokens = int64(usage.GetPromptTokens())         //nolint:gosec // Intentional use of int64 for backward compatibility
-		completionTokens = int64(usage.GetCompletionTokens()) //nolint:gosec // Intentional use of int64 for backward compatibility
+	response := &runtimev1pb.ConversationResponse{}
+	if resp != nil {
+		// usage
+		usage := conversation.ConvertUsageToProto(resp)
+		diag.DefaultComponentMonitoring.ConversationInvoked(ctx, req.GetName(), err == nil,
+			diag.ElapsedSince(start), diag.NonStreamingConversation, int64(usage.GetPromptTokens()), int64(usage.GetCompletionTokens()))
+		response.Usage = usage
+
+		// TODO(@Sicoyle): determine if contextID is optional or required
+		if resp.Context != "" {
+			response.ContextID = &resp.Context
+		}
+
+		response.Results, err = conversation.ConvertComponentsContribOutputToProto(resp.Outputs, outputScrubber, req.GetName())
+		if err != nil {
+			return nil, err
+		}
 	}
-	diag.DefaultComponentMonitoring.ConversationInvoked(ctx, req.GetName(), err == nil, elapsed, diag.NonStreamingConversation, promptTokens, completionTokens)
-
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
 		return nil, err
 	}
 
-	// handle response
-	response := &runtimev1pb.ConversationResponse{}
-	a.logger.Debug(response)
-	if resp != nil {
-		if resp.ConversationContext != "" {
-			response.ContextID = &resp.ConversationContext
-		}
-
-		response.Outputs, err = conversation.ConvertComponentsContribOutputToProto(resp.Outputs, outputScrubber, req.GetName())
-		if err != nil {
-			return nil, err
-		}
-		response.Usage = usage
-	}
-
+	a.logger.Infof("ConversationAlpha1 response: %v", response) // TODO(@Sicoyle): delete this line
 	return response, nil
 }
 
@@ -130,21 +110,15 @@ func (a *Universal) ConverseStreamAlpha1(req *runtimev1pb.ConversationRequest, s
 	}
 
 	if len(req.GetInputs()) == 0 {
-		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
-		a.logger.Debug(err)
-		return err
+		return messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 	}
 
-	// Create streaming pipeline
-	pipelineImpl := conversation.NewStreamingPipelineImpl(a.logger)
+	// TODO(@Sicoyle): maybe create a diff streaming pkg - tbd maybe conversationstreaming pkg instead tbh
+	pipeline := conversation.NewStreamingPipelineImpl(a.logger)
 
-	// prepare non-streaming scrubber in case PII scrubbing is enabled
 	var inputScrubber, outputScrubber piiscrubber.Scrubber
-
-	// Check if PII scrubbing is needed for inputs or outputs
 	needsInputPIIScrubbing := conversation.NeedsInputScrubber(req)
 	needsOutputPIIScrubbing := conversation.NeedsOutputScrubber(req)
-
 	if needsInputPIIScrubbing || needsOutputPIIScrubbing {
 		scrubber, err := piiscrubber.NewDefaultScrubber()
 		if err != nil {
@@ -155,37 +129,50 @@ func (a *Universal) ConverseStreamAlpha1(req *runtimev1pb.ConversationRequest, s
 		}
 		if needsOutputPIIScrubbing {
 			outputScrubber = scrubber
+			// TODO(@Sicoyle): come back to this and the window size stuff
 			scrubberMiddleware, err := conversation.NewStreamingPIIScrubber()
 			if err != nil {
 				return fmt.Errorf("failed to create streaming PII scrubber middleware: %w", err)
 			}
-			pipelineImpl.AddMiddleware(scrubberMiddleware)
+
+			pipeline.AddMiddleware(scrubberMiddleware)
 		}
 	}
 
-	// Prepare component conversation componentRequest (similar to non-streaming version)
-	componentRequest, err := conversation.GetComponentRequest(req, inputScrubber)
+	componentRequest, err := conversation.CreateComponentRequest(req, inputScrubber)
 	if err != nil {
 		return err
 	}
 
-	// Process streaming request
+	return a.processConversationStream(stream, component, componentRequest, req.GetName(), outputScrubber, pipeline)
+}
+
+func (a *Universal) processConversationStream(
+	stream runtimev1pb.Dapr_ConverseStreamAlpha1Server,
+	component contribConverse.Conversation,
+	componentRequest *contribConverse.ConversationRequest,
+	componentName string,
+	outputScrubber piiscrubber.Scrubber,
+	pipeline *conversation.StreamingPipeline,
+) error {
 	ctx := stream.Context()
 	start := time.Now()
-	var usage *runtimev1pb.ConversationUsage
-	var retErr error // used in defer to track error
-	defer func() {
-		elapsed := diag.ElapsedSince(start)
-		var promptTokens, completionTokens int64
-		if usage != nil {
-			promptTokens = int64(usage.GetPromptTokens())         //nolint:gosec // Intentional use of int64 for backward compatibility
-			completionTokens = int64(usage.GetCompletionTokens()) //nolint:gosec // Intentional use of int64 for backward compatibility
-		}
-		diag.DefaultComponentMonitoring.ConversationInvoked(ctx, req.GetName(), retErr == nil, elapsed, diag.StreamingConversation, promptTokens, completionTokens)
-	}()
 
-	// we use non-streaming scrubber on the non-streamingoutput
-	// we get usage to use in monitoring
-	usage, retErr = pipelineImpl.ProcessStream(ctx, stream, component, componentRequest, req.GetName(), outputScrubber)
-	return retErr
+	// TODO(@Sicoyle): mv scrubbers to be fields on pipeline instead
+	usage, err := pipeline.ProcessStream(ctx, stream, component, componentRequest, componentName, outputScrubber)
+
+	// TODO(@Sicoyle): mv this to the pipeline instead of here?
+	elapsed := diag.ElapsedSince(start)
+	var promptTokens, completionTokens int64
+	if usage != nil {
+		promptTokens = int64(usage.GetPromptTokens())
+		completionTokens = int64(usage.GetCompletionTokens())
+	}
+	diag.DefaultComponentMonitoring.ConversationInvoked(ctx, componentName, err == nil, elapsed, diag.StreamingConversation, promptTokens, completionTokens)
+
+	if err != nil {
+		// TODO(@Sicoyle): do I need to add a streaming conversation metric increment here?
+		a.logger.Debug(err)
+	}
+	return err
 }

@@ -53,14 +53,22 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content:  "well hello there, my phone number is +2222222222",
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "well hello there, my phone number is +2222222222",
+								},
+							},
+						},
+					},
 					ScrubPII: &scrubInput,
 				},
 			},
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		require.Len(t, resp.GetResults(), 1)
+		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetResults()[0].GetContent()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("scrub input great phone number", func(t *testing.T) {
@@ -69,14 +77,22 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content:  "well hello there, my phone number is +4422222222",
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "well hello there, my phone number is +4422222222",
+								},
+							},
+						},
+					},
 					ScrubPII: &scrubInput,
 				},
 			},
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		require.Len(t, resp.GetResults(), 1)
+		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetResults()[0].GetContent()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("scrub input email", func(t *testing.T) {
@@ -86,14 +102,22 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content:  "well hello there, my email is test@test.com",
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "well hello there, my email is test@test.com",
+								},
+							},
+						},
+					},
 					ScrubPII: &scrubInput,
 				},
 			},
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		require.Len(t, resp.GetResults(), 1)
+		require.Equal(t, "well hello there, my email is <EMAIL_ADDRESS>", resp.GetResults()[0].GetContent()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("scrub input ip address", func(t *testing.T) {
@@ -103,14 +127,22 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content:  "well hello there from 10.8.9.1",
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "well hello there from 10.8.9.1",
+								},
+							},
+						},
+					},
 					ScrubPII: &scrubInput,
 				},
 			},
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there from <IP>", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		require.Len(t, resp.GetResults(), 1)
+		require.Equal(t, "well hello there from <IP>", resp.GetResults()[0].GetContent()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
@@ -122,16 +154,24 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content: combinedInput,
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: combinedInput,
+								},
+							},
+						},
+					},
 				},
 			},
 			ScrubPII: &scrubOutput,
 		})
 
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1) // Echo returns single output
+		require.Len(t, resp.GetResults(), 1) // Echo returns single output
 		// Echo component returns the input with PII scrubbed (predictable behavior)
-		require.Equal(t, "well hello there from <IP> well hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		require.Equal(t, "well hello there from <IP> well hello there, my email is <EMAIL_ADDRESS>", resp.GetResults()[0].GetContent()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {
@@ -141,14 +181,22 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Content:  "well hello there",
+					Content: []*rtv1.ConversationContent{
+						{
+							ContentType: &rtv1.ConversationContent_Text{
+								Text: &rtv1.ConversationText{
+									Text: "well hello there",
+								},
+							},
+						},
+					},
 					ScrubPII: &scrubOutput,
 				},
 			},
 			ScrubPII: &scrubOutput,
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		require.Len(t, resp.GetResults(), 1)
+		require.Equal(t, "well hello there", resp.GetResults()[0].GetContent()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	})
 }

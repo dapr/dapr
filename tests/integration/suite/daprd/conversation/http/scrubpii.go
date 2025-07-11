@@ -79,8 +79,8 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		// Parse the JSON response and check that it contains the scrubbed content
 		var conversationResp ConversationResponse
 		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
-		require.Len(t, conversationResp.Outputs, 1)
-		require.Contains(t, conversationResp.Outputs[0].Result, "well hello there, my phone number is <PHONE_NUMBER>")
+		require.Len(t, conversationResp.Output, 1)
+		require.Contains(t, conversationResp.Output[0].Result, "well hello there, my phone number is <PHONE_NUMBER>")
 	})
 
 	t.Run("scrub input email", func(t *testing.T) {
@@ -98,8 +98,8 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		// Parse the JSON response and check that it contains the scrubbed content
 		var conversationResp ConversationResponse
 		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
-		require.Len(t, conversationResp.Outputs, 1)
-		require.Contains(t, conversationResp.Outputs[0].Result, "well hello there, my email is <EMAIL_ADDRESS>")
+		require.Len(t, conversationResp.Output, 1)
+		require.Contains(t, conversationResp.Output[0].Result, "well hello there, my email is <EMAIL_ADDRESS>")
 	})
 
 	t.Run("scrub input ip address", func(t *testing.T) {
@@ -117,8 +117,8 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		// Parse the JSON response and check that it contains the scrubbed content
 		var conversationResp ConversationResponse
 		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
-		require.Len(t, conversationResp.Outputs, 1)
-		require.Contains(t, conversationResp.Outputs[0].Result, "well hello there from <IP>")
+		require.Len(t, conversationResp.Output, 1)
+		require.Contains(t, conversationResp.Output[0].Result, "well hello there from <IP>")
 	})
 
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
@@ -138,10 +138,10 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		// Parse the JSON response and check that it contains the scrubbed content
 		var conversationResp ConversationResponse
 		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
-		require.Len(t, conversationResp.Outputs, 1)
+		require.Len(t, conversationResp.Output, 1)
 		// Check that both IP and email are scrubbed in the result
-		require.Contains(t, conversationResp.Outputs[0].Result, "<IP>")
-		require.Contains(t, conversationResp.Outputs[0].Result, "<EMAIL_ADDRESS>")
+		require.Contains(t, conversationResp.Output[0].Result, "<IP>")
+		require.Contains(t, conversationResp.Output[0].Result, "<EMAIL_ADDRESS>")
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {
@@ -159,7 +159,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		// Parse the JSON response and check that it contains the expected content
 		var conversationResp ConversationResponse
 		require.NoError(t, json.Unmarshal(respBody, &conversationResp))
-		require.Len(t, conversationResp.Outputs, 1)
-		require.Contains(t, conversationResp.Outputs[0].Result, "well hello there")
+		require.Len(t, conversationResp.Output, 1)
+		require.Contains(t, conversationResp.Output[0].Result, "well hello there")
 	})
 }

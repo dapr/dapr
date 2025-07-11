@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -60,21 +61,21 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 		// Test echo behavior with tool definitions
 		req := &runtimev1pb.ConversationRequest{
 			Name: "echo",
-			Tools: []*runtimev1pb.Tool{
+			Tools: []*runtimev1pb.ConversationTool{
 				{
-					Type:        "function",
-					Name:        "get_weather",
-					Description: "Get current weather for a location",
-					Parameters:  `{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`,
+					Type:        wrapperspb.String("function"),
+					Name:        wrapperspb.String("get_weather"),
+					Description: wrapperspb.String("Get current weather for a location"),
+					Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`),
 				},
 			},
 			Inputs: []*runtimev1pb.ConversationInput{
 				{
 					Role: ptr.Of("user"),
-					Parts: []*runtimev1pb.ContentPart{
+					Content: []*runtimev1pb.ConversationContent{
 						{
-							ContentType: &runtimev1pb.ContentPart_Text{
-								Text: &runtimev1pb.TextContent{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
 									Text: "What's the weather like in San Francisco?",
 								},
 							},
@@ -87,18 +88,18 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.ConverseAlpha1(ctx, req)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Len(t, resp.GetOutputs(), 1)
+		require.Len(t, resp.GetResults(), 1)
 
-		output := resp.GetOutputs()[0]
-		t.Logf("Echo Response - Result: %s", output.GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		output := resp.GetResults()[0]
+		t.Logf("Echo Response - Result: %s", extractTextFromParts(output.GetContent()))
 
 		// Extract tool calls from parts
-		toolCalls := extractToolCallsFromParts(output.GetParts())
+		toolCalls := extractToolCallsFromParts(output.GetContent())
 		t.Logf("Echo Response - ToolCalls from Parts: %v", toolCalls)
 		t.Logf("Echo Response - FinishReason: %s", output.GetFinishReason())
 
 		// Echo should just echo the input text, not generate tool calls
-		assert.Contains(t, output.GetResult(), "weather") //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		assert.Contains(t, extractTextFromParts(output.GetContent()), "weather")
 		// Echo doesn't generate tool calls - it just echoes the input
 		assert.Empty(t, toolCalls, "Echo should not generate tool calls")
 		assert.Equal(t, "stop", output.GetFinishReason())
@@ -110,8 +111,16 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*runtimev1pb.ConversationInput{
 				{
-					Content: "Hello world",
-					Role:    ptr.Of("user"),
+					Content: []*runtimev1pb.ConversationContent{
+						{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
+									Text: "Hello world",
+								},
+							},
+						},
+					},
+					Role: ptr.Of("user"),
 				},
 			},
 		}
@@ -119,16 +128,16 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.ConverseAlpha1(ctx, req)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Len(t, resp.GetOutputs(), 1)
+		require.Len(t, resp.GetResults(), 1)
 
-		output := resp.GetOutputs()[0]
-		t.Logf("Echo Normal Response - Result: %s", output.GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		output := resp.GetResults()[0]
+		t.Logf("Echo Normal Response - Result: %s", extractTextFromParts(output.GetContent()))
 
 		// Extract tool calls from parts
-		toolCalls := extractToolCallsFromParts(output.GetParts())
+		toolCalls := extractToolCallsFromParts(output.GetContent())
 		t.Logf("Echo Normal Response - ToolCalls from Parts: %v", toolCalls)
 
-		assert.Equal(t, "Hello world", output.GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		assert.Equal(t, "Hello world", extractTextFromParts(output.GetContent()))
 		assert.Empty(t, toolCalls)
 	})
 
@@ -144,21 +153,21 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 
 			req := &runtimev1pb.ConversationRequest{
 				Name: provider.componentName,
-				Tools: []*runtimev1pb.Tool{
+				Tools: []*runtimev1pb.ConversationTool{
 					{
-						Type:        "function",
-						Name:        "get_weather",
-						Description: "Get current weather for a location",
-						Parameters:  `{"type":"object","properties":{"location":{"type":"string","description":"City and state"}},"required":["location"]}`,
+						Type:        wrapperspb.String("function"),
+						Name:        wrapperspb.String("get_weather"),
+						Description: wrapperspb.String("Get current weather for a location"),
+						Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string","description":"City and state"}},"required":["location"]}`),
 					},
 				},
 				Inputs: []*runtimev1pb.ConversationInput{
 					{
 						Role: ptr.Of("user"),
-						Parts: []*runtimev1pb.ContentPart{
+						Content: []*runtimev1pb.ConversationContent{
 							{
-								ContentType: &runtimev1pb.ContentPart_Text{
-									Text: &runtimev1pb.TextContent{
+								ContentType: &runtimev1pb.ConversationContent_Text{
+									Text: &runtimev1pb.ConversationText{
 										Text: "What's the weather like in San Francisco? Please use the get_weather function.",
 									},
 								},
@@ -171,14 +180,14 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.ConverseAlpha1(ctx, req)
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.NotEmpty(t, resp.GetOutputs(), "Should have at least one output")
+			require.NotEmpty(t, resp.GetResults(), "Should have at least one output")
 
 			// Log all outputs for debugging
-			for i, output := range resp.GetOutputs() {
-				t.Logf("%s Output[%d] - Result: %s", provider.componentName, i, output.GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+			for i, output := range resp.GetResults() {
+				t.Logf("%s Output[%d] - Result: %s", provider.componentName, i, extractTextFromParts(output.GetContent()))
 
 				// Extract tool calls from parts
-				toolCalls := extractToolCallsFromParts(output.GetParts())
+				toolCalls := extractToolCallsFromParts(output.GetContent())
 				t.Logf("%s Output[%d] - ToolCalls from Parts: %v", provider.componentName, i, toolCalls)
 				t.Logf("%s Output[%d] - FinishReason: %s", provider.componentName, i, output.GetFinishReason())
 			}
@@ -188,9 +197,9 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 			case "anthropic":
 				// Anthropic may return multiple outputs: explanation + tool calls
 				var toolCallOutput *runtimev1pb.ConversationResult
-				var toolCalls []*runtimev1pb.ToolCallContent
-				for _, output := range resp.GetOutputs() {
-					outputToolCalls := extractToolCallsFromParts(output.GetParts())
+				var toolCalls []*runtimev1pb.ConversationToolCall
+				for _, output := range resp.GetResults() {
+					outputToolCalls := extractToolCallsFromParts(output.GetContent())
 					if len(outputToolCalls) > 0 {
 						toolCallOutput = output
 						toolCalls = outputToolCalls
@@ -202,8 +211,8 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 					t.Logf("✅ Tool calling working with %s!", provider.componentName)
 					assert.Equal(t, "tool_calls", toolCallOutput.GetFinishReason())
 					toolCall := toolCalls[0]
-					assert.Equal(t, "get_weather", toolCall.GetName())
-					assert.NotEmpty(t, toolCall.GetId())
+					assert.Equal(t, "get_weather", toolCall.GetName().GetValue())
+					assert.NotEmpty(t, toolCall.GetId().GetValue())
 					// Note: Anthropic may not populate Type field consistently via LangChain Go
 				} else {
 					t.Logf("ℹ️ %s chose not to call tools for this request (acceptable)", provider.componentName)
@@ -211,15 +220,15 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 
 			case "googleai":
 				// GoogleAI through LangChain Go doesn't populate Type and ID fields consistently
-				require.Len(t, resp.GetOutputs(), 1)
-				output := resp.GetOutputs()[0]
-				toolCalls := extractToolCallsFromParts(output.GetParts())
+				require.Len(t, resp.GetResults(), 1)
+				output := resp.GetResults()[0]
+				toolCalls := extractToolCallsFromParts(output.GetContent())
 
 				if len(toolCalls) > 0 {
 					t.Logf("✅ Tool calling working with %s!", provider.componentName)
 					assert.Equal(t, "tool_calls", output.GetFinishReason())
 					toolCall := toolCalls[0]
-					assert.Equal(t, "get_weather", toolCall.GetName())
+					assert.Equal(t, "get_weather", toolCall.GetName().GetValue())
 					// Skip Type and ID assertions for GoogleAI due to LangChain Go implementation differences
 				} else {
 					t.Logf("ℹ️ %s chose not to call tools for this request", provider.componentName)
@@ -227,16 +236,16 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 
 			default:
 				// Standard validation for other providers (OpenAI, etc.)
-				require.Len(t, resp.GetOutputs(), 1)
-				output := resp.GetOutputs()[0]
-				toolCalls := extractToolCallsFromParts(output.GetParts())
+				require.Len(t, resp.GetResults(), 1)
+				output := resp.GetResults()[0]
+				toolCalls := extractToolCallsFromParts(output.GetContent())
 
 				if len(toolCalls) > 0 {
 					t.Logf("✅ Tool calling working with %s!", provider.componentName)
 					toolCall := toolCalls[0]
-					assert.Equal(t, "function", toolCall.GetType())
-					assert.Equal(t, "get_weather", toolCall.GetName())
-					assert.NotEmpty(t, toolCall.GetId())
+					assert.Equal(t, "function", toolCall.GetType().GetValue())
+					assert.Equal(t, "get_weather", toolCall.GetName().GetValue())
+					assert.NotEmpty(t, toolCall.GetId().GetValue())
 					assert.Equal(t, "tool_calls", output.GetFinishReason())
 				} else {
 					t.Logf("ℹ️ %s didn't return tool calls - this might be expected depending on the model behavior", provider.componentName)
@@ -264,10 +273,10 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 				Inputs: []*runtimev1pb.ConversationInput{
 					{
 						Role: ptr.Of("user"),
-						Parts: []*runtimev1pb.ContentPart{
+						Content: []*runtimev1pb.ConversationContent{
 							{
-								ContentType: &runtimev1pb.ContentPart_Text{
-									Text: &runtimev1pb.TextContent{
+								ContentType: &runtimev1pb.ConversationContent_Text{
+									Text: &runtimev1pb.ConversationText{
 										Text: "Please call get_weather for New York City.",
 									},
 								},
@@ -275,12 +284,12 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 						},
 					},
 				},
-				Tools: []*runtimev1pb.Tool{
+				Tools: []*runtimev1pb.ConversationTool{
 					{
-						Type:        "function",
-						Name:        "get_weather",
-						Description: "Get current weather for a location",
-						Parameters:  `{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`,
+						Type:        wrapperspb.String("function"),
+						Name:        wrapperspb.String("get_weather"),
+						Description: wrapperspb.String("Get current weather for a location"),
+						Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`),
 					},
 				},
 			}
@@ -297,7 +306,7 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 			}
 
 			var chunks []string
-			var toolCalls []*runtimev1pb.ToolCall
+			var toolCalls []*runtimev1pb.ConversationToolCall
 			var finishReason string
 
 			for {
@@ -315,13 +324,13 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 				}
 
 				if complete := resp.GetComplete(); complete != nil {
-					t.Logf("Streaming complete - Usage: %s, Outputs: %v", complete.GetUsage(), complete.GetOutputs())
-					for _, output := range complete.GetOutputs() {
-						t.Logf("Output - Result: %s", output.GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibilitynolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+					t.Logf("Streaming complete - Usage: %s, Outputs: %v", complete.GetUsage(), complete.GetResults())
+					for _, output := range complete.GetResults() {
+						t.Logf("Output - Result: %s", extractTextFromParts(output.GetContent()))
 						t.Logf("Output - FinishReason: %s", output.GetFinishReason())
-						toolCalls := extractToolCallsFromParts(output.GetParts())
+						toolCalls := extractToolCallsFromParts(output.GetContent())
 						if len(toolCalls) > 0 {
-							t.Logf("ToolCalls - ID: %s, Type: %s, Name: %s, Arguments: %s", toolCalls[0].GetId(), toolCalls[0].GetType(), toolCalls[0].GetName(), toolCalls[0].GetArguments())
+							t.Logf("ToolCalls - ID: %s, Type: %s, Name: %s, Arguments: %s", toolCalls[0].GetId().GetValue(), toolCalls[0].GetType().GetValue(), toolCalls[0].GetName().GetValue(), toolCalls[0].GetArguments())
 						}
 					}
 					break
@@ -329,8 +338,8 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 
 				if chunk := resp.GetChunk(); chunk != nil {
 					// Extract text from parts instead of deprecated content field
-					if len(chunk.GetParts()) > 0 {
-						if textContent := chunk.GetParts()[0].GetText(); textContent != nil {
+					if len(chunk.GetContent()) > 0 {
+						if textContent := chunk.GetContent()[0].GetText(); textContent != nil {
 							text := textContent.GetText()
 							if text != "" {
 								chunks = append(chunks, text)
@@ -340,11 +349,11 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 					}
 
 					// Extract tool calls from chunk parts
-					chunkToolCalls := extractToolCallsFromParts(chunk.GetParts())
+					chunkToolCalls := extractToolCallsFromParts(chunk.GetContent())
 					if len(chunkToolCalls) > 0 {
 						// Convert ToolCallContent to ToolCall for backward compatibility
 						for _, tc := range chunkToolCalls {
-							toolCall := &runtimev1pb.ToolCall{
+							toolCall := &runtimev1pb.ConversationToolCall{
 								Id:        tc.GetId(),
 								Type:      tc.GetType(),
 								Name:      tc.GetName(),
@@ -370,16 +379,16 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 				t.Logf("✅ Streaming tool calling working with %s!", provider.componentName)
 
 				toolCall := toolCalls[0]
-				assert.Equal(t, "get_weather", toolCall.GetName())
-				assert.Contains(t, strings.ToLower(toolCall.GetArguments()), "new york")
+				assert.Equal(t, "get_weather", toolCall.GetName().GetValue())
+				assert.Contains(t, strings.ToLower(toolCall.GetArguments().GetValue()), "new york")
 
 				// Provider-specific Type and ID field validation
 				switch provider.componentName {
 				case "googleai":
 					// Skip Type and ID assertions for GoogleAI due to LangChain Go implementation differences
 				default:
-					assert.Equal(t, "function", toolCall.GetType())
-					assert.NotEmpty(t, toolCall.GetId())
+					assert.Equal(t, "function", toolCall.GetType().GetValue())
+					assert.NotEmpty(t, toolCall.GetId().GetValue())
 				}
 			} else {
 				t.Logf("ℹ️ %s didn't return tool calls in streaming mode - this might be expected", provider.componentName)
@@ -400,10 +409,10 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 				Inputs: []*runtimev1pb.ConversationInput{
 					{
 						Role: ptr.Of("user"),
-						Parts: []*runtimev1pb.ContentPart{
+						Content: []*runtimev1pb.ConversationContent{
 							{
-								ContentType: &runtimev1pb.ContentPart_Text{
-									Text: &runtimev1pb.TextContent{
+								ContentType: &runtimev1pb.ConversationContent_Text{
+									Text: &runtimev1pb.ConversationText{
 										Text: "What's the weather like in San Francisco? Please use the get_weather function.",
 									},
 								},
@@ -411,12 +420,12 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 						},
 					},
 				},
-				Tools: []*runtimev1pb.Tool{
+				Tools: []*runtimev1pb.ConversationTool{
 					{
-						Type:        "function",
-						Name:        "get_weather",
-						Description: "Get current weather for a location",
-						Parameters:  `{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`,
+						Type:        wrapperspb.String("function"),
+						Name:        wrapperspb.String("get_weather"),
+						Description: wrapperspb.String("Get current weather for a location"),
+						Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`),
 					},
 				},
 			}
@@ -424,21 +433,21 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 			resp1, err := client.ConverseAlpha1(ctx, req1)
 			require.NoError(t, err)
 			require.NotNil(t, resp1)
-			require.NotEmpty(t, resp1.GetOutputs())
+			require.NotEmpty(t, resp1.GetResults())
 
 			// Extract tool calls and full response parts
-			var toolCalls []*runtimev1pb.ToolCallContent
+			var toolCalls []*runtimev1pb.ConversationToolCall
 			var assistantText string
-			var assistantResponseParts []*runtimev1pb.ContentPart
-			for _, output := range resp1.GetOutputs() {
-				outputToolCalls := extractToolCallsFromParts(output.GetParts())
+			var assistantResponseParts []*runtimev1pb.ConversationContent
+			for _, output := range resp1.GetResults() {
+				outputToolCalls := extractToolCallsFromParts(output.GetContent())
 				if len(outputToolCalls) > 0 {
 					toolCalls = outputToolCalls
 					// CRITICAL: Store the complete parts from assistant response
 					// This includes both text and tool calls - essential for Anthropic multi-turn
-					assistantResponseParts = output.GetParts()
+					assistantResponseParts = output.GetContent()
 				}
-				if result := output.GetResult(); result != "" { //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+				if result := extractTextFromParts(output.GetContent()); result != "" {
 					assistantText = result
 				}
 			}
@@ -449,11 +458,11 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 
 			require.NotEmpty(t, toolCalls, "Should receive tool calls for weather query")
 			toolCall := toolCalls[0]
-			require.Equal(t, "get_weather", toolCall.GetName())
-			toolCallID := toolCall.GetId()
+			require.Equal(t, "get_weather", toolCall.GetName().GetValue())
+			toolCallID := toolCall.GetId().GetValue()
 			require.NotEmpty(t, toolCallID, "Tool call should have an ID")
 
-			t.Logf("✅ Step 1 Success: Got tool call %s with ID %s", toolCall.GetName(), toolCallID)
+			t.Logf("✅ Step 1 Success: Got tool call %s with ID %s", toolCall.GetName().GetValue(), toolCallID)
 
 			// Step 2: Simulate tool execution and send results back
 			t.Logf("🔄 Step 2: Sending tool execution results")
@@ -463,10 +472,10 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 					// Previous user message
 					{
 						Role: ptr.Of("user"),
-						Parts: []*runtimev1pb.ContentPart{
+						Content: []*runtimev1pb.ConversationContent{
 							{
-								ContentType: &runtimev1pb.ContentPart_Text{
-									Text: &runtimev1pb.TextContent{
+								ContentType: &runtimev1pb.ConversationContent_Text{
+									Text: &runtimev1pb.ConversationText{
 										Text: "What's the weather like in San Francisco? Please use the get_weather function.",
 									},
 								},
@@ -477,20 +486,18 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 					// CRITICAL: Use the exact parts returned by the assistant - this ensures
 					// providers like Anthropic can find corresponding tool_use blocks
 					{
-						Role:  ptr.Of("assistant"),
-						Parts: assistantResponseParts, // Use the complete original response parts
+						Role:    ptr.Of("assistant"),
+						Content: assistantResponseParts, // Use the complete original response parts
 					},
 					// Tool execution result
 					{
 						Role: ptr.Of("tool"),
-						Parts: []*runtimev1pb.ContentPart{
+						ToolResults: []*runtimev1pb.ConversationToolResult{
 							{
-								ContentType: &runtimev1pb.ContentPart_ToolResult{
-									ToolResult: &runtimev1pb.ToolResultContent{
-										ToolCallId: toolCallID,
-										Name:       "get_weather",
-										Content:    `{"location": "San Francisco", "temperature": "72°F", "condition": "Sunny", "humidity": "65%"}`,
-									},
+								Id:   toolCallID,
+								Name: "get_weather",
+								Result: &runtimev1pb.ConversationToolResult_OutputText{
+									OutputText: `{"location": "San Francisco", "temperature": "72°F", "condition": "Sunny", "humidity": "65%"}`,
 								},
 							},
 						},
@@ -501,12 +508,12 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 			resp2, err := client.ConverseAlpha1(ctx, req2)
 			require.NoError(t, err)
 			require.NotNil(t, resp2)
-			require.NotEmpty(t, resp2.GetOutputs())
+			require.NotEmpty(t, resp2.GetResults())
 
 			// Step 3: Validate final assistant response
 			t.Logf("🔄 Step 3: Validating final assistant response")
-			finalOutput := resp2.GetOutputs()[0]
-			finalResponse := finalOutput.GetResult() //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+			finalOutput := resp2.GetResults()[0]
+			finalResponse := extractTextFromParts(finalOutput.GetContent())
 			t.Logf("🔍 Final Response: %s", finalResponse)
 			t.Logf("🔍 Final FinishReason: %s", finalOutput.GetFinishReason())
 
@@ -527,7 +534,7 @@ func (tc *toolCalling) Run(t *testing.T, ctx context.Context) {
 			}
 
 			// Verify no more tool calls in final response (should be a regular text response)
-			finalToolCalls := extractToolCallsFromParts(finalOutput.GetParts())
+			finalToolCalls := extractToolCallsFromParts(finalOutput.GetContent())
 			assert.Empty(t, finalToolCalls, "Final response should not contain tool calls")
 
 			// Check finish reason is appropriate

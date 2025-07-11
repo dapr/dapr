@@ -14,160 +14,21 @@ limitations under the License.
 package universal
 
 import (
-	"context"
 	"errors"
 	"testing"
 
 	"github.com/dapr/dapr/pkg/conversation"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/metadata"
 
-	contribConverse "github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/kit/ptr"
 )
-
-const (
-	fakeConversationComponentName = "fakeConversationComponent"
-	fakeStreamingComponentName    = "fakeStreamingComponent"
-	fakeToolCallingComponentName  = "fakeToolCallingComponent"
-)
-
-// Mock conversation component for testing
-type mockConversationComponent struct {
-	shouldError bool
-	response    *contribConverse.ConversationResponse
-}
-
-func (m *mockConversationComponent) Init(ctx context.Context, meta contribConverse.Metadata) error {
-	return nil
-}
-
-func (m *mockConversationComponent) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
-func (m *mockConversationComponent) Converse(ctx context.Context, req *contribConverse.ConversationRequest) (*contribConverse.ConversationResponse, error) {
-	if m.shouldError {
-		return nil, errors.New("mock conversation error")
-	}
-	return m.response, nil
-}
-
-func (m *mockConversationComponent) Close() error {
-	return nil
-}
-
-// Mock tool calling conversation component that simulates OpenAI-style tool calling
-
-// Mock streaming-capable conversation component
-type mockStreamingConversationComponent struct {
-	*mockConversationComponent
-	streamChunks []string
-	shouldError  bool
-}
-
-func (m *mockStreamingConversationComponent) ConverseStream(ctx context.Context, req *contribConverse.ConversationRequest, streamFunc func(ctx context.Context, chunk []byte) error) (*contribConverse.ConversationResponse, error) {
-	if m.shouldError {
-		return nil, errors.New("mock streaming error")
-	}
-
-	// Simulate streaming by calling streamFunc for each chunk
-	for _, chunk := range m.streamChunks {
-		if err := streamFunc(ctx, []byte(chunk)); err != nil {
-			return nil, err
-		}
-	}
-
-	return m.response, nil
-}
-
-// Mock stream server for testing that implements grpc.ServerStream
-type mockStreamServer struct {
-	ctx      context.Context
-	messages []*runtimev1pb.ConversationStreamResponse
-	sendErr  error
-}
-
-func (m *mockStreamServer) Context() context.Context {
-	return m.ctx
-}
-
-func (m *mockStreamServer) Send(resp *runtimev1pb.ConversationStreamResponse) error {
-	if m.sendErr != nil {
-		return m.sendErr
-	}
-	m.messages = append(m.messages, resp)
-	return nil
-}
-
-// Required grpc.ServerStream methods
-func (m *mockStreamServer) SetHeader(metadata.MD) error  { return nil }
-func (m *mockStreamServer) SendHeader(metadata.MD) error { return nil }
-func (m *mockStreamServer) SetTrailer(metadata.MD)       {}
-func (m *mockStreamServer) SendMsg(interface{}) error    { return nil }
-func (m *mockStreamServer) RecvMsg(interface{}) error    { return nil }
-
-func newMockAPI() *Universal {
-	compStore := compstore.New()
-
-	// Add non-streaming component
-	compStore.AddConversation(fakeConversationComponentName, &mockConversationComponent{
-		response: &contribConverse.ConversationResponse{
-			Outputs: []contribConverse.ConversationOutput{
-				{
-					Parts: []contribConverse.ContentPart{
-						contribConverse.TextContentPart{Text: "Hello, this is a test response from non-streaming component"},
-					},
-				},
-			},
-			ConversationContext: "test-context-123",
-		},
-	})
-
-	// Add streaming component
-	compStore.AddConversation(fakeStreamingComponentName, &mockStreamingConversationComponent{
-		mockConversationComponent: &mockConversationComponent{
-			response: &contribConverse.ConversationResponse{
-				Outputs: []contribConverse.ConversationOutput{
-					{
-						Parts: []contribConverse.ContentPart{
-							contribConverse.TextContentPart{Text: "Complete response"},
-						},
-					},
-				},
-				ConversationContext: "test-context-456",
-			},
-		},
-		streamChunks: []string{"Hello ", "streaming ", "world!"},
-	})
-
-	// Add echo component (which supports tool calling simulation)
-	// The echo component can simulate tool calling behavior for testing
-	compStore.AddConversation(fakeToolCallingComponentName, &mockConversationComponent{
-		response: &contribConverse.ConversationResponse{
-			Outputs: []contribConverse.ConversationOutput{
-				{
-					Parts: []contribConverse.ContentPart{
-						contribConverse.TextContentPart{Text: "Echo response - tool calling will be handled by the echo component logic"},
-					},
-				},
-			},
-			ConversationContext: "test-context-tools",
-		},
-	})
-
-	return &Universal{
-		logger:     testLogger,
-		resiliency: resiliency.New(nil),
-		compStore:  compStore,
-	}
-}
 
 func TestConverseStreamAlpha1_ComponentValidation(t *testing.T) {
 	testCases := []struct {
@@ -180,14 +41,38 @@ func TestConverseStreamAlpha1_ComponentValidation(t *testing.T) {
 		{
 			name:          "No conversation components",
 			componentName: fakeConversationComponentName,
-			inputs:        []*runtimev1pb.ConversationInput{{Content: "test"}},
+			inputs: []*runtimev1pb.ConversationInput{
+				{
+					Content: []*runtimev1pb.ConversationContent{
+						{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
+									Text: "test",
+								},
+							},
+						},
+					},
+				},
+			},
 			expectedError: messages.ErrConversationNotFound,
 			setupEmpty:    true,
 		},
 		{
 			name:          "Component does not exist",
 			componentName: "nonexistent",
-			inputs:        []*runtimev1pb.ConversationInput{{Content: "test"}},
+			inputs: []*runtimev1pb.ConversationInput{
+				{
+					Content: []*runtimev1pb.ConversationContent{
+						{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
+									Text: "test",
+								},
+							},
+						},
+					},
+				},
+			},
 			expectedError: messages.ErrConversationNotFound.WithFormat("nonexistent"),
 		},
 		{
@@ -199,12 +84,36 @@ func TestConverseStreamAlpha1_ComponentValidation(t *testing.T) {
 		{
 			name:          "Valid request with non-streaming component",
 			componentName: fakeConversationComponentName,
-			inputs:        []*runtimev1pb.ConversationInput{{Content: "test"}},
+			inputs: []*runtimev1pb.ConversationInput{
+				{
+					Content: []*runtimev1pb.ConversationContent{
+						{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
+									Text: "test",
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
 			name:          "Valid request with streaming component",
 			componentName: fakeStreamingComponentName,
-			inputs:        []*runtimev1pb.ConversationInput{{Content: "test"}},
+			inputs: []*runtimev1pb.ConversationInput{
+				{
+					Content: []*runtimev1pb.ConversationContent{
+						{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
+									Text: "test",
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -212,7 +121,6 @@ func TestConverseStreamAlpha1_ComponentValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var api *Universal
 			if tt.setupEmpty {
-				// Empty component store
 				api = &Universal{
 					logger:     testLogger,
 					resiliency: resiliency.New(nil),
@@ -237,7 +145,6 @@ func TestConverseStreamAlpha1_ComponentValidation(t *testing.T) {
 				require.ErrorIs(t, err, tt.expectedError)
 			} else {
 				require.NoError(t, err)
-				// Should have received some messages
 				assert.NotEmpty(t, stream.messages, "Expected to receive stream messages")
 			}
 		})
@@ -251,7 +158,17 @@ func TestConverseStreamAlpha1_NonStreamingComponent(t *testing.T) {
 	req := &runtimev1pb.ConversationRequest{
 		Name: fakeConversationComponentName,
 		Inputs: []*runtimev1pb.ConversationInput{
-			{Content: "Tell me a story"},
+			{
+				Content: []*runtimev1pb.ConversationContent{
+					{
+						ContentType: &runtimev1pb.ConversationContent_Text{
+							Text: &runtimev1pb.ConversationText{
+								Text: "Tell me a story",
+							},
+						},
+					},
+				},
+			},
 		},
 		ScrubPII: &falseBool, // Disable PII scrubbing for simpler testing
 	}
@@ -274,16 +191,16 @@ func TestConverseStreamAlpha1_NonStreamingComponent(t *testing.T) {
 		if chunk := msg.GetChunk(); chunk != nil {
 			hasChunks = true
 			// Check for content in parts instead of deprecated content field
-			assert.NotEmpty(t, chunk.GetParts(), "Chunk should have parts")
-			if len(chunk.GetParts()) > 0 {
-				if textContent := chunk.GetParts()[0].GetText(); textContent != nil {
+			assert.NotEmpty(t, chunk.GetContent(), "Chunk should have parts")
+			if len(chunk.GetContent()) > 0 {
+				if textContent := chunk.GetContent()[0].GetText(); textContent != nil {
 					assert.NotEmpty(t, textContent.GetText(), "Chunk text content should not be empty")
 				}
 			}
 		}
 		if complete := msg.GetComplete(); complete != nil {
 			hasCompletion = true
-			assert.Equal(t, "test-context-123", complete.GetContextID())
+			assert.Equal(t, "test-context-123", complete.GetContextId())
 		}
 	}
 
@@ -298,7 +215,17 @@ func TestConverseStreamAlpha1_StreamingComponent(t *testing.T) {
 	req := &runtimev1pb.ConversationRequest{
 		Name: fakeStreamingComponentName,
 		Inputs: []*runtimev1pb.ConversationInput{
-			{Content: "Hello streaming"},
+			{
+				Content: []*runtimev1pb.ConversationContent{
+					{
+						ContentType: &runtimev1pb.ConversationContent_Text{
+							Text: &runtimev1pb.ConversationText{
+								Text: "Hello streaming",
+							},
+						},
+					},
+				},
+			},
 		},
 		ScrubPII: &falseBool, // Disable PII scrubbing for simpler testing
 	}
@@ -317,15 +244,15 @@ func TestConverseStreamAlpha1_StreamingComponent(t *testing.T) {
 	for _, msg := range stream.messages {
 		if chunk := msg.GetChunk(); chunk != nil {
 			// Extract text content from parts instead of deprecated content field
-			if len(chunk.GetParts()) > 0 {
-				if textContent := chunk.GetParts()[0].GetText(); textContent != nil {
+			if len(chunk.GetContent()) > 0 {
+				if textContent := chunk.GetContent()[0].GetText(); textContent != nil {
 					chunkContents = append(chunkContents, textContent.GetText())
 				}
 			}
 		}
 		if complete := msg.GetComplete(); complete != nil {
 			hasCompletion = true
-			assert.Equal(t, "test-context-456", complete.GetContextID())
+			assert.Equal(t, "test-context-456", complete.GetContextId())
 		}
 	}
 
@@ -352,7 +279,17 @@ func TestConverseStreamAlpha1_ComponentError(t *testing.T) {
 	req := &runtimev1pb.ConversationRequest{
 		Name: "errorComponent",
 		Inputs: []*runtimev1pb.ConversationInput{
-			{Content: "test"},
+			{
+				Content: []*runtimev1pb.ConversationContent{
+					{
+						ContentType: &runtimev1pb.ConversationContent_Text{
+							Text: &runtimev1pb.ConversationText{
+								Text: "test",
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -371,7 +308,17 @@ func TestConverseStreamAlpha1_StreamError(t *testing.T) {
 	req := &runtimev1pb.ConversationRequest{
 		Name: fakeConversationComponentName,
 		Inputs: []*runtimev1pb.ConversationInput{
-			{Content: "test"},
+			{
+				Content: []*runtimev1pb.ConversationContent{
+					{
+						ContentType: &runtimev1pb.ConversationContent_Text{
+							Text: &runtimev1pb.ConversationText{
+								Text: "test",
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -396,12 +343,28 @@ func TestRequestProcessing(t *testing.T) {
 			Name: fakeConversationComponentName,
 			Inputs: []*runtimev1pb.ConversationInput{
 				{
-					Content: "Hello",
-					Role:    &userRole,
+					Content: []*runtimev1pb.ConversationContent{
+						{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
+									Text: "Hello",
+								},
+							},
+						},
+					},
+					Role: &userRole,
 				},
 				{
-					Content: "Hi there",
-					Role:    &assistantRole,
+					Content: []*runtimev1pb.ConversationContent{
+						{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
+									Text: "Hi there",
+								},
+							},
+						},
+					},
+					Role: &assistantRole,
 				},
 			},
 		}
@@ -419,7 +382,17 @@ func TestRequestProcessing(t *testing.T) {
 		req := &runtimev1pb.ConversationRequest{
 			Name: fakeConversationComponentName,
 			Inputs: []*runtimev1pb.ConversationInput{
-				{Content: "test"},
+				{
+					Content: []*runtimev1pb.ConversationContent{
+						{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
+									Text: "Hi there",
+								},
+							},
+						},
+					},
+				},
 			},
 			Temperature: &temperature,
 		}
@@ -437,8 +410,19 @@ func TestRequestProcessing(t *testing.T) {
 		req := &runtimev1pb.ConversationRequest{
 			Name: fakeConversationComponentName,
 			Inputs: []*runtimev1pb.ConversationInput{
-				{Content: "test"},
+				{
+					Content: []*runtimev1pb.ConversationContent{
+						{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
+									Text: "Hi there",
+								},
+							},
+						},
+					},
+				},
 			},
+
 			ContextID: &contextID,
 		}
 
@@ -458,21 +442,21 @@ func TestConversationToolCalling_BasicRequestHandling(t *testing.T) {
 	// Test basic tool calling request with tool definitions
 	req := &runtimev1pb.ConversationRequest{
 		Name: fakeToolCallingComponentName,
-		Tools: []*runtimev1pb.Tool{
+		Tools: []*runtimev1pb.ConversationTool{
 			{
-				Type:        "function",
-				Name:        "get_weather",
-				Description: "Get current weather for a location",
-				Parameters:  `{"type":"object","properties":{"location":{"type":"string","description":"City and state"}},"required":["location"]}`,
+				Type:        wrapperspb.String("function"),
+				Name:        wrapperspb.String("get_weather"),
+				Description: wrapperspb.String("Get current weather for a location"),
+				Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string","description":"City and state"}},"required":["location"]}`),
 			},
 		},
 		Inputs: []*runtimev1pb.ConversationInput{
 			{
 				Role: ptr.Of("user"),
-				Parts: []*runtimev1pb.ContentPart{
+				Content: []*runtimev1pb.ConversationContent{
 					{
-						ContentType: &runtimev1pb.ContentPart_Text{
-							Text: &runtimev1pb.TextContent{
+						ContentType: &runtimev1pb.ConversationContent_Text{
+							Text: &runtimev1pb.ConversationText{
 								Text: "What's the weather like in San Francisco?",
 							},
 						},
@@ -486,12 +470,12 @@ func TestConversationToolCalling_BasicRequestHandling(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	require.Len(t, resp.GetOutputs(), 1)
+	require.Len(t, resp.GetResults(), 1)
 
 	// Basic validation - the mock just echoes back, comprehensive tool calling
 	// functionality is tested in integration tests with real echo component
-	output := resp.GetOutputs()[0]
-	assert.NotEmpty(t, output.GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+	output := resp.GetResults()[0]
+	assert.NotEmpty(t, output.GetContent()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 	assert.Equal(t, "test-context-tools", resp.GetContextID())
 }
 
@@ -504,14 +488,12 @@ func TestConversationToolCalling_ToolResultRequestHandling(t *testing.T) {
 		Inputs: []*runtimev1pb.ConversationInput{
 			{
 				Role: ptr.Of("tool"),
-				Parts: []*runtimev1pb.ContentPart{
+				ToolResults: []*runtimev1pb.ConversationToolResult{
 					{
-						ContentType: &runtimev1pb.ContentPart_ToolResult{
-							ToolResult: &runtimev1pb.ToolResultContent{
-								ToolCallId: "call_test_12345",
-								Name:       "get_weather",
-								Content:    `{"temperature": 72, "condition": "sunny"}`,
-							},
+						Id:   "call_test_12345",
+						Name: "get_weather",
+						Result: &runtimev1pb.ConversationToolResult_OutputText{
+							OutputText: `{"temperature": 72, "condition": "sunny"}`,
 						},
 					},
 				},
@@ -523,27 +505,27 @@ func TestConversationToolCalling_ToolResultRequestHandling(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	require.Len(t, resp.GetOutputs(), 1)
+	require.Len(t, resp.GetResults(), 1)
 
 	// Basic validation - the mock just echoes back
-	output := resp.GetOutputs()[0]
-	assert.NotEmpty(t, output.GetResult()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+	output := resp.GetResults()[0]
+	assert.NotEmpty(t, output.GetContent()) //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
 }
 
 func TestConversationToolCalling_ToolDefinitionConversion(t *testing.T) {
 	// Test the tool definition conversion function
-	protoTools := []*runtimev1pb.Tool{
+	protoTools := []*runtimev1pb.ConversationTool{
 		{
-			Type:        "function",
-			Name:        "test_function",
-			Description: "A test function",
-			Parameters:  `{"type":"object","properties":{"param1":{"type":"string"}},"required":["param1"]}`,
+			Type:        wrapperspb.String("function"),
+			Name:        wrapperspb.String("test_function"),
+			Description: wrapperspb.String("A test function"),
+			Parameters:  wrapperspb.String(`{"type":"object","properties":{"param1":{"type":"string"}},"required":["param1"]}`),
 		},
 		{
-			Type:        "function",
-			Name:        "weather_function",
-			Description: "Get weather for a location",
-			Parameters:  `{"type":"object","properties":{"location":{"type":"string","description":"City name"},"units":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}`,
+			Type:        wrapperspb.String("function"),
+			Name:        wrapperspb.String("weather_function"),
+			Description: wrapperspb.String("Get weather for a location"),
+			Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string","description":"City name"},"units":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}`),
 		},
 	}
 
@@ -569,7 +551,7 @@ func TestConversationToolCalling_ToolDefinitionConversion(t *testing.T) {
 
 func TestConversationToolCalling_ComponentsContribToolDefinitionConversion_EdgeCases(t *testing.T) {
 	t.Run("empty tools array", func(t *testing.T) {
-		result := conversation.ConvertProtoToolsToComponentsContrib([]*runtimev1pb.Tool{})
+		result := conversation.ConvertProtoToolsToComponentsContrib([]*runtimev1pb.ConversationTool{})
 		assert.Nil(t, result)
 	})
 
@@ -579,12 +561,12 @@ func TestConversationToolCalling_ComponentsContribToolDefinitionConversion_EdgeC
 	})
 
 	t.Run("tool with empty fields", func(t *testing.T) {
-		protoTools := []*runtimev1pb.Tool{
+		protoTools := []*runtimev1pb.ConversationTool{
 			{
-				Type:        "",
-				Name:        "",
-				Description: "",
-				Parameters:  "",
+				Type:        wrapperspb.String(""),
+				Name:        wrapperspb.String(""),
+				Description: wrapperspb.String(""),
+				Parameters:  wrapperspb.String(""),
 			},
 		}
 
@@ -599,12 +581,12 @@ func TestConversationToolCalling_ComponentsContribToolDefinitionConversion_EdgeC
 	})
 
 	t.Run("tool with nil function", func(t *testing.T) {
-		protoTools := []*runtimev1pb.Tool{
+		protoTools := []*runtimev1pb.ConversationTool{
 			{
-				Type:        "function",
-				Name:        "",
-				Description: "",
-				Parameters:  "",
+				Type:        wrapperspb.String("function"),
+				Name:        wrapperspb.String(""),
+				Description: wrapperspb.String(""),
+				Parameters:  wrapperspb.String(""),
 			},
 		}
 
@@ -625,21 +607,21 @@ func TestConversationToolCalling_StreamingWithTools(t *testing.T) {
 
 	req := &runtimev1pb.ConversationRequest{
 		Name: fakeToolCallingComponentName,
-		Tools: []*runtimev1pb.Tool{
+		Tools: []*runtimev1pb.ConversationTool{
 			{
-				Type:        "function",
-				Name:        "get_weather",
-				Description: "Get current weather for a location",
-				Parameters:  `{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`,
+				Type:        wrapperspb.String("function"),
+				Name:        wrapperspb.String("get_weather"),
+				Description: wrapperspb.String("Get current weather for a location"),
+				Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`),
 			},
 		},
 		Inputs: []*runtimev1pb.ConversationInput{
 			{
 				Role: ptr.Of("user"),
-				Parts: []*runtimev1pb.ContentPart{
+				Content: []*runtimev1pb.ConversationContent{
 					{
-						ContentType: &runtimev1pb.ContentPart_Text{
-							Text: &runtimev1pb.TextContent{
+						ContentType: &runtimev1pb.ConversationContent_Text{
+							Text: &runtimev1pb.ConversationText{
 								Text: "What's the weather like in New York?",
 							},
 						},
@@ -682,21 +664,21 @@ func TestContentPartsSupport(t *testing.T) {
 	t.Run("Parts-based input with text and tool definitions", func(t *testing.T) {
 		req := &runtimev1pb.ConversationRequest{
 			Name: fakeConversationComponentName,
-			Tools: []*runtimev1pb.Tool{
+			Tools: []*runtimev1pb.ConversationTool{
 				{
-					Type:        "function",
-					Name:        "get_weather",
-					Description: "Get weather for a location",
-					Parameters:  `{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`,
+					Type:        wrapperspb.String("function"),
+					Name:        wrapperspb.String("get_weather"),
+					Description: wrapperspb.String("Get weather for a location"),
+					Parameters:  wrapperspb.String(`{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`),
 				},
 			},
 			Inputs: []*runtimev1pb.ConversationInput{
 				{
 					Role: ptr.Of("user"),
-					Parts: []*runtimev1pb.ContentPart{
+					Content: []*runtimev1pb.ConversationContent{
 						{
-							ContentType: &runtimev1pb.ContentPart_Text{
-								Text: &runtimev1pb.TextContent{
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
 									Text: "Hello, I need help with weather information.",
 								},
 							},
@@ -710,17 +692,17 @@ func TestContentPartsSupport(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Len(t, resp.GetOutputs(), 1)
+		require.Len(t, resp.GetResults(), 1)
 
-		output := resp.GetOutputs()[0]
+		output := resp.GetResults()[0]
 
 		// Check that response has both legacy and new fields
-		assert.NotEmpty(t, output.GetResult(), "Legacy result field should be populated") //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
-		assert.NotEmpty(t, output.GetParts(), "Parts field should be populated")
+		assert.NotEmpty(t, output.GetContent(), "Legacy result field should be populated") //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		assert.NotEmpty(t, output.GetContent(), "Parts field should be populated")
 
 		// Verify parts contain text content
 		hasTextPart := false
-		for _, part := range output.GetParts() {
+		for _, part := range output.GetContent() {
 			if textContent := part.GetText(); textContent != nil {
 				hasTextPart = true
 				assert.NotEmpty(t, textContent.GetText(), "Text content should not be empty")
@@ -735,15 +717,12 @@ func TestContentPartsSupport(t *testing.T) {
 			Inputs: []*runtimev1pb.ConversationInput{
 				{
 					Role: ptr.Of("tool"),
-					Parts: []*runtimev1pb.ContentPart{
+					ToolResults: []*runtimev1pb.ConversationToolResult{
 						{
-							ContentType: &runtimev1pb.ContentPart_ToolResult{
-								ToolResult: &runtimev1pb.ToolResultContent{
-									ToolCallId: "call_12345",
-									Name:       "get_weather",
-									Content:    `{"temperature": 22, "condition": "sunny", "location": "San Francisco"}`,
-									IsError:    ptr.Of(false),
-								},
+							Id:   "call_12345",
+							Name: "get_weather",
+							Result: &runtimev1pb.ConversationToolResult_OutputText{
+								OutputText: `{"temperature": 22, "condition": "sunny", "location": "San Francisco"}`,
 							},
 						},
 					},
@@ -755,43 +734,10 @@ func TestContentPartsSupport(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Len(t, resp.GetOutputs(), 1)
+		require.Len(t, resp.GetResults(), 1)
 
-		output := resp.GetOutputs()[0]
-		assert.NotEmpty(t, output.GetResult(), "Should have response content") //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
-		assert.NotEmpty(t, output.GetParts(), "Should have response parts")
-	})
-
-	t.Run("Backward compatibility with legacy content field", func(t *testing.T) {
-		req := &runtimev1pb.ConversationRequest{
-			Name: fakeConversationComponentName,
-			Inputs: []*runtimev1pb.ConversationInput{
-				{
-					Content: "Hello world", // Legacy field
-					Role:    ptr.Of("user"),
-				},
-			},
-		}
-
-		resp, err := api.ConverseAlpha1(t.Context(), req)
-
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.Len(t, resp.GetOutputs(), 1)
-
-		output := resp.GetOutputs()[0]
-
-		// Both legacy and new fields should be populated
-		assert.NotEmpty(t, output.GetResult(), "Legacy result field should work") //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
-		assert.NotEmpty(t, output.GetParts(), "Parts should be generated for legacy input")
-
-		// Verify the parts contain the expected text content
-		hasTextPart := false
-		for _, part := range output.GetParts() {
-			if textContent := part.GetText(); textContent != nil {
-				hasTextPart = true
-			}
-		}
-		assert.True(t, hasTextPart, "Legacy content should be converted to text parts")
+		output := resp.GetResults()[0]
+		assert.NotEmpty(t, output.GetContent(), "Should have response content") //nolint:staticcheck // Intentional test use of deprecated field for backward compatibility
+		assert.NotEmpty(t, output.GetContent(), "Should have response parts")
 	})
 }

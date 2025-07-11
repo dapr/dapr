@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func TestConvertUsageToProto(t *testing.T) {
@@ -50,9 +51,9 @@ func TestConvertUsageToProto(t *testing.T) {
 				Usage: &contribConverse.UsageInfo{},
 			},
 			expected: &runtimev1pb.ConversationUsage{
-				PromptTokens:     ptr.Of(uint32(0)),
-				CompletionTokens: ptr.Of(uint32(0)),
-				TotalTokens:      ptr.Of(uint32(0)),
+				PromptTokens:     ptr.Of(uint64(0)),
+				CompletionTokens: ptr.Of(uint64(0)),
+				TotalTokens:      ptr.Of(uint64(0)),
 			},
 		},
 		{
@@ -65,9 +66,9 @@ func TestConvertUsageToProto(t *testing.T) {
 				},
 			},
 			expected: &runtimev1pb.ConversationUsage{
-				PromptTokens:     ptr.Of(uint32(100)),
-				CompletionTokens: ptr.Of(uint32(50)),
-				TotalTokens:      ptr.Of(uint32(150)),
+				PromptTokens:     ptr.Of(uint64(100)),
+				CompletionTokens: ptr.Of(uint64(50)),
+				TotalTokens:      ptr.Of(uint64(150)),
 			},
 		},
 	}
@@ -97,8 +98,12 @@ func TestNeedsInputScrubber(t *testing.T) {
 			name: "inputs without PII scrubbing",
 			input: &runtimev1pb.ConversationRequest{
 				Inputs: []*runtimev1pb.ConversationInput{
-					{Content: "hello", ScrubPII: ptr.Of(false)},
-					{Content: "world", ScrubPII: nil},
+					{Content: []*runtimev1pb.ConversationContent{
+						{ContentType: &runtimev1pb.ConversationContent_Text{Text: &runtimev1pb.ConversationText{Text: "hello"}}},
+					}, ScrubPII: ptr.Of(false)},
+					{Content: []*runtimev1pb.ConversationContent{
+						{ContentType: &runtimev1pb.ConversationContent_Text{Text: &runtimev1pb.ConversationText{Text: "world"}}},
+					}, ScrubPII: nil},
 				},
 			},
 			expected: false,
@@ -107,8 +112,12 @@ func TestNeedsInputScrubber(t *testing.T) {
 			name: "one input with PII scrubbing",
 			input: &runtimev1pb.ConversationRequest{
 				Inputs: []*runtimev1pb.ConversationInput{
-					{Content: "hello", ScrubPII: ptr.Of(false)},
-					{Content: "my email is test@example.com", ScrubPII: ptr.Of(true)},
+					{Content: []*runtimev1pb.ConversationContent{
+						{ContentType: &runtimev1pb.ConversationContent_Text{Text: &runtimev1pb.ConversationText{Text: "hello"}}},
+					}, ScrubPII: ptr.Of(false)},
+					{Content: []*runtimev1pb.ConversationContent{
+						{ContentType: &runtimev1pb.ConversationContent_Text{Text: &runtimev1pb.ConversationText{Text: "my email is test@example.com"}}},
+					}, ScrubPII: ptr.Of(true)},
 				},
 			},
 			expected: true,
@@ -117,8 +126,12 @@ func TestNeedsInputScrubber(t *testing.T) {
 			name: "all inputs with PII scrubbing",
 			input: &runtimev1pb.ConversationRequest{
 				Inputs: []*runtimev1pb.ConversationInput{
-					{Content: "hello", ScrubPII: ptr.Of(true)},
-					{Content: "world", ScrubPII: ptr.Of(true)},
+					{Content: []*runtimev1pb.ConversationContent{
+						{ContentType: &runtimev1pb.ConversationContent_Text{Text: &runtimev1pb.ConversationText{Text: "hello"}}},
+					}, ScrubPII: ptr.Of(true)},
+					{Content: []*runtimev1pb.ConversationContent{
+						{ContentType: &runtimev1pb.ConversationContent_Text{Text: &runtimev1pb.ConversationText{Text: "world"}}},
+					}, ScrubPII: ptr.Of(true)},
 				},
 			},
 			expected: true,
@@ -173,7 +186,7 @@ func TestNeedsOutputScrubber(t *testing.T) {
 func TestConvertProtoToolsToComponentsContrib(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    []*runtimev1pb.Tool
+		input    []*runtimev1pb.ConversationTool
 		expected []contribConverse.Tool
 	}{
 		{
@@ -183,22 +196,22 @@ func TestConvertProtoToolsToComponentsContrib(t *testing.T) {
 		},
 		{
 			name:     "empty tools",
-			input:    []*runtimev1pb.Tool{},
+			input:    []*runtimev1pb.ConversationTool{},
 			expected: nil,
 		},
 		{
 			name: "single tool",
-			input: []*runtimev1pb.Tool{
+			input: []*runtimev1pb.ConversationTool{
 				{
-					Type:        "function",
-					Name:        "get_weather",
-					Description: "Get weather information",
-					Parameters:  `{"type": "object"}`,
+					Type:        wrapperspb.String("function"),
+					Name:        wrapperspb.String("get_weather"),
+					Description: wrapperspb.String("Get weather information"),
+					Parameters:  wrapperspb.String(`{"type": "object"}`),
 				},
 			},
 			expected: []contribConverse.Tool{
 				{
-					ToolType: "function",
+					Type: "function",
 					Function: contribConverse.ToolFunction{
 						Name:        "get_weather",
 						Description: "Get weather information",
@@ -209,23 +222,23 @@ func TestConvertProtoToolsToComponentsContrib(t *testing.T) {
 		},
 		{
 			name: "multiple tools",
-			input: []*runtimev1pb.Tool{
+			input: []*runtimev1pb.ConversationTool{
 				{
-					Type:        "function",
-					Name:        "get_weather",
-					Description: "Get weather information",
-					Parameters:  `{"type": "object", "properties": {"city": {"type": "string"}}}`,
+					Type:        wrapperspb.String("function"),
+					Name:        wrapperspb.String("get_weather"),
+					Description: wrapperspb.String("Get weather information"),
+					Parameters:  wrapperspb.String(`{"type": "object", "properties": {"city": {"type": "string"}}}`),
 				},
 				{
-					Type:        "function",
-					Name:        "send_email",
-					Description: "Send an email",
-					Parameters:  `{"type": "object", "properties": {"to": {"type": "string"}, "subject": {"type": "string"}}}`,
+					Type:        wrapperspb.String("function"),
+					Name:        wrapperspb.String("send_email"),
+					Description: wrapperspb.String("Send an email"),
+					Parameters:  wrapperspb.String(`{"type": "object", "properties": {"to": {"type": "string"}, "subject": {"type": "string"}}}`),
 				},
 			},
 			expected: []contribConverse.Tool{
 				{
-					ToolType: "function",
+					Type: "function",
 					Function: contribConverse.ToolFunction{
 						Name:        "get_weather",
 						Description: "Get weather information",
@@ -233,7 +246,7 @@ func TestConvertProtoToolsToComponentsContrib(t *testing.T) {
 					},
 				},
 				{
-					ToolType: "function",
+					Type: "function",
 					Function: contribConverse.ToolFunction{
 						Name:        "send_email",
 						Description: "Send an email",
@@ -256,7 +269,7 @@ func TestConvertComponentsContribToolCallsToProto(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []contribConverse.ToolCall
-		expected []*runtimev1pb.ToolCall
+		expected []*runtimev1pb.ConversationToolCall
 	}{
 		{
 			name:     "nil tool calls",
@@ -280,12 +293,12 @@ func TestConvertComponentsContribToolCallsToProto(t *testing.T) {
 					},
 				},
 			},
-			expected: []*runtimev1pb.ToolCall{
+			expected: []*runtimev1pb.ConversationToolCall{
 				{
-					Id:        "call_123",
-					Type:      "function",
-					Name:      "get_weather",
-					Arguments: `{"city": "San Francisco"}`,
+					Id:        wrapperspb.String("call_123"),
+					Type:      wrapperspb.String("function"),
+					Name:      wrapperspb.String("get_weather"),
+					Arguments: wrapperspb.String(`{"city": "San Francisco"}`),
 				},
 			},
 		},
@@ -309,18 +322,18 @@ func TestConvertComponentsContribToolCallsToProto(t *testing.T) {
 					},
 				},
 			},
-			expected: []*runtimev1pb.ToolCall{
+			expected: []*runtimev1pb.ConversationToolCall{
 				{
-					Id:        "call_123",
-					Type:      "function",
-					Name:      "get_weather",
-					Arguments: `{"city": "San Francisco"}`,
+					Id:        wrapperspb.String("call_123"),
+					Type:      wrapperspb.String("function"),
+					Name:      wrapperspb.String("get_weather"),
+					Arguments: wrapperspb.String(`{"city": "San Francisco"}`),
 				},
 				{
-					Id:        "call_456",
-					Type:      "function",
-					Name:      "send_email",
-					Arguments: `{"to": "user@example.com", "subject": "Test"}`,
+					Id:        wrapperspb.String("call_456"),
+					Type:      wrapperspb.String("function"),
+					Name:      wrapperspb.String("send_email"),
+					Arguments: wrapperspb.String(`{"to": "user@example.com", "subject": "Test"}`),
 				},
 			},
 		},
@@ -334,145 +347,11 @@ func TestConvertComponentsContribToolCallsToProto(t *testing.T) {
 	}
 }
 
-func TestExtractToolCallIDFromParts(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []*runtimev1pb.ContentPart
-		expected string
-	}{
-		{
-			name:     "empty parts",
-			input:    []*runtimev1pb.ContentPart{},
-			expected: "",
-		},
-		{
-			name: "text part only",
-			input: []*runtimev1pb.ContentPart{
-				{
-					ContentType: &runtimev1pb.ContentPart_Text{
-						Text: &runtimev1pb.TextContent{Text: "hello"},
-					},
-				},
-			},
-			expected: "",
-		},
-		{
-			name: "tool result part",
-			input: []*runtimev1pb.ContentPart{
-				{
-					ContentType: &runtimev1pb.ContentPart_ToolResult{
-						ToolResult: &runtimev1pb.ToolResultContent{
-							ToolCallId: "call_123",
-							Name:       "get_weather",
-							Content:    "Sunny, 72°F",
-						},
-					},
-				},
-			},
-			expected: "call_123",
-		},
-		{
-			name: "multiple parts with tool result",
-			input: []*runtimev1pb.ContentPart{
-				{
-					ContentType: &runtimev1pb.ContentPart_Text{
-						Text: &runtimev1pb.TextContent{Text: "hello"},
-					},
-				},
-				{
-					ContentType: &runtimev1pb.ContentPart_ToolResult{
-						ToolResult: &runtimev1pb.ToolResultContent{
-							ToolCallId: "call_456",
-							Name:       "send_email",
-							Content:    "Email sent successfully",
-						},
-					},
-				},
-			},
-			expected: "call_456",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := extractToolCallIDFromParts(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestExtractToolNameFromParts(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []*runtimev1pb.ContentPart
-		expected string
-	}{
-		{
-			name:     "empty parts",
-			input:    []*runtimev1pb.ContentPart{},
-			expected: "",
-		},
-		{
-			name: "text part only",
-			input: []*runtimev1pb.ContentPart{
-				{
-					ContentType: &runtimev1pb.ContentPart_Text{
-						Text: &runtimev1pb.TextContent{Text: "hello"},
-					},
-				},
-			},
-			expected: "",
-		},
-		{
-			name: "tool result part",
-			input: []*runtimev1pb.ContentPart{
-				{
-					ContentType: &runtimev1pb.ContentPart_ToolResult{
-						ToolResult: &runtimev1pb.ToolResultContent{
-							ToolCallId: "call_123",
-							Name:       "get_weather",
-							Content:    "Sunny, 72°F",
-						},
-					},
-				},
-			},
-			expected: "get_weather",
-		},
-		{
-			name: "multiple parts with tool result",
-			input: []*runtimev1pb.ContentPart{
-				{
-					ContentType: &runtimev1pb.ContentPart_Text{
-						Text: &runtimev1pb.TextContent{Text: "hello"},
-					},
-				},
-				{
-					ContentType: &runtimev1pb.ContentPart_ToolResult{
-						ToolResult: &runtimev1pb.ToolResultContent{
-							ToolCallId: "call_456",
-							Name:       "send_email",
-							Content:    "Email sent successfully",
-						},
-					},
-				},
-			},
-			expected: "send_email",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := extractToolNameFromParts(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestConvertComponentsContribPartsToProto(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []*runtimev1pb.ContentPart
+		expected []*runtimev1pb.ConversationContent
 	}{
 		{
 			name:     "empty string",
@@ -482,10 +361,10 @@ func TestConvertComponentsContribPartsToProto(t *testing.T) {
 		{
 			name:  "non-empty string",
 			input: "Hello, world!",
-			expected: []*runtimev1pb.ContentPart{
+			expected: []*runtimev1pb.ConversationContent{
 				{
-					ContentType: &runtimev1pb.ContentPart_Text{
-						Text: &runtimev1pb.TextContent{
+					ContentType: &runtimev1pb.ConversationContent_Text{
+						Text: &runtimev1pb.ConversationText{
 							Text: "Hello, world!",
 						},
 					},
@@ -505,8 +384,8 @@ func TestConvertComponentsContribPartsToProto(t *testing.T) {
 func TestConvertProtoPartsToComponentsContrib(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    []*runtimev1pb.ContentPart
-		expected []contribConverse.ContentPart
+		input    []*runtimev1pb.ConversationContent
+		expected []contribConverse.ConversationContent
 	}{
 		{
 			name:     "nil parts",
@@ -515,38 +394,38 @@ func TestConvertProtoPartsToComponentsContrib(t *testing.T) {
 		},
 		{
 			name:     "empty parts",
-			input:    []*runtimev1pb.ContentPart{},
+			input:    []*runtimev1pb.ConversationContent{},
 			expected: nil,
 		},
 		{
 			name: "text part",
-			input: []*runtimev1pb.ContentPart{
+			input: []*runtimev1pb.ConversationContent{
 				{
-					ContentType: &runtimev1pb.ContentPart_Text{
-						Text: &runtimev1pb.TextContent{Text: "Hello, world!"},
+					ContentType: &runtimev1pb.ConversationContent_Text{
+						Text: &runtimev1pb.ConversationText{Text: "Hello, world!"},
 					},
 				},
 			},
-			expected: []contribConverse.ContentPart{
+			expected: []contribConverse.ConversationContent{
 				contribConverse.TextContentPart{Text: "Hello, world!"},
 			},
 		},
 		{
 			name: "tool call part",
-			input: []*runtimev1pb.ContentPart{
+			input: []*runtimev1pb.ConversationContent{
 				{
-					ContentType: &runtimev1pb.ContentPart_ToolCall{
-						ToolCall: &runtimev1pb.ToolCallContent{
-							Id:        "call_123",
-							Type:      "function",
-							Name:      "get_weather",
-							Arguments: `{"city": "San Francisco"}`,
+					ContentType: &runtimev1pb.ConversationContent_ToolCall{
+						ToolCall: &runtimev1pb.ConversationToolCall{
+							Id:        wrapperspb.String("call_123"),
+							Type:      wrapperspb.String("function"),
+							Name:      wrapperspb.String("get_weather"),
+							Arguments: wrapperspb.String(`{"city": "San Francisco"}`),
 						},
 					},
 				},
 			},
-			expected: []contribConverse.ContentPart{
-				contribConverse.ToolCallContentPart{
+			expected: []contribConverse.ConversationContent{
+				contribConverse.ToolCallRequest{
 					ID:       "call_123",
 					CallType: "function",
 					Function: contribConverse.ToolCallFunction{
@@ -557,50 +436,27 @@ func TestConvertProtoPartsToComponentsContrib(t *testing.T) {
 			},
 		},
 		{
-			name: "tool result part",
-			input: []*runtimev1pb.ContentPart{
-				{
-					ContentType: &runtimev1pb.ContentPart_ToolResult{
-						ToolResult: &runtimev1pb.ToolResultContent{
-							ToolCallId: "call_123",
-							Name:       "get_weather",
-							Content:    "Sunny, 72°F",
-							IsError:    ptr.Of(false),
-						},
-					},
-				},
-			},
-			expected: []contribConverse.ContentPart{
-				contribConverse.ToolResultContentPart{
-					ToolCallID: "call_123",
-					Name:       "get_weather",
-					Content:    "Sunny, 72°F",
-					IsError:    false,
-				},
-			},
-		},
-		{
 			name: "mixed parts",
-			input: []*runtimev1pb.ContentPart{
+			input: []*runtimev1pb.ConversationContent{
 				{
-					ContentType: &runtimev1pb.ContentPart_Text{
-						Text: &runtimev1pb.TextContent{Text: "Let me check the weather"},
+					ContentType: &runtimev1pb.ConversationContent_Text{
+						Text: &runtimev1pb.ConversationText{Text: "Let me check the weather"},
 					},
 				},
 				{
-					ContentType: &runtimev1pb.ContentPart_ToolCall{
-						ToolCall: &runtimev1pb.ToolCallContent{
-							Id:        "call_123",
-							Type:      "function",
-							Name:      "get_weather",
-							Arguments: `{"city": "San Francisco"}`,
+					ContentType: &runtimev1pb.ConversationContent_ToolCall{
+						ToolCall: &runtimev1pb.ConversationToolCall{
+							Id:        wrapperspb.String("call_123"),
+							Type:      wrapperspb.String("function"),
+							Name:      wrapperspb.String("get_weather"),
+							Arguments: wrapperspb.String(`{"city": "San Francisco"}`),
 						},
 					},
 				},
 			},
-			expected: []contribConverse.ContentPart{
+			expected: []contribConverse.ConversationContent{
 				contribConverse.TextContentPart{Text: "Let me check the weather"},
-				contribConverse.ToolCallContentPart{
+				contribConverse.ToolCallRequest{
 					ID:       "call_123",
 					CallType: "function",
 					Function: contribConverse.ToolCallFunction{
@@ -620,6 +476,8 @@ func TestConvertProtoPartsToComponentsContrib(t *testing.T) {
 	}
 }
 
+// TODO(@Sicoyle): I moved &runtimev1pb.ConversationToolResul from ConversationContent to ConversationInput.ToolResults.
+// So somewhere else now I need to doulbe check that on multi-turn conversations that I maintain tool results as I should..
 func TestConvertComponentsContribContentPartsToProto(t *testing.T) {
 	// Create a mock PII scrubber for testing
 	scrubber, err := piiscrubber.NewDefaultScrubber()
@@ -627,10 +485,10 @@ func TestConvertComponentsContribContentPartsToProto(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		input         []contribConverse.ContentPart
+		input         []contribConverse.ConversationContent
 		scrubber      piiscrubber.Scrubber
 		componentName string
-		expected      []*runtimev1pb.ContentPart
+		expected      []*runtimev1pb.ConversationContent
 		expectError   bool
 	}{
 		{
@@ -640,41 +498,41 @@ func TestConvertComponentsContribContentPartsToProto(t *testing.T) {
 		},
 		{
 			name:     "empty parts",
-			input:    []contribConverse.ContentPart{},
+			input:    []contribConverse.ConversationContent{},
 			expected: nil,
 		},
 		{
 			name: "text part without scrubber",
-			input: []contribConverse.ContentPart{
+			input: []contribConverse.ConversationContent{
 				contribConverse.TextContentPart{Text: "Hello, world!"},
 			},
-			expected: []*runtimev1pb.ContentPart{
+			expected: []*runtimev1pb.ConversationContent{
 				{
-					ContentType: &runtimev1pb.ContentPart_Text{
-						Text: &runtimev1pb.TextContent{Text: "Hello, world!"},
+					ContentType: &runtimev1pb.ConversationContent_Text{
+						Text: &runtimev1pb.ConversationText{Text: "Hello, world!"},
 					},
 				},
 			},
 		},
 		{
 			name: "text part with scrubber",
-			input: []contribConverse.ContentPart{
+			input: []contribConverse.ConversationContent{
 				contribConverse.TextContentPart{Text: "My email is test@example.com"},
 			},
 			scrubber:      scrubber,
 			componentName: "test-component",
-			expected: []*runtimev1pb.ContentPart{
+			expected: []*runtimev1pb.ConversationContent{
 				{
-					ContentType: &runtimev1pb.ContentPart_Text{
-						Text: &runtimev1pb.TextContent{Text: "My email is <EMAIL_ADDRESS>"},
+					ContentType: &runtimev1pb.ConversationContent_Text{
+						Text: &runtimev1pb.ConversationText{Text: "My email is <EMAIL_ADDRESS>"},
 					},
 				},
 			},
 		},
 		{
 			name: "tool call part",
-			input: []contribConverse.ContentPart{
-				contribConverse.ToolCallContentPart{
+			input: []contribConverse.ConversationContent{
+				contribConverse.ToolCallRequest{
 					ID:       "call_123",
 					CallType: "function",
 					Function: contribConverse.ToolCallFunction{
@@ -683,37 +541,14 @@ func TestConvertComponentsContribContentPartsToProto(t *testing.T) {
 					},
 				},
 			},
-			expected: []*runtimev1pb.ContentPart{
+			expected: []*runtimev1pb.ConversationContent{
 				{
-					ContentType: &runtimev1pb.ContentPart_ToolCall{
-						ToolCall: &runtimev1pb.ToolCallContent{
-							Id:        "call_123",
-							Type:      "function",
-							Name:      "get_weather",
-							Arguments: `{"city": "San Francisco"}`,
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "tool result part",
-			input: []contribConverse.ContentPart{
-				contribConverse.ToolResultContentPart{
-					ToolCallID: "call_123",
-					Name:       "get_weather",
-					Content:    "Sunny, 72°F",
-					IsError:    false,
-				},
-			},
-			expected: []*runtimev1pb.ContentPart{
-				{
-					ContentType: &runtimev1pb.ContentPart_ToolResult{
-						ToolResult: &runtimev1pb.ToolResultContent{
-							ToolCallId: "call_123",
-							Name:       "get_weather",
-							Content:    "Sunny, 72°F",
-							IsError:    ptr.Of(false),
+					ContentType: &runtimev1pb.ConversationContent_ToolCall{
+						ToolCall: &runtimev1pb.ConversationToolCall{
+							Id:        wrapperspb.String("call_123"),
+							Type:      wrapperspb.String("function"),
+							Name:      wrapperspb.String("get_weather"),
+							Arguments: wrapperspb.String(`{"city": "San Francisco"}`),
 						},
 					},
 				},
@@ -735,7 +570,6 @@ func TestConvertComponentsContribContentPartsToProto(t *testing.T) {
 }
 
 func TestGetInputsFromRequest(t *testing.T) {
-	// Create a mock PII scrubber for testing
 	scrubber, err := piiscrubber.NewDefaultScrubber()
 	require.NoError(t, err)
 
@@ -760,7 +594,13 @@ func TestGetInputsFromRequest(t *testing.T) {
 				Name: "test-component",
 				Inputs: []*runtimev1pb.ConversationInput{
 					{
-						Content:  "Hello, world!",
+						Content: []*runtimev1pb.ConversationContent{
+							{
+								ContentType: &runtimev1pb.ConversationContent_Text{
+									Text: &runtimev1pb.ConversationText{Text: "Hello, world!"},
+								},
+							},
+						},
 						Role:     ptr.Of("user"),
 						ScrubPII: ptr.Of(false),
 					},
@@ -768,9 +608,8 @@ func TestGetInputsFromRequest(t *testing.T) {
 			},
 			expected: []contribConverse.ConversationInput{
 				{
-					Message: "Hello, world!",
-					Role:    contribConverse.RoleUser,
-					Parts: []contribConverse.ContentPart{
+					Role: contribConverse.RoleUser,
+					Content: []contribConverse.ConversationContent{
 						contribConverse.TextContentPart{Text: "Hello, world!"},
 					},
 				},
@@ -782,7 +621,13 @@ func TestGetInputsFromRequest(t *testing.T) {
 				Name: "test-component",
 				Inputs: []*runtimev1pb.ConversationInput{
 					{
-						Content:  "My email is test@example.com",
+						Content: []*runtimev1pb.ConversationContent{
+							{
+								ContentType: &runtimev1pb.ConversationContent_Text{
+									Text: &runtimev1pb.ConversationText{Text: "My email is test@example.com"},
+								},
+							},
+						},
 						Role:     ptr.Of("user"),
 						ScrubPII: ptr.Of(true),
 					},
@@ -791,9 +636,8 @@ func TestGetInputsFromRequest(t *testing.T) {
 			scrubber: scrubber,
 			expected: []contribConverse.ConversationInput{
 				{
-					Message: "My email is <EMAIL_ADDRESS>",
-					Role:    contribConverse.RoleUser,
-					Parts: []contribConverse.ContentPart{
+					Role: contribConverse.RoleUser,
+					Content: []contribConverse.ConversationContent{
 						contribConverse.TextContentPart{Text: "My email is <EMAIL_ADDRESS>"},
 					},
 				},
@@ -806,10 +650,10 @@ func TestGetInputsFromRequest(t *testing.T) {
 				Inputs: []*runtimev1pb.ConversationInput{
 					{
 						Role: ptr.Of("user"),
-						Parts: []*runtimev1pb.ContentPart{
+						Content: []*runtimev1pb.ConversationContent{
 							{
-								ContentType: &runtimev1pb.ContentPart_Text{
-									Text: &runtimev1pb.TextContent{Text: "Hello, world!"},
+								ContentType: &runtimev1pb.ConversationContent_Text{
+									Text: &runtimev1pb.ConversationText{Text: "Hello, world!"},
 								},
 							},
 						},
@@ -818,9 +662,8 @@ func TestGetInputsFromRequest(t *testing.T) {
 			},
 			expected: []contribConverse.ConversationInput{
 				{
-					Message: "Hello, world!",
-					Role:    contribConverse.RoleUser,
-					Parts: []contribConverse.ContentPart{
+					Role: contribConverse.RoleUser,
+					Content: []contribConverse.ConversationContent{
 						contribConverse.TextContentPart{Text: "Hello, world!"},
 					},
 				},
@@ -833,13 +676,14 @@ func TestGetInputsFromRequest(t *testing.T) {
 				Inputs: []*runtimev1pb.ConversationInput{
 					{
 						Role: ptr.Of("user"), // Will be changed to tool due to tool result content
-						Parts: []*runtimev1pb.ContentPart{
+						Content: []*runtimev1pb.ConversationContent{
 							{
-								ContentType: &runtimev1pb.ContentPart_ToolResult{
-									ToolResult: &runtimev1pb.ToolResultContent{
-										ToolCallId: "call_123",
-										Name:       "get_weather",
-										Content:    "Sunny, 72°F",
+								ContentType: &runtimev1pb.ConversationContent_ToolCall{
+									ToolCall: &runtimev1pb.ConversationToolCall{
+										Id:   wrapperspb.String("call_123"),
+										Type: wrapperspb.String("function"),
+										Name: wrapperspb.String("get_weather"),
+										// TODO(@Sicoyle): double check i have a test checking args field
 									},
 								},
 							},
@@ -849,10 +693,9 @@ func TestGetInputsFromRequest(t *testing.T) {
 			},
 			expected: []contribConverse.ConversationInput{
 				{
-					Message: "",
-					Role:    contribConverse.RoleTool,
-					Parts: []contribConverse.ContentPart{
-						contribConverse.ToolResultContentPart{
+					Role: contribConverse.RoleTool,
+					Content: []contribConverse.ConversationContent{
+						contribConverse.ToolCallResponse{
 							ToolCallID: "call_123",
 							Name:       "get_weather",
 							Content:    "Sunny, 72°F",
@@ -909,20 +752,25 @@ func TestConvertComponentsContribOutputToProto(t *testing.T) {
 			name: "legacy result without PII scrubbing",
 			input: []contribConverse.ConversationOutput{
 				{
-					Result:     "Hello, world!",
+					Content: []contribConverse.ConversationContent{
+						contribConverse.TextContentPart{
+							Text: "Hello, world!",
+						},
+					},
 					Parameters: testParams,
 				},
 			},
 			componentName: "test-component",
 			expected: []*runtimev1pb.ConversationResult{
 				{
-					Result:       "Hello, world!",
 					Parameters:   testParams,
 					FinishReason: ptr.Of("stop"),
-					Parts: []*runtimev1pb.ContentPart{
+					Content: []*runtimev1pb.ConversationContent{
 						{
-							ContentType: &runtimev1pb.ContentPart_Text{
-								Text: &runtimev1pb.TextContent{Text: "Hello, world!"},
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{
+									Text: "Hello, world!",
+								},
 							},
 						},
 					},
@@ -933,7 +781,11 @@ func TestConvertComponentsContribOutputToProto(t *testing.T) {
 			name: "legacy result with PII scrubbing",
 			input: []contribConverse.ConversationOutput{
 				{
-					Result:     "My email is test@example.com",
+					Content: []contribConverse.ConversationContent{
+						contribConverse.TextContentPart{
+							Text: "My email is test@example.com",
+						},
+					},
 					Parameters: testParams,
 				},
 			},
@@ -941,13 +793,12 @@ func TestConvertComponentsContribOutputToProto(t *testing.T) {
 			componentName: "test-component",
 			expected: []*runtimev1pb.ConversationResult{
 				{
-					Result:       "My email is <EMAIL_ADDRESS>",
 					Parameters:   testParams,
 					FinishReason: ptr.Of("stop"),
-					Parts: []*runtimev1pb.ContentPart{
+					Content: []*runtimev1pb.ConversationContent{
 						{
-							ContentType: &runtimev1pb.ContentPart_Text{
-								Text: &runtimev1pb.TextContent{Text: "My email is <EMAIL_ADDRESS>"},
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{Text: "My email is <EMAIL_ADDRESS>"},
 							},
 						},
 					},
@@ -959,9 +810,11 @@ func TestConvertComponentsContribOutputToProto(t *testing.T) {
 			input: []contribConverse.ConversationOutput{
 				{
 					Parameters: testParams,
-					Parts: []contribConverse.ContentPart{
-						contribConverse.TextContentPart{Text: "Let me check the weather"},
-						contribConverse.ToolCallContentPart{
+					Content: []contribConverse.ConversationContent{
+						contribConverse.TextContentPart{
+							Text: "Let me check the weather",
+						},
+						contribConverse.ToolCallRequest{
 							ID:       "call_123",
 							CallType: "function",
 							Function: contribConverse.ToolCallFunction{
@@ -975,22 +828,21 @@ func TestConvertComponentsContribOutputToProto(t *testing.T) {
 			componentName: "test-component",
 			expected: []*runtimev1pb.ConversationResult{
 				{
-					Result:       "",
 					Parameters:   testParams,
 					FinishReason: ptr.Of("tool_calls"),
-					Parts: []*runtimev1pb.ContentPart{
+					Content: []*runtimev1pb.ConversationContent{
 						{
-							ContentType: &runtimev1pb.ContentPart_Text{
-								Text: &runtimev1pb.TextContent{Text: "Let me check the weather"},
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{Text: "Let me check the weather"},
 							},
 						},
 						{
-							ContentType: &runtimev1pb.ContentPart_ToolCall{
-								ToolCall: &runtimev1pb.ToolCallContent{
-									Id:        "call_123",
-									Type:      "function",
-									Name:      "get_weather",
-									Arguments: `{"city": "San Francisco"}`,
+							ContentType: &runtimev1pb.ConversationContent_ToolCall{
+								ToolCall: &runtimev1pb.ConversationToolCall{
+									Id:        wrapperspb.String("call_123"),
+									Type:      wrapperspb.String("function"),
+									Name:      wrapperspb.String("get_weather"),
+									Arguments: wrapperspb.String(`{"city": "San Francisco"}`),
 								},
 							},
 						},
@@ -1002,7 +854,11 @@ func TestConvertComponentsContribOutputToProto(t *testing.T) {
 			name: "custom finish reason",
 			input: []contribConverse.ConversationOutput{
 				{
-					Result:       "Response truncated",
+					Content: []contribConverse.ConversationContent{
+						contribConverse.TextContentPart{
+							Text: "Response truncated",
+						},
+					},
 					FinishReason: "length",
 					Parameters:   testParams,
 				},
@@ -1010,13 +866,12 @@ func TestConvertComponentsContribOutputToProto(t *testing.T) {
 			componentName: "test-component",
 			expected: []*runtimev1pb.ConversationResult{
 				{
-					Result:       "Response truncated",
 					Parameters:   testParams,
 					FinishReason: ptr.Of("length"),
-					Parts: []*runtimev1pb.ContentPart{
+					Content: []*runtimev1pb.ConversationContent{
 						{
-							ContentType: &runtimev1pb.ContentPart_Text{
-								Text: &runtimev1pb.TextContent{Text: "Response truncated"},
+							ContentType: &runtimev1pb.ConversationContent_Text{
+								Text: &runtimev1pb.ConversationText{Text: "Response truncated"},
 							},
 						},
 					},
