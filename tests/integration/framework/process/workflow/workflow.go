@@ -16,7 +16,6 @@ package workflow
 import (
 	"context"
 	"runtime"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,7 +31,7 @@ import (
 )
 
 type Workflow struct {
-	taskregistry atomic.Value // map[int]*task.TaskRegistry
+	taskregistry []*task.TaskRegistry
 	db           *sqlite.SQLite
 	place        *placement.Placement
 	sched        *scheduler.Scheduler
@@ -87,14 +86,17 @@ spec:
 	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
 
 	for i := range daprds {
+		dopts := make([]daprd.Option, len(baseDopts))
+		copy(dopts, baseDopts)
+
+		// Add specific opts for this daprd
 		for _, daprdOpt := range opts.daprdOptions {
 			if daprdOpt.index == i {
-				baseDopts = append(baseDopts, daprdOpt.opts...)
-				break
+				dopts = append(dopts, daprdOpt.opts...)
 			}
 		}
 
-		daprds[i] = daprd.New(t, baseDopts...)
+		daprds[i] = daprd.New(t, dopts...)
 	}
 
 	registries := make(map[int]*task.TaskRegistry)
@@ -115,14 +117,17 @@ spec:
 	}
 
 	workflow := &Workflow{
-		taskregistry: atomic.Value{},
+		taskregistry: make([]*task.TaskRegistry, len(daprds)),
 		db:           db,
 		place:        place,
 		sched:        sched,
 		daprds:       daprds,
 	}
 
-	workflow.taskregistry.Store(registries)
+	for i := range workflow.taskregistry {
+		workflow.taskregistry[i] = registries[i]
+	}
+
 	return workflow
 }
 
@@ -159,14 +164,12 @@ func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
 }
 
 func (w *Workflow) Registry() *task.TaskRegistry {
-	registries := w.taskregistry.Load().(map[int]*task.TaskRegistry)
-	return registries[0]
+	return w.taskregistry[0]
 }
 
 // Registry returns the registry for a specific index
 func (w *Workflow) RegistryN(index int) *task.TaskRegistry {
-	registries := w.taskregistry.Load().(map[int]*task.TaskRegistry)
-	return registries[index]
+	return w.taskregistry[index]
 }
 
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {

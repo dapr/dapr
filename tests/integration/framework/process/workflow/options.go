@@ -22,24 +22,30 @@ import (
 
 type Option func(*options)
 
+type orchestratorConfig struct {
+	index int
+	name  string
+	fn    func(*task.OrchestrationContext) (any, error)
+}
+
+type activityConfig struct {
+	index int
+	name  string
+	fn    func(task.ActivityContext) (any, error)
+}
+
+type daprdOptionConfig struct {
+	index int
+	opts  []daprd.Option
+}
+
 type options struct {
 	daprds          int
 	enableScheduler bool
 
-	orchestrators []struct {
-		index int
-		name  string
-		fn    func(*task.OrchestrationContext) (any, error)
-	}
-	activities []struct {
-		index int
-		name  string
-		fn    func(task.ActivityContext) (any, error)
-	}
-	daprdOptions []struct {
-		index int
-		opts  []daprd.Option
-	}
+	orchestrators []orchestratorConfig
+	activities    []activityConfig
+	daprdOptions  []daprdOptionConfig
 }
 
 func WithScheduler(enable bool) Option {
@@ -57,11 +63,11 @@ func WithAddOrchestratorN(t *testing.T, index int, name string, or func(*task.Or
 	t.Helper()
 
 	return func(o *options) {
-		o.orchestrators = append(o.orchestrators, struct {
-			index int
-			name  string
-			fn    func(*task.OrchestrationContext) (any, error)
-		}{index, name, or})
+		o.orchestrators = append(o.orchestrators, orchestratorConfig{
+			index: index,
+			name:  name,
+			fn:    or,
+		})
 	}
 }
 
@@ -74,11 +80,11 @@ func WithAddActivityN(t *testing.T, index int, name string, a func(task.Activity
 	t.Helper()
 
 	return func(o *options) {
-		o.activities = append(o.activities, struct {
-			index int
-			name  string
-			fn    func(task.ActivityContext) (any, error)
-		}{index, name, a})
+		o.activities = append(o.activities, activityConfig{
+			index: index,
+			name:  name,
+			fn:    a,
+		})
 	}
 }
 
@@ -90,9 +96,9 @@ func WithDaprds(daprds int) Option {
 
 func WithDaprdOptions(index int, opts ...daprd.Option) Option {
 	return func(o *options) {
-		o.daprdOptions = append(o.daprdOptions, struct {
-			index int
-			opts  []daprd.Option
-		}{index, opts})
+		o.daprdOptions = append(o.daprdOptions, daprdOptionConfig{
+			index: index,
+			opts:  opts,
+		})
 	}
 }
