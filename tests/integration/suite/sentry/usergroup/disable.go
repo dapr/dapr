@@ -72,7 +72,7 @@ func (d *disable) Setup(t *testing.T) []framework.Option {
 			}),
 			exec.WithEnvVars(t,
 				"KUBERNETES_SERVICE_HOST", "anything",
-				"DAPR_UNSAFE_SKIP_CONTAINER_UID_CHECK", "false",
+				"DAPR_UNSAFE_SKIP_CONTAINER_UID_GID_CHECK", "false",
 			),
 			exec.WithStdout(d.logline.Stdout()),
 		),
