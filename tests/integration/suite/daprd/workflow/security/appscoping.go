@@ -46,7 +46,7 @@ func (c *security) Setup(t *testing.T) []framework.Option {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app0: %w", err)
 		}
-		return fmt.Sprintf("Processed by app0: %s", input), nil
+		return "Processed by app0: " + input, nil
 	})
 
 	// App1 workflow that processes data locally
@@ -55,7 +55,7 @@ func (c *security) Setup(t *testing.T) []framework.Option {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app1: %w", err)
 		}
-		return fmt.Sprintf("Processed by app1: %s", input), nil
+		return "Processed by app1: " + input, nil
 	})
 
 	return []framework.Option{
