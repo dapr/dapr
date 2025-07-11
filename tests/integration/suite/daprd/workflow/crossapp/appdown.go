@@ -155,7 +155,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	var id api.InstanceID
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		id, err = client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
-		require.NoError(c, err)
+		assert.NoError(c, err)
 
 		// Wait for activity to start
 		select {
@@ -175,7 +175,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 		defer waitCancel()
 
 		_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
-		require.Error(t, err)
-		assert.EqualError(t, err, "context deadline exceeded")
+		assert.Error(c, err)
+		assert.EqualError(c, err, "context deadline exceeded")
 	}, 20*time.Second, 100*time.Millisecond)
 }
