@@ -44,6 +44,7 @@ var (
 
 type activity struct {
 	appID             string
+	namespace         string
 	actorID           string
 	actorType         string
 	workflowActorType string
@@ -62,6 +63,7 @@ type activity struct {
 
 type Options struct {
 	AppID              string
+	Namespace          string
 	ActivityActorType  string
 	WorkflowActorType  string
 	ReminderInterval   *time.Duration
@@ -102,6 +104,7 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 		if a == nil {
 			a = &activity{
 				appID:              opts.AppID,
+				namespace:          opts.Namespace,
 				actorID:            actorID,
 				actorType:          opts.ActivityActorType,
 				workflowActorType:  opts.WorkflowActorType,

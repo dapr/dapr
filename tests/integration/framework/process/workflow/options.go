@@ -16,18 +16,36 @@ package workflow
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/durabletask-go/task"
 )
 
 type Option func(*options)
 
-type options struct {
-	registry *task.TaskRegistry
-	daprds   int
+type orchestratorConfig struct {
+	index int
+	name  string
+	fn    func(*task.OrchestrationContext) (any, error)
+}
 
+type activityConfig struct {
+	index int
+	name  string
+	fn    func(task.ActivityContext) (any, error)
+}
+
+type daprdOptionConfig struct {
+	index int
+	opts  []daprd.Option
+}
+
+type options struct {
+	daprds          int
 	enableScheduler bool
+
+	orchestrators []orchestratorConfig
+	activities    []activityConfig
+	daprdOptions  []daprdOptionConfig
 }
 
 func WithScheduler(enable bool) Option {
@@ -36,24 +54,51 @@ func WithScheduler(enable bool) Option {
 	}
 }
 
-func WithAddOrchestratorN(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+func WithAddOrchestrator(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+	t.Helper()
+	return WithAddOrchestratorN(t, 0, name, or)
+}
+
+func WithAddOrchestratorN(t *testing.T, index int, name string, or func(*task.OrchestrationContext) (any, error)) Option {
 	t.Helper()
 
 	return func(o *options) {
-		require.NoError(t, o.registry.AddOrchestratorN(name, or))
+		o.orchestrators = append(o.orchestrators, orchestratorConfig{
+			index: index,
+			name:  name,
+			fn:    or,
+		})
 	}
 }
 
-func WithAddActivityN(t *testing.T, name string, a func(task.ActivityContext) (any, error)) Option {
+func WithAddActivity(t *testing.T, name string, a func(task.ActivityContext) (any, error)) Option {
+	t.Helper()
+	return WithAddActivityN(t, 0, name, a)
+}
+
+func WithAddActivityN(t *testing.T, index int, name string, a func(task.ActivityContext) (any, error)) Option {
 	t.Helper()
 
 	return func(o *options) {
-		require.NoError(t, o.registry.AddActivityN(name, a))
+		o.activities = append(o.activities, activityConfig{
+			index: index,
+			name:  name,
+			fn:    a,
+		})
 	}
 }
 
 func WithDaprds(daprds int) Option {
 	return func(o *options) {
 		o.daprds = daprds
+	}
+}
+
+func WithDaprdOptions(index int, opts ...daprd.Option) Option {
+	return func(o *options) {
+		o.daprdOptions = append(o.daprdOptions, daprdOptionConfig{
+			index: index,
+			opts:  opts,
+		})
 	}
 }

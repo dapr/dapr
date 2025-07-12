@@ -39,6 +39,7 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 		return err
 	}
 
+	// The activity actor should always create reminders for its own actor type and ID
 	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,

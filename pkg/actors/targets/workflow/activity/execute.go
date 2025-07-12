@@ -22,6 +22,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -109,9 +110,15 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		return todo.RunCompletedTrue, err
 	}
 
+	// send completed event to orchestrator wf actor
+	wfActorType := a.workflowActorType
+	if router := taskEvent.GetRouter(); router != nil {
+		wfActorType = common.GetWorkflowActorType(a.namespace, router.GetSource())
+	}
+
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-		WithActor(a.workflowActorType, workflowID).
+		WithActor(wfActorType, workflowID).
 		WithData(resultData).
 		WithContentType(invokev1.ProtobufContentType)
 

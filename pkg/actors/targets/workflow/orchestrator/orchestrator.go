@@ -54,6 +54,7 @@ type orchestrator struct {
 	actorID           string
 	actorType         string
 	activityActorType string
+	namespace         string
 
 	resiliency resiliency.Provider
 	router     router.Interface
@@ -80,6 +81,7 @@ type orchestrator struct {
 
 type Options struct {
 	AppID             string
+	Namespace         string
 	WorkflowActorType string
 	ActivityActorType string
 	ReminderInterval  *time.Duration
@@ -123,6 +125,7 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 		if o == nil {
 			o = &orchestrator{
 				appID:              opts.AppID,
+				namespace:          opts.Namespace,
 				actorID:            actorID,
 				actorType:          opts.WorkflowActorType,
 				activityActorType:  opts.ActivityActorType,

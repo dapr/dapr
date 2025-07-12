@@ -72,6 +72,7 @@ type Options struct {
 
 type Actors struct {
 	appID             string
+	namespace         string
 	workflowActorType string
 	activityActorType string
 
@@ -89,6 +90,7 @@ type Actors struct {
 func New(opts Options) *Actors {
 	return &Actors{
 		appID:                     opts.AppID,
+		namespace:                 opts.Namespace,
 		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
 		actors:                    opts.Actors,
@@ -112,6 +114,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	oopts := orchestrator.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		ReminderInterval:  abe.defaultReminderInterval,
@@ -132,6 +135,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	aopts := activity.Options{
 		AppID:             abe.appID,
+		Namespace:         abe.namespace,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
 		ReminderInterval:  abe.defaultReminderInterval,
