@@ -54,10 +54,12 @@ type restart struct {
 	registry2 *task.TaskRegistry
 
 	activityStarted chan struct{}
+	activityReady   chan struct{}
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
 	r.activityStarted = make(chan struct{})
+	r.activityReady = make(chan struct{})
 
 	r.place = placement.New(t)
 	r.sched = scheduler.New(t,
@@ -88,6 +90,10 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 		case r.activityStarted <- struct{}{}:
 		default:
 		}
+
+		// This ensures the workflow hangs when app2 goes down
+		<-r.activityReady
+
 		return "Processed by app2: " + input, nil
 	})
 
@@ -192,6 +198,8 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	// Restart the listener for app2 & ensure wf completion
 	client2Restart := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client2Restart.StartWorkItemListener(ctx, r.registry2))
+	close(r.activityReady)
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		completionCtx, completionCancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer completionCancel()
