@@ -162,7 +162,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		select {
 		case <-r.activityStarted:
 		case <-time.After(5 * time.Second):
-			t.Fatal("Timeout waiting for activity to start")
+			c.Errorf("Timeout waiting for activity to start")
 		}
 	}, 20*time.Second, 100*time.Millisecond)
 
