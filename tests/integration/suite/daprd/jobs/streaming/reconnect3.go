@@ -97,11 +97,15 @@ func (r *reconnect3) Setup(t *testing.T) []framework.Option {
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(srv, r.daprd, r.scheduler1, r.scheduler2, r.scheduler3),
+		framework.WithProcesses(r.scheduler1, r.scheduler3, srv, r.daprd),
 	}
 }
 
 func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
+	sched2Ctx, sched2Cancel := context.WithCancel(t.Context())
+	t.Cleanup(sched2Cancel)
+	r.scheduler2.Run(t, sched2Ctx)
+
 	r.scheduler1.WaitUntilRunning(t, ctx)
 	r.scheduler2.WaitUntilRunning(t, ctx)
 	r.scheduler3.WaitUntilRunning(t, ctx)
@@ -127,9 +131,8 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 		r.lock.Unlock()
 	}, time.Second*5, time.Millisecond*10)
 
-	r.scheduler2.Cleanup(t)
-
-	time.Sleep(time.Second * 5)
+	sched2Cancel()
+	time.Sleep(time.Second * 3)
 
 	r.lock.Lock()
 	r.jobCalledMap = make(map[string]struct{})
