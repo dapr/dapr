@@ -393,17 +393,18 @@ test-integration: test-deps
 		CGO_ENABLED=1 gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
-			--rerun-fails=2 --rerun-fails-max-failures=10s --rerun-fails-abort-on-data-race \
+			--rerun-fails=2 --rerun-fails-max-failures=10 --rerun-fails-abort-on-data-race --packages="./tests/integration" \
 			-- \
-			./tests/integration -timeout=20m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false
+			-timeout=20m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -args -integration-parallel=false
 
 .PHONY: test-integration-parallel
 test-integration-parallel: test-deps
 		CGO_ENABLED=1 gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
+			--rerun-fails=2 --rerun-fails-max-failures=10 --rerun-fails-abort-on-data-race --packages="./tests/integration" \
 			-- \
-			./tests/integration -timeout=20m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true
+			-timeout=20m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -args -integration-parallel=true
 
 ################################################################################
 # Target: lint                                                                 #
