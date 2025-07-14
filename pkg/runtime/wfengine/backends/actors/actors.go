@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -112,9 +113,9 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 
+	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
 		AppID:             abe.appID,
-		Namespace:         abe.namespace,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		ReminderInterval:  abe.defaultReminderInterval,
@@ -131,11 +132,11 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		SchedulerReminders: abe.schedulerReminders,
 		EventSink:          abe.eventSink,
+		ActorTypeBuilder:   actorTypeBuilder,
 	}
 
 	aopts := activity.Options{
 		AppID:             abe.appID,
-		Namespace:         abe.namespace,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
 		ReminderInterval:  abe.defaultReminderInterval,
@@ -154,6 +155,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		Actors:             abe.actors,
 		SchedulerReminders: abe.schedulerReminders,
+		ActorTypeBuilder:   actorTypeBuilder,
 	}
 
 	workflowFactory, activityFactory, err := workflow.Factories(ctx, oopts, aopts)

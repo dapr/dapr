@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -54,7 +55,7 @@ type orchestrator struct {
 	actorID           string
 	actorType         string
 	activityActorType string
-	namespace         string
+	actorTypeBuilder  *common.ActorTypeBuilder
 
 	resiliency resiliency.Provider
 	router     router.Interface
@@ -81,7 +82,6 @@ type orchestrator struct {
 
 type Options struct {
 	AppID             string
-	Namespace         string
 	WorkflowActorType string
 	ActivityActorType string
 	ReminderInterval  *time.Duration
@@ -91,6 +91,7 @@ type Options struct {
 	Scheduler          todo.WorkflowScheduler
 	SchedulerReminders bool
 	EventSink          EventSink
+	ActorTypeBuilder   *common.ActorTypeBuilder
 }
 
 func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
@@ -125,7 +126,6 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 		if o == nil {
 			o = &orchestrator{
 				appID:              opts.AppID,
-				namespace:          opts.Namespace,
 				actorID:            actorID,
 				actorType:          opts.WorkflowActorType,
 				activityActorType:  opts.ActivityActorType,
@@ -138,6 +138,7 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 				actorState:         astate,
 				schedulerReminders: opts.SchedulerReminders,
 				ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
+				actorTypeBuilder:   opts.ActorTypeBuilder,
 				closeCh:            make(chan struct{}),
 				lock:               make(chan struct{}, 1),
 			}

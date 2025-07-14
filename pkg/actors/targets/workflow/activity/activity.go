@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/kit/logger"
@@ -44,10 +45,10 @@ var (
 
 type activity struct {
 	appID             string
-	namespace         string
 	actorID           string
 	actorType         string
 	workflowActorType string
+	actorTypeBuilder  *common.ActorTypeBuilder
 
 	table     table.Interface
 	router    router.Interface
@@ -63,13 +64,13 @@ type activity struct {
 
 type Options struct {
 	AppID              string
-	Namespace          string
 	ActivityActorType  string
 	WorkflowActorType  string
 	ReminderInterval   *time.Duration
 	Scheduler          todo.ActivityScheduler
 	Actors             actors.Interface
 	SchedulerReminders bool
+	ActorTypeBuilder   *common.ActorTypeBuilder
 }
 
 func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
@@ -104,7 +105,6 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 		if a == nil {
 			a = &activity{
 				appID:              opts.AppID,
-				namespace:          opts.Namespace,
 				actorID:            actorID,
 				actorType:          opts.ActivityActorType,
 				workflowActorType:  opts.WorkflowActorType,
@@ -115,6 +115,7 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 				reminders:          reminders,
 				scheduler:          opts.Scheduler,
 				schedulerReminders: opts.SchedulerReminders,
+				actorTypeBuilder:   opts.ActorTypeBuilder,
 				lock:               make(chan struct{}, 1),
 			}
 		} else {

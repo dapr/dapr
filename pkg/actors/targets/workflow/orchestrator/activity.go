@@ -22,7 +22,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
@@ -70,8 +69,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	activityActorType := o.activityActorType
 	if router := e.GetRouter(); router != nil && router.Target != nil {
-		builder := common.NewActorTypeBuilder(o.namespace)
-		activityActorType = builder.Activity(router.GetTarget())
+		activityActorType = o.actorTypeBuilder.Activity(router.GetTarget())
 	}
 
 	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), o.state.Generation)

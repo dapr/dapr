@@ -25,7 +25,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 )
 
 func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, data proto.Message, start *time.Time, targetAppID string) (string, error) {
@@ -58,8 +57,7 @@ func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, da
 		}
 	}
 
-	builder := common.NewActorTypeBuilder(o.namespace)
-	actorType := builder.Workflow(targetAppID)
+	actorType := o.actorTypeBuilder.Workflow(targetAppID)
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
 
 	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
