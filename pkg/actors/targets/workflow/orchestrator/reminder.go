@@ -58,7 +58,8 @@ func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, da
 		}
 	}
 
-	actorType := common.GetWorkflowActorType(o.namespace, targetAppID)
+	builder := common.NewActorTypeBuilder(o.namespace)
+	actorType := builder.Workflow(targetAppID)
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
 
 	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{

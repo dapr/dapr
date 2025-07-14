@@ -70,7 +70,8 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	activityActorType := o.activityActorType
 	if router := e.GetRouter(); router != nil && router.Target != nil {
-		activityActorType = common.GetActivityActorType(o.namespace, router.GetTarget())
+		builder := common.NewActorTypeBuilder(o.namespace)
+		activityActorType = builder.Activity(router.GetTarget())
 	}
 
 	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), o.state.Generation)

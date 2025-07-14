@@ -13,10 +13,20 @@ limitations under the License.
 
 package common
 
-func GetWorkflowActorType(ns, appID string) string {
-	return "dapr.internal." + ns + "." + appID + ".workflow"
+type ActorTypeBuilder struct {
+	ns string
 }
 
-func GetActivityActorType(ns, appID string) string {
-	return "dapr.internal." + ns + "." + appID + ".activity"
+func NewActorTypeBuilder(namespace string) *ActorTypeBuilder {
+	return &ActorTypeBuilder{
+		ns: namespace,
+	}
+}
+
+func (a *ActorTypeBuilder) Workflow(appID string) string {
+	return "dapr.internal." + a.ns + "." + appID + ".workflow"
+}
+
+func (a *ActorTypeBuilder) Activity(appID string) string {
+	return "dapr.internal." + a.ns + "." + appID + ".activity"
 }
