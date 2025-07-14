@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -50,18 +49,13 @@ func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent,
 		return errors.New("invalid timer object for creating a timer reminder")
 	}
 
-	delay := time.Until(e.GetTimerFired().GetFireAt().AsTime())
-	if delay < 0 {
-		delay = 0
-	}
-
+	start := e.GetTimerFired().GetFireAt().AsTime()
 	reminderPrefix := "timer-" + strconv.Itoa(int(e.GetTimerFired().GetTimerId()))
-
 	data := &backend.DurableTimer{TimerEvent: e, Generation: generation}
 
-	log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer, duetime=%s", o.actorID, reminderPrefix, delay)
+	log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer, duetime=%s", o.actorID, reminderPrefix, start)
 
-	if _, err := o.createReminder(ctx, reminderPrefix, data, delay); err != nil {
+	if _, err := o.createReminder(ctx, reminderPrefix, data, &start, o.appID); err != nil {
 		return fmt.Errorf("actor '%s' failed to create reminder for timer: %w", o.actorID, err)
 	}
 

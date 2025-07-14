@@ -27,15 +27,19 @@ import (
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 )
 
-func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration) (string, error) {
+func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, data proto.Message, start *time.Time, targetAppID string) (string, error) {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 
+	dueTime := "0s"
+	if start != nil {
+		dueTime = start.UTC().Format(time.RFC3339)
+	}
+
 	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
-	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", o.activityActorType, o.actorID, reminderName, delay)
 
 	var period string
 	var oneshot bool
@@ -53,11 +57,14 @@ func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, da
 		}
 	}
 
+	actorType := o.actorTypeBuilder.Workflow(targetAppID)
+	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
+
 	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
-		ActorType: o.actorType,
+		ActorType: actorType,
 		ActorID:   o.actorID,
 		Data:      adata,
-		DueTime:   delay.String(),
+		DueTime:   dueTime,
 		Name:      reminderName,
 		Period:    period,
 		IsOneShot: oneshot,

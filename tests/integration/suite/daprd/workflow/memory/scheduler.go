@@ -47,11 +47,11 @@ func (s *scheduler) Setup(t *testing.T) []framework.Option {
 
 	s.workflow = workflow.New(t,
 		workflow.WithScheduler(true),
-		workflow.WithAddOrchestratorN(t, "foo", func(ctx *task.OrchestrationContext) (any, error) {
+		workflow.WithAddOrchestrator(t, "foo", func(ctx *task.OrchestrationContext) (any, error) {
 			require.NoError(t, ctx.CallActivity("bar", task.WithActivityInput(input)).Await(new([]byte)))
 			return "", nil
 		}),
-		workflow.WithAddActivityN(t, "bar", func(ctx task.ActivityContext) (any, error) { return "", nil }),
+		workflow.WithAddActivity(t, "bar", func(ctx task.ActivityContext) (any, error) { return "", nil }),
 	)
 
 	return []framework.Option{
