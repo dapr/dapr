@@ -19,9 +19,11 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc"
 
+	"github.com/cenkalti/backoff"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -318,7 +320,13 @@ func (s *Subscriber) StartAppSubscriptions() error {
 	var errs []error
 	for name, ps := range s.compStore.ListPubSubs() {
 		for _, sub := range s.compStore.ListSubscriptionsAppByPubSub(name) {
-			ss, err := s.startSubscription(ps, sub, false)
+			var ss *subscription.Subscription
+			var err error
+			backoff.Retry(func() error {
+				ss, err = s.startSubscription(ps, sub, false)
+				return err
+			}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 10))
+
 			if err != nil {
 				errs = append(errs, err)
 				continue
