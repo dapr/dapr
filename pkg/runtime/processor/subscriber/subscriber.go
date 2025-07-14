@@ -23,7 +23,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
