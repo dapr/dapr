@@ -122,7 +122,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 	// Check if the job's key exists in the etcd database
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
+		chosenSchedulerEtcdKeys := getEtcdKeys(t, ctx, chosenSchedulerPort)
 		n.checkKeysForJobName(t, "testJob", chosenSchedulerEtcdKeys)
 	}, time.Second*40, time.Millisecond*10, "failed to find job's key in etcd")
 
@@ -134,7 +134,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		require.NotEmptyf(t, diffSchedulerPort, "diffSchedulerPort should not be empty")
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
+			diffSchedulerEtcdKeys := getEtcdKeys(t, ctx, diffSchedulerPort)
 			n.checkKeysForJobName(t, "testJob", diffSchedulerEtcdKeys)
 		}, time.Second*40, time.Millisecond*10, "failed to find job's key in etcd")
 	}
@@ -155,16 +155,13 @@ func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb
 	require.True(t, found, "job's key not found: '%s'", jobName)
 }
 
-func getEtcdKeys(t *testing.T, port int) []*mvccpb.KeyValue {
+func getEtcdKeys(t *testing.T, ctx context.Context, port int) []*mvccpb.KeyValue {
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(port)},
 		DialTimeout: 40 * time.Second,
 	})
 	require.NoError(t, err)
 	defer client.Close()
-
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
 
 	// Get keys with prefix
 	resp, err := client.Get(ctx, "", clientv3.WithPrefix())

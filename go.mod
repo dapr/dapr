@@ -12,8 +12,8 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.15.1-0.20250701140252-bd6ea2e0f5b7
-	github.com/dapr/durabletask-go v0.7.3-0.20250703143506-24aa630ce118
-	github.com/dapr/kit v0.15.3-0.20250703145131-34f8820d2a4a
+	github.com/dapr/durabletask-go v0.7.3-0.20250705135742-20fd7583dc03
+	github.com/dapr/kit v0.15.3-0.20250709024107-7c4cedad37d8
 	github.com/diagridio/go-etcd-cron v0.8.3-0.20250704082745-6b45119148c2
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
@@ -68,8 +68,8 @@ require (
 	golang.org/x/net v0.41.0
 	golang.org/x/sync v0.15.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9
-	google.golang.org/grpc v1.72.1
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822
+	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.31.0
@@ -87,7 +87,7 @@ require (
 )
 
 require (
-	cel.dev/expr v0.20.0 // indirect
+	cel.dev/expr v0.23.0 // indirect
 	cloud.google.com/go v0.120.0 // indirect
 	cloud.google.com/go/ai v0.7.0 // indirect
 	cloud.google.com/go/aiplatform v1.86.0 // indirect
@@ -128,7 +128,7 @@ require (
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
 	github.com/Code-Hex/go-generics-cache v1.3.1 // indirect
 	github.com/DataDog/zstd v1.5.2 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.26.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.27.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.50.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.50.0 // indirect
 	github.com/IBM/sarama v1.43.3 // indirect
@@ -204,7 +204,7 @@ require (
 	github.com/cloudwego/kitex v0.5.0 // indirect
 	github.com/cloudwego/netpoll v0.3.2 // indirect
 	github.com/cloudwego/thriftgo v0.3.0 // indirect
-	github.com/cncf/xds/go v0.0.0-20250121191232-2f005788dc42 // indirect
+	github.com/cncf/xds/go v0.0.0-20250326154945-ae57f3c0d45f // indirect
 	github.com/cohesion-org/deepseek-go v1.2.0 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
@@ -368,6 +368,7 @@ require (
 	github.com/open-policy-agent/opa v1.4.2 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/openzipkin/zipkin-go v0.4.3 // indirect
+	github.com/oracle/coherence-go-client/v2 v2.2.0 // indirect
 	github.com/oracle/oci-go-sdk/v54 v54.0.0 // indirect
 	github.com/panjf2000/ants/v2 v2.8.1 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
@@ -441,7 +442,7 @@ require (
 	go.etcd.io/etcd/pkg/v3 v3.5.21 // indirect
 	go.etcd.io/etcd/raft/v3 v3.5.21 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
-	go.opentelemetry.io/contrib/detectors/gcp v1.34.0 // indirect
+	go.opentelemetry.io/contrib/detectors/gcp v1.35.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.60.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
@@ -518,5 +519,3 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-replace github.com/dapr/kit => github.com/dapr/kit v0.15.3-0.20250616160611-598b032bce69
