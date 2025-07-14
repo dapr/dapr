@@ -203,7 +203,6 @@ func (s *Server) Run(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("failed to listen on %s: %w", addr, err)
 			}
-			s.port = listener.Addr().(*net.TCPAddr).Port // Update port from listener in case it was not specified
 			s.htarget.Ready()
 			if s.tlsConfig == nil {
 				log.Infof("Starting OIDC HTTP server (insecure) on %s", addr)

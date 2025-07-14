@@ -183,7 +183,6 @@ func newOIDCServerRunner(opts Options, camngr ca.Signer) (concurrency.Runner, er
 		}
 
 		oidcOpts := oidc.Options{
-			Port:               *opts.OIDC.ServerListenPort,
 			ListenAddress:      opts.OIDC.ServerListenAddress,
 			JWKS:               jwksBytes,
 			JWTIssuer:          &issuer,
@@ -191,6 +190,9 @@ func newOIDCServerRunner(opts Options, camngr ca.Signer) (concurrency.Runner, er
 			AllowedHosts:       opts.OIDC.Domains,
 			TLSConfig:          opts.OIDC.TLSConfig,
 			SignatureAlgorithm: signAlg,
+		}
+		if opts.OIDC.ServerListenPort != nil {
+			oidcOpts.Port = *opts.OIDC.ServerListenPort
 		}
 
 		oidcOpts.JWKSURI = opts.OIDC.JWKSURI
