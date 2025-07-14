@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -127,6 +128,7 @@ func Run() {
 	cfg.JWT.SigningKeyPath = jwtKeyPath
 	cfg.JWT.Enabled = opts.JWT.Enabled
 	cfg.JWT.JWKSPath = jwksPath
+	cfg.JWT.SigningAlgorithm = opts.JWT.SigningAlgorithm
 	cfg.TrustDomain = opts.TrustDomain
 	cfg.Port = opts.Port
 	cfg.ListenAddress = opts.ListenAddress
@@ -134,10 +136,6 @@ func Run() {
 
 	if opts.JWT.Issuer != nil {
 		cfg.JWT.Issuer = opts.JWT.Issuer
-	}
-
-	if opts.JWT.SigningAlgorithm != "" {
-		cfg.JWT.SigningAlgorithm = opts.JWT.SigningAlgorithm
 	}
 
 	if opts.JWT.KeyID != nil {
@@ -162,14 +160,13 @@ func Run() {
 
 		// Configure TLS for OIDC HTTP server if needed
 		var oidcTLSConfig *tls.Config
-		if opts.OIDC.TLSCertFile != "" && opts.OIDC.TLSKeyFile != "" {
-			oidcTLSConfig, err = createOIDCTLSConfig(opts.OIDC.TLSCertFile, opts.OIDC.TLSKeyFile)
+		if opts.OIDC.TLSCertFile != nil && opts.OIDC.TLSKeyFile != nil {
+			oidcTLSConfig, err = createOIDCTLSConfig(*opts.OIDC.TLSCertFile, *opts.OIDC.TLSKeyFile)
 			if err != nil {
-				log.Errorf("Failed to create OIDC TLS config: %v", err)
-				return err
+				return fmt.Errorf("Failed to create OIDC TLS config: %v", err)
 			}
-		} else if opts.OIDC.TLSCertFile != "" || opts.OIDC.TLSKeyFile != "" {
-			log.Fatalf("Both OIDC TLS certificate and key must be provided if one is specified. Cert: %q, Key: %q", opts.OIDC.TLSCertFile, opts.OIDC.TLSKeyFile)
+		} else if opts.OIDC.TLSCertFile != nil || opts.OIDC.TLSKeyFile != nil {
+			return fmt.Errorf("Both OIDC TLS certificate and key must be provided if one is specified.")
 		}
 
 		sentry, serr := sentry.New(ctx, sentry.Options{

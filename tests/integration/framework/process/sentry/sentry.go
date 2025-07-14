@@ -309,8 +309,9 @@ func (s *Sentry) HealthzPort() int {
 	return s.healthzPort
 }
 
-func (s *Sentry) OIDCPort() *int {
-	return s.oidcPort
+func (s *Sentry) OIDCPort(t *testing.T) int {
+	require.NotNil(t, s.oidcPort)
+	return *s.oidcPort
 }
 
 func (s *Sentry) Namespace() string {
@@ -348,6 +349,12 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		if err := conn.Close(); err != nil {
+			if err != grpc.ErrClientConnClosing && //nolint:staticcheck
+				!strings.Contains(err.Error(), "connection is closing") &&
+				!strings.Contains(err.Error(), "already closed") {
+				require.NoError(t, err, "Failed to close gRPC connection")
+			}
+
 			// Log the error but don't fail the test if connection is already closed
 			t.Logf("Warning: gRPC connection close error (may be already closed): %v", err)
 		}
