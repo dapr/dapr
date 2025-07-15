@@ -16,6 +16,7 @@ package crossapp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,6 +107,6 @@ func (c *crossnamespace) Run(t *testing.T, ctx context.Context) {
 	// Start workflow from app0 (default namespace)
 	_, err := client0.ScheduleNewOrchestration(waitCtx, "CrossNamespaceWorkflow", api.WithInput("Hello from app0"))
 	require.Error(t, err)
-	require.EqualError(t, err, "context deadline exceeded")
+	require.True(t, strings.Contains(err.Error(), "context deadline exceeded") || strings.Contains(err.Error(), "DeadlineExceeded"))
 	c.actorNotFoundLogLine.EventuallyFoundAll(t)
 }
