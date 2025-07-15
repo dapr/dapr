@@ -123,7 +123,7 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 		var result string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID(r.daprd2.AppID())).
+			task.WithActivityAppID(r.daprd2.AppID())).
 			Await(&result)
 		if err != nil {
 			return fmt.Sprintf("Error occurred: %v", err), nil

@@ -88,7 +88,7 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 		var result1 string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID(m.workflow.DaprN(1).AppID())).
+			task.WithActivityAppID(m.workflow.DaprN(1).AppID())).
 			Await(&result1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute ProcessData: %w", err)
@@ -98,7 +98,7 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 		var result2 string
 		err = ctx.CallActivity("ValidateData",
 			task.WithActivityInput(result1),
-			task.WithAppID(m.workflow.DaprN(2).AppID())).
+			task.WithActivityAppID(m.workflow.DaprN(2).AppID())).
 			Await(&result2)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute ValidateData: %w", err)
@@ -108,7 +108,7 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 		var result3 string
 		err = ctx.CallActivity("TransformData",
 			task.WithActivityInput(result2),
-			task.WithAppID(m.workflow.DaprN(3).AppID())).
+			task.WithActivityAppID(m.workflow.DaprN(3).AppID())).
 			Await(&result3)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute TransformData: %w", err)
@@ -118,7 +118,7 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 		var result4 string
 		err = ctx.CallActivity("EnrichData",
 			task.WithActivityInput(result3),
-			task.WithAppID(m.workflow.DaprN(4).AppID())).
+			task.WithActivityAppID(m.workflow.DaprN(4).AppID())).
 			Await(&result4)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute EnrichData: %w", err)

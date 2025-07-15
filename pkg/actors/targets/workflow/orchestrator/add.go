@@ -51,7 +51,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	// hosted, so use the source app from the router
 	sourceAppID := o.appID
 	if e.GetRouter() != nil {
-		sourceAppID = e.GetRouter().GetSource()
+		sourceAppID = e.GetRouter().GetSourceAppID()
 	}
 
 	if _, err := o.createReminder(ctx, "new-event", nil, nil, sourceAppID); err != nil {
