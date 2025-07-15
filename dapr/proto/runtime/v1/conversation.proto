@@ -62,7 +62,8 @@ message ConversationRequest {
   // `auto` is the default if tools are present.
   optional google.protobuf.StringValue tool_choice = 9; // TODO(@Sicoyle): This actually is not a string in openai lol so need to fix this one
 
-  // replacing ConversationInput field
+  // ConversationInputV2 is the revamped conversation inputs better matching openai,
+  // and is intended to replace ConversationInput field.
   repeated ConversationInputV2 inputs_v2 = 10;
 
   /* TODO: fields to bring in from openai.ChatCompletionNewParams after Dapr 1.16.
@@ -98,7 +99,7 @@ message ConversationInputV2 {
   repeated ConversationMessage messages = 1;
 
   // Scrub PII data that goes into the LLM
-  optional bool scrubPII = 3;
+  optional bool scrubPII = 2;
 }
 
 // inspired by openai.ChatCompletionMessageParamUnion
