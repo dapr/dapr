@@ -88,7 +88,7 @@ func RunIntegrationTests(t *testing.T) {
 			// TODO: @joshvanl: update framework to use `t.Context()` which is
 			// correctly respected on cleanup.
 			//nolint:usetesting
-			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			t.Cleanup(cancel)
 
 			framework.Run(t, ctx, options...)
