@@ -77,7 +77,7 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 		var output string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID(c.workflow.DaprN(1).AppID())).
+			task.WithActivityAppID(c.workflow.DaprN(1).AppID())).
 			Await(&output)
 		if err != nil {
 			// Expected to fail due to namespace isolation

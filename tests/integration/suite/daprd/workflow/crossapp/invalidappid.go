@@ -73,7 +73,7 @@ func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 		var result string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID("nonexistent-app")).
+			task.WithActivityAppID("nonexistent-app")).
 			Await(&result)
 		return fmt.Sprintf("Error handled: %v", err), nil
 	})
