@@ -185,8 +185,6 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 		return err
 	}
 
-	monitoring.RecordSidecarsConnectedCount(1)
-	defer monitoring.RecordSidecarsConnectedCount(-1)
 	select {
 	case <-s.closeCh:
 		return errors.New("server is closing")
