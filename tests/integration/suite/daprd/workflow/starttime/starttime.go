@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package timer
+package starttime
 
 import (
 	"context"
@@ -24,46 +24,50 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
-	suite.Register(new(resumeearly))
+	suite.Register(new(starttime))
 }
 
-type resumeearly struct {
+type starttime struct {
 	workflow *workflow.Workflow
 }
 
-func (r *resumeearly) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t)
+func (s *starttime) Setup(t *testing.T) []framework.Option {
+	s.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(r.workflow),
+		framework.WithProcesses(s.workflow),
 	}
 }
 
-func (r *resumeearly) Run(t *testing.T, ctx context.Context) {
-	r.workflow.WaitUntilRunning(t, ctx)
+func (s *starttime) Run(t *testing.T, ctx context.Context) {
+	s.workflow.WaitUntilRunning(t, ctx)
 
-	r.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
-		return nil, ctx.CreateTimer(time.Second * 8).Await(nil)
+	var executed time.Time
+	s.workflow.Registry().AddOrchestratorN("delay", func(ctx *task.OrchestrationContext) (any, error) {
+		if !ctx.IsReplaying {
+			executed = time.Now()
+		}
+		return nil, nil
 	})
 
-	client := r.workflow.BackendClient(t, ctx)
+	client := s.workflow.BackendClient(t, ctx)
 
 	start := time.Now()
-	id, err := client.ScheduleNewOrchestration(ctx, "timer")
+	id, err := client.ScheduleNewOrchestration(ctx, "delay", api.WithStartTime(start.Add(time.Second*7)))
 	require.NoError(t, err)
-
-	time.Sleep(time.Second * 1)
-	require.NoError(t, client.SuspendOrchestration(ctx, id, "foo"))
-
-	time.Sleep(time.Second * 3)
-	require.NoError(t, client.ResumeOrchestration(ctx, id, "bar"))
-
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	// TODO: @joshvanl: remove in delta after second precision is removed.
-	assert.InDelta(t, 8.0, time.Since(start).Seconds(), 1.0)
+	assert.InDelta(t, 7.0, executed.Sub(start).Seconds(), 1.0)
+
+	start = time.Now()
+	id, err = client.ScheduleNewOrchestration(ctx, "delay", api.WithStartTime(start.Add(0)))
+	require.NoError(t, err)
+	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, err)
+	assert.InDelta(t, 0, executed.Sub(start).Seconds(), 1.0)
 }
