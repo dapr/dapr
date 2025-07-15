@@ -785,7 +785,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 
 		if a.channels.AppChannel() != nil {
 			// Start subscribing to topics and reading from input bindings
-			if err := a.processor.Subscriber().StartAppSubscriptions(); err != nil {
+			if err := a.processor.Subscriber().StartAppSubscriptions(ctx); err != nil {
 				log.Warnf("failed to subscribe to topics: %s ", err)
 			}
 			err := a.processor.Binding().StartReadingFromBindings(ctx)

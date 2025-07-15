@@ -288,7 +288,7 @@ func (s *Subscriber) StopPubSub(name string) {
 	s.streamSubs[name] = nil
 }
 
-func (s *Subscriber) StartAppSubscriptions() error {
+func (s *Subscriber) StartAppSubscriptions(ctx context.Context) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -322,10 +322,17 @@ func (s *Subscriber) StartAppSubscriptions() error {
 		for _, sub := range s.compStore.ListSubscriptionsAppByPubSub(name) {
 			var ss *subscription.Subscription
 			var err error
+
+			var b backoff.BackOff = backoff.NewConstantBackOff(1 * time.Second)
+			b = backoff.WithContext(b, ctx)
+			b = backoff.WithMaxRetries(b, 10)
 			backoff.Retry(func() error {
 				ss, err = s.startSubscription(ps, sub, false)
+				if err != nil {
+					log.Errorf("failed to create subscription for %s: %s", name, err)
+				}
 				return err
-			}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 10))
+			}, b)
 
 			if err != nil {
 				errs = append(errs, err)
