@@ -116,7 +116,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 		var result string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID(a.daprd2.AppID())).
+			task.WithActivityAppID(a.daprd2.AppID())).
 			Await(&result)
 		if err != nil {
 			return fmt.Sprintf("Error occurred: %v", err), nil
