@@ -11,14 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package timer
+package workflow
 
 import (
 	"context"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -28,41 +26,35 @@ import (
 )
 
 func init() {
-	suite.Register(new(resumeearly))
+	suite.Register(new(activity))
 }
 
-type resumeearly struct {
+type activity struct {
 	workflow *workflow.Workflow
 }
 
-func (r *resumeearly) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t)
+func (a *activity) Setup(t *testing.T) []framework.Option {
+	a.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(r.workflow),
+		framework.WithProcesses(a.workflow),
 	}
 }
 
-func (r *resumeearly) Run(t *testing.T, ctx context.Context) {
-	r.workflow.WaitUntilRunning(t, ctx)
+func (a *activity) Run(t *testing.T, ctx context.Context) {
+	a.workflow.WaitUntilRunning(t, ctx)
 
-	r.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
-		return nil, ctx.CreateTimer(time.Second * 8).Await(nil)
+	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+		return nil, ctx.CallActivity("bar").Await(nil)
+	})
+	a.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+		return nil, nil
 	})
 
-	client := r.workflow.BackendClient(t, ctx)
+	client := a.workflow.BackendClient(t, ctx)
 
-	start := time.Now()
-	id, err := client.ScheduleNewOrchestration(ctx, "timer")
+	id, err := client.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
-
-	time.Sleep(time.Second * 1)
-	require.NoError(t, client.SuspendOrchestration(ctx, id, "foo"))
-
-	time.Sleep(time.Second * 3)
-	require.NoError(t, client.ResumeOrchestration(ctx, id, "bar"))
-
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, time.Since(start).Seconds(), 8.0)
 }

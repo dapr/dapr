@@ -16,114 +16,19 @@ package activity
 import (
 	"context"
 	"errors"
-	"sync"
-	"time"
 
-	"github.com/dapr/dapr/pkg/actors"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/reminders"
-	"github.com/dapr/dapr/pkg/actors/router"
-	"github.com/dapr/dapr/pkg/actors/state"
-	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/dapr/pkg/actors/targets"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/lock"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/kit/logger"
 )
 
-var (
-	log = logger.NewLogger("dapr.runtime.actors.targets.activity")
-
-	activityCache = &sync.Pool{
-		New: func() any {
-			var a *activity
-			return a
-		},
-	}
-)
+var log = logger.NewLogger("dapr.runtime.actors.targets.activity")
 
 type activity struct {
-	appID             string
-	actorID           string
-	actorType         string
-	workflowActorType string
-	actorTypeBuilder  *common.ActorTypeBuilder
-
-	table     table.Interface
-	router    router.Interface
-	state     state.Interface
-	reminders reminders.Interface
-
-	scheduler          todo.ActivityScheduler
-	reminderInterval   time.Duration
-	schedulerReminders bool
-
-	lock chan struct{}
-}
-
-type Options struct {
-	AppID              string
-	ActivityActorType  string
-	WorkflowActorType  string
-	ReminderInterval   *time.Duration
-	Scheduler          todo.ActivityScheduler
-	Actors             actors.Interface
-	SchedulerReminders bool
-	ActorTypeBuilder   *common.ActorTypeBuilder
-}
-
-func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
-	table, err := opts.Actors.Table(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	router, err := opts.Actors.Router(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	state, err := opts.Actors.State(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	reminders, err := opts.Actors.Reminders(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	reminderInterval := time.Minute * 1
-
-	if opts.ReminderInterval != nil {
-		reminderInterval = *opts.ReminderInterval
-	}
-
-	return func(actorID string) targets.Interface {
-		a := activityCache.Get().(*activity)
-		if a == nil {
-			a = &activity{
-				appID:              opts.AppID,
-				actorID:            actorID,
-				actorType:          opts.ActivityActorType,
-				workflowActorType:  opts.WorkflowActorType,
-				reminderInterval:   reminderInterval,
-				table:              table,
-				router:             router,
-				state:              state,
-				reminders:          reminders,
-				scheduler:          opts.Scheduler,
-				schedulerReminders: opts.SchedulerReminders,
-				actorTypeBuilder:   opts.ActorTypeBuilder,
-				lock:               make(chan struct{}, 1),
-			}
-		} else {
-			a.actorID = actorID
-		}
-
-		return a
-	}, nil
+	*factory
+	actorID string
+	lock    *lock.Lock
 }
 
 // InvokeMethod implements actors.InternalActor and schedules the background execution of a workflow activity.
@@ -132,26 +37,30 @@ func Factory(ctx context.Context, opts Options) (targets.Factory, error) {
 // returns immediately after creating the reminder, enabling the workflow to continue processing other events
 // in parallel.
 func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	select {
-	case a.lock <- struct{}{}:
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	unlock, err := a.lock.ContextLock(ctx)
+	if err != nil {
+		return nil, err
 	}
-	defer func() { <-a.lock }()
+	defer unlock()
+
 	return a.handleInvoke(ctx, req)
 }
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
 func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	if !reminder.SkipLock {
-		select {
-		case a.lock <- struct{}{}:
-		case <-ctx.Done():
-			return ctx.Err()
+		unlock, err := a.lock.ContextLock(ctx)
+		if err != nil {
+			return err
 		}
-		defer func() { <-a.lock }()
+		defer unlock()
 	}
-	return a.handleReminder(ctx, reminder)
+
+	if err := a.handleReminder(ctx, reminder); err != nil {
+		return err
+	}
+
+	return a.Deactivate(ctx)
 }
 
 // InvokeTimer implements actors.InternalActor
@@ -161,7 +70,7 @@ func (a *activity) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(context.Context) error {
-	log.Debugf("Activity actor '%s': deactivated", a.actorID)
+	a.table.Delete(a.actorID)
 	activityCache.Put(a)
 	return nil
 }

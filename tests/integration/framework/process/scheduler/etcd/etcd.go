@@ -57,10 +57,13 @@ func New(t *testing.T, fopts ...Option) *Etcd {
 	lurl, err := url.Parse(clientEndpoint)
 	require.NoError(t, err)
 	config.ListenClientUrls = []url.URL{*lurl}
+	config.AdvertiseClientUrls = []url.URL{*lurl}
 
 	lurl, err = url.Parse("http://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
 	require.NoError(t, err)
 	config.ListenPeerUrls = []url.URL{*lurl}
+
+	config.ListenMetricsUrls = nil
 
 	return &Etcd{
 		fp:        fp,

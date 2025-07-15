@@ -31,13 +31,11 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/kit/events/queue"
 )
 
 type Interface interface {
@@ -53,7 +51,6 @@ type Options struct {
 	Resiliency         resiliency.Provider
 	Reminders          reminders.Interface
 	GRPC               *manager.Manager
-	IdlerQueue         *queue.Processor[string, targets.Idlable]
 	SchedulerReminders bool
 	MaxRequestBodySize int
 }
@@ -68,8 +65,6 @@ type router struct {
 	reminders  reminders.Interface
 	grpc       *manager.Manager
 
-	idlerQueue *queue.Processor[string, targets.Idlable]
-
 	clock clock.Clock
 
 	callOptions []grpc.CallOption
@@ -83,7 +78,6 @@ func New(opts Options) Interface {
 		placement:          opts.Placement,
 		resiliency:         opts.Resiliency,
 		grpc:               opts.GRPC,
-		idlerQueue:         opts.IdlerQueue,
 		reminders:          opts.Reminders,
 		clock:              clock.RealClock{},
 		callOptions: []grpc.CallOption{
@@ -177,7 +171,7 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
-	target, _, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
+	target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
 	if err != nil {
 		return backoff.Permanent(err)
 	}
@@ -295,7 +289,7 @@ func (r *router) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 }
 
 func (r *router) callLocalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	target, err := r.getOrCreateActor(req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	target, err := r.table.GetOrCreate(req.GetActor().GetActorType(), req.GetActor().GetActorId())
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +333,7 @@ func (r *router) callLocalActorStream(ctx context.Context,
 	req *internalv1pb.InternalInvokeRequest,
 	stream chan<- *internalv1pb.InternalInvokeResponse,
 ) error {
-	target, err := r.getOrCreateActor(req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	target, err := r.table.GetOrCreate(req.GetActor().GetActorType(), req.GetActor().GetActorId())
 	if err != nil {
 		return err
 	}
@@ -379,20 +373,4 @@ func (r *router) callRemoteActorStream(ctx context.Context,
 			return ctx.Err()
 		}
 	}
-}
-
-func (r *router) getOrCreateActor(actorType, actorID string) (targets.Interface, error) {
-	target, created, err := r.table.GetOrCreate(actorType, actorID)
-	if err != nil {
-		return nil, err
-	}
-
-	if created {
-		// If the target is idlable, then add it to the queue.
-		if idler, ok := target.(targets.Idlable); ok {
-			r.idlerQueue.Enqueue(idler)
-		}
-	}
-
-	return target, nil
 }
