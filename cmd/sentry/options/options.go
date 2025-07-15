@@ -139,8 +139,8 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.OIDC.serverListenPort, "oidc-server-listen-port", 8080, "The port for the OIDC HTTP server")
 	fs.StringVar(&opts.OIDC.ServerListenAddress, "oidc-server-listen-address", "0.0.0.0", "The address for the OIDC HTTP server")
 	fs.BoolVar(&opts.OIDC.TLSEnabled, "oidc-server-tls-enabled", true, "Serve OIDC HTTP with TLS")
-	fs.StringVar(opts.OIDC.TLSCertFile, "oidc-server-tls-cert-file", "", "TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
-	fs.StringVar(opts.OIDC.TLSKeyFile, "oidc-server-tls-key-file", "", "TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
+	fs.StringVar(&opts.OIDC.tlsCertFile, "oidc-server-tls-cert-file", "", "TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
+	fs.StringVar(&opts.OIDC.tlsKeyFile, "oidc-server-tls-key-file", "", "TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
 	fs.StringVar(&opts.OIDC.jwksURI, "oidc-jwks-uri", "", "Custom URI where the JWKS can be accessed externally")
 	fs.StringVar(&opts.OIDC.pathPrefix, "oidc-path-prefix", "", "Path prefix to add to OIDC HTTP endpoints")
 	fs.StringSliceVar(&opts.OIDC.AllowedHosts, "oidc-allowed-hosts", nil, "List of allowed hosts for OIDC HTTP endpoints")
@@ -162,6 +162,12 @@ func New(origArgs []string) *Options {
 
 	if fs.Changed("oidc-server-listen-port") {
 		opts.OIDC.ServerListenPort = &opts.OIDC.serverListenPort
+	}
+	if fs.Changed("oidc-server-tls-cert-file") {
+		opts.OIDC.TLSCertFile = &opts.OIDC.tlsCertFile
+	}
+	if fs.Changed("oidc-server-tls-key-file") {
+		opts.OIDC.TLSKeyFile = &opts.OIDC.tlsKeyFile
 	}
 	if fs.Changed("oidc-jwks-uri") {
 		opts.OIDC.JWKSURI = &opts.OIDC.jwksURI

@@ -85,12 +85,12 @@ func (o *customOIDCServer) Setup(t *testing.T) []framework.Option {
 		sentry.WithOIDCAllowedHosts(o.allowedHosts), // Allowed hosts restriction
 	)
 
-	oidcPort := o.sentry.OIDCPort()
+	oidcPort := o.sentry.OIDCPort(t)
 	require.NotNil(t, oidcPort, "OIDC port should not be nil when OIDC is enabled")
 
 	testBundle := o.sentry.CABundle()
 	o.testBundle = &testBundle
-	o.oidcBaseURL = fmt.Sprintf("https://localhost:%d", *oidcPort)
+	o.oidcBaseURL = fmt.Sprintf("https://localhost:%d", oidcPort)
 
 	return []framework.Option{
 		framework.WithProcesses(o.sentry),
@@ -128,7 +128,7 @@ func (o *customOIDCServer) testPathPrefixConfiguration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify issuer includes path prefix
-	expectedIssuer := fmt.Sprintf("https://localhost:%d%s", *o.sentry.OIDCPort(), o.pathPrefix)
+	expectedIssuer := fmt.Sprintf("https://localhost:%d%s", o.sentry.OIDCPort(t), o.pathPrefix)
 	assert.Equal(t, expectedIssuer, discovery["issuer"])
 
 	// Test JWKS endpoint with path prefix
@@ -299,10 +299,10 @@ func (o *customOIDCServer) testInsecureHTTPMode(t *testing.T) {
 
 	httpSentry.WaitUntilRunning(t, ctx)
 
-	httpOIDCPort := httpSentry.OIDCPort()
+	httpOIDCPort := httpSentry.OIDCPort(t)
 	require.NotNil(t, httpOIDCPort, "HTTP OIDC port should not be nil when OIDC is enabled")
 
-	httpBaseURL := fmt.Sprintf("http://localhost:%d", *httpOIDCPort)
+	httpBaseURL := fmt.Sprintf("http://localhost:%d", httpOIDCPort)
 
 	// Create regular HTTP client (no TLS)
 	httpClient := &http.Client{
