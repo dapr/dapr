@@ -183,7 +183,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	err = o.saveInternalState(ctx, state)
 	if err != nil {
-		return todo.RunCompletedTrue, err
+		return todo.RunCompletedFalse, err
 	}
 
 	if executionStatus != "" {
