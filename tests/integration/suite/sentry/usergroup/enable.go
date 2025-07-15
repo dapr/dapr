@@ -48,6 +48,9 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 		TrustDomain:      "integration.test.dapr.io",
 		AllowedClockSkew: time.Second * 5,
 		OverrideCATTL:    nil,
+		MissingCredentials: bundle.MissingCredentials{
+			X509: true,
+		},
 	})
 	require.NoError(t, err)
 
