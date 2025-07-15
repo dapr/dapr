@@ -29,7 +29,9 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
+	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/app/lock"
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -51,6 +53,7 @@ type Options struct {
 	IdleQueue   *queue.Processor[string, targets.Idlable]
 	IdleTimeout time.Duration
 	clock       clock.Clock
+	Reentrancy  *reentrancystore.Store
 }
 
 type app struct {
@@ -67,6 +70,8 @@ type app struct {
 	// idleAt is the time after which this actor is considered to be idle.
 	// When the actor is locked, idleAt is updated by adding the idleTimeout to the current time.
 	idleAt *atomic.Pointer[time.Time]
+
+	lock *lock.Lock
 
 	clock clock.Clock
 }
@@ -88,19 +93,33 @@ func Factory(opts Options) targets.Factory {
 			idleTimeout: opts.IdleTimeout,
 			idleAt:      &idleAt,
 			clock:       opts.clock,
+			lock: lock.New(lock.Options{
+				ActorType:   opts.ActorType,
+				ConfigStore: opts.Reentrancy,
+			}),
 		}
 	}
 }
 
 func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	ctx, cancel, err := a.lock.LockRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
+	return a.doInvokeMethod(ctx, req)
+}
+
+func (a *app) doInvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
+	a.idleQueue.Enqueue(a)
+
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create InvokeMethodRequest: %w", err)
 	}
 	defer imReq.Close()
-
-	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
-	a.idleQueue.Enqueue(a)
 
 	// Replace method to actors method.
 	msg := imReq.Message()
@@ -176,6 +195,12 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 }
 
 func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
+	ctx, cancel, err := a.lock.Lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+
 	invokeMethod := "remind/" + reminder.Name
 	data, err := json.Marshal(&api.ReminderResponse{
 		DueTime: reminder.DueTime,
@@ -192,7 +217,7 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 		WithData(data).
 		WithContentType(internalv1pb.JSONContentType)
 
-	_, err = a.InvokeMethod(ctx, req)
+	_, err = a.doInvokeMethod(ctx, req)
 	if err != nil {
 		if !errors.Is(err, actorerrors.ErrReminderCanceled) {
 			log.Errorf("Error executing reminder for actor %s: %v", reminder.Key(), err)
@@ -204,6 +229,12 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 }
 
 func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
+	ctx, cancel, err := a.lock.Lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+
 	invokeMethod := "timer/" + reminder.Name
 	data, err := json.Marshal(&api.TimerResponse{
 		Callback: reminder.Callback,
@@ -222,7 +253,7 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 		WithData(data).
 		WithContentType(internalv1pb.JSONContentType)
 
-	_, err = a.InvokeMethod(ctx, req)
+	_, err = a.doInvokeMethod(ctx, req)
 	if err != nil {
 		if !errors.Is(err, actorerrors.ErrReminderCanceled) {
 			log.Errorf("Error executing timer for actor %s: %v", reminder.Key(), err)
@@ -233,7 +264,9 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	return nil
 }
 
-func (a *app) Deactivate() error {
+func (a *app) Deactivate(ctx context.Context) error {
+	a.lock.Close(ctx)
+
 	req := invokev1.NewInvokeMethodRequest("actors/"+a.actorType+"/"+a.actorID).
 		WithActor(a.actorType, a.actorID).
 		WithHTTPExtension(http.MethodDelete, "").

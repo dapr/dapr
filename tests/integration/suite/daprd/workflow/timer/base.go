@@ -15,7 +15,6 @@ package timer
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -49,19 +47,18 @@ func (b *base) Setup(t *testing.T) []framework.Option {
 func (b *base) Run(t *testing.T, ctx context.Context) {
 	b.workflow.WaitUntilRunning(t, ctx)
 
-	var now atomic.Pointer[time.Time]
 	b.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
-		if !ctx.IsReplaying {
-			now.Store(ptr.Of(time.Now()))
-		}
-		return nil, ctx.CreateTimer(time.Second * 4).Await(nil)
+		err := ctx.CreateTimer(time.Second * 7).Await(nil)
+		return nil, err
 	})
 
 	client := b.workflow.BackendClient(t, ctx)
 
+	start := time.Now()
 	id, err := client.ScheduleNewOrchestration(ctx, "timer", api.WithInstanceID("timer"))
 	require.NoError(t, err)
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.InDelta(t, 4.0, time.Since(*now.Load()).Seconds(), 1.0)
+	// TODO: @joshvanl: remove in delta when second precision is removed.
+	assert.InDelta(t, 7.0, time.Since(start).Seconds(), 1.0)
 }

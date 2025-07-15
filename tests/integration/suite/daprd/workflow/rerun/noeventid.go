@@ -66,5 +66,5 @@ func (n *noeventid) Run(t *testing.T, ctx context.Context) {
 	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 5, api.WithRerunNewInstanceID("xyz"))
 	require.Error(t, err)
 
-	assert.Equal(t, status.Error(codes.NotFound, "'abc' does not have history event with ID '5'"), err)
+	assert.Equal(t, status.Error(codes.NotFound, "does not have history event with ID '5'"), err)
 }

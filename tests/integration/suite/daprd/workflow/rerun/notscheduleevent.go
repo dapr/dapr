@@ -66,5 +66,5 @@ func (n *notscheduleevent) Run(t *testing.T, ctx context.Context) {
 	_, err = client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 1, api.WithRerunNewInstanceID("xyz"))
 	require.Error(t, err)
 
-	assert.Equal(t, status.Error(codes.NotFound, "'abc' target event ID '1' is not a TaskScheduled event"), err)
+	assert.Equal(t, status.Error(codes.NotFound, "target event '*protos.HistoryEvent_ExecutionCompleted' with ID '1' is not an event that can be rerun"), err)
 }
