@@ -31,6 +31,7 @@ message ConversationRequest {
   optional string contextID = 2;
 
   // Inputs for the conversation, support multiple input in one time.
+  // Deprecating in favor of ConversationInputV2
   repeated ConversationInput inputs = 3;
 
   // Parameters for all custom fields.
@@ -61,6 +62,9 @@ message ConversationRequest {
   // `auto` is the default if tools are present.
   optional google.protobuf.StringValue tool_choice = 9; // TODO(@Sicoyle): This actually is not a string in openai lol so need to fix this one
 
+  // replacing ConversationInput field
+  repeated ConversationInputV2 inputs_v2 = 10;
+
   /* TODO: fields to bring in from openai.ChatCompletionNewParams after Dapr 1.16.
   Note: They can be within the other messages, not necessarily top level here.
   MaxCompletionTokens: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2131
@@ -73,11 +77,21 @@ message ConversationRequest {
   */
 }
 
-// directly inspired by openai.ChatCompletionNewParams
-// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2106
+// maintained for backwards compatibility,
+// and we will move to ConversationInputV2 instead in future.
 message ConversationInput {
   // The content to send to the llm
-  // TODO(@Sicoyle): should be typed and be one of look at ex
+  repeated ConversationMessage messages = 1;
+
+  // Scrub PII data that goes into the LLM
+  optional bool scrubPII = 3;
+}
+
+
+// directly inspired by openai.ChatCompletionNewParams
+// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2106
+message ConversationInputV2 {
+  // The content to send to the llm
   repeated ConversationMessage messages = 1;
 
   // Scrub PII data that goes into the LLM
