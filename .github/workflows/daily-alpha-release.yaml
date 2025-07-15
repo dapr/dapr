@@ -4,12 +4,15 @@ on:
   schedule:
     - cron: '0 6 * * *' # every day at 6am
   workflow_dispatch:
-
 jobs:
   new-alpha-release:
     name: New Alpha Release
     runs-on: ubuntu-latest
     steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Generate alpha version
         id: version
         run: |
@@ -20,7 +23,11 @@ jobs:
           echo "Latest tag: ${latest}"
           alpha_version="0.0.0-alpha"
           echo "rel_version=${alpha_version}" >> "$GITHUB_OUTPUT"          
-      - name: Create Release
-        uses: ./.github/workflows/create-release.yml
-        with:
-          rel_version: ${{ steps.version.outputs.rel_version }}
+      - name: Trigger create-release workflow
+        run: |
+          gh workflow run create-release.yaml \
+            --repo diagridio/d3e \
+            --ref main \
+            --field rel_version="0.0.0-alpha"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

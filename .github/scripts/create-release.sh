@@ -28,10 +28,9 @@ fi
 MAJOR_MINOR_VERSION=`echo $REL_VERSION | cut -d. -f1,2`
 RELEASE_BRANCH="release-$MAJOR_MINOR_VERSION"
 RELEASE_TAG="v$REL_VERSION"
-SUFFIX=`echo $REL_VERSION | grep \- | cut -d- -f2 | cut -d. -f1`
 
 FORCE_PUSH=false
-if [ "$SUFFIX" == "alpha" ]; then
+if [ "$REL_VERSION" == "0.0.0-alpha" ]; then
   RELEASE_BRANCH="master"
   FORCE_PUSH=true
 fi
