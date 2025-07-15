@@ -46,7 +46,6 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if err := o.saveInternalState(ctx, state); err != nil {
 		return err
 	}
-	defer o.ometaBroadcaster.Broadcast(o.ometa)
 
 	// For activity completion events, we want to create the reminder on the same app where this workflow actor is
 	// hosted, so use the source app from the router
