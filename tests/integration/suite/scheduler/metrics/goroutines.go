@@ -92,6 +92,6 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.LessOrEqual(c, startGoRoutines, g.scheduler.Metrics(t, ctx).All()["go_goroutines"]+10)
+		assert.LessOrEqual(c, g.scheduler.Metrics(t, ctx).All()["go_goroutines"]-10, startGoRoutines)
 	}, time.Second*30, time.Second)
 }
