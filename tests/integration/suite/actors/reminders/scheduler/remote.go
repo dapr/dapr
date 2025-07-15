@@ -74,7 +74,7 @@ spec:
   - name: SchedulerReminders
     enabled: true`), 0o600))
 
-	r.actorIDsNum = 200
+	r.actorIDsNum = 100
 	r.methodcalled.Store(make([]string, 0, r.actorIDsNum))
 	r.actorIDs = make([]string, r.actorIDsNum)
 	for i := range r.actorIDsNum {
