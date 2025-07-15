@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -75,10 +74,8 @@ func (m *client) Run(t *testing.T, ctx context.Context) {
 	m.place.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilTCPReady(t, ctx)
 
-	client := fclient.HTTP(t)
-
 	// Before initialization
-	res := getMetadata(t, ctx, client, m.daprd.HTTPPort())
+	res := m.daprd.GetMetadata(t, ctx)
 	require.False(t, t.Failed())
 	assert.Equal(t, "INITIALIZING", res.ActorRuntime.RuntimeStatus)
 	assert.False(t, res.ActorRuntime.HostReady)
@@ -88,7 +85,7 @@ func (m *client) Run(t *testing.T, ctx context.Context) {
 	// Complete init
 	close(m.blockConfig)
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
-		res := getMetadata(t, ctx, client, m.daprd.HTTPPort())
+		res := m.daprd.GetMetadata(t, ctx)
 		assert.Equal(t, "RUNNING", res.ActorRuntime.RuntimeStatus)
 		assert.True(t, res.ActorRuntime.HostReady)
 		assert.Equal(t, "placement: connected", res.ActorRuntime.Placement)

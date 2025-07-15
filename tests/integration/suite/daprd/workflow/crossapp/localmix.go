@@ -102,7 +102,7 @@ func (l *localmix) Run(t *testing.T, ctx context.Context) {
 		var step2Result string
 		err = ctx.CallActivity("RemoteProcess2",
 			task.WithActivityInput(step1Result),
-			task.WithAppID(l.workflow.DaprN(1).AppID())).
+			task.WithActivityAppID(l.workflow.DaprN(1).AppID())).
 			Await(&step2Result)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute step 2 remote activity: %w", err)
@@ -121,7 +121,7 @@ func (l *localmix) Run(t *testing.T, ctx context.Context) {
 		var step4Result string
 		err = ctx.CallActivity("LocalProcess4",
 			task.WithActivityInput(step3Result),
-			task.WithAppID(l.workflow.DaprN(0).AppID())).
+			task.WithActivityAppID(l.workflow.DaprN(0).AppID())).
 			Await(&step4Result)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute step 4 local activity: %w", err)
