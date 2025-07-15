@@ -123,7 +123,7 @@ jobs:
       - name: Dependency review
         uses: actions/dependency-review-action@v4
         # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-      - uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+      - uses: antontroshin/setup-go@461004e4c97225a313a997efabc35fde47d587bb
         with:
           go-version-file: "go.mod"
       - name: Install govulncheck
@@ -196,7 +196,7 @@ jobs:
       - name: Set up Go
         id: setup-go
         # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+        uses: antontroshin/setup-go@461004e4c97225a313a997efabc35fde47d587bb
         with:
           go-version-file: "go.mod"
       - name: Run make test
@@ -246,7 +246,7 @@ jobs:
       - name: Set up Go
         id: setup-go
         # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+        uses: antontroshin/setup-go@461004e4c97225a313a997efabc35fde47d587bb
         with:
           go-version-file: "go.mod"
       - name: Override DAPR_HOST_IP for MacOS
@@ -339,7 +339,7 @@ jobs:
       - name: Set up Go
         id: setup-go
         # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+        uses: antontroshin/setup-go@461004e4c97225a313a997efabc35fde47d587bb
         with:
           go-version-file: "go.mod"
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
