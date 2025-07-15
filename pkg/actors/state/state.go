@@ -202,10 +202,8 @@ func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bo
 		defer cancel()
 	}
 
-	if !ignoreHosted {
-		if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
-			return messages.ErrActorInstanceMissing
-		}
+	if !ignoreHosted && !s.table.ActorExists(req.ActorType, req.ActorID) {
+		return messages.ErrActorInstanceMissing
 	}
 
 	operations := make([]contribstate.TransactionalStateOperation, len(req.Operations))
