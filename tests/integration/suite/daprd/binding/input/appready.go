@@ -130,6 +130,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.HTTP(t).Do(req)
 		assert.NoError(c, err)
 		defer resp.Body.Close()
+		require.NotNil(c, resp)
 		assert.Equal(c, http.StatusOK, resp.StatusCode)
 	}, time.Second*5, 10*time.Millisecond)
 
