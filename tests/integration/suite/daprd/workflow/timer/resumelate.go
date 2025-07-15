@@ -64,6 +64,5 @@ func (r *resumelate) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	// TODO: @joshvanl: remove in delta after second precision is removed.
-	assert.InDelta(t, 11.0, time.Since(start).Seconds(), 1.0)
+	assert.GreaterOrEqual(t, time.Since(start).Seconds(), 11.0)
 }

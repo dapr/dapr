@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -29,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
-	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
@@ -194,7 +192,6 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 		assert.GreaterOrEqual(c,
 			len(w.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
 	}, time.Second*10, time.Millisecond*10)
-	backendClient.RaiseEvent(ctx, api.InstanceID(uuid.NewString()), uuid.NewString())
 
 	return backendClient
 }

@@ -24,7 +24,6 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -104,8 +103,7 @@ func (w *workflows) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	meta := getMetadata(t, ctx, fclient.HTTP(t), w.workflow.Dapr().HTTPPort())
-	assert.ElementsMatch(t, []metadataActiveActors{
+	assert.ElementsMatch(t, []*daprd.MetadataActorRuntimeActiveActor{
 		{
 			Type:  "dapr.internal.default." + w.workflow.Dapr().AppID() + ".workflow",
 			Count: 2,
@@ -122,5 +120,5 @@ func (w *workflows) Run(t *testing.T, ctx context.Context) {
 			Type:  "myothertype",
 			Count: 1,
 		},
-	}, meta.ActorRuntime.ActiveActors)
+	}, w.workflow.Dapr().GetMetaActorRuntime(t, ctx).ActiveActors)
 }

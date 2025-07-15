@@ -57,8 +57,14 @@ func (n *nodelay) Run(t *testing.T, ctx context.Context) {
 
 	client := n.workflow.BackendClient(t, ctx)
 
+	// Ensure workflow actors are warmed.
+	id, err := client.ScheduleNewOrchestration(ctx, "delay")
+	require.NoError(t, err)
+	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, err)
+
 	start := time.Now()
-	id, err := client.ScheduleNewOrchestration(ctx, "delay", api.WithStartTime(start.Add(0)))
+	id, err = client.ScheduleNewOrchestration(ctx, "delay", api.WithStartTime(start.Add(0)))
 	require.NoError(t, err)
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
