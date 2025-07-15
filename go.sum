@@ -505,8 +505,18 @@ github.com/dapr/components-contrib v1.15.1-0.20250701140252-bd6ea2e0f5b7 h1:9Myk
 github.com/dapr/components-contrib v1.15.1-0.20250701140252-bd6ea2e0f5b7/go.mod h1:b/rsNUUMNxDcikbbl8dyJ1TlWXMz0+kmPCxuA3wrApc=
 github.com/dapr/durabletask-go v0.7.3-0.20250711135247-7a35af6fe0e5 h1:l8oBGwcfCwqvSYDZwla0A2fhENmXFc1Wk4lR0VEq+is=
 github.com/dapr/durabletask-go v0.7.3-0.20250711135247-7a35af6fe0e5/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
+<<<<<<< HEAD
 github.com/dapr/kit v0.15.3-0.20250710140356-9d4f384c5763 h1:9H0+baON+6+x4A/nQ2Lj+1JNk8MSlNv6sik6zfxdvsE=
 github.com/dapr/kit v0.15.3-0.20250710140356-9d4f384c5763/go.mod h1:40ZWs5P6xfYf7O59XgwqZkIyDldTIXlhTQhGop8QoSM=
+||||||| parent of 92970cd2b (Update signatures to use `task.WithAppID` to `task.WithActivityAppID`)
+github.com/dapr/durabletask-go v0.7.3-0.20250709154301-00ff61ed902f h1:FuON+GrglBOyHorX/ktbJp720FAMv6n44nHzY7x8Yzs=
+github.com/dapr/durabletask-go v0.7.3-0.20250709154301-00ff61ed902f/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
+github.com/dapr/kit v0.15.3-0.20250709024107-7c4cedad37d8 h1:r+mJmaQkB5gwhfb4tbNGBxdUFbujQ17eiyltF685VHk=
+github.com/dapr/kit v0.15.3-0.20250709024107-7c4cedad37d8/go.mod h1:40ZWs5P6xfYf7O59XgwqZkIyDldTIXlhTQhGop8QoSM=
+=======
+github.com/dapr/kit v0.15.3-0.20250709024107-7c4cedad37d8 h1:r+mJmaQkB5gwhfb4tbNGBxdUFbujQ17eiyltF685VHk=
+github.com/dapr/kit v0.15.3-0.20250709024107-7c4cedad37d8/go.mod h1:40ZWs5P6xfYf7O59XgwqZkIyDldTIXlhTQhGop8QoSM=
+>>>>>>> 92970cd2b (Update signatures to use `task.WithAppID` to `task.WithActivityAppID`)
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
