@@ -81,7 +81,10 @@ message ConversationRequest {
 // and we will move to ConversationInputV2 instead in future.
 message ConversationInput {
   // The content to send to the llm
-  repeated ConversationMessage messages = 1;
+  string content = 1;
+
+  // The role to set for the message
+  optional string role = 2;
 
   // Scrub PII data that goes into the LLM
   optional bool scrubPII = 3;
@@ -195,7 +198,16 @@ message ConversationContentMessageContent {
 }
 
 // ConversationResult is the result for one input.
+// This is being deprecated in favor of ConversationResultV2.
 message ConversationResult {
+  // Result for the one conversation input.
+  string result = 1;
+  // Parameters for all custom fields.
+  map<string, google.protobuf.Any> parameters = 2;
+}
+
+// ConversationResultV2 is the result for one input.
+message ConversationResultV2 {
   // Result for the one conversation input.
   // string result = 1; // was string before
   ConversationResultChoices choices = 1;
@@ -230,7 +242,11 @@ message ConversationResponse {
   optional string contextID = 1;
 
   // An array of results.
+  // Deprecating in favor of ConversationResultV2.
   repeated ConversationResult outputs = 2;
+
+  repeated ConversationResultV2 outputs_v2 = 3;
+
 }
 
 // ConversationTools are the typed tools available to be called.
