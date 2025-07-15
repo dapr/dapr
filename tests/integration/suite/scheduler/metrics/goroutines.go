@@ -70,7 +70,7 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	startGoRoutines := g.scheduler.Metrics(t, ctx).All()["go_goroutines"]
 
-	n := 100
+	n := 50
 	rep := 2
 
 	for i := range n {

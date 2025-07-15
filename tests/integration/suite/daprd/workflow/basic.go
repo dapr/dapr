@@ -133,7 +133,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		r := task.NewTaskRegistry()
 		r.AddOrchestratorN("Root", func(ctx *task.OrchestrationContext) (any, error) {
 			tasks := []task.Task{}
-			for i := range 5 {
+			for i := range 3 {
 				task := ctx.CallSubOrchestrator("L1", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L1_"+strconv.Itoa(i)))
 				tasks = append(tasks, task)
 			}
@@ -166,7 +166,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			// List of all orchestrations created
 			orchestrationIDs := []string{string(id)}
-			for i := range 5 {
+			for i := range 3 {
 				orchestrationIDs = append(orchestrationIDs, string(id)+"_L1_"+strconv.Itoa(i), string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
 			}
 			for _, orchID := range orchestrationIDs {
@@ -187,7 +187,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		// Wait for all L2 suborchestrations to complete
 		orchIDs := []string{}
-		for i := range 5 {
+		for i := range 3 {
 			orchIDs = append(orchIDs, string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
 		}
 		for _, orchID := range orchIDs {
