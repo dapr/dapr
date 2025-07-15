@@ -97,7 +97,7 @@ func (r *reconnect3) Setup(t *testing.T) []framework.Option {
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(srv, r.daprd, r.scheduler1, r.scheduler2, r.scheduler3),
+		framework.WithProcesses(srv, r.scheduler1, r.scheduler2, r.scheduler3, r.daprd),
 	}
 }
 
