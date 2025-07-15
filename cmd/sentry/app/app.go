@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -163,10 +164,10 @@ func Run() {
 		if opts.OIDC.TLSCertFile != nil && opts.OIDC.TLSKeyFile != nil {
 			oidcTLSConfig, err = createOIDCTLSConfig(*opts.OIDC.TLSCertFile, *opts.OIDC.TLSKeyFile)
 			if err != nil {
-				return fmt.Errorf("Failed to create OIDC TLS config: %v", err)
+				return fmt.Errorf("failed to create OIDC TLS config: %v", err)
 			}
 		} else if opts.OIDC.TLSCertFile != nil || opts.OIDC.TLSKeyFile != nil {
-			return fmt.Errorf("Both OIDC TLS certificate and key must be provided if one is specified.")
+			return errors.New("both OIDC TLS certificate and key must be provided if one is specified")
 		}
 
 		sentry, serr := sentry.New(ctx, sentry.Options{

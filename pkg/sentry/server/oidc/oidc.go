@@ -236,7 +236,7 @@ func (s *Server) handleJWKS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.jwks == nil || len(s.jwks) == 0 {
+	if len(s.jwks) == 0 {
 		log.Error("JWKS not available in bundle")
 		http.Error(w, "JWKS not available", http.StatusNotFound)
 		return
@@ -299,7 +299,7 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.jwks == nil || len(s.jwks) == 0 {
+	if len(s.jwks) == 0 {
 		log.Error("JWKS not available in bundle")
 		http.Error(w, "OIDC configuration not available", http.StatusNotFound)
 		return

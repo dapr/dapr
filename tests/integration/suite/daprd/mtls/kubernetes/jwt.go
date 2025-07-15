@@ -231,7 +231,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 	}
 
 	// Get OIDC discovery document from Sentry's OIDC HTTP server
-	oidcURL := fmt.Sprintf("https://localhost:%d/.well-known/openid-configuration", *j.sentry.OIDCPort())
+	oidcURL := fmt.Sprintf("https://localhost:%d/.well-known/openid-configuration", j.sentry.OIDCPort(t))
 	httpResp, err := httpClient.Get(oidcURL)
 	require.NoError(t, err)
 	defer httpResp.Body.Close()

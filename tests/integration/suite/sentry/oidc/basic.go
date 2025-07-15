@@ -79,12 +79,12 @@ func (o *basicOIDCServer) Setup(t *testing.T) []framework.Option {
 		sentry.WithOIDCTLSKeyFile(o.tlsKeyFile),
 	)
 
-	oidcPort := o.sentry.OIDCPort()
+	oidcPort := o.sentry.OIDCPort(t)
 	require.NotNil(t, oidcPort, "OIDC port should not be nil when OIDC is enabled")
 
 	testBundle := o.sentry.CABundle()
 	o.testBundle = &testBundle
-	o.oidcBaseURL = fmt.Sprintf("https://localhost:%d", *oidcPort)
+	o.oidcBaseURL = fmt.Sprintf("https://localhost:%d", oidcPort)
 
 	return []framework.Option{
 		framework.WithProcesses(o.sentry),
