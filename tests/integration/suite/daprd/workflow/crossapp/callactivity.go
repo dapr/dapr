@@ -59,7 +59,7 @@ func (c *callactivity) Run(t *testing.T, ctx context.Context) {
 
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID(c.workflow.DaprN(1).AppID())). // app1
+			task.WithActivityAppID(c.workflow.DaprN(1).AppID())). // app1
 			Await(&output)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute activity in app1: %w", err)
