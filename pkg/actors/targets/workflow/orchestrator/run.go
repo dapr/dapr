@@ -71,7 +71,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			esHistoryEvent = e
 			// Set the source app ID for cross-app routing in durabletask-go
 			esHistoryEvent.Router = &protos.TaskRouter{
-				Source: o.appID,
+				SourceAppID: o.appID,
 			}
 			break
 		}
