@@ -18,6 +18,7 @@ import (
 	"time"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
+	"github.com/tmc/langchaingo/llms"
 
 	"github.com/dapr/components-contrib/conversation"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -28,13 +29,6 @@ import (
 )
 
 func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) {
-	// valid component
-	if a.compStore.ConversationsLen() == 0 {
-		err := messages.ErrConversationNotFound
-		a.logger.Debug(err)
-		return nil, err
-	}
-
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
 		err := messages.ErrConversationNotFound.WithFormat(req.GetName())
@@ -63,7 +57,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	for _, i := range req.GetInputs() {
-		msg := i.GetContent()
+		scrubbedContent := i.GetContent()
 
 		if i.GetScrubPII() {
 			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetContent()})
@@ -73,12 +67,19 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 				return &runtimev1pb.ConversationResponse{}, sErr
 			}
 
-			msg = scrubbed[0]
+			scrubbedContent = scrubbed[0]
 		}
 
+		// TODO(@Sicoyle): assuming we want tool call content response data scrubbed too
+		toolCallResp := i.GetToolCallResponse()
 		c := conversation.ConversationInput{
-			Message: msg,
+			Content: scrubbedContent,
 			Role:    conversation.Role(i.GetRole()),
+			ToolCallResponse: &llms.ToolCallResponse{
+				ToolCallID: toolCallResp.GetId().String(),
+				Name:       toolCallResp.GetName().String(),
+				Content:    toolCallResp.GetContent(),
+			},
 		}
 
 		request.Inputs = append(request.Inputs, c)

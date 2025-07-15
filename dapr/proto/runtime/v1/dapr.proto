@@ -20,6 +20,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "dapr/proto/common/v1/common.proto";
 import "dapr/proto/runtime/v1/appcallback.proto";
+import "google/protobuf/wrappers.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -1329,25 +1330,110 @@ message ConversationRequest {
 
   // Temperature for the LLM to optimize for creativity or predictability
   optional double temperature = 7;
+
+  // TODO(@Sicoyle): grab openai spec on this
+  // optional tools -> array of oneof type tools
+  // we want typed spec on tool options -> ref llm providers and build my protos
+  // Just do FunctionToolCall type for now! later can support filesearchtool, etc
 }
+
+/*
+would we want this instead for the content
+message ConversationContent {
+  oneof content {
+    google.protobuf.StringValue text = 1; // or google.protobuf.Any??
+    ToolResponse tool_response = 2;
+  }
+}
+
+meaning something similar to:
+message SubscribeTopicEventsRequestAlpha1 {
+  oneof subscribe_topic_events_request_type {
+    SubscribeTopicEventsRequestInitialAlpha1 initial_request = 1;
+    SubscribeTopicEventsRequestProcessedAlpha1 event_processed = 2;
+  }
+}
+*/
+
+// decisions to make:
+// unary vs bidi
+// - unary is bad for history in multi replicas & waste of time updating python sdk + dapr agents
+// - bidi -> timeline? cleanup, references on history, etc
+// tool call info within existing messages vs separate and separate api
+// history size acct for in api
+// 1.17 bubble up usage info
+
+// openai does both ChatCompletion
+// we want unary and bidi bc openai does both
+// crew ai client fetches state and passes all to backend
+// so we will do the same client side sends all of this
+
+// we need:
+// both unary & bidi -> but unary 1.16 & bidi 1.17
+// use openai & langchain go for reference and we match. We match openai api 1:1 -> sam to ref openai and try to make ours match as all llm providers mostly use openai spec
+// use same api bc anthropic and openai use same
+
+// look if openai scrubs tool call response and if we need to
+
 
 message ConversationInput {
   // The content to send to the llm
-  string content = 1;
+  // TODO(@Sicoyle) make called messages
+  google.protobuf.StringValue content = 1; // was just string // do we want as google.protobuf.StringValue instead?
 
   // The role to set for the message
   optional string role = 2;
 
   // Scrub PII data that goes into the LLM
-  optional bool scrubPII = 3;
+  optional bool scrubPII = 3; // 
+
+  // Tool call name indicates that a tool call response will be included as the contents.
+  // Multi-turn conversations can include tool call results as user input to go back to the LLM,
+  // if it requested a tool call request previously.
+  // optional string tool_call_name = 4; // if set, then the content corresponds to a tool call
+  // google.protobuf.StringValue instead?
+
+  optional ConversationToolCallResponse tool_call_response = 4;
+}
+
+message ConversationToolCallResponse {
+  // needed for history
+  google.protobuf.StringValue id = 1;
+
+  google.protobuf.StringValue name = 2;
+
+  google.protobuf.Any content = 3;
 }
 
 // ConversationResult is the result for one input.
 message ConversationResult {
   // Result for the one conversation input.
-  string result = 1;
+  string result = 1; // was string before
   // Parameters for all custom fields.
   map<string, google.protobuf.Any> parameters = 2;
+
+  // The tool call name if set, indicates that the content corresponds to a tool call.
+  // optional string tool_call_name = 3;
+  // google.protobuf.StringValue instead?
+  optional ConversationToolCallRequest tool_call_request = 3;
+}
+
+message ConversationToolCallRequest {
+  // I think some providers might not generate this...
+  google.protobuf.StringValue id = 1; // according to langchain go
+
+  google.protobuf.StringValue type = 2;
+
+  ConversationFunctionCallRequest function_call = 3;
+
+  // doesn't make sense to bubble this up really here does it? not for tool call
+  // google.protobuf.StringValue stop_reason = 4; // can stop_reason be optional??
+}
+
+message ConversationFunctionCallRequest {
+  google.protobuf.StringValue name = 1;
+
+  map<string, google.protobuf.Any> arguments = 2;
 }
 
 // ConversationResponse is the response for Conversation.
