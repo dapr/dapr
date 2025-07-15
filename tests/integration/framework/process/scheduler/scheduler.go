@@ -204,15 +204,15 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", s.healthzPort), nil)
-		require.NoError(t, err)
+		require.NoError(c, err)
 		resp, err := client.Do(req)
 		if !assert.NoError(c, err) {
 			return
 		}
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
+		assert.NoError(c, err)
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
-		assert.NoError(t, resp.Body.Close())
+		assert.NoError(c, resp.Body.Close())
 	}, time.Second*20, 10*time.Millisecond)
 }
 
