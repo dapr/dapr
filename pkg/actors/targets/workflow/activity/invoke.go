@@ -25,7 +25,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -61,12 +60,10 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 		return fmt.Errorf("failed to decode activity reminder: %w", err)
 	}
 
-	completed, err := a.executeActivity(ctx, reminder.Name, &state)
-	if completed == todo.RunCompletedTrue {
-		a.table.DeleteFromTableIn(a, 0)
-	}
+	err := a.executeActivity(ctx, reminder.Name, &state)
 
-	// Returning nil signals that we want the execution to be retried in the next period interval
+	// Returning nil signals that we want the execution to be retried in the next
+	// period interval
 	switch {
 	case err == nil:
 		if a.schedulerReminders {
