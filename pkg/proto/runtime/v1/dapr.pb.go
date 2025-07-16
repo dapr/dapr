@@ -25,7 +25,6 @@ import (
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	_ "google.golang.org/protobuf/types/known/wrapperspb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -6937,9 +6936,7 @@ var file_dapr_proto_runtime_v1_dapr_proto_rawDesc = []byte{
 	0x63, 0x61, 0x6c, 0x6c, 0x62, 0x61, 0x63, 0x6b, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x28,
 	0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x72, 0x75, 0x6e, 0x74, 0x69,
 	0x6d, 0x65, 0x2f, 0x76, 0x31, 0x2f, 0x63, 0x6f, 0x6e, 0x76, 0x65, 0x72, 0x73, 0x61, 0x74, 0x69,
-	0x6f, 0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x1e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
-	0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x77, 0x72, 0x61, 0x70, 0x70, 0x65,
-	0x72, 0x73, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x65, 0x0a, 0x14, 0x49, 0x6e, 0x76, 0x6f,
+	0x6f, 0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x65, 0x0a, 0x14, 0x49, 0x6e, 0x76, 0x6f,
 	0x6b, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
 	0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64,
 	0x12, 0x3d, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28,
@@ -8009,7 +8006,7 @@ var file_dapr_proto_runtime_v1_dapr_proto_rawDesc = []byte{
 	0x4e, 0x10, 0x00, 0x12, 0x0f, 0x0a, 0x0b, 0x44, 0x45, 0x43, 0x4c, 0x41, 0x52, 0x41, 0x54, 0x49,
 	0x56, 0x45, 0x10, 0x01, 0x12, 0x10, 0x0a, 0x0c, 0x50, 0x52, 0x4f, 0x47, 0x52, 0x41, 0x4d, 0x4d,
 	0x41, 0x54, 0x49, 0x43, 0x10, 0x02, 0x12, 0x0d, 0x0a, 0x09, 0x53, 0x54, 0x52, 0x45, 0x41, 0x4d,
-	0x49, 0x4e, 0x47, 0x10, 0x03, 0x32, 0xbe, 0x31, 0x0a, 0x04, 0x44, 0x61, 0x70, 0x72, 0x12, 0x64,
+	0x49, 0x4e, 0x47, 0x10, 0x03, 0x32, 0xab, 0x32, 0x0a, 0x04, 0x44, 0x61, 0x70, 0x72, 0x12, 0x64,
 	0x0a, 0x0d, 0x49, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12,
 	0x2b, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e,
 	0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x6e, 0x76, 0x6f, 0x6b, 0x65, 0x53, 0x65,
@@ -8405,14 +8402,21 @@ var file_dapr_proto_runtime_v1_dapr_proto_rawDesc = []byte{
 	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2b, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70,
 	0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e,
 	0x43, 0x6f, 0x6e, 0x76, 0x65, 0x72, 0x73, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70,
-	0x72, 0x2e, 0x76, 0x31, 0x42, 0x0a, 0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73,
-	0x5a, 0x31, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70,
-	0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x2f, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72, 0x75, 0x6e, 0x74,
-	0x69, 0x6d, 0x65, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e,
-	0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76,
-	0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x6b, 0x0a, 0x0a, 0x43, 0x6f, 0x6e, 0x76, 0x65, 0x72,
+	0x73, 0x65, 0x56, 0x32, 0x12, 0x2c, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6e,
+	0x76, 0x65, 0x72, 0x73, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x56, 0x32, 0x1a, 0x2d, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
+	0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6e, 0x76, 0x65,
+	0x72, 0x73, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x56,
+	0x32, 0x22, 0x00, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76,
+	0x31, 0x42, 0x0a, 0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x31, 0x67,
+	0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64,
+	0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x72, 0x75,
+	0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65,
+	0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41,
+	0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -8578,9 +8582,11 @@ var file_dapr_proto_runtime_v1_dapr_proto_goTypes = []interface{}{
 	(*v1.JobFailurePolicy)(nil),                        // 145: dapr.proto.common.v1.JobFailurePolicy
 	(*v1.ConfigurationItem)(nil),                       // 146: dapr.proto.common.v1.ConfigurationItem
 	(*ConversationRequest)(nil),                        // 147: dapr.proto.runtime.v1.ConversationRequest
-	(*v1.InvokeResponse)(nil),                          // 148: dapr.proto.common.v1.InvokeResponse
-	(*emptypb.Empty)(nil),                              // 149: google.protobuf.Empty
-	(*ConversationResponse)(nil),                       // 150: dapr.proto.runtime.v1.ConversationResponse
+	(*ConversationRequestV2)(nil),                      // 148: dapr.proto.runtime.v1.ConversationRequestV2
+	(*v1.InvokeResponse)(nil),                          // 149: dapr.proto.common.v1.InvokeResponse
+	(*emptypb.Empty)(nil),                              // 150: google.protobuf.Empty
+	(*ConversationResponse)(nil),                       // 151: dapr.proto.runtime.v1.ConversationResponse
+	(*ConversationResponseV2)(nil),                     // 152: dapr.proto.runtime.v1.ConversationResponseV2
 }
 var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
 	135, // 0: dapr.proto.runtime.v1.InvokeServiceRequest.message:type_name -> dapr.proto.common.v1.InvokeRequest
@@ -8721,67 +8727,69 @@ var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
 	101, // 135: dapr.proto.runtime.v1.Dapr.GetJobAlpha1:input_type -> dapr.proto.runtime.v1.GetJobRequest
 	103, // 136: dapr.proto.runtime.v1.Dapr.DeleteJobAlpha1:input_type -> dapr.proto.runtime.v1.DeleteJobRequest
 	147, // 137: dapr.proto.runtime.v1.Dapr.ConverseAlpha1:input_type -> dapr.proto.runtime.v1.ConversationRequest
-	148, // 138: dapr.proto.runtime.v1.Dapr.InvokeService:output_type -> dapr.proto.common.v1.InvokeResponse
-	9,   // 139: dapr.proto.runtime.v1.Dapr.GetState:output_type -> dapr.proto.runtime.v1.GetStateResponse
-	7,   // 140: dapr.proto.runtime.v1.Dapr.GetBulkState:output_type -> dapr.proto.runtime.v1.GetBulkStateResponse
-	149, // 141: dapr.proto.runtime.v1.Dapr.SaveState:output_type -> google.protobuf.Empty
-	15,  // 142: dapr.proto.runtime.v1.Dapr.QueryStateAlpha1:output_type -> dapr.proto.runtime.v1.QueryStateResponse
-	149, // 143: dapr.proto.runtime.v1.Dapr.DeleteState:output_type -> google.protobuf.Empty
-	149, // 144: dapr.proto.runtime.v1.Dapr.DeleteBulkState:output_type -> google.protobuf.Empty
-	149, // 145: dapr.proto.runtime.v1.Dapr.ExecuteStateTransaction:output_type -> google.protobuf.Empty
-	149, // 146: dapr.proto.runtime.v1.Dapr.PublishEvent:output_type -> google.protobuf.Empty
-	19,  // 147: dapr.proto.runtime.v1.Dapr.BulkPublishEventAlpha1:output_type -> dapr.proto.runtime.v1.BulkPublishResponse
-	24,  // 148: dapr.proto.runtime.v1.Dapr.SubscribeTopicEventsAlpha1:output_type -> dapr.proto.runtime.v1.SubscribeTopicEventsResponseAlpha1
-	27,  // 149: dapr.proto.runtime.v1.Dapr.InvokeBinding:output_type -> dapr.proto.runtime.v1.InvokeBindingResponse
-	29,  // 150: dapr.proto.runtime.v1.Dapr.GetSecret:output_type -> dapr.proto.runtime.v1.GetSecretResponse
-	32,  // 151: dapr.proto.runtime.v1.Dapr.GetBulkSecret:output_type -> dapr.proto.runtime.v1.GetBulkSecretResponse
-	149, // 152: dapr.proto.runtime.v1.Dapr.RegisterActorTimer:output_type -> google.protobuf.Empty
-	149, // 153: dapr.proto.runtime.v1.Dapr.UnregisterActorTimer:output_type -> google.protobuf.Empty
-	149, // 154: dapr.proto.runtime.v1.Dapr.RegisterActorReminder:output_type -> google.protobuf.Empty
-	149, // 155: dapr.proto.runtime.v1.Dapr.UnregisterActorReminder:output_type -> google.protobuf.Empty
-	40,  // 156: dapr.proto.runtime.v1.Dapr.GetActorState:output_type -> dapr.proto.runtime.v1.GetActorStateResponse
-	149, // 157: dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction:output_type -> google.protobuf.Empty
-	44,  // 158: dapr.proto.runtime.v1.Dapr.InvokeActor:output_type -> dapr.proto.runtime.v1.InvokeActorResponse
-	59,  // 159: dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.GetConfigurationResponse
-	59,  // 160: dapr.proto.runtime.v1.Dapr.GetConfiguration:output_type -> dapr.proto.runtime.v1.GetConfigurationResponse
-	62,  // 161: dapr.proto.runtime.v1.Dapr.SubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.SubscribeConfigurationResponse
-	62,  // 162: dapr.proto.runtime.v1.Dapr.SubscribeConfiguration:output_type -> dapr.proto.runtime.v1.SubscribeConfigurationResponse
-	63,  // 163: dapr.proto.runtime.v1.Dapr.UnsubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.UnsubscribeConfigurationResponse
-	63,  // 164: dapr.proto.runtime.v1.Dapr.UnsubscribeConfiguration:output_type -> dapr.proto.runtime.v1.UnsubscribeConfigurationResponse
-	65,  // 165: dapr.proto.runtime.v1.Dapr.TryLockAlpha1:output_type -> dapr.proto.runtime.v1.TryLockResponse
-	67,  // 166: dapr.proto.runtime.v1.Dapr.UnlockAlpha1:output_type -> dapr.proto.runtime.v1.UnlockResponse
-	84,  // 167: dapr.proto.runtime.v1.Dapr.EncryptAlpha1:output_type -> dapr.proto.runtime.v1.EncryptResponse
-	87,  // 168: dapr.proto.runtime.v1.Dapr.DecryptAlpha1:output_type -> dapr.proto.runtime.v1.DecryptResponse
-	46,  // 169: dapr.proto.runtime.v1.Dapr.GetMetadata:output_type -> dapr.proto.runtime.v1.GetMetadataResponse
-	149, // 170: dapr.proto.runtime.v1.Dapr.SetMetadata:output_type -> google.protobuf.Empty
-	69,  // 171: dapr.proto.runtime.v1.Dapr.SubtleGetKeyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleGetKeyResponse
-	71,  // 172: dapr.proto.runtime.v1.Dapr.SubtleEncryptAlpha1:output_type -> dapr.proto.runtime.v1.SubtleEncryptResponse
-	73,  // 173: dapr.proto.runtime.v1.Dapr.SubtleDecryptAlpha1:output_type -> dapr.proto.runtime.v1.SubtleDecryptResponse
-	75,  // 174: dapr.proto.runtime.v1.Dapr.SubtleWrapKeyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleWrapKeyResponse
-	77,  // 175: dapr.proto.runtime.v1.Dapr.SubtleUnwrapKeyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleUnwrapKeyResponse
-	79,  // 176: dapr.proto.runtime.v1.Dapr.SubtleSignAlpha1:output_type -> dapr.proto.runtime.v1.SubtleSignResponse
-	81,  // 177: dapr.proto.runtime.v1.Dapr.SubtleVerifyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleVerifyResponse
-	91,  // 178: dapr.proto.runtime.v1.Dapr.StartWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.StartWorkflowResponse
-	89,  // 179: dapr.proto.runtime.v1.Dapr.GetWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.GetWorkflowResponse
-	149, // 180: dapr.proto.runtime.v1.Dapr.PurgeWorkflowAlpha1:output_type -> google.protobuf.Empty
-	149, // 181: dapr.proto.runtime.v1.Dapr.TerminateWorkflowAlpha1:output_type -> google.protobuf.Empty
-	149, // 182: dapr.proto.runtime.v1.Dapr.PauseWorkflowAlpha1:output_type -> google.protobuf.Empty
-	149, // 183: dapr.proto.runtime.v1.Dapr.ResumeWorkflowAlpha1:output_type -> google.protobuf.Empty
-	149, // 184: dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowAlpha1:output_type -> google.protobuf.Empty
-	91,  // 185: dapr.proto.runtime.v1.Dapr.StartWorkflowBeta1:output_type -> dapr.proto.runtime.v1.StartWorkflowResponse
-	89,  // 186: dapr.proto.runtime.v1.Dapr.GetWorkflowBeta1:output_type -> dapr.proto.runtime.v1.GetWorkflowResponse
-	149, // 187: dapr.proto.runtime.v1.Dapr.PurgeWorkflowBeta1:output_type -> google.protobuf.Empty
-	149, // 188: dapr.proto.runtime.v1.Dapr.TerminateWorkflowBeta1:output_type -> google.protobuf.Empty
-	149, // 189: dapr.proto.runtime.v1.Dapr.PauseWorkflowBeta1:output_type -> google.protobuf.Empty
-	149, // 190: dapr.proto.runtime.v1.Dapr.ResumeWorkflowBeta1:output_type -> google.protobuf.Empty
-	149, // 191: dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowBeta1:output_type -> google.protobuf.Empty
-	149, // 192: dapr.proto.runtime.v1.Dapr.Shutdown:output_type -> google.protobuf.Empty
-	100, // 193: dapr.proto.runtime.v1.Dapr.ScheduleJobAlpha1:output_type -> dapr.proto.runtime.v1.ScheduleJobResponse
-	102, // 194: dapr.proto.runtime.v1.Dapr.GetJobAlpha1:output_type -> dapr.proto.runtime.v1.GetJobResponse
-	104, // 195: dapr.proto.runtime.v1.Dapr.DeleteJobAlpha1:output_type -> dapr.proto.runtime.v1.DeleteJobResponse
-	150, // 196: dapr.proto.runtime.v1.Dapr.ConverseAlpha1:output_type -> dapr.proto.runtime.v1.ConversationResponse
-	138, // [138:197] is the sub-list for method output_type
-	79,  // [79:138] is the sub-list for method input_type
+	148, // 138: dapr.proto.runtime.v1.Dapr.ConverseV2:input_type -> dapr.proto.runtime.v1.ConversationRequestV2
+	149, // 139: dapr.proto.runtime.v1.Dapr.InvokeService:output_type -> dapr.proto.common.v1.InvokeResponse
+	9,   // 140: dapr.proto.runtime.v1.Dapr.GetState:output_type -> dapr.proto.runtime.v1.GetStateResponse
+	7,   // 141: dapr.proto.runtime.v1.Dapr.GetBulkState:output_type -> dapr.proto.runtime.v1.GetBulkStateResponse
+	150, // 142: dapr.proto.runtime.v1.Dapr.SaveState:output_type -> google.protobuf.Empty
+	15,  // 143: dapr.proto.runtime.v1.Dapr.QueryStateAlpha1:output_type -> dapr.proto.runtime.v1.QueryStateResponse
+	150, // 144: dapr.proto.runtime.v1.Dapr.DeleteState:output_type -> google.protobuf.Empty
+	150, // 145: dapr.proto.runtime.v1.Dapr.DeleteBulkState:output_type -> google.protobuf.Empty
+	150, // 146: dapr.proto.runtime.v1.Dapr.ExecuteStateTransaction:output_type -> google.protobuf.Empty
+	150, // 147: dapr.proto.runtime.v1.Dapr.PublishEvent:output_type -> google.protobuf.Empty
+	19,  // 148: dapr.proto.runtime.v1.Dapr.BulkPublishEventAlpha1:output_type -> dapr.proto.runtime.v1.BulkPublishResponse
+	24,  // 149: dapr.proto.runtime.v1.Dapr.SubscribeTopicEventsAlpha1:output_type -> dapr.proto.runtime.v1.SubscribeTopicEventsResponseAlpha1
+	27,  // 150: dapr.proto.runtime.v1.Dapr.InvokeBinding:output_type -> dapr.proto.runtime.v1.InvokeBindingResponse
+	29,  // 151: dapr.proto.runtime.v1.Dapr.GetSecret:output_type -> dapr.proto.runtime.v1.GetSecretResponse
+	32,  // 152: dapr.proto.runtime.v1.Dapr.GetBulkSecret:output_type -> dapr.proto.runtime.v1.GetBulkSecretResponse
+	150, // 153: dapr.proto.runtime.v1.Dapr.RegisterActorTimer:output_type -> google.protobuf.Empty
+	150, // 154: dapr.proto.runtime.v1.Dapr.UnregisterActorTimer:output_type -> google.protobuf.Empty
+	150, // 155: dapr.proto.runtime.v1.Dapr.RegisterActorReminder:output_type -> google.protobuf.Empty
+	150, // 156: dapr.proto.runtime.v1.Dapr.UnregisterActorReminder:output_type -> google.protobuf.Empty
+	40,  // 157: dapr.proto.runtime.v1.Dapr.GetActorState:output_type -> dapr.proto.runtime.v1.GetActorStateResponse
+	150, // 158: dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction:output_type -> google.protobuf.Empty
+	44,  // 159: dapr.proto.runtime.v1.Dapr.InvokeActor:output_type -> dapr.proto.runtime.v1.InvokeActorResponse
+	59,  // 160: dapr.proto.runtime.v1.Dapr.GetConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.GetConfigurationResponse
+	59,  // 161: dapr.proto.runtime.v1.Dapr.GetConfiguration:output_type -> dapr.proto.runtime.v1.GetConfigurationResponse
+	62,  // 162: dapr.proto.runtime.v1.Dapr.SubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.SubscribeConfigurationResponse
+	62,  // 163: dapr.proto.runtime.v1.Dapr.SubscribeConfiguration:output_type -> dapr.proto.runtime.v1.SubscribeConfigurationResponse
+	63,  // 164: dapr.proto.runtime.v1.Dapr.UnsubscribeConfigurationAlpha1:output_type -> dapr.proto.runtime.v1.UnsubscribeConfigurationResponse
+	63,  // 165: dapr.proto.runtime.v1.Dapr.UnsubscribeConfiguration:output_type -> dapr.proto.runtime.v1.UnsubscribeConfigurationResponse
+	65,  // 166: dapr.proto.runtime.v1.Dapr.TryLockAlpha1:output_type -> dapr.proto.runtime.v1.TryLockResponse
+	67,  // 167: dapr.proto.runtime.v1.Dapr.UnlockAlpha1:output_type -> dapr.proto.runtime.v1.UnlockResponse
+	84,  // 168: dapr.proto.runtime.v1.Dapr.EncryptAlpha1:output_type -> dapr.proto.runtime.v1.EncryptResponse
+	87,  // 169: dapr.proto.runtime.v1.Dapr.DecryptAlpha1:output_type -> dapr.proto.runtime.v1.DecryptResponse
+	46,  // 170: dapr.proto.runtime.v1.Dapr.GetMetadata:output_type -> dapr.proto.runtime.v1.GetMetadataResponse
+	150, // 171: dapr.proto.runtime.v1.Dapr.SetMetadata:output_type -> google.protobuf.Empty
+	69,  // 172: dapr.proto.runtime.v1.Dapr.SubtleGetKeyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleGetKeyResponse
+	71,  // 173: dapr.proto.runtime.v1.Dapr.SubtleEncryptAlpha1:output_type -> dapr.proto.runtime.v1.SubtleEncryptResponse
+	73,  // 174: dapr.proto.runtime.v1.Dapr.SubtleDecryptAlpha1:output_type -> dapr.proto.runtime.v1.SubtleDecryptResponse
+	75,  // 175: dapr.proto.runtime.v1.Dapr.SubtleWrapKeyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleWrapKeyResponse
+	77,  // 176: dapr.proto.runtime.v1.Dapr.SubtleUnwrapKeyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleUnwrapKeyResponse
+	79,  // 177: dapr.proto.runtime.v1.Dapr.SubtleSignAlpha1:output_type -> dapr.proto.runtime.v1.SubtleSignResponse
+	81,  // 178: dapr.proto.runtime.v1.Dapr.SubtleVerifyAlpha1:output_type -> dapr.proto.runtime.v1.SubtleVerifyResponse
+	91,  // 179: dapr.proto.runtime.v1.Dapr.StartWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.StartWorkflowResponse
+	89,  // 180: dapr.proto.runtime.v1.Dapr.GetWorkflowAlpha1:output_type -> dapr.proto.runtime.v1.GetWorkflowResponse
+	150, // 181: dapr.proto.runtime.v1.Dapr.PurgeWorkflowAlpha1:output_type -> google.protobuf.Empty
+	150, // 182: dapr.proto.runtime.v1.Dapr.TerminateWorkflowAlpha1:output_type -> google.protobuf.Empty
+	150, // 183: dapr.proto.runtime.v1.Dapr.PauseWorkflowAlpha1:output_type -> google.protobuf.Empty
+	150, // 184: dapr.proto.runtime.v1.Dapr.ResumeWorkflowAlpha1:output_type -> google.protobuf.Empty
+	150, // 185: dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowAlpha1:output_type -> google.protobuf.Empty
+	91,  // 186: dapr.proto.runtime.v1.Dapr.StartWorkflowBeta1:output_type -> dapr.proto.runtime.v1.StartWorkflowResponse
+	89,  // 187: dapr.proto.runtime.v1.Dapr.GetWorkflowBeta1:output_type -> dapr.proto.runtime.v1.GetWorkflowResponse
+	150, // 188: dapr.proto.runtime.v1.Dapr.PurgeWorkflowBeta1:output_type -> google.protobuf.Empty
+	150, // 189: dapr.proto.runtime.v1.Dapr.TerminateWorkflowBeta1:output_type -> google.protobuf.Empty
+	150, // 190: dapr.proto.runtime.v1.Dapr.PauseWorkflowBeta1:output_type -> google.protobuf.Empty
+	150, // 191: dapr.proto.runtime.v1.Dapr.ResumeWorkflowBeta1:output_type -> google.protobuf.Empty
+	150, // 192: dapr.proto.runtime.v1.Dapr.RaiseEventWorkflowBeta1:output_type -> google.protobuf.Empty
+	150, // 193: dapr.proto.runtime.v1.Dapr.Shutdown:output_type -> google.protobuf.Empty
+	100, // 194: dapr.proto.runtime.v1.Dapr.ScheduleJobAlpha1:output_type -> dapr.proto.runtime.v1.ScheduleJobResponse
+	102, // 195: dapr.proto.runtime.v1.Dapr.GetJobAlpha1:output_type -> dapr.proto.runtime.v1.GetJobResponse
+	104, // 196: dapr.proto.runtime.v1.Dapr.DeleteJobAlpha1:output_type -> dapr.proto.runtime.v1.DeleteJobResponse
+	151, // 197: dapr.proto.runtime.v1.Dapr.ConverseAlpha1:output_type -> dapr.proto.runtime.v1.ConversationResponse
+	152, // 198: dapr.proto.runtime.v1.Dapr.ConverseV2:output_type -> dapr.proto.runtime.v1.ConversationResponseV2
+	139, // [139:199] is the sub-list for method output_type
+	79,  // [79:139] is the sub-list for method input_type
 	79,  // [79:79] is the sub-list for extension type_name
 	79,  // [79:79] is the sub-list for extension extendee
 	0,   // [0:79] is the sub-list for field type_name
