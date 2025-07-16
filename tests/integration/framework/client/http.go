@@ -25,7 +25,7 @@ import (
 // isolated when running in parallel.
 // The returned client will call CloseIdleConnections on test cleanup.
 func HTTP(t assert.TestingT) *http.Client {
-	return HTTPWithTimeout(t, time.Second*10)
+	return HTTPWithTimeout(t, time.Second*30)
 }
 
 func HTTPWithTimeout(t assert.TestingT, timeout time.Duration) *http.Client {

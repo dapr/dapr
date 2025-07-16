@@ -71,7 +71,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			esHistoryEvent = e
 			// Set the source app ID for cross-app routing in durabletask-go
 			esHistoryEvent.Router = &protos.TaskRouter{
-				Source: o.appID,
+				SourceAppID: o.appID,
 			}
 			break
 		}
@@ -183,8 +183,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	err = o.saveInternalState(ctx, state)
 	if err != nil {
-		return todo.RunCompletedTrue, err
+		return todo.RunCompletedFalse, err
 	}
+
 	if executionStatus != "" {
 		// If workflow is not completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.
