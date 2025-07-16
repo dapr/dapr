@@ -15,7 +15,6 @@ package targets
 
 import (
 	"context"
-	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -33,9 +32,10 @@ type Interface interface {
 	Deactivate(context.Context) error
 }
 
-type Idlable interface {
-	Interface
-	ScheduledTime() time.Time
+type Factory interface {
+	GetOrCreate(string) Interface
+	Exists(string) bool
+	HaltAll(context.Context) error
+	HaltNonHosted(context.Context) error
+	Len() int
 }
-
-type Factory = func(actorID string) Interface

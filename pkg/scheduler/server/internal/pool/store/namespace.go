@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/stream"
 	"github.com/dapr/kit/events/loop"
@@ -61,8 +62,9 @@ func (n *Namespace) Add(opts Options) context.CancelCauseFunc {
 	}
 
 	remove := store.add(opts.Connection, opts)
-
+	monitoring.RecordSidecarsConnectedCount(1)
 	return func(err error) {
+		monitoring.RecordSidecarsConnectedCount(-1)
 		n.lock.Lock()
 		defer n.lock.Unlock()
 		log.Debugf("Closing connection to %s [appID=%v] [actorTypes=%v]", opts.Namespace, opts.AppID, opts.ActorTypes)
