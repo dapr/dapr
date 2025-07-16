@@ -17,15 +17,13 @@ import (
 	"context"
 	"errors"
 
+	"google.golang.org/grpc/codes"
+
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/lock"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/dapr/kit/logger"
-	"google.golang.org/grpc/codes"
 )
-
-var log = logger.NewLogger("dapr.runtime.actors.targets.executor")
 
 const (
 	MethodComplete      = "Complete"
