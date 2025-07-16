@@ -92,7 +92,7 @@ const (
 	Dapr_GetJobAlpha1_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/GetJobAlpha1"
 	Dapr_DeleteJobAlpha1_FullMethodName                = "/dapr.proto.runtime.v1.Dapr/DeleteJobAlpha1"
 	Dapr_ConverseAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
-	Dapr_ConverseV2_FullMethodName                     = "/dapr.proto.runtime.v1.Dapr/ConverseV2"
+	Dapr_ConverseV1Alpha2_FullMethodName               = "/dapr.proto.runtime.v1.Dapr/ConverseV1Alpha2"
 )
 
 // DaprClient is the client API for Dapr service.
@@ -227,7 +227,7 @@ type DaprClient interface {
 	// Converse with a LLM service
 	ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error)
 	// Converse with a LLM service via v2 api
-	ConverseV2(ctx context.Context, in *ConversationRequestV2, opts ...grpc.CallOption) (*ConversationResponseV2, error)
+	ConverseV1Alpha2(ctx context.Context, in *ConversationRequestV1Alpha2, opts ...grpc.CallOption) (*ConversationResponseV1Alpha2, error)
 }
 
 type daprClient struct {
@@ -888,9 +888,9 @@ func (c *daprClient) ConverseAlpha1(ctx context.Context, in *ConversationRequest
 	return out, nil
 }
 
-func (c *daprClient) ConverseV2(ctx context.Context, in *ConversationRequestV2, opts ...grpc.CallOption) (*ConversationResponseV2, error) {
-	out := new(ConversationResponseV2)
-	err := c.cc.Invoke(ctx, Dapr_ConverseV2_FullMethodName, in, out, opts...)
+func (c *daprClient) ConverseV1Alpha2(ctx context.Context, in *ConversationRequestV1Alpha2, opts ...grpc.CallOption) (*ConversationResponseV1Alpha2, error) {
+	out := new(ConversationResponseV1Alpha2)
+	err := c.cc.Invoke(ctx, Dapr_ConverseV1Alpha2_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1029,7 +1029,7 @@ type DaprServer interface {
 	// Converse with a LLM service
 	ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error)
 	// Converse with a LLM service via v2 api
-	ConverseV2(context.Context, *ConversationRequestV2) (*ConversationResponseV2, error)
+	ConverseV1Alpha2(context.Context, *ConversationRequestV1Alpha2) (*ConversationResponseV1Alpha2, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1213,8 +1213,8 @@ func (UnimplementedDaprServer) DeleteJobAlpha1(context.Context, *DeleteJobReques
 func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConverseAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) ConverseV2(context.Context, *ConversationRequestV2) (*ConversationResponseV2, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ConverseV2 not implemented")
+func (UnimplementedDaprServer) ConverseV1Alpha2(context.Context, *ConversationRequestV1Alpha2) (*ConversationResponseV1Alpha2, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConverseV1Alpha2 not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -2320,20 +2320,20 @@ func _Dapr_ConverseAlpha1_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Dapr_ConverseV2_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConversationRequestV2)
+func _Dapr_ConverseV1Alpha2_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConversationRequestV1Alpha2)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaprServer).ConverseV2(ctx, in)
+		return srv.(DaprServer).ConverseV1Alpha2(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Dapr_ConverseV2_FullMethodName,
+		FullMethod: Dapr_ConverseV1Alpha2_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).ConverseV2(ctx, req.(*ConversationRequestV2))
+		return srv.(DaprServer).ConverseV1Alpha2(ctx, req.(*ConversationRequestV1Alpha2))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2562,8 +2562,8 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_ConverseAlpha1_Handler,
 		},
 		{
-			MethodName: "ConverseV2",
-			Handler:    _Dapr_ConverseV2_Handler,
+			MethodName: "ConverseV1Alpha2",
+			Handler:    _Dapr_ConverseV1Alpha2_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
