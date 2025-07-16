@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opencensus.io/stats/view"
+
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/config"
@@ -246,7 +248,21 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	// Initialize metrics only if MetricSpec is enabled.
 	metricsSpec := globalConfig.GetMetricsSpec()
 	if metricsSpec.GetEnabled() {
-		err = diag.InitMetrics(intc.id, namespace, metricsSpec)
+		// We create or use a provided meter to avoid
+		// using the default meter which relies on
+		// global state which can be problematic in tests
+		// or when decoupling the runtimes lifecycle from
+		// the proccesses lifecycle.
+		var meter view.Meter
+		if cfg.Metrics.Meter == nil {
+			log.Debug("Creating a new meter for metrics")
+			meter = view.NewMeter() // Create a new meter if not provided
+		} else {
+			log.Debug("Using provided meter for metrics")
+			meter = cfg.Metrics.Meter
+		}
+
+		err = diag.InitMetrics(meter, intc.id, namespace, metricsSpec)
 		if err != nil {
 			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
 		}
