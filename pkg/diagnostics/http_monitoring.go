@@ -61,6 +61,8 @@ type httpMetrics struct {
 	excludeVerbs bool
 
 	pathMatcher *pathMatching
+
+	meter stats.Recorder
 }
 
 func newHTTPMetrics() *httpMetrics {
@@ -150,34 +152,43 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	method = h.getMetricsMethod(method)
 
 	if h.legacy || h.pathMatcher.enabled() {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
-			h.serverRequestCount.M(1))
-		stats.RecordWithTags(
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status)...),
+			stats.WithMeasurements(h.serverRequestCount.M(1)))
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
-			h.serverLatency.M(elapsed))
-		stats.RecordWithTags(
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status)...),
+			stats.WithMeasurements(h.serverLatency.M(elapsed)))
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.serverResponseCount.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
-			h.serverResponseCount.M(1))
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.serverResponseCount.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status)...),
+			stats.WithMeasurements(h.serverResponseCount.M(1)))
 	} else {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
-			h.serverRequestCount.M(1))
-		stats.RecordWithTags(
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status)...),
+			stats.WithMeasurements(h.serverRequestCount.M(1)))
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
-			h.serverLatency.M(elapsed))
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status)...),
+			stats.WithMeasurements(h.serverLatency.M(elapsed)))
 	}
-	stats.RecordWithTags(
-		ctx, diagUtils.WithTags(h.serverRequestBytes.Name(), appIDKey, h.appID),
-		h.serverRequestBytes.M(reqContentSize))
-	stats.RecordWithTags(
-		ctx, diagUtils.WithTags(h.serverResponseBytes.Name(), appIDKey, h.appID),
-		h.serverResponseBytes.M(resContentSize))
+	stats.RecordWithOptions(
+		ctx,
+		stats.WithRecorder(h.meter),
+		stats.WithTags(diagUtils.WithTags(h.serverRequestBytes.Name(), appIDKey, h.appID)...),
+		stats.WithMeasurements(h.serverRequestBytes.M(reqContentSize)))
+	stats.RecordWithOptions(
+		ctx,
+		stats.WithRecorder(h.meter),
+		stats.WithTags(diagUtils.WithTags(h.serverResponseBytes.Name(), appIDKey, h.appID)...),
+		stats.WithMeasurements(h.serverResponseBytes.M(resContentSize)))
 }
 
 func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path string, contentSize int64) {
@@ -189,15 +200,17 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	method = h.getMetricsMethod(method)
 
 	if h.legacy || h.pathMatcher.enabled() {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
-			h.clientSentBytes.M(contentSize))
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method)...),
+			stats.WithMeasurements(h.clientSentBytes.M(contentSize)))
 	} else {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
-			h.clientSentBytes.M(contentSize))
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method)...),
+			stats.WithMeasurements(h.clientSentBytes.M(contentSize)))
 	}
 }
 
@@ -210,27 +223,33 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	method = h.getMetricsMethod(method)
 
 	if h.legacy || h.pathMatcher.enabled() {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
-			h.clientCompletedCount.M(1))
-		stats.RecordWithTags(
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status)...),
+			stats.WithMeasurements(h.clientCompletedCount.M(1)))
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
-			h.clientRoundtripLatency.M(elapsed))
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status)...),
+			stats.WithMeasurements(h.clientRoundtripLatency.M(elapsed)))
 	} else {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
-			h.clientCompletedCount.M(1))
-		stats.RecordWithTags(
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status)...),
+			stats.WithMeasurements(h.clientCompletedCount.M(1)))
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
-			h.clientRoundtripLatency.M(elapsed))
+			stats.WithRecorder(h.meter),
+			stats.WithTags(diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status)...),
+			stats.WithMeasurements(h.clientRoundtripLatency.M(elapsed)))
 	}
-	stats.RecordWithTags(
-		ctx, diagUtils.WithTags(h.clientReceivedBytes.Name(), appIDKey, h.appID),
-		h.clientReceivedBytes.M(contentSize))
+	stats.RecordWithOptions(
+		ctx,
+		stats.WithRecorder(h.meter),
+		stats.WithTags(diagUtils.WithTags(h.clientReceivedBytes.Name(), appIDKey, h.appID)...),
+		stats.WithMeasurements(h.clientReceivedBytes.M(contentSize)))
 }
 
 func (h *httpMetrics) AppHealthProbeStarted(ctx context.Context) {
@@ -238,7 +257,9 @@ func (h *httpMetrics) AppHealthProbeStarted(ctx context.Context) {
 		return
 	}
 
-	stats.RecordWithTags(ctx, diagUtils.WithTags("", appIDKey, h.appID))
+	stats.RecordWithOptions(ctx,
+		stats.WithRecorder(h.meter),
+		stats.WithTags(diagUtils.WithTags("", appIDKey, h.appID)...))
 }
 
 func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string, elapsed float64) {
@@ -246,14 +267,16 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		return
 	}
 
-	stats.RecordWithTags(
+	stats.RecordWithOptions(
 		ctx,
-		diagUtils.WithTags(h.healthProbeCompletedCount.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
-		h.healthProbeCompletedCount.M(1))
-	stats.RecordWithTags(
+		stats.WithRecorder(h.meter),
+		stats.WithTags(diagUtils.WithTags(h.healthProbeCompletedCount.Name(), appIDKey, h.appID, httpStatusCodeKey, status)...),
+		stats.WithMeasurements(h.healthProbeCompletedCount.M(1)))
+	stats.RecordWithOptions(
 		ctx,
-		diagUtils.WithTags(h.healthProbeRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
-		h.healthProbeRoundtripLatency.M(elapsed))
+		stats.WithRecorder(h.meter),
+		stats.WithTags(diagUtils.WithTags(h.healthProbeRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status)...),
+		stats.WithMeasurements(h.healthProbeRoundtripLatency.M(elapsed)))
 }
 
 type HTTPMonitoringConfig struct {
@@ -270,11 +293,12 @@ func NewHTTPMonitoringConfig(pathMatching []string, legacy, excludeVerbs bool) H
 	}
 }
 
-func (h *httpMetrics) Init(appID string, config HTTPMonitoringConfig, latencyDistribution *view.Aggregation) error {
+func (h *httpMetrics) Init(meter view.Meter, appID string, config HTTPMonitoringConfig, latencyDistribution *view.Aggregation) error {
 	h.appID = appID
 	h.enabled = true
 	h.legacy = config.legacy
 	h.excludeVerbs = config.excludeVerbs
+	h.meter = meter
 
 	if config.pathMatching != nil {
 		h.pathMatcher = newPathMatching(config.pathMatching, config.legacy)
@@ -302,7 +326,7 @@ func (h *httpMetrics) Init(appID string, config HTTPMonitoringConfig, latencyDis
 		views = append(views, diagUtils.NewMeasureView(h.serverResponseCount, serverTags, view.Count()))
 	}
 
-	return view.Register(views...)
+	return meter.Register(views...)
 }
 
 // HTTPMiddleware is the middleware to track HTTP server-side requests.
