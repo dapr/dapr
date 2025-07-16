@@ -42,7 +42,6 @@ with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
         print ("Release Candidate build from {}...".format(gitRef))
     elif gitRef.find("-alpha.") > 0:
         print ("Release Alpha build from {}...".format(gitRef))
-        githubEnv.write("ALPHA_RELEASE=true\n")
     else:
         print ("Checking if {} exists".format(releaseNotePath))
         if os.path.exists(releaseNotePath):
