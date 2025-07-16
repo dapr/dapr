@@ -21,8 +21,6 @@ import "google/protobuf/wrappers.proto";
 option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
 
 // ConversationRequest is the request object for Conversation.
-// Many of these fields are inspired by openai.ChatCompletionNewParams
-// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2106
 message ConversationRequest {
   option deprecated = true;
   

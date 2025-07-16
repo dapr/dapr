@@ -35,8 +35,6 @@ const (
 )
 
 // ConversationRequest is the request object for Conversation.
-// Many of these fields are inspired by openai.ChatCompletionNewParams
-// https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2106
 //
 // Deprecated: Marked as deprecated in dapr/proto/runtime/v1/conversation.proto.
 type ConversationRequest struct {
