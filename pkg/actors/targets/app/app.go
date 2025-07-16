@@ -29,16 +29,12 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
-	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
-	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/app/lock"
-	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 	"github.com/dapr/kit/strings"
@@ -46,59 +42,18 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.targets.app")
 
-type Options struct {
-	ActorType   string
-	AppChannel  channel.AppChannel
-	Resiliency  resiliency.Provider
-	IdleQueue   *queue.Processor[string, targets.Idlable]
-	IdleTimeout time.Duration
-	clock       clock.Clock
-	Reentrancy  *reentrancystore.Store
-}
-
 type app struct {
-	actorType string
-	actorID   string
+	*factory
 
-	appChannel channel.AppChannel
-	resiliency resiliency.Provider
-	idleQueue  *queue.Processor[string, targets.Idlable]
-
-	// idleTimeout is the configured max idle time for actors of this kind.
-	idleTimeout time.Duration
+	actorID string
 
 	// idleAt is the time after which this actor is considered to be idle.
-	// When the actor is locked, idleAt is updated by adding the idleTimeout to the current time.
-	idleAt *atomic.Pointer[time.Time]
+	// When the actor is locked, idleAt is updated by adding the idleTimeout to
+	// the current time.
+	idleAt atomic.Pointer[time.Time]
 
-	lock *lock.Lock
-
+	lock  *lock.Lock
 	clock clock.Clock
-}
-
-func Factory(opts Options) targets.Factory {
-	return func(actorID string) targets.Interface {
-		if opts.clock == nil {
-			opts.clock = clock.RealClock{}
-		}
-		var idleAt atomic.Pointer[time.Time]
-		idleAt.Store(ptr.Of(opts.clock.Now().Add(opts.IdleTimeout)))
-
-		return &app{
-			actorType:   opts.ActorType,
-			actorID:     actorID,
-			appChannel:  opts.AppChannel,
-			resiliency:  opts.Resiliency,
-			idleQueue:   opts.IdleQueue,
-			idleTimeout: opts.IdleTimeout,
-			idleAt:      &idleAt,
-			clock:       opts.clock,
-			lock: lock.New(lock.Options{
-				ActorType:   opts.ActorType,
-				ConfigStore: opts.Reentrancy,
-			}),
-		}
-	}
 }
 
 func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -113,7 +68,7 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 
 func (a *app) doInvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
-	a.idleQueue.Enqueue(a)
+	a.idlerQueue.Enqueue(a)
 
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
 	if err != nil {
@@ -201,6 +156,9 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 	}
 	defer cancel()
 
+	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
+	a.idlerQueue.Enqueue(a)
+
 	invokeMethod := "remind/" + reminder.Name
 	data, err := json.Marshal(&api.ReminderResponse{
 		DueTime: reminder.DueTime,
@@ -265,6 +223,8 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 }
 
 func (a *app) Deactivate(ctx context.Context) error {
+	defer a.table.Delete(a.actorID)
+
 	a.lock.Close(ctx)
 
 	req := invokev1.NewInvokeMethodRequest("actors/"+a.actorType+"/"+a.actorID).
@@ -286,9 +246,10 @@ func (a *app) Deactivate(ctx context.Context) error {
 		return fmt.Errorf("error from actor service: (%d) %s", resp.Status().GetCode(), string(body))
 	}
 
-	a.idleQueue.Dequeue(key.ConstructComposite(a.actorType, a.actorID))
+	a.idlerQueue.Dequeue(key.ConstructComposite(a.actorType, a.actorID))
 	diag.DefaultMonitoring.ActorDeactivated(a.actorType)
 	log.Debugf("Deactivated actor '%s'", a.Key())
+	appCache.Put(a)
 
 	return nil
 }
