@@ -1,0 +1,219 @@
+package actors
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/targets/executor"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/backend"
+)
+
+type ClusterTasksBackendOptions struct {
+	Actors            actors.Interface
+	ExecutorActorType string
+}
+
+type ClusterTasksBackend struct {
+	actors            actors.Interface
+	executorActorType string
+}
+
+func NewClusterTasksBackend(opts ClusterTasksBackendOptions) *ClusterTasksBackend {
+	return &ClusterTasksBackend{
+		actors:            opts.Actors,
+		executorActorType: opts.ExecutorActorType,
+	}
+}
+
+func (be *ClusterTasksBackend) CompleteActivityTask(ctx context.Context, resp *protos.ActivityResponse) error {
+	router, err := be.actors.Router(ctx)
+	if err != nil {
+		return err
+	}
+
+	key := backend.GetActivityExecutionKey(
+		resp.GetInstanceId(),
+		resp.GetTaskId(),
+	)
+
+	data, err := proto.Marshal(resp)
+	if err != nil {
+		return err
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(executor.MethodComplete).
+		WithActor(be.executorActorType, key).
+		WithData(data).
+		WithContentType(invokev1.ProtobufContentType)
+
+	_, err = router.Call(ctx, req)
+	return err
+}
+
+func (be *ClusterTasksBackend) CancelActivityTask(ctx context.Context, id api.InstanceID, taskID int32) error {
+	router, err := be.actors.Router(ctx)
+	if err != nil {
+		return err
+	}
+
+	key := backend.GetActivityExecutionKey(
+		string(id),
+		taskID,
+	)
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(executor.MethodCancel).
+		WithActor(be.executorActorType, key).
+		WithContentType(invokev1.ProtobufContentType)
+
+	_, err = router.Call(ctx, req)
+	return err
+}
+
+func (be *ClusterTasksBackend) WaitForActivityCompletion(ctx context.Context, req *protos.ActivityRequest) (*protos.ActivityResponse, error) {
+	router, err := be.actors.Router(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	key := backend.GetActivityExecutionKey(
+		req.GetOrchestrationInstance().GetInstanceId(),
+		req.GetTaskId(),
+	)
+	sreq := internalsv1pb.
+		NewInternalInvokeRequest(executor.MethodWatchComplete).
+		WithActor(be.executorActorType, key).
+		WithContentType(invokev1.ProtobufContentType)
+
+	var ch chan *internalsv1pb.InternalInvokeResponse
+	for {
+		ch = make(chan *internalsv1pb.InternalInvokeResponse, 1)
+		err = router.CallStream(ctx, sreq, ch)
+		if err == nil {
+			break
+		}
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		log.Errorf("Failed to wait for activity completion: %s", err)
+		select {
+		case <-time.After(time.Second / 2):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	var res *internalsv1pb.InternalInvokeResponse
+	select {
+	case res = <-ch:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	if res == nil {
+		return nil, errors.New("received nil response from activity completion")
+	}
+	if res.GetStatus().GetCode() == int32(codes.Aborted) {
+		return nil, api.ErrTaskCancelled
+	}
+	var resp protos.ActivityResponse
+	if err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (be *ClusterTasksBackend) CompleteOrchestratorTask(ctx context.Context, resp *protos.OrchestratorResponse) error {
+	router, err := be.actors.Router(ctx)
+	if err != nil {
+		return err
+	}
+
+	data, err := proto.Marshal(resp)
+	if err != nil {
+		return err
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(executor.MethodComplete).
+		WithActor(be.executorActorType, resp.GetInstanceId()).
+		WithData(data).
+		WithContentType(invokev1.ProtobufContentType)
+
+	_, err = router.Call(ctx, req)
+	return err
+}
+
+func (be *ClusterTasksBackend) CancelOrchestratorTask(ctx context.Context, id api.InstanceID) error {
+	router, err := be.actors.Router(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(executor.MethodCancel).
+		WithActor(be.executorActorType, string(id)).
+		WithContentType(invokev1.ProtobufContentType)
+
+	_, err = router.Call(ctx, req)
+	return err
+}
+
+func (be *ClusterTasksBackend) WaitForOrchestratorCompletion(ctx context.Context, req *protos.OrchestratorRequest) (*protos.OrchestratorResponse, error) {
+	router, err := be.actors.Router(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	sreq := internalsv1pb.
+		NewInternalInvokeRequest(executor.MethodWatchComplete).
+		WithActor(be.executorActorType, req.GetInstanceId()).
+		WithContentType(invokev1.ProtobufContentType)
+
+	var ch chan *internalsv1pb.InternalInvokeResponse
+	for {
+		ch = make(chan *internalsv1pb.InternalInvokeResponse, 1)
+		err = router.CallStream(ctx, sreq, ch)
+		if err == nil {
+			break
+		}
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		log.Errorf("Failed to wait for orchestrator completion: %s", err)
+		select {
+		case <-time.After(time.Second / 2):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	var res *internalsv1pb.InternalInvokeResponse
+	select {
+	case res = <-ch:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	if res == nil {
+		return nil, errors.New("received nil response from orchestrator completion")
+	}
+	if res.GetStatus().GetCode() == int32(codes.Aborted) {
+		return nil, api.ErrTaskCancelled
+	}
+	var resp protos.OrchestratorResponse
+	if err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}

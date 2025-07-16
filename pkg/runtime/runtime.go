@@ -298,14 +298,15 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	wfe := wfengine.New(wfengine.Options{
-		AppID:              runtimeConfig.id,
-		Namespace:          namespace,
-		Actors:             actors,
-		Spec:               globalConfig.GetWorkflowSpec(),
-		BackendManager:     processor.WorkflowBackend(),
-		Resiliency:         resiliencyProvider,
-		SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
-		EventSink:          runtimeConfig.workflowEventSink,
+		AppID:                     runtimeConfig.id,
+		Namespace:                 namespace,
+		Actors:                    actors,
+		Spec:                      globalConfig.GetWorkflowSpec(),
+		BackendManager:            processor.WorkflowBackend(),
+		Resiliency:                resiliencyProvider,
+		SchedulerReminders:        globalConfig.IsFeatureEnabled(config.SchedulerReminders),
+		EventSink:                 runtimeConfig.workflowEventSink,
+		EnableClusteredDeployment: runtimeConfig.workflowsEnableClusteredDeployment,
 	})
 
 	rt := &DaprRuntime{

@@ -157,6 +157,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.maxBodySize != nil {
 		args = append(args, "--max-body-size="+*opts.maxBodySize)
 	}
+	if opts.workflowsEnableClusteredDeployment != nil {
+		args = append(args, "--workflows-enable-clustered-deployment="+strconv.FormatBool(*opts.workflowsEnableClusteredDeployment))
+	}
 
 	ns := "default"
 	if opts.namespace != nil {

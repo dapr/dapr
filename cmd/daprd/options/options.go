@@ -37,53 +37,54 @@ import (
 )
 
 type Options struct {
-	AppID                         string
-	ComponentsPath                string
-	ControlPlaneAddress           string
-	ControlPlaneTrustDomain       string
-	ControlPlaneNamespace         string
-	SentryAddress                 string
-	TrustAnchors                  []byte
-	AllowedOrigins                string
-	EnableProfiling               bool
-	AppMaxConcurrency             int
-	EnableMTLS                    bool
-	AppSSL                        bool
-	MaxRequestSize                int // In bytes
-	ResourcesPath                 []string
-	AppProtocol                   string
-	EnableAPILogging              *bool
-	RuntimeVersion                bool
-	BuildInfo                     bool
-	WaitCommand                   bool
-	DaprHTTPPort                  string
-	DaprAPIGRPCPort               string
-	ProfilePort                   string
-	DaprInternalGRPCPort          string
-	DaprInternalGRPCListenAddress string
-	DaprPublicPort                string
-	DaprPublicListenAddress       string
-	AppPort                       string
-	DaprGracefulShutdownSeconds   int
-	DaprBlockShutdownDuration     *time.Duration
-	ActorsService                 string
-	RemindersService              string
-	SchedulerAddress              []string
-	SchedulerJobStreams           uint
-	DaprAPIListenAddresses        string
-	AppHealthProbeInterval        int
-	AppHealthProbeTimeout         int
-	AppHealthThreshold            int
-	EnableAppHealthCheck          bool
-	Mode                          string
-	Config                        []string
-	UnixDomainSocket              string
-	ReadBufferSize                int // In bytes
-	DisableBuiltinK8sSecretStore  bool
-	AppHealthCheckPath            string
-	AppChannelAddress             string
-	Logger                        logger.Options
-	Metrics                       *metrics.FlagOptions
+	AppID                              string
+	ComponentsPath                     string
+	ControlPlaneAddress                string
+	ControlPlaneTrustDomain            string
+	ControlPlaneNamespace              string
+	SentryAddress                      string
+	TrustAnchors                       []byte
+	AllowedOrigins                     string
+	EnableProfiling                    bool
+	AppMaxConcurrency                  int
+	EnableMTLS                         bool
+	AppSSL                             bool
+	MaxRequestSize                     int // In bytes
+	ResourcesPath                      []string
+	AppProtocol                        string
+	EnableAPILogging                   *bool
+	RuntimeVersion                     bool
+	BuildInfo                          bool
+	WaitCommand                        bool
+	DaprHTTPPort                       string
+	DaprAPIGRPCPort                    string
+	ProfilePort                        string
+	DaprInternalGRPCPort               string
+	DaprInternalGRPCListenAddress      string
+	DaprPublicPort                     string
+	DaprPublicListenAddress            string
+	AppPort                            string
+	DaprGracefulShutdownSeconds        int
+	DaprBlockShutdownDuration          *time.Duration
+	ActorsService                      string
+	RemindersService                   string
+	SchedulerAddress                   []string
+	SchedulerJobStreams                uint
+	DaprAPIListenAddresses             string
+	AppHealthProbeInterval             int
+	AppHealthProbeTimeout              int
+	AppHealthThreshold                 int
+	EnableAppHealthCheck               bool
+	Mode                               string
+	Config                             []string
+	UnixDomainSocket                   string
+	ReadBufferSize                     int // In bytes
+	DisableBuiltinK8sSecretStore       bool
+	AppHealthCheckPath                 string
+	AppChannelAddress                  string
+	Logger                             logger.Options
+	Metrics                            *metrics.FlagOptions
+	WorkflowsEnableClusteredDeployment bool
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -165,6 +166,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.IntVar(&opts.AppHealthProbeTimeout, "app-health-probe-timeout", int(config.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
 	fs.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(config.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 	fs.StringVar(&opts.AppChannelAddress, "app-channel-address", runtime.DefaultChannelAddress, "The network address the application listens on")
+	fs.BoolVar(&opts.WorkflowsEnableClusteredDeployment, "workflows-enable-clustered-deployment", false, "Enable feature to support workflows in a clustered deployment")
 
 	// Add flags for actors, placement, and reminders
 	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
