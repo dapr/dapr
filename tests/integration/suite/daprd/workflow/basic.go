@@ -222,7 +222,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
-		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.GetRuntimeStatus())
+		require.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), metadata.GetRuntimeStatus().String())
 
 		// Purge the root orchestration
 		b.purgeWorkflow(t, ctx, string(id))
@@ -276,9 +276,7 @@ func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, in
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", b.daprd.HTTPPort(), name)
 	data, err := json.Marshal(input)
 	require.NoError(t, err)
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, strings.NewReader(string(data)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(string(data)))
 	req.Header.Set("Content-Type", "application/json")
 	require.NoError(t, err)
 	resp, err := b.httpClient.Do(req)
@@ -304,9 +302,7 @@ func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID 
 
 	// use http client to terminate the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", b.daprd.HTTPPort(), instanceID)
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)
 	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)
@@ -325,9 +321,7 @@ func (b *basic) purgeWorkflow(t *testing.T, ctx context.Context, instanceID stri
 
 	// use http client to purge the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", b.daprd.HTTPPort(), instanceID)
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)
 	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)

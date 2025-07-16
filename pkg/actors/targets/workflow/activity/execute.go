@@ -31,17 +31,17 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *backend.HistoryEvent) (todo.RunCompleted, error) {
+func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *backend.HistoryEvent) error {
 	activityName := ""
 	if ts := taskEvent.GetTaskScheduled(); ts != nil {
 		activityName = ts.GetName()
 	} else {
-		return todo.RunCompletedTrue, fmt.Errorf("invalid activity task event: '%s'", taskEvent.String())
+		return fmt.Errorf("invalid activity task event: '%s'", taskEvent.String())
 	}
 
 	endIndex := strings.Index(a.actorID, "::")
 	if endIndex < 0 {
-		return todo.RunCompletedTrue, fmt.Errorf("invalid activity actor ID: '%s'", a.actorID)
+		return fmt.Errorf("invalid activity actor ID: '%s'", a.actorID)
 	}
 	workflowID := a.actorID[0:endIndex]
 
@@ -67,10 +67,10 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 
 	if errors.Is(err, context.DeadlineExceeded) {
 		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
-		return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
+		return wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 	} else if err != nil {
 		diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusRecoverable, elapsed)
-		return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to schedule an activity execution: %w", err))
+		return wferrors.NewRecoverable(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
 	diag.DefaultWorkflowMonitoring.ActivityOperationEvent(ctx, activityName, diag.StatusSuccess, elapsed)
 
@@ -90,13 +90,13 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		// Activity execution failed with recoverable error
 		elapsed = diag.ElapsedSince(start)
 		executionStatus = diag.StatusRecoverable
-		return todo.RunCompletedFalse, ctx.Err() // will be retried
+		return ctx.Err() // will be retried
 	case completed := <-callback:
 		elapsed = diag.ElapsedSince(start)
 		if !completed {
 			// Activity execution failed with recoverable error
 			executionStatus = diag.StatusRecoverable
-			return todo.RunCompletedFalse, wferrors.NewRecoverable(todo.ErrExecutionAborted) // AbandonActivityWorkItem was called
+			return wferrors.NewRecoverable(todo.ErrExecutionAborted) // AbandonActivityWorkItem was called
 		}
 	}
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
@@ -106,13 +106,13 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	if err != nil {
 		// Returning non-recoverable error
 		executionStatus = diag.StatusFailed
-		return todo.RunCompletedTrue, err
+		return err
 	}
 
 	// send completed event to orchestrator wf actor
 	wfActorType := a.workflowActorType
 	if router := taskEvent.GetRouter(); router != nil {
-		wfActorType = a.actorTypeBuilder.Workflow(router.GetSource())
+		wfActorType = a.actorTypeBuilder.Workflow(router.GetSourceAppID())
 	}
 
 	req := internalsv1pb.
@@ -126,7 +126,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	case err != nil:
 		// Returning recoverable error, record metrics
 		executionStatus = diag.StatusRecoverable
-		return todo.RunCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", todo.AddWorkflowEventMethod, err))
+		return wferrors.NewRecoverable(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", todo.AddWorkflowEventMethod, err))
 	case wi.Result.GetTaskCompleted() != nil:
 		// Activity execution completed successfully
 		executionStatus = diag.StatusSuccess
@@ -134,5 +134,5 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		// Activity execution failed
 		executionStatus = diag.StatusFailed
 	}
-	return todo.RunCompletedTrue, nil
+	return nil
 }

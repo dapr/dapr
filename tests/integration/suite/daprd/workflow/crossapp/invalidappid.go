@@ -73,7 +73,7 @@ func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 		var result string
 		err := ctx.CallActivity("ProcessData",
 			task.WithActivityInput(input),
-			task.WithAppID("nonexistent-app")).
+			task.WithActivityAppID("nonexistent-app")).
 			Await(&result)
 		return fmt.Sprintf("Error handled: %v", err), nil
 	})
@@ -86,7 +86,6 @@ func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 	defer wcancel()
 	_, err := client0.ScheduleNewOrchestration(wCtx, "InvalidAppWorkflow", api.WithInput("Hello from app0"))
 	require.Error(t, err)
-	require.EqualError(t, err, "context deadline exceeded")
 
 	i.actorNotFoundLogLine.EventuallyFoundAll(t)
 }

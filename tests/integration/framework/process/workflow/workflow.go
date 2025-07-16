@@ -17,7 +17,9 @@ import (
 	"context"
 	"runtime"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -174,9 +176,8 @@ func (w *Workflow) RegistryN(index int) *task.TaskRegistry {
 
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
 	t.Helper()
-	backendClient := client.NewTaskHubGrpcClient(w.daprds[0].GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.Registry()))
-	return backendClient
+
+	return w.BackendClientN(t, ctx, 0)
 }
 
 // BackendClient returns a backend client for the specified index
@@ -186,6 +187,12 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 
 	backendClient := client.NewTaskHubGrpcClient(w.daprds[index].GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.RegistryN(index)))
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c,
+			len(w.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
+	}, time.Second*10, time.Millisecond*10)
+
 	return backendClient
 }
 
