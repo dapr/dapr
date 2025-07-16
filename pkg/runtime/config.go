@@ -75,87 +75,89 @@ const (
 
 // Config holds the Dapr Runtime configuration.
 type Config struct {
-	AppID                         string
-	ControlPlaneAddress           string
-	SentryAddress                 string
-	AllowedOrigins                string
-	EnableProfiling               bool
-	AppMaxConcurrency             int
-	EnableMTLS                    bool
-	AppSSL                        bool
-	MaxRequestSize                int // In bytes
-	ResourcesPath                 []string
-	ComponentsPath                string
-	AppProtocol                   string
-	EnableAPILogging              *bool
-	DaprHTTPPort                  string
-	DaprAPIGRPCPort               string
-	ProfilePort                   string
-	DaprInternalGRPCPort          string
-	DaprInternalGRPCListenAddress string
-	DaprPublicPort                string
-	DaprPublicListenAddress       string
-	ApplicationPort               string
-	DaprGracefulShutdownSeconds   int
-	DaprBlockShutdownDuration     *time.Duration
-	ActorsService                 string
-	RemindersService              string
-	SchedulerAddress              []string
-	SchedulerStreams              uint
-	DaprAPIListenAddresses        string
-	AppHealthProbeInterval        int
-	AppHealthProbeTimeout         int
-	AppHealthThreshold            int
-	EnableAppHealthCheck          bool
-	Mode                          string
-	Config                        []string
-	UnixDomainSocket              string
-	ReadBufferSize                int // In bytes
-	DisableBuiltinK8sSecretStore  bool
-	AppHealthCheckPath            string
-	AppChannelAddress             string
-	Metrics                       metrics.Options
-	Registry                      *registry.Options
-	Security                      security.Handler
-	Healthz                       healthz.Healthz
-	WorkflowEventSink             orchestrator.EventSink
+	AppID                              string
+	ControlPlaneAddress                string
+	SentryAddress                      string
+	AllowedOrigins                     string
+	EnableProfiling                    bool
+	AppMaxConcurrency                  int
+	EnableMTLS                         bool
+	AppSSL                             bool
+	MaxRequestSize                     int // In bytes
+	ResourcesPath                      []string
+	ComponentsPath                     string
+	AppProtocol                        string
+	EnableAPILogging                   *bool
+	DaprHTTPPort                       string
+	DaprAPIGRPCPort                    string
+	ProfilePort                        string
+	DaprInternalGRPCPort               string
+	DaprInternalGRPCListenAddress      string
+	DaprPublicPort                     string
+	DaprPublicListenAddress            string
+	ApplicationPort                    string
+	DaprGracefulShutdownSeconds        int
+	DaprBlockShutdownDuration          *time.Duration
+	ActorsService                      string
+	RemindersService                   string
+	SchedulerAddress                   []string
+	SchedulerStreams                   uint
+	DaprAPIListenAddresses             string
+	AppHealthProbeInterval             int
+	AppHealthProbeTimeout              int
+	AppHealthThreshold                 int
+	EnableAppHealthCheck               bool
+	Mode                               string
+	Config                             []string
+	UnixDomainSocket                   string
+	ReadBufferSize                     int // In bytes
+	DisableBuiltinK8sSecretStore       bool
+	AppHealthCheckPath                 string
+	AppChannelAddress                  string
+	Metrics                            metrics.Options
+	Registry                           *registry.Options
+	Security                           security.Handler
+	Healthz                            healthz.Healthz
+	WorkflowEventSink                  orchestrator.EventSink
+	WorkflowsEnableClusteredDeployment bool
 }
 
 type internalConfig struct {
-	id                           string
-	httpPort                     int
-	publicPort                   *int
-	publicListenAddress          string
-	profilePort                  int
-	enableProfiling              bool
-	apiGRPCPort                  int
-	internalGRPCPort             int
-	internalGRPCListenAddress    string
-	apiListenAddresses           []string
-	appConnectionConfig          config.AppConnectionConfig
-	mode                         modes.DaprMode
-	actorsService                string
-	remindersService             string
-	schedulerAddress             []string
-	schedulerStreams             uint
-	allowedOrigins               string
-	standalone                   configmodes.StandaloneConfig
-	kubernetes                   configmodes.KubernetesConfig
-	mTLSEnabled                  bool
-	sentryServiceAddress         string
-	unixDomainSocket             string
-	maxRequestBodySize           int // In bytes
-	readBufferSize               int // In bytes
-	gracefulShutdownDuration     time.Duration
-	blockShutdownDuration        *time.Duration
-	enableAPILogging             *bool
-	disableBuiltinK8sSecretStore bool
-	config                       []string
-	registry                     *registry.Registry
-	metricsExporter              metrics.Exporter
-	healthz                      healthz.Healthz
-	outboundHealthz              healthz.Healthz
-	workflowEventSink            orchestrator.EventSink
+	id                                 string
+	httpPort                           int
+	publicPort                         *int
+	publicListenAddress                string
+	profilePort                        int
+	enableProfiling                    bool
+	apiGRPCPort                        int
+	internalGRPCPort                   int
+	internalGRPCListenAddress          string
+	apiListenAddresses                 []string
+	appConnectionConfig                config.AppConnectionConfig
+	mode                               modes.DaprMode
+	actorsService                      string
+	remindersService                   string
+	schedulerAddress                   []string
+	schedulerStreams                   uint
+	allowedOrigins                     string
+	standalone                         configmodes.StandaloneConfig
+	kubernetes                         configmodes.KubernetesConfig
+	mTLSEnabled                        bool
+	sentryServiceAddress               string
+	unixDomainSocket                   string
+	maxRequestBodySize                 int // In bytes
+	readBufferSize                     int // In bytes
+	gracefulShutdownDuration           time.Duration
+	blockShutdownDuration              *time.Duration
+	enableAPILogging                   *bool
+	disableBuiltinK8sSecretStore       bool
+	config                             []string
+	registry                           *registry.Registry
+	metricsExporter                    metrics.Exporter
+	healthz                            healthz.Healthz
+	outboundHealthz                    healthz.Healthz
+	workflowEventSink                  orchestrator.EventSink
+	workflowsEnableClusteredDeployment bool
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -326,18 +328,19 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
-		registry:                  registry.New(c.Registry),
-		metricsExporter:           metrics.New(c.Metrics),
-		blockShutdownDuration:     c.DaprBlockShutdownDuration,
-		actorsService:             c.ActorsService,
-		remindersService:          c.RemindersService,
-		schedulerAddress:          c.SchedulerAddress,
-		schedulerStreams:          c.SchedulerStreams,
-		publicListenAddress:       c.DaprPublicListenAddress,
-		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
-		healthz:                   c.Healthz,
-		outboundHealthz:           healthz.New(),
-		workflowEventSink:         c.WorkflowEventSink,
+		registry:                           registry.New(c.Registry),
+		metricsExporter:                    metrics.New(c.Metrics),
+		blockShutdownDuration:              c.DaprBlockShutdownDuration,
+		actorsService:                      c.ActorsService,
+		remindersService:                   c.RemindersService,
+		schedulerAddress:                   c.SchedulerAddress,
+		schedulerStreams:                   c.SchedulerStreams,
+		publicListenAddress:                c.DaprPublicListenAddress,
+		internalGRPCListenAddress:          c.DaprInternalGRPCListenAddress,
+		healthz:                            c.Healthz,
+		outboundHealthz:                    healthz.New(),
+		workflowEventSink:                  c.WorkflowEventSink,
+		workflowsEnableClusteredDeployment: c.WorkflowsEnableClusteredDeployment,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
