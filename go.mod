@@ -13,8 +13,8 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.15.1-0.20250701140252-bd6ea2e0f5b7
 	github.com/dapr/durabletask-go v0.7.3-0.20250711135247-7a35af6fe0e5
-	github.com/dapr/kit v0.15.3-0.20250709024107-7c4cedad37d8
-	github.com/diagridio/go-etcd-cron v0.8.3-0.20250704082745-6b45119148c2
+	github.com/dapr/kit v0.15.3-0.20250710140356-9d4f384c5763
+	github.com/diagridio/go-etcd-cron v0.8.3-0.20250711135408-17bb34390b59
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
