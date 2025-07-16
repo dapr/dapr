@@ -72,13 +72,6 @@ const (
 	serviceInvocationRecvLatencyMs    = "runtime/service_invocation/res_recv_latency_ms"
 )
 
-func metricsCleanup() {
-	diag.CleanupRegisteredViews(
-		serviceInvocationRequestSentName,
-		serviceInvocationResponseRecvName,
-		serviceInvocationRecvLatencyMs)
-}
-
 var testLogger = logger.NewLogger("proxy-test")
 
 // asserting service is implemented on the server side and serves as a handler for stuff.
@@ -437,7 +430,10 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 			s.service.simulatePingFailures.Store(0)
 		}()
 
-		setupMetrics(s)
+		meter := setupMetrics(s)
+		t.Cleanup(func() {
+			meter.Stop()
+		})
 
 		ctx, cancel := s.ctx()
 		defer cancel()
@@ -452,9 +448,9 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		require.Equal(t, int32(3), s.service.pingCallCount.Load())
 		require.Equal(t, message, res.GetValue())
 
-		assertRequestSentMetrics(t, "unary", 3, nil)
+		assertRequestSentMetrics(t, meter, "unary", 3, nil)
 
-		rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
+		rows, err := meter.RetrieveData(serviceInvocationResponseRecvName)
 		require.NoError(t, err)
 		assert.Len(t, rows, 2)
 		// 2 Ping failures
@@ -475,7 +471,10 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		// Reset callCount before this test
 		s.service.pingCallCount.Store(0)
 
-		setupMetrics(s)
+		meter := setupMetrics(s)
+		t.Cleanup(func() {
+			meter.Stop()
+		})
 
 		ctx := metadata.NewOutgoingContext(t.Context(), metadata.Pairs(diagConsts.GRPCProxyAppIDKey, testAppID))
 
@@ -490,8 +489,8 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
 		time.Sleep(500 * time.Millisecond)
 
-		assertRequestSentMetrics(t, "unary", 4, nil)
-		assertResponseReceiveMetricsSameCode(t, "unary", codes.DeadlineExceeded, 4)
+		assertRequestSentMetrics(t, meter, "unary", 4, nil)
+		assertResponseReceiveMetricsSameCode(t, meter, "unary", codes.DeadlineExceeded, 4)
 	})
 
 	s.T().Run("multiple threads", func(t *testing.T) {
@@ -505,7 +504,10 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 			s.service.simulateRandomFailures.Store(false)
 		}()
 
-		setupMetrics(s)
+		meter := setupMetrics(s)
+		t.Cleanup(func() {
+			meter.Stop()
+		})
 
 		numGoroutines := 10
 		numOperations := 10
@@ -540,13 +542,13 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
 		time.Sleep(500 * time.Millisecond)
 
-		assertRequestSentMetrics(t, "unary", int64(numGoroutines*numOperations), assert.GreaterOrEqual)
+		assertRequestSentMetrics(t, meter, "unary", int64(numGoroutines*numOperations), assert.GreaterOrEqual)
 	})
 }
 
-func assertResponseReceiveMetricsSameCode(t *testing.T, requestType string, code codes.Code, expected int64) []*view.Row {
+func assertResponseReceiveMetricsSameCode(t *testing.T, meter view.Meter, requestType string, code codes.Code, expected int64) []*view.Row {
 	t.Helper()
-	rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
+	rows, err := meter.RetrieveData(serviceInvocationResponseRecvName)
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 	count := diag.GetCountValueForObservationWithTagSet(
@@ -558,9 +560,9 @@ func assertResponseReceiveMetricsSameCode(t *testing.T, requestType string, code
 	return rows
 }
 
-func assertRequestSentMetrics(t *testing.T, requestType string, requestsSentExpected int64, assertEqualFn func(t assert.TestingT, e1 interface{}, e2 interface{}, msgAndArgs ...interface{}) bool) []*view.Row {
+func assertRequestSentMetrics(t *testing.T, meter view.Meter, requestType string, requestsSentExpected int64, assertEqualFn func(t assert.TestingT, e1 interface{}, e2 interface{}, msgAndArgs ...interface{}) bool) []*view.Row {
 	t.Helper()
-	rows, err := view.RetrieveData(serviceInvocationRequestSentName)
+	rows, err := meter.RetrieveData(serviceInvocationRequestSentName)
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 	requestsSent := diag.GetCountValueForObservationWithTagSet(
@@ -620,7 +622,10 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 		defer cancel()
 
-		setupMetrics(s)
+		meter := setupMetrics(s)
+		t.Cleanup(func() {
+			meter.Stop()
+		})
 
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 			diagConsts.GRPCProxyAppIDKey, testAppID,
@@ -655,8 +660,8 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		_, err = stream.Recv()
 		s.Require().ErrorIs(err, io.EOF, "stream should close with io.EOF, meaining OK")
 
-		assertRequestSentMetrics(t, "streaming", 1, nil)
-		rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
+		assertRequestSentMetrics(t, meter, "streaming", 1, nil)
+		rows, err := meter.RetrieveData(serviceInvocationResponseRecvName)
 		require.NoError(t, err)
 		assert.Empty(t, rows) // no error so no response metric
 	})
@@ -671,7 +676,10 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 		defer cancel()
 
-		setupMetrics(s)
+		meter := setupMetrics(s)
+		t.Cleanup(func() {
+			meter.Stop()
+		})
 
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 			diagConsts.GRPCProxyAppIDKey, testAppID,
@@ -695,15 +703,17 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		_, err = stream.Recv()
 		s.Require().ErrorIs(err, io.EOF, "stream should close with io.EOF, meaining OK")
 
-		assertRequestSentMetrics(t, "streaming", 2, nil)
-		assertResponseReceiveMetricsSameCode(t, "streaming", codes.Unavailable, 1)
+		assertRequestSentMetrics(t, meter, "streaming", 2, nil)
+		assertResponseReceiveMetricsSameCode(t, meter, "streaming", codes.Unavailable, 1)
 	})
 }
 
-func setupMetrics(s *proxyTestSuite) {
+func setupMetrics(s *proxyTestSuite) view.Meter {
 	s.T().Helper()
-	metricsCleanup()
-	s.Require().NoError(diag.DefaultMonitoring.Init(testAppID, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(logger.NewLogger("debug"))))
+	meter := view.NewMeter()
+	meter.Start()
+	s.Require().NoError(diag.DefaultMonitoring.Init(meter, testAppID, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(logger.NewLogger("debug"))))
+	return meter
 }
 
 func (s *proxyTestSuite) initServer() {

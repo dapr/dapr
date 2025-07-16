@@ -50,13 +50,15 @@ var (
 var defaultSizeDistribution = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
 
 // InitMetrics initializes metrics.
-func InitMetrics(appID, namespace string, metricSpec config.MetricSpec) error {
+func InitMetrics(meter view.Meter, appID, namespace string, metricSpec config.MetricSpec) error {
+	meter.Start()
+
 	latencyDistribution := metricSpec.GetLatencyDistribution(log)
-	if err := DefaultMonitoring.Init(appID, latencyDistribution); err != nil {
+	if err := DefaultMonitoring.Init(meter, appID, latencyDistribution); err != nil {
 		return err
 	}
 
-	if err := DefaultGRPCMonitoring.Init(appID, latencyDistribution); err != nil {
+	if err := DefaultGRPCMonitoring.Init(meter, appID, latencyDistribution); err != nil {
 		return err
 	}
 
@@ -65,29 +67,29 @@ func InitMetrics(appID, namespace string, metricSpec config.MetricSpec) error {
 		metricSpec.GetHTTPIncreasedCardinality(log),
 		metricSpec.GetHTTPExcludeVerbs(),
 	)
-	if err := DefaultHTTPMonitoring.Init(appID, httpConfig, latencyDistribution); err != nil {
+	if err := DefaultHTTPMonitoring.Init(meter, appID, httpConfig, latencyDistribution); err != nil {
 		return err
 	}
 
-	if err := DefaultComponentMonitoring.Init(appID, namespace, latencyDistribution); err != nil {
+	if err := DefaultComponentMonitoring.Init(meter, appID, namespace, latencyDistribution); err != nil {
 		return err
 	}
 
-	if err := DefaultResiliencyMonitoring.Init(appID); err != nil {
+	if err := DefaultResiliencyMonitoring.Init(meter, appID); err != nil {
 		return err
 	}
 
-	if err := DefaultWorkflowMonitoring.Init(appID, namespace, latencyDistribution); err != nil {
+	if err := DefaultWorkflowMonitoring.Init(meter, appID, namespace, latencyDistribution); err != nil {
 		return err
 	}
 
 	if metricSpec.GetRecordErrorCodes() {
-		if err := DefaultErrorCodeMonitoring.Init(appID); err != nil {
+		if err := DefaultErrorCodeMonitoring.Init(meter, appID); err != nil {
 			return err
 		}
 	}
 
-	// Set reporting period of views
-	view.SetReportingPeriod(DefaultReportingPeriod)
+	// Set reporting period of views on the explicit meter
+	meter.SetReportingPeriod(DefaultReportingPeriod)
 	return utils.CreateRulesMap(metricSpec.Rules)
 }

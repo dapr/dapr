@@ -31,12 +31,17 @@ import (
 func TestRecordErrorCode(t *testing.T) {
 	t.Run("record single error code", func(t *testing.T) {
 		m := newErrorCodeMetrics()
-		_ = m.Init("app-id")
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		_ = m.Init(meter, "app-id")
 
 		m.RecordErrorCode(errorcodes.ActorInstanceMissing)
 
-		viewData, _ := view.RetrieveData("error_code/total")
-		v := view.Find("error_code/total")
+		viewData, _ := meter.RetrieveData("error_code/total")
+		v := meter.Find("error_code/total")
 
 		allTagsPresent(t, v, viewData[0].Tags)
 		assert.Len(t, viewData, 1)
@@ -49,14 +54,19 @@ func TestRecordErrorCode(t *testing.T) {
 
 	t.Run("record two valid error codes", func(t *testing.T) {
 		m := newErrorCodeMetrics()
-		_ = m.Init("app-id")
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		_ = m.Init(meter, "app-id")
 
 		m.RecordErrorCode(errorcodes.StateBulkGet)
 		m.RecordErrorCode(errorcodes.StateBulkGet)
 		m.RecordErrorCode(errorcodes.CommonAPIUnimplemented)
 
-		viewData, _ := view.RetrieveData("error_code/total")
-		v := view.Find("error_code/total")
+		viewData, _ := meter.RetrieveData("error_code/total")
+		v := meter.Find("error_code/total")
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
@@ -72,7 +82,12 @@ func TestRecordErrorCode(t *testing.T) {
 	})
 
 	t.Run("record different error structures", func(t *testing.T) {
-		_ = DefaultErrorCodeMonitoring.Init("app-id")
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		_ = DefaultErrorCodeMonitoring.Init(meter, "app-id")
 
 		assert.True(t, RecordErrorCode(&errorcodes.WorkflowComponentMissing))
 		assert.True(t, RecordErrorCode(messages.NewAPIErrorHTTP("error message", errorcodes.WorkflowComponentMissing, 502)))
@@ -90,8 +105,8 @@ func TestRecordErrorCode(t *testing.T) {
 		)
 		assert.True(t, RecordErrorCode(apierrors.PubSub("pubsub-name").WithMetadata(nil).NotFound()))
 
-		viewData, _ := view.RetrieveData("error_code/total")
-		v := view.Find("error_code/total")
+		viewData, _ := meter.RetrieveData("error_code/total")
+		v := meter.Find("error_code/total")
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
