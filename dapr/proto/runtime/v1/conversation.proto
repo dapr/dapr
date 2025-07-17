@@ -134,6 +134,7 @@ message ConversationInputV1Alpha2 {
 // so none of these message_types have this role field as required I will propagate it in the backend,
 // while leaving it as an optional input in case users want to specify.
 message ConversationMessage {
+    // TODO(@Sicoyle): update my names below to match their names closer in openai?
   oneof message_types {
     ConversationMessageOfDeveloper of_developer = 1;
     ConversationMessageOfSystem of_system = 2;
@@ -202,8 +203,16 @@ message ConversationMessageOfAssistant {
 // ConversationMessageOfTool is intended to be the contents of a conversation message,
 // as the role of a tool.
 message ConversationMessageOfTool {
+  // Tool ID is helpful for tracking tool history
   optional google.protobuf.StringValue tool_id = 1;
-  repeated ConversationContentMessageContent content = 2;
+
+  // TODO: pls double check me here: I see ChatCompletionToolMessageParam does not have name field,
+  // but in translating to langchain llms.MessageContent for ToolCall message should be an incoming tool call response from an api POV,
+  // so then to me i need to add a name field.
+  google.protobuf.StringValue name = 2;
+
+  repeated ConversationContentMessageContent content = 3;
+
 }
 
 // inspired by openai.ChatCompletionMessageToolCallParam

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
+	"github.com/tmc/langchaingo/llms"
 
 	"github.com/dapr/components-contrib/conversation"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -162,97 +163,192 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 		a.logger.Debug(err)
 		return &runtimev1pb.ConversationResponseV1Alpha2{}, err
 	}
+	// TODO: double check that in case of input of tool call response that i properly translate to llms.ToolCallResponse msg type
+	// TODO: sam to double check on nil ptr checks
 
 	for _, input := range req.GetInputs() {
-		for messageIndex, message := range input.GetMessages() {
+		for _, message := range input.GetMessages() {
 			var (
-				content string
-				role    string
-
-				// optional based on msg type below
-				refusal   *string
-				toolCalls []*conversation.ConversationInputToolCalls
-				toolId    *string
+				langchainMsg llms.MessageContent
 			)
 
 			// Openai allows roles to be passed in; however,
-			// we make them implicit in the backend setting this field based on the input msg type.
-			// TODO(@Sicoyle): evaluate where i should put consts like this.
+			// we make them implicit in the backend setting this field based on the input msg type using the langchain role types.
 			switch msg := message.GetMessageTypes().(type) {
+
 			case *runtimev1pb.ConversationMessage_OfUser:
-				content = msg.OfUser.GetContent()[messageIndex].GetText().GetValue()
-				role = "user"
+				var parts []llms.ContentPart
+
+				// scrub inputs
+				for _, content := range msg.OfUser.GetContent() {
+					text := content.GetText().GetValue()
+					if input.GetScrubPII() {
+						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
+						if sErr != nil {
+							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
+							a.logger.Debug(sErr)
+							return &runtimev1pb.ConversationResponseV1Alpha2{}, sErr
+						}
+						text = scrubbed[0]
+					}
+					parts = append(parts, llms.TextContent{
+						Text: text,
+					})
+				}
+
+				langchainMsg = llms.MessageContent{
+					Role:  llms.ChatMessageTypeHuman,
+					Parts: parts,
+				}
+
 			case *runtimev1pb.ConversationMessage_OfSystem:
-				content = msg.OfSystem.GetContent()[messageIndex].GetText().GetValue()
-				role = "system"
+				var parts []llms.ContentPart
+
+				// scrub inputs
+				for _, content := range msg.OfSystem.GetContent() {
+					text := content.GetText().GetValue()
+					if input.GetScrubPII() {
+						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
+						if sErr != nil {
+							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
+							a.logger.Debug(sErr)
+							return &runtimev1pb.ConversationResponseV1Alpha2{}, sErr
+						}
+						text = scrubbed[0]
+					}
+					parts = append(parts, llms.TextContent{
+						Text: text,
+					})
+				}
+
+				langchainMsg = llms.MessageContent{
+					Role:  llms.ChatMessageTypeSystem,
+					Parts: parts,
+				}
+
 			case *runtimev1pb.ConversationMessage_OfAssistant:
+				var parts []llms.ContentPart
+				for _, content := range msg.OfAssistant.GetContent() {
+					text := content.GetText().GetValue()
+
+					// scrub inputs
+					if input.GetScrubPII() {
+						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
+						if sErr != nil {
+							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
+							a.logger.Debug(sErr)
+							return &runtimev1pb.ConversationResponseV1Alpha2{}, sErr
+						}
+						text = scrubbed[0]
+					}
+					parts = append(parts, llms.TextPart(text))
+				}
+
+				langchainMsg = llms.MessageContent{
+					Role:  llms.ChatMessageTypeAI, // TODO: double check this role
+					Parts: parts,
+				}
+
+				if msg.OfAssistant.Refusal != nil {
+					langchainMsg.Parts = append(langchainMsg.Parts, llms.TextPart(msg.OfAssistant.Refusal.Value))
+				}
+
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
-					content = msg.OfAssistant.GetContent()[messageIndex].GetText().GetValue()
-					role = "assistant"
-					refusal = &msg.OfAssistant.Refusal.Value
-					tcf := tool.GetFunction()
-					tcfaBytes, err := json.Marshal(tcf.GetArguments())
+					// TODO: scrub anything?
+
+					role := llms.ChatMessageTypeTool
+					tcfaBytes, err := json.Marshal(tool.GetFunction().GetArguments())
 					if err != nil {
 						a.logger.Debug(err)
 						return &runtimev1pb.ConversationResponseV1Alpha2{}, err
 					}
-					tcfaBytesString := string(tcfaBytes)
 
-					toolCalls = append(toolCalls, &conversation.ConversationInputToolCalls{
-						Id: tool.GetId().String(),
-						ToolCallFunction: conversation.ToolCallFunction{
-							Name:      tcf.GetName().String(),
-							Arguments: &tcfaBytesString,
+					toolCall := &llms.ToolCall{
+						ID:   tool.GetId().String(),
+						Type: string(role), // double check this role
+						FunctionCall: &llms.FunctionCall{
+							Name:      tool.GetFunction().GetName().String(),
+							Arguments: string(tcfaBytes),
 						},
-					})
+					}
+
+					langchainMsg = llms.MessageContent{
+						Role:  role, // doble check this role and if it should be tool or assistant...
+						Parts: append(langchainMsg.Parts, toolCall),
+					}
 				}
 
 			case *runtimev1pb.ConversationMessage_OfTool:
-				content = msg.OfTool.GetContent()[messageIndex].GetText().GetValue()
-				role = "tool"
-				toolId = &msg.OfTool.GetToolId().Value
+				// TODO: scrub anything?
+
+				toolID := ""
+				if msg.OfTool.ToolId != nil {
+					toolID = msg.OfTool.ToolId.GetValue()
+				}
+
+				toolName := ""
+				if msg.OfTool.Name != nil {
+					toolName = msg.OfTool.Name.GetValue()
+				}
+
+				var parts []llms.ContentPart
+				for _, content := range msg.OfTool.GetContent() {
+					text := content.GetText().GetValue()
+
+					// scrub inputs
+					if input.GetScrubPII() {
+						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
+						if sErr != nil {
+							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
+							a.logger.Debug(sErr)
+							return &runtimev1pb.ConversationResponseV1Alpha2{}, sErr
+						}
+						text = scrubbed[0]
+					}
+
+					parts = append(parts, llms.ToolCallResponse{
+						ToolCallID: toolID,
+						Content:    text,
+						Name:       toolName,
+					})
+				}
+
+				langchainMsg = llms.MessageContent{
+					Role:  llms.ChatMessageTypeTool,
+					Parts: parts,
+				}
+
 			default:
 				// TODO(@Sicoyle): should I create custom conversation err types?
 				return &runtimev1pb.ConversationResponseV1Alpha2{}, errors.New("message type is invalid")
 			}
+			request.Message = append(request.Message, &langchainMsg)
 
-			if input.GetScrubPII() {
-				scrubbed, sErr := scrubber.ScrubTexts([]string{content})
-				if sErr != nil {
-					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-					a.logger.Debug(sErr)
-					return &runtimev1pb.ConversationResponseV1Alpha2{}, sErr
-				}
-				content = scrubbed[messageIndex]
-			}
-
-			c := conversation.ConversationInputV1Alpha2{
-				Message: content,
-				Role:    conversation.Role(role),
-			}
-
-			// TODO(@Sicoyle): wrap this to also only do this if it's message of an assistant type
-			// and move c creation into diff types instead of this setup.
-			if refusal != nil {
-				c.Refusal = refusal
-			}
-
-			if len(toolCalls) > 0 {
-				c.ToolCalls = toolCalls
-			}
-
-			if toolId != nil {
-				c.ToolId = toolId
-			}
-
-			request.Inputs = append(request.Inputs, c)
 		}
 	}
-
 	request.Parameters = req.GetParameters()
 	request.ConversationContext = req.GetContextId()
 	request.Temperature = req.GetTemperature()
 
+	if tools := req.GetTools(); tools != nil {
+		availableTools := []*llms.Tool{}
+		for _, tool := range tools {
+			switch t := tool.GetToolTypes().(type) {
+			case *runtimev1pb.ConversationTools_Function:
+				langchainTool := llms.Tool{
+					Type: "function",
+					Function: &llms.FunctionDefinition{
+						Name:        t.Function.GetName().GetValue(),
+						Description: t.Function.GetDescription().GetValue(),
+						Parameters:  t.Function.GetParameters(),
+					},
+				}
+
+				availableTools = append(availableTools, &langchainTool)
+			}
+		}
+		request.Tools = availableTools
+	}
 	// do call
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*conversation.ConversationResponseV1Alpha2](ctx,
@@ -260,7 +356,6 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 	)
 
 	resp, err := policyRunner(func(ctx context.Context) (*conversation.ConversationResponseV1Alpha2, error) {
-		// HERE SAM fixing in Converse()!
 		rResp, rErr := component.ConverseV1Alpha2(ctx, request)
 		return rResp, rErr
 	})
@@ -281,7 +376,7 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 			response.ContextId = &resp.ConversationContext
 		}
 
-		for _, o := range resp.Outputs {
+		for i, o := range resp.Outputs {
 			res := o.Result
 
 			if req.GetScrubPii() {
@@ -298,8 +393,8 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResultV1Alpha2{
 				Choices: &runtimev1pb.ConversationResultChoices{
 					Message:      &wrapperspb.StringValue{Value: res},
-					FinishReason: &wrapperspb.StringValue{Value: "TODO"},
-					Index:        0, // TODO!!
+					FinishReason: &wrapperspb.StringValue{Value: o.StopReason},
+					Index:        int64(i),
 				},
 				Parameters: o.Parameters,
 			})
