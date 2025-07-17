@@ -532,6 +532,19 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 			},
 		}
 		activityActorID := getActivityActorID(w.actorID, taskID, state.Generation)
+
+		// Fixes 1.15 issue where it tries to delete activity state that is not present
+		res, err := w.actorState.Get(ctx, &actorapi.GetStateRequest{
+			ActorType: w.activityActorType,
+			ActorID:   activityActorID,
+		}, false)
+		if err != nil {
+			return runCompletedFalse, fmt.Errorf("failed to get activity state: %w", err)
+		}
+		if res == nil || res.Data == nil {
+			continue
+		}
+
 		if transactionalRequests[activityActorID] == nil {
 			transactionalRequests[activityActorID] = []actorapi.TransactionalOperation{op}
 		} else {
