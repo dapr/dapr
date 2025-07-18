@@ -44,7 +44,7 @@ type SecretManager interface {
 
 type SubscribeManager interface {
 	InitProgramaticSubscriptions(context.Context) error
-	StartAppSubscriptions(context.Context) error
+	StartAppSubscriptions() error
 	StopAppSubscriptions()
 	StopAllSubscriptionsForever()
 	ReloadDeclaredAppSubscription(name, pubsubName string) error
