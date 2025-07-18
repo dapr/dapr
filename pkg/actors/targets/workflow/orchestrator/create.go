@@ -60,7 +60,7 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 			ActivityActorType: o.activityActorType,
 		})
 		o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
-		o.setOrchestrationMetadata(o.rstate, startEvent.GetExecutionStarted())
+		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 

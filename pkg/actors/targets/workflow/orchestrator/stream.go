@@ -23,9 +23,11 @@ import (
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
 func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
@@ -45,21 +47,22 @@ func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.Inte
 		case <-o.closeCh:
 			return nil
 		case <-ticker.C:
-			var unlock context.CancelFunc
-			unlock, err = o.lock.ContextLock(ctx)
+			state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, wfenginestate.Options{
+				AppID:             o.appID,
+				WorkflowActorType: o.actorType,
+				ActivityActorType: o.activityActorType,
+			})
 			if err != nil {
 				return err
 			}
-			var ometa *backend.OrchestrationMetadata
-			_, ometa, err = o.loadInternalState(ctx)
-			unlock()
-			if err != nil {
-				return err
-			}
-
-			if ometa == nil {
+			if state == nil {
 				continue
 			}
+
+			ometa := o.ometaFromState(
+				runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History),
+				o.getExecutionStartedEvent(state),
+			)
 
 			if err = o.sendStateToStream(ctx, ch, stream, ometa); err != nil {
 				return fmt.Errorf("failed to send state to stream: %w", err)
