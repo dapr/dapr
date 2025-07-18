@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
@@ -70,6 +71,9 @@ type Subscriber struct {
 	hasInitProg  bool
 	lock         sync.RWMutex
 	closed       atomic.Bool
+
+	retryCtx    context.Context
+	retryCancel context.CancelFunc
 }
 
 type namedSubscription struct {
@@ -80,6 +84,7 @@ type namedSubscription struct {
 var log = logger.NewLogger("dapr.runtime.processor.subscription")
 
 func New(opts Options) *Subscriber {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Subscriber{
 		appID:           opts.AppID,
 		namespace:       opts.Namespace,
@@ -93,12 +98,15 @@ func New(opts Options) *Subscriber {
 		adapterStreamer: opts.AdapterStreamer,
 		appSubs:         make(map[string][]*namedSubscription),
 		streamSubs:      make(map[string]map[rtpubsub.ConnectionID]*namedSubscription),
+		retryCtx:        ctx,
+		retryCancel:     cancel,
 	}
 }
 
 func (s *Subscriber) Run(ctx context.Context) error {
 	<-ctx.Done()
 	s.closed.Store(true)
+	s.retryCancel()
 	return nil
 }
 
@@ -106,6 +114,7 @@ func (s *Subscriber) StopAllSubscriptionsForever() {
 	s.lock.Lock()
 
 	s.closed.Store(true)
+	s.retryCancel()
 
 	var wg sync.WaitGroup
 	for _, psubs := range s.appSubs {
@@ -251,6 +260,9 @@ func (s *Subscriber) ReloadDeclaredAppSubscription(name, pubsubName string) erro
 
 	ss, err := s.startSubscription(ps, sub.NamedSubscription, false)
 	if err != nil {
+		log.Errorf("Failed to start declared subscription %s for pubsub %s, topic %s: %s", name, pubsubName, sub.Topic, err)
+		go s.retrySubscription(pubsubName, ps, sub.NamedSubscription)
+
 		return fmt.Errorf("failed to create subscription for %s: %s", sub.PubsubName, err)
 	}
 
@@ -316,11 +328,15 @@ func (s *Subscriber) StartAppSubscriptions() error {
 	s.appSubs = make(map[string][]*namedSubscription)
 
 	var errs []error
+
 	for name, ps := range s.compStore.ListPubSubs() {
 		for _, sub := range s.compStore.ListSubscriptionsAppByPubSub(name) {
 			ss, err := s.startSubscription(ps, sub, false)
 			if err != nil {
 				errs = append(errs, err)
+				log.Errorf("Failed to start subscription for pubsub %s, topic %s: %s", name, sub.Topic, err)
+
+				go s.retrySubscription(name, ps, sub)
 				continue
 			}
 
@@ -334,6 +350,35 @@ func (s *Subscriber) StartAppSubscriptions() error {
 	return errors.Join(errs...)
 }
 
+func (s *Subscriber) retrySubscription(pubsubName string, pubsub *rtpubsub.PubsubItem, sub *compstore.NamedSubscription) {
+	backoff.Retry(func() error {
+		if s.closed.Load() {
+			log.Debugf("Stopping retry for subscription pubsub %s, topic %s due to subscriber closure", pubsubName, sub.Topic)
+			return nil
+		}
+
+		ss, err := s.startSubscription(pubsub, sub, false)
+		if err != nil {
+			log.Errorf("Retry failed for subscription pubsub %s, topic %s: %s. Will retry.", pubsubName, sub.Topic, err)
+			return err
+		}
+
+		s.lock.Lock()
+		if !s.closed.Load() && s.appSubActive {
+			s.appSubs[pubsubName] = append(s.appSubs[pubsubName], &namedSubscription{
+				name:         sub.Name,
+				Subscription: ss,
+			})
+			log.Infof("Successfully started subscription after retry for pubsub %s, topic %s", pubsubName, sub.Topic)
+		} else {
+			// Subscriber was closed while we were retrying, stop the subscription
+			ss.Stop()
+		}
+		s.lock.Unlock()
+		return nil
+	}, backoff.WithContext(backoff.NewExponentialBackOff(backoff.WithMaxElapsedTime(0)), s.retryCtx))
+}
+
 func (s *Subscriber) StopAppSubscriptions() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -343,6 +388,7 @@ func (s *Subscriber) StopAppSubscriptions() {
 	}
 
 	s.appSubActive = false
+	s.retryCancel()
 
 	var wg sync.WaitGroup
 	for _, psub := range s.appSubs {
@@ -357,6 +403,7 @@ func (s *Subscriber) StopAppSubscriptions() {
 	wg.Wait()
 
 	s.appSubs = make(map[string][]*namedSubscription)
+	s.retryCtx, s.retryCancel = context.WithCancel(context.Background())
 }
 
 func (s *Subscriber) InitProgramaticSubscriptions(ctx context.Context) error {
@@ -425,10 +472,14 @@ func (s *Subscriber) reloadPubSubApp(name string, pubsub *rtpubsub.PubsubItem) e
 
 	var errs []error
 	subs := make([]*namedSubscription, 0, len(s.compStore.ListSubscriptionsAppByPubSub(name)))
+
 	for _, sub := range s.compStore.ListSubscriptionsAppByPubSub(name) {
 		ss, err := s.startSubscription(pubsub, sub, false)
 		if err != nil {
+			log.Errorf("Failed to reload subscription for pubsub %s, topic %s: %s", name, sub.Topic, err)
 			errs = append(errs, fmt.Errorf("failed to create subscription for %s: %s", name, err))
+
+			go s.retrySubscription(name, pubsub, sub)
 			continue
 		}
 
