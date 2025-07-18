@@ -15,7 +15,6 @@ package workflow
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"testing"
 	"time"
@@ -98,7 +97,6 @@ spec:
 				dopts = append(dopts, daprdOpt.opts...)
 			}
 		}
-		dopts = append(dopts, daprd.WithAppID(fmt.Sprintf("app%d", i)))
 
 		daprds[i] = daprd.New(t, dopts...)
 	}
