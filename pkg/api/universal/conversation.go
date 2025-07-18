@@ -23,6 +23,7 @@ import (
 	"github.com/tmc/langchaingo/llms"
 
 	"github.com/dapr/components-contrib/conversation"
+	"github.com/dapr/components-contrib/conversation/mistral"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -40,7 +41,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	// prepare request
-	request := &conversation.ConversationRequest{}
+	request := &conversation.Request{}
 	err := kmeta.DecodeMetadata(req.GetMetadata(), request)
 	if err != nil {
 		return nil, err
@@ -73,12 +74,16 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			msg = scrubbed[0]
 		}
 
-		c := conversation.ConversationInput{
-			Message: msg,
-			Role:    conversation.Role(i.GetRole()),
+		c := llms.MessageContent{
+			Role: llms.ChatMessageType(i.GetRole()),
+			Parts: []llms.ContentPart{
+				llms.TextContent{
+					Text: msg,
+				},
+			},
 		}
 
-		request.Inputs = append(request.Inputs, c)
+		*request.Message = append(*request.Message, c)
 	}
 
 	request.Parameters = req.GetParameters()
@@ -87,12 +92,22 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 	// do call
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[*conversation.ConversationResponse](ctx,
+	policyRunner := resiliency.NewRunner[*conversation.Response](ctx,
 		a.resiliency.ComponentOutboundPolicy(req.GetName(), resiliency.Conversation),
 	)
 
-	resp, err := policyRunner(func(ctx context.Context) (*conversation.ConversationResponse, error) {
-		rResp, rErr := component.Converse(ctx, request)
+	// transform v1 proto -> v2 component request
+	toolsv2 := []llms.Tool{}
+	requestv2 := &conversation.Request{
+		Message:             request.Message,
+		Tools:               &toolsv2,
+		Parameters:          request.Parameters,
+		ConversationContext: request.ConversationContext,
+		Temperature:         request.Temperature,
+	}
+
+	resp, err := policyRunner(func(ctx context.Context) (*conversation.Response, error) {
+		rResp, rErr := component.Converse(ctx, requestv2)
 		return rResp, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
@@ -144,8 +159,13 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 		return nil, err
 	}
 
+	// Log component type for debugging
+	if _, isMistral := component.(*mistral.Mistral); isMistral {
+		a.logger.Debugf("Detected Mistral component: %s", req.GetName())
+	}
+
 	// prepare request
-	request := &conversation.ConversationRequestV1Alpha2{}
+	request := &conversation.Request{}
 	err := kmeta.DecodeMetadata(req.GetMetadata(), request)
 	if err != nil {
 		return nil, err
@@ -166,6 +186,7 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 	// TODO: double check that in case of input of tool call response that i properly translate to llms.ToolCallResponse msg type
 	// TODO: sam to double check on nil ptr checks
 
+	var llmMessages []*llms.MessageContent
 	for _, input := range req.GetInputs() {
 		for _, message := range input.GetMessages() {
 			var (
@@ -263,19 +284,35 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 						return &runtimev1pb.ConversationResponseV1Alpha2{}, err
 					}
 
+					// handle mistral edge case on handling tool call message
+					// where it expects a text message instead of a tool call message
+					// if _, ok := component.(*mistral.Mistral); ok {
+					// 	a.logger.Debugf("Processing Mistral tool call: %s(%s)",
+					// 		tool.GetFunction().GetName().String(),
+					// 		string(tcfaBytes))
+
+					// 	toolCall := &llms.ToolCall{
+					// 		ID:   tool.GetId().String(),
+					// 		Type: "function",
+					// 		FunctionCall: &llms.FunctionCall{
+					// 			Name:      tool.GetFunction().GetName().String(),
+					// 			Arguments: string(tcfaBytes),
+					// 		},
+					// 	}
+
+					// 	langchainMsg.Parts = append(langchainMsg.Parts, mistral.CreateMistralCompatibleToolCall(toolCall)...)
+					// } else {
+					// For other providers, use standard tool call
 					toolCall := &llms.ToolCall{
 						ID:   tool.GetId().String(),
-						Type: string(role), // double check this role
+						Type: string(role), // double check if this is right or should be just "function"
 						FunctionCall: &llms.FunctionCall{
 							Name:      tool.GetFunction().GetName().String(),
 							Arguments: string(tcfaBytes),
 						},
 					}
-
-					langchainMsg = llms.MessageContent{
-						Role:  role, // doble check this role and if it should be tool or assistant...
-						Parts: append(langchainMsg.Parts, toolCall),
-					}
+					langchainMsg.Parts = append(langchainMsg.Parts, toolCall)
+					// }
 				}
 
 			case *runtimev1pb.ConversationMessage_OfTool:
@@ -306,11 +343,27 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 						text = scrubbed[0]
 					}
 
+					// wip but pushing for cassie
+					// handle mistral edge case on handling tool call response message
+					// where it expects a text message instead of a tool call response message
+					// if _, ok := component.(*mistral.Mistral); ok {
+					// 	a.logger.Debugf("Processing Mistral tool response: ID=%s, Name=%s, Content=%s",
+					// 		toolID, toolName, text)
+
+					// 	toolResponse := llms.ToolCallResponse{
+					// 		ToolCallID: toolID,
+					// 		Content:    text,
+					// 		Name:       toolName,
+					// 	}
+
+					// 	parts = append(parts, mistral.CreateMistralCompatibleToolResponse(toolResponse)...)
+					// } else {
 					parts = append(parts, llms.ToolCallResponse{
 						ToolCallID: toolID,
 						Content:    text,
 						Name:       toolName,
 					})
+					// }
 				}
 
 				langchainMsg = llms.MessageContent{
@@ -322,16 +375,25 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 				// TODO(@Sicoyle): should I create custom conversation err types?
 				return &runtimev1pb.ConversationResponseV1Alpha2{}, errors.New("message type is invalid")
 			}
-			request.Message = append(request.Message, &langchainMsg)
+			llmMessages = append(llmMessages, &langchainMsg)
 
 		}
 	}
+
+	if len(llmMessages) > 0 {
+		requestMessages := make([]llms.MessageContent, len(llmMessages))
+		for i, msg := range llmMessages {
+			requestMessages[i] = *msg
+		}
+		request.Message = &requestMessages
+	}
+
 	request.Parameters = req.GetParameters()
 	request.ConversationContext = req.GetContextId()
 	request.Temperature = req.GetTemperature()
 
 	if tools := req.GetTools(); tools != nil {
-		availableTools := []*llms.Tool{}
+		availableTools := []llms.Tool{}
 		for _, tool := range tools {
 			switch t := tool.GetToolTypes().(type) {
 			case *runtimev1pb.ConversationTools_Function:
@@ -344,19 +406,21 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 					},
 				}
 
-				availableTools = append(availableTools, &langchainTool)
+				availableTools = append(availableTools, langchainTool)
 			}
 		}
-		request.Tools = availableTools
+		request.Tools = &availableTools
 	}
 	// do call
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[*conversation.ConversationResponseV1Alpha2](ctx,
+	policyRunner := resiliency.NewRunner[*conversation.Response](ctx,
 		a.resiliency.ComponentOutboundPolicy(req.GetName(), resiliency.Conversation),
 	)
 
-	resp, err := policyRunner(func(ctx context.Context) (*conversation.ConversationResponseV1Alpha2, error) {
-		rResp, rErr := component.ConverseV1Alpha2(ctx, request)
+	// transform v2 proto -> v1 component request
+
+	resp, err := policyRunner(func(ctx context.Context) (*conversation.Response, error) {
+		rResp, rErr := component.Converse(ctx, request)
 		return rResp, rErr
 	})
 	elapsed := diag.ElapsedSince(start)
