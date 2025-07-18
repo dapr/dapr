@@ -20,6 +20,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "dapr/proto/common/v1/common.proto";
 import "dapr/proto/runtime/v1/appcallback.proto";
+import "dapr/proto/runtime/v1/conversation.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -220,6 +221,9 @@ service Dapr {
 
   // Converse with a LLM service
   rpc ConverseAlpha1(ConversationRequest) returns (ConversationResponse) {}
+
+  // Converse with a LLM service via v2 api
+  rpc ConverseV1Alpha2(ConversationRequestV1Alpha2) returns (ConversationResponseV1Alpha2) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -1305,56 +1309,4 @@ message DeleteJobRequest {
 // DeleteJobResponse is the message response to delete the job by name.
 message DeleteJobResponse {
   // Empty
-}
-
-// ConversationRequest is the request object for Conversation.
-message ConversationRequest {
-  // The name of Conversation component
-  string name = 1;
-
-  // The ID of an existing chat (like in ChatGPT)
-  optional string contextID = 2;
-
-  // Inputs for the conversation, support multiple input in one time.
-  repeated ConversationInput inputs = 3;
-
-  // Parameters for all custom fields.
-  map<string, google.protobuf.Any> parameters = 4;
-
-  // The metadata passing to conversation components.
-  map<string, string> metadata = 5;
-
-  // Scrub PII data that comes back from the LLM
-  optional bool scrubPII = 6;
-
-  // Temperature for the LLM to optimize for creativity or predictability
-  optional double temperature = 7;
-}
-
-message ConversationInput {
-  // The content to send to the llm
-  string content = 1;
-
-  // The role to set for the message
-  optional string role = 2;
-
-  // Scrub PII data that goes into the LLM
-  optional bool scrubPII = 3;
-}
-
-// ConversationResult is the result for one input.
-message ConversationResult {
-  // Result for the one conversation input.
-  string result = 1;
-  // Parameters for all custom fields.
-  map<string, google.protobuf.Any> parameters = 2;
-}
-
-// ConversationResponse is the response for Conversation.
-message ConversationResponse {
-  // The ID of an existing chat (like in ChatGPT)
-  optional string contextID = 1;
-
-  // An array of results.
-  repeated ConversationResult outputs = 2;
 }

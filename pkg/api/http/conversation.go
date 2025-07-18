@@ -38,6 +38,20 @@ func (a *api) constructConversationEndpoints() []endpoints.Endpoint {
 				Name: "Converse",
 			},
 		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "conversation/{name}/converse",
+			Version: apiVersionV1alpha2,
+			Group: &endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupConversation,
+				Version:              endpoints.EndpointGroupVersion1alpha2,
+				AppendSpanAttributes: nil,
+			},
+			Handler: a.onConverseAlpha2(),
+			Settings: endpoints.EndpointSettings{
+				Name: "Converse",
+			},
+		},
 	}
 }
 
@@ -46,6 +60,18 @@ func (a *api) onConverseAlpha1() http.HandlerFunc {
 		a.universal.ConverseAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.ConversationRequest, *runtimev1pb.ConversationResponse]{
 			InModifier: func(r *http.Request, in *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationRequest, error) {
+				in.Name = chi.URLParam(r, nameParam)
+				return in, nil
+			},
+		},
+	)
+}
+
+func (a *api) onConverseAlpha2() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.ConverseV1Alpha2,
+		UniversalHTTPHandlerOpts[*runtimev1pb.ConversationRequestV1Alpha2, *runtimev1pb.ConversationResponseV1Alpha2]{
+			InModifier: func(r *http.Request, in *runtimev1pb.ConversationRequestV1Alpha2) (*runtimev1pb.ConversationRequestV1Alpha2, error) {
 				in.Name = chi.URLParam(r, nameParam)
 				return in, nil
 			},
