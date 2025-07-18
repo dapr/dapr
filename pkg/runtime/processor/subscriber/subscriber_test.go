@@ -511,7 +511,7 @@ func TestSubscriptionRetryMechanisms(t *testing.T) {
 			return hasSubscription
 		}, 5*time.Second, 100*time.Millisecond)
 
-		assert.Equal(t, int(calls.Load()), 3)
+		assert.Equal(t, 3, int(calls.Load()))
 		assert.True(t, subs.appSubActive)
 	})
 
@@ -565,7 +565,7 @@ func TestSubscriptionRetryMechanisms(t *testing.T) {
 			return hasSubscription
 		}, 5*time.Second, 100*time.Millisecond)
 
-		assert.Equal(t, int(calls.Load()), 2)
+		assert.Equal(t, 2, int(calls.Load()))
 	})
 
 	t.Run("retry stops when subscriber is closed", func(t *testing.T) {

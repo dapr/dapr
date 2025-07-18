@@ -332,7 +332,6 @@ func (s *Subscriber) StartAppSubscriptions() error {
 	for name, ps := range s.compStore.ListPubSubs() {
 		for _, sub := range s.compStore.ListSubscriptionsAppByPubSub(name) {
 			ss, err := s.startSubscription(ps, sub, false)
-
 			if err != nil {
 				errs = append(errs, err)
 				log.Errorf("Failed to start subscription for pubsub %s, topic %s: %s", name, sub.Topic, err)
