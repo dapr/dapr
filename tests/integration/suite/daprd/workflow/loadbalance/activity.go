@@ -22,7 +22,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/grpc"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
@@ -39,11 +38,7 @@ type activity struct {
 }
 
 func (a *activity) Setup(t *testing.T) []framework.Option {
-	a.workflow = workflow.New(t,
-		workflow.WithDaprds(2),
-		workflow.WithDaprdOptions(0, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
-		workflow.WithDaprdOptions(1, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
-	)
+	a.workflow = newClusteredDeployment(t, 2)
 
 	return []framework.Option{
 		framework.WithProcesses(a.workflow),

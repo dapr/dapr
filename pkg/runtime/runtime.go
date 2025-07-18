@@ -306,7 +306,7 @@ func newDaprRuntime(ctx context.Context,
 		Resiliency:                resiliencyProvider,
 		SchedulerReminders:        globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 		EventSink:                 runtimeConfig.workflowEventSink,
-		EnableClusteredDeployment: runtimeConfig.workflowsEnableClusteredDeployment,
+		EnableClusteredDeployment: globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
 	})
 
 	rt := &DaprRuntime{
