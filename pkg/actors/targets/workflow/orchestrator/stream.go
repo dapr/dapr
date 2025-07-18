@@ -40,6 +40,8 @@ func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.Inte
 	}
 
 	ticker := time.NewTicker(time.Second * 3)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -47,7 +49,8 @@ func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.Inte
 		case <-o.closeCh:
 			return nil
 		case <-ticker.C:
-			state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, wfenginestate.Options{
+			var state *wfenginestate.State
+			state, err = wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, wfenginestate.Options{
 				AppID:             o.appID,
 				WorkflowActorType: o.actorType,
 				ActivityActorType: o.activityActorType,
