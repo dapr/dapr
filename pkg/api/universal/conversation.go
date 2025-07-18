@@ -16,7 +16,6 @@ package universal
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
@@ -192,6 +191,12 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 			var (
 				langchainMsg llms.MessageContent
 			)
+
+			if message.GetMessageTypes() == nil {
+				err := messages.ErrConversationInvalidParams.WithFormat(req.GetName())
+				a.logger.Debug(err)
+				return nil, err
+			}
 
 			// Openai allows roles to be passed in; however,
 			// we make them implicit in the backend setting this field based on the input msg type using the langchain role types.
@@ -372,8 +377,9 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 				}
 
 			default:
-				// TODO(@Sicoyle): should I create custom conversation err types?
-				return &runtimev1pb.ConversationResponseV1Alpha2{}, errors.New("message type is invalid")
+				err := messages.ErrConversationInvalidParams.WithFormat(req.GetName())
+				a.logger.Debug(err)
+				return nil, err
 			}
 			llmMessages = append(llmMessages, &langchainMsg)
 
