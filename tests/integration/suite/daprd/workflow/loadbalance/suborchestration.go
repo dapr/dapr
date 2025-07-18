@@ -41,8 +41,8 @@ type suborchestration struct {
 func (s *suborchestration) Setup(t *testing.T) []framework.Option {
 	s.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithDaprdOptions(0, daprd.WithWorkflowsEnableClusteredDeployment(true)),
-		workflow.WithDaprdOptions(1, daprd.WithWorkflowsEnableClusteredDeployment(true)),
+		workflow.WithDaprdOptions(0, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
+		workflow.WithDaprdOptions(1, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
 	)
 
 	return []framework.Option{
@@ -53,20 +53,19 @@ func (s *suborchestration) Setup(t *testing.T) []framework.Option {
 func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
-	s.workflow.Registry().AddOrchestratorN("top", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, s.workflow.RegistryN(0).AddOrchestratorN("top", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallSubOrchestrator("sub").Await(nil))
 		return nil, nil
-	})
-	s.workflow.Registry().AddOrchestratorN("sub", func(ctx *task.OrchestrationContext) (any, error) {
+	}))
+	require.NoError(t, s.workflow.RegistryN(0).AddOrchestratorN("sub", func(ctx *task.OrchestrationContext) (any, error) {
 		return nil, nil
-	})
+	}))
+	_ = s.workflow.BackendClientN(t, ctx, 0)
 
 	client := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
 		s.workflow.DaprN(0).GRPCConn(t, ctx),
 		s.workflow.DaprN(1).GRPCConn(t, ctx),
 	), logger.New(t))
-
-	require.NoError(t, client.StartWorkItemListener(ctx, s.workflow.Registry()))
 
 	const n = 10
 	ids := make([]api.InstanceID, n)

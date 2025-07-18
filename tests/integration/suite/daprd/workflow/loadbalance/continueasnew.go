@@ -43,8 +43,8 @@ type continueasnew struct {
 func (c *continueasnew) Setup(t *testing.T) []framework.Option {
 	c.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithDaprdOptions(0, daprd.WithWorkflowsEnableClusteredDeployment(true)),
-		workflow.WithDaprdOptions(1, daprd.WithWorkflowsEnableClusteredDeployment(true)),
+		workflow.WithDaprdOptions(0, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
+		workflow.WithDaprdOptions(1, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
 	)
 
 	return []framework.Option{
@@ -56,8 +56,7 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
 	var cont atomic.Bool
-	reg := c.workflow.Registry()
-	require.NoError(t, reg.AddOrchestratorN("can", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, c.workflow.RegistryN(0).AddOrchestratorN("can", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		require.NoError(t, ctx.GetInput(&input))
 		if cont.Load() {
@@ -72,13 +71,12 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 
 		return nil, nil
 	}))
+	_ = c.workflow.BackendClientN(t, ctx, 0)
 
 	client := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
 		c.workflow.DaprN(0).GRPCConn(t, ctx),
 		c.workflow.DaprN(1).GRPCConn(t, ctx),
 	), logger.New(t))
-
-	require.NoError(t, client.StartWorkItemListener(ctx, c.workflow.Registry()))
 
 	for range 10 {
 		cont.Store(false)

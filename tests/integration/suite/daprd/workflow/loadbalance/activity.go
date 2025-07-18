@@ -41,8 +41,8 @@ type activity struct {
 func (a *activity) Setup(t *testing.T) []framework.Option {
 	a.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithDaprdOptions(0, daprd.WithWorkflowsEnableClusteredDeployment(true)),
-		workflow.WithDaprdOptions(1, daprd.WithWorkflowsEnableClusteredDeployment(true)),
+		workflow.WithDaprdOptions(0, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
+		workflow.WithDaprdOptions(1, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
 	)
 
 	return []framework.Option{
@@ -53,20 +53,19 @@ func (a *activity) Setup(t *testing.T) []framework.Option {
 func (a *activity) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	a.workflow.Registry().AddOrchestratorN("activity", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, a.workflow.RegistryN(0).AddOrchestratorN("activity", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("abc", task.WithActivityInput("abc")).Await(nil))
 		return nil, nil
-	})
-	a.workflow.Registry().AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
+	}))
+	require.NoError(t, a.workflow.RegistryN(0).AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
 		return nil, nil
-	})
+	}))
+	_ = a.workflow.BackendClientN(t, ctx, 0)
 
 	client := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
 		a.workflow.DaprN(0).GRPCConn(t, ctx),
 		a.workflow.DaprN(1).GRPCConn(t, ctx),
 	), logger.New(t))
-
-	require.NoError(t, client.StartWorkItemListener(ctx, a.workflow.Registry()))
 
 	const n = 10
 	ids := make([]api.InstanceID, n)
