@@ -55,13 +55,13 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		FailurePolicy: schedFPToCron(job.FailurePolicy),
 	}
 
-	if job.GetOverwrite() {
+	if req.GetOverwrite() {
 		err = cron.Add(ctx, serialized.Name(), apiJob)
 	} else {
 		err = cron.AddIfNotExists(ctx, serialized.Name(), apiJob)
 	}
 
-	logWithField := log.WithFields(map[string]any{"overwrite": job.GetOverwrite()})
+	logWithField := log.WithFields(map[string]any{"overwrite": req.GetOverwrite()})
 	if err != nil {
 		logWithField.Errorf("error scheduling job %s: %s", req.GetName(), err)
 		if apierrors.IsJobAlreadyExists(err) {
@@ -185,8 +185,6 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 		return err
 	}
 
-	monitoring.RecordSidecarsConnectedCount(1)
-	defer monitoring.RecordSidecarsConnectedCount(-1)
 	select {
 	case <-s.closeCh:
 		return errors.New("server is closing")

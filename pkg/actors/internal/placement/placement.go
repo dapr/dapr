@@ -27,13 +27,13 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/dapr/pkg/actors/targets"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -57,6 +57,7 @@ type Interface interface {
 	Ready() bool
 	Lock(context.Context) (context.Context, context.CancelFunc, error)
 	LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error)
+	IsActorHosted(ctx context.Context, actorType, actorID string) bool
 }
 
 type Options struct {
@@ -66,6 +67,7 @@ type Options struct {
 	Port      int
 	Addresses []string
 
+	Scheduler schedclient.Reloader
 	APILevel  *apilevel.APILevel
 	Security  security.Handler
 	Table     table.Interface
@@ -81,6 +83,7 @@ type placement struct {
 	apiLevel   *apilevel.APILevel
 	htarget    healthz.Target
 
+	scheduler         schedclient.Reloader
 	hashTable         *hashing.ConsistentHashTables
 	virtualNodesCache *hashing.VirtualNodesCache
 
@@ -91,6 +94,8 @@ type placement struct {
 
 	tableUnlock context.CancelFunc
 
+	reloadTypes atomic.Bool
+
 	appID     string
 	namespace string
 	hostname  string
@@ -98,11 +103,12 @@ type placement struct {
 	isReady   atomic.Bool
 	readyCh   chan struct{}
 	wg        sync.WaitGroup
-	closed    atomic.Bool
+	closedCh  chan struct{}
 }
 
 func New(opts Options) (Interface, error) {
 	lock := lock.NewOuterCancel(errors.New("placement is disseminating"), time.Second*2)
+
 	client, err := client.New(client.Options{
 		Addresses: opts.Addresses,
 		Security:  opts.Security,
@@ -110,6 +116,12 @@ func New(opts Options) (Interface, error) {
 		Lock:      lock,
 		Healthz:   opts.Healthz,
 		Mode:      opts.Mode,
+		BaseHost: &v1pb.Host{
+			Name:      opts.Hostname + ":" + strconv.Itoa(opts.Port),
+			Id:        opts.AppID,
+			ApiLevel:  20,
+			Namespace: opts.Namespace,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -129,8 +141,10 @@ func New(opts Options) (Interface, error) {
 		hostname:      opts.Hostname,
 		operationLock: fifo.New(),
 		apiLevel:      opts.APILevel,
+		scheduler:     opts.Scheduler,
 		htarget:       opts.Healthz.AddTarget("internal-placement-service"),
 		lock:          lock,
+		closedCh:      make(chan struct{}),
 		readyCh:       make(chan struct{}),
 	}, nil
 }
@@ -144,6 +158,10 @@ func (p *placement) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			ch, actorTypes := p.actorTable.SubscribeToTypeUpdates(ctx)
+			if len(actorTypes) > 0 {
+				p.reloadTypes.Store(true)
+			}
+
 			log.Infof("Reporting actor types: %v", actorTypes)
 			if err := p.sendHost(ctx, actorTypes); err != nil {
 				return err
@@ -155,6 +173,8 @@ func (p *placement) Run(ctx context.Context) error {
 			for {
 				select {
 				case actorTypes = <-ch:
+					p.scheduler.ReloadActorTypes([]string{})
+					p.reloadTypes.Store(true)
 					log.Infof("Updating actor types: %v", actorTypes)
 					// TODO: @joshvanl: it is a nonsense to be sending the same actor
 					// types over and over again, *every second*. This should be removed
@@ -183,7 +203,7 @@ func (p *placement) Run(ctx context.Context) error {
 		},
 	).Run(ctx)
 
-	p.closed.Store(true)
+	close(p.closedCh)
 
 	p.operationLock.Lock()
 	if p.tableUnlock != nil {
@@ -220,14 +240,7 @@ func (p *placement) Ready() bool {
 }
 
 func (p *placement) sendHost(ctx context.Context, actorTypes []string) error {
-	err := p.client.Send(ctx, &v1pb.Host{
-		Name:      p.hostname + ":" + p.port,
-		Entities:  actorTypes,
-		Id:        p.appID,
-		ApiLevel:  20,
-		Namespace: p.namespace,
-	})
-	if err != nil {
+	if err := p.client.Send(ctx, actorTypes); err != nil {
 		diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
 		return err
 	}
@@ -269,7 +282,7 @@ func (p *placement) handleLockOperation(ctx context.Context) {
 
 	clear(p.hashTable.Entries)
 
-	// If we don't receive an unlock in 10 seconds, unlock the table.
+	// If we don't receive an unlock in 15 seconds, unlock the table.
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -312,23 +325,24 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 		p.reminders.DrainRebalancedReminders()
 	}
 
-	err := p.actorTable.Drain(func(target targets.Interface) bool {
-		lar, err := p.LookupActor(ctx, &api.LookupActorRequest{
-			ActorType: target.Type(),
-			ActorID:   target.ID(),
-		})
-		if err != nil {
-			log.Errorf("failed to lookup actor %s/%s: %s", target.Type(), target.ID(), err)
-			return true
-		}
-
-		return lar != nil && !p.isActorLocal(lar.Address, p.hostname, p.port)
-	})
-	if err != nil {
-		log.Errorf("Error draining actors: %s", err)
+	if err := p.actorTable.HaltNonHosted(ctx); err != nil {
+		log.Errorf("Error draining non-hosted actors: %s", err)
 	}
 
 	log.Infof("Placement tables updated, version: %s", in.GetVersion())
+}
+
+func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string) bool {
+	lar, err := p.LookupActor(ctx, &api.LookupActorRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+	})
+	if err != nil {
+		log.Errorf("failed to lookup actor %s/%s: %s", actorType, actorID, err)
+		return false
+	}
+
+	return lar != nil && p.isActorLocal(lar.Address, p.hostname, p.port)
 }
 
 func (p *placement) handleUnlockOperation(ctx context.Context) {
@@ -356,6 +370,11 @@ func (p *placement) handleUnlockOperation(ctx context.Context) {
 		if p.isReady.CompareAndSwap(false, true) {
 			close(p.readyCh)
 		}
+	}
+
+	if p.reloadTypes.Load() {
+		p.scheduler.ReloadActorTypes(p.actorTable.Types())
+		p.reloadTypes.Store(false)
 	}
 
 	p.htarget.Ready()

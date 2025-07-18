@@ -152,6 +152,7 @@ func (c *cron) Run(ctx context.Context) error {
 					case <-c.readyCh:
 					default:
 						close(c.readyCh)
+						log.Info("Cron is ready")
 					}
 
 					c.hostBroadcaster.Broadcast(hosts)
@@ -227,36 +228,43 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 
 func (c *cron) triggerHandler(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
 	log.Debugf("Triggering job: %s", req.GetName())
-
-	start := time.Now()
-	resp := c.triggerJob(ctx, req)
-	monitoring.RecordTriggerDuration(start)
-
-	log.Debugf("Triggered job %s in %s (%s)", req.GetName(), time.Since(start), resp.GetResult())
-
+	duration, resp := c.triggerJob(ctx, req)
+	log.Debugf("Triggered job %s in %s (%s)", req.GetName(), duration, resp.GetResult())
 	return resp
 }
 
-func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
+func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) (time.Duration, *api.TriggerResponse) {
 	var meta schedulerv1pb.JobMetadata
 	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
 		log.Errorf("Error unmarshalling metadata: %s", err)
-		return &api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE}
+		return 0, &api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE}
 	}
 
 	idx := strings.LastIndex(req.GetName(), "||")
 	if idx == -1 || len(req.GetName()) <= idx+2 {
 		log.Errorf("Job name is malformed: %s", req.GetName())
-		return &api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE}
+		return 0, &api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE}
 	}
 
-	defer monitoring.RecordJobsTriggeredCount(&meta)
-	return &api.TriggerResponse{
-		Result: c.connectionPool.Trigger(ctx, &internalsv1pb.JobEvent{
-			Key:      req.GetName(),
-			Name:     req.GetName()[idx+2:],
-			Data:     req.GetPayload(),
-			Metadata: &meta,
-		}),
+	start := time.Now()
+	result := c.connectionPool.Trigger(ctx, &internalsv1pb.JobEvent{
+		Key:      req.GetName(),
+		Name:     req.GetName()[idx+2:],
+		Data:     req.GetPayload(),
+		Metadata: &meta,
+	})
+	duration := time.Since(start)
+
+	switch result {
+	case api.TriggerResponseResult_SUCCESS:
+		monitoring.RecordJobsTriggeredCount(&meta)
+		monitoring.RecordTriggerDuration(&meta, duration)
+	case api.TriggerResponseResult_FAILED:
+		monitoring.RecordJobsFailedCount(&meta)
+		monitoring.RecordTriggerDuration(&meta, duration)
+	case api.TriggerResponseResult_UNDELIVERABLE:
+		monitoring.RecordJobsUndeliveredCount(&meta)
 	}
+
+	return duration, &api.TriggerResponse{Result: result}
 }
