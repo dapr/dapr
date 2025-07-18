@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/dapr/dapr/pkg/api/http/consts"
 	"github.com/dapr/dapr/pkg/api/universal"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -1083,7 +1084,7 @@ func TestFindTargetIDAndMethod(t *testing.T) {
 			if gotMethod != tt.wantMethod {
 				t.Errorf("findTargetIDAndMethod() gotMethod = %v, want %v", gotMethod, tt.wantMethod)
 			}
-			appIDHeader := tt.headers.Get(daprAppID)
+			appIDHeader := tt.headers.Get(consts.DaprAppIDHeader)
 			if appIDHeader != "" {
 				t.Error("dapr-app-id is present in request headers and shouldn't be")
 			}
