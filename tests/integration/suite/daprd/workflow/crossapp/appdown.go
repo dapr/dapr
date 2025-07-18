@@ -150,7 +150,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	id, err := client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	select {
 	case <-a.activityStarted:
@@ -165,6 +165,6 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer waitCancel()
 	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.EqualError(t, err, "context deadline exceeded")
 }
