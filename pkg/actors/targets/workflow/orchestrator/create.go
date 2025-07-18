@@ -40,9 +40,19 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		return errors.New("invalid execution start event")
 	} else {
 		if es.GetParentInstance() == nil {
-			log.Debugf("Workflow actor '%s': creating workflow '%s' with instanceId '%s'", o.actorID, es.GetName(), es.GetOrchestrationInstance().GetInstanceId())
+			log.Debugf("Workflow actor '%s': creating workflow '%s' with instanceId '%s'",
+				o.actorID,
+				es.GetName(),
+				es.GetOrchestrationInstance().GetInstanceId(),
+			)
 		} else {
-			log.Debugf("Workflow actor '%s': creating child workflow '%s' with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'", es.GetName(), es.GetOrchestrationInstance().GetInstanceId(), es.GetParentInstance().GetName(), es.GetParentInstance().GetOrchestrationInstance().GetInstanceId())
+			log.Debugf("Workflow actor '%s': creating child workflow '%s' with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'",
+				o.actorID,
+				es.GetName(),
+				es.GetOrchestrationInstance().GetInstanceId(),
+				es.GetParentInstance().GetName(),
+				es.GetParentInstance().GetOrchestrationInstance().GetInstanceId(),
+			)
 		}
 	}
 

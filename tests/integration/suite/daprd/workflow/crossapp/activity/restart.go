@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package crossapp
+package activity
 
 import (
 	"context"
@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -64,11 +63,6 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 	r.place = placement.New(t)
 	r.sched = scheduler.New(t,
 		scheduler.WithLogLevel("debug"))
-	db := sqlite.New(t,
-		sqlite.WithActorStateStore(true),
-		sqlite.WithMetadata("busyTimeout", "10s"),
-		sqlite.WithMetadata("disableWAL", "true"),
-	)
 
 	app1 := app.New(t)
 	app2 := app.New(t)
@@ -132,7 +126,7 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 	})
 
 	return []framework.Option{
-		framework.WithProcesses(r.place, r.sched, db, app1, app2, r.daprd1),
+		framework.WithProcesses(r.place, r.sched, app1, app2, r.daprd1),
 	}
 }
 

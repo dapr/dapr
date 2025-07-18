@@ -29,38 +29,42 @@ import (
 
 func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) error {
 	msgs := make([]proto.Message, len(events))
+	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
 
 	for i, msg := range events {
 		msgs[i] = &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
+		historyEvents[i] = msg.GetHistoryEvent()
 		targets[i] = msg.GetTargetInstanceID()
 	}
 
-	return o.callStateMessages(ctx, msgs, targets, todo.CreateWorkflowInstanceMethod)
+	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.CreateWorkflowInstanceMethod)
 }
 
 func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) error {
-	targets := make([]string, len(events))
 	msgs := make([]proto.Message, len(events))
+	historyEvents := make([]*backend.HistoryEvent, len(events))
+	targets := make([]string, len(events))
 
 	for i, msg := range events {
 		msgs[i] = msg.GetHistoryEvent()
+		historyEvents[i] = msg.GetHistoryEvent()
 		targets[i] = msg.GetTargetInstanceID()
 	}
 
-	return o.callStateMessages(ctx, msgs, targets, todo.AddWorkflowEventMethod)
+	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.AddWorkflowEventMethod)
 }
 
-func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, targets []string, method string) error {
+func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, method string) error {
 	errs := make([]error, len(msgs))
 
 	var wg sync.WaitGroup
 	wg.Add(len(msgs))
 	for i, msg := range msgs {
-		go func(i int, msg proto.Message, target string) {
+		go func(i int, msg proto.Message, historyEvent *backend.HistoryEvent, target string) {
 			defer wg.Done()
-			errs[i] = o.callStateMessage(ctx, msg, target, method)
-		}(i, msg, targets[i])
+			errs[i] = o.callStateMessage(ctx, msg, historyEvent, target, method)
+		}(i, msg, historyEvents[i], targets[i])
 	}
 
 	wg.Wait()
@@ -68,17 +72,46 @@ func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Messa
 	return errors.Join(errs...)
 }
 
-func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, target string, method string) error {
+func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, historyEvent *backend.HistoryEvent, target string, method string) error {
 	b, err := proto.Marshal(m)
 	if err != nil {
 		return err
 	}
+	actorType := o.actorType
 
-	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", o.actorID, method, target)
+	if historyEvent != nil && historyEvent.GetRouter() != nil {
+		router := historyEvent.GetRouter()
+		log.Debugf("Cross-app suborchestrator call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
+
+		switch m := m.(type) {
+		case *backend.CreateWorkflowInstanceRequest:
+			// If target app is specified and different from current app, use cross-app actor type
+			if router.TargetAppID != nil {
+				actorType = o.actorTypeBuilder.Workflow(router.GetTargetAppID())
+			}
+		case *backend.HistoryEvent:
+			var routeAppID string
+			if m.GetSubOrchestrationInstanceCompleted() != nil || m.GetSubOrchestrationInstanceFailed() != nil {
+				if router.TargetAppID == nil {
+					return errors.New("sub-orchestrator completion events should have a target appID")
+				}
+				routeAppID = router.GetTargetAppID()
+			} else {
+				routeAppID = router.GetSourceAppID()
+			}
+
+			// If route app is specified and different from current app, use cross-app actor type
+			if routeAppID != "" && routeAppID != o.appID {
+				actorType = o.actorTypeBuilder.Workflow(routeAppID)
+			}
+		}
+	}
+
+	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", o.actorID, method, actorType, target)
 
 	if _, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(method).
-		WithActor(o.actorType, target).
+		WithActor(actorType, target).
 		WithData(b).
 		WithContentType(invokev1.ProtobufContentType),
 	); err != nil {
