@@ -67,15 +67,20 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		return err
 	}
 
-	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), generation)
+	activityActorType := o.activityActorType
+	if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
+		activityActorType = o.actorTypeBuilder.Activity(router.GetTargetAppID())
+	}
+
+	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), o.state.Generation)
 
 	o.activityResultAwaited.Store(true)
 
-	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", o.actorID, targetActorID)
+	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest("Execute").
-		WithActor(o.activityActorType, targetActorID).
+		WithActor(activityActorType, targetActorID).
 		WithData(eventData).
 		WithContentType(invokev1.ProtobufContentType),
 	)

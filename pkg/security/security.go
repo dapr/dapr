@@ -152,6 +152,10 @@ type security struct {
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {
+	if err := checkUserIDGroupID(opts.Mode); err != nil {
+		return nil, err
+	}
+
 	if len(opts.ControlPlaneTrustDomain) == 0 {
 		return nil, errors.New("control plane trust domain is required")
 	}

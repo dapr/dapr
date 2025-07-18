@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -70,39 +69,39 @@ func (o *orchestrator) handleStreamInitial(ctx context.Context, req *internalsv1
 		return nil, fmt.Errorf("unsupported stream method: %s", m)
 	}
 
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case o.lock <- struct{}{}:
+	unlock, err := o.lock.ContextLock(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	ch := make(chan *backend.OrchestrationMetadata)
 	o.ometaBroadcaster.Subscribe(ctx, ch)
 
 	_, ometa, err := o.loadInternalState(ctx)
+	unlock()
 	if err != nil {
 		return nil, err
 	}
 
-	<-o.lock
+	if ometa == nil {
+		return ch, nil
+	}
 
-	if ometa != nil {
-		arstate, err := anypb.New(ometa)
-		if err != nil {
-			return nil, err
-		}
+	arstate, err := anypb.New(ometa)
+	if err != nil {
+		return nil, err
+	}
 
-		select {
-		case <-ctx.Done():
-		case stream <- &internalsv1pb.InternalInvokeResponse{
-			Status:  &internalsv1pb.Status{Code: http.StatusOK},
-			Message: &commonv1pb.InvokeResponse{Data: arstate},
-		}:
-		}
+	if api.OrchestrationMetadataIsComplete(ometa) {
+		o.cleanup()
+	}
 
-		if api.OrchestrationMetadataIsComplete(ometa) {
-			o.table.DeleteFromTableIn(o, time.Second*10)
-		}
+	select {
+	case <-ctx.Done():
+	case stream <- &internalsv1pb.InternalInvokeResponse{
+		Status:  &internalsv1pb.Status{Code: http.StatusOK},
+		Message: &commonv1pb.InvokeResponse{Data: arstate},
+	}:
 	}
 
 	return ch, nil

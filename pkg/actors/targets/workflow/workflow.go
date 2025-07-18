@@ -22,12 +22,12 @@ import (
 )
 
 func Factories(ctx context.Context, o orchestrator.Options, a activity.Options) (targets.Factory, targets.Factory, error) {
-	orchFactory, err := orchestrator.Factory(ctx, o)
+	orchFactory, err := orchestrator.New(ctx, o)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	activityFactory, err := activity.Factory(ctx, a)
+	activityFactory, err := activity.New(ctx, a)
 	if err != nil {
 		return nil, nil, err
 	}
