@@ -1446,6 +1446,47 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 		},
 	}))
+
+	t.Run("jwt audiences", testSuiteGenerator([]testCase{
+		{
+			name:        "omitted when not set",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--jwt-audiences")
+			},
+		},
+		{
+			name: "present when set with single audience",
+			annotations: map[string]string{
+				annotations.KeyJwtAudiences: "api.example.com",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--jwt-audiences api.example.com")
+			},
+		},
+		{
+			name: "present when set with multiple audiences",
+			annotations: map[string]string{
+				annotations.KeyJwtAudiences: "api.example.com,auth.example.com,payments.example.com",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--jwt-audiences api.example.com,auth.example.com,payments.example.com")
+			},
+		},
+		{
+			name: "omitted when annotation is empty",
+			annotations: map[string]string{
+				annotations.KeyJwtAudiences: "",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--jwt-audiences")
+			},
+		},
+	}))
 }
 
 func assertEqualJSON(t *testing.T, val any, expect string) {

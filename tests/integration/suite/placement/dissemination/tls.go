@@ -51,7 +51,7 @@ func (n *tls) Setup(t *testing.T) []framework.Option {
 	n.sentry = sentry.New(t)
 
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
-	require.NoError(t, os.WriteFile(taFile, n.sentry.CABundle().TrustAnchors, 0o600))
+	require.NoError(t, os.WriteFile(taFile, n.sentry.CABundle().X509.TrustAnchors, 0o600))
 	n.place = placement.New(t,
 		placement.WithEnableTLS(true),
 		placement.WithSentryAddress(n.sentry.Address()),
@@ -105,7 +105,7 @@ func (n *tls) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppID("my-app1"),
 		daprd.WithNamespace("ns1"),
 		daprd.WithMode("standalone"),
-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(n.sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(n.sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(n.sentry.Address()),
 		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithEnableMTLS(true),
@@ -117,7 +117,7 @@ func (n *tls) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppID("my-app2"),
 		daprd.WithNamespace("ns2"),
 		daprd.WithMode("standalone"),
-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(n.sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(n.sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(n.sentry.Address()),
 		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithEnableMTLS(true),
@@ -129,7 +129,7 @@ func (n *tls) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppID("my-app3"),
 		daprd.WithNamespace("ns2"),
 		daprd.WithMode("standalone"),
-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(n.sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(n.sentry.CABundle().X509.TrustAnchors))),
 		daprd.WithSentryAddress(n.sentry.Address()),
 		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithEnableMTLS(true),
