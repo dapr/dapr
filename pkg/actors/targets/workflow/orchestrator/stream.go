@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -36,31 +37,63 @@ func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.Inte
 		return err
 	}
 
+	ticker := time.NewTicker(time.Second * 3)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-o.closeCh:
 			return nil
+		case <-ticker.C:
+			unlock, err := o.lock.ContextLock(ctx)
+			if err != nil {
+				return err
+			}
+			_, ometa, err := o.loadInternalState(ctx)
+			unlock()
+			if err != nil {
+				return err
+			}
+
+			if ometa == nil {
+				continue
+			}
+
+			if err = o.sendStateToStream(ctx, ch, stream, ometa); err != nil {
+				return fmt.Errorf("failed to send state to stream: %w", err)
+			}
+
 		case val, ok := <-ch:
 			if !ok {
 				return nil
 			}
-			d, err := anypb.New(val)
-			if err != nil {
-				return err
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-o.closeCh:
-				return nil
-			case stream <- &internalsv1pb.InternalInvokeResponse{
-				Status:  &internalsv1pb.Status{Code: http.StatusOK},
-				Message: &commonv1pb.InvokeResponse{Data: d},
-			}:
+
+			if err = o.sendStateToStream(ctx, ch, stream, val); err != nil {
+				return fmt.Errorf("failed to send state to stream: %w", err)
 			}
 		}
+	}
+}
+
+func (o *orchestrator) sendStateToStream(ctx context.Context,
+	ch chan *backend.OrchestrationMetadata,
+	stream chan<- *internalsv1pb.InternalInvokeResponse,
+	val *backend.OrchestrationMetadata,
+) error {
+	d, err := anypb.New(val)
+	if err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-o.closeCh:
+		return nil
+	case stream <- &internalsv1pb.InternalInvokeResponse{
+		Status:  &internalsv1pb.Status{Code: http.StatusOK},
+		Message: &commonv1pb.InvokeResponse{Data: d},
+	}:
+		return nil
 	}
 }
 
