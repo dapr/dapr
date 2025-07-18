@@ -42,8 +42,8 @@ type timer struct {
 func (i *timer) Setup(t *testing.T) []framework.Option {
 	i.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithDaprdOptions(0, daprd.WithWorkflowsEnableClusteredDeployment(true)),
-		workflow.WithDaprdOptions(1, daprd.WithWorkflowsEnableClusteredDeployment(true)),
+		workflow.WithDaprdOptions(0, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
+		workflow.WithDaprdOptions(1, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
 	)
 
 	return []framework.Option{
@@ -54,17 +54,16 @@ func (i *timer) Setup(t *testing.T) []framework.Option {
 func (i *timer) Run(t *testing.T, ctx context.Context) {
 	i.workflow.WaitUntilRunning(t, ctx)
 
-	i.workflow.Registry().AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, i.workflow.RegistryN(0).AddOrchestratorN("timer", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CreateTimer(time.Second).Await(nil))
 		return nil, nil
-	})
+	}))
+	_ = i.workflow.BackendClientN(t, ctx, 0)
 
 	client := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
 		i.workflow.DaprN(0).GRPCConn(t, ctx),
 		i.workflow.DaprN(1).GRPCConn(t, ctx),
 	), logger.New(t))
-
-	require.NoError(t, client.StartWorkItemListener(ctx, i.workflow.Registry()))
 
 	const n = 10
 	ids := make([]api.InstanceID, n)

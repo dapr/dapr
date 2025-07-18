@@ -42,8 +42,8 @@ type raise struct {
 func (r *raise) Setup(t *testing.T) []framework.Option {
 	r.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithDaprdOptions(0, daprd.WithWorkflowsEnableClusteredDeployment(true)),
-		workflow.WithDaprdOptions(1, daprd.WithWorkflowsEnableClusteredDeployment(true)),
+		workflow.WithDaprdOptions(0, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
+		workflow.WithDaprdOptions(1, daprd.WithAppID("app"), daprd.WithWorkflowsEnableClusteredDeployment(true)),
 	)
 
 	return []framework.Option{
@@ -54,17 +54,16 @@ func (r *raise) Setup(t *testing.T) []framework.Option {
 func (r *raise) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	r.workflow.Registry().AddOrchestratorN("raise", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, r.workflow.RegistryN(0).AddOrchestratorN("raise", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.WaitForSingleEvent("my-event", time.Hour).Await(nil))
 		return nil, nil
-	})
+	}))
+	_ = r.workflow.BackendClientN(t, ctx, 0)
 
 	client := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
 		r.workflow.DaprN(0).GRPCConn(t, ctx),
 		r.workflow.DaprN(1).GRPCConn(t, ctx),
 	), logger.New(t))
-
-	require.NoError(t, client.StartWorkItemListener(ctx, r.workflow.Registry()))
 
 	const n = 10
 	ids := make([]api.InstanceID, n)
