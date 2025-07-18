@@ -58,16 +58,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	client := b.daprd.GRPCClient(t, ctx)
 
+	// TODO: add all fields for ConversationRequestV1Alpha2 && for http
+	// TODO: add multiple inputs, multiple msgs, multple tools
 	t.Run("good input", func(t *testing.T) {
-
-		/*
-			types:
-			*ConversationMessage_OfDeveloper
-			*ConversationMessage_OfSystem
-			*ConversationMessage_OfUser
-			*ConversationMessage_OfAssistant
-			*ConversationMessage_OfTool
-		*/
 		resp, err := client.ConverseV1Alpha2(ctx, &rtv1.ConversationRequestV1Alpha2{
 			Name: "test-alpha2-echo",
 			Inputs: []*rtv1.ConversationInputV1Alpha2{

@@ -165,20 +165,22 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 
 	// prepare request
 	request := &conversation.Request{}
-	err := kmeta.DecodeMetadata(req.GetMetadata(), request)
+	var err error
+	err = kmeta.DecodeMetadata(req.GetMetadata(), request)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(req.GetInputs()) == 0 {
-		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
 		return nil, err
 	}
 
-	scrubber, err := piiscrubber.NewDefaultScrubber()
+	var scrubber piiscrubber.Scrubber
+	scrubber, err = piiscrubber.NewDefaultScrubber()
 	if err != nil {
-		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
 		return &runtimev1pb.ConversationResponseV1Alpha2{}, err
 	}
@@ -190,10 +192,11 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 		for _, message := range input.GetMessages() {
 			var (
 				langchainMsg llms.MessageContent
+				scrubbed     []string
 			)
 
 			if message.GetMessageTypes() == nil {
-				err := messages.ErrConversationInvalidParams.WithFormat(req.GetName())
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName())
 				a.logger.Debug(err)
 				return nil, err
 			}
@@ -209,11 +212,11 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 				for _, content := range msg.OfUser.GetContent() {
 					text := content.GetText().GetValue()
 					if input.GetScrubPII() {
-						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
-						if sErr != nil {
-							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-							a.logger.Debug(sErr)
-							return &runtimev1pb.ConversationResponseV1Alpha2{}, sErr
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseV1Alpha2{}, err
 						}
 						text = scrubbed[0]
 					}
@@ -234,11 +237,11 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 				for _, content := range msg.OfSystem.GetContent() {
 					text := content.GetText().GetValue()
 					if input.GetScrubPII() {
-						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
-						if sErr != nil {
-							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-							a.logger.Debug(sErr)
-							return &runtimev1pb.ConversationResponseV1Alpha2{}, sErr
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseV1Alpha2{}, err
 						}
 						text = scrubbed[0]
 					}
@@ -252,6 +255,33 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 					Parts: parts,
 				}
 
+			case *runtimev1pb.ConversationMessage_OfDeveloper:
+				var parts []llms.ContentPart
+
+				// scrub inputs
+				for _, content := range msg.OfDeveloper.GetContent() {
+					text := content.GetText().GetValue()
+					if input.GetScrubPII() {
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseV1Alpha2{}, err
+						}
+						text = scrubbed[0]
+					}
+					parts = append(parts, llms.TextContent{
+						Text: text,
+					})
+				}
+
+				langchainMsg = llms.MessageContent{
+					// mapped to human based on these options:
+					// https://github.com/tmc/langchaingo/blob/main/llms/chat_messages.go#L18
+					Role:  llms.ChatMessageTypeHuman,
+					Parts: parts,
+				}
+
 			case *runtimev1pb.ConversationMessage_OfAssistant:
 				var parts []llms.ContentPart
 				for _, content := range msg.OfAssistant.GetContent() {
@@ -259,11 +289,11 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 
 					// scrub inputs
 					if input.GetScrubPII() {
-						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
-						if sErr != nil {
-							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-							a.logger.Debug(sErr)
-							return &runtimev1pb.ConversationResponseV1Alpha2{}, sErr
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseV1Alpha2{}, err
 						}
 						text = scrubbed[0]
 					}
@@ -283,7 +313,8 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 					// TODO: scrub anything?
 
 					role := llms.ChatMessageTypeTool
-					tcfaBytes, err := json.Marshal(tool.GetFunction().GetArguments())
+					var tcfaBytes []byte
+					tcfaBytes, err = json.Marshal(tool.GetFunction().GetArguments())
 					if err != nil {
 						a.logger.Debug(err)
 						return &runtimev1pb.ConversationResponseV1Alpha2{}, err
@@ -339,11 +370,11 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 
 					// scrub inputs
 					if input.GetScrubPII() {
-						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
-						if sErr != nil {
-							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-							a.logger.Debug(sErr)
-							return &runtimev1pb.ConversationResponseV1Alpha2{}, sErr
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseV1Alpha2{}, err
 						}
 						text = scrubbed[0]
 					}
@@ -377,7 +408,7 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 				}
 
 			default:
-				err := messages.ErrConversationInvalidParams.WithFormat(req.GetName())
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName())
 				a.logger.Debug(err)
 				return nil, err
 			}
@@ -417,6 +448,7 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 		}
 		request.Tools = &availableTools
 	}
+
 	// do call
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*conversation.Response](ctx,
