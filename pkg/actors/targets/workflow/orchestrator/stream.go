@@ -45,11 +45,13 @@ func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.Inte
 		case <-o.closeCh:
 			return nil
 		case <-ticker.C:
-			unlock, err := o.lock.ContextLock(ctx)
+			var unlock context.CancelFunc
+			unlock, err = o.lock.ContextLock(ctx)
 			if err != nil {
 				return err
 			}
-			_, ometa, err := o.loadInternalState(ctx)
+			var ometa *backend.OrchestrationMetadata
+			_, ometa, err = o.loadInternalState(ctx)
 			unlock()
 			if err != nil {
 				return err
