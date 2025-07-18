@@ -48,7 +48,7 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	// Update cached state
 	o.state = state
 	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
-	o.setOrchestrationMetadata(o.rstate, o.getExecutionStartedEvent(state))
+	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
 	o.ometaBroadcaster.Broadcast(o.ometa)
 
 	return state, o.ometa, nil
@@ -73,7 +73,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	// Update cached state
 	o.state = state
 	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
-	o.setOrchestrationMetadata(o.rstate, o.getExecutionStartedEvent(state))
+	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
 	return nil
 }
 
@@ -102,7 +102,7 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 	return nil
 }
 
-func (o *orchestrator) setOrchestrationMetadata(rstate *backend.OrchestrationRuntimeState, startEvent *protos.ExecutionStartedEvent) {
+func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState, startEvent *protos.ExecutionStartedEvent) *backend.OrchestrationMetadata {
 	var se *protos.ExecutionStartedEvent = nil
 	if rstate.GetStartEvent() != nil {
 		se = rstate.GetStartEvent()
@@ -124,7 +124,7 @@ func (o *orchestrator) setOrchestrationMetadata(rstate *backend.OrchestrationRun
 	if se != nil && se.GetParentInstance() != nil && se.GetParentInstance().GetOrchestrationInstance() != nil {
 		parentInstanceID = se.GetParentInstance().GetOrchestrationInstance().GetInstanceId()
 	}
-	o.ometa = &backend.OrchestrationMetadata{
+	return &backend.OrchestrationMetadata{
 		InstanceId:       rstate.GetInstanceId(),
 		Name:             name,
 		RuntimeStatus:    runtimestate.RuntimeStatus(rstate),

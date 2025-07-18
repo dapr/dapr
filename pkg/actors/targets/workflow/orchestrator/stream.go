@@ -17,14 +17,17 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
 
 func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
@@ -36,31 +39,69 @@ func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.Inte
 		return err
 	}
 
+	ticker := time.NewTicker(time.Second * 3)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-o.closeCh:
 			return nil
+		case <-ticker.C:
+			var state *wfenginestate.State
+			state, err = wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, wfenginestate.Options{
+				AppID:             o.appID,
+				WorkflowActorType: o.actorType,
+				ActivityActorType: o.activityActorType,
+			})
+			if err != nil {
+				return err
+			}
+			if state == nil {
+				continue
+			}
+
+			ometa := o.ometaFromState(
+				runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History),
+				o.getExecutionStartedEvent(state),
+			)
+
+			if err = o.sendStateToStream(ctx, ch, stream, ometa); err != nil {
+				return fmt.Errorf("failed to send state to stream: %w", err)
+			}
+
 		case val, ok := <-ch:
 			if !ok {
 				return nil
 			}
-			d, err := anypb.New(val)
-			if err != nil {
-				return err
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-o.closeCh:
-				return nil
-			case stream <- &internalsv1pb.InternalInvokeResponse{
-				Status:  &internalsv1pb.Status{Code: http.StatusOK},
-				Message: &commonv1pb.InvokeResponse{Data: d},
-			}:
+
+			if err = o.sendStateToStream(ctx, ch, stream, val); err != nil {
+				return fmt.Errorf("failed to send state to stream: %w", err)
 			}
 		}
+	}
+}
+
+func (o *orchestrator) sendStateToStream(ctx context.Context,
+	ch chan *backend.OrchestrationMetadata,
+	stream chan<- *internalsv1pb.InternalInvokeResponse,
+	val *backend.OrchestrationMetadata,
+) error {
+	d, err := anypb.New(val)
+	if err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-o.closeCh:
+		return nil
+	case stream <- &internalsv1pb.InternalInvokeResponse{
+		Status:  &internalsv1pb.Status{Code: http.StatusOK},
+		Message: &commonv1pb.InvokeResponse{Data: d},
+	}:
+		return nil
 	}
 }
 
