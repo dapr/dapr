@@ -42,7 +42,9 @@ const (
 	secondsToWaitInMethod   = 5
 )
 
-var httpClient = utils.NewHTTPClient()
+var (
+	httpClient = utils.NewHTTPClient()
+)
 
 type daprConfig struct {
 	Entities                []string `json:"entities,omitempty"`
