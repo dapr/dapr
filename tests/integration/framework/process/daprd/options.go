@@ -36,36 +36,35 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
-	appID                              string
-	namespace                          *string
-	appPort                            *int
-	grpcPort                           int
-	httpPort                           int
-	internalGRPCPort                   int
-	publicPort                         int
-	metricsPort                        int
-	profilePort                        int
-	appProtocol                        string
-	appHealthCheck                     bool
-	appHealthCheckPath                 string
-	appHealthProbeInterval             int
-	appHealthProbeThreshold            int
-	resourceFiles                      []string
-	resourceDirs                       []string
-	configs                            []string
-	placementAddresses                 []string
-	logLevel                           string
-	mode                               string
-	enableMTLS                         bool
-	sentryAddress                      string
-	controlPlaneAddress                string
-	disableK8sSecretStore              *bool
-	gracefulShutdownSeconds            *int
-	blockShutdownDuration              *string
-	controlPlaneTrustDomain            *string
-	schedulerAddresses                 []string
-	maxBodySize                        *string
-	workflowsEnableClusteredDeployment *bool
+	appID                   string
+	namespace               *string
+	appPort                 *int
+	grpcPort                int
+	httpPort                int
+	internalGRPCPort        int
+	publicPort              int
+	metricsPort             int
+	profilePort             int
+	appProtocol             string
+	appHealthCheck          bool
+	appHealthCheckPath      string
+	appHealthProbeInterval  int
+	appHealthProbeThreshold int
+	resourceFiles           []string
+	resourceDirs            []string
+	configs                 []string
+	placementAddresses      []string
+	logLevel                string
+	mode                    string
+	enableMTLS              bool
+	sentryAddress           string
+	controlPlaneAddress     string
+	disableK8sSecretStore   *bool
+	gracefulShutdownSeconds *int
+	blockShutdownDuration   *string
+	controlPlaneTrustDomain *string
+	schedulerAddresses      []string
+	maxBodySize             *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -352,11 +351,5 @@ spec:
 func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
-	}
-}
-
-func WithWorkflowsEnableClusteredDeployment(enable bool) Option {
-	return func(o *options) {
-		o.workflowsEnableClusteredDeployment = &enable
 	}
 }

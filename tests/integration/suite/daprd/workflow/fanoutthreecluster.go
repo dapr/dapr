@@ -47,6 +47,17 @@ func (f *fanoutthreecluster) Setup(t *testing.T) []framework.Option {
 	placement := placement.New(t)
 	scheduler := scheduler.New(t)
 
+	config := `
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+    name: workflowsclustereddeployment
+spec:
+    features:
+    - name: WorkflowsClusteredDeployment
+    enabled: true
+`
+
 	db := sqlite.New(t,
 		sqlite.WithActorStateStore(true),
 		sqlite.WithMetadata("busyTimeout", "10s"),
@@ -58,21 +69,21 @@ func (f *fanoutthreecluster) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(placement.Address()),
 		daprd.WithScheduler(scheduler),
 		daprd.WithResourceFiles(db.GetComponent(t)),
-		daprd.WithWorkflowsEnableClusteredDeployment(true),
+		daprd.WithConfigManifests(t, config),
 	)
 	f.daprd2 = daprd.New(t,
 		daprd.WithPlacementAddresses(placement.Address()),
 		daprd.WithScheduler(scheduler),
 		daprd.WithResourceFiles(db.GetComponent(t)),
 		daprd.WithAppID(f.daprd1.AppID()),
-		daprd.WithWorkflowsEnableClusteredDeployment(true),
+		daprd.WithConfigManifests(t, config),
 	)
 	f.daprd3 = daprd.New(t,
 		daprd.WithPlacementAddresses(placement.Address()),
 		daprd.WithScheduler(scheduler),
 		daprd.WithResourceFiles(db.GetComponent(t)),
 		daprd.WithAppID(f.daprd1.AppID()),
-		daprd.WithWorkflowsEnableClusteredDeployment(true),
+		daprd.WithConfigManifests(t, config),
 	)
 
 	return []framework.Option{

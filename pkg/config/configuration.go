@@ -56,6 +56,9 @@ const (
 	// Enables support for using the Scheduler control plane service
 	// for Actor Reminders.
 	SchedulerReminders Feature = "SchedulerReminders"
+
+	// Enables feature to support workflows in a clustered deployment.
+	WorkflowsClusteredDeployment Feature = "WorkflowsClusteredDeployment"
 )
 
 // end feature flags section
