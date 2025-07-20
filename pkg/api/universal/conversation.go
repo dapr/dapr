@@ -182,8 +182,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		a.logger.Debug(err)
 		return &runtimev1pb.ConversationResponseAlpha2{}, err
 	}
-	// TODO: double check that in case of input of tool call response that i properly translate to llms.ToolCallResponse msg type
-	// TODO: sam to double check on nil ptr checks
 
 	var llmMessages []*llms.MessageContent
 	for _, input := range req.GetInputs() {
@@ -196,11 +194,11 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			// we make them implicit in the backend setting this field based on the input msg type using the langchain role types.
 			switch msg := message.GetMessageTypes().(type) {
 
-			case *runtimev1pb.ConversationMessage_OfUser:
+			case *runtimev1pb.ConversationMessage_OfDeveloper:
 				var parts []llms.ContentPart
 
 				// scrub inputs
-				for _, content := range msg.OfUser.GetContent() {
+				for _, content := range msg.OfDeveloper.GetContent() {
 					text := content.GetText()
 					if input.GetScrubPii() {
 						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
@@ -243,6 +241,31 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 				langchainMsg = llms.MessageContent{
 					Role:  llms.ChatMessageTypeSystem,
+					Parts: parts,
+				}
+
+			case *runtimev1pb.ConversationMessage_OfUser:
+				var parts []llms.ContentPart
+
+				// scrub inputs
+				for _, content := range msg.OfUser.GetContent() {
+					text := content.GetText()
+					if input.GetScrubPii() {
+						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
+						if sErr != nil {
+							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
+							a.logger.Debug(sErr)
+							return &runtimev1pb.ConversationResponseAlpha2{}, sErr
+						}
+						text = scrubbed[0]
+					}
+					parts = append(parts, llms.TextContent{
+						Text: text,
+					})
+				}
+
+				langchainMsg = llms.MessageContent{
+					Role:  llms.ChatMessageTypeHuman,
 					Parts: parts,
 				}
 
