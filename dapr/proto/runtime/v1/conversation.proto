@@ -16,7 +16,6 @@ syntax = "proto3";
 package dapr.proto.runtime.v1;
 
 import "google/protobuf/any.proto";
-import "google/protobuf/wrappers.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
 
@@ -46,10 +45,10 @@ message ConversationRequest {
   optional double temperature = 7;
 }
 
-// ConversationRequestV1Alpha2 is the new request object for Conversation.
+// ConversationRequestAlpha2 is the new request object for Conversation.
 // Many of these fields are inspired by openai.ChatCompletionNewParams
 // https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2106
-message ConversationRequestV1Alpha2 {
+message ConversationRequestAlpha2 {
   // The name of Conversation component
   string name = 1;
 
@@ -58,7 +57,7 @@ message ConversationRequestV1Alpha2 {
 
   // Inputs for the conversation, support multiple input in one time.
   // This is the revamped conversation inputs better matching openai.
-  repeated ConversationInputV1Alpha2 inputs = 3;
+  repeated ConversationInputAlpha2 inputs = 3;
 
   // Parameters for all custom fields.
   map<string, google.protobuf.Any> parameters = 4;
@@ -88,7 +87,7 @@ message ConversationRequestV1Alpha2 {
   // `auto` is the default if tools are present.
   // ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1976
   // ref: https://python.langchain.com/docs/how_to/tool_choice/
-  optional google.protobuf.StringValue tool_choice = 9;
+  optional string tool_choice = 9;
 
   /* TODO: fields to bring in from openai.ChatCompletionNewParams after Dapr 1.16.
   Note: They can be within the other messages, not necessarily top level here.
@@ -119,20 +118,18 @@ message ConversationInput {
 
 // directly inspired by openai.ChatCompletionNewParams
 // https://github.com/openai/openai-go/blob/main/chatcompletion.go#L2106
-message ConversationInputV1Alpha2 {
+message ConversationInputAlpha2 {
   // The content to send to the llm
   repeated ConversationMessage messages = 1;
 
   // Scrub PII data that goes into the LLM
-  optional bool scrubPII = 2;
+  optional bool scrub_pii = 2;
 }
 
 // inspired by openai.ChatCompletionMessageParamUnion
 // https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1449
-// Note: I've made role inherent to the type of ConversationMessage 
-// (before we had it nested as a standalone field under ConversationInput)
-// so none of these message_types have this role field as required I will propagate it in the backend,
-// while leaving it as an optional input in case users want to specify.
+// The role field is inherent to the type of ConversationMessage,
+// and is propagated in the backend according to the underlying LLM provider type.
 message ConversationMessage {
     // TODO(@Sicoyle): update my names below to match their names closer in openai?
   oneof message_types {
@@ -152,7 +149,7 @@ message ConversationMessage {
 // as the role of a developer.
 message ConversationMessageOfDeveloper {
   // The name of the participant in the message.
-  optional google.protobuf.StringValue name = 1;
+  optional string name = 1;
   // TODO(@Sicoyle): circle back here if content or msg should be naming here?
   repeated ConversationContentMessageContent content = 2;
 
@@ -163,7 +160,7 @@ message ConversationMessageOfDeveloper {
 // ConversationMessageOfSystem is intended to be the contents of a conversation message,
 // as the role of a system.
 message ConversationMessageOfSystem {
-  optional google.protobuf.StringValue name = 1;
+  optional string name = 1;
   repeated ConversationContentMessageContent content = 2;
 }
 
@@ -172,7 +169,7 @@ message ConversationMessageOfSystem {
 // ConversationMessageOfUser is intended to be the contents of a conversation message,
 // as the role of an end user.
 message ConversationMessageOfUser {
-  optional google.protobuf.StringValue name = 1;
+  optional string name = 1;
   repeated ConversationContentMessageContent content = 2;
 }
 
@@ -182,7 +179,7 @@ message ConversationMessageOfUser {
 // ConversationMessageOfAssistant is intended to be the contents of a conversation message,
 // as the role of an assistant.
 message ConversationMessageOfAssistant {
-  optional google.protobuf.StringValue name = 1;
+  optional string name = 1;
 
   // TODO: there is an audio field here to bring in when the time comes 1.17 or later.
 
@@ -192,7 +189,7 @@ message ConversationMessageOfAssistant {
   repeated ConversationToolCalls tool_calls = 3;
 
   // The refusal message by the assistant in the case it refuses a conversation.
-  optional google.protobuf.StringValue refusal = 4;
+  optional string refusal = 4;
 
   // Note: There is a FunctionCall type too that is deprecated,
   // so we are not bringing that to dapr.
@@ -204,12 +201,10 @@ message ConversationMessageOfAssistant {
 // as the role of a tool.
 message ConversationMessageOfTool {
   // Tool ID is helpful for tracking tool history
-  optional google.protobuf.StringValue tool_id = 1;
+  optional string tool_id = 1;
 
-  // TODO: pls double check me here: I see ChatCompletionToolMessageParam does not have name field,
-  // but in translating to langchain llms.MessageContent for ToolCall message should be an incoming tool call response from an api POV,
-  // so then to me i need to add a name field.
-  google.protobuf.StringValue name = 2;
+  // Name of tool associated with the message
+  string name = 2;
 
   repeated ConversationContentMessageContent content = 3;
 
@@ -221,7 +216,7 @@ message ConversationMessageOfTool {
 // This assumes that in our api if a client makes a request that would get a tool call response from the llm,
 // that this client can also have the tool handy itself to execute.s
 message ConversationToolCalls {
-    optional google.protobuf.StringValue id = 1;
+    optional string id = 1;
     oneof tool_types {
         ConversationToolCallsOfFunction function = 2;
     }
@@ -230,7 +225,7 @@ message ConversationToolCalls {
 // inspired by openai.ChatCompletionMessageToolCallFunctionParam
 // https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1692
 message ConversationToolCallsOfFunction {
-  google.protobuf.StringValue name = 1;
+  string name = 1;
   map<string, google.protobuf.Any> arguments = 2;
 }
 
@@ -241,7 +236,7 @@ message ConversationToolCallsOfFunction {
 // so instead of this, we support that in one message type instead.
 // Backend will fill in a type field to implicitly be "text" instead of me specifying a type field.
 message ConversationContentMessageContent {
-  google.protobuf.StringValue text = 1;
+  string text = 1;
 }
 
 // ConversationResult is the result for one input.
@@ -254,8 +249,8 @@ message ConversationResult {
   map<string, google.protobuf.Any> parameters = 2;
 }
 
-// ConversationResultV1Alpha2 is the result for one input.
-message ConversationResultV1Alpha2 {
+// ConversationResultAlpha2 is the result for one input.
+message ConversationResultAlpha2 {
   // Result for the one conversation input.
   // string result = 1; // was string before
   ConversationResultChoices choices = 1;
@@ -286,12 +281,12 @@ message ConversationResultChoices {
   // content was omitted due to a flag from our content filters, `tool_calls` if the
   // model called a tool.
   // Any of "stop", "length", "tool_calls", "content_filter".
-  google.protobuf.StringValue finish_reason = 1;
+  string finish_reason = 1;
 
   // The index of the choice in the list of choices.
   int64 index = 2;
 
-  google.protobuf.StringValue message = 3;
+  string message = 3;
 }
 
 // ConversationResponse is the response for Conversation.
@@ -305,13 +300,13 @@ message ConversationResponse {
   repeated ConversationResult outputs = 2;
 }
 
-// ConversationResponseV1Alpha2 is the V1Alpha2 response for Conversation.
-message ConversationResponseV1Alpha2 {
+// ConversationResponseAlpha2 is the Alpha2 response for Conversation.
+message ConversationResponseAlpha2 {
   // The ID of an existing chat (like in ChatGPT)
   optional string context_id = 1;
 
   // An array of results.
-  repeated ConversationResultV1Alpha2 outputs = 2;
+  repeated ConversationResultAlpha2 outputs = 2;
 }
 
 // ConversationTools are the typed tools available to be called.
@@ -328,11 +323,11 @@ message ConversationTools {
 // https://pkg.go.dev/github.com/openai/openai-go/shared#FunctionDefinitionParam
 message ConversationToolsFunction {
   // The name of the function to be called.
-  google.protobuf.StringValue name = 1;
+  string name = 1;
 
   // A description of what the function does, 
   // used by the model to choose when and how to call the function.
-  optional google.protobuf.StringValue description = 2;
+  optional string description = 2;
 
   // The parameters the functions accepts, described as a JSON Schema object. 
   // See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
