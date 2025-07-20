@@ -284,25 +284,6 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 						return &runtimev1pb.ConversationResponseV1Alpha2{}, err
 					}
 
-					// handle mistral edge case on handling tool call message
-					// where it expects a text message instead of a tool call message
-					// if _, ok := component.(*mistral.Mistral); ok {
-					// 	a.logger.Debugf("Processing Mistral tool call: %s(%s)",
-					// 		tool.GetFunction().GetName().String(),
-					// 		string(tcfaBytes))
-
-					// 	toolCall := &llms.ToolCall{
-					// 		ID:   tool.GetId().String(),
-					// 		Type: "function",
-					// 		FunctionCall: &llms.FunctionCall{
-					// 			Name:      tool.GetFunction().GetName().String(),
-					// 			Arguments: string(tcfaBytes),
-					// 		},
-					// 	}
-
-					// 	langchainMsg.Parts = append(langchainMsg.Parts, mistral.CreateMistralCompatibleToolCall(toolCall)...)
-					// } else {
-					// For other providers, use standard tool call
 					toolCall := &llms.ToolCall{
 						ID:   tool.GetId().String(),
 						Type: string(role), // double check if this is right or should be just "function"
@@ -311,8 +292,14 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 							Arguments: string(tcfaBytes),
 						},
 					}
-					langchainMsg.Parts = append(langchainMsg.Parts, toolCall)
-					// }
+
+					// handle mistral edge case on handling tool call message
+					// where it expects a text message instead of a tool call message
+					if _, ok := component.(*mistral.Mistral); ok {
+						langchainMsg.Parts = append(parts, mistral.CreateToolCallPart(toolCall))
+					} else {
+						langchainMsg.Parts = append(langchainMsg.Parts, toolCall)
+					}
 				}
 
 			case *runtimev1pb.ConversationMessage_OfTool:
@@ -343,32 +330,22 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 						text = scrubbed[0]
 					}
 
-					// wip but pushing for cassie
-					// handle mistral edge case on handling tool call response message
-					// where it expects a text message instead of a tool call response message
-					// if _, ok := component.(*mistral.Mistral); ok {
-					// 	a.logger.Debugf("Processing Mistral tool response: ID=%s, Name=%s, Content=%s",
-					// 		toolID, toolName, text)
-
-					// 	toolResponse := llms.ToolCallResponse{
-					// 		ToolCallID: toolID,
-					// 		Content:    text,
-					// 		Name:       toolName,
-					// 	}
-
-					// 	parts = append(parts, mistral.CreateMistralCompatibleToolResponse(toolResponse)...)
-					// } else {
-					parts = append(parts, llms.ToolCallResponse{
+					toolCallResponse := llms.ToolCallResponse{
 						ToolCallID: toolID,
 						Content:    text,
 						Name:       toolName,
-					})
-					// }
-				}
+					}
 
-				langchainMsg = llms.MessageContent{
-					Role:  llms.ChatMessageTypeTool,
-					Parts: parts,
+					// handle mistral edge case on handling tool call response message
+					// where it expects a text message instead of a tool call response message
+					if _, ok := component.(*mistral.Mistral); ok {
+						langchainMsg = mistral.CreateToolResponseMessage(toolCallResponse)
+					} else {
+						langchainMsg = llms.MessageContent{
+							Role:  llms.ChatMessageTypeTool,
+							Parts: parts,
+						}
+					}
 				}
 
 			default:
