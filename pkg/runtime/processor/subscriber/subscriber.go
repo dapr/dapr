@@ -72,8 +72,8 @@ type Subscriber struct {
 	lock         sync.RWMutex
 	closed       atomic.Bool
 
-	retryCtx    context.Context
-	retryCancel context.CancelFunc
+	retryCtx    map[string]context.Context
+	retryCancel map[string]context.CancelFunc
 }
 
 type namedSubscription struct {
@@ -84,7 +84,6 @@ type namedSubscription struct {
 var log = logger.NewLogger("dapr.runtime.processor.subscription")
 
 func New(opts Options) *Subscriber {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &Subscriber{
 		appID:           opts.AppID,
 		namespace:       opts.Namespace,
@@ -98,15 +97,15 @@ func New(opts Options) *Subscriber {
 		adapterStreamer: opts.AdapterStreamer,
 		appSubs:         make(map[string][]*namedSubscription),
 		streamSubs:      make(map[string]map[rtpubsub.ConnectionID]*namedSubscription),
-		retryCtx:        ctx,
-		retryCancel:     cancel,
+		retryCtx:        make(map[string]context.Context),
+		retryCancel:     make(map[string]context.CancelFunc),
 	}
 }
 
 func (s *Subscriber) Run(ctx context.Context) error {
 	<-ctx.Done()
 	s.closed.Store(true)
-	s.retryCancel()
+	s.cancelAllRetries()
 	return nil
 }
 
@@ -114,7 +113,7 @@ func (s *Subscriber) StopAllSubscriptionsForever() {
 	s.lock.Lock()
 
 	s.closed.Store(true)
-	s.retryCancel()
+	s.cancelAllRetries()
 
 	var wg sync.WaitGroup
 	for _, psubs := range s.appSubs {
@@ -278,6 +277,8 @@ func (s *Subscriber) StopPubSub(name string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	s.cancelRetries(name)
+
 	var wg sync.WaitGroup
 	wg.Add(len(s.appSubs[name]) + len(s.streamSubs[name]))
 	for _, sub := range s.appSubs[name] {
@@ -351,6 +352,16 @@ func (s *Subscriber) StartAppSubscriptions() error {
 }
 
 func (s *Subscriber) retrySubscription(pubsubName string, pubsub *rtpubsub.PubsubItem, sub *compstore.NamedSubscription) {
+	s.lock.Lock()
+	ctx := s.retryCtx[pubsubName]
+	if s.retryCtx[pubsubName] == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(context.Background())
+		s.retryCtx[pubsubName] = ctx
+		s.retryCancel[pubsubName] = cancel
+	}
+	s.lock.Unlock()
+
 	backoff.Retry(func() error {
 		if s.closed.Load() {
 			log.Debugf("Stopping retry for subscription pubsub %s, topic %s due to subscriber closure", pubsubName, sub.Topic)
@@ -376,7 +387,7 @@ func (s *Subscriber) retrySubscription(pubsubName string, pubsub *rtpubsub.Pubsu
 		}
 		s.lock.Unlock()
 		return nil
-	}, backoff.WithContext(backoff.NewExponentialBackOff(backoff.WithMaxElapsedTime(0)), s.retryCtx))
+	}, backoff.WithContext(backoff.NewExponentialBackOff(backoff.WithMaxElapsedTime(0)), ctx))
 }
 
 func (s *Subscriber) StopAppSubscriptions() {
@@ -388,7 +399,7 @@ func (s *Subscriber) StopAppSubscriptions() {
 	}
 
 	s.appSubActive = false
-	s.retryCancel()
+	s.cancelAllRetries()
 
 	var wg sync.WaitGroup
 	for _, psub := range s.appSubs {
@@ -403,7 +414,6 @@ func (s *Subscriber) StopAppSubscriptions() {
 	wg.Wait()
 
 	s.appSubs = make(map[string][]*namedSubscription)
-	s.retryCtx, s.retryCancel = context.WithCancel(context.Background())
 }
 
 func (s *Subscriber) InitProgramaticSubscriptions(ctx context.Context) error {
@@ -450,6 +460,8 @@ func (s *Subscriber) reloadPubSubStream(name string, pubsub *rtpubsub.PubsubItem
 }
 
 func (s *Subscriber) reloadPubSubApp(name string, pubsub *rtpubsub.PubsubItem) error {
+	s.cancelRetries(name)
+
 	var wg sync.WaitGroup
 	wg.Add(len(s.appSubs[name]))
 	for _, sub := range s.appSubs[name] {
@@ -586,4 +598,20 @@ func (s *Subscriber) startSubscription(pubsub *rtpubsub.PubsubItem, comp *compst
 		ConnectionID:    comp.ConnectionID,
 		Postman:         postman,
 	})
+}
+
+func (s *Subscriber) cancelRetries(pubsubName string) {
+	if cancel, exists := s.retryCancel[pubsubName]; exists {
+		cancel()
+		delete(s.retryCtx, pubsubName)
+		delete(s.retryCancel, pubsubName)
+	}
+}
+
+func (s *Subscriber) cancelAllRetries() {
+	for _, cancel := range s.retryCancel {
+		cancel()
+	}
+	s.retryCtx = make(map[string]context.Context)
+	s.retryCancel = make(map[string]context.CancelFunc)
 }
