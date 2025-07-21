@@ -48,9 +48,11 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	}
 
 	// For activity completion events, we want to create the reminder on the same app where this workflow actor is
-	// hosted, so use the source app from the router
+	// hosted, so use the source app from the router.
+	// For sub-orchestrator completion events we want to create the reminder on the current app.
 	sourceAppID := o.appID
-	if e.GetRouter() != nil {
+	returningToParent := e.GetSubOrchestrationInstanceCompleted() != nil || e.GetSubOrchestrationInstanceFailed() != nil
+	if !returningToParent && e.GetRouter() != nil {
 		sourceAppID = e.GetRouter().GetSourceAppID()
 	}
 
