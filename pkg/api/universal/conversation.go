@@ -17,10 +17,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
 	"github.com/tmc/langchaingo/llms"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/conversation/mistral"
@@ -127,10 +129,16 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		}
 
 		for _, o := range resp.Outputs {
-			res := o.Result
+			// extract content from the first choice since this api version only responded with a single string result
+			var content string
+			if o.Choices != nil {
+				content = o.Choices[0].Message.Content
+			}
+
+			res := content
 
 			if req.GetScrubPII() {
-				scrubbed, sErr := scrubber.ScrubTexts([]string{o.Result})
+				scrubbed, sErr := scrubber.ScrubTexts([]string{content})
 				if sErr != nil {
 					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
 					a.logger.Debug(sErr)
@@ -142,7 +150,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResult{
 				Result:     res,
-				Parameters: o.Parameters,
+				Parameters: request.Parameters,
 			})
 		}
 	}
@@ -288,7 +296,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				}
 
 				langchainMsg = llms.MessageContent{
-					Role:  llms.ChatMessageTypeAI, // TODO: double check this role
+					Role:  llms.ChatMessageTypeAI,
 					Parts: parts,
 				}
 
@@ -474,27 +482,75 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			response.ContextId = &resp.ConversationContext
 		}
 
-		for i, o := range resp.Outputs {
-			res := o.Result
+		for _, o := range resp.Outputs {
+			var resultingChoices []*runtimev1pb.ConversationResultChoices
 
-			if req.GetScrubPii() {
-				scrubbed, sErr := scrubber.ScrubTexts([]string{o.Result})
-				if sErr != nil {
-					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-					a.logger.Debug(sErr)
-					return &runtimev1pb.ConversationResponseAlpha2{}, sErr
+			for _, choice := range o.Choices {
+				resultMessage := &runtimev1pb.ConversationResultMessage{}
+
+				// handle text result
+				if choice.Message.Content != "" {
+					content := choice.Message.Content
+					if req.GetScrubPii() {
+						scrubbed, sErr := scrubber.ScrubTexts([]string{content})
+						if sErr != nil {
+							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
+							a.logger.Debug(sErr)
+							return &runtimev1pb.ConversationResponseAlpha2{}, sErr
+						}
+						content = scrubbed[0]
+					}
+					resultMessage.Content = content
 				}
 
-				res = scrubbed[0]
+				// handle tool call results for user to then execute locally
+				if choice.Message.ToolCallRequest != nil {
+					for _, toolCall := range *choice.Message.ToolCallRequest {
+						var argsMap map[string]any
+						arguments := make(map[string]*anypb.Any)
+
+						// some tools may or may not have arguments
+						if toolCall.FunctionCall.Arguments != "" {
+							err := json.Unmarshal([]byte(toolCall.FunctionCall.Arguments), &argsMap)
+							if err != nil {
+								return &runtimev1pb.ConversationResponseAlpha2{}, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
+							}
+							// convert parsed arguments to output format
+							for k, v := range argsMap {
+								if vBytes, err := json.Marshal(v); err == nil {
+									arguments[k] = &anypb.Any{
+										Value: vBytes,
+									}
+								}
+							}
+						}
+
+						resultingToolCall := &runtimev1pb.ConversationToolCalls{
+							ToolTypes: &runtimev1pb.ConversationToolCalls_Function{
+								Function: &runtimev1pb.ConversationToolCallsOfFunction{
+									Name:      toolCall.FunctionCall.Name,
+									Arguments: arguments,
+								},
+							},
+						}
+						if toolCall.ID != "" {
+							resultingToolCall.Id = &toolCall.ID
+						}
+						resultMessage.ToolCalls = append(resultMessage.ToolCalls, resultingToolCall)
+					}
+				}
+
+				resultingChoice := &runtimev1pb.ConversationResultChoices{
+					FinishReason: choice.FinishReason,
+					Index:        choice.Index,
+					Message:      resultMessage,
+				}
+
+				resultingChoices = append(resultingChoices, resultingChoice)
 			}
 
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResultAlpha2{
-				Choices: &runtimev1pb.ConversationResultChoices{
-					Message:      res,
-					FinishReason: o.StopReason,
-					Index:        int64(i),
-				},
-				Parameters: o.Parameters,
+				Choices: resultingChoices,
 			})
 		}
 	}
