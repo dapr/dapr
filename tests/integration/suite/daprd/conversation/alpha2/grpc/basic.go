@@ -130,9 +130,27 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 2) // Should have outputs for both inputs
+
+		// user message output
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetChoices().GetMessage())
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		choices0 := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "stop", choices0.GetFinishReason())
+		require.Equal(t, int64(0), choices0.GetIndex())
+		require.NotNil(t, choices0.GetMessage())
+		require.Equal(t, "well hello there", choices0.GetMessage().GetContent())
+		require.Empty(t, choices0.GetMessage().GetRefusal())
+		require.Empty(t, choices0.GetMessage().GetToolCalls())
+
+		// system message output
 		require.NotNil(t, resp.GetOutputs()[1].GetChoices())
-		require.Equal(t, "You are a helpful assistant", resp.GetOutputs()[1].GetChoices().GetMessage())
+		require.Len(t, resp.GetOutputs()[1].GetChoices(), 1)
+		choices1 := resp.GetOutputs()[1].GetChoices()[0]
+		require.Equal(t, "stop", choices1.GetFinishReason())
+		require.Equal(t, int64(1), choices1.GetIndex())
+		require.NotNil(t, choices1.GetMessage())
+		require.Equal(t, "You are a helpful assistant", choices1.GetMessage().GetContent())
+		require.Empty(t, choices1.GetMessage().GetRefusal())
+		require.Empty(t, choices1.GetMessage().GetToolCalls())
 	})
 }

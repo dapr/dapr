@@ -146,37 +146,25 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			"contextId": "test-conversation-123",
 			"outputs": [
 				{
-					"choices": {
-						"finishReason": "done",
-						"message": "well hello there"
-					},
-					"parameters": {
-						"max_tokens": {
-							"@type": "type.googleapis.com/google.protobuf.Int64Value",
-							"value": "100"
-						},
-						"model": {
-							"@type": "type.googleapis.com/google.protobuf.StringValue",
-							"value": "test-model"
+					"choices": [
+						{
+							"finishReason": "stop",
+							"message": {
+								"content": "well hello there"
+							}
 						}
-					}
+					]
 				},
 				{
-					"choices": {
-						"finishReason": "done",
-						"index": "1",
-						"message": "You are a helpful assistant"
-					},
-					"parameters": {
-						"max_tokens": {
-							"@type": "type.googleapis.com/google.protobuf.Int64Value",
-							"value": "100"
-						},
-						"model": {
-							"@type": "type.googleapis.com/google.protobuf.StringValue",
-							"value": "test-model"
+					"choices": [
+						{
+							"finishReason": "stop",
+							"index": "1",
+							"message": {
+								"content": "You are a helpful assistant"
+							}
 						}
-					}
+					]
 				}
 			]
 		}`

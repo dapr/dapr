@@ -84,7 +84,14 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "user message", resp.GetOutputs()[0].GetChoices().GetMessage())
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		choices := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "stop", choices.GetFinishReason())
+		require.Equal(t, int64(0), choices.GetIndex())
+		require.NotNil(t, choices.GetMessage())
+		require.Equal(t, "user message", choices.GetMessage().GetContent())
+		require.Empty(t, choices.GetMessage().GetRefusal())
+		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
 	t.Run("of_system", func(t *testing.T) {
@@ -112,7 +119,14 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "system message", resp.GetOutputs()[0].GetChoices().GetMessage())
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		choices := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "stop", choices.GetFinishReason())
+		require.Equal(t, int64(0), choices.GetIndex())
+		require.NotNil(t, choices.GetMessage())
+		require.Equal(t, "system message", choices.GetMessage().GetContent())
+		require.Empty(t, choices.GetMessage().GetRefusal())
+		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
 	t.Run("of_developer", func(t *testing.T) {
@@ -140,7 +154,14 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "developer message", resp.GetOutputs()[0].GetChoices().GetMessage())
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		choices := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "stop", choices.GetFinishReason())
+		require.Equal(t, int64(0), choices.GetIndex())
+		require.NotNil(t, choices.GetMessage())
+		require.Equal(t, "developer message", choices.GetMessage().GetContent())
+		require.Empty(t, choices.GetMessage().GetRefusal())
+		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
 	t.Run("of_assistant", func(t *testing.T) {
@@ -168,7 +189,14 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "assistant message", resp.GetOutputs()[0].GetChoices().GetMessage())
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		choices := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "stop", choices.GetFinishReason())
+		require.Equal(t, int64(0), choices.GetIndex())
+		require.NotNil(t, choices.GetMessage())
+		require.Equal(t, "assistant message", choices.GetMessage().GetContent())
+		require.Empty(t, choices.GetMessage().GetRefusal())
+		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
@@ -197,6 +225,13 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "tool message", resp.GetOutputs()[0].GetChoices().GetMessage())
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		choices := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "stop", choices.GetFinishReason())
+		require.Equal(t, int64(0), choices.GetIndex())
+		require.NotNil(t, choices.GetMessage())
+		require.Equal(t, "tool message", choices.GetMessage().GetContent())
+		require.Empty(t, choices.GetMessage().GetRefusal())
+		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 }

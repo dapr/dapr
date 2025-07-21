@@ -75,7 +75,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":{"finishReason":"done","message":"user message"}}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"user message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_system", func(t *testing.T) {
@@ -89,7 +89,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":{"finishReason":"done","message":"system message"}}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"system message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_developer", func(t *testing.T) {
@@ -103,7 +103,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":{"finishReason":"done","message":"developer message"}}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"developer message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_assistant", func(t *testing.T) {
@@ -117,7 +117,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":{"finishReason":"done","message":"assistant message"}}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"assistant message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
@@ -131,6 +131,6 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":{"finishReason":"done","message":"tool message"}}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"tool message"}}]}]}`, string(respBody))
 	})
 }
