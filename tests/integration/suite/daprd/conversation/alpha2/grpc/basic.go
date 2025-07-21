@@ -18,12 +18,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -58,18 +60,39 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	client := b.daprd.GRPCClient(t, ctx)
 
-	// TODO: add all fields for ConversationRequestV1Alpha2 && for http
-	// TODO: add multiple inputs, multiple msgs, multple tools
-	t.Run("good input", func(t *testing.T) {
+	t.Run("all fields", func(t *testing.T) {
+		tool := &rtv1.ConversationTools{
+			ToolTypes: &rtv1.ConversationTools_Function{
+				Function: &rtv1.ConversationToolsFunction{
+					Name:        &wrapperspb.StringValue{Value: "test_function"},
+					Description: &wrapperspb.StringValue{Value: "A test function"},
+					Parameters: map[string]*anypb.Any{
+						"param1": &anypb.Any{Value: []byte(`"string"`)},
+					},
+				},
+			},
+		}
+
+		parameters := map[string]*anypb.Any{
+			"max_tokens": &anypb.Any{Value: []byte(`100`)},
+			"model":      &anypb.Any{Value: []byte(`"test-model"`)},
+		}
+		metadata := map[string]string{
+			"api_key": "test-key",
+			"version": "1.0",
+		}
+
 		resp, err := client.ConverseV1Alpha2(ctx, &rtv1.ConversationRequestV1Alpha2{
-			Name: "test-alpha2-echo",
+			Name:      "test-alpha2-echo",
+			ContextId: ptr.Of("test-conversation-123"),
+			// multiple inputs
 			Inputs: []*rtv1.ConversationInputV1Alpha2{
 				{
 					Messages: []*rtv1.ConversationMessage{
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfUser{
 								OfUser: &rtv1.ConversationMessageOfUser{
-									Name: nil,
+									Name: &wrapperspb.StringValue{Value: "test-user"},
 									Content: []*rtv1.ConversationContentMessageContent{
 										{
 											Text: &wrapperspb.StringValue{
@@ -81,12 +104,40 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 							},
 						},
 					},
+					ScrubPII: ptr.Of(false),
+				},
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfSystem{
+								OfSystem: &rtv1.ConversationMessageOfSystem{
+									Name: &wrapperspb.StringValue{Value: "test-system"},
+									Content: []*rtv1.ConversationContentMessageContent{
+										{
+											Text: &wrapperspb.StringValue{
+												Value: "You are a helpful assistant",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					ScrubPII: ptr.Of(true),
 				},
 			},
+			Parameters:  parameters,
+			Metadata:    metadata,
+			ScrubPii:    ptr.Of(true),
+			Temperature: ptr.Of(0.7),
+			Tools:       []*rtv1.ConversationTools{tool},
+			ToolChoice:  &wrapperspb.StringValue{Value: "auto"},
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 1)
+		require.Len(t, resp.GetOutputs(), 2) // Should have outputs for both inputs
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetChoices().GetMessage().GetValue())
+		require.NotNil(t, resp.GetOutputs()[1].GetChoices())
+		require.Equal(t, "You are a helpful assistant", resp.GetOutputs()[1].GetChoices().GetMessage().GetValue())
 	})
 }

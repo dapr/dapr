@@ -63,8 +63,58 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := client.HTTP(t)
 
-	t.Run("good json", func(t *testing.T) {
-		body := `{"inputs":[{"messages":[{"ofUser":{"content":[{"text":"well hello there"}]}}]}]}`
+	t.Run("all fields", func(t *testing.T) {
+		body := `{
+			"name": "test-alpha2-echo",
+			"contextId": "test-conversation-123",
+			"inputs": [
+				{
+					"messages": [
+						{
+							"ofUser": {
+								"name": "test-user",
+								"content": [
+									{
+										"text": "well hello there"
+									}
+								]
+							}
+						}
+					],
+					"scrubPII": false
+				},
+				{
+					"messages": [
+						{
+							"ofSystem": {
+								"name": "test-system",
+								"content": [
+									{
+										"text": "You are a helpful assistant"
+									}
+								]
+							}
+						}
+					],
+					"scrubPII": true
+				}
+			],
+			"metadata": {
+				"api_key": "test-key",
+				"version": "1.0"
+			},
+			"scrubPii": true,
+			"temperature": 0.7,
+			"tools": [
+				{
+					"function": {
+						"name": "test_function",
+						"description": "A test function"
+					}
+				}
+			],
+			"toolChoice": "auto"
+		}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 		require.NoError(t, err)
@@ -74,7 +124,27 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":{"finishReason":"done","message":"well hello there"}}]}`, string(respBody))
+
+		// Should have outputs for both inputs
+		expectedResponse := `{
+			"contextId": "test-conversation-123",
+			"outputs": [
+				{
+					"choices": {
+						"finishReason": "done",
+						"message": "well hello there"
+					}
+				},
+				{
+					"choices": {
+						"finishReason": "done",
+						"index": "1",
+						"message": "You are a helpful assistant"
+					}
+				}
+			]
+		}`
+		require.JSONEq(t, expectedResponse, string(respBody))
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
