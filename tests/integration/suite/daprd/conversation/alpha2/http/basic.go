@@ -99,6 +99,16 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					"scrubPII": true
 				}
 			],
+			"parameters": {
+				"max_tokens": {
+					"@type": "type.googleapis.com/google.protobuf.Int64Value",
+					"value": "100"
+				},
+				"model": {
+					"@type": "type.googleapis.com/google.protobuf.StringValue",
+					"value": "test-model"
+				}
+			},
 			"metadata": {
 				"api_key": "test-key",
 				"version": "1.0"
@@ -109,7 +119,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				{
 					"function": {
 						"name": "test_function",
-						"description": "A test function"
+						"description": "A test function",
+						"parameters": {
+							"param1": {
+								"@type": "type.googleapis.com/google.protobuf.StringValue",
+								"value": "string"
+							}
+						}
 					}
 				}
 			],
@@ -133,6 +149,16 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					"choices": {
 						"finishReason": "done",
 						"message": "well hello there"
+					},
+					"parameters": {
+						"max_tokens": {
+							"@type": "type.googleapis.com/google.protobuf.Int64Value",
+							"value": "100"
+						},
+						"model": {
+							"@type": "type.googleapis.com/google.protobuf.StringValue",
+							"value": "test-model"
+						}
 					}
 				},
 				{
@@ -140,6 +166,16 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						"finishReason": "done",
 						"index": "1",
 						"message": "You are a helpful assistant"
+					},
+					"parameters": {
+						"max_tokens": {
+							"@type": "type.googleapis.com/google.protobuf.Int64Value",
+							"value": "100"
+						},
+						"model": {
+							"@type": "type.googleapis.com/google.protobuf.StringValue",
+							"value": "test-model"
+						}
 					}
 				}
 			]

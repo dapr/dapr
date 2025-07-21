@@ -18,12 +18,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -60,20 +60,18 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 
 	// Test all message types
 	t.Run("of_user", func(t *testing.T) {
-		resp, err := client.ConverseV1Alpha2(ctx, &rtv1.ConversationRequestV1Alpha2{
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name: "test-alpha2-echo",
-			Inputs: []*rtv1.ConversationInputV1Alpha2{
+			Inputs: []*rtv1.ConversationInputAlpha2{
 				{
 					Messages: []*rtv1.ConversationMessage{
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfUser{
 								OfUser: &rtv1.ConversationMessageOfUser{
-									Name: &wrapperspb.StringValue{Value: "user name"},
+									Name: ptr.Of("user name"),
 									Content: []*rtv1.ConversationContentMessageContent{
 										{
-											Text: &wrapperspb.StringValue{
-												Value: "user message",
-											},
+											Text: "user message",
 										},
 									},
 								},
@@ -86,24 +84,22 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "user message", resp.GetOutputs()[0].GetChoices().GetMessage().GetValue())
+		require.Equal(t, "user message", resp.GetOutputs()[0].GetChoices().GetMessage())
 	})
 
 	t.Run("of_system", func(t *testing.T) {
-		resp, err := client.ConverseV1Alpha2(ctx, &rtv1.ConversationRequestV1Alpha2{
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name: "test-alpha2-echo",
-			Inputs: []*rtv1.ConversationInputV1Alpha2{
+			Inputs: []*rtv1.ConversationInputAlpha2{
 				{
 					Messages: []*rtv1.ConversationMessage{
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfSystem{
 								OfSystem: &rtv1.ConversationMessageOfSystem{
-									Name: &wrapperspb.StringValue{Value: "system name"},
+									Name: ptr.Of("system name"),
 									Content: []*rtv1.ConversationContentMessageContent{
 										{
-											Text: &wrapperspb.StringValue{
-												Value: "system message",
-											},
+											Text: "system message",
 										},
 									},
 								},
@@ -116,24 +112,22 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "system message", resp.GetOutputs()[0].GetChoices().GetMessage().GetValue())
+		require.Equal(t, "system message", resp.GetOutputs()[0].GetChoices().GetMessage())
 	})
 
 	t.Run("of_developer", func(t *testing.T) {
-		resp, err := client.ConverseV1Alpha2(ctx, &rtv1.ConversationRequestV1Alpha2{
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name: "test-alpha2-echo",
-			Inputs: []*rtv1.ConversationInputV1Alpha2{
+			Inputs: []*rtv1.ConversationInputAlpha2{
 				{
 					Messages: []*rtv1.ConversationMessage{
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfDeveloper{
 								OfDeveloper: &rtv1.ConversationMessageOfDeveloper{
-									Name: &wrapperspb.StringValue{Value: "dev name"},
+									Name: ptr.Of("dev name"),
 									Content: []*rtv1.ConversationContentMessageContent{
 										{
-											Text: &wrapperspb.StringValue{
-												Value: "developer message",
-											},
+											Text: "developer message",
 										},
 									},
 								},
@@ -146,24 +140,22 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "developer message", resp.GetOutputs()[0].GetChoices().GetMessage().GetValue())
+		require.Equal(t, "developer message", resp.GetOutputs()[0].GetChoices().GetMessage())
 	})
 
 	t.Run("of_assistant", func(t *testing.T) {
-		resp, err := client.ConverseV1Alpha2(ctx, &rtv1.ConversationRequestV1Alpha2{
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name: "test-alpha2-echo",
-			Inputs: []*rtv1.ConversationInputV1Alpha2{
+			Inputs: []*rtv1.ConversationInputAlpha2{
 				{
 					Messages: []*rtv1.ConversationMessage{
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
 								OfAssistant: &rtv1.ConversationMessageOfAssistant{
-									Name: &wrapperspb.StringValue{Value: "assistant name"},
+									Name: ptr.Of("assistant name"),
 									Content: []*rtv1.ConversationContentMessageContent{
 										{
-											Text: &wrapperspb.StringValue{
-												Value: "assistant message",
-											},
+											Text: "assistant message",
 										},
 									},
 								},
@@ -176,25 +168,23 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "assistant message", resp.GetOutputs()[0].GetChoices().GetMessage().GetValue())
+		require.Equal(t, "assistant message", resp.GetOutputs()[0].GetChoices().GetMessage())
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
-		resp, err := client.ConverseV1Alpha2(ctx, &rtv1.ConversationRequestV1Alpha2{
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name: "test-alpha2-echo",
-			Inputs: []*rtv1.ConversationInputV1Alpha2{
+			Inputs: []*rtv1.ConversationInputAlpha2{
 				{
 					Messages: []*rtv1.ConversationMessage{
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfTool{
 								OfTool: &rtv1.ConversationMessageOfTool{
-									ToolId: &wrapperspb.StringValue{Value: "tool-123"},
-									Name:   &wrapperspb.StringValue{Value: "tool name"},
+									ToolId: ptr.Of("tool-123"),
+									Name:   "tool name",
 									Content: []*rtv1.ConversationContentMessageContent{
 										{
-											Text: &wrapperspb.StringValue{
-												Value: "tool message",
-											},
+											Text: "tool message",
 										},
 									},
 								},
@@ -207,6 +197,6 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "tool message", resp.GetOutputs()[0].GetChoices().GetMessage().GetValue())
+		require.Equal(t, "tool message", resp.GetOutputs()[0].GetChoices().GetMessage())
 	})
 }

@@ -525,7 +525,7 @@ replace (
 // Don't commit with this uncommented!
 //
 //replace github.com/dapr/components-contrib => ../components-contrib
-replace github.com/dapr/components-contrib => github.com/sicoyle/components-contrib v0.0.0-20250718132631-67d10a9bd149
+replace github.com/dapr/components-contrib => github.com/sicoyle/components-contrib v0.0.0-20250721151718-76148c32af54
 
 // replace github.com/dapr/kit => ../kit
 //

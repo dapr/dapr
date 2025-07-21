@@ -222,8 +222,8 @@ service Dapr {
   // Converse with a LLM service
   rpc ConverseAlpha1(ConversationRequest) returns (ConversationResponse) {}
 
-  // Converse with a LLM service via v2 api
-  rpc ConverseV1Alpha2(ConversationRequestV1Alpha2) returns (ConversationResponseV1Alpha2) {}
+  // Converse with a LLM service via alpha2 api
+  rpc ConverseAlpha2(ConversationRequestAlpha2) returns (ConversationResponseAlpha2) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.

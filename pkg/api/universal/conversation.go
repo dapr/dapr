@@ -16,6 +16,7 @@ package universal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
@@ -28,7 +29,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	kmeta "github.com/dapr/kit/metadata"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) {
@@ -150,7 +150,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	return response, nil
 }
 
-func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.ConversationRequestV1Alpha2) (*runtimev1pb.ConversationResponseV1Alpha2, error) {
+func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.ConversationRequestAlpha2) (*runtimev1pb.ConversationResponseAlpha2, error) {
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
 		err := messages.ErrConversationNotFound.WithFormat(req.GetName())
@@ -182,10 +182,8 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 	if err != nil {
 		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
-		return &runtimev1pb.ConversationResponseV1Alpha2{}, err
+		return &runtimev1pb.ConversationResponseAlpha2{}, err
 	}
-	// TODO: double check that in case of input of tool call response that i properly translate to llms.ToolCallResponse msg type
-	// TODO: sam to double check on nil ptr checks
 
 	var llmMessages []*llms.MessageContent
 	for _, input := range req.GetInputs() {
@@ -205,68 +203,18 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 			// we make them implicit in the backend setting this field based on the input msg type using the langchain role types.
 			switch msg := message.GetMessageTypes().(type) {
 
-			case *runtimev1pb.ConversationMessage_OfUser:
-				var parts []llms.ContentPart
-
-				// scrub inputs
-				for _, content := range msg.OfUser.GetContent() {
-					text := content.GetText().GetValue()
-					if input.GetScrubPII() {
-						scrubbed, err = scrubber.ScrubTexts([]string{text})
-						if err != nil {
-							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseV1Alpha2{}, err
-						}
-						text = scrubbed[0]
-					}
-					parts = append(parts, llms.TextContent{
-						Text: text,
-					})
-				}
-
-				langchainMsg = llms.MessageContent{
-					Role:  llms.ChatMessageTypeHuman,
-					Parts: parts,
-				}
-
-			case *runtimev1pb.ConversationMessage_OfSystem:
-				var parts []llms.ContentPart
-
-				// scrub inputs
-				for _, content := range msg.OfSystem.GetContent() {
-					text := content.GetText().GetValue()
-					if input.GetScrubPII() {
-						scrubbed, err = scrubber.ScrubTexts([]string{text})
-						if err != nil {
-							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseV1Alpha2{}, err
-						}
-						text = scrubbed[0]
-					}
-					parts = append(parts, llms.TextContent{
-						Text: text,
-					})
-				}
-
-				langchainMsg = llms.MessageContent{
-					Role:  llms.ChatMessageTypeSystem,
-					Parts: parts,
-				}
-
 			case *runtimev1pb.ConversationMessage_OfDeveloper:
 				var parts []llms.ContentPart
 
 				// scrub inputs
 				for _, content := range msg.OfDeveloper.GetContent() {
-					text := content.GetText().GetValue()
-					if input.GetScrubPII() {
+					text := content.GetText()
+					if input.GetScrubPii() {
 						scrubbed, err = scrubber.ScrubTexts([]string{text})
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseV1Alpha2{}, err
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
 					}
@@ -282,22 +230,74 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 					Parts: parts,
 				}
 
-			case *runtimev1pb.ConversationMessage_OfAssistant:
+			case *runtimev1pb.ConversationMessage_OfSystem:
 				var parts []llms.ContentPart
-				for _, content := range msg.OfAssistant.GetContent() {
-					text := content.GetText().GetValue()
 
-					// scrub inputs
-					if input.GetScrubPII() {
+				// scrub inputs
+				for _, content := range msg.OfSystem.GetContent() {
+					text := content.GetText()
+					if input.GetScrubPii() {
 						scrubbed, err = scrubber.ScrubTexts([]string{text})
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseV1Alpha2{}, err
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
 					}
-					parts = append(parts, llms.TextPart(text))
+					parts = append(parts, llms.TextContent{
+						Text: text,
+					})
+				}
+
+				langchainMsg = llms.MessageContent{
+					Role:  llms.ChatMessageTypeSystem,
+					Parts: parts,
+				}
+
+			case *runtimev1pb.ConversationMessage_OfUser:
+				var parts []llms.ContentPart
+
+				// scrub inputs
+				for _, content := range msg.OfUser.GetContent() {
+					text := content.GetText()
+					if input.GetScrubPii() {
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
+						}
+						text = scrubbed[0]
+					}
+					parts = append(parts, llms.TextContent{
+						Text: text,
+					})
+				}
+
+				langchainMsg = llms.MessageContent{
+					Role:  llms.ChatMessageTypeHuman,
+					Parts: parts,
+				}
+
+			case *runtimev1pb.ConversationMessage_OfAssistant:
+				var parts []llms.ContentPart
+				for _, content := range msg.OfAssistant.GetContent() {
+					text := content.GetText()
+
+					// scrub inputs
+					if input.GetScrubPii() {
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
+						}
+						text = scrubbed[0]
+					}
+					parts = append(parts, llms.TextContent{
+						Text: text,
+					})
 				}
 
 				langchainMsg = llms.MessageContent{
@@ -306,7 +306,9 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 				}
 
 				if msg.OfAssistant.Refusal != nil {
-					langchainMsg.Parts = append(langchainMsg.Parts, llms.TextPart(msg.OfAssistant.Refusal.Value))
+					langchainMsg.Parts = append(langchainMsg.Parts, llms.TextContent{
+						Text: msg.OfAssistant.GetRefusal(),
+					})
 				}
 
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
@@ -317,38 +319,25 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 					tcfaBytes, err = json.Marshal(tool.GetFunction().GetArguments())
 					if err != nil {
 						a.logger.Debug(err)
-						return &runtimev1pb.ConversationResponseV1Alpha2{}, err
+						return &runtimev1pb.ConversationResponseAlpha2{}, err
+					}
+
+					toolCall := &llms.ToolCall{
+						ID:   tool.GetId(),
+						Type: string(role), // double check if this is right or should be just "function"
+						FunctionCall: &llms.FunctionCall{
+							Name:      tool.GetFunction().GetName(),
+							Arguments: string(tcfaBytes),
+						},
 					}
 
 					// handle mistral edge case on handling tool call message
 					// where it expects a text message instead of a tool call message
-					// if _, ok := component.(*mistral.Mistral); ok {
-					// 	a.logger.Debugf("Processing Mistral tool call: %s(%s)",
-					// 		tool.GetFunction().GetName().String(),
-					// 		string(tcfaBytes))
-
-					// 	toolCall := &llms.ToolCall{
-					// 		ID:   tool.GetId().String(),
-					// 		Type: "function",
-					// 		FunctionCall: &llms.FunctionCall{
-					// 			Name:      tool.GetFunction().GetName().String(),
-					// 			Arguments: string(tcfaBytes),
-					// 		},
-					// 	}
-
-					// 	langchainMsg.Parts = append(langchainMsg.Parts, mistral.CreateMistralCompatibleToolCall(toolCall)...)
-					// } else {
-					// For other providers, use standard tool call
-					toolCall := &llms.ToolCall{
-						ID:   tool.GetId().String(),
-						Type: string(role), // double check if this is right or should be just "function"
-						FunctionCall: &llms.FunctionCall{
-							Name:      tool.GetFunction().GetName().String(),
-							Arguments: string(tcfaBytes),
-						},
+					if _, ok := component.(*mistral.Mistral); ok {
+						langchainMsg.Parts = append(parts, mistral.CreateToolCallPart(toolCall))
+					} else {
+						langchainMsg.Parts = append(langchainMsg.Parts, toolCall)
 					}
-					langchainMsg.Parts = append(langchainMsg.Parts, toolCall)
-					// }
 				}
 
 			case *runtimev1pb.ConversationMessage_OfTool:
@@ -356,55 +345,44 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 
 				toolID := ""
 				if msg.OfTool.ToolId != nil {
-					toolID = msg.OfTool.ToolId.GetValue()
-				}
-
-				toolName := ""
-				if msg.OfTool.Name != nil {
-					toolName = msg.OfTool.Name.GetValue()
+					toolID = msg.OfTool.GetToolId()
 				}
 
 				var parts []llms.ContentPart
 				for _, content := range msg.OfTool.GetContent() {
-					text := content.GetText().GetValue()
+					text := content.GetText()
 
 					// scrub inputs
-					if input.GetScrubPII() {
+					if input.GetScrubPii() {
 						scrubbed, err = scrubber.ScrubTexts([]string{text})
 						if err != nil {
 							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 							a.logger.Debug(err)
-							return &runtimev1pb.ConversationResponseV1Alpha2{}, err
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
 					}
 
-					// wip but pushing for cassie
-					// handle mistral edge case on handling tool call response message
-					// where it expects a text message instead of a tool call response message
-					// if _, ok := component.(*mistral.Mistral); ok {
-					// 	a.logger.Debugf("Processing Mistral tool response: ID=%s, Name=%s, Content=%s",
-					// 		toolID, toolName, text)
+					parts = append(parts, llms.TextContent{
+						Text: text,
+					})
 
-					// 	toolResponse := llms.ToolCallResponse{
-					// 		ToolCallID: toolID,
-					// 		Content:    text,
-					// 		Name:       toolName,
-					// 	}
-
-					// 	parts = append(parts, mistral.CreateMistralCompatibleToolResponse(toolResponse)...)
-					// } else {
-					parts = append(parts, llms.ToolCallResponse{
+					toolCallResponse := llms.ToolCallResponse{
 						ToolCallID: toolID,
 						Content:    text,
-						Name:       toolName,
-					})
-					// }
-				}
+						Name:       msg.OfTool.GetName(),
+					}
 
-				langchainMsg = llms.MessageContent{
-					Role:  llms.ChatMessageTypeTool,
-					Parts: parts,
+					// handle mistral edge case on handling tool call response message
+					// where it expects a text message instead of a tool call response message
+					if _, ok := component.(*mistral.Mistral); ok {
+						langchainMsg = mistral.CreateToolResponseMessage(toolCallResponse)
+					} else {
+						langchainMsg = llms.MessageContent{
+							Role:  llms.ChatMessageTypeTool,
+							Parts: parts,
+						}
+					}
 				}
 
 			default:
@@ -428,6 +406,46 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 	request.Parameters = req.GetParameters()
 	request.ConversationContext = req.GetContextId()
 	request.Temperature = req.GetTemperature()
+	toolChoice := req.GetToolChoice()
+	tools := req.GetTools()
+
+	// set default tool choice
+	if toolChoice == "" {
+		if len(tools) > 0 {
+			toolChoice = "auto"
+		} else {
+			toolChoice = "none"
+		}
+	}
+
+	// validate tool choice
+	switch toolChoice {
+	case "auto", "none":
+	case "required":
+		if len(tools) <= 0 {
+			return &runtimev1pb.ConversationResponseAlpha2{}, errors.New("tool choice must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
+		}
+	default:
+		// user chose a specific tool name that we must validate.
+		// for now, tool name passed in must match casing/syntax specified.
+		if tools != nil {
+			toolNameFound := false
+			for _, tool := range tools {
+				switch t := tool.GetToolTypes().(type) {
+				case *runtimev1pb.ConversationTools_Function:
+					if toolChoice == t.Function.GetName() {
+						toolNameFound = true
+						break
+					}
+				}
+			}
+			if !toolNameFound {
+				return &runtimev1pb.ConversationResponseAlpha2{}, errors.New("tool choice must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
+			}
+		}
+	}
+
+	request.ToolChoice = toolChoice
 
 	if tools := req.GetTools(); tools != nil {
 		availableTools := []llms.Tool{}
@@ -437,12 +455,11 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 				langchainTool := llms.Tool{
 					Type: "function",
 					Function: &llms.FunctionDefinition{
-						Name:        t.Function.GetName().GetValue(),
-						Description: t.Function.GetDescription().GetValue(),
+						Name:        t.Function.GetName(),
+						Description: t.Function.GetDescription(),
 						Parameters:  t.Function.GetParameters(),
 					},
 				}
-
 				availableTools = append(availableTools, langchainTool)
 			}
 		}
@@ -467,11 +484,11 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
-		return &runtimev1pb.ConversationResponseV1Alpha2{}, err
+		return &runtimev1pb.ConversationResponseAlpha2{}, err
 	}
 
 	// handle response
-	response := &runtimev1pb.ConversationResponseV1Alpha2{}
+	response := &runtimev1pb.ConversationResponseAlpha2{}
 	a.logger.Debug(response)
 	if resp != nil {
 		if resp.ConversationContext != "" {
@@ -486,16 +503,16 @@ func (a *Universal) ConverseV1Alpha2(ctx context.Context, req *runtimev1pb.Conve
 				if sErr != nil {
 					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
 					a.logger.Debug(sErr)
-					return &runtimev1pb.ConversationResponseV1Alpha2{}, sErr
+					return &runtimev1pb.ConversationResponseAlpha2{}, sErr
 				}
 
 				res = scrubbed[0]
 			}
 
-			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResultV1Alpha2{
+			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResultAlpha2{
 				Choices: &runtimev1pb.ConversationResultChoices{
-					Message:      &wrapperspb.StringValue{Value: res},
-					FinishReason: &wrapperspb.StringValue{Value: o.StopReason},
+					Message:      res,
+					FinishReason: o.StopReason,
 					Index:        int64(i),
 				},
 				Parameters: o.Parameters,

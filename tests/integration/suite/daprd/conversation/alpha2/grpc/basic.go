@@ -19,7 +19,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -64,8 +63,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		tool := &rtv1.ConversationTools{
 			ToolTypes: &rtv1.ConversationTools_Function{
 				Function: &rtv1.ConversationToolsFunction{
-					Name:        &wrapperspb.StringValue{Value: "test_function"},
-					Description: &wrapperspb.StringValue{Value: "A test function"},
+					Name:        "test_function",
+					Description: ptr.Of("A test function"),
 					Parameters: map[string]*anypb.Any{
 						"param1": &anypb.Any{Value: []byte(`"string"`)},
 					},
@@ -82,48 +81,44 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			"version": "1.0",
 		}
 
-		resp, err := client.ConverseV1Alpha2(ctx, &rtv1.ConversationRequestV1Alpha2{
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name:      "test-alpha2-echo",
 			ContextId: ptr.Of("test-conversation-123"),
 			// multiple inputs
-			Inputs: []*rtv1.ConversationInputV1Alpha2{
+			Inputs: []*rtv1.ConversationInputAlpha2{
 				{
 					Messages: []*rtv1.ConversationMessage{
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfUser{
 								OfUser: &rtv1.ConversationMessageOfUser{
-									Name: &wrapperspb.StringValue{Value: "test-user"},
+									Name: ptr.Of("test-user"),
 									Content: []*rtv1.ConversationContentMessageContent{
 										{
-											Text: &wrapperspb.StringValue{
-												Value: "well hello there",
-											},
+											Text: "well hello there",
 										},
 									},
 								},
 							},
 						},
 					},
-					ScrubPII: ptr.Of(false),
+					ScrubPii: ptr.Of(false),
 				},
 				{
 					Messages: []*rtv1.ConversationMessage{
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfSystem{
 								OfSystem: &rtv1.ConversationMessageOfSystem{
-									Name: &wrapperspb.StringValue{Value: "test-system"},
+									Name: ptr.Of("test-system"),
 									Content: []*rtv1.ConversationContentMessageContent{
 										{
-											Text: &wrapperspb.StringValue{
-												Value: "You are a helpful assistant",
-											},
+											Text: "You are a helpful assistant",
 										},
 									},
 								},
 							},
 						},
 					},
-					ScrubPII: ptr.Of(true),
+					ScrubPii: ptr.Of(true),
 				},
 			},
 			Parameters:  parameters,
@@ -131,13 +126,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			ScrubPii:    ptr.Of(true),
 			Temperature: ptr.Of(0.7),
 			Tools:       []*rtv1.ConversationTools{tool},
-			ToolChoice:  &wrapperspb.StringValue{Value: "auto"},
+			ToolChoice:  ptr.Of("auto"),
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 2) // Should have outputs for both inputs
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
-		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetChoices().GetMessage().GetValue())
+		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetChoices().GetMessage())
 		require.NotNil(t, resp.GetOutputs()[1].GetChoices())
-		require.Equal(t, "You are a helpful assistant", resp.GetOutputs()[1].GetChoices().GetMessage().GetValue())
+		require.Equal(t, "You are a helpful assistant", resp.GetOutputs()[1].GetChoices().GetMessage())
 	})
 }
