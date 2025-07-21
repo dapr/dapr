@@ -79,12 +79,11 @@ message ConversationRequestAlpha2 {
 
   // Controls which (if any) tool is called by the model. 
   // `none` means the model will not call any tool and instead generates a message. 
-  // `auto` means the model can pick between generating a message or calling one or more tools. 
-  // `required` means the model must call one or more tools. 
-  // Specifying a particular tool via:
-  // `{"type": "function", "function": {"name": "my_function"}}` forces the model to call that tool.
+  // `auto` means the model can pick between generating a message or calling one or more tools.
+  // Alternatively, a specific tool name may be used here, and casing/syntax must match on tool name.
   // `none` is the default when no tools are present.
   // `auto` is the default if tools are present.
+  // `required` requires one or more functions to be called.
   // ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L1976
   // ref: https://python.langchain.com/docs/how_to/tool_choice/
   optional string tool_choice = 9;

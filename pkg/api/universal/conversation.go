@@ -385,6 +385,46 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	request.Parameters = req.GetParameters()
 	request.ConversationContext = req.GetContextId()
 	request.Temperature = req.GetTemperature()
+	toolChoice := req.GetToolChoice()
+	tools := req.GetTools()
+
+	// set default tool choice
+	if toolChoice == "" {
+		if len(tools) > 0 {
+			toolChoice = "auto"
+		} else {
+			toolChoice = "none"
+		}
+	}
+
+	// validate tool choice
+	switch toolChoice {
+	case "auto", "none":
+	case "required":
+		if len(tools) <= 0 {
+			return &runtimev1pb.ConversationResponseAlpha2{}, errors.New("tool choice must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
+		}
+	default:
+		// user chose a specific tool name that we must validate.
+		// for now, tool name passed in must match casing/syntax specified.
+		if tools != nil {
+			toolNameFound := false
+			for _, tool := range tools {
+				switch t := tool.GetToolTypes().(type) {
+				case *runtimev1pb.ConversationTools_Function:
+					if toolChoice == t.Function.GetName() {
+						toolNameFound = true
+						break
+					}
+				}
+			}
+			if !toolNameFound {
+				return &runtimev1pb.ConversationResponseAlpha2{}, errors.New("tool choice must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
+			}
+		}
+	}
+
+	request.ToolChoice = toolChoice
 
 	if tools := req.GetTools(); tools != nil {
 		availableTools := []llms.Tool{}
@@ -399,12 +439,12 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						Parameters:  t.Function.GetParameters(),
 					},
 				}
-
 				availableTools = append(availableTools, langchainTool)
 			}
 		}
 		request.Tools = &availableTools
 	}
+
 	// do call
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*conversation.Response](ctx,
