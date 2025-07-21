@@ -70,7 +70,7 @@ func (b *basicproxy) Run(t *testing.T, ctx context.Context) {
 	b.daprd2.WaitUntilRunning(t, ctx)
 
 	client := testpb.NewTestServiceClient(b.daprd1.GRPCConn(t, ctx))
-	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", b.daprd2.AppID())
+	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", b.daprd2.AppID(), "dapr-caller-app-id", b.daprd1.AppID(), "dapr-callee-app-id", b.daprd2.AppID())
 	_, err := client.Ping(ctx, new(testpb.PingRequest))
 	require.NoError(t, err)
 

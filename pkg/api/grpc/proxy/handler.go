@@ -98,8 +98,6 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	ctx := serverStream.Context()
 	md, _ := metadata.FromIncomingContext(ctx)
 	v := md[diagConsts.GRPCProxyAppIDKey]
-	// Remove the AppId from the metadata as it shouldn't be forwarded to the target gRPC service
-	md.Delete(diagConsts.GRPCProxyAppIDKey)
 
 	// The app id check is handled in the StreamDirector. If we don't have it here, we just use a NoOp policy since we know the request is impossible.
 	var policyDef *resiliency.PolicyDefinition
@@ -164,6 +162,11 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			teardown(false)
 			return nil, err
 		}
+
+		// Remove the AppId from the metadata as it shouldn't be forwarded to the target gRPC service
+		md, _ = metadata.FromOutgoingContext(outgoingCtx)
+		md.Delete(diagConsts.GRPCProxyAppIDKey)
+		outgoingCtx = metadata.NewOutgoingContext(ctx, md.Copy())
 
 		// Do not "defer clientCancel()" yet, in case we need to proxy a stream
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
