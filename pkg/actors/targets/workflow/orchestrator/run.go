@@ -26,6 +26,7 @@ import (
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
@@ -68,6 +69,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	for _, e := range state.Inbox {
 		if es := e.GetExecutionStarted(); es != nil {
 			esHistoryEvent = e
+			if esHistoryEvent.Router == nil {
+				// Set the source app ID for cross-app routing in durabletask-go
+				esHistoryEvent.Router = &protos.TaskRouter{
+					SourceAppID: o.appID,
+				}
+			}
 			break
 		}
 	}
@@ -178,8 +185,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	err = o.saveInternalState(ctx, state)
 	if err != nil {
-		return todo.RunCompletedTrue, err
+		return todo.RunCompletedFalse, err
 	}
+
 	if executionStatus != "" {
 		// If workflow is not completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.

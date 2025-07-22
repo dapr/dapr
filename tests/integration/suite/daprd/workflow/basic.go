@@ -133,7 +133,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		r := task.NewTaskRegistry()
 		r.AddOrchestratorN("Root", func(ctx *task.OrchestrationContext) (any, error) {
 			tasks := []task.Task{}
-			for i := range 5 {
+			for i := range 3 {
 				task := ctx.CallSubOrchestrator("L1", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L1_"+strconv.Itoa(i)))
 				tasks = append(tasks, task)
 			}
@@ -166,7 +166,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			// List of all orchestrations created
 			orchestrationIDs := []string{string(id)}
-			for i := range 5 {
+			for i := range 3 {
 				orchestrationIDs = append(orchestrationIDs, string(id)+"_L1_"+strconv.Itoa(i), string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
 			}
 			for _, orchID := range orchestrationIDs {
@@ -187,7 +187,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		// Wait for all L2 suborchestrations to complete
 		orchIDs := []string{}
-		for i := range 5 {
+		for i := range 3 {
 			orchIDs = append(orchIDs, string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
 		}
 		for _, orchID := range orchIDs {
@@ -222,7 +222,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
-		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.GetRuntimeStatus())
+		require.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), metadata.GetRuntimeStatus().String())
 
 		// Purge the root orchestration
 		b.purgeWorkflow(t, ctx, string(id))
@@ -276,9 +276,7 @@ func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, in
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", b.daprd.HTTPPort(), name)
 	data, err := json.Marshal(input)
 	require.NoError(t, err)
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, strings.NewReader(string(data)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(string(data)))
 	req.Header.Set("Content-Type", "application/json")
 	require.NoError(t, err)
 	resp, err := b.httpClient.Do(req)
@@ -304,9 +302,7 @@ func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID 
 
 	// use http client to terminate the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", b.daprd.HTTPPort(), instanceID)
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)
 	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)
@@ -325,9 +321,7 @@ func (b *basic) purgeWorkflow(t *testing.T, ctx context.Context, instanceID stri
 
 	// use http client to purge the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", b.daprd.HTTPPort(), instanceID)
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)
 	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)

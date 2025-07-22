@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -55,7 +56,6 @@ import (
 var log = logger.NewLogger("dapr.wfengine.backend.actors")
 
 const (
-	defaultNamespace     = "default"
 	WorkflowNameLabelKey = "workflow"
 	ActivityNameLabelKey = "activity"
 	ActorTypePrefix      = "dapr.internal."
@@ -72,6 +72,7 @@ type Options struct {
 
 type Actors struct {
 	appID             string
+	namespace         string
 	workflowActorType string
 	activityActorType string
 
@@ -89,6 +90,7 @@ type Actors struct {
 func New(opts Options) *Actors {
 	return &Actors{
 		appID:                     opts.AppID,
+		namespace:                 opts.Namespace,
 		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
 		actors:                    opts.Actors,
@@ -102,14 +104,12 @@ func New(opts Options) *Actors {
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-	defer cancel()
-
 	atable, err := abe.actors.Table(ctx)
 	if err != nil {
 		return err
 	}
 
+	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
 		AppID:             abe.appID,
 		WorkflowActorType: abe.workflowActorType,
@@ -128,6 +128,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		SchedulerReminders: abe.schedulerReminders,
 		EventSink:          abe.eventSink,
+		ActorTypeBuilder:   actorTypeBuilder,
 	}
 
 	aopts := activity.Options{
@@ -150,6 +151,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		Actors:             abe.actors,
 		SchedulerReminders: abe.schedulerReminders,
+		ActorTypeBuilder:   actorTypeBuilder,
 	}
 
 	workflowFactory, activityFactory, err := workflow.Factories(ctx, oopts, aopts)

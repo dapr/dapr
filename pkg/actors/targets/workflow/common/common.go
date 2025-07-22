@@ -11,28 +11,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package idler
+package common
 
-import (
-	"time"
-
-	"github.com/dapr/dapr/pkg/actors/targets"
-)
-
-// idler is a wrapper for an actor which should be idled in some time in the
-// future.
-type idler struct {
-	targets.Interface
-	idleTime time.Time
+type ActorTypeBuilder struct {
+	ns string
 }
 
-func New(actor targets.Interface, idleIn time.Duration) targets.Idlable {
-	return &idler{
-		Interface: actor,
-		idleTime:  time.Now().Add(idleIn),
+func NewActorTypeBuilder(namespace string) *ActorTypeBuilder {
+	return &ActorTypeBuilder{
+		ns: namespace,
 	}
 }
 
-func (i *idler) ScheduledTime() time.Time {
-	return i.idleTime
+func (a *ActorTypeBuilder) Workflow(appID string) string {
+	return "dapr.internal." + a.ns + "." + appID + ".workflow"
+}
+
+func (a *ActorTypeBuilder) Activity(appID string) string {
+	return "dapr.internal." + a.ns + "." + appID + ".activity"
 }

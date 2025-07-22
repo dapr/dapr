@@ -64,5 +64,5 @@ func (r *resumelate) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, time.Since(start), time.Second*11)
+	assert.GreaterOrEqual(t, time.Since(start).Seconds(), 11.0)
 }
