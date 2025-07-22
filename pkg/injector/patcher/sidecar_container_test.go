@@ -1463,7 +1463,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				args := strings.Join(container.Args, " ")
-				assert.Contains(t, args, "--sentry-request-jwt-audiencest-jwt-audiences api.example.com")
+				assert.Contains(t, args, "--sentry-request-jwt-audiences api.example.com")
 			},
 		},
 		{
@@ -1473,7 +1473,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				args := strings.Join(container.Args, " ")
-				assert.Contains(t, args, "--sentry-request-jwt-audiencest-jwt-audiences api.example.com,auth.example.com,payments.example.com")
+				assert.Contains(t, args, "--sentry-request-jwt-audiences api.example.com,auth.example.com,payments.example.com")
 			},
 		},
 		{

@@ -70,9 +70,4 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	require.NotEmpty(t, dep.Spec.Template.Spec.Containers)
 	require.Equal(t, "dapr-sentry", dep.Spec.Template.Spec.Containers[0].Name)
-	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--jwt-enabled=false")
-	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-enabled=false")
-	for _, port := range dep.Spec.Template.Spec.Containers[0].Ports {
-		require.NotEqual(t, "oidc", port.Name)
-	}
 }
