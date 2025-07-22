@@ -173,20 +173,22 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 	// prepare request
 	request := &conversation.Request{}
-	err := kmeta.DecodeMetadata(req.GetMetadata(), request)
+	var err error
+	err = kmeta.DecodeMetadata(req.GetMetadata(), request)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(req.GetInputs()) == 0 {
-		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
 		return nil, err
 	}
 
-	scrubber, err := piiscrubber.NewDefaultScrubber()
+	var scrubber piiscrubber.Scrubber
+	scrubber, err = piiscrubber.NewDefaultScrubber()
 	if err != nil {
-		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
 		return &runtimev1pb.ConversationResponseAlpha2{}, err
 	}
@@ -196,7 +198,14 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		for _, message := range input.GetMessages() {
 			var (
 				langchainMsg llms.MessageContent
+				scrubbed     []string
 			)
+
+			if message.GetMessageTypes() == nil {
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName())
+				a.logger.Debug(err)
+				return nil, err
+			}
 
 			// Openai allows roles to be passed in; however,
 			// we make them implicit in the backend setting this field based on the input msg type using the langchain role types.
@@ -209,11 +218,11 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				for _, content := range msg.OfDeveloper.GetContent() {
 					text := content.GetText()
 					if input.GetScrubPii() {
-						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
-						if sErr != nil {
-							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-							a.logger.Debug(sErr)
-							return &runtimev1pb.ConversationResponseAlpha2{}, sErr
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
 					}
@@ -223,6 +232,8 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				}
 
 				langchainMsg = llms.MessageContent{
+					// mapped to human based on these options:
+					// https://github.com/tmc/langchaingo/blob/main/llms/chat_messages.go#L18
 					Role:  llms.ChatMessageTypeHuman,
 					Parts: parts,
 				}
@@ -234,11 +245,11 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				for _, content := range msg.OfSystem.GetContent() {
 					text := content.GetText()
 					if input.GetScrubPii() {
-						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
-						if sErr != nil {
-							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-							a.logger.Debug(sErr)
-							return &runtimev1pb.ConversationResponseAlpha2{}, sErr
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
 					}
@@ -259,11 +270,11 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				for _, content := range msg.OfUser.GetContent() {
 					text := content.GetText()
 					if input.GetScrubPii() {
-						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
-						if sErr != nil {
-							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-							a.logger.Debug(sErr)
-							return &runtimev1pb.ConversationResponseAlpha2{}, sErr
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
 					}
@@ -284,27 +295,30 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 					// scrub inputs
 					if input.GetScrubPii() {
-						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
-						if sErr != nil {
-							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-							a.logger.Debug(sErr)
-							return &runtimev1pb.ConversationResponseAlpha2{}, sErr
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
 					}
-					parts = append(parts, llms.TextPart(text))
+					parts = append(parts, llms.TextContent{
+						Text: text,
+					})
 				}
 
 				langchainMsg = llms.MessageContent{
 					Role:  llms.ChatMessageTypeAI,
 					Parts: parts,
 				}
-
+        
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
 					// TODO: scrub anything?
 
 					role := llms.ChatMessageTypeTool
-					tcfaBytes, err := json.Marshal(tool.GetFunction().GetArguments())
+					var tcfaBytes []byte
+					tcfaBytes, err = json.Marshal(tool.GetFunction().GetArguments())
 					if err != nil {
 						a.logger.Debug(err)
 						return &runtimev1pb.ConversationResponseAlpha2{}, err
@@ -342,14 +356,18 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 					// scrub inputs
 					if input.GetScrubPii() {
-						scrubbed, sErr := scrubber.ScrubTexts([]string{text})
-						if sErr != nil {
-							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-							a.logger.Debug(sErr)
-							return &runtimev1pb.ConversationResponseAlpha2{}, sErr
+						scrubbed, err = scrubber.ScrubTexts([]string{text})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						text = scrubbed[0]
 					}
+
+					parts = append(parts, llms.TextContent{
+						Text: text,
+					})
 
 					toolCallResponse := llms.ToolCallResponse{
 						ToolCallID: toolID,
@@ -370,8 +388,9 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				}
 
 			default:
-				// TODO(@Sicoyle): should I create custom conversation err types?
-				return &runtimev1pb.ConversationResponseAlpha2{}, errors.New("message type is invalid")
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName())
+				a.logger.Debug(err)
+				return nil, err
 			}
 			llmMessages = append(llmMessages, &langchainMsg)
 
