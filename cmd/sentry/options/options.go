@@ -78,7 +78,7 @@ type JWTOptions struct {
 type OIDCOptions struct {
 	Enabled             bool
 	ServerListenAddress string
-	ServerListenPort    *int
+	ServerListenPort    int
 	TLSEnabled          bool     // Enable TLS for the OIDC HTTP server
 	TLSCertFile         *string  // TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
 	TLSKeyFile          *string  // TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)
@@ -88,11 +88,10 @@ type OIDCOptions struct {
 	Insecure            bool     // Allow HTTP insecure (Optional)
 
 	// sentinel values used to bind to potentially nil pointers
-	serverListenPort int    // Port for the OIDC HTTP server
-	jwksURI          string // Custom URI where the JWKS can be accessed externally
-	pathPrefix       string // Path prefix to add to OIDC HTTP endpoints
-	tlsCertFile      string // TLS certificate file for the OIDC HTTP server
-	tlsKeyFile       string // TLS key file for the OIDC HTTP server
+	jwksURI     string // Custom URI where the JWKS can be accessed externally
+	pathPrefix  string // Path prefix to add to OIDC HTTP endpoints
+	tlsCertFile string // TLS certificate file for the OIDC HTTP server
+	tlsKeyFile  string // TLS key file for the OIDC HTTP server
 }
 
 func New(origArgs []string) *Options {
@@ -136,7 +135,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.JWT.keyID, "jwt-key-id", "", "Key ID (kid) used for JWT signing (defaults to base64 encoded SHA-256 of the signing key)")
 	fs.DurationVar(&opts.JWT.TTL, "jwt-ttl", config.DefaultJWTTTL, "Time-to-live for JWT tokens (default 24h)")
 	fs.BoolVar(&opts.OIDC.Enabled, "oidc-enabled", false, "Enable OIDC HTTP server for Dapr Sentry")
-	fs.IntVar(&opts.OIDC.serverListenPort, "oidc-server-listen-port", 8080, "The port for the OIDC HTTP server")
+	fs.IntVar(&opts.OIDC.ServerListenPort, "oidc-server-listen-port", 9080, "The port for the OIDC HTTP server")
 	fs.StringVar(&opts.OIDC.ServerListenAddress, "oidc-server-listen-address", "0.0.0.0", "The address for the OIDC HTTP server")
 	fs.BoolVar(&opts.OIDC.TLSEnabled, "oidc-server-tls-enabled", true, "Serve OIDC HTTP with TLS")
 	fs.StringVar(&opts.OIDC.tlsCertFile, "oidc-server-tls-cert-file", "", "TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
@@ -160,9 +159,6 @@ func New(origArgs []string) *Options {
 	// Ignore errors; flagset is set for ExitOnError
 	_ = fs.Parse(args)
 
-	if fs.Changed("oidc-server-listen-port") {
-		opts.OIDC.ServerListenPort = &opts.OIDC.serverListenPort
-	}
 	if fs.Changed("oidc-server-tls-cert-file") {
 		opts.OIDC.TLSCertFile = &opts.OIDC.tlsCertFile
 	}

@@ -119,8 +119,8 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--reminders-service", c.RemindersService)
 	}
 
-	if c.JwtAudiences != "" {
-		args = append(args, "--jwt-audiences", c.JwtAudiences)
+	if c.SentryRequestJwtAudiences != "" {
+		args = append(args, "--sentry-request-jwt-audiences", c.SentryRequestJwtAudiences)
 	}
 
 	// --enable-api-logging is set if and only if there's an explicit value (true or false) for that

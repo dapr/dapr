@@ -76,5 +76,5 @@ const (
 	KeyPluggableComponentContainer      = "dapr.io/component-container"
 	KeyPluggableComponentsInjection     = "dapr.io/inject-pluggable-components"
 	KeyAppChannel                       = "dapr.io/app-channel-address"
-	KeyJwtAudiences                     = "dapr.io/jwt-audiences"
+	KeySentryRequestJwtAudiences        = "dapr.io/sentry-request-jwt-audiences"
 )

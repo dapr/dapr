@@ -123,7 +123,7 @@ func Run() {
 		MTLSEnabled:             opts.EnableMTLS,
 		Mode:                    modes.DaprMode(opts.Mode),
 		Healthz:                 healthz,
-		JwtAudiences:            opts.JwtAudiences,
+		JwtAudiences:            opts.SentryRequestJwtAudiences,
 	})
 	if err != nil {
 		log.Fatal(err)

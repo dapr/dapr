@@ -118,7 +118,7 @@ type SidecarConfig struct {
 	ComponentContainer                  string  `annotation:"dapr.io/component-container"`
 	InjectPluggableComponents           bool    `annotation:"dapr.io/inject-pluggable-components"`
 	AppChannelAddress                   string  `annotation:"dapr.io/app-channel-address"`
-	JwtAudiences                        string  `annotation:"dapr.io/jwt-audiences"`
+	SentryRequestJwtAudiences           string  `annotation:"dapr.io/sentry-request-jwt-audiences"`
 
 	pod *corev1.Pod
 }
