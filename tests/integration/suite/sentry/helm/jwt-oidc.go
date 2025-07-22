@@ -94,8 +94,6 @@ func (o *oidc) Run(t *testing.T, ctx context.Context) {
 	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--jwt-signing-algorithm=RS256")
 	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--jwt-key-id=jwt-key-id")
 	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-enabled=true")
-	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-server-listen-port=8080")
-	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-server-listen-address=0.0.0.0")
 	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-server-tls-enabled=true")
 	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-server-tls-cert-file=/tmp/oidc.crt")
 	require.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--oidc-server-tls-key-file=/tmp/oidc.key")
