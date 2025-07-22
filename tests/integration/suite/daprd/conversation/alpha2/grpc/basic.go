@@ -68,7 +68,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					Name:        "test_function",
 					Description: ptr.Of("A test function"),
 					Parameters: map[string]*anypb.Any{
-						"param1": &anypb.Any{
+						"param1": {
 							Value: []byte(`"string"`),
 						},
 					},
@@ -77,8 +77,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}
 
 		parameters := map[string]*anypb.Any{
-			"max_tokens": &anypb.Any{Value: []byte(`100`)},
-			"model":      &anypb.Any{Value: []byte(`"test-model"`)},
+			"max_tokens": {Value: []byte(`100`)},
+			"model":      {Value: []byte(`"test-model"`)},
 		}
 		metadata := map[string]string{
 			"api_key": "test-key",
@@ -187,7 +187,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 											ToolTypes: &rtv1.ConversationToolCalls_Function{
 												Function: &rtv1.ConversationToolCallsOfFunction{
 													Name:      "test_function",
-													Arguments: "test-string",
+													Arguments: `{"test": "value"}`,
 												},
 											},
 										},
@@ -201,7 +201,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, "test-string", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetToolCalls()[0].GetFunction().GetArguments())
+		require.Equal(t, `{"test": "value"}`, resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetToolCalls()[0].GetFunction().GetArguments())
 	})
 
 	t.Run("malformed tool call", func(t *testing.T) {

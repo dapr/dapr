@@ -193,7 +193,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 										"id": "id 123",
 										"function": {
 											"name": "test_function",
-											"arguments": "test-string"
+											"arguments": "{\"test\": \"value\"}"
 										}
 									}
 								]
@@ -226,7 +226,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 										"id": "id 123",
 										"function": {
 											"name": "test_function",
-											"arguments": "test-string"
+											"arguments": "{\"test\": \"value\"}"
 										}
 									}
 								]
