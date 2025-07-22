@@ -69,9 +69,9 @@ const (
 	TracestateHeader  = "tracestate"
 	BaggageHeader     = "baggage"
 
-	GRPCTraceContextKey = "grpc-trace-bin"
-	GRPCProxyAppIDKey   = "dapr-app-id"
-
+	GRPCTraceContextKey  = "grpc-trace-bin"
+	GRPCProxyAppIDKey    = "dapr-app-id"
+	GRPCProxyCalleeIDKey = "dapr-callee-app-id"
 	// Trace sampling constants
 	SupportedVersion = 0
 	MaxVersion       = 254

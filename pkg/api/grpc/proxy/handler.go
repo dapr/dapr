@@ -163,6 +163,11 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			return nil, err
 		}
 
+		// Remove the AppId from the metadata as it shouldn't be forwarded to the target gRPC service
+		md, _ = metadata.FromOutgoingContext(outgoingCtx)
+		md.Delete(diagConsts.GRPCProxyAppIDKey)
+		outgoingCtx = metadata.NewOutgoingContext(ctx, md.Copy())
+
 		// Do not "defer clientCancel()" yet, in case we need to proxy a stream
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 
