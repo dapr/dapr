@@ -257,13 +257,14 @@ func Run() {
 
 // createOIDCTLSConfig creates a TLS configuration for the OIDC HTTP server
 func createOIDCTLSConfig(certFile, keyFile string) (*tls.Config, error) {
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, err
-	}
-
 	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
+		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				return nil, err
+			}
+			return &cert, nil
+		},
+		MinVersion: tls.VersionTLS12,
 	}, nil
 }
