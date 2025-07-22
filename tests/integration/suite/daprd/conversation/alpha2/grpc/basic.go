@@ -18,6 +18,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -66,24 +68,27 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					Name:        "test_function",
 					Description: ptr.Of("A test function"),
 					Parameters: map[string]*anypb.Any{
-						"param1": &anypb.Any{Value: []byte(`"string"`)},
+						"param1": {
+							Value: []byte(`"string"`),
+						},
 					},
 				},
 			},
 		}
 
 		parameters := map[string]*anypb.Any{
-			"max_tokens": &anypb.Any{Value: []byte(`100`)},
-			"model":      &anypb.Any{Value: []byte(`"test-model"`)},
+			"max_tokens": {Value: []byte(`100`)},
+			"model":      {Value: []byte(`"test-model"`)},
 		}
 		metadata := map[string]string{
 			"api_key": "test-key",
 			"version": "1.0",
 		}
 
+		contextID := "test-conversation-123"
 		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name:      "test-alpha2-echo",
-			ContextId: ptr.Of("test-conversation-123"),
+			ContextId: ptr.Of(contextID),
 			// multiple inputs
 			Inputs: []*rtv1.ConversationInputAlpha2{
 				{
@@ -92,7 +97,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 							MessageTypes: &rtv1.ConversationMessage_OfUser{
 								OfUser: &rtv1.ConversationMessageOfUser{
 									Name: ptr.Of("test-user"),
-									Content: []*rtv1.ConversationContentMessageContent{
+									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "well hello there",
 										},
@@ -109,7 +114,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 							MessageTypes: &rtv1.ConversationMessage_OfSystem{
 								OfSystem: &rtv1.ConversationMessageOfSystem{
 									Name: ptr.Of("test-system"),
-									Content: []*rtv1.ConversationContentMessageContent{
+									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "You are a helpful assistant",
 										},
@@ -129,8 +134,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			ToolChoice:  ptr.Of("auto"),
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 2) // Should have outputs for both inputs
-
+		// Echo component returns the last message as the output
+		require.Len(t, resp.GetOutputs(), 1)
+		require.Equal(t, contextID, resp.GetContextId())
 		// user message output
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
@@ -138,19 +144,96 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "stop", choices0.GetFinishReason())
 		require.Equal(t, int64(0), choices0.GetIndex())
 		require.NotNil(t, choices0.GetMessage())
-		require.Equal(t, "well hello there", choices0.GetMessage().GetContent())
-		require.Empty(t, choices0.GetMessage().GetRefusal())
+		require.Equal(t, "You are a helpful assistant", choices0.GetMessage().GetContent())
 		require.Empty(t, choices0.GetMessage().GetToolCalls())
+	})
 
-		// system message output
-		require.NotNil(t, resp.GetOutputs()[1].GetChoices())
-		require.Len(t, resp.GetOutputs()[1].GetChoices(), 1)
-		choices1 := resp.GetOutputs()[1].GetChoices()[0]
-		require.Equal(t, "stop", choices1.GetFinishReason())
-		require.Equal(t, int64(1), choices1.GetIndex())
-		require.NotNil(t, choices1.GetMessage())
-		require.Equal(t, "You are a helpful assistant", choices1.GetMessage().GetContent())
-		require.Empty(t, choices1.GetMessage().GetRefusal())
-		require.Empty(t, choices1.GetMessage().GetToolCalls())
+	t.Run("invalid json - malformed request", func(t *testing.T) {
+		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							// This will err
+							MessageTypes: nil,
+						},
+					},
+				},
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("correct tool call", func(t *testing.T) {
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
+								OfAssistant: &rtv1.ConversationMessageOfAssistant{
+									Name: ptr.Of("assistant name"),
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "assistant message",
+										},
+									},
+									ToolCalls: []*rtv1.ConversationToolCalls{
+										{
+											Id: ptr.Of("id 123"),
+											ToolTypes: &rtv1.ConversationToolCalls_Function{
+												Function: &rtv1.ConversationToolCallsOfFunction{
+													Name:      "test_function",
+													Arguments: `{"test": "value"}`,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.GetOutputs(), 1)
+		require.Equal(t, `{"test": "value"}`, resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetToolCalls()[0].GetFunction().GetArguments())
+	})
+
+	t.Run("malformed tool call", func(t *testing.T) {
+		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
+								OfAssistant: &rtv1.ConversationMessageOfAssistant{
+									Name: ptr.Of("assistant name"),
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "assistant message",
+										},
+									},
+									ToolCalls: []*rtv1.ConversationToolCalls{
+										{
+											Id: ptr.Of("call_123"),
+											// This should err
+											ToolTypes: nil,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 }

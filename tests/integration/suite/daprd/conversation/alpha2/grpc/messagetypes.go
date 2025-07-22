@@ -69,7 +69,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 							MessageTypes: &rtv1.ConversationMessage_OfUser{
 								OfUser: &rtv1.ConversationMessageOfUser{
 									Name: ptr.Of("user name"),
-									Content: []*rtv1.ConversationContentMessageContent{
+									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "user message",
 										},
@@ -90,7 +90,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, int64(0), choices.GetIndex())
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "user message", choices.GetMessage().GetContent())
-		require.Empty(t, choices.GetMessage().GetRefusal())
+		// Test that toolCalls field is present but not populated for echo
 		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
@@ -104,7 +104,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 							MessageTypes: &rtv1.ConversationMessage_OfSystem{
 								OfSystem: &rtv1.ConversationMessageOfSystem{
 									Name: ptr.Of("system name"),
-									Content: []*rtv1.ConversationContentMessageContent{
+									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "system message",
 										},
@@ -125,7 +125,6 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, int64(0), choices.GetIndex())
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "system message", choices.GetMessage().GetContent())
-		require.Empty(t, choices.GetMessage().GetRefusal())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
@@ -139,7 +138,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 							MessageTypes: &rtv1.ConversationMessage_OfDeveloper{
 								OfDeveloper: &rtv1.ConversationMessageOfDeveloper{
 									Name: ptr.Of("dev name"),
-									Content: []*rtv1.ConversationContentMessageContent{
+									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "developer message",
 										},
@@ -160,7 +159,6 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, int64(0), choices.GetIndex())
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "developer message", choices.GetMessage().GetContent())
-		require.Empty(t, choices.GetMessage().GetRefusal())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
@@ -174,9 +172,20 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
 								OfAssistant: &rtv1.ConversationMessageOfAssistant{
 									Name: ptr.Of("assistant name"),
-									Content: []*rtv1.ConversationContentMessageContent{
+									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "assistant message",
+										},
+									},
+									ToolCalls: []*rtv1.ConversationToolCalls{
+										{
+											Id: ptr.Of("call_123"),
+											ToolTypes: &rtv1.ConversationToolCalls_Function{
+												Function: &rtv1.ConversationToolCallsOfFunction{
+													Name:      "test_function",
+													Arguments: "test-string",
+												},
+											},
 										},
 									},
 								},
@@ -187,16 +196,21 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 			},
 		})
 		require.NoError(t, err)
+		// Echo component returns the assistant message with tool calls
 		require.Len(t, resp.GetOutputs(), 1)
+
+		// assistant message with tool calls
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
-		choices := resp.GetOutputs()[0].GetChoices()[0]
-		require.Equal(t, "stop", choices.GetFinishReason())
-		require.Equal(t, int64(0), choices.GetIndex())
-		require.NotNil(t, choices.GetMessage())
-		require.Equal(t, "assistant message", choices.GetMessage().GetContent())
-		require.Empty(t, choices.GetMessage().GetRefusal())
-		require.Empty(t, choices.GetMessage().GetToolCalls())
+		choices0 := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "stop", choices0.GetFinishReason())
+		require.Equal(t, int64(0), choices0.GetIndex())
+		require.NotNil(t, choices0.GetMessage())
+		require.Equal(t, "assistant message", choices0.GetMessage().GetContent())
+		require.NotEmpty(t, choices0.GetMessage().GetToolCalls())
+		require.Equal(t, "call_123", choices0.GetMessage().GetToolCalls()[0].GetId())
+		require.Equal(t, "test_function", choices0.GetMessage().GetToolCalls()[0].GetFunction().GetName())
+		require.Equal(t, "test-string", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetToolCalls()[0].GetFunction().GetArguments())
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
@@ -210,7 +224,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 								OfTool: &rtv1.ConversationMessageOfTool{
 									ToolId: ptr.Of("tool-123"),
 									Name:   "tool name",
-									Content: []*rtv1.ConversationContentMessageContent{
+									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "tool message",
 										},
@@ -231,7 +245,80 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, int64(0), choices.GetIndex())
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "tool message", choices.GetMessage().GetContent())
-		require.Empty(t, choices.GetMessage().GetRefusal())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
+	})
+
+	t.Run("multiple messages in conversation", func(t *testing.T) {
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Name: ptr.Of("user-1"),
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "first user message",
+										},
+									},
+								},
+							},
+						},
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
+								OfAssistant: &rtv1.ConversationMessageOfAssistant{
+									Name: ptr.Of("assistant-1"),
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "first assistant response",
+										},
+									},
+								},
+							},
+						},
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfUser{
+								OfUser: &rtv1.ConversationMessageOfUser{
+									Name: ptr.Of("user-2"),
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "second user message",
+										},
+									},
+								},
+							},
+						},
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfSystem{
+								OfSystem: &rtv1.ConversationMessageOfSystem{
+									Name: ptr.Of("system-1"),
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "system instruction",
+										},
+									},
+								},
+							},
+						},
+					},
+					ScrubPii: ptr.Of(false),
+				},
+			},
+		})
+		require.NoError(t, err)
+		// Echo component returns the last message (system instruction)
+		require.Len(t, resp.GetOutputs(), 1)
+
+		// system instruction
+		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
+		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
+		choices0 := resp.GetOutputs()[0].GetChoices()[0]
+		require.Equal(t, "stop", choices0.GetFinishReason())
+		require.Equal(t, int64(0), choices0.GetIndex())
+		require.NotNil(t, choices0.GetMessage())
+		require.Equal(t, "system instruction", choices0.GetMessage().GetContent())
+		require.Empty(t, choices0.GetMessage().GetToolCalls())
 	})
 }

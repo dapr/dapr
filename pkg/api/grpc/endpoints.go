@@ -129,7 +129,7 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/ConverseAlpha1",
 	},
 	"conversation.v1alpha2": {
-		daprRuntimePrefix + "v1.Dapr/ConverseV1Alpha2",
+		daprRuntimePrefix + "v1.Dapr/ConverseAlpha2",
 	},
 }
 
