@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -91,8 +90,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, int64(0), choices.GetIndex())
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "user message", choices.GetMessage().GetContent())
-		// Test that refusal, toolCalls fields are present but not populated for echo
-		require.Empty(t, choices.GetMessage().GetRefusal())
+		// Test that toolCalls field is present but not populated for echo
 		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
@@ -127,7 +125,6 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, int64(0), choices.GetIndex())
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "system message", choices.GetMessage().GetContent())
-		require.Empty(t, choices.GetMessage().GetRefusal())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
@@ -162,7 +159,6 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, int64(0), choices.GetIndex())
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "developer message", choices.GetMessage().GetContent())
-		require.Empty(t, choices.GetMessage().GetRefusal())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
@@ -186,15 +182,12 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 											Id: ptr.Of("call_123"),
 											ToolTypes: &rtv1.ConversationToolCalls_Function{
 												Function: &rtv1.ConversationToolCallsOfFunction{
-													Name: "test_function",
-													Arguments: map[string]*anypb.Any{
-														"arg1": &anypb.Any{Value: []byte(`"value1"`)},
-													},
+													Name:      "test_function",
+													Arguments: "test-string",
 												},
 											},
 										},
 									},
-									Refusal: ptr.Of("I cannot help with that request"),
 								},
 							},
 						},
@@ -203,11 +196,10 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 			},
 		})
 		require.NoError(t, err)
-		// Echo component returns separate outputs for content, refusal, and tool calls
-		require.Len(t, resp.GetOutputs(), 3)
+		// Echo component returns the assistant message with tool calls
+		require.Len(t, resp.GetOutputs(), 1)
 
-		// @sicoyle I think this should be one output
-		// First output: content
+		// assistant message with tool calls
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		choices0 := resp.GetOutputs()[0].GetChoices()[0]
@@ -215,30 +207,10 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, int64(0), choices0.GetIndex())
 		require.NotNil(t, choices0.GetMessage())
 		require.Equal(t, "assistant message", choices0.GetMessage().GetContent())
-		require.Empty(t, choices0.GetMessage().GetRefusal())
-		require.Empty(t, choices0.GetMessage().GetToolCalls())
-
-		// Second output: refusal
-		require.NotNil(t, resp.GetOutputs()[1].GetChoices())
-		require.Len(t, resp.GetOutputs()[1].GetChoices(), 1)
-		choices1 := resp.GetOutputs()[1].GetChoices()[0]
-		require.Equal(t, "stop", choices1.GetFinishReason())
-		require.Equal(t, int64(0), choices1.GetIndex())
-		require.NotNil(t, choices1.GetMessage())
-		require.Equal(t, "I cannot help with that request", choices1.GetMessage().GetContent())
-		require.Empty(t, choices1.GetMessage().GetRefusal())
-		require.Empty(t, choices1.GetMessage().GetToolCalls())
-
-		// Third output: tool call
-		require.NotNil(t, resp.GetOutputs()[2].GetChoices())
-		require.Len(t, resp.GetOutputs()[2].GetChoices(), 1)
-		choices2 := resp.GetOutputs()[2].GetChoices()[0]
-		require.Equal(t, "stop", choices2.GetFinishReason())
-		require.Equal(t, int64(0), choices2.GetIndex())
-		require.NotNil(t, choices2.GetMessage())
-		require.Contains(t, choices2.GetMessage().GetContent(), "test_function")
-		require.Empty(t, choices2.GetMessage().GetRefusal())
-		require.Empty(t, choices2.GetMessage().GetToolCalls())
+		require.NotEmpty(t, choices0.GetMessage().GetToolCalls())
+		require.Equal(t, "call_123", choices0.GetMessage().GetToolCalls()[0].GetId())
+		require.Equal(t, "test_function", choices0.GetMessage().GetToolCalls()[0].GetFunction().GetName())
+		require.Equal(t, "test-string", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetToolCalls()[0].GetFunction().GetArguments())
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
@@ -273,7 +245,6 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, int64(0), choices.GetIndex())
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "tool message", choices.GetMessage().GetContent())
-		require.Empty(t, choices.GetMessage().GetRefusal())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
@@ -337,51 +308,17 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 			},
 		})
 		require.NoError(t, err)
-		// Echo component returns separate outputs for each message
-		require.Len(t, resp.GetOutputs(), 4)
+		// Echo component returns the last message (system instruction)
+		require.Len(t, resp.GetOutputs(), 1)
 
-		// First output: first user message
+		// system instruction
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		choices0 := resp.GetOutputs()[0].GetChoices()[0]
 		require.Equal(t, "stop", choices0.GetFinishReason())
 		require.Equal(t, int64(0), choices0.GetIndex())
 		require.NotNil(t, choices0.GetMessage())
-		require.Equal(t, "first user message", choices0.GetMessage().GetContent())
-		require.Empty(t, choices0.GetMessage().GetRefusal())
+		require.Equal(t, "system instruction", choices0.GetMessage().GetContent())
 		require.Empty(t, choices0.GetMessage().GetToolCalls())
-
-		// Second output: first assistant response
-		require.NotNil(t, resp.GetOutputs()[1].GetChoices())
-		require.Len(t, resp.GetOutputs()[1].GetChoices(), 1)
-		choices1 := resp.GetOutputs()[1].GetChoices()[0]
-		require.Equal(t, "stop", choices1.GetFinishReason())
-		require.Equal(t, int64(1), choices1.GetIndex())
-		require.NotNil(t, choices1.GetMessage())
-		require.Equal(t, "first assistant response", choices1.GetMessage().GetContent())
-		require.Empty(t, choices1.GetMessage().GetRefusal())
-		require.Empty(t, choices1.GetMessage().GetToolCalls())
-
-		// Third output: second user message
-		require.NotNil(t, resp.GetOutputs()[2].GetChoices())
-		require.Len(t, resp.GetOutputs()[2].GetChoices(), 1)
-		choices2 := resp.GetOutputs()[2].GetChoices()[0]
-		require.Equal(t, "stop", choices2.GetFinishReason())
-		require.Equal(t, int64(2), choices2.GetIndex())
-		require.NotNil(t, choices2.GetMessage())
-		require.Equal(t, "second user message", choices2.GetMessage().GetContent())
-		require.Empty(t, choices2.GetMessage().GetRefusal())
-		require.Empty(t, choices2.GetMessage().GetToolCalls())
-
-		// Fourth output: system instruction
-		require.NotNil(t, resp.GetOutputs()[3].GetChoices())
-		require.Len(t, resp.GetOutputs()[3].GetChoices(), 1)
-		choices3 := resp.GetOutputs()[3].GetChoices()[0]
-		require.Equal(t, "stop", choices3.GetFinishReason())
-		require.Equal(t, int64(3), choices3.GetIndex())
-		require.NotNil(t, choices3.GetMessage())
-		require.Equal(t, "system instruction", choices3.GetMessage().GetContent())
-		require.Empty(t, choices3.GetMessage().GetRefusal())
-		require.Empty(t, choices3.GetMessage().GetToolCalls())
 	})
 }

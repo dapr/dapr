@@ -141,7 +141,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		// Should have outputs for both inputs
+		// Echo component combines messages from multiple inputs into one output
 		expectedResponse := `{
 			"contextId": "test-conversation-123",
 			"outputs": [
@@ -149,17 +149,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					"choices": [
 						{
 							"finishReason": "stop",
-							"message": {
-								"content": "well hello there"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"index": "1",
 							"message": {
 								"content": "You are a helpful assistant"
 							}
@@ -204,12 +193,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 										"id": "id 123",
 										"function": {
 											"name": "test_function",
-											"arguments": {
-												"arg1": {
-													"@type": "type.googleapis.com/google.protobuf.StringValue",
-													"value": "valid string"
-												}
-											}
+											"arguments": "test-string"
 										}
 									}
 								]
@@ -228,6 +212,31 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, respBody)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
+
+		expectedResponse := `{
+			"outputs": [
+				{
+					"choices": [
+						{
+							"finishReason": "stop",
+							"message": {
+								"content": "assistant message",
+								"toolCalls": [
+									{
+										"id": "id 123",
+										"function": {
+											"name": "test_function",
+											"arguments": "test-string"
+										}
+									}
+								]
+							}
+						}
+					]
+				}
+			]
+		}`
+		require.JSONEq(t, expectedResponse, string(respBody))
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
 

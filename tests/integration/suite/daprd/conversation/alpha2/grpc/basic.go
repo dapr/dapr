@@ -68,7 +68,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					Name:        "test_function",
 					Description: ptr.Of("A test function"),
 					Parameters: map[string]*anypb.Any{
-						"param1": &anypb.Any{Value: []byte(`"string"`)},
+						"param1": &anypb.Any{
+							Value: []byte(`"string"`),
+						},
 					},
 				},
 			},
@@ -132,7 +134,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			ToolChoice:  ptr.Of("auto"),
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 2) // Should have outputs for both inputs
+		// Echo component returns the last message as the output
+		require.Len(t, resp.GetOutputs(), 1)
 		require.Equal(t, contextID, resp.GetContextId())
 		// user message output
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
@@ -141,20 +144,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "stop", choices0.GetFinishReason())
 		require.Equal(t, int64(0), choices0.GetIndex())
 		require.NotNil(t, choices0.GetMessage())
-		require.Equal(t, "well hello there", choices0.GetMessage().GetContent())
-		require.Empty(t, choices0.GetMessage().GetRefusal())
+		require.Equal(t, "You are a helpful assistant", choices0.GetMessage().GetContent())
 		require.Empty(t, choices0.GetMessage().GetToolCalls())
-
-		// system message output
-		require.NotNil(t, resp.GetOutputs()[1].GetChoices())
-		require.Len(t, resp.GetOutputs()[1].GetChoices(), 1)
-		choices1 := resp.GetOutputs()[1].GetChoices()[0]
-		require.Equal(t, "stop", choices1.GetFinishReason())
-		require.Equal(t, int64(1), choices1.GetIndex())
-		require.NotNil(t, choices1.GetMessage())
-		require.Equal(t, "You are a helpful assistant", choices1.GetMessage().GetContent())
-		require.Empty(t, choices1.GetMessage().GetRefusal())
-		require.Empty(t, choices1.GetMessage().GetToolCalls())
 	})
 
 	t.Run("invalid json - malformed request", func(t *testing.T) {
@@ -176,7 +167,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("correct tool call", func(t *testing.T) {
-		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name: "test-alpha2-echo",
 			Inputs: []*rtv1.ConversationInputAlpha2{
 				{
@@ -195,10 +186,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 											Id: ptr.Of("id 123"),
 											ToolTypes: &rtv1.ConversationToolCalls_Function{
 												Function: &rtv1.ConversationToolCallsOfFunction{
-													Name: "test_function",
-													Arguments: map[string]*anypb.Any{
-														"arg1": &anypb.Any{Value: []byte(`"valid string"`)},
-													},
+													Name:      "test_function",
+													Arguments: "test-string",
 												},
 											},
 										},
@@ -211,6 +200,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			},
 		})
 		require.NoError(t, err)
+		require.Len(t, resp.GetOutputs(), 1)
+		require.Equal(t, "test-string", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetToolCalls()[0].GetFunction().GetArguments())
 	})
 
 	t.Run("malformed tool call", func(t *testing.T) {

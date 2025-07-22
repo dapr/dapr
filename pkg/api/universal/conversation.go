@@ -15,14 +15,12 @@ package universal
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
-	piiscrubber "github.com/aavaz-ai/pii-scrubber"
 	"github.com/tmc/langchaingo/llms"
-	"google.golang.org/protobuf/types/known/anypb"
 
+	piiscrubber "github.com/aavaz-ai/pii-scrubber"
 	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/conversation/mistral"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -323,20 +321,13 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					}
 
 					role := llms.ChatMessageTypeTool
-					var tcfaBytes []byte
-					tcfaBytes, err = json.Marshal(tool.GetFunction().GetArguments())
-					if err != nil {
-						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), err.Error())
-						a.logger.Debug(err)
-						return nil, err
-					}
 
 					toolCall := &llms.ToolCall{
 						ID:   tool.GetId(),
 						Type: string(role), // double check if this is right or should be just "function"
 						FunctionCall: &llms.FunctionCall{
 							Name:      tool.GetFunction().GetName(),
-							Arguments: string(tcfaBytes),
+							Arguments: tool.GetFunction().GetArguments(),
 						},
 					}
 
@@ -529,32 +520,11 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				// handle tool call results for user to then execute locally
 				if choice.Message.ToolCallRequest != nil {
 					for _, toolCall := range *choice.Message.ToolCallRequest {
-						var argsMap map[string]any
-						arguments := make(map[string]*anypb.Any)
-
-						// some tools may or may not have arguments
-						if toolCall.FunctionCall.Arguments != "" {
-							err = json.Unmarshal([]byte(toolCall.FunctionCall.Arguments), &argsMap)
-							if err != nil {
-								err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), fmt.Errorf("failed to unmarshal tool call arguments: %w", err))
-								a.logger.Debug(err)
-								return nil, err
-							}
-							// convert parsed arguments to output format
-							for k, v := range argsMap {
-								if vBytes, err := json.Marshal(v); err == nil {
-									arguments[k] = &anypb.Any{
-										Value: vBytes,
-									}
-								}
-							}
-						}
-
 						resultingToolCall := &runtimev1pb.ConversationToolCalls{
 							ToolTypes: &runtimev1pb.ConversationToolCalls_Function{
 								Function: &runtimev1pb.ConversationToolCallsOfFunction{
 									Name:      toolCall.FunctionCall.Name,
-									Arguments: arguments,
+									Arguments: toolCall.FunctionCall.Arguments,
 								},
 							},
 						}

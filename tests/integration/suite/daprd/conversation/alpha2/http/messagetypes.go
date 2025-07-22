@@ -107,7 +107,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("of_assistant", func(t *testing.T) {
-		body := `{"inputs":[{"messages":[{"ofAssistant":{"name":"assistant name","content":[{"text":"assistant message"}],"toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":{"arg1":{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"value1"}}}}],"refusal":"I cannot help with that request"}}]}]}`
+		body := `{"inputs":[{"messages":[{"ofAssistant":{"name":"assistant name","content":[{"text":"assistant message"}],"toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":"test-string"}}]}}]}]}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 		require.NoError(t, err)
@@ -117,8 +117,8 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		// Echo component returns separate outputs for content, refusal, and tool calls
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"assistant message"}}]},{"choices":[{"finishReason":"stop","message":{"content":"I cannot help with that request"}}]},{"choices":[{"finishReason":"stop","message":{"content":"test_function({\"arg1\":{\"type_url\":\"type.googleapis.com/google.protobuf.StringValue\",\"value\":\"CgZ2YWx1ZTE=\"}})"}}]}]}`, string(respBody))
+		// Echo component returns the assistant message with tool calls
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"assistant message","toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":"test-string"}}]}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
@@ -195,45 +195,13 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
+		// only expect last choice from echo
 		expectedResponse := `{
 			"outputs": [
 				{
 					"choices": [
 						{
 							"finishReason": "stop",
-							"message": {
-								"content": "first user message"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"index": "1",
-							"message": {
-								"content": "first assistant response"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"index": "2",
-							"message": {
-								"content": "second user message"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"index": "3",
 							"message": {
 								"content": "system instruction"
 							}
