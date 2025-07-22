@@ -98,9 +98,13 @@ func nopTeardown(destroy bool) {
 func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, *grpcProxy.ProxyTarget, func(destroy bool), error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
-	v := md[diagConsts.GRPCProxyAppIDKey]
+	v := md[diagConsts.GRPCProxyCalleeIDKey]
 	if len(v) == 0 {
-		return ctx, nil, nil, nopTeardown, fmt.Errorf("failed to proxy request: required metadata %s not found", diagConsts.GRPCProxyAppIDKey)
+		log.Debugf("failed to proxy request: required metadata %s not found, fallback to %s", diagConsts.GRPCProxyCalleeIDKey, diagConsts.GRPCProxyAppIDKey)
+		v = md[diagConsts.GRPCProxyAppIDKey]
+		if len(v) == 0 {
+			return ctx, nil, nil, nopTeardown, fmt.Errorf("failed to proxy request: required metadata %s or %s not found", diagConsts.GRPCProxyCalleeIDKey, diagConsts.GRPCProxyAppIDKey)
+		}
 	}
 
 	appID := v[0]
