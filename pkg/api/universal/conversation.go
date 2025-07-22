@@ -312,7 +312,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					Role:  llms.ChatMessageTypeAI,
 					Parts: parts,
 				}
-        
+
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
 					// TODO: scrub anything?
 
