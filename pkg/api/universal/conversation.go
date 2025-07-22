@@ -300,10 +300,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					Parts: parts,
 				}
 
-				if msg.OfAssistant.Refusal != nil {
-					langchainMsg.Parts = append(langchainMsg.Parts, llms.TextPart(msg.OfAssistant.GetRefusal()))
-				}
-
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
 					// TODO: scrub anything?
 
@@ -432,7 +428,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		}
 	}
 
-	request.ToolChoice = toolChoice
+	request.ToolChoice = &toolChoice
 
 	if tools := req.GetTools(); tools != nil {
 		availableTools := []llms.Tool{}
