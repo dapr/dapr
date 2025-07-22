@@ -184,4 +184,88 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
+
+	t.Run("correct tool call", func(t *testing.T) {
+		body := `{
+			"name": "test-alpha2-echo",
+			"inputs": [
+				{
+					"messages": [
+						{
+							"ofAssistant": {
+								"name": "assistant name",
+								"content": [
+									{
+										"text": "assistant message"
+									}
+								],
+								"toolCalls": [
+									{
+										"id": "id 123",
+										"function": {
+											"name": "test_function",
+											"arguments": {
+												"arg1": {
+													"@type": "type.googleapis.com/google.protobuf.StringValue",
+													"value": "valid string"
+												}
+											}
+										}
+									}
+								]
+							}
+						}
+					]
+				}
+			]
+		}`
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		respBody, err := io.ReadAll(resp.Body)
+		require.NotNil(t, respBody)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("malformed tool call", func(t *testing.T) {
+		body := `{
+			"name": "test-alpha2-echo",
+			"inputs": [
+				{
+					"messages": [
+						{
+							"ofAssistant": {
+								"name": "assistant name",
+								"content": [
+									{
+										"text": "assistant message"
+									}
+								],
+								"toolCalls": [
+									{
+										"id": "call_123"
+									}
+								]
+							}
+						}
+					]
+				}
+			]
+		}`
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		respBody, err := io.ReadAll(resp.Body)
+		require.NotNil(t, respBody)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		require.Contains(t, string(respBody), "tool types cannot be nil")
+	})
 }

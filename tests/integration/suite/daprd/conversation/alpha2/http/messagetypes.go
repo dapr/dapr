@@ -107,7 +107,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("of_assistant", func(t *testing.T) {
-		body := `{"inputs":[{"messages":[{"ofAssistant":{"name":"assistant name","content":[{"text":"assistant message"}]}}]}]}`
+		body := `{"inputs":[{"messages":[{"ofAssistant":{"name":"assistant name","content":[{"text":"assistant message"}],"toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":{"arg1":{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"value1"}}}}],"refusal":"I cannot help with that request"}}]}]}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 		require.NoError(t, err)
@@ -117,7 +117,8 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"assistant message"}}]}]}`, string(respBody))
+		// Echo component returns separate outputs for content, refusal, and tool calls
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"assistant message"}}]},{"choices":[{"finishReason":"stop","message":{"content":"I cannot help with that request"}}]},{"choices":[{"finishReason":"stop","message":{"content":"test_function({\"arg1\":{\"type_url\":\"type.googleapis.com/google.protobuf.StringValue\",\"value\":\"CgZ2YWx1ZTE=\"}})"}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
@@ -132,5 +133,115 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"tool message"}}]}]}`, string(respBody))
+	})
+
+	t.Run("multiple messages in conversation", func(t *testing.T) {
+		body := `{
+			"inputs": [
+				{
+					"messages": [
+						{
+							"ofUser": {
+								"name": "user-1",
+								"content": [
+									{
+										"text": "first user message"
+									}
+								]
+							}
+						},
+						{
+							"ofAssistant": {
+								"name": "assistant-1",
+								"content": [
+									{
+										"text": "first assistant response"
+									}
+								]
+							}
+						},
+						{
+							"ofUser": {
+								"name": "user-2",
+								"content": [
+									{
+										"text": "second user message"
+									}
+								]
+							}
+						},
+						{
+							"ofSystem": {
+								"name": "system-1",
+								"content": [
+									{
+										"text": "system instruction"
+									}
+								]
+							}
+						}
+					],
+					"scrubPII": false
+				}
+			]
+		}`
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		expectedResponse := `{
+			"outputs": [
+				{
+					"choices": [
+						{
+							"finishReason": "stop",
+							"message": {
+								"content": "first user message"
+							}
+						}
+					]
+				},
+				{
+					"choices": [
+						{
+							"finishReason": "stop",
+							"index": "1",
+							"message": {
+								"content": "first assistant response"
+							}
+						}
+					]
+				},
+				{
+					"choices": [
+						{
+							"finishReason": "stop",
+							"index": "2",
+							"message": {
+								"content": "second user message"
+							}
+						}
+					]
+				},
+				{
+					"choices": [
+						{
+							"finishReason": "stop",
+							"index": "3",
+							"message": {
+								"content": "system instruction"
+							}
+						}
+					]
+				}
+			]
+		}`
+		require.JSONEq(t, expectedResponse, string(respBody))
 	})
 }

@@ -16,7 +16,6 @@ package universal
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -54,22 +53,24 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		return nil, err
 	}
 
-	scrubber, err := piiscrubber.NewDefaultScrubber()
+	var scrubber piiscrubber.Scrubber
+	scrubber, err = piiscrubber.NewDefaultScrubber()
 	if err != nil {
-		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
 		return &runtimev1pb.ConversationResponse{}, err
 	}
 
+	var scrubbed []string
 	for _, i := range req.GetInputs() {
 		msg := i.GetContent()
 
 		if i.GetScrubPII() {
-			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetContent()})
-			if sErr != nil {
-				sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-				a.logger.Debug(sErr)
-				return &runtimev1pb.ConversationResponse{}, sErr
+			scrubbed, err = scrubber.ScrubTexts([]string{i.GetContent()})
+			if err != nil {
+				err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+				a.logger.Debug(err)
+				return &runtimev1pb.ConversationResponse{}, err
 			}
 
 			msg = scrubbed[0]
@@ -138,11 +139,11 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			res := content
 
 			if req.GetScrubPII() {
-				scrubbed, sErr := scrubber.ScrubTexts([]string{content})
-				if sErr != nil {
-					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-					a.logger.Debug(sErr)
-					return &runtimev1pb.ConversationResponse{}, sErr
+				scrubbed, err = scrubber.ScrubTexts([]string{content})
+				if err != nil {
+					err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+					a.logger.Debug(err)
+					return &runtimev1pb.ConversationResponse{}, err
 				}
 
 				res = scrubbed[0]
@@ -202,7 +203,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			)
 
 			if message.GetMessageTypes() == nil {
-				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName())
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), fmt.Errorf("message type cannot be nil"))
 				a.logger.Debug(err)
 				return nil, err
 			}
@@ -320,14 +321,20 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				}
 
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
-					// TODO: scrub anything?
+					// TODO: @sicoyle, confirm, but I think we need to scrub here
+					if tool.ToolTypes == nil {
+						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), fmt.Errorf("tool types cannot be nil"))
+						a.logger.Debug(err)
+						return nil, err
+					}
 
 					role := llms.ChatMessageTypeTool
 					var tcfaBytes []byte
 					tcfaBytes, err = json.Marshal(tool.GetFunction().GetArguments())
 					if err != nil {
+						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), err.Error())
 						a.logger.Debug(err)
-						return &runtimev1pb.ConversationResponseAlpha2{}, err
+						return nil, err
 					}
 
 					toolCall := &llms.ToolCall{
@@ -349,8 +356,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				}
 
 			case *runtimev1pb.ConversationMessage_OfTool:
-				// TODO: scrub anything?
-
 				toolID := ""
 				if msg.OfTool.ToolId != nil {
 					toolID = msg.OfTool.GetToolId()
@@ -431,7 +436,9 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	case "auto", "none":
 	case "required":
 		if len(tools) <= 0 {
-			return &runtimev1pb.ConversationResponseAlpha2{}, errors.New("tool choice must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
+			err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool choice must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
+			a.logger.Debug(err)
+			return nil, err
 		}
 	default:
 		// user chose a specific tool name that we must validate.
@@ -448,7 +455,9 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				}
 			}
 			if !toolNameFound {
-				return &runtimev1pb.ConversationResponseAlpha2{}, errors.New("tool choice must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool choice not found. Must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
+				a.logger.Debug(err)
+				return nil, err
 			}
 		}
 	}
@@ -474,14 +483,12 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		request.Tools = &availableTools
 	}
 
-	// do call
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*conversation.Response](ctx,
 		a.resiliency.ComponentOutboundPolicy(req.GetName(), resiliency.Conversation),
 	)
 
 	// transform v2 proto -> v1 component request
-
 	resp, err := policyRunner(func(ctx context.Context) (*conversation.Response, error) {
 		rResp, rErr := component.Converse(ctx, request)
 		return rResp, rErr
@@ -513,11 +520,12 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				if choice.Message.Content != "" {
 					content := choice.Message.Content
 					if req.GetScrubPii() {
-						scrubbed, sErr := scrubber.ScrubTexts([]string{content})
-						if sErr != nil {
-							sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
-							a.logger.Debug(sErr)
-							return &runtimev1pb.ConversationResponseAlpha2{}, sErr
+						var scrubbed []string
+						scrubbed, err = scrubber.ScrubTexts([]string{content})
+						if err != nil {
+							err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+							a.logger.Debug(err)
+							return &runtimev1pb.ConversationResponseAlpha2{}, err
 						}
 						content = scrubbed[0]
 					}
@@ -532,9 +540,11 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 						// some tools may or may not have arguments
 						if toolCall.FunctionCall.Arguments != "" {
-							err := json.Unmarshal([]byte(toolCall.FunctionCall.Arguments), &argsMap)
+							err = json.Unmarshal([]byte(toolCall.FunctionCall.Arguments), &argsMap)
 							if err != nil {
-								return &runtimev1pb.ConversationResponseAlpha2{}, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
+								err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), fmt.Errorf("failed to unmarshal tool call arguments: %w", err))
+								a.logger.Debug(err)
+								return nil, err
 							}
 							// convert parsed arguments to output format
 							for k, v := range argsMap {

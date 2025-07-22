@@ -18,6 +18,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -81,9 +83,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			"version": "1.0",
 		}
 
+		contextID := "test-conversation-123"
 		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name:      "test-alpha2-echo",
-			ContextId: ptr.Of("test-conversation-123"),
+			ContextId: ptr.Of(contextID),
 			// multiple inputs
 			Inputs: []*rtv1.ConversationInputAlpha2{
 				{
@@ -92,7 +95,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 							MessageTypes: &rtv1.ConversationMessage_OfUser{
 								OfUser: &rtv1.ConversationMessageOfUser{
 									Name: ptr.Of("test-user"),
-									Content: []*rtv1.ConversationContentMessageContent{
+									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "well hello there",
 										},
@@ -109,7 +112,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 							MessageTypes: &rtv1.ConversationMessage_OfSystem{
 								OfSystem: &rtv1.ConversationMessageOfSystem{
 									Name: ptr.Of("test-system"),
-									Content: []*rtv1.ConversationContentMessageContent{
+									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "You are a helpful assistant",
 										},
@@ -130,7 +133,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 2) // Should have outputs for both inputs
-
+		require.Equal(t, contextID, resp.GetContextId())
 		// user message output
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
@@ -152,5 +155,94 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "You are a helpful assistant", choices1.GetMessage().GetContent())
 		require.Empty(t, choices1.GetMessage().GetRefusal())
 		require.Empty(t, choices1.GetMessage().GetToolCalls())
+	})
+
+	t.Run("invalid json - malformed request", func(t *testing.T) {
+		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							// This will err
+							MessageTypes: nil,
+						},
+					},
+				},
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("correct tool call", func(t *testing.T) {
+		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
+								OfAssistant: &rtv1.ConversationMessageOfAssistant{
+									Name: ptr.Of("assistant name"),
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "assistant message",
+										},
+									},
+									ToolCalls: []*rtv1.ConversationToolCalls{
+										{
+											Id: ptr.Of("id 123"),
+											ToolTypes: &rtv1.ConversationToolCalls_Function{
+												Function: &rtv1.ConversationToolCallsOfFunction{
+													Name: "test_function",
+													Arguments: map[string]*anypb.Any{
+														"arg1": &anypb.Any{Value: []byte(`"valid string"`)},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("malformed tool call", func(t *testing.T) {
+		_, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
+			Name: "test-alpha2-echo",
+			Inputs: []*rtv1.ConversationInputAlpha2{
+				{
+					Messages: []*rtv1.ConversationMessage{
+						{
+							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
+								OfAssistant: &rtv1.ConversationMessageOfAssistant{
+									Name: ptr.Of("assistant name"),
+									Content: []*rtv1.ConversationMessageContent{
+										{
+											Text: "assistant message",
+										},
+									},
+									ToolCalls: []*rtv1.ConversationToolCalls{
+										{
+											Id: ptr.Of("call_123"),
+											// This should err
+											ToolTypes: nil,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 }
