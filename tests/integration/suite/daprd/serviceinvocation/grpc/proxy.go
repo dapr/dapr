@@ -77,8 +77,8 @@ func (b *basicproxy) Run(t *testing.T, ctx context.Context) {
 	select {
 	case md := <-b.ch:
 		require.Empty(t, md.Get("dapr-app-id"))
-		require.Equal(t, md.Get("dapr-callee-app-id"), b.daprd2.AppID())
-		require.Equal(t, md.Get("dapr-caller-app-id"), b.daprd1.AppID())
+		require.Equal(t, md.Get("dapr-callee-app-id")[0], b.daprd2.AppID())
+		require.Equal(t, md.Get("dapr-caller-app-id")[0], b.daprd1.AppID())
 	case <-time.After(10 * time.Second):
 		assert.Fail(t, "timed out waiting for metadata")
 	}
