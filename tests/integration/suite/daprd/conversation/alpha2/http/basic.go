@@ -121,6 +121,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						"name": "test_function",
 						"description": "A test function",
 						"parameters": {
+<<<<<<< HEAD
 							"type": "object",
 							"properties": {
 								"param1": {
@@ -129,6 +130,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 								}
 							},
 							"required": ["param1"]
+||||||| parent of b5569ff88 (feat: conversation api tool calling (#8880))
+=======
+							"param1": {
+								"@type": "type.googleapis.com/google.protobuf.StringValue",
+								"value": "string"
+							}
+>>>>>>> b5569ff88 (feat: conversation api tool calling (#8880))
 						}
 					}
 				}

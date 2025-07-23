@@ -1630,5 +1630,10 @@ message ConversationToolsFunction {
   // See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
   // and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.	
   // Omitting `parameters` defines a function with an empty parameter list.
+<<<<<<< HEAD
   google.protobuf.Struct parameters = 3;
+||||||| parent of b5569ff88 (feat: conversation api tool calling (#8880))
+=======
+  map<string, google.protobuf.Any> parameters = 3;
+>>>>>>> b5569ff88 (feat: conversation api tool calling (#8880))
 }

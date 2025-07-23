@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
+<<<<<<< HEAD
 	"google.golang.org/protobuf/types/known/structpb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -114,6 +115,58 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 									},
 								},
 							},
+||||||| parent of b5569ff88 (feat: conversation api tool calling (#8880))
+=======
+
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
+)
+
+func init() {
+	suite.Register(new(basic))
+}
+
+type basic struct {
+	daprd *daprd.Daprd
+}
+
+func (b *basic) Setup(t *testing.T) []framework.Option {
+	b.daprd = daprd.New(t, daprd.WithResourceFiles(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: test-alpha2-echo
+spec:
+  type: conversation.echo
+  version: v1
+  metadata:
+  - name: key
+    value: testkey
+`))
+
+	return []framework.Option{
+		framework.WithProcesses(b.daprd),
+	}
+}
+
+func (b *basic) Run(t *testing.T, ctx context.Context) {
+	b.daprd.WaitUntilRunning(t, ctx)
+
+	client := b.daprd.GRPCClient(t, ctx)
+
+	t.Run("all fields", func(t *testing.T) {
+		tool := &rtv1.ConversationTools{
+			ToolTypes: &rtv1.ConversationTools_Function{
+				Function: &rtv1.ConversationToolsFunction{
+					Name:        "test_function",
+					Description: ptr.Of("A test function"),
+					Parameters: map[string]*anypb.Any{
+						"param1": {
+							Value: []byte(`"string"`),
+>>>>>>> b5569ff88 (feat: conversation api tool calling (#8880))
 						},
 					},
 				},
