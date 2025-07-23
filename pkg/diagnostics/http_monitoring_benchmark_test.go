@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.opencensus.io/stats/view"
 )
 
 const (
@@ -31,7 +33,12 @@ const (
 func BenchmarkHTTPMiddlewareLowCardinalityNoPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
 	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
-	testHTTP.Init("fakeID", configHTTP, nil)
+	meter := view.NewMeter()
+	meter.Start()
+	b.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", configHTTP, nil)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -48,7 +55,12 @@ func BenchmarkHTTPMiddlewareLowCardinalityNoPathMatching(b *testing.B) {
 func BenchmarkHTTPMiddlewareHighCardinalityNoPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
 	configHTTP := NewHTTPMonitoringConfig(nil, true, false)
-	testHTTP.Init("fakeID", configHTTP, nil)
+	meter := view.NewMeter()
+	meter.Start()
+	b.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", configHTTP, nil)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -67,7 +79,12 @@ func BenchmarkHTTPMiddlewareLowCardinalityWithPathMatching(b *testing.B) {
 	pathMatching := []string{"/invoke/method/orders/{orderID}"}
 
 	configHTTP := NewHTTPMonitoringConfig(pathMatching, false, false)
-	testHTTP.Init("fakeID", configHTTP, nil)
+	meter := view.NewMeter()
+	meter.Start()
+	b.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", configHTTP, nil)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -84,7 +101,12 @@ func BenchmarkHTTPMiddlewareLowCardinalityWithPathMatching(b *testing.B) {
 func BenchmarkHTTPMiddlewareHighCardinalityWithPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
 	pathMatching := []string{"/invoke/method/orders/{orderID}"}
-	testHTTP.Init("fakeID", HTTPMonitoringConfig{pathMatching: pathMatching, legacy: true}, nil)
+	meter := view.NewMeter()
+	meter.Start()
+	b.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", HTTPMonitoringConfig{pathMatching: pathMatching, legacy: true}, nil)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)

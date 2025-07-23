@@ -20,6 +20,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	timeutils "github.com/dapr/kit/time"
 )
 
 // GetReminderRequest is the request object to get an existing reminder.
@@ -171,7 +173,7 @@ func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl str
 	reminder.RegisteredTime = now
 	reminder.DueTime = dueTime
 	if dueTime != "" {
-		reminder.RegisteredTime, err = parseTimeTruncateSeconds(dueTime, &now)
+		reminder.RegisteredTime, err = timeutils.ParseTime(dueTime, &now)
 		if err != nil {
 			return fmt.Errorf("error parsing %s due time: %w", logMsg, err)
 		}
@@ -185,7 +187,7 @@ func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl str
 
 	// Set expiration time if configured
 	if ttl != "" {
-		reminder.ExpirationTime, err = parseTimeTruncateSeconds(ttl, &reminder.RegisteredTime)
+		reminder.ExpirationTime, err = timeutils.ParseTime(ttl, &reminder.RegisteredTime)
 		if err != nil {
 			return fmt.Errorf("error parsing %s TTL: %w", logMsg, err)
 		}
