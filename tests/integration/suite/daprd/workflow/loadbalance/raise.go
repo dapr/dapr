@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -54,6 +55,11 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	}))
 	_ = r.workflow.BackendClientN(t, ctx, 0)
+	// verify executor actor is registered
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		assert.GreaterOrEqual(col,
+			len(r.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+	}, time.Second*10, time.Millisecond*10)
 
 	client := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
 		r.workflow.DaprN(0).GRPCConn(t, ctx),

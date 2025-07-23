@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,6 +68,11 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	}))
 	_ = c.workflow.BackendClientN(t, ctx, 0)
+	// verify executor actor is registered
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		assert.GreaterOrEqual(col,
+			len(c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+	}, time.Second*10, time.Millisecond*10)
 
 	client := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
 		c.workflow.DaprN(0).GRPCConn(t, ctx),

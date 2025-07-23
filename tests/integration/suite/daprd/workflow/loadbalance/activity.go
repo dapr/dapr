@@ -16,7 +16,9 @@ package loadbalance
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -56,6 +58,11 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	}))
 	_ = a.workflow.BackendClientN(t, ctx, 0)
+	// verify executor actor is registered
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c,
+			len(a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+	}, time.Second*10, time.Millisecond*10)
 
 	client := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
 		a.workflow.DaprN(0).GRPCConn(t, ctx),

@@ -18,6 +18,9 @@ package loadbalance
 import (
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 )
@@ -34,10 +37,15 @@ metadata:
 spec:
     features:
     - name: WorkflowsClusteredDeployment
-    enabled: true
+      enabled: true
 `
+	// use the same appID for all daprds so they represent a cluster of daprds
+	uid, err := uuid.NewRandom()
+	require.NoError(t, err)
+	appID := uid.String()
+
 	for i := range daprds {
-		wopts = append(wopts, workflow.WithDaprdOptions(i, daprd.WithAppID("app"), daprd.WithConfigManifests(t, config)))
+		wopts = append(wopts, workflow.WithDaprdOptions(i, daprd.WithAppID(appID), daprd.WithConfigManifests(t, config)))
 	}
 	return workflow.New(t, wopts...)
 }
