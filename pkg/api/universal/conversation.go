@@ -313,18 +313,14 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				}
 
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
-					// TODO: @sicoyle, confirm, but I think we need to scrub here
 					if tool.ToolTypes == nil {
 						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), fmt.Errorf("tool types cannot be nil"))
 						a.logger.Debug(err)
 						return nil, err
 					}
-
-					role := llms.ChatMessageTypeTool
-
 					toolCall := &llms.ToolCall{
 						ID:   tool.GetId(),
-						Type: string(role), // double check if this is right or should be just "function"
+						Type: string(llms.ChatMessageTypeFunction),
 						FunctionCall: &llms.FunctionCall{
 							Name:      tool.GetFunction().GetName(),
 							Arguments: tool.GetFunction().GetArguments(),
