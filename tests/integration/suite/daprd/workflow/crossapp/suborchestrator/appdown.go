@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package crossapp
+package suborchestrator
 
 import (
 	"context"
@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -49,22 +48,17 @@ type appdown struct {
 	registry1 *task.TaskRegistry
 	registry2 *task.TaskRegistry
 
-	activityStarted chan struct{}
-	activityReady   chan struct{}
+	subOrchestratorStarted chan struct{}
+	subOrchestratorReady   chan struct{}
 }
 
 func (a *appdown) Setup(t *testing.T) []framework.Option {
-	a.activityStarted = make(chan struct{})
-	a.activityReady = make(chan struct{})
+	a.subOrchestratorStarted = make(chan struct{})
+	a.subOrchestratorReady = make(chan struct{})
 
 	a.place = placement.New(t)
 	a.sched = scheduler.New(t,
 		scheduler.WithLogLevel("debug"))
-	db := sqlite.New(t,
-		sqlite.WithActorStateStore(true),
-		sqlite.WithMetadata("busyTimeout", "10s"),
-		sqlite.WithMetadata("disableWAL", "true"),
-	)
 
 	app1 := app.New(t)
 	app2 := app.New(t)
@@ -73,17 +67,20 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 	a.registry2 = task.NewTaskRegistry()
 
 	// App2: Activity that will be called before the app goes down
-	a.registry2.AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
+	a.registry2.AddOrchestratorN("ProcessData", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
 		}
 
-		close(a.activityStarted)
+		select {
+		case a.subOrchestratorStarted <- struct{}{}:
+		default:
+		}
 
 		// Block until allowed to proceed (which will never happen in this test)
 		// bc triggering this app to go down mid-activity execution and ensure the wf hangs
-		<-a.activityReady
+		<-a.subOrchestratorReady
 
 		return "Processed by app2: " + input, nil
 	})
@@ -111,9 +108,9 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 		}
 
 		var result string
-		err := ctx.CallActivity("ProcessData",
-			task.WithActivityInput(input),
-			task.WithActivityAppID(a.daprd2.AppID())).
+		err := ctx.CallSubOrchestrator("ProcessData",
+			task.WithSubOrchestratorInput(input),
+			task.WithSubOrchestratorAppID(a.daprd2.AppID())).
 			Await(&result)
 		if err != nil {
 			return fmt.Sprintf("Error occurred: %v", err), nil
@@ -123,7 +120,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 	})
 
 	return []framework.Option{
-		framework.WithProcesses(a.place, a.sched, db, app1, app2, a.daprd1),
+		framework.WithProcesses(a.place, a.sched, app1, app2, a.daprd1),
 	}
 }
 
@@ -149,22 +146,30 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	err = client2.StartWorkItemListener(cctx, a.registry2)
 	require.NoError(t, err)
 
-	id, err := client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
-	require.NoError(t, err)
+	var id api.InstanceID
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		id, err = client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
+		assert.NoError(c, err)
 
-	select {
-	case <-a.activityStarted:
-	case <-time.After(15 * time.Second):
-		require.Fail(t, "Timed out waiting for activity to start in app2")
-	}
+		// Wait for sub-orchestrator to start
+		select {
+		case <-a.subOrchestratorStarted:
+		case <-time.After(5 * time.Second):
+			c.Errorf("Timeout waiting for sub-orchestrator to start")
+		}
+	}, 20*time.Second, 100*time.Millisecond)
 
 	// Stop app2 to simulate app going down mid-execution
 	ccancel()
 	daprd2Cancel()
 
-	waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer waitCancel()
-	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
-	require.Error(t, err)
-	assert.EqualError(t, err, "context deadline exceeded")
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		// Expect completion to hang, so timeout
+		waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer waitCancel()
+
+		_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+		assert.Error(c, err)
+		assert.EqualError(c, err, "context deadline exceeded")
+	}, 20*time.Second, 100*time.Millisecond)
 }
