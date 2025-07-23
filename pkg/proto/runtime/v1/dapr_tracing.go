@@ -81,6 +81,10 @@ func (x *ConversationRequest) AppendSpanAttributes(rpcMethod string, m map[strin
 	m[diagConsts.RPCSystemSpanAttributeKey] = x.GetName()
 }
 
+func (x *ConversationRequestAlpha2) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	m[diagConsts.RPCSystemSpanAttributeKey] = x.GetName()
+}
+
 func (*DeleteJobRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
