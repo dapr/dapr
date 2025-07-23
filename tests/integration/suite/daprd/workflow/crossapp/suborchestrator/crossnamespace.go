@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package crossapp
+package suborchestrator
 
 import (
 	"context"
@@ -36,7 +36,7 @@ func init() {
 	suite.Register(new(crossnamespace))
 }
 
-// crossnamespace tests that calling activities across different namespaces fails
+// crossnamespace tests that calling sub-orchestrators across different namespaces fails
 type crossnamespace struct {
 	workflow             *workflow.Workflow
 	actorNotFoundLogLine *logline.LogLine
@@ -58,11 +58,11 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 		workflow.WithDaprdOptions(1, daprd.WithNamespace("other")),
 	)
 
-	// App1: Activity in different namespace
-	c.workflow.RegistryN(1).AddActivityN("ProcessData", func(ctx task.ActivityContext) (any, error) {
+	// App1: Sub-orchestrator in different namespace
+	c.workflow.RegistryN(1).AddOrchestratorN("ProcessData", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
-			return nil, fmt.Errorf("failed to get input in app1 activity: %w", err)
+			return nil, fmt.Errorf("failed to get input in app1 sub-orchestrator: %w", err)
 		}
 		return "Processed by app1: " + input, nil
 	})
@@ -74,11 +74,11 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 			return nil, fmt.Errorf("failed to get input in app0: %w", err)
 		}
 
-		// Try to call activity on app1 in different namespace - this should fail
+		// Try to call sub-orchestrator on app1 in different namespace - this should fail
 		var output string
-		err := ctx.CallActivity("ProcessData",
-			task.WithActivityInput(input),
-			task.WithActivityAppID(c.workflow.DaprN(1).AppID())).
+		err := ctx.CallSubOrchestrator("ProcessData",
+			task.WithSubOrchestratorInput(input),
+			task.WithSubOrchestratorAppID(c.workflow.DaprN(1).AppID())).
 			Await(&output)
 		if err != nil {
 			// Expected to fail due to namespace isolation
