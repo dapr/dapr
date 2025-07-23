@@ -83,7 +83,11 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			},
 		}
 
-		*request.Message = append(*request.Message, c)
+		if request.Message == nil {
+			request.Message = &[]llms.MessageContent{}
+		} else {
+			*request.Message = append(*request.Message, c)
+		}
 	}
 
 	request.Parameters = req.GetParameters()
