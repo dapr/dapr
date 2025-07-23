@@ -325,7 +325,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						a.logger.Debug(err)
 						return nil, err
 					}
-					toolCall := &llms.ToolCall{
+					toolCall := llms.ToolCall{
 						ID:   tool.GetId(),
 						Type: string(llms.ChatMessageTypeFunction),
 						FunctionCall: &llms.FunctionCall{
@@ -337,7 +337,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					// handle mistral edge case on handling tool call message
 					// where it expects a text message instead of a tool call message
 					if _, ok := component.(*mistral.Mistral); ok {
-						langchainMsg.Parts = append(langchainMsg.Parts, mistral.CreateToolCallPart(toolCall))
+						langchainMsg.Parts = append(langchainMsg.Parts, mistral.CreateToolCallPart(&toolCall))
 					} else {
 						langchainMsg.Parts = append(langchainMsg.Parts, toolCall)
 					}

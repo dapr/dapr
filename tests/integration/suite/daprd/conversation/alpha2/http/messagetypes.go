@@ -195,9 +195,39 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		// only expect last choice from echo
+		// echo component returns one output per message
 		expectedResponse := `{
 			"outputs": [
+				{
+					"choices": [
+						{
+							"finishReason": "stop",
+							"message": {
+								"content": "first user message"
+							}
+						}
+					]
+				},
+				{
+					"choices": [
+						{
+							"finishReason": "stop",
+							"message": {
+								"content": "first assistant response"
+							}
+						}
+					]
+				},
+				{
+					"choices": [
+						{
+							"finishReason": "stop",
+							"message": {
+								"content": "second user message"
+							}
+						}
+					]
+				},
 				{
 					"choices": [
 						{

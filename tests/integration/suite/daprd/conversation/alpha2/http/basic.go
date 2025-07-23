@@ -141,10 +141,20 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		// Echo component combines messages from multiple inputs into one output
+		// Echo component returns one output per input message
 		expectedResponse := `{
 			"contextId": "test-conversation-123",
 			"outputs": [
+				{
+					"choices": [
+						{
+							"finishReason": "stop",
+							"message": {
+								"content": "well hello there"
+							}
+						}
+					]
+				},
 				{
 					"choices": [
 						{
