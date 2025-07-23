@@ -98,15 +98,6 @@ type Options struct {
 	// file are automatically picked up. Cannot be used with TrustAnchors.
 	TrustAnchorsFile *string
 
-	// JSONWebKeySet is the JSON Web Key Set for this Dapr installation. Cannot be
-	// used with JSONWebKeySetFile or TrustAnchorsFile.
-	JSONWebKeySet []byte
-
-	// JSONWebKeySetFile is the path to the JSON Web Key Set for this Dapr
-	// installation. Prefer this over JSONWebKeySet so changes to the file are
-	// automatically picked up. Cannot be used with JSONWebKeySet or TrustAnchors.
-	JSONWebKeySetFile *string
-
 	// AppID is the application ID of this workload.
 	AppID string
 
@@ -137,6 +128,15 @@ type Options struct {
 	// written to the `tls.cert` and `tls.key` files respectively in the given
 	// directory.
 	WriteIdentityToFile *string
+
+	// JSONWebKeySet is the JSON Web Key Set for this Dapr installation. Cannot be
+	// used with JSONWebKeySetFile or TrustAnchorsFile.
+	JSONWebKeySet []byte
+
+	// JSONWebKeySetFile is the path to the JSON Web Key Set for this Dapr
+	// installation. Prefer this over JSONWebKeySet so changes to the file are
+	// automatically picked up. Cannot be used with JSONWebKeySet or TrustAnchors.
+	JSONWebKeySetFile *string
 
 	// JwtAudiences is the list of JWT audiences to be included in the certificate request.
 	JwtAudiences []string
@@ -208,7 +208,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			}
 
 			switch {
-			case len(opts.TrustAnchors) > 0 && opts.JSONWebKeySetFile != nil:
+			case len(opts.TrustAnchors) > 0:
 				trustAnchors, err = static.From(static.Options{
 					Anchors: opts.TrustAnchors,
 					Jwks:    opts.JSONWebKeySet,
@@ -216,17 +216,11 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 				if err != nil {
 					return nil, err
 				}
-			case len(opts.TrustAnchors) > 0:
-				trustAnchors, err = static.From(static.Options{
-					Anchors: opts.TrustAnchors,
-				})
-				if err != nil {
-					return nil, err
-				}
 			case opts.TrustAnchorsFile != nil:
 				trustAnchors = file.From(file.Options{
-					Log:    log,
-					CAPath: *opts.TrustAnchorsFile,
+					Log:      log,
+					CAPath:   *opts.TrustAnchorsFile,
+					JwksPath: opts.JSONWebKeySetFile,
 				})
 			}
 		}

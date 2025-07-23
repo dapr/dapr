@@ -190,7 +190,7 @@ func (o *basicOIDCServer) testJWTTokenValidation(t *testing.T) {
 		TrustDomain:               "localhost",
 		CertificateSigningRequest: csrPEM,
 		TokenValidator:            sentryv1pb.SignCertificateRequest_INSECURE,
-		Audiences:                 []string{"test-audience"},
+		JwtAudiences:              []string{"test-audience"},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.GetJwt(), "Sentry should have issued a JWT token")
@@ -200,7 +200,7 @@ func (o *basicOIDCServer) testJWTTokenValidation(t *testing.T) {
 
 	// Validate token using OIDC provider
 	verifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: "test-audience"})
-	idToken, err := verifier.Verify(t.Context(), tokenString)
+	idToken, err := verifier.Verify(t.Context(), tokenString.GetValue())
 	require.NoError(t, err, "Resource provider should be able to validate Sentry-issued JWT")
 
 	// Verify standard claims
@@ -220,7 +220,7 @@ func (o *basicOIDCServer) testJWTTokenValidation(t *testing.T) {
 
 	// Verify trust domain audience validation
 	trustDomainVerifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: "localhost"})
-	trustDomainToken, err := trustDomainVerifier.Verify(t.Context(), tokenString)
+	trustDomainToken, err := trustDomainVerifier.Verify(t.Context(), tokenString.GetValue())
 	require.NoError(t, err, "Token should be valid for trust domain audience")
 	assert.Contains(t, trustDomainToken.Audience, "localhost")
 }
@@ -256,7 +256,7 @@ func (o *basicOIDCServer) testMultipleAudienceValidation(t *testing.T) {
 			TrustDomain:               "localhost",
 			CertificateSigningRequest: csrPEM,
 			TokenValidator:            sentryv1pb.SignCertificateRequest_INSECURE,
-			Audiences:                 tc.audiences,
+			JwtAudiences:              tc.audiences,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, resp.GetJwt())
@@ -267,7 +267,7 @@ func (o *basicOIDCServer) testMultipleAudienceValidation(t *testing.T) {
 		// Test each requested audience
 		for _, aud := range tc.audiences {
 			verifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: aud})
-			idToken, verifyErr := verifier.Verify(t.Context(), tokenString)
+			idToken, verifyErr := verifier.Verify(t.Context(), tokenString.GetValue())
 			require.NoError(t, verifyErr, "Token should be valid for audience %s in test case %s", aud, tc.name)
 			assert.Equal(t, o.oidcBaseURL, idToken.Issuer)
 			assert.Equal(t, expectedSubject, idToken.Subject)
@@ -277,13 +277,13 @@ func (o *basicOIDCServer) testMultipleAudienceValidation(t *testing.T) {
 
 		// Test trust domain audience (always included)
 		verifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: "localhost"})
-		idToken, verifyErr := verifier.Verify(t.Context(), tokenString)
+		idToken, verifyErr := verifier.Verify(t.Context(), tokenString.GetValue())
 		require.NoError(t, verifyErr, "Token should be valid for trust domain audience in test case %s", tc.name)
 		assert.Contains(t, idToken.Audience, "localhost")
 
 		// Test invalid audience
 		invalidVerifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: "invalid-audience"})
-		_, err = invalidVerifier.Verify(t.Context(), tokenString)
+		_, err = invalidVerifier.Verify(t.Context(), tokenString.GetValue())
 		assert.Error(t, err, "Token should be invalid for unauthorized audience in test case %s", tc.name)
 	}
 }
@@ -307,7 +307,7 @@ func (o *basicOIDCServer) testTokenExpiration(t *testing.T) {
 		TrustDomain:               "localhost",
 		CertificateSigningRequest: csrPEM,
 		TokenValidator:            sentryv1pb.SignCertificateRequest_INSECURE,
-		Audiences:                 []string{"test-audience"},
+		JwtAudiences:              []string{"test-audience"},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.GetJwt())
@@ -316,7 +316,7 @@ func (o *basicOIDCServer) testTokenExpiration(t *testing.T) {
 	require.NotEmpty(t, tokenString)
 
 	verifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: "test-audience"})
-	idToken, err := verifier.Verify(t.Context(), tokenString)
+	idToken, err := verifier.Verify(t.Context(), tokenString.GetValue())
 	require.NoError(t, err, "Freshly issued token should be valid")
 
 	// Verify token timing properties
@@ -375,7 +375,7 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 		TrustDomain:               "localhost",
 		CertificateSigningRequest: csrPEM,
 		TokenValidator:            sentryv1pb.SignCertificateRequest_INSECURE,
-		Audiences:                 []string{"bank-api", "audit-service", "fraud-detection"},
+		JwtAudiences:              []string{"bank-api", "audit-service", "fraud-detection"},
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.GetWorkloadCertificate(), "Certificate should be issued")
@@ -389,7 +389,7 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 	services := []string{"bank-api", "audit-service", "fraud-detection"}
 	for _, serviceAudience := range services {
 		verifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: serviceAudience})
-		token, verifyErr := verifier.Verify(t.Context(), jwtToken)
+		token, verifyErr := verifier.Verify(t.Context(), jwtToken.GetValue())
 		require.NoError(t, verifyErr, "%s should be able to validate the token", serviceAudience)
 
 		assert.Equal(t, expectedSubject, token.Subject)
@@ -401,7 +401,7 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 
 	// Test that unauthorized services cannot validate the token
 	unauthorizedVerifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: "unauthorized-service"})
-	_, err = unauthorizedVerifier.Verify(t.Context(), jwtToken)
+	_, err = unauthorizedVerifier.Verify(t.Context(), jwtToken.GetValue())
 	assert.Error(t, err, "Unauthorized service should not be able to validate the token")
 }
 

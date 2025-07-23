@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
@@ -225,9 +226,9 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	log.Debugf("Successfully signed certificate for %s/%s", namespace, req.GetId())
 
-	var jwtToken *string
+	var jwtToken *wrapperspb.StringValue
 	if s.jwtEnabled {
-		audiences := append([]string{res.TrustDomain.String()}, req.GetAudiences()...) // Default audience is the trust domain
+		audiences := append([]string{res.TrustDomain.String()}, req.GetJwtAudiences()...) // Default audience is the trust domain
 
 		// Generate a JWT with the same identity
 		tkn, err := s.ca.Generate(ctx, &jwt.Request{
@@ -243,7 +244,7 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		if tkn == "" {
 			return nil, status.Error(codes.Internal, "failed to generate JWT: empty token")
 		}
-		jwtToken = &tkn
+		jwtToken = wrapperspb.String(tkn)
 	}
 
 	return &sentryv1pb.SignCertificateResponse{
