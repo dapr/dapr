@@ -21,7 +21,6 @@ import (
 	"github.com/tmc/langchaingo/llms"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
-
 	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/conversation/mistral"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -86,9 +85,8 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 		if request.Message == nil {
 			request.Message = &[]llms.MessageContent{}
-		} else {
-			*request.Message = append(*request.Message, c)
 		}
+		*request.Message = append(*request.Message, c)
 	}
 
 	request.Parameters = req.GetParameters()
