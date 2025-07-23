@@ -91,11 +91,11 @@ spec:
 	}
 }
 
-func (a *conflict) Run(t *testing.T, ctx context.Context) {
-	for _, d := range a.cluster {
+func (c *conflict) Run(t *testing.T, ctx context.Context) {
+	for _, d := range c.cluster {
 		d.WaitUntilRunning(t, ctx)
 	}
-	a.single.WaitUntilRunning(t, ctx)
+	c.single.WaitUntilRunning(t, ctx)
 
 	regFactory := func(t *testing.T) *task.TaskRegistry {
 		r := task.NewTaskRegistry()
@@ -109,26 +109,26 @@ func (a *conflict) Run(t *testing.T, ctx context.Context) {
 		return r
 	}
 
-	cluster0BackendClient := client.NewTaskHubGrpcClient(a.cluster[0].GRPCConn(t, ctx), logger.New(t))
+	cluster0BackendClient := client.NewTaskHubGrpcClient(c.cluster[0].GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, cluster0BackendClient.StartWorkItemListener(ctx, regFactory(t)))
 
-	singleBackendClient := client.NewTaskHubGrpcClient(a.single.GRPCConn(t, ctx), logger.New(t))
+	singleBackendClient := client.NewTaskHubGrpcClient(c.single.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, singleBackendClient.StartWorkItemListener(ctx, regFactory(t)))
 
 	// verify executor actor is registered in the clustered deployment
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c,
-			len(a.cluster[0].GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		assert.GreaterOrEqual(col,
+			len(c.cluster[0].GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
 	}, time.Second*10, time.Millisecond*10)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c,
-			len(a.single.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		assert.GreaterOrEqual(col,
+			len(c.single.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
 	}, time.Second*10, time.Millisecond*10)
 
 	clusterClient := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
-		a.cluster[0].GRPCConn(t, ctx),
-		a.cluster[1].GRPCConn(t, ctx),
+		c.cluster[0].GRPCConn(t, ctx),
+		c.cluster[1].GRPCConn(t, ctx),
 	), logger.New(t))
 
 	const n = 10
