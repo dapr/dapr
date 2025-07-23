@@ -52,33 +52,6 @@ func TestRequestsIncludeAppendSpanAttribute(t *testing.T) {
 			}
 
 			// Only get structs whose name ends in "Request"
-			if strings.HasSuffix(typeSpec.Name.Name, "Request") {
-				allRequests = append(allRequests, typeSpec.Name.Name)
-			}
-		}
-	}
-
-	node, err = parser.ParseFile(fset, "conversation.pb.go", nil, 0)
-	require.NoError(t, err)
-
-	for _, decl := range node.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
-
-		for _, spec := range genDecl.Specs {
-			// Get structs only
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-			_, ok = typeSpec.Type.(*ast.StructType)
-			if !ok {
-				continue
-			}
-
-			// Only get structs whose name ends in "Request"
 			if strings.HasSuffix(typeSpec.Name.Name, "Request") || strings.HasSuffix(typeSpec.Name.Name, "RequestAlpha2") {
 				allRequests = append(allRequests, typeSpec.Name.Name)
 			}
