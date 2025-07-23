@@ -21,6 +21,7 @@ import (
 	"github.com/tmc/langchaingo/llms"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
+
 	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/conversation/mistral"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -56,7 +57,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	if err != nil {
 		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
-		return &runtimev1pb.ConversationResponse{}, err
+		return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
 	}
 
 	var scrubbed []string
