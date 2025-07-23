@@ -201,7 +201,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
-		require.Equal(t, `{"test": "value"}`, resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetToolCalls()[0].GetFunction().GetArguments())
+		require.JSONEq(t, `{"test": "value"}`, resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetToolCalls()[0].GetFunction().GetArguments())
 	})
 
 	t.Run("malformed tool call", func(t *testing.T) {

@@ -15,7 +15,7 @@ package universal
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -30,6 +30,7 @@ import (
 	kmeta "github.com/dapr/kit/metadata"
 )
 
+//nolint:staticcheck
 func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) {
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
@@ -201,7 +202,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			)
 
 			if message.GetMessageTypes() == nil {
-				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), fmt.Errorf("message type cannot be nil"))
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), errors.New("message type cannot be nil"))
 				a.logger.Debug(err)
 				return nil, err
 			}
@@ -209,7 +210,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			// Openai allows roles to be passed in; however,
 			// we make them implicit in the backend setting this field based on the input msg type using the langchain role types.
 			switch msg := message.GetMessageTypes().(type) {
-
 			case *runtimev1pb.ConversationMessage_OfDeveloper:
 				var parts []llms.ContentPart
 
@@ -314,7 +314,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
 					if tool.ToolTypes == nil {
-						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), fmt.Errorf("tool types cannot be nil"))
+						err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), errors.New("tool types cannot be nil"))
 						a.logger.Debug(err)
 						return nil, err
 					}
@@ -330,7 +330,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					// handle mistral edge case on handling tool call message
 					// where it expects a text message instead of a tool call message
 					if _, ok := component.(*mistral.Mistral); ok {
-						langchainMsg.Parts = append(parts, mistral.CreateToolCallPart(toolCall))
+						langchainMsg.Parts = append(langchainMsg.Parts, mistral.CreateToolCallPart(toolCall))
 					} else {
 						langchainMsg.Parts = append(langchainMsg.Parts, toolCall)
 					}
@@ -385,7 +385,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				return nil, err
 			}
 			llmMessages = append(llmMessages, &langchainMsg)
-
 		}
 	}
 
@@ -416,7 +415,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	switch toolChoice {
 	case "auto", "none":
 	case "required":
-		if len(tools) <= 0 {
+		if len(tools) == 0 {
 			err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool choice must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
 			a.logger.Debug(err)
 			return nil, err
