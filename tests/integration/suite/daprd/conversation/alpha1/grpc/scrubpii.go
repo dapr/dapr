@@ -60,9 +60,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub input phone number", func(t *testing.T) {
 		scrubInput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content:  "well hello there, my phone number is +2222222222",
 					ScrubPII: &scrubInput,
@@ -76,9 +76,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("scrub input great phone number", func(t *testing.T) {
 		scrubInput := true
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content:  "well hello there, my phone number is +4422222222",
 					ScrubPII: &scrubInput,
@@ -93,9 +93,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub input email", func(t *testing.T) {
 		scrubInput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content:  "well hello there, my email is test@test.com",
 					ScrubPII: &scrubInput,
@@ -110,9 +110,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub input ip address", func(t *testing.T) {
 		scrubInput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content:  "well hello there from 10.8.9.1",
 					ScrubPII: &scrubInput,
@@ -127,9 +127,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
 		scrubOutput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content: "well hello there from 10.8.9.1",
 				},
@@ -149,9 +149,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("no scrubbing on good input", func(t *testing.T) {
 		scrubOutput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content:  "well hello there",
 					ScrubPII: &scrubOutput,

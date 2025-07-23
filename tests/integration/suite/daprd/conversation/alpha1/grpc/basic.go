@@ -58,9 +58,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	client := b.daprd.GRPCClient(t, ctx)
 
 	t.Run("good input", func(t *testing.T) {
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content: "well hello there",
 				},

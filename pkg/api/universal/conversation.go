@@ -30,8 +30,7 @@ import (
 	kmeta "github.com/dapr/kit/metadata"
 )
 
-//nolint:staticcheck
-func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) {
+func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) { //nolint:staticcheck
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
 		err := messages.ErrConversationNotFound.WithFormat(req.GetName())
@@ -69,7 +68,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			if err != nil {
 				err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 				a.logger.Debug(err)
-				return &runtimev1pb.ConversationResponse{}, err
+				return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
 			}
 
 			msg = scrubbed[0]
@@ -117,11 +116,11 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
-		return &runtimev1pb.ConversationResponse{}, err
+		return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
 	}
 
 	// handle response
-	response := &runtimev1pb.ConversationResponse{}
+	response := &runtimev1pb.ConversationResponse{} //nolint:staticcheck
 	a.logger.Debug(response)
 	if resp != nil {
 		if resp.ConversationContext != "" {
@@ -142,13 +141,13 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 				if err != nil {
 					err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 					a.logger.Debug(err)
-					return &runtimev1pb.ConversationResponse{}, err
+					return &runtimev1pb.ConversationResponse{}, err //nolint:staticcheck
 				}
 
 				res = scrubbed[0]
 			}
 
-			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResult{
+			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResult{ //nolint:staticcheck
 				Result:     res,
 				Parameters: request.Parameters,
 			})

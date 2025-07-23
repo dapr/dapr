@@ -58,8 +58,8 @@ func (a *api) constructConversationEndpoints() []endpoints.Endpoint {
 func (a *api) onConverseAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.ConverseAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.ConversationRequest, *runtimev1pb.ConversationResponse]{
-			InModifier: func(r *http.Request, in *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationRequest, error) {
+		UniversalHTTPHandlerOpts[*runtimev1pb.ConversationRequest, *runtimev1pb.ConversationResponse]{ //nolint:staticcheck
+			InModifier: func(r *http.Request, in *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationRequest, error) { //nolint:staticcheck
 				in.Name = chi.URLParam(r, nameParam)
 				return in, nil
 			},
