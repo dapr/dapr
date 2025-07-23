@@ -38,14 +38,40 @@ func (a *api) constructConversationEndpoints() []endpoints.Endpoint {
 				Name: "Converse",
 			},
 		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "conversation/{name}/converse",
+			Version: apiVersionV1alpha2,
+			Group: &endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupConversation,
+				Version:              endpoints.EndpointGroupVersion1alpha2,
+				AppendSpanAttributes: nil,
+			},
+			Handler: a.onConverseAlpha2(),
+			Settings: endpoints.EndpointSettings{
+				Name: "Converse",
+			},
+		},
 	}
 }
 
 func (a *api) onConverseAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.ConverseAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.ConversationRequest, *runtimev1pb.ConversationResponse]{
-			InModifier: func(r *http.Request, in *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationRequest, error) {
+		UniversalHTTPHandlerOpts[*runtimev1pb.ConversationRequest, *runtimev1pb.ConversationResponse]{ //nolint:staticcheck
+			InModifier: func(r *http.Request, in *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationRequest, error) { //nolint:staticcheck
+				in.Name = chi.URLParam(r, nameParam)
+				return in, nil
+			},
+		},
+	)
+}
+
+func (a *api) onConverseAlpha2() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.ConverseAlpha2,
+		UniversalHTTPHandlerOpts[*runtimev1pb.ConversationRequestAlpha2, *runtimev1pb.ConversationResponseAlpha2]{
+			InModifier: func(r *http.Request, in *runtimev1pb.ConversationRequestAlpha2) (*runtimev1pb.ConversationRequestAlpha2, error) {
 				in.Name = chi.URLParam(r, nameParam)
 				return in, nil
 			},
