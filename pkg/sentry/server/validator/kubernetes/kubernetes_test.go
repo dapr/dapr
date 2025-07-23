@@ -1237,7 +1237,7 @@ func TestValidate(t *testing.T) {
 				Token:                     newToken(t, "my-ns", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
-				Audiences:                 []string{"custom-audience-1", "custom-audience-2"},
+				JwtAudiences:              []string{"custom-audience-1", "custom-audience-2"},
 			},
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{

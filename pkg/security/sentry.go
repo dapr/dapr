@@ -117,7 +117,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			Token:          token,
 			Namespace:      ns,
 			TokenValidator: tokenValidator,
-			Audiences:      opts.JwtAudiences,
+			JwtAudiences:   opts.JwtAudiences,
 		}
 
 		if trustDomain != nil {
@@ -147,7 +147,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			// potential issues where the workload does not yet have an
 			// authority used by Sentry but that would be successfully
 			// validated by a 3rd party via the OIDC server.
-			tkn, err := jwt.Parse([]byte(resp.GetJwt()),
+			tkn, err := jwt.Parse([]byte(resp.GetJwt().GetValue()),
 				jwt.WithAcceptableSkew(5*time.Minute),
 				jwt.WithContext(ctx),
 				jwt.WithVerify(false))
@@ -161,7 +161,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 				return nil, errors.New("JWT audience is empty")
 			}
 
-			jwtVal = ptr.Of(resp.GetJwt())
+			jwtVal = ptr.Of(resp.GetJwt().GetValue())
 		}
 
 		return &spiffe.SVIDResponse{
