@@ -299,8 +299,11 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 // 2. Basic auth header: `http://dapr-app-id:<service-id>@localhost:3500/<method>`
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
 func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string, method string) {
-	if appID := headers.Get(daprAppID); appID != "" {
-		return appID, strings.TrimPrefix(path.Clean(reqPath), "/")
+	if appID := headers.Get(diagConsts.GRPCProxyAppIDKey); appID != "" {
+		targetID, method = appID, strings.TrimPrefix(path.Clean(reqPath), "/")
+		// Delete the header as it should not be passed forward with the request and is only used by the Dapr API
+		headers.Del(diagConsts.GRPCProxyAppIDKey)
+		return targetID, method
 	}
 
 	if auth := headers.Get("Authorization"); strings.HasPrefix(auth, "Basic ") {
