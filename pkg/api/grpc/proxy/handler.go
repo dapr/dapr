@@ -18,8 +18,9 @@ import (
 
 	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/kit/utils"
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 // Metadata header used to indicate if the call should be handled as a gRPC stream.
@@ -161,6 +162,11 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			teardown(false)
 			return nil, err
 		}
+
+		// Remove the AppId from the metadata as it shouldn't be forwarded to the target gRPC service
+		md, _ = metadata.FromOutgoingContext(outgoingCtx)
+		md.Delete(diagConsts.GRPCProxyAppIDKey)
+		outgoingCtx = metadata.NewOutgoingContext(ctx, md.Copy())
 
 		// Do not "defer clientCancel()" yet, in case we need to proxy a stream
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
