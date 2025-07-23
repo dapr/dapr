@@ -141,7 +141,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 		}
 
 		var jwtVal *string
-		if resp.Jwt != nil {
+		if resp.GetJwt() != nil && resp.GetJwt().GetValue() != "" {
 			// NOTE: We do not verify the signature of the token here
 			// as the token was passed over a secure channel. This avoids
 			// potential issues where the workload does not yet have an
