@@ -275,7 +275,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 		tempFile := filepath.Join(t.TempDir(), "trust.pem")
 		require.NoError(t, os.WriteFile(tempFile, sampleTrustAnchors, 0o600))
 
-		_, err := New(context.Background(), Options{
+		_, err := New(t.Context(), Options{
 			TrustAnchors:            sampleTrustAnchors,
 			TrustAnchorsFile:        &tempFile,
 			AppID:                   "test",
@@ -293,7 +293,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 		tempFile := filepath.Join(t.TempDir(), "jwks.json")
 		require.NoError(t, os.WriteFile(tempFile, sampleJWKS, 0o600))
 
-		_, err := New(context.Background(), Options{
+		_, err := New(t.Context(), Options{
 			TrustAnchors:            sampleTrustAnchors,
 			JSONWebKeySet:           sampleJWKS,
 			JSONWebKeySetFile:       &tempFile,
@@ -312,7 +312,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 		tempFile := filepath.Join(t.TempDir(), "jwks.json")
 		require.NoError(t, os.WriteFile(tempFile, sampleJWKS, 0o600))
 
-		_, err := New(context.Background(), Options{
+		_, err := New(t.Context(), Options{
 			TrustAnchors:            sampleTrustAnchors,
 			JSONWebKeySetFile:       &tempFile,
 			AppID:                   "test",
@@ -330,7 +330,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 		tempFile := filepath.Join(t.TempDir(), "trust.pem")
 		require.NoError(t, os.WriteFile(tempFile, sampleTrustAnchors, 0o600))
 
-		_, err := New(context.Background(), Options{
+		_, err := New(t.Context(), Options{
 			TrustAnchorsFile:        &tempFile,
 			JSONWebKeySet:           sampleJWKS,
 			AppID:                   "test",
@@ -345,7 +345,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 	})
 
 	t.Run("missing trust anchors when mTLS enabled should fail", func(t *testing.T) {
-		_, err := New(context.Background(), Options{
+		_, err := New(t.Context(), Options{
 			AppID:                   "test",
 			ControlPlaneTrustDomain: "test.example.com",
 			ControlPlaneNamespace:   "default",
@@ -358,7 +358,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 	})
 
 	t.Run("missing trust anchors in Kubernetes mode should fail", func(t *testing.T) {
-		_, err := New(context.Background(), Options{
+		_, err := New(t.Context(), Options{
 			AppID:                   "test",
 			ControlPlaneTrustDomain: "test.example.com",
 			ControlPlaneNamespace:   "default",
@@ -372,7 +372,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 	})
 
 	t.Run("valid TrustAnchors only should succeed", func(t *testing.T) {
-		p, err := New(context.Background(), Options{
+		p, err := New(t.Context(), Options{
 			TrustAnchors:            sampleTrustAnchors,
 			AppID:                   "test",
 			ControlPlaneTrustDomain: "test.example.com",
@@ -389,7 +389,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 	})
 
 	t.Run("valid JSONWebKeySet alone without trust anchors should fail", func(t *testing.T) {
-		_, err := New(context.Background(), Options{
+		_, err := New(t.Context(), Options{
 			JSONWebKeySet:           sampleJWKS,
 			AppID:                   "test",
 			ControlPlaneTrustDomain: "test.example.com",
@@ -406,7 +406,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 	})
 
 	t.Run("valid TrustAnchors and JSONWebKeySet together should succeed", func(t *testing.T) {
-		p, err := New(context.Background(), Options{
+		p, err := New(t.Context(), Options{
 			TrustAnchors:            sampleTrustAnchors,
 			JSONWebKeySet:           sampleJWKS,
 			AppID:                   "test",
@@ -427,7 +427,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 		tempFile := filepath.Join(t.TempDir(), "trust.pem")
 		require.NoError(t, os.WriteFile(tempFile, sampleTrustAnchors, 0o600))
 
-		p, err := New(context.Background(), Options{
+		p, err := New(t.Context(), Options{
 			TrustAnchorsFile:        &tempFile,
 			AppID:                   "test",
 			ControlPlaneTrustDomain: "test.example.com",
@@ -450,7 +450,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 		jwksFile := filepath.Join(t.TempDir(), "jwks.json")
 		require.NoError(t, os.WriteFile(jwksFile, sampleJWKS, 0o600))
 
-		p, err := New(context.Background(), Options{
+		p, err := New(t.Context(), Options{
 			TrustAnchorsFile:        &trustFile,
 			JSONWebKeySetFile:       &jwksFile,
 			AppID:                   "test",
@@ -468,7 +468,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 	})
 
 	t.Run("no trust anchors needed when mTLS disabled and not Kubernetes mode", func(t *testing.T) {
-		p, err := New(context.Background(), Options{
+		p, err := New(t.Context(), Options{
 			AppID:                   "test",
 			ControlPlaneTrustDomain: "test.example.com",
 			ControlPlaneNamespace:   "default",
@@ -488,7 +488,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		p, err := New(context.Background(), Options{
+		p, err := New(t.Context(), Options{
 			AppID:                   "test",
 			ControlPlaneTrustDomain: "test.example.com",
 			ControlPlaneNamespace:   "default",
