@@ -39,6 +39,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
         run: python ./.github/scripts/automerge.py
   prune_stale:
+    if: github.repository_owner == 'dapr'
     name: Prune Stale
     runs-on: ubuntu-latest
     permissions:
