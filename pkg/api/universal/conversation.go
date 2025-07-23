@@ -131,7 +131,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		for _, o := range resp.Outputs {
 			// extract content from the first choice since this api version only responded with a single string result
 			var content string
-			if o.Choices != nil {
+			if o.Choices != nil && o.Choices[0].Message.Content != "" {
 				content = o.Choices[0].Message.Content
 			}
 
@@ -177,6 +177,10 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	err = kmeta.DecodeMetadata(req.GetMetadata(), request)
 	if err != nil {
 		return nil, err
+	}
+
+	if request.Message == nil {
+		request.Message = &[]llms.MessageContent{}
 	}
 
 	if len(req.GetInputs()) == 0 {
