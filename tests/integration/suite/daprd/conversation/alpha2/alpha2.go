@@ -11,9 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package conversation
+package alpha2
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation/alpha1"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation/alpha2"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation/alpha2/grpc"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation/alpha2/http"
 )
