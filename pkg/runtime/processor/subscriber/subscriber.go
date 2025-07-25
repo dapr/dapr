@@ -23,6 +23,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/components-contrib/pubsub"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -120,7 +121,7 @@ func (s *Subscriber) StopAllSubscriptionsForever() {
 		wg.Add(len(psubs))
 		for _, sub := range psubs {
 			go func(sub *namedSubscription) {
-				sub.Stop()
+				sub.Stop(pubsub.ErrGracefulShutdown)
 				wg.Done()
 			}(sub)
 		}
@@ -130,7 +131,7 @@ func (s *Subscriber) StopAllSubscriptionsForever() {
 		wg.Add(len(psubs))
 		for _, sub := range psubs {
 			go func() {
-				sub.Stop()
+				sub.Stop(pubsub.ErrGracefulShutdown)
 				wg.Done()
 			}()
 		}

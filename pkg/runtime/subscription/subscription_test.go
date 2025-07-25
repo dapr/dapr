@@ -69,7 +69,9 @@ func TestTracingOnNewPublishedMessage(t *testing.T) {
 				},
 			})
 			require.NoError(t, err)
-			t.Cleanup(ps.Stop)
+			t.Cleanup(func() {
+				ps.Stop()
+			})
 
 			traceparent := "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01"
 			traceid := "00-80e1afed08e019fc1110464cfa66635c-7a085853722dc6d2-01"

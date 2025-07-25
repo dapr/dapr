@@ -167,7 +167,9 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -219,7 +221,9 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		order := `{"data":{"orderId":1},"datacontenttype":"application/json","id":"8b540b03-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
 
@@ -274,7 +278,9 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(2)
 
@@ -414,7 +420,9 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(2)
 
@@ -498,7 +506,9 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(10)
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
@@ -565,7 +575,9 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(4)
 		msgArr[0].EntryId = ""
@@ -640,7 +652,9 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(5)
 
@@ -719,7 +733,9 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(5)
 
@@ -843,7 +859,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -982,7 +1000,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -1076,7 +1096,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -1172,7 +1194,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -1263,7 +1287,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -1339,7 +1365,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -1601,7 +1629,9 @@ func TestPubSubDeadLetter(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
@@ -1650,7 +1680,9 @@ func TestPubSubDeadLetter(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
