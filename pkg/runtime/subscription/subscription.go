@@ -330,7 +330,7 @@ func (s *Subscription) Stop(err ...error) {
 		time.Sleep(time.Millisecond * 400)
 	}
 	if err != nil && len(err) > 0 {
-		s.cancel(err[0])
+		s.cancel(errors.Join(err...))
 		return
 	}
 
