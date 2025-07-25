@@ -21,7 +21,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/structpb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -68,52 +67,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				Function: &rtv1.ConversationToolsFunction{
 					Name:        "test_function",
 					Description: ptr.Of("A test function"),
-					Parameters: &structpb.Struct{
-						Fields: map[string]*structpb.Value{
-							"type": {
-								Kind: &structpb.Value_StringValue{
-									StringValue: "object",
-								},
-							},
-							"properties": {
-								Kind: &structpb.Value_StructValue{
-									StructValue: &structpb.Struct{
-										Fields: map[string]*structpb.Value{
-											"param1": {
-												Kind: &structpb.Value_StructValue{
-													StructValue: &structpb.Struct{
-														Fields: map[string]*structpb.Value{
-															"type": {
-																Kind: &structpb.Value_StringValue{
-																	StringValue: "string",
-																},
-															},
-															"description": {
-																Kind: &structpb.Value_StringValue{
-																	StringValue: "A test parameter",
-																},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-							"required": {
-								Kind: &structpb.Value_ListValue{
-									ListValue: &structpb.ListValue{
-										Values: []*structpb.Value{
-											{
-												Kind: &structpb.Value_StringValue{
-													StringValue: "param1",
-												},
-											},
-										},
-									},
-								},
-							},
+					Parameters: map[string]*anypb.Any{
+						"param1": {
+							Value: []byte(`"string"`),
 						},
 					},
 				},

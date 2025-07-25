@@ -11,7 +11,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.15.1-0.20250725163610-adc76bd6ec85
+	github.com/dapr/components-contrib v1.15.1-0.20250723145814-9f0aec6d35cd
 	github.com/dapr/durabletask-go v0.7.3-0.20250711135247-7a35af6fe0e5
 	github.com/dapr/kit v0.15.3-0.20250717140748-8b780b4d81c5
 	github.com/diagridio/go-etcd-cron v0.8.3-0.20250717040853-f73d9b003369
@@ -290,6 +290,7 @@ require (
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
+	github.com/gorilla/css v1.0.1 // indirect
 	github.com/grandcat/zeroconf v1.0.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect

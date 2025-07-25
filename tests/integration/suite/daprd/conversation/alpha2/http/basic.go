@@ -121,14 +121,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						"name": "test_function",
 						"description": "A test function",
 						"parameters": {
-							"type": "object",
-							"properties": {
-								"param1": {
-									"type": "string",
-									"description": "A test parameter"
-								}
-							},
-							"required": ["param1"]
+							"param1": {
+								"@type": "type.googleapis.com/google.protobuf.StringValue",
+								"value": "string"
+							}
 						}
 					}
 				}
