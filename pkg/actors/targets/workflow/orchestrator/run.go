@@ -69,9 +69,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	for _, e := range state.Inbox {
 		if es := e.GetExecutionStarted(); es != nil {
 			esHistoryEvent = e
-			// Set the source app ID for cross-app routing in durabletask-go
-			esHistoryEvent.Router = &protos.TaskRouter{
-				SourceAppID: o.appID,
+			if esHistoryEvent.Router == nil {
+				// Set the source app ID for cross-app routing in durabletask-go
+				esHistoryEvent.Router = &protos.TaskRouter{
+					SourceAppID: o.appID,
+				}
 			}
 			break
 		}
