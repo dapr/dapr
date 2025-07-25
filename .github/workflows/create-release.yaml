@@ -14,6 +14,11 @@
 name: Create a release
 
 on:
+  workflow_call:
+    inputs:
+      rel_version:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       rel_version:
