@@ -52,18 +52,18 @@ func TestRequestsIncludeAppendSpanAttribute(t *testing.T) {
 			}
 
 			// Only get structs whose name ends in "Request"
-			if strings.HasSuffix(typeSpec.Name.Name, "Request") {
+			if strings.HasSuffix(typeSpec.Name.Name, "Request") || strings.HasSuffix(typeSpec.Name.Name, "RequestAlpha2") {
 				allRequests = append(allRequests, typeSpec.Name.Name)
 			}
 		}
 	}
 
 	// Now, check that all the structs that were found implement the "AppendSpanAttributes" method in the "dapr_tracing.go" file
-	node, err = parser.ParseFile(fset, "dapr_tracing.go", nil, 0)
+	tracingNode, err := parser.ParseFile(fset, "dapr_tracing.go", nil, 0)
 	require.NoError(t, err)
 
 	haveMethods := make([]string, 0, len(allRequests))
-	for _, decl := range node.Decls {
+	for _, decl := range tracingNode.Decls {
 		// Get all functions
 		funcDecl, ok := decl.(*ast.FuncDecl)
 		if !ok {
@@ -121,8 +121,8 @@ func TestRequestsIncludeAppendSpanAttribute(t *testing.T) {
 			continue
 		}
 
-		// We have the name; if it ends in "Request", we are golden
-		if strings.HasSuffix(ident.Name, "Request") {
+		// We have the name; if it ends in "Request" or "RequestAlpha2", we are golden
+		if strings.HasSuffix(ident.Name, "Request") || strings.HasSuffix(ident.Name, "RequestAlpha2") {
 			haveMethods = append(haveMethods, ident.Name)
 		}
 	}
@@ -131,5 +131,17 @@ func TestRequestsIncludeAppendSpanAttribute(t *testing.T) {
 	slices.Sort(allRequests)
 	slices.Sort(haveMethods)
 
+	hasConversationRequest := false
+	hasConversationRequestAlpha2 := false
+	for _, req := range allRequests {
+		if req == "ConversationRequest" {
+			hasConversationRequest = true
+		}
+		if req == "ConversationRequestAlpha2" {
+			hasConversationRequestAlpha2 = true
+		}
+	}
+	assert.True(t, hasConversationRequest)
+	assert.True(t, hasConversationRequestAlpha2)
 	assert.Equal(t, allRequests, haveMethods, "Some Request structs are missing the `AppendSpanAttributes(rpcMethod string, m map[string]string)` method")
 }
