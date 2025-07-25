@@ -2,6 +2,8 @@ module github.com/dapr/dapr
 
 go 1.24.4
 
+replace github.com/dapr/components-contrib v1.15.1-0.20250723145814-9f0aec6d35cd => github.com/javier-aliaga/components-contrib v0.0.0-20250725101341-8aab501b0e38
+
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/PaesslerAG/jsonpath v0.1.1
@@ -290,7 +292,6 @@ require (
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
-	github.com/gorilla/css v1.0.1 // indirect
 	github.com/grandcat/zeroconf v1.0.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
