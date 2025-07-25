@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors/targets/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
@@ -58,6 +59,7 @@ var log = logger.NewLogger("dapr.wfengine.backend.actors")
 const (
 	WorkflowNameLabelKey = "workflow"
 	ActivityNameLabelKey = "activity"
+	ExecutorNameLabelKey = "executor"
 	ActorTypePrefix      = "dapr.internal."
 )
 
@@ -68,6 +70,11 @@ type Options struct {
 	Resiliency         resiliency.Provider
 	SchedulerReminders bool
 	EventSink          orchestrator.EventSink
+	// experimental feature
+	// enabling this will use the cluster tasks backend for pending tasks, instead of the default local implementation
+	// the cluster tasks backend uses actors to share the state of pending tasks
+	// allowing to deploy multiple daprd replicas and expose them through a loadbalancer
+	EnableClusteredDeployment bool
 }
 
 type Actors struct {
@@ -75,28 +82,39 @@ type Actors struct {
 	namespace         string
 	workflowActorType string
 	activityActorType string
+	executorActorType string
 
-	pendingTasksBackend     PendingTasksBackend
-	defaultReminderInterval *time.Duration
-	resiliency              resiliency.Provider
-	actors                  actors.Interface
-	schedulerReminders      bool
-	eventSink               orchestrator.EventSink
+	enableClusteredDeployment bool
+	pendingTasksBackend       PendingTasksBackend
+	defaultReminderInterval   *time.Duration
+	resiliency                resiliency.Provider
+	actors                    actors.Interface
+	schedulerReminders        bool
+	eventSink                 orchestrator.EventSink
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 }
 
 func New(opts Options) *Actors {
+	var pendingTasksBackend PendingTasksBackend = local.NewTasksBackend()
+	if opts.EnableClusteredDeployment {
+		pendingTasksBackend = NewClusterTasksBackend(ClusterTasksBackendOptions{
+			Actors:            opts.Actors,
+			ExecutorActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
+		})
+	}
 	return &Actors{
 		appID:                     opts.AppID,
 		namespace:                 opts.Namespace,
 		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
+		executorActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		schedulerReminders:        opts.SchedulerReminders,
-		pendingTasksBackend:       local.NewTasksBackend(),
+		pendingTasksBackend:       pendingTasksBackend,
+		enableClusteredDeployment: opts.EnableClusteredDeployment,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
@@ -159,20 +177,34 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		return err
 	}
 
-	atable.RegisterActorTypes(
-		table.RegisterActorTypeOptions{
-			Factories: []table.ActorTypeFactory{
-				{
-					Factory: workflowFactory,
-					Type:    abe.workflowActorType,
-				},
-				{
-					Factory: activityFactory,
-					Type:    abe.activityActorType,
-				},
-			},
+	factories := []table.ActorTypeFactory{
+		{
+			Factory: workflowFactory,
+			Type:    abe.workflowActorType,
 		},
-	)
+		{
+			Factory: activityFactory,
+			Type:    abe.activityActorType,
+		},
+	}
+
+	if abe.enableClusteredDeployment {
+		executorFactory, err := executor.New(ctx, executor.Options{
+			ActorType: abe.executorActorType,
+			Actors:    abe.actors,
+		})
+		if err != nil {
+			return err
+		}
+		factories = append(factories, table.ActorTypeFactory{
+			Factory: executorFactory,
+			Type:    abe.executorActorType,
+		})
+	}
+
+	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
+		Factories: factories,
+	})
 
 	return nil
 }
@@ -183,7 +215,12 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 		return err
 	}
 
-	return table.UnRegisterActorTypes(abe.workflowActorType, abe.activityActorType)
+	actorTypes := []string{abe.workflowActorType, abe.activityActorType}
+	if abe.enableClusteredDeployment {
+		actorTypes = append(actorTypes, abe.executorActorType)
+	}
+
+	return table.UnRegisterActorTypes(actorTypes...)
 }
 
 // RerunWorkflowFromEvent implements backend.Backend and reruns a workflow from
