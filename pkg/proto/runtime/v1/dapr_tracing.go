@@ -92,123 +92,163 @@ func (*DeleteJobRequest) AppendSpanAttributes(rpcMethod string, m map[string]str
 func (*DecryptRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*DeleteBulkStateRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*EncryptRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*ExecuteActorStateTransactionRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*ExecuteStateTransactionRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*GetActorStateRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*GetBulkSecretRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*GetBulkStateRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*GetConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*GetJobRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*GetMetadataRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*GetWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*InvokeActorRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*PauseWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*PurgeWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*QueryStateRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*RaiseEventWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*RegisterActorReminderRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*RegisterActorTimerRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*ResumeWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*ScheduleJobRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SetMetadataRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*ShutdownRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*StartWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SubscribeConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SubscribeTopicEventsRequestInitialAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SubscribeTopicEventsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODOalph
 }
+
 func (*SubscribeTopicEventsRequestAlpha1_InitialRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SubtleDecryptRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SubtleEncryptRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SubtleGetKeyRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SubtleSignRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SubtleUnwrapKeyRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SubtleVerifyRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*SubtleWrapKeyRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*TerminateWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*TryLockRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*UnlockRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*UnregisterActorReminderRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*UnregisterActorTimerRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+
 func (*UnsubscribeConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
