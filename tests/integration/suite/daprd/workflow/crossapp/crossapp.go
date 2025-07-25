@@ -11,9 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package conversation
+package crossapp
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation/alpha1"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation/alpha2"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp/activity"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp/suborchestrator"
 )
