@@ -113,7 +113,7 @@ func (s *Subscriber) StopAllSubscriptionsForever() {
 		wg.Add(len(psubs))
 		for _, sub := range psubs {
 			go func(sub *namedSubscription) {
-				sub.Stop(pubsub.ErrShutdownConsumerGroup)
+				sub.Stop(pubsub.ErrGracefulShutdown)
 				wg.Done()
 			}(sub)
 		}
@@ -123,7 +123,7 @@ func (s *Subscriber) StopAllSubscriptionsForever() {
 		wg.Add(len(psubs))
 		for _, sub := range psubs {
 			go func() {
-				sub.Stop(pubsub.ErrShutdownConsumerGroup)
+				sub.Stop(pubsub.ErrGracefulShutdown)
 				wg.Done()
 			}()
 		}

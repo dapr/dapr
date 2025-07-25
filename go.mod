@@ -2,7 +2,7 @@ module github.com/dapr/dapr
 
 go 1.24.4
 
-replace github.com/dapr/components-contrib v1.15.1-0.20250723145814-9f0aec6d35cd => github.com/javier-aliaga/components-contrib v0.0.0-20250725101341-8aab501b0e38
+replace github.com/dapr/components-contrib v1.15.1-0.20250723145814-9f0aec6d35cd => github.com/javier-aliaga/components-contrib v0.0.0-20250725112238-a0c5ea4af499
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
