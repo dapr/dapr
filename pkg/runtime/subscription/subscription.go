@@ -66,7 +66,7 @@ type Subscription struct {
 	adapterStreamer rtpubsub.AdapterStreamer
 	adapter         rtpubsub.Adapter
 
-	cancel   func()
+	cancel   func(cause error)
 	closed   atomic.Bool
 	wg       sync.WaitGroup
 	inflight atomic.Int64
@@ -82,7 +82,7 @@ func New(opts Options) (*Subscription, error) {
 		return nil, fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", opts.Topic, opts.PubSubName)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancelCause(context.Background())
 
 	s := &Subscription{
 		appID:           opts.AppID,
@@ -111,7 +111,7 @@ func New(opts Options) (*Subscription, error) {
 	if route.BulkSubscribe != nil && route.BulkSubscribe.Enabled {
 		err := s.bulkSubscribeTopic(ctx, policyDef)
 		if err != nil {
-			cancel()
+			cancel(nil)
 			return nil, fmt.Errorf("failed to bulk subscribe to topic %s: %w", s.topic, err)
 		}
 		return s, nil
@@ -308,14 +308,14 @@ func New(opts Options) (*Subscription, error) {
 		return err
 	})
 	if err != nil {
-		cancel()
+		cancel(nil)
 		return nil, fmt.Errorf("failed to subscribe to topic %s: %w", s.topic, err)
 	}
 
 	return s, nil
 }
 
-func (s *Subscription) Stop() {
+func (s *Subscription) Stop(err ...error) {
 	s.closed.Store(true)
 	inflight := s.inflight.Load() > 0
 
@@ -329,7 +329,12 @@ func (s *Subscription) Stop() {
 	if inflight {
 		time.Sleep(time.Millisecond * 400)
 	}
-	s.cancel()
+	if err != nil && len(err) > 0 {
+		s.cancel(err[0])
+		return
+	}
+
+	s.cancel(nil)
 }
 
 func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *contribpubsub.NewMessage, deadLetterTopic string) error {
