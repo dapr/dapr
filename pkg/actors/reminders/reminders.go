@@ -23,7 +23,7 @@ import (
 )
 
 // TODO: @joshvanl: move errors package
-var ErrReminderOpActorNotHosted = errors.New("operations on actor reminders are only possible on hosted actor types")
+var ErrReminderOpActorNotHosted = errors.New("operations on actor reminders are only possible on hosted actor types. Check that the actor type is correct and hosted by the expected instance")
 
 type Interface interface {
 	// Get retrieves an actor reminder.
