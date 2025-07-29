@@ -1,0 +1,30 @@
+name: Sync release branch to master
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release-*
+
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+    name: Syncing release branch to master
+    outputs:
+      pr_number: ${{ steps.create_pr.outputs.pr_number }}
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Set up Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20
+    - name: Create sync PR from release branch to master
+      id: create_pr
+      uses: tretuna/sync-branches@main
+      with:
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        FROM_BRANCH: ${{ github.ref_name }}
+        TO_BRANCH: master
