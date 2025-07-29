@@ -1,17 +1,17 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package grpc
 
 import (
 	"context"
@@ -60,9 +60,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub input phone number", func(t *testing.T) {
 		scrubInput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content:  "well hello there, my phone number is +2222222222",
 					ScrubPII: &scrubInput,
@@ -76,9 +76,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("scrub input great phone number", func(t *testing.T) {
 		scrubInput := true
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content:  "well hello there, my phone number is +4422222222",
 					ScrubPII: &scrubInput,
@@ -93,9 +93,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub input email", func(t *testing.T) {
 		scrubInput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content:  "well hello there, my email is test@test.com",
 					ScrubPII: &scrubInput,
@@ -110,9 +110,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub input ip address", func(t *testing.T) {
 		scrubInput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content:  "well hello there from 10.8.9.1",
 					ScrubPII: &scrubInput,
@@ -127,9 +127,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
 		scrubOutput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content: "well hello there from 10.8.9.1",
 				},
@@ -149,9 +149,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("no scrubbing on good input", func(t *testing.T) {
 		scrubOutput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{ //nolint:staticcheck
 			Name: "echo",
-			Inputs: []*rtv1.ConversationInput{
+			Inputs: []*rtv1.ConversationInput{ //nolint:staticcheck
 				{
 					Content:  "well hello there",
 					ScrubPII: &scrubOutput,
