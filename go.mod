@@ -16,7 +16,7 @@ require (
 	github.com/dapr/kit v0.15.3-0.20250710140356-9d4f384c5763
 	github.com/diagridio/go-etcd-cron v0.8.3-0.20250717040853-f73d9b003369
 	github.com/evanphx/json-patch/v5 v5.9.0
-	github.com/go-chi/chi/v5 v5.0.11
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/cors v1.2.1
 	github.com/go-logr/logr v1.4.2
 	github.com/golang/mock v1.6.0
