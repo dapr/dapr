@@ -31,6 +31,25 @@ import (
 	kmeta "github.com/dapr/kit/metadata"
 )
 
+func mapRoleToChatMessageType(roleStr string) llms.ChatMessageType {
+	switch roleStr {
+	case "user", "human":
+		return llms.ChatMessageTypeHuman
+	case "system":
+		return llms.ChatMessageTypeSystem
+	case "assistant", "ai":
+		return llms.ChatMessageTypeAI
+	case "tool":
+		return llms.ChatMessageTypeTool
+	case "function":
+		return llms.ChatMessageTypeFunction
+	case "generic":
+		return llms.ChatMessageTypeGeneric
+	default:
+		return llms.ChatMessageTypeHuman
+	}
+}
+
 func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) { //nolint:staticcheck
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
@@ -63,7 +82,6 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	var scrubbed []string
 	for _, i := range req.GetInputs() {
 		msg := i.GetContent()
-
 		if i.GetScrubPII() {
 			scrubbed, err = scrubber.ScrubTexts([]string{i.GetContent()})
 			if err != nil {
@@ -76,7 +94,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		}
 
 		c := llms.MessageContent{
-			Role: llms.ChatMessageType(i.GetRole()),
+			Role: mapRoleToChatMessageType(i.GetRole()),
 			Parts: []llms.ContentPart{
 				llms.TextContent{
 					Text: msg,
