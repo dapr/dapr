@@ -16,6 +16,8 @@ package universal
 import (
 	"context"
 	"errors"
+	"fmt"
+	"google.golang.org/protobuf/types/known/structpb"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -364,25 +366,34 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						text = scrubbed[0]
 					}
 
-					parts = append(parts, llms.TextContent{
-						Text: text,
-					})
-
 					toolCallResponse := llms.ToolCallResponse{
 						ToolCallID: toolID,
 						Content:    text,
 						Name:       msg.OfTool.GetName(),
 					}
 
-					// handle mistral edge case on handling tool call response message
-					// where it expects a text message instead of a tool call response message
-					if _, ok := component.(*mistral.Mistral); ok {
-						langchainMsg = mistral.CreateToolResponseMessage(toolCallResponse)
-					} else {
-						langchainMsg = llms.MessageContent{
-							Role:  llms.ChatMessageTypeTool,
-							Parts: parts,
+					parts = append(parts, toolCallResponse)
+				}
+
+				// handle mistral edge case on handling tool call response message
+				// where it expects a text message instead of a tool call response message
+				if _, ok := component.(*mistral.Mistral); ok {
+					mistralContent := ""
+					for _, part := range parts {
+						if resp, ok := part.(llms.ToolCallResponse); ok {
+							mistralContent += resp.Content + "\n"
 						}
+					}
+					mistralToolCallResponse := llms.ToolCallResponse{
+						ToolCallID: toolID,
+						Content:    mistralContent,
+						Name:       msg.OfTool.GetName(),
+					}
+					langchainMsg = mistral.CreateToolResponseMessage(mistralToolCallResponse)
+				} else {
+					langchainMsg = llms.MessageContent{
+						Role:  llms.ChatMessageTypeTool,
+						Parts: parts,
 					}
 				}
 
@@ -409,18 +420,14 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	toolChoice := req.GetToolChoice()
 	tools := req.GetTools()
 
-	// set default tool choice
-	if toolChoice == "" {
-		if len(tools) > 0 {
-			toolChoice = "auto"
-		} else {
-			toolChoice = "none"
-		}
+	// set default tool choice to auto if not specified and tools are available
+	if toolChoice == "" && len(tools) > 0 {
+		toolChoice = "auto"
 	}
 
 	// validate tool choice
 	switch toolChoice {
-	case "auto", "none":
+	case "auto", "none", "":
 	case "required":
 		if len(tools) == 0 {
 			err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool choice must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
@@ -442,26 +449,54 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				}
 			}
 			if !toolNameFound {
-				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool choice not found. Must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
+				err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "tool choice selected was not found. Must be 'auto', 'none', 'required', or a specific tool name matching the tools available to be used")
 				a.logger.Debug(err)
 				return nil, err
 			}
 		}
 	}
 
-	request.ToolChoice = &toolChoice
+	if toolChoice != "" {
+		request.ToolChoice = &toolChoice
+	}
 
 	if tools := req.GetTools(); tools != nil {
 		availableTools := []llms.Tool{}
 		for _, tool := range tools {
 			switch t := tool.GetToolTypes().(type) {
 			case *runtimev1pb.ConversationTools_Function:
+				// only type, required, and properties are supported in most LLMs for jsonschema attributes
+				params := map[string]any{
+					"type": "object",
+				}
+				for key, param := range t.Function.GetParameters() {
+					fmt.Printf("key: %s, value: %s\n", key, param.String())
+					if key == "required" {
+						listValue := &structpb.ListValue{}
+						err := param.UnmarshalTo(listValue)
+						if err != nil {
+							err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "error unmarshalling tool json schema required field: %v", err)
+							return nil, err
+						}
+						params["required"] = listValue.AsSlice()
+					}
+					if key == "properties" {
+						// convert properties to map[string]any
+						structValue := &structpb.Struct{}
+						err := param.UnmarshalTo(structValue)
+						if err != nil {
+							err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "error unmarshalling tool json schema properties field: %v", err)
+							return nil, err
+						}
+						params["properties"] = structValue.AsMap()
+					}
+				}
 				langchainTool := llms.Tool{
 					Type: "function",
 					Function: &llms.FunctionDefinition{
 						Name:        t.Function.GetName(),
 						Description: t.Function.GetDescription(),
-						Parameters:  t.Function.GetParameters(),
+						Parameters:  params,
 					},
 				}
 				availableTools = append(availableTools, langchainTool)
