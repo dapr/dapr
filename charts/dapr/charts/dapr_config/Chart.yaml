@@ -1,5 +1,5 @@
 apiVersion: v2
-appVersion: "1.0"
+appVersion: '0.0.0'
 description: A Helm chart for Dapr configuration
 name: dapr_config
 version: '0.0.0'
