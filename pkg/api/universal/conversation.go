@@ -16,7 +16,6 @@ package universal
 import (
 	"context"
 	"errors"
-	"fmt"
 	"google.golang.org/protobuf/types/known/structpb"
 	"time"
 
@@ -470,7 +469,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					"type": "object",
 				}
 				for key, param := range t.Function.GetParameters() {
-					fmt.Printf("key: %s, value: %s\n", key, param.String())
 					if key == "required" {
 						listValue := &structpb.ListValue{}
 						err := param.UnmarshalTo(listValue)
