@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    # command: redis-server --save 60 1 --loglevel warning # Optional: persistence and logging
+
+  kafka:
+    image: "bitnami/kafka:latest"
+    ports:
+      - "9092:9092" # For clients running outside Docker (e.g., local Go test)
+      - "9093:9093" # For clients running inside Docker (inter-container communication)
+    environment:
+      # KRaft settings
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9094
+      # Listeners
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9094,INTERNAL://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092,INTERNAL://kafka:9093
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      # Topic auto-creation (optional, but useful for tests if not creating topics manually)
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      # Other Kafka configurations
+      - KAFKA_CFG_NUM_PARTITIONS=1 # Keep low for perf test simplicity unless testing partitioning
+      - KAFKA_CFG_DEFAULT_REPLICATION_FACTOR=1
+    volumes:
+      - kafka-data:/bitnami/kafka
+    # depends_on: # No explicit Zookeeper dependency with KRaft mode
+      # - zookeeper
+
+  # Optional: If you need Zookeeper for older Kafka versions or other reasons
+  # zookeeper:
+  #   image: "bitnami/zookeeper:latest"
+  #   ports:
+  #     - "2181:2181"
+  #   environment:
+  #     - ALLOW_ANONYMOUS_LOGIN=yes
+  #   volumes:
+  #     - zookeeper-data:/bitnami/zookeeper
+
+volumes:
+  redis-data:
+  kafka-data:
+  # zookeeper-data:
