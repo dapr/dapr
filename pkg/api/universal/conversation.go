@@ -16,7 +16,6 @@ package universal
 import (
 	"context"
 	"errors"
-	"google.golang.org/protobuf/types/known/structpb"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -31,6 +30,25 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	kmeta "github.com/dapr/kit/metadata"
 )
+
+func mapRoleToChatMessageType(roleStr string) llms.ChatMessageType {
+	switch roleStr {
+	case "user", "human":
+		return llms.ChatMessageTypeHuman
+	case "system":
+		return llms.ChatMessageTypeSystem
+	case "assistant", "ai":
+		return llms.ChatMessageTypeAI
+	case "tool":
+		return llms.ChatMessageTypeTool
+	case "function":
+		return llms.ChatMessageTypeFunction
+	case "generic":
+		return llms.ChatMessageTypeGeneric
+	default:
+		return llms.ChatMessageTypeHuman
+	}
+}
 
 func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) { //nolint:staticcheck
 	component, ok := a.compStore.GetConversation(req.GetName())
@@ -64,7 +82,6 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	var scrubbed []string
 	for _, i := range req.GetInputs() {
 		msg := i.GetContent()
-
 		if i.GetScrubPII() {
 			scrubbed, err = scrubber.ScrubTexts([]string{i.GetContent()})
 			if err != nil {
@@ -77,7 +94,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		}
 
 		c := llms.MessageContent{
-			Role: llms.ChatMessageType(i.GetRole()),
+			Role: mapRoleToChatMessageType(i.GetRole()),
 			Parts: []llms.ContentPart{
 				llms.TextContent{
 					Text: msg,
@@ -464,37 +481,12 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		for _, tool := range tools {
 			switch t := tool.GetToolTypes().(type) {
 			case *runtimev1pb.ConversationTools_Function:
-				// only type, required, and properties are supported in most LLMs for jsonschema attributes
-				params := map[string]any{
-					"type": "object",
-				}
-				for key, param := range t.Function.GetParameters() {
-					if key == "required" {
-						listValue := &structpb.ListValue{}
-						err := param.UnmarshalTo(listValue)
-						if err != nil {
-							err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "error unmarshalling tool json schema required field: %v", err)
-							return nil, err
-						}
-						params["required"] = listValue.AsSlice()
-					}
-					if key == "properties" {
-						// convert properties to map[string]any
-						structValue := &structpb.Struct{}
-						err := param.UnmarshalTo(structValue)
-						if err != nil {
-							err = messages.ErrConversationInvalidParams.WithFormat(req.GetName(), "error unmarshalling tool json schema properties field: %v", err)
-							return nil, err
-						}
-						params["properties"] = structValue.AsMap()
-					}
-				}
 				langchainTool := llms.Tool{
 					Type: "function",
 					Function: &llms.FunctionDefinition{
 						Name:        t.Function.GetName(),
 						Description: t.Function.GetDescription(),
-						Parameters:  params,
+						Parameters:  t.Function.GetParameters().AsMap(),
 					},
 				}
 				availableTools = append(availableTools, langchainTool)
