@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package crossapp
+package suborchestrator
 
 import (
 	"context"
@@ -35,7 +35,7 @@ func init() {
 	suite.Register(new(invalidappid))
 }
 
-// invalidappid tests error handling when calling activities on non-existent app IDs
+// invalidappid tests error handling when calling sub-orchestrators on non-existent app IDs
 type invalidappid struct {
 	workflow             *workflow.Workflow
 	actorNotFoundLogLine *logline.LogLine
@@ -69,11 +69,11 @@ func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
 		}
 
-		// Try to call activity on non-existent app
+		// Try to call sub-orchestrator on non-existent app
 		var result string
-		err := ctx.CallActivity("ProcessData",
-			task.WithActivityInput(input),
-			task.WithActivityAppID("nonexistent-app")).
+		err := ctx.CallSubOrchestrator("ProcessData",
+			task.WithSubOrchestratorInput(input),
+			task.WithSubOrchestratorAppID("nonexistent-app")).
 			Await(&result)
 		return fmt.Sprintf("Error handled: %v", err), nil
 	})
