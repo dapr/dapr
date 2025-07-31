@@ -158,6 +158,11 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 		or.streamFns = make(map[int64]*streamFn)
 	}
 
+	// Reset the cache state to force a reload from the state store
+	or.state = nil
+	or.rstate = nil
+	or.ometa = nil
+
 	return or
 }
 
