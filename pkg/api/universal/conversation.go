@@ -479,7 +479,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					Function: &llms.FunctionDefinition{
 						Name:        t.Function.GetName(),
 						Description: t.Function.GetDescription(),
-						Parameters:  t.Function.GetParameters(),
+						Parameters:  t.Function.GetParameters().AsMap(),
 					},
 				}
 				availableTools = append(availableTools, langchainTool)
