@@ -466,7 +466,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	if tools := req.GetTools(); tools != nil {
-		availableTools := []llms.Tool{}
+		availableTools := make([]llms.Tool, 0, len(tools))
 		for _, tool := range tools {
 			switch t := tool.GetToolTypes().(type) {
 			case *runtimev1pb.ConversationTools_Function:

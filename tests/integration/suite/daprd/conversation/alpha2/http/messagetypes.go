@@ -203,37 +203,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 						{
 							"finishReason": "stop",
 							"message": {
-								"content": "first user message"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"message": {
-								"content": "first assistant response"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"message": {
-								"content": "second user message"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"message": {
-								"content": "system instruction"
+								"content": "first user message\nfirst assistant response\nsecond user message\nsystem instruction"
 							}
 						}
 					]
