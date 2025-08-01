@@ -34,7 +34,7 @@ const (
 )
 
 func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
-	return a.scheduleJob(ctx, inReq.GetJob())
+	return a.scheduleJob(ctx, inReq)
 }
 
 func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1pb.JobHTTPRequest) (*runtimev1pb.ScheduleJobResponse, error) {
@@ -44,24 +44,26 @@ func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1p
 	}
 
 	//nolint:protogetter
-	return a.scheduleJob(ctx, &runtimev1pb.Job{
-		Name:          job.GetName(),
-		Schedule:      job.Schedule,
-		Repeats:       job.Repeats,
-		DueTime:       job.DueTime,
-		Ttl:           job.Ttl,
-		Data:          data,
-		Overwrite:     job.GetOverwrite(),
-		FailurePolicy: job.GetFailurePolicy(),
+	return a.scheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
+		Job: &runtimev1pb.Job{
+			Name:          job.GetName(),
+			Schedule:      job.Schedule,
+			Repeats:       job.Repeats,
+			DueTime:       job.DueTime,
+			Ttl:           job.Ttl,
+			Data:          data,
+			FailurePolicy: job.GetFailurePolicy(),
+		},
+		Overwrite: job.GetOverwrite(),
 	})
 }
 
-func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*runtimev1pb.ScheduleJobResponse, error) {
+func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
 	}
-
+	job := jobRequest.GetJob()
 	if job == nil {
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Job", errMetadata, errorcodes.SchedulerEmpty)
 	}
@@ -85,7 +87,7 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 				},
 			},
 		},
-		Overwrite: job.GetOverwrite(),
+		Overwrite: jobRequest.GetOverwrite(),
 		//nolint:protogetter
 		Job: &schedulerv1pb.Job{
 			Schedule:      job.Schedule,
