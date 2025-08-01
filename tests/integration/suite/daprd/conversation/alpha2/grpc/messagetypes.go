@@ -244,7 +244,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "stop", choices.GetFinishReason())
 		require.Equal(t, int64(0), choices.GetIndex())
 		require.NotNil(t, choices.GetMessage())
-		require.Equal(t, "tool message", choices.GetMessage().GetContent())
+		require.Equal(t, "Tool Response for tool 'tool name' with ID 'tool-123': tool message", choices.GetMessage().GetContent())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 

@@ -16,6 +16,7 @@ package universal
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -394,15 +395,15 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				// handle mistral edge case on handling tool call response message
 				// where it expects a text message instead of a tool call response message
 				if _, ok := component.(*mistral.Mistral); ok {
-					mistralContent := ""
+					mistralContentParts := make([]string, 0, len(parts))
 					for _, part := range parts {
 						if resp, ok := part.(llms.ToolCallResponse); ok {
-							mistralContent += resp.Content + "\n"
+							mistralContentParts = append(mistralContentParts, resp.Content)
 						}
 					}
 					mistralToolCallResponse := llms.ToolCallResponse{
 						ToolCallID: toolID,
-						Content:    mistralContent,
+						Content:    strings.Join(mistralContentParts, "\n"),
 						Name:       msg.OfTool.GetName(),
 					}
 					langchainMsg = mistral.CreateToolResponseMessage(mistralToolCallResponse)
