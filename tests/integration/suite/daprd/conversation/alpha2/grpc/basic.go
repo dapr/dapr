@@ -178,7 +178,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			ToolChoice:  ptr.Of("auto"),
 		})
 		require.NoError(t, err)
-		// Echo component returns one output per input message
+		// Echo component returns one output following current chat completion API and other providers
 		require.Len(t, resp.GetOutputs(), 1)
 		require.Equal(t, contextID, resp.GetContextId())
 

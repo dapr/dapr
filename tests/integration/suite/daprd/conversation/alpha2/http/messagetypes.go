@@ -195,7 +195,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		// echo component returns one output per message
+		// Echo component returns one output following current chat completion API and other providers
 		expectedResponse := `{
 			"outputs": [
 				{

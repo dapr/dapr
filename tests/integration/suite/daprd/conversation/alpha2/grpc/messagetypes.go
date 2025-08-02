@@ -308,7 +308,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 			},
 		})
 		require.NoError(t, err)
-		// Echo component returns one output per message
+		// Echo component returns one output following current chat completion API and other providers
 		require.Len(t, resp.GetOutputs(), 1)
 
 		// First output - first user message
