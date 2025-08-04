@@ -71,11 +71,10 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		_, err = client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
-			Name:      jobName,
-			Schedule:  ptr.Of("@weekly"),
-			Repeats:   ptr.Of(uint32(1)),
-			Overwrite: true,
-		}})
+			Name:     jobName,
+			Schedule: ptr.Of("@weekly"),
+			Repeats:  ptr.Of(uint32(1)),
+		}, Overwrite: true})
 		require.NoError(t, err)
 
 		modifiedJob, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{Name: jobName})
@@ -95,11 +94,10 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 
 		for _, req := range []*rtv1.ScheduleJobRequest{
 			{Job: &rtv1.Job{
-				Name:      "overwrite2",
-				Schedule:  ptr.Of("@weekly"),
-				Repeats:   ptr.Of(uint32(1)),
-				Overwrite: false,
-			}},
+				Name:     "overwrite2",
+				Schedule: ptr.Of("@weekly"),
+				Repeats:  ptr.Of(uint32(1)),
+			}, Overwrite: false},
 		} {
 			_, err := client.ScheduleJobAlpha1(ctx, req)
 			require.Error(t, err)
