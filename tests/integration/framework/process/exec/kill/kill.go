@@ -18,7 +18,7 @@ import (
 	"testing"
 )
 
-func Interupt(t *testing.T, cmd *exec.Cmd) {
+func Interrupt(t *testing.T, cmd *exec.Cmd) {
 	t.Helper()
 
 	if cmd == nil || cmd.ProcessState != nil {

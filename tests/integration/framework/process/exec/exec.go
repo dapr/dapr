@@ -132,7 +132,7 @@ func (e *Exec) Cleanup(t *testing.T) {
 		return
 	}
 
-	kill.Interupt(t, e.cmd)
+	kill.Interrupt(t, e.cmd)
 	e.checkExit(t)
 }
 
