@@ -34,7 +34,7 @@ import (
 
 type Option func(*options)
 
-type exec struct {
+type Exec struct {
 	cmd *oexec.Cmd
 
 	args       []string
@@ -49,7 +49,7 @@ type exec struct {
 	once atomic.Bool
 }
 
-func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
+func New(t *testing.T, binPath string, args []string, fopts ...Option) *Exec {
 	t.Helper()
 
 	defaultExitCode := 0
@@ -78,7 +78,7 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 		fopt(&opts)
 	}
 
-	return &exec{
+	return &Exec{
 		binPath:    binPath,
 		args:       args,
 		envs:       opts.envs,
@@ -89,7 +89,7 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 	}
 }
 
-func (e *exec) Run(t *testing.T, ctx context.Context) {
+func (e *Exec) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
 
 	t.Logf("Running %q with args: %s %s", filepath.Base(e.binPath), e.binPath, strings.Join(e.args, " "))
@@ -125,18 +125,28 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, e.cmd.Start())
 }
 
-func (e *exec) Cleanup(t *testing.T) {
+func (e *Exec) Cleanup(t *testing.T) {
 	defer func() { e.wg.Wait() }()
 
 	if !e.once.CompareAndSwap(false, true) {
 		return
 	}
 
-	kill.Kill(t, e.cmd)
+	kill.Interupt(t, e.cmd)
 	e.checkExit(t)
 }
 
-func (e *exec) checkExit(t *testing.T) {
+func (e *Exec) Kill(t *testing.T) {
+	defer e.wg.Wait()
+
+	if !e.once.CompareAndSwap(false, true) {
+		return
+	}
+
+	kill.Kill(t, e.cmd)
+}
+
+func (e *Exec) checkExit(t *testing.T) {
 	t.Helper()
 
 	t.Logf("waiting for %q process to exit", filepath.Base(e.binPath))

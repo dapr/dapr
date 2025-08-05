@@ -93,7 +93,7 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 		assert.Positive(c, r.jobCalled.Load())
 	}, time.Second*5, time.Millisecond*10)
 
-	r.scheduler1.Cleanup(t)
+	r.scheduler1.Kill(t)
 
 	called := r.jobCalled.Load()
 	time.Sleep(time.Second * 2)
@@ -102,7 +102,7 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 	r.scheduler2.Run(t, ctx)
 	r.scheduler2.WaitUntilRunning(t, ctx)
 	r.scheduler2.WaitUntilLeadership(t, ctx, 1)
-	t.Cleanup(func() { r.scheduler2.Cleanup(t) })
+	t.Cleanup(func() { r.scheduler2.Kill(t) })
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Greater(c, r.jobCalled.Load(), called)
