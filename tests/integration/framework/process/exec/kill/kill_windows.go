@@ -24,7 +24,7 @@ import (
 )
 
 func interrupt(_ *testing.T, cmd *exec.Cmd) {
-	kill(_, cmd)
+	kill(nil, cmd)
 }
 
 func kill(_ *testing.T, cmd *exec.Cmd) {
