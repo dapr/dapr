@@ -17,14 +17,10 @@ import "github.com/dapr/durabletask-go/backend"
 
 func (o *orchestrator) runEventSink(ch chan *backend.OrchestrationMetadata, cb func(*backend.OrchestrationMetadata)) {
 	for {
-		select {
-		case <-o.closeCh:
+		val, ok := <-ch
+		if !ok {
 			return
-		case val, ok := <-ch:
-			if !ok {
-				return
-			}
-			cb(val)
 		}
+		cb(val)
 	}
 }

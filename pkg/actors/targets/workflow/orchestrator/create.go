@@ -121,8 +121,6 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 		return err
 	}
 
-	defer o.ometaBroadcaster.Broadcast(o.ometa)
-
 	var start *time.Time
 	if ts := startEvent.GetExecutionStarted().GetScheduledStartTimestamp(); ts != nil {
 		start = ptr.Of(ts.AsTime())
