@@ -93,7 +93,7 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 		assert.Positive(c, r.jobCalled.Load())
 	}, time.Second*5, time.Millisecond*10)
 
-	r.scheduler1.Kill(t)
+	r.scheduler1.Cleanup(t)
 
 	called := r.jobCalled.Load()
 	time.Sleep(time.Second * 2)
