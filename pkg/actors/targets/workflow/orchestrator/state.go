@@ -49,7 +49,6 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	o.state = state
 	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
-	o.ometaBroadcaster.Broadcast(o.ometa)
 
 	return state, o.ometa, nil
 }
@@ -74,6 +73,7 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	o.state = state
 	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
+	o.ometaBroadcaster.Broadcast(o.ometa)
 	return nil
 }
 
@@ -145,12 +145,10 @@ func (o *orchestrator) cleanup() {
 	}
 
 	o.table.Delete(o.actorID)
-	o.ometaBroadcaster.Broadcast(o.ometa)
-	close(o.closeCh)
-	o.ometaBroadcaster.Close()
 	o.state = nil
 	o.rstate = nil
 	o.ometa = nil
+	o.ometaBroadcaster.Close()
 
 	go func() {
 		o.wg.Wait()

@@ -144,7 +144,6 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 		or.ometaBroadcaster.Close()
 	}
 	or.ometaBroadcaster = broadcaster.New[*backend.OrchestrationMetadata]()
-	or.closeCh = make(chan struct{})
 	or.closed.Store(false)
 
 	if f.eventSink != nil {
