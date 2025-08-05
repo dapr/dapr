@@ -24,7 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	clientv3 "go.etcd.io/etcd/client/v3"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
@@ -122,12 +121,16 @@ func (c *Cluster) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		s.WaitUntilRunning(t, ctx)
 	}
 
-	require.EventuallyWithT(t, func(col *assert.CollectT) {
-		resp, err := c.schedulers[0].ETCDClient(t, ctx).Get(ctx, "dapr/leadership", clientv3.WithPrefix())
-		if assert.NoError(col, err) {
-			_ = assert.NotNil(col, resp) && assert.Len(col, resp.Kvs, len(c.schedulers))
-		}
-	}, 10*time.Second, 10*time.Millisecond)
+	for _, sched := range c.schedulers {
+		assert.EventuallyWithT(t, func(col *assert.CollectT) {
+			stream, err := sched.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+			require.NoError(t, err)
+			resp, err := stream.Recv()
+			stream.CloseSend()
+			require.NoError(t, err)
+			assert.Len(col, resp.GetHosts(), len(c.schedulers))
+		}, 10*time.Second, 10*time.Millisecond)
+	}
 }
 
 func (c *Cluster) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
