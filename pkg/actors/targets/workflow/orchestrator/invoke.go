@@ -101,8 +101,6 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	completed, err := o.runWorkflow(ctx, reminder)
 	if completed == todo.RunCompletedTrue {
 		defer o.cleanup()
-	} else {
-		defer o.ometaBroadcaster.Broadcast(o.ometa)
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.

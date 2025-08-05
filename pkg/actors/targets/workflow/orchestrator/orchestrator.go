@@ -45,7 +45,6 @@ type orchestrator struct {
 	activityResultAwaited atomic.Bool
 	completed             atomic.Bool
 	lock                  *lock.Lock
-	closeCh               chan struct{}
 	closed                atomic.Bool
 	wg                    sync.WaitGroup
 }
