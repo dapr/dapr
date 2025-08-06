@@ -90,8 +90,6 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 }
 
 func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request []byte) error {
-	defer o.cleanup()
-
 	state, ometa, err := o.loadInternalState(ctx)
 	if err != nil {
 		return err

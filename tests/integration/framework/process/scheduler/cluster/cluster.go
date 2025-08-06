@@ -135,7 +135,19 @@ func (c *Cluster) WaitUntilRunning(t *testing.T, ctx context.Context) {
 
 func (c *Cluster) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
 	t.Helper()
-	return c.schedulers[0].Client(t, ctx)
+	return c.ClientN(t, ctx, 0)
+}
+
+func (c *Cluster) ClientN(t *testing.T, ctx context.Context, n int) schedulerv1pb.SchedulerClient {
+	t.Helper()
+	require.Less(t, n, len(c.schedulers), "n must be less than the number of schedulers in the cluster")
+	return c.schedulers[n].Client(t, ctx)
+}
+
+func (c *Cluster) EtcdClientPortN(t *testing.T, n int) int {
+	t.Helper()
+	require.Less(t, n, len(c.schedulers), "n must be less than the number of schedulers in the cluster")
+	return c.schedulers[n].EtcdClientPort()
 }
 
 func (c *Cluster) Addresses() []string {
