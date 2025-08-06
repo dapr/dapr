@@ -47,7 +47,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/metrics"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -55,7 +54,7 @@ import (
 )
 
 type Scheduler struct {
-	exec       process.Interface
+	exec       *exec.Exec
 	ports      *ports.Ports
 	httpClient *http.Client
 
@@ -70,8 +69,7 @@ type Scheduler struct {
 	etcdClientPort     int
 	sentry             *sentry.Sentry
 
-	runOnce     sync.Once
-	cleanupOnce sync.Once
+	runOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -191,12 +189,17 @@ func (s *Scheduler) Run(t *testing.T, ctx context.Context) {
 }
 
 func (s *Scheduler) Cleanup(t *testing.T) {
-	s.cleanupOnce.Do(func() {
-		if s.httpClient != nil {
-			s.httpClient.CloseIdleConnections()
-		}
-		s.exec.Cleanup(t)
-	})
+	if s.httpClient != nil {
+		s.httpClient.CloseIdleConnections()
+	}
+	s.exec.Cleanup(t)
+}
+
+func (s *Scheduler) Kill(t *testing.T) {
+	if s.httpClient != nil {
+		s.httpClient.CloseIdleConnections()
+	}
+	s.exec.Kill(t)
 }
 
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
