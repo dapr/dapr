@@ -70,6 +70,8 @@ func (l *local) Setup(t *testing.T) []framework.Option {
 }
 
 func (l *local) Run(t *testing.T, ctx context.Context) {
+	l.daprd.WaitUntilRunning(t, ctx)
+
 	client := l.daprd.GRPCClient(t, ctx)
 
 	errCh := make(chan error)
