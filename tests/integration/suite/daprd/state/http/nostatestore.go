@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -38,11 +37,11 @@ func init() {
 }
 
 type nostatestore struct {
-	daprd *procdaprd.Daprd
+	daprd *daprd.Daprd
 }
 
 func (n *nostatestore) Setup(t *testing.T) []framework.Option {
-	n.daprd = procdaprd.New(t, daprd.WithErrorCodeMetrics(t))
+	n.daprd = daprd.New(t, daprd.WithErrorCodeMetrics(t))
 
 	return []framework.Option{
 		framework.WithProcesses(n.daprd),
