@@ -128,6 +128,7 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 		var loaded bool
 		o, loaded = f.table.LoadOrStore(actorID, newO)
 		if loaded {
+			newO.ometaBroadcaster.Close()
 			orchestratorCache.Put(newO)
 		}
 	}
@@ -138,6 +139,7 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	or := o.(*orchestrator)
 
+	or.wg.Wait()
 	or.factory = f
 	or.actorID = actorID
 	if or.ometaBroadcaster != nil {

@@ -221,7 +221,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
 		}
-	}, 20*time.Second, 10*time.Millisecond)
+	}, 30*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {

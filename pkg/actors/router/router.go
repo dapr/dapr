@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
+	targetserrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -182,6 +183,10 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		err = target.InvokeReminder(ctx, req)
 	}
 
+	if targetserrors.IsClosed(err) {
+		return err
+	}
+
 	return backoff.Permanent(err)
 }
 
@@ -212,6 +217,9 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		var resp *internalv1pb.InternalInvokeResponse
 		resp, err = r.callLocalActor(ctx, req)
 		if err != nil {
+			if targetserrors.IsClosed(err) {
+				return resp, err
+			}
 			return resp, backoff.Permanent(err)
 		}
 		return resp, nil

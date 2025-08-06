@@ -72,7 +72,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		activityActorType = o.actorTypeBuilder.Activity(router.GetTargetAppID())
 	}
 
-	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), o.state.Generation)
+	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), generation)
 
 	o.activityResultAwaited.Store(true)
 
