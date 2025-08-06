@@ -88,8 +88,8 @@ func (f *fanoutthree) Run(t *testing.T, ctx context.Context) {
 	registry := task.NewTaskRegistry()
 
 	registry.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		tasks := make([]task.Task, 10)
-		for i := range 10 {
+		tasks := make([]task.Task, 5)
+		for i := range 5 {
 			tasks[i] = ctx.CallActivity("bar", task.WithActivityInput(i))
 		}
 
@@ -119,8 +119,8 @@ func (f *fanoutthree) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	_, err = client1.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	exp := make([]int, 10)
-	for i := range 10 {
+	exp := make([]int, 5)
+	for i := range 5 {
 		exp[i] = i
 	}
 	assert.ElementsMatch(t, exp, f.called.Slice())

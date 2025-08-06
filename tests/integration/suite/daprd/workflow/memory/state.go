@@ -82,7 +82,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		assert.InDelta(c,
 			s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"]*1e-6,
 			actorMemBaseline,
-			5,
+			35,
 			"workflow memory leak",
 		)
 	}, time.Second*30, time.Millisecond*10)

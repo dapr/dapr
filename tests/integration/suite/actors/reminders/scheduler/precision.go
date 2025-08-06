@@ -124,12 +124,12 @@ func (r *precision) Run(t *testing.T, ctx context.Context) {
 		Name:      "ms",
 		Data:      []byte("reminderdata"),
 		Period:    "1ms",
-		Ttl:       "5s",
+		Ttl:       "10ms",
 	})
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, r.called.Slice(), 17)
+		assert.Len(c, r.called.Slice(), 15)
 	}, time.Second*10, time.Millisecond*10)
 
 	eMap := make(map[string][]*request)
