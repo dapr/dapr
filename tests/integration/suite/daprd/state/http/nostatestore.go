@@ -73,9 +73,14 @@ func (n *nostatestore) Run(t *testing.T, ctx context.Context) {
 	errCode, exists := data["errorCode"]
 	require.True(t, exists)
 	require.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", errCode)
+
+	metric := fmt.Sprintf(
+		"dapr_error_code_total|app_id:%s|category:state|error_code:ERR_STATE_STORE_NOT_CONFIGURED",
+		n.daprd.AppID(),
+	)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, n.daprd.Metrics(c, ctx).MatchMetricAndSum(c, 1, "dapr_error_code_total"))
-	}, time.Second*20, time.Millisecond*10)
+		assert.GreaterOrEqual(c, n.daprd.Metrics(c, ctx).All()[metric], 1.0)
+	}, time.Second*10, time.Millisecond*10)
 
 	// Confirm that the 'message' field exists and contains the correct error message
 	errMsg, exists := data["message"]
