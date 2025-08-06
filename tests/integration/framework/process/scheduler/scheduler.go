@@ -69,6 +69,9 @@ type Scheduler struct {
 	etcdClientPort     int
 	sentry             *sentry.Sentry
 
+	embed    bool
+	userpass bool
+
 	runOnce sync.Once
 }
 
@@ -154,6 +157,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	if opts.clientEndpoints != nil {
 		args = append(args, "--etcd-client-endpoints="+strings.Join(*opts.clientEndpoints, ","))
 	}
+
 	if opts.clientUsername != nil {
 		args = append(args, "--etcd-client-username="+*opts.clientUsername)
 	}
@@ -178,6 +182,8 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		dataDir:            dataDir,
 		sentry:             opts.sentry,
 		namespace:          opts.namespace,
+		userpass:           opts.clientUsername != nil && opts.clientPassword != nil,
+		embed:              opts.embed != nil && *opts.embed,
 	}
 }
 
@@ -217,6 +223,15 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
 		assert.NoError(t, resp.Body.Close())
 	}, time.Second*20, 10*time.Millisecond)
+
+	if s.embed && !s.userpass {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp, err := s.ETCDClient(t, ctx).Get(ctx, "dapr/leadership/"+s.id)
+			if assert.NoError(c, err) {
+				assert.Len(c, resp.Kvs, 1)
+			}
+		}, 10*time.Second, 10*time.Millisecond)
+	}
 }
 
 func (s *Scheduler) WaitUntilLeadership(t *testing.T, ctx context.Context, leaders int) {
