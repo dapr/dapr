@@ -166,13 +166,13 @@ func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T])
 
 	switch event.Type {
 	case operatorpb.ResourceEventType_CREATED:
-		log.Infof("Received %s creation: %s", r.kind, event.Resource.LogName())
+		log.Debugf("Received %s creation: %s", r.kind, event.Resource.LogName())
 		r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_UPDATED:
-		log.Infof("Received %s update: %s", r.kind, event.Resource.LogName())
+		log.Debugf("Received %s update: %s", r.kind, event.Resource.LogName())
 		r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_DELETED:
-		log.Infof("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
+		log.Debugf("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
 		r.manager.delete(ctx, event.Resource)
 	}
 }
