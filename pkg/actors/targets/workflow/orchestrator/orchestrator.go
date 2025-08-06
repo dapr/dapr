@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	targetserrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/lock"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -51,22 +52,36 @@ type orchestrator struct {
 
 // InvokeMethod implements actors.InternalActor
 func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	o.wg.Add(1)
+	defer o.wg.Done()
+
 	unlock, err := o.lock.ContextLock(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
 
+	if o.closed.Load() {
+		return nil, targetserrors.NewClosed("invoke")
+	}
+
 	return o.handleInvoke(ctx, req)
 }
 
 // InvokeReminder implements actors.InternalActor
 func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
+	o.wg.Add(1)
+	defer o.wg.Done()
+
 	unlock, err := o.lock.ContextLock(ctx)
 	if err != nil {
 		return err
 	}
 	defer unlock()
+
+	if o.closed.Load() {
+		return targetserrors.NewClosed("reminder")
+	}
 
 	return o.handleReminder(ctx, reminder)
 }
@@ -88,6 +103,9 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
+	o.wg.Add(1)
+	defer o.wg.Done()
+
 	unlock, err := o.lock.ContextLock(ctx)
 	if err != nil {
 		return err

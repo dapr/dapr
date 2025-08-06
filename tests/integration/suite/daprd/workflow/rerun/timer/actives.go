@@ -51,7 +51,6 @@ func (a *actives) Run(t *testing.T, ctx context.Context) {
 		as2 := ctx.CreateTimer(time.Second * 5)
 		as3 := ctx.CreateTimer(time.Second * 5)
 		as4 := ctx.CallActivity("bar")
-		time.Sleep(time.Second)
 		require.NoError(t, as4.Await(nil))
 		require.NoError(t, as3.Await(nil))
 		require.NoError(t, as2.Await(nil))
