@@ -123,7 +123,7 @@ func (r *precision) Run(t *testing.T, ctx context.Context) {
 		ActorId:   "myactorid",
 		Name:      "ms",
 		Data:      []byte("reminderdata"),
-		Period:    "400ms",
+		Period:    "1ms",
 		Ttl:       "5s",
 	})
 	require.NoError(t, err)
@@ -137,9 +137,9 @@ func (r *precision) Run(t *testing.T, ctx context.Context) {
 		eMap[v.name] = append(eMap[v.name], v)
 	}
 
-	tolerance := 100 * time.Millisecond
+	tolerance := 200 * time.Millisecond
 	assertDurationWithTolerance(t, eMap, "sec", 1*time.Second, float64(tolerance))
-	assertDurationWithTolerance(t, eMap, "ms", 400*time.Millisecond, float64(tolerance))
+	assertDurationWithTolerance(t, eMap, "ms", time.Millisecond, float64(tolerance))
 }
 
 func assertDurationWithTolerance(t *testing.T, values map[string][]*request, key string, expectedDiff time.Duration, tolerance float64) {

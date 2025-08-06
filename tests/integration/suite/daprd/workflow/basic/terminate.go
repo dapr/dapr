@@ -98,7 +98,7 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 	backendClient := client.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
 
 	t.Run("terminate", func(t *testing.T) {
-		delayTime := 15 * time.Second
+		delayTime := 30 * time.Second
 		var executedActivity atomic.Bool
 		r := task.NewTaskRegistry()
 		r.AddOrchestratorN("Root", func(ctx *task.OrchestrationContext) (any, error) {
