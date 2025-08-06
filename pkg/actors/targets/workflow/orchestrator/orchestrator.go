@@ -61,8 +61,8 @@ func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.Inte
 	}
 	defer unlock()
 
-	if o.closed.Load() {
-		return nil, targetserrors.NewClosed("invoke")
+	if err := o.checkClosed("invoke"); err != nil {
+		return nil, err
 	}
 
 	return o.handleInvoke(ctx, req)
@@ -79,8 +79,8 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 	}
 	defer unlock()
 
-	if o.closed.Load() {
-		return targetserrors.NewClosed("reminder")
+	if err := o.checkClosed("reminder"); err != nil {
+		return err
 	}
 
 	return o.handleReminder(ctx, reminder)
@@ -130,4 +130,12 @@ func (o *orchestrator) Type() string {
 // ID returns the ID for this unique actor.
 func (o *orchestrator) ID() string {
 	return o.actorID
+}
+
+func (o *orchestrator) checkClosed(method string) error {
+	if o.closed.Load() {
+		return targetserrors.NewClosed(method)
+	}
+
+	return nil
 }
