@@ -77,13 +77,17 @@ func (c *callee) Setup(t *testing.T) []framework.Option {
 	c.daprd2 = daprd.New(t, opts...)
 
 	return []framework.Option{
-		framework.WithProcesses(app, c.daprd1, c.daprd2),
+		framework.WithProcesses(app, c.daprd1),
 	}
 }
 
 func (c *callee) Run(t *testing.T, ctx context.Context) {
-	c.daprd1.WaitUntilRunning(t, ctx)
+	c.daprd2.Run(t, ctx)
 	c.daprd2.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() {
+		c.healthError.Store(true)
+		c.daprd2.Cleanup(t)
+	})
 
 	client := c.daprd1.GRPCClient(t, ctx)
 
