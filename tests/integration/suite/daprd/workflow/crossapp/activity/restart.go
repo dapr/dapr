@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -57,6 +58,8 @@ type restart struct {
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
+	os.SkipWindows(t)
+
 	r.activityStarted = make(chan struct{})
 	r.activityReady = make(chan struct{})
 
