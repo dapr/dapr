@@ -65,14 +65,12 @@ func (l *local) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app),
+		framework.WithProcesses(app, l.daprd),
 	}
 }
 
 func (l *local) Run(t *testing.T, ctx context.Context) {
-	l.daprd.Run(t, ctx)
 	l.daprd.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { l.daprd.Cleanup(t) })
 
 	client := client.HTTP(t)
 

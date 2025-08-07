@@ -183,7 +183,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		sentry:             opts.sentry,
 		namespace:          opts.namespace,
 		userpass:           opts.clientUsername != nil && opts.clientPassword != nil,
-		embed:              opts.embed != nil && *opts.embed,
+		embed:              opts.embed == nil || *opts.embed,
 	}
 }
 
