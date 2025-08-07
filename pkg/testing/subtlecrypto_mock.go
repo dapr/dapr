@@ -23,7 +23,7 @@ import (
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 
-	contribCrypto "github.com/dapr/components-contrib/crypto"
+	contribCrypto "github.com/dapr/components-contrib/cryptography"
 )
 
 var (
