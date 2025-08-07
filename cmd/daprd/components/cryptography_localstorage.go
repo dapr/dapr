@@ -1,7 +1,7 @@
 //go:build allcomponents
 
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,17 +16,11 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
-	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/kit/logger"
+	"github.com/dapr/components-contrib/cryptography/localstorage"
+	cryptoLoader "github.com/dapr/dapr/pkg/components/cryptography"
 )
 
 func init() {
-	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
-		return webhook.NewDingTalkWebhook(l)
-	}, "dingtalk.webhook")
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
-		return webhook.NewDingTalkWebhook(l)
-	}, "dingtalk.webhook")
+	// TODO: in future rm the dapr. prefix
+	cryptoLoader.DefaultRegistry.RegisterComponent(localstorage.NewLocalStorageCrypto, "localstorage", "dapr.localstorage")
 }

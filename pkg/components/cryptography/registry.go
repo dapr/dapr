@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dapr/components-contrib/crypto"
+	crypto "github.com/dapr/components-contrib/cryptography"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/kit/logger"
 )
@@ -29,11 +29,7 @@ type Registry struct {
 }
 
 // DefaultRegistry is the singleton with the registry.
-var DefaultRegistry *Registry
-
-func init() {
-	DefaultRegistry = NewRegistry()
-}
+var DefaultRegistry *Registry = NewRegistry()
 
 // NewRegistry returns a new crypto provider registry.
 func NewRegistry() *Registry {

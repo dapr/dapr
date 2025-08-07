@@ -1,7 +1,7 @@
 //go:build allcomponents
 
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2021 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,10 +16,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/crypto/kubernetes/secrets"
-	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
+	"github.com/dapr/components-contrib/nameresolution/hashicorp/consul"
+	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 )
 
 func init() {
-	cryptoLoader.DefaultRegistry.RegisterComponent(secrets.NewKubeSecretsCrypto, "dapr.kubernetes.secrets")
+	nrLoader.DefaultRegistry.RegisterComponent(consul.NewResolver, "hashicorp.consul", "consul")
 }
