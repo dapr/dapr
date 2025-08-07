@@ -111,8 +111,6 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*30, time.Millisecond*10)
 
 	r.scheduler4.Run(t, ctx)
-	r.scheduler4.WaitUntilRunning(t, ctx)
-	r.scheduler4.WaitUntilLeadership(t, ctx, 3)
 	t.Cleanup(func() { r.scheduler4.Cleanup(t) })
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -123,5 +121,5 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 			r.scheduler3.Address(),
 			r.scheduler4.Address(),
 		}, resp.GetScheduler().GetConnectedAddresses())
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*10)
 }

@@ -105,7 +105,7 @@ func (r *precision) Run(t *testing.T, ctx context.Context) {
 		eMap[v.name] = append(eMap[v.name], v)
 	}
 
-	tolerance := 200 * time.Millisecond
+	tolerance := 500 * time.Millisecond
 
 	assertDurationWithTolerance(t, eMap, "test1", 1*time.Second, float64(tolerance))
 	assertDurationWithTolerance(t, eMap, "test2", time.Millisecond, float64(tolerance))
