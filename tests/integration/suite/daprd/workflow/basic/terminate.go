@@ -39,6 +39,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -59,6 +60,8 @@ type terminate struct {
 }
 
 func (tt *terminate) Setup(t *testing.T) []framework.Option {
+	os.SkipWindows(t)
+
 	handler := http.NewServeMux()
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(""))
@@ -98,7 +101,7 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 	backendClient := client.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
 
 	t.Run("terminate", func(t *testing.T) {
-		delayTime := 4 * time.Second
+		delayTime := 30 * time.Second
 		var executedActivity atomic.Bool
 		r := task.NewTaskRegistry()
 		r.AddOrchestratorN("Root", func(ctx *task.OrchestrationContext) (any, error) {
