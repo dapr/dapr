@@ -22,5 +22,5 @@ import (
 
 func init() {
 	// TODO: in future rm the dapr. prefix
-	cryptoLoader.DefaultRegistry.RegisterComponent(localstorage.NewLocalStorageCrypto, "localstorage", "dapr.localstorage")
+	cryptoLoader.DefaultRegistry.RegisterComponent(localstorage.NewLocalStorageCrypto, "dapr.localstorage")
 }

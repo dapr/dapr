@@ -22,5 +22,5 @@ import (
 
 func init() {
 	// TODO: in future rm the dapr prefix
-	cryptoLoader.DefaultRegistry.RegisterComponent(jwks.NewJWKSCrypto, "jwks", "dapr.jwks")
+	cryptoLoader.DefaultRegistry.RegisterComponent(jwks.NewJWKSCrypto, "dapr.jwks")
 }
