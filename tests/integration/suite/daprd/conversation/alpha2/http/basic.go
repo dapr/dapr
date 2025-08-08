@@ -145,7 +145,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		// Echo component returns one output per input message
+		// Echo component returns one output following current chat completion API and other providers
 		expectedResponse := `{
 			"contextId": "test-conversation-123",
 			"outputs": [
@@ -154,17 +154,16 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						{
 							"finishReason": "stop",
 							"message": {
-								"content": "well hello there"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"message": {
-								"content": "You are a helpful assistant"
+								"content": "well hello there\nYou are a helpful assistant",
+								"toolCalls": [
+									{
+										"function": {
+											"arguments": "param1", 
+											"name": "test_function"
+										}, 
+										"id": "0"
+									}
+								]
 							}
 						}
 					]
