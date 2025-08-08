@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-FROM golang:1.24.4 AS build_env
+FROM golang:1.24.6 AS build_env
 
 ENV CGO_ENABLED=0
 WORKDIR /app
