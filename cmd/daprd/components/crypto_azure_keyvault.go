@@ -16,11 +16,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/cryptography/jwks"
-	cryptoLoader "github.com/dapr/dapr/pkg/components/cryptography"
+	"github.com/dapr/components-contrib/crypto/azure/keyvault"
+	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 )
 
 func init() {
-	// TODO: in future rm the dapr prefix
-	cryptoLoader.DefaultRegistry.RegisterComponent(jwks.NewJWKSCrypto, "jwks", "dapr.jwks")
+	cryptoLoader.DefaultRegistry.RegisterComponent(keyvault.NewAzureKeyvaultCrypto, "azure.keyvault")
 }
