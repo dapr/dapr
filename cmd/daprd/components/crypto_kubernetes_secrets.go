@@ -16,8 +16,8 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/cryptography/kubernetes/secrets"
-	cryptoLoader "github.com/dapr/dapr/pkg/components/cryptography"
+	"github.com/dapr/components-contrib/crypto/kubernetes/secrets"
+	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 )
 
 func init() {
