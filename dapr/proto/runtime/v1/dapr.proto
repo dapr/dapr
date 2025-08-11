@@ -18,6 +18,7 @@ package dapr.proto.runtime.v1;
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
 import "dapr/proto/common/v1/common.proto";
 import "dapr/proto/runtime/v1/appcallback.proto";
 
@@ -1269,17 +1270,16 @@ message Job {
   // when the job is triggered.
   google.protobuf.Any data = 6 [json_name = "data"];
 
-  // If true, allows this job to overwrite an existing job with the same name.
-  bool overwrite = 7  [json_name = "overwrite"];
-
   // failure_policy is the optional policy for handling job failures.
-  optional common.v1.JobFailurePolicy failure_policy = 8 [json_name = "failurePolicy"];
+  optional common.v1.JobFailurePolicy failure_policy = 7 [json_name = "failurePolicy"];
 }
 
 // ScheduleJobRequest is the message to create/schedule the job.
 message ScheduleJobRequest {
   // The job details.
   Job job = 1;
+  // If true, allows this job to overwrite an existing job with the same name.
+  bool overwrite = 2  [json_name = "overwrite"];
 }
 
 // ScheduleJobResponse is the message response to create/schedule the job.
@@ -1630,5 +1630,5 @@ message ConversationToolsFunction {
   // See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
   // and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.	
   // Omitting `parameters` defines a function with an empty parameter list.
-  map<string, google.protobuf.Any> parameters = 3;
+  google.protobuf.Struct parameters = 3;
 }
