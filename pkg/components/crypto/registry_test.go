@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cp "github.com/dapr/components-contrib/crypto"
-	crypto "github.com/dapr/dapr/pkg/components/crypto"
+	"github.com/dapr/dapr/pkg/components/crypto"
 	"github.com/dapr/kit/logger"
 )
 
