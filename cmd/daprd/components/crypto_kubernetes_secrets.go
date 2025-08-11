@@ -21,6 +21,5 @@ import (
 )
 
 func init() {
-	// TODO: in future rm the dapr. prefix
 	cryptoLoader.DefaultRegistry.RegisterComponent(secrets.NewKubeSecretsCrypto, "dapr.kubernetes.secrets")
 }

@@ -22,7 +22,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/conversation"
-	crypto "github.com/dapr/components-contrib/cryptography"
+	crypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"

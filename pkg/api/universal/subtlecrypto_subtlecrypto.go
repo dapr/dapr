@@ -28,7 +28,7 @@ import (
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 
-	contribCrypto "github.com/dapr/components-contrib/cryptography"
+	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"

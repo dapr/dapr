@@ -17,9 +17,9 @@ import (
 	"context"
 	"sync"
 
-	contribcrypto "github.com/dapr/components-contrib/cryptography"
+	contribcrypto "github.com/dapr/components-contrib/crypto"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	compcrypto "github.com/dapr/dapr/pkg/components/cryptography"
+	compcrypto "github.com/dapr/dapr/pkg/components/crypto"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"

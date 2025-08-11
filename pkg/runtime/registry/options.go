@@ -17,7 +17,7 @@ import (
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/configuration"
 	"github.com/dapr/dapr/pkg/components/conversation"
-	crypto "github.com/dapr/dapr/pkg/components/cryptography"
+	crypto "github.com/dapr/dapr/pkg/components/crypto"
 	"github.com/dapr/dapr/pkg/components/lock"
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/components/nameresolution"

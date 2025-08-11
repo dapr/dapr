@@ -20,7 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	contribCrypto "github.com/dapr/components-contrib/cryptography"
+	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/kit/ptr"
