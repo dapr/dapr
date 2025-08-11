@@ -29,17 +29,13 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
-	"github.com/dapr/dapr/pkg/actors/locker"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/kit/concurrency/fifo"
-	"github.com/dapr/kit/events/queue"
 )
 
 type Interface interface {
@@ -55,9 +51,7 @@ type Options struct {
 	Resiliency         resiliency.Provider
 	Reminders          reminders.Interface
 	GRPC               *manager.Manager
-	IdlerQueue         *queue.Processor[string, targets.Idlable]
 	SchedulerReminders bool
-	Locker             locker.Interface
 	MaxRequestBodySize int
 }
 
@@ -70,11 +64,7 @@ type router struct {
 	resiliency resiliency.Provider
 	reminders  reminders.Interface
 	grpc       *manager.Manager
-	locker     locker.Interface
 
-	idlerQueue *queue.Processor[string, targets.Idlable]
-
-	lock  *fifo.Mutex
 	clock clock.Clock
 
 	callOptions []grpc.CallOption
@@ -88,10 +78,7 @@ func New(opts Options) Interface {
 		placement:          opts.Placement,
 		resiliency:         opts.Resiliency,
 		grpc:               opts.GRPC,
-		idlerQueue:         opts.IdlerQueue,
 		reminders:          opts.Reminders,
-		locker:             opts.Locker,
-		lock:               fifo.New(),
 		clock:              clock.RealClock{},
 		callOptions: []grpc.CallOption{
 			grpc.MaxCallRecvMsgSize(opts.MaxRequestBodySize),
@@ -101,25 +88,22 @@ func New(opts Options) Interface {
 }
 
 func (r *router) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	cancel, err := r.locker.LockRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	defer cancel()
-
 	var res *internalv1pb.InternalInvokeResponse
+	var err error
+
 	if r.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		res, err = r.callActor(ctx, req)
-		// Don't bubble perminant errors up to the caller to interfere with top level
-		// retries.
-		if _, ok := err.(*backoff.PermanentError); ok {
-			err = errors.Unwrap(err)
-		}
 	} else {
 		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, r.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
 		res, err = policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 			return r.callActor(ctx, req)
 		})
+	}
+
+	// Don't bubble perminant errors up to the caller to interfere with top level
+	// retries.
+	if _, ok := err.(*backoff.PermanentError); ok {
+		err = errors.Unwrap(err)
 	}
 
 	return res, err
@@ -128,25 +112,17 @@ func (r *router) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 func (r *router) CallReminder(ctx context.Context, req *api.Reminder) error {
 	if req.SkipLock {
 		return r.callReminder(ctx, req)
-	} else {
-		cancel, err := r.locker.Lock(req.ActorType, req.ActorID)
-		if err != nil {
-			return err
-		}
-		defer cancel()
 	}
 
-	var err error
 	if r.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
-		err = r.callReminder(ctx, req)
+		return r.callReminder(ctx, req)
 	} else {
 		policyRunner := resiliency.NewRunner[struct{}](ctx, r.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
-		_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+		_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
 			return struct{}{}, r.callReminder(ctx, req)
 		})
+		return err
 	}
-
-	return err
 }
 
 func (r *router) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
@@ -195,7 +171,7 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
-	target, _, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
+	target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
 	if err != nil {
 		return backoff.Permanent(err)
 	}
@@ -229,7 +205,7 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to lookup actor: %w", err)
 	}
 
 	if lar.Local {
@@ -313,7 +289,7 @@ func (r *router) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 }
 
 func (r *router) callLocalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	target, err := r.getOrCreateActor(req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	target, err := r.table.GetOrCreate(req.GetActor().GetActorType(), req.GetActor().GetActorId())
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +333,7 @@ func (r *router) callLocalActorStream(ctx context.Context,
 	req *internalv1pb.InternalInvokeRequest,
 	stream chan<- *internalv1pb.InternalInvokeResponse,
 ) error {
-	target, err := r.getOrCreateActor(req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	target, err := r.table.GetOrCreate(req.GetActor().GetActorType(), req.GetActor().GetActorId())
 	if err != nil {
 		return err
 	}
@@ -397,20 +373,4 @@ func (r *router) callRemoteActorStream(ctx context.Context,
 			return ctx.Err()
 		}
 	}
-}
-
-func (r *router) getOrCreateActor(actorType, actorID string) (targets.Interface, error) {
-	target, created, err := r.table.GetOrCreate(actorType, actorID)
-	if err != nil {
-		return nil, err
-	}
-
-	if created {
-		// If the target is idlable, then add it to the queue.
-		if idler, ok := target.(targets.Idlable); ok {
-			r.idlerQueue.Enqueue(idler)
-		}
-	}
-
-	return target, nil
 }

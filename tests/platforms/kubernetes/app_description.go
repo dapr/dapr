@@ -19,7 +19,7 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 
-	"github.com/dapr/kit/utils"
+	"github.com/dapr/kit/strings"
 )
 
 const (
@@ -88,7 +88,7 @@ func (a AppDescription) String() string {
 
 // ShouldBeExposed returns if the app should be exposed as a loadbalancer/nodeport service.
 func (a AppDescription) ShouldBeExposed() bool {
-	return a.IngressEnabled && !utils.IsTruthy(os.Getenv(useServiceInternalIP))
+	return a.IngressEnabled && !strings.IsTruthy(os.Getenv(useServiceInternalIP))
 }
 
 func (a AppDescription) MarshalJSON() ([]byte, error) {

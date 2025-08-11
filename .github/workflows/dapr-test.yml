@@ -67,8 +67,8 @@ env:
   DAPR_GO_BUILD_TAGS: "subtlecrypto"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
-  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.13.0"
-  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.12.5"
+  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.14.5"
+  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.13.6"
 
 jobs:
   deploy-infrastructure:
@@ -271,7 +271,7 @@ jobs:
                 `PR_NUMBER=${testPayload.issue.number}`
               );
             }
-      # In windows-2019 images, WSL comes with bash.exe (but no distribution) and that causes issues
+      # In windows-2025 images, WSL comes with bash.exe (but no distribution) and that causes issues
       # See: https://github.community/t/wsl-not-available-for-hosted-windows-machine/124389
       - name: Remove bash.exe from WSL
         if: runner.os == 'Windows'
@@ -286,7 +286,7 @@ jobs:
       - name: Set up Go
         id: setup-go
         # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+        uses: antontroshin/setup-go@461004e4c97225a313a997efabc35fde47d587bb
         with:
           go-version-file: "go.mod"
       - name: Login to Azure
@@ -460,7 +460,7 @@ jobs:
       - name: Set up Go
         id: setup-go
         # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
+        uses: antontroshin/setup-go@461004e4c97225a313a997efabc35fde47d587bb
         with:
           go-version-file: "go.mod"
       - uses: azure/setup-kubectl@v3

@@ -15,6 +15,7 @@ package subscriber
 
 import (
 	"encoding/json"
+	"errors"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -192,7 +193,7 @@ func TestSubscriptionLifecycle(t *testing.T) {
 	mockPubSub3.AssertNumberOfCalls(t, "Subscribe", 3)
 }
 
-func Test_initProgramaticSubscriptions(t *testing.T) {
+func Test_initProgrammaticSubscriptions(t *testing.T) {
 	t.Run("get topic routes but no pubsubs are registered", func(t *testing.T) {
 		compStore := compstore.New()
 		subs := New(Options{
@@ -203,7 +204,7 @@ func Test_initProgramaticSubscriptions(t *testing.T) {
 			AppID:      TestRuntimeConfigID,
 			Channels:   new(channels.Channels),
 		})
-		require.NoError(t, subs.initProgramaticSubscriptions(t.Context()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
 	})
 
@@ -218,7 +219,7 @@ func Test_initProgramaticSubscriptions(t *testing.T) {
 			AppID:      TestRuntimeConfigID,
 			Channels:   new(channels.Channels),
 		})
-		require.NoError(t, subs.initProgramaticSubscriptions(t.Context()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
 	})
 
@@ -253,9 +254,9 @@ func Test_initProgramaticSubscriptions(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.cancelCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
 
-		require.NoError(t, subs.initProgramaticSubscriptions(t.Context()))
-		require.NoError(t, subs.initProgramaticSubscriptions(t.Context()))
-		require.NoError(t, subs.initProgramaticSubscriptions(t.Context()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
 		assert.Len(t, compStore.ListProgramaticSubscriptions(), 1)
 	})
 }
@@ -448,4 +449,171 @@ func TestReloadPubSub(t *testing.T) {
 	mockPubSub1.AssertNumberOfCalls(t, "unsubscribed", 3)
 	mockPubSub2.AssertNumberOfCalls(t, "unsubscribed", 3)
 	mockPubSub3.AssertNumberOfCalls(t, "unsubscribed", 3)
+}
+
+func TestSubscriptionRetryMechanisms(t *testing.T) {
+	createMockSetup := func() (*daprt.InMemoryPubsub, *compstore.ComponentStore) {
+		mockPubSub := new(daprt.InMemoryPubsub)
+		mockPubSub.On("Init", mock.Anything).Return(nil)
+		mockPubSub.On("unsubscribed", "topic1").Return(nil)
+		require.NoError(t, mockPubSub.Init(t.Context(), contribpubsub.Metadata{}))
+
+		compStore := compstore.New()
+		compStore.AddPubSub("mockPubSub", &rtpubsub.PubsubItem{
+			Component: mockPubSub,
+		})
+
+		return mockPubSub, compStore
+	}
+
+	t.Run("StartAppSubscriptions succeeds after retries", func(t *testing.T) {
+		t.Parallel()
+
+		mockPubSub, compStore := createMockSetup()
+
+		var calls atomic.Int32
+		subsCall := mockPubSub.
+			On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).
+			Return(errors.New("temporary subscription failure"))
+		subsCall.Run(func(args mock.Arguments) {
+			if calls.Add(1) == 3 {
+				// Succeed on the 3rd attempt
+				subsCall.Return(nil)
+			}
+		})
+
+		compStore.SetProgramaticSubscriptions(
+			rtpubsub.Subscription{
+				PubsubName: "mockPubSub",
+				Topic:      "topic1",
+				Rules:      []*rtpubsub.Rule{{Path: "/"}},
+			},
+		)
+
+		subs := New(Options{
+			CompStore:  compStore,
+			IsHTTP:     true,
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Namespace:  "ns1",
+			AppID:      TestRuntimeConfigID,
+			Channels:   new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
+		})
+		subs.hasInitProg = true
+
+		err := subs.StartAppSubscriptions()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "temporary subscription failure")
+
+		assert.Eventually(t, func() bool {
+			subs.lock.RLock()
+			hasSubscription := len(subs.appSubs["mockPubSub"]) == 1
+			subs.lock.RUnlock()
+			return hasSubscription
+		}, 5*time.Second, 100*time.Millisecond)
+
+		assert.Equal(t, 3, int(calls.Load()))
+		assert.True(t, subs.appSubActive)
+	})
+
+	t.Run("ReloadDeclaredAppSubscription succeeds after retries", func(t *testing.T) {
+		t.Parallel()
+
+		mockPubSub, compStore := createMockSetup()
+
+		var calls atomic.Int32
+		subsCall := mockPubSub.
+			On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).
+			Return(errors.New("temporary failure"))
+		subsCall.Run(func(args mock.Arguments) {
+			if calls.Add(1) == 2 {
+				// Succeed on the 2nd attempt
+				subsCall.Return(nil)
+			}
+		})
+
+		compStore.AddDeclarativeSubscription(&subapi.Subscription{
+			ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+			Spec: subapi.SubscriptionSpec{
+				Pubsubname: "mockPubSub",
+				Topic:      "topic1",
+				Routes:     subapi.Routes{Default: "/"},
+			},
+		}, rtpubsub.Subscription{
+			PubsubName: "mockPubSub",
+			Topic:      "topic1",
+			Rules:      []*rtpubsub.Rule{{Path: "/"}},
+		})
+
+		subs := New(Options{
+			CompStore:  compStore,
+			IsHTTP:     true,
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Namespace:  "ns1",
+			AppID:      TestRuntimeConfigID,
+			Channels:   new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
+		})
+		subs.appSubActive = true
+
+		err := subs.ReloadDeclaredAppSubscription("sub1", "mockPubSub")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "temporary failure")
+
+		assert.Eventually(t, func() bool {
+			subs.lock.RLock()
+			hasSubscription := len(subs.appSubs["mockPubSub"]) == 1
+			subs.lock.RUnlock()
+			return hasSubscription
+		}, 5*time.Second, 100*time.Millisecond)
+
+		assert.Equal(t, 2, int(calls.Load()))
+	})
+
+	t.Run("retry stops when subscriber is closed", func(t *testing.T) {
+		t.Parallel()
+
+		mockPubSub, compStore := createMockSetup()
+
+		var callCount atomic.Int32
+		mockPubSub.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).
+			Run(func(args mock.Arguments) {
+				callCount.Add(1)
+			}).
+			Return(errors.New("persistent subscription failure"))
+
+		compStore.SetProgramaticSubscriptions(
+			rtpubsub.Subscription{
+				PubsubName: "mockPubSub",
+				Topic:      "topic1",
+				Rules:      []*rtpubsub.Rule{{Path: "/"}},
+			},
+		)
+
+		subs := New(Options{
+			CompStore:  compStore,
+			IsHTTP:     true,
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Namespace:  "ns1",
+			AppID:      TestRuntimeConfigID,
+			Channels:   new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
+		})
+		subs.hasInitProg = true
+
+		err := subs.StartAppSubscriptions()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "persistent subscription failure")
+
+		initialCallCount := callCount.Load()
+
+		time.Sleep(500 * time.Millisecond)
+		subs.StopAllSubscriptionsForever()
+
+		time.Sleep(500 * time.Millisecond)
+		finalCallCount := callCount.Load()
+
+		assert.Greater(t, finalCallCount, initialCallCount)
+
+		time.Sleep(1 * time.Second)
+		verifyCallCount := callCount.Load()
+		assert.Equal(t, finalCallCount, verifyCallCount, "Retries should have stopped after subscriber closure")
+	})
 }

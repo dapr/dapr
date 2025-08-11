@@ -17,7 +17,11 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-type Client interface {
-	schedulerv1pb.SchedulerClient
+type Interface interface {
 	Addresses() []string
+	schedulerv1pb.SchedulerClient
+}
+
+type Reloader interface {
+	ReloadActorTypes(actorTypes []string)
 }

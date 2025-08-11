@@ -34,7 +34,10 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.etcd")
 
 type Options struct {
-	Name                 string
+	Name string
+
+	Embed bool
+
 	InitialCluster       []string
 	ClientPort           uint64
 	SpaceQuota           int64
@@ -47,6 +50,10 @@ type Options struct {
 	BackendBatchInterval string
 	DefragThresholdMB    uint
 	Metrics              string
+
+	ClientEndpoints []string
+	ClientUsername  string
+	ClientPassword  string
 
 	Security security.Handler
 
@@ -72,24 +79,52 @@ type etcd struct {
 }
 
 func New(opts Options) (Interface, error) {
-	config, err := config(opts)
+	if opts.Embed {
+		config, err := config(opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create etcd config: %w", err)
+		}
+
+		return &etcd{
+			hz:      opts.Healthz.AddTarget("scheduler-etcd-embed"),
+			config:  config,
+			mode:    opts.Mode,
+			readyCh: make(chan struct{}),
+
+			existingClusterPath: filepath.Join(opts.DataDir, "dapr-scheduler-existing-cluster"),
+		}, nil
+	}
+
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints: opts.ClientEndpoints,
+		Username:  opts.ClientUsername,
+		Password:  opts.ClientPassword,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create etcd config: %w", err)
+		return nil, fmt.Errorf("failed to create etcd client: %w", err)
 	}
 
 	return &etcd{
-		hz:      opts.Healthz.AddTarget(),
-		config:  config,
+		hz:      opts.Healthz.AddTarget("scheduler-etcd-external"),
+		client:  client,
 		mode:    opts.Mode,
 		readyCh: make(chan struct{}),
-
-		existingClusterPath: filepath.Join(opts.DataDir, "dapr-scheduler-existing-cluster"),
 	}, nil
 }
 
 func (e *etcd) Run(ctx context.Context) error {
 	defer e.hz.NotReady()
 	log.Info("Starting Etcd provider")
+
+	if e.config == nil {
+		log.Info("Using external Etcd database, will not start embedded Etcd")
+		e.hz.Ready()
+		close(e.readyCh)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	log.Infof("Starting embedded Etcd")
 
 	if err := e.maybeDeleteDataDir(); err != nil {
 		return err

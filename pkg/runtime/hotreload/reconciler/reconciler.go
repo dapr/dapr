@@ -61,7 +61,7 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 	return &Reconciler[compapi.Component]{
 		clock:   clock.RealClock{},
 		kind:    compapi.Kind,
-		htarget: opts.Healthz.AddTarget(),
+		htarget: opts.Healthz.AddTarget("component-reconciler"),
 		manager: &components{
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
@@ -75,7 +75,7 @@ func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subs
 	return &Reconciler[subapi.Subscription]{
 		clock:   clock.RealClock{},
 		kind:    subapi.Kind,
-		htarget: opts.Healthz.AddTarget(),
+		htarget: opts.Healthz.AddTarget("subscription-reconciler"),
 		manager: &subscriptions{
 			Loader: opts.Loader.Subscriptions(),
 			store:  opts.CompStore,
@@ -166,13 +166,13 @@ func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T])
 
 	switch event.Type {
 	case operatorpb.ResourceEventType_CREATED:
-		log.Infof("Received %s creation: %s", r.kind, event.Resource.LogName())
+		log.Debugf("Received %s creation: %s", r.kind, event.Resource.LogName())
 		r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_UPDATED:
-		log.Infof("Received %s update: %s", r.kind, event.Resource.LogName())
+		log.Debugf("Received %s update: %s", r.kind, event.Resource.LogName())
 		r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_DELETED:
-		log.Infof("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
+		log.Debugf("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
 		r.manager.delete(ctx, event.Resource)
 	}
 }

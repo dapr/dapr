@@ -14,43 +14,67 @@ limitations under the License.
 package healthz
 
 import (
-	"sync/atomic"
+	"sync"
 )
 
 // Healthz implements a health check mechanism.
-// Tagets can be added to the health check, and the health check will return
-// true when all targets are ready.
-// Returns not ready if no targets are registered.
 type Healthz interface {
 	IsReady() bool
-	AddTarget() Target
-	AddTargetSet(int) []Target
+	GetUnhealthyTargets() []string
+	AddTarget(name string) Target
 }
 
 type healthz struct {
-	targetsReady atomic.Int64
-	targets      atomic.Int64
+	lock      sync.RWMutex
+	targets   int64
+	unhealthy map[string]struct{}
 }
 
 func New() Healthz {
-	return new(healthz)
+	return &healthz{
+		unhealthy: make(map[string]struct{}),
+		targets:   0,
+	}
 }
 
 func (h *healthz) IsReady() bool {
-	targets := h.targets.Load()
+	h.lock.RLock()
+	defer h.lock.RUnlock()
 	// If no targets are registered, the server is not ready.
-	return targets != 0 && targets == h.targetsReady.Load()
+	return h.targets > 0 && len(h.unhealthy) == 0
 }
 
-func (h *healthz) AddTarget() Target {
-	h.targets.Add(1)
-	return &target{healthz: h}
-}
+func (h *healthz) GetUnhealthyTargets() []string {
+	h.lock.RLock()
+	defer h.lock.RUnlock()
 
-func (h *healthz) AddTargetSet(n int) []Target {
-	targets := make([]Target, n)
-	for i := range n {
-		targets[i] = h.AddTarget()
+	unhealthyList := make([]string, 0, len(h.unhealthy))
+	for name := range h.unhealthy {
+		unhealthyList = append(unhealthyList, name)
 	}
-	return targets
+	return unhealthyList
+}
+
+func (h *healthz) AddTarget(name string) Target {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	t := &target{
+		name:    name,
+		healthz: h,
+	}
+	h.targets++
+	h.unhealthy[name] = struct{}{}
+	return t
+}
+
+func (h *healthz) markHealthy(name string) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	delete(h.unhealthy, name)
+}
+
+func (h *healthz) markUnhealthy(name string) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	h.unhealthy[name] = struct{}{}
 }

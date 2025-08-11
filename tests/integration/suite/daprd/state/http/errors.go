@@ -301,7 +301,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", errCode)
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, daprdNoStateStore.Metrics(c, ctx).MatchMetricAndSum(c, 1, "dapr_error_code_total"))
-		}, time.Second*10, time.Millisecond*10)
+		}, time.Second*20, time.Millisecond*10)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]

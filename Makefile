@@ -272,6 +272,15 @@ ADDITIONAL_HELM_SET ?= ""
 ifneq ($(ADDITIONAL_HELM_SET),)
 	ADDITIONAL_HELM_SET := --set $(ADDITIONAL_HELM_SET)
 endif
+ifeq ($(DEBUG),1)
+	ADDITIONAL_HELM_SET := --set dapr_operator.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_placement.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_scheduler.securityContext.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_scheduler.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_sentry.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_sidecar_injector.runAsNonRoot=false $(ADDITIONAL_HELM_SET)
+	ADDITIONAL_HELM_SET := --set dapr_sidecar_injector.sidecarRunAsNonRoot=false $(ADDITIONAL_HELM_SET)
+endif
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	ADDITIONAL_HELM_SET := $(ADDITIONAL_HELM_SET) \
 		--set dapr_operator.image.name=$(RELEASE_NAME) \
@@ -404,6 +413,9 @@ test-integration-parallel: test-deps
 lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m --max-same-issues 0 --max-issues-per-linter 0
 
+.PHONY: lint-fix
+lint-fix: check-linter
+	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m --max-same-issues 0 --max-issues-per-linter 0 --fix
 
 ################################################################################
 # Target: check-linter                                                         #
@@ -421,7 +433,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.24.1; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.24.4; cd -
 endef
 
 # Generate modtidy target action for each go.mod file

@@ -47,12 +47,14 @@ func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflow
 	response, err := a.workflowEngine.Client().Get(ctx, &req)
 	if err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId(), err)
+			err = nil
 		} else {
 			err = messages.ErrWorkflowGetResponse.WithFormat(in.GetInstanceId(), err)
 		}
 		a.logger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
+		return &runtimev1pb.GetWorkflowResponse{
+			InstanceId: in.GetInstanceId(),
+		}, err
 	}
 
 	res := &runtimev1pb.GetWorkflowResponse{

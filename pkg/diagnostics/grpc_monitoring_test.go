@@ -31,17 +31,13 @@ type fakeProxyStream struct {
 	appID string
 }
 
-func cleanupGrpcViews() {
-	CleanupRegisteredViews("grpc.io/server/server_latency", "grpc.io/client/roundtrip_latency", "grpc.io/healthprobes/roundtrip_latency")
-}
-
 func (f *fakeProxyStream) Context() context.Context {
 	if f.appID == "" {
 		return context.Background()
 	}
 
 	ctx := context.Background()
-	ctx = grpcMetadata.NewIncomingContext(ctx, grpcMetadata.New(map[string]string{GRPCProxyAppIDKey: f.appID}))
+	ctx = grpcMetadata.NewIncomingContext(ctx, grpcMetadata.New(map[string]string{"dapr-app-id": f.appID}))
 	ctx, _ = metadata.SetMetadataInTapHandle(ctx, nil)
 	return ctx
 }
@@ -68,8 +64,12 @@ func (f *fakeProxyStream) RecvMsg(m interface{}) error {
 func TestStreamingServerInterceptor(t *testing.T) {
 	t.Run("not a proxy request, do not run pipeline", func(t *testing.T) {
 		m := newGRPCMetrics()
-		t.Cleanup(cleanupGrpcViews)
-		require.NoError(t, m.Init("test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 
 		i := m.StreamingServerInterceptor()
 		s := &fakeProxyStream{}
@@ -80,19 +80,23 @@ func TestStreamingServerInterceptor(t *testing.T) {
 		err := i(nil, s, &grpc.StreamServerInfo{}, f)
 		require.NoError(t, err)
 
-		rows, err := view.RetrieveData("grpc.io/server/completed_rpcs")
+		rows, err := meter.RetrieveData("grpc.io/server/completed_rpcs")
 		require.NoError(t, err)
 		assert.Empty(t, rows)
 
-		rowsLatency, err := view.RetrieveData("grpc.io/server/server_latency")
+		rowsLatency, err := meter.RetrieveData("grpc.io/server/server_latency")
 		require.NoError(t, err)
 		assert.Empty(t, rowsLatency)
 	})
 
 	t.Run("proxy request, run pipeline", func(t *testing.T) {
 		m := newGRPCMetrics()
-		t.Cleanup(cleanupGrpcViews)
-		require.NoError(t, m.Init("test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 
 		i := m.StreamingServerInterceptor()
 		s := &fakeProxyStream{
@@ -105,14 +109,14 @@ func TestStreamingServerInterceptor(t *testing.T) {
 		err := i(nil, s, &grpc.StreamServerInfo{FullMethod: "/appv1.Test"}, f)
 		require.NoError(t, err)
 
-		rows, err := view.RetrieveData("grpc.io/server/completed_rpcs")
+		rows, err := meter.RetrieveData("grpc.io/server/completed_rpcs")
 		require.NoError(t, err)
 		require.Len(t, rows, 1)
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 		assert.Equal(t, "grpc_server_method", rows[0].Tags[1].Key.Name())
 		assert.Equal(t, "grpc_server_status", rows[0].Tags[2].Key.Name())
 
-		rows, err = view.RetrieveData("grpc.io/server/server_latency")
+		rows, err = meter.RetrieveData("grpc.io/server/server_latency")
 		require.NoError(t, err)
 		require.Len(t, rows, 1)
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
@@ -124,8 +128,12 @@ func TestStreamingServerInterceptor(t *testing.T) {
 func TestStreamingClientInterceptor(t *testing.T) {
 	t.Run("not a proxy request, do not run pipeline", func(t *testing.T) {
 		m := newGRPCMetrics()
-		t.Cleanup(cleanupGrpcViews)
-		require.NoError(t, m.Init("test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 
 		i := m.StreamingClientInterceptor()
 		s := &fakeProxyStream{}
@@ -136,19 +144,23 @@ func TestStreamingClientInterceptor(t *testing.T) {
 		err := i(nil, s, &grpc.StreamServerInfo{}, f)
 		require.NoError(t, err)
 
-		rows, err := view.RetrieveData("grpc.io/client/completed_rpcs")
+		rows, err := meter.RetrieveData("grpc.io/client/completed_rpcs")
 		require.NoError(t, err)
 		assert.Empty(t, rows)
 
-		rowsLatency, err := view.RetrieveData("grpc.io/client/roundtrip_latency")
+		rowsLatency, err := meter.RetrieveData("grpc.io/client/roundtrip_latency")
 		require.NoError(t, err)
 		assert.Empty(t, rowsLatency)
 	})
 
 	t.Run("proxy request, run pipeline", func(t *testing.T) {
 		m := newGRPCMetrics()
-		t.Cleanup(cleanupGrpcViews)
-		require.NoError(t, m.Init("test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		require.NoError(t, m.Init(meter, "test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 
 		i := m.StreamingClientInterceptor()
 		s := &fakeProxyStream{
@@ -161,14 +173,14 @@ func TestStreamingClientInterceptor(t *testing.T) {
 		err := i(nil, s, &grpc.StreamServerInfo{FullMethod: "/appv1.Test"}, f)
 		require.NoError(t, err)
 
-		rows, err := view.RetrieveData("grpc.io/client/completed_rpcs")
+		rows, err := meter.RetrieveData("grpc.io/client/completed_rpcs")
 		require.NoError(t, err)
 		assert.Len(t, rows, 1)
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 		assert.Equal(t, "grpc_client_method", rows[0].Tags[1].Key.Name())
 		assert.Equal(t, "grpc_client_status", rows[0].Tags[2].Key.Name())
 
-		rowsLatency, err := view.RetrieveData("grpc.io/client/roundtrip_latency")
+		rowsLatency, err := meter.RetrieveData("grpc.io/client/roundtrip_latency")
 		require.NoError(t, err)
 		assert.Len(t, rowsLatency, 1)
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
