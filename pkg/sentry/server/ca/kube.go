@@ -86,7 +86,7 @@ func (k *kube) get(ctx context.Context) (ca_bundle.Bundle, ca_bundle.MissingCred
 			return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to load JWT signing key: %w", jwtErr)
 		}
 
-		if verifyErr := verifyJWKS(jwks, jwtKey); verifyErr != nil {
+		if verifyErr := verifyJWKS(jwks, jwtKey, k.config.JWT.KeyID); verifyErr != nil {
 			return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to verify JWKS: %w", verifyErr)
 		}
 

@@ -137,7 +137,7 @@ func (s *selfhosted) loadAndValidateJWTBundle(bundle *ca_bundle.Bundle) (bool, e
 	// Read JWKS
 	jwks, err := os.ReadFile(s.config.JWT.JWKSPath)
 	if err == nil {
-		if verifyErr := verifyJWKS(jwks, bundle.JWT.SigningKey); verifyErr != nil {
+		if verifyErr := verifyJWKS(jwks, bundle.JWT.SigningKey, s.config.JWT.KeyID); verifyErr != nil {
 			return false, fmt.Errorf("failed to verify JWKS: %w", verifyErr)
 		}
 		bundle.JWT.JWKSJson = jwks

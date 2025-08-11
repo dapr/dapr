@@ -178,6 +178,9 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		if opts.jwt.ttl != nil {
 			args = append(args, "-jwt-ttl="+opts.jwt.ttl.String())
 		}
+		if opts.jwt.keyID != nil {
+			args = append(args, "-jwt-key-id="+*opts.jwt.keyID)
+		}
 	} else {
 		require.Nil(t, opts.jwt.issuer, "jwtIssuer must be nil when JWT is not enabled")
 		require.False(t, opts.jwt.jwtIssuerFromOIDC, "jwtIssuerFromOIDC must be false when JWT is not enabled")

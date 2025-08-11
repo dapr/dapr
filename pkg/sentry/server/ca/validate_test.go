@@ -273,7 +273,7 @@ func TestVerifyJWKS(t *testing.T) {
 		jwksBytes := createJWKS(t, signingKey, "test-key")
 
 		// Verify the JWKS
-		err := verifyJWKS(jwksBytes, signingKey)
+		err := verifyJWKS(jwksBytes, signingKey, nil)
 		assert.NoError(t, err, "JWKS verification should succeed with valid key")
 	})
 
@@ -289,27 +289,27 @@ func TestVerifyJWKS(t *testing.T) {
 		})
 
 		// Verify the JWKS
-		err = verifyJWKS(jwksBytes, signingKey)
+		err = verifyJWKS(jwksBytes, signingKey, nil)
 		assert.NoError(t, err, "JWKS verification should succeed when multiple keys are present")
 	})
 
 	t.Run("nil signing key", func(t *testing.T) {
 		jwksBytes := createJWKS(t, signingKey, "test-key")
-		err := verifyJWKS(jwksBytes, nil)
+		err := verifyJWKS(jwksBytes, nil, nil)
 		require.Error(t, err, "JWKS verification should fail with nil signing key")
 		assert.Contains(t, err.Error(), "can't verify JWKS without signing key")
 	})
 
 	t.Run("invalid JWKS format", func(t *testing.T) {
 		invalidJWKS := []byte(`{"keys": [{"invalid": "format"]}`)
-		err := verifyJWKS(invalidJWKS, signingKey)
+		err := verifyJWKS(invalidJWKS, signingKey, nil)
 		require.Error(t, err, "JWKS verification should fail with invalid JWKS format")
 		assert.Contains(t, err.Error(), "failed to parse JWKS")
 	})
 
 	t.Run("empty JWKS", func(t *testing.T) {
 		emptyJWKS := []byte(`{"keys": []}`)
-		err := verifyJWKS(emptyJWKS, signingKey)
+		err := verifyJWKS(emptyJWKS, signingKey, nil)
 		require.Error(t, err, "JWKS verification should fail with empty JWKS")
 		assert.Contains(t, err.Error(), "JWKS doesn't contain any keys")
 	})
@@ -323,7 +323,7 @@ func TestVerifyJWKS(t *testing.T) {
 		jwksBytes := createJWKS(t, differentKey, "different-key")
 
 		// Verify the JWKS with the original signing key
-		err = verifyJWKS(jwksBytes, signingKey)
+		err = verifyJWKS(jwksBytes, signingKey, nil)
 		require.Error(t, err, "JWKS verification should fail when no matching key is found")
 		assert.Contains(t, err.Error(), "JWKS doesn't contain a matching public key")
 	})
@@ -356,7 +356,7 @@ func TestVerifyJWKS(t *testing.T) {
 		require.NoError(t, err, "Failed to marshal JWKS")
 
 		// Verification should succeed because the key IDs match
-		err = verifyJWKS(jwksBytes, signingKey)
+		err = verifyJWKS(jwksBytes, signingKey, nil)
 		assert.NoError(t, err, "JWKS verification should succeed when key IDs match")
 	})
 
@@ -378,7 +378,7 @@ func TestVerifyJWKS(t *testing.T) {
 		jwksBytes := createMultiKeyJWKS(t, keys)
 
 		// Verification should succeed even with many keys
-		err := verifyJWKS(jwksBytes, signingKey)
+		err := verifyJWKS(jwksBytes, signingKey, nil)
 		assert.NoError(t, err, "JWKS verification should succeed even with many keys")
 	})
 
@@ -397,7 +397,7 @@ func TestVerifyJWKS(t *testing.T) {
 			]
 		}`)
 
-		err := verifyJWKS(malformedJWKS, signingKey)
+		err := verifyJWKS(malformedJWKS, signingKey, nil)
 		assert.Error(t, err, "JWKS verification should fail with malformed key")
 	})
 
@@ -423,9 +423,64 @@ func TestVerifyJWKS(t *testing.T) {
 			]
 		}`)
 
-		err := verifyJWKS(mixedJWKS, signingKey)
+		err := verifyJWKS(mixedJWKS, signingKey, nil)
 		require.Error(t, err, "JWKS verification should fail when no matching key is found")
 		assert.Contains(t, err.Error(), "JWKS doesn't contain a matching public key")
+	})
+
+	t.Run("user-provided key ID matches JWKS", func(t *testing.T) {
+		// Create a JWKS with a specific key ID
+		jwksBytes := createJWKS(t, signingKey, "user-specified-key-id")
+
+		// Verify the JWKS with the user-provided key ID
+		userKeyID := "user-specified-key-id"
+		err := verifyJWKS(jwksBytes, signingKey, &userKeyID)
+		assert.NoError(t, err, "JWKS verification should succeed when user-provided key ID matches")
+	})
+
+	t.Run("user-provided key ID not found in JWKS", func(t *testing.T) {
+		// Create a JWKS with a different key ID
+		jwksBytes := createJWKS(t, signingKey, "actual-key-id")
+
+		// Verify the JWKS with a different user-provided key ID
+		userKeyID := "missing-key-id"
+		err := verifyJWKS(jwksBytes, signingKey, &userKeyID)
+		require.Error(t, err, "JWKS verification should fail when user-provided key ID is not found")
+		assert.Contains(t, err.Error(), "JWKS doesn't contain a key with user-provided key ID \"missing-key-id\"")
+	})
+
+	t.Run("user-provided key ID with multiple keys in JWKS", func(t *testing.T) {
+		// Create a JWKS with multiple keys, including the user-specified one
+		extraKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err, "Failed to generate extra key")
+
+		keys := map[string]crypto.Signer{
+			"extra-key-1":        extraKey,
+			"user-specified-key": signingKey,
+			"extra-key-2":        extraKey,
+		}
+		jwksBytes := createMultiKeyJWKS(t, keys)
+
+		// Verify the JWKS with the user-provided key ID
+		userKeyID := "user-specified-key"
+		err = verifyJWKS(jwksBytes, signingKey, &userKeyID)
+		assert.NoError(t, err, "JWKS verification should succeed when user-provided key ID is found among multiple keys")
+	})
+
+	t.Run("user-provided key ID matches but content differs", func(t *testing.T) {
+		// Generate a different key with same key ID as user specified
+		differentKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err, "Failed to generate different key")
+
+		// Create a JWKS with the different key but same key ID as user-provided
+		jwksBytes := createJWKS(t, differentKey, "same-key-id")
+
+		// Verify the JWKS with user-provided key ID - should fail because key content doesn't match
+		userKeyID := "same-key-id"
+		err = verifyJWKS(jwksBytes, signingKey, &userKeyID)
+		require.Error(t, err, "JWKS verification should fail when user-provided key ID matches but key content differs")
+		// The key ID exists in JWKS but content doesn't match signing key, so verification should fail
+		assert.Contains(t, err.Error(), "JWKS contains a key with user-provided key ID \"same-key-id\" but the key content doesn't match")
 	})
 }
 

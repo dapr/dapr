@@ -45,6 +45,7 @@ type jwtOptions struct {
 	issuer            *string
 	ttl               *time.Duration
 	jwtIssuerFromOIDC bool
+	keyID             *string // optional explicit kid
 }
 
 type oidcOptions struct {
@@ -206,5 +207,12 @@ func WithOIDCTLSCertFile(certFile string) Option {
 func WithOIDCTLSKeyFile(keyFile string) Option {
 	return func(o *options) {
 		o.oidc.tlsKeyFile = &keyFile
+	}
+}
+
+// WithJWTKeyID sets an explicit JWT key ID to pass via --jwt-key-id flag
+func WithJWTKeyID(kid string) Option {
+	return func(o *options) {
+		o.jwt.keyID = &kid
 	}
 }

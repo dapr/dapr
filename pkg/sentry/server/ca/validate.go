@@ -22,7 +22,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -143,8 +142,9 @@ func loadJWTSigningKey(keyPEM []byte) (crypto.Signer, error) {
 }
 
 // verifyJWKS verifies that the JWKS is valid and contains a corresponding
-// public key for the provided signing key.
-func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
+// public key for the provided signing key. If userProvidedKeyID is provided,
+// it validates that the JWKS contains a key with that exact key ID.
+func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer, userProvidedKeyID *string) error {
 	if signingKey == nil {
 		// If no signing key is provided but JWKS exists, we can't verify the match
 		return errors.New("can't verify JWKS without signing key")
@@ -181,17 +181,44 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 		}
 	}
 
+	// If user provided a key ID explicitly, use that for validation
+	var expectedKeyID *string
+	if userProvidedKeyID != nil {
+		expectedKeyID = userProvidedKeyID
+	} else {
+		expectedKeyID = signingKeyID
+	}
+
 	// Verify that the public key is in the JWKS
 	found := false
 	matchAttempted := false
+	userProvidedKeyIDFound := false
 
 	for i := range keySet.Len() {
 		key, _ := keySet.Key(i)
 
-		// If both keys have key IDs, check if they match first (faster path)
-		if signingKeyID != nil {
+		// If user provided a key ID, we must find a key with that exact ID and verify content matches
+		if userProvidedKeyID != nil {
 			if kid, ok := key.Get(jwk.KeyIDKey); ok {
-				if s, ok := kid.(string); ok && s == *signingKeyID {
+				if s, ok := kid.(string); ok && s == *userProvidedKeyID {
+					userProvidedKeyIDFound = true
+					// Now verify that this key's content matches the signing key
+					if keyMatches(key, publicJWK) {
+						found = true
+						break
+					}
+					// If we found the key ID but content doesn't match, we still need to continue
+					// to check if there are other keys with the same ID that might match
+				}
+			}
+			// Skip this key if it doesn't have the user-provided key ID
+			continue
+		}
+
+		// If no user-provided key ID, check by key ID first (if both have key IDs)
+		if expectedKeyID != nil {
+			if kid, ok := key.Get(jwk.KeyIDKey); ok {
+				if s, ok := kid.(string); ok && s == *expectedKeyID {
 					found = true
 					break
 				}
@@ -200,70 +227,27 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 
 		// If key ID check wasn't successful, compare the key contents
 		matchAttempted = true
-
-		// First, ensure we're comparing public keys
-		keyPublic, err := key.PublicKey()
-		if err != nil {
-			return fmt.Errorf("JWKS contains a none public key: %w", err)
-		}
-
-		// Check if the key has a valid "use" field (if present)
-		if use, ok := keyPublic.Get(jwk.KeyUsageKey); ok {
-			if s, ok := use.(string); ok && s != "sig" {
-				// Skip keys not meant for signature verification
-				continue
-			}
-		}
-
-		// Get raw representations of both keys to compare
-		var pubRaw any
-		if err = keyPublic.Raw(&pubRaw); err != nil {
-			return fmt.Errorf("failed to get raw public key from JWKS: %w", err)
-		}
-
-		var signerPubRaw interface{}
-		if err = publicJWK.Raw(&signerPubRaw); err != nil {
-			return fmt.Errorf("failed to get raw public key from signing key: %w", err)
-		}
-
-		// Type-specific comparisons for different key types
-		switch pubKey := pubRaw.(type) {
-		case *ecdsa.PublicKey:
-			if signerPubKey, ok := signerPubRaw.(*ecdsa.PublicKey); ok {
-				if signerPubKey.Equal(pubKey) {
-					found = true
-					break
-				}
-			}
-		case *rsa.PublicKey:
-			if signerPubKey, ok := signerPubRaw.(*rsa.PublicKey); ok {
-				if signerPubKey.Equal(pubKey) {
-					found = true
-					break
-				}
-			}
-		case ed25519.PublicKey:
-			if signerPubKey, ok := signerPubRaw.(ed25519.PublicKey); ok {
-				if signerPubKey.Equal(pubKey) {
-					found = true
-					break
-				}
-			}
-		default:
-			// If the key type is not recognized, we can't compare it
-			return fmt.Errorf("unsupported key type in JWKS: %s", reflect.TypeOf(pubRaw).Name())
-		}
-
-		if found {
+		if keyMatches(key, publicJWK) {
+			found = true
 			break
 		}
 	}
 
 	if !found {
+		// If a user provided a key ID but it wasn't found in the JWKS, return a specific error
+		if userProvidedKeyID != nil {
+			if !userProvidedKeyIDFound {
+				return fmt.Errorf("JWKS doesn't contain a key with user-provided key ID %q", *userProvidedKeyID)
+			} else {
+				// Key ID was found but content didn't match
+				return fmt.Errorf("JWKS contains a key with user-provided key ID %q but the key content doesn't match the signing key", *userProvidedKeyID)
+			}
+		}
+
 		if !matchAttempted {
 			var sid string
-			if signingKeyID != nil {
-				sid = *signingKeyID
+			if expectedKeyID != nil {
+				sid = *expectedKeyID
 			} else {
 				sid = "<no-key-id>"
 			}
@@ -273,6 +257,55 @@ func verifyJWKS(jwksBytes []byte, signingKey crypto.Signer) error {
 	}
 
 	return nil
+}
+
+// keyMatches compares two JWK keys for equality
+func keyMatches(key1, key2 jwk.Key) bool {
+	// First, ensure we're comparing public keys
+	keyPublic, err := key1.PublicKey()
+	if err != nil {
+		return false
+	}
+
+	// Check if the key has a valid "use" field (if present)
+	if use, ok := keyPublic.Get(jwk.KeyUsageKey); ok {
+		if s, ok := use.(string); ok && s != "sig" {
+			// Skip keys not meant for signature verification
+			return false
+		}
+	}
+
+	// Get raw representations of both keys to compare
+	var pubRaw any
+	if err = keyPublic.Raw(&pubRaw); err != nil {
+		return false
+	}
+
+	var signerPubRaw interface{}
+	if err = key2.Raw(&signerPubRaw); err != nil {
+		return false
+	}
+
+	// Type-specific comparisons for different key types
+	switch pubKey := pubRaw.(type) {
+	case *ecdsa.PublicKey:
+		if signerPubKey, ok := signerPubRaw.(*ecdsa.PublicKey); ok {
+			return signerPubKey.Equal(pubKey)
+		}
+	case *rsa.PublicKey:
+		if signerPubKey, ok := signerPubRaw.(*rsa.PublicKey); ok {
+			return signerPubKey.Equal(pubKey)
+		}
+	case ed25519.PublicKey:
+		if signerPubKey, ok := signerPubRaw.(ed25519.PublicKey); ok {
+			return signerPubKey.Equal(pubKey)
+		}
+	default:
+		// If the key type is not recognized, we can't compare it
+		return false
+	}
+
+	return false
 }
 
 // validateKeyAlgorithmCompatibility checks if the provided key is compatible with the specified algorithm

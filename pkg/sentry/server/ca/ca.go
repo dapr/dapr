@@ -196,19 +196,32 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 			return nil, fmt.Errorf("JWT signing key is incompatible with algorithm %s: %w", jwtSignAlg, validateErr)
 		}
 
-		var kid string
-		if conf.JWT.KeyID != nil {
-			kid = *conf.JWT.KeyID
-		} else {
-			thumbprint, thumbErr := signKey.Thumbprint(ca_bundle.DefaultKeyThumbprintAlgorithm)
-			if thumbErr != nil {
-				return nil, fmt.Errorf("failed to generate JWK thumbprint: %w", thumbErr)
+		// When a signing key is parsed from a pre-generated key, it often has no metadata
+		// (e.g., key ID or algorithm). The user can set a key ID manually, but it must
+		// uniquely match the intended key in the JWKS. If no key ID is provided, we
+		// generate one from the key's thumbprint. In that case, the JWKS must also use
+		// this generated key ID so the correct key can be matched.
+		if signKey.KeyID() == "" {
+			var kid string
+			if conf.JWT.KeyID != nil {
+				kid = *conf.JWT.KeyID
+				log.Infof("Using JWT kid from configuration: %s", kid)
+			} else {
+				thumbprint, thumbErr := signKey.Thumbprint(ca_bundle.DefaultKeyThumbprintAlgorithm)
+				if thumbErr != nil {
+					return nil, fmt.Errorf("failed to generate JWK thumbprint: %w", thumbErr)
+				}
+				kid = base64.StdEncoding.EncodeToString(thumbprint)
+				log.Infof("Using JWT kid from thumbprint: %s, please ensure this aligns with your JWKS", kid)
 			}
-			kid = base64.StdEncoding.EncodeToString(thumbprint)
-		}
 
-		signKey.Set(jwk.KeyIDKey, kid)
-		signKey.Set(jwk.AlgorithmKey, conf.JWT.SigningAlgorithm)
+			if err := signKey.Set(jwk.KeyIDKey, kid); err != nil {
+				return nil, fmt.Errorf("failed to set JWK key ID: %w", err)
+			}
+		}
+		if err := signKey.Set(jwk.AlgorithmKey, conf.JWT.SigningAlgorithm); err != nil {
+			return nil, fmt.Errorf("failed to set JWK algorithm: %w", err)
+		}
 
 		jwtIss, err = jwt.New(jwt.IssuerOptions{
 			SignKey:          signKey,
