@@ -426,7 +426,7 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 
 	worker := func(i int) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/abc/reminders/myreminder%d", testAppURL, actorTypeScheduler, i), reminderB)
+			_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/%d/reminders/myreminder%d", testAppURL, actorTypeScheduler, i, i), reminderB)
 			assert.NoError(c, err)
 		}, 10*time.Second, time.Millisecond*100)
 
