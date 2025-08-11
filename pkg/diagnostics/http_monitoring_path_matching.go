@@ -124,6 +124,22 @@ func (pm *pathMatching) match(path string) (string, bool) {
 }
 
 type pathMatchingRW struct {
-	http.ResponseWriter
 	matchedPath string
+	header      http.Header
+}
+
+// Header returns a non-nil header map
+func (rw *pathMatchingRW) Header() http.Header {
+	if rw.header == nil {
+		rw.header = make(http.Header)
+	}
+	return rw.header
+}
+
+func (rw *pathMatchingRW) Write(b []byte) (int, error) {
+	return 0, nil
+}
+
+func (rw *pathMatchingRW) WriteHeader(statusCode int) {
+	// no-op
 }
