@@ -31,7 +31,6 @@ import (
 	kmeta "github.com/dapr/kit/metadata"
 )
 
-<<<<<<< HEAD
 func mapRoleToChatMessageType(roleStr string) llms.ChatMessageType {
 	switch roleStr {
 	case "user", "human":
@@ -51,17 +50,6 @@ func mapRoleToChatMessageType(roleStr string) llms.ChatMessageType {
 	}
 }
 
-||||||| parent of b5569ff88 (feat: conversation api tool calling (#8880))
-func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) {
-	// valid component
-	if a.compStore.ConversationsLen() == 0 {
-		err := messages.ErrConversationNotFound
-		a.logger.Debug(err)
-		return nil, err
-	}
-
-=======
->>>>>>> b5569ff88 (feat: conversation api tool calling (#8880))
 func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) { //nolint:staticcheck
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
@@ -106,15 +94,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		}
 
 		c := llms.MessageContent{
-<<<<<<< HEAD
 			Role: mapRoleToChatMessageType(i.GetRole()),
-||||||| parent of b5569ff88 (feat: conversation api tool calling (#8880))
-		c := conversation.ConversationInput{
-			Message: msg,
-			Role:    conversation.Role(i.GetRole()),
-=======
-			Role: llms.ChatMessageType(i.GetRole()),
->>>>>>> b5569ff88 (feat: conversation api tool calling (#8880))
 			Parts: []llms.ContentPart{
 				llms.TextContent{
 					Text: msg,
@@ -499,13 +479,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					Function: &llms.FunctionDefinition{
 						Name:        t.Function.GetName(),
 						Description: t.Function.GetDescription(),
-<<<<<<< HEAD
 						Parameters:  t.Function.GetParameters().AsMap(),
-||||||| parent of b5569ff88 (feat: conversation api tool calling (#8880))
-	resp, err := policyRunner(func(ctx context.Context) (*conversation.ConversationResponse, error) {
-=======
-						Parameters:  t.Function.GetParameters(),
->>>>>>> b5569ff88 (feat: conversation api tool calling (#8880))
 					},
 				}
 				availableTools = append(availableTools, langchainTool)
