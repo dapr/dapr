@@ -215,11 +215,11 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 				log.Infof("Using JWT kid from thumbprint: %s, please ensure this aligns with your JWKS", kid)
 			}
 
-			if err := signKey.Set(jwk.KeyIDKey, kid); err != nil {
+			if err = signKey.Set(jwk.KeyIDKey, kid); err != nil {
 				return nil, fmt.Errorf("failed to set JWK key ID: %w", err)
 			}
 		}
-		if err := signKey.Set(jwk.AlgorithmKey, conf.JWT.SigningAlgorithm); err != nil {
+		if err = signKey.Set(jwk.AlgorithmKey, conf.JWT.SigningAlgorithm); err != nil {
 			return nil, fmt.Errorf("failed to set JWK algorithm: %w", err)
 		}
 
