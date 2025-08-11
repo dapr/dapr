@@ -519,8 +519,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.15.1-0.20250723145814-9f0aec6d35cd h1:1NBz3yJ72E5FnLZrSnCVbnZCynhx91Dcxz8dxeGS7QM=
-github.com/dapr/components-contrib v1.15.1-0.20250723145814-9f0aec6d35cd/go.mod h1:axSGDWnaJTn34hFvpS7O7yj0caB7nSjXdNu4VsrniHY=
+github.com/dapr/components-contrib v1.15.1-0.20250725163610-adc76bd6ec85 h1:eSCTYjRM8oRMWMXCXLxAQRCli03FNVUFbS00IF4h+zQ=
+github.com/dapr/components-contrib v1.15.1-0.20250725163610-adc76bd6ec85/go.mod h1:GfreXwMaOEn1ISA8lPtlLQCb8lzI4Ux/4TlYPE/OHfU=
 github.com/dapr/durabletask-go v0.7.3-0.20250711135247-7a35af6fe0e5 h1:l8oBGwcfCwqvSYDZwla0A2fhENmXFc1Wk4lR0VEq+is=
 github.com/dapr/durabletask-go v0.7.3-0.20250711135247-7a35af6fe0e5/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
 github.com/dapr/kit v0.15.3-0.20250717140748-8b780b4d81c5 h1:Q26gmPxs6WnnBYoudOlznPHsmrbTawcYEpHg4VoB7v8=
@@ -668,8 +668,8 @@ github.com/gin-contrib/sse v0.1.0/go.mod h1:RHrZQHXnP2xjPF+u1gW/2HnVO7nvIa9PG3Gm
 github.com/gin-gonic/gin v1.7.7/go.mod h1:axIBovoeJpVj8S3BwE0uPMTeReE4+AfFtqpqaZ1qq1U=
 github.com/go-asn1-ber/asn1-ber v1.3.1/go.mod h1:hEBeB/ic+5LoWskz+yKT7vGhhPYkProFKoKdwZRWMe0=
 github.com/go-chi/chi/v5 v5.0.7/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
-github.com/go-chi/chi/v5 v5.0.11 h1:BnpYbFZ3T3S1WMpD79r7R5ThWX40TaFB7L31Y8xqSwA=
-github.com/go-chi/chi/v5 v5.0.11/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
+github.com/go-chi/chi/v5 v5.2.2 h1:CMwsvRVTbXVytCk1Wd72Zy1LAsAh9GxMmSNWLHCG618=
+github.com/go-chi/chi/v5 v5.2.2/go.mod h1:L2yAIGWB3H+phAw1NxKwWM+7eUH/lU8pOMm5hHcoops=
 github.com/go-chi/cors v1.2.1 h1:xEC8UT3Rlp2QuWNEr4Fs/c2EAGVKBwy/1vHx3bppil4=
 github.com/go-chi/cors v1.2.1/go.mod h1:sSbTewc+6wYHBBCW7ytsFSn836hqM7JxpglAy2Vzc58=
 github.com/go-co-op/gocron v1.9.0/go.mod h1:DbJm9kdgr1sEvWpHCA7dFFs/PGHPMil9/97EXCRPr4k=

@@ -28,8 +28,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/zipkin"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -298,14 +298,15 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	wfe := wfengine.New(wfengine.Options{
-		AppID:              runtimeConfig.id,
-		Namespace:          namespace,
-		Actors:             actors,
-		Spec:               globalConfig.GetWorkflowSpec(),
-		BackendManager:     processor.WorkflowBackend(),
-		Resiliency:         resiliencyProvider,
-		SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
-		EventSink:          runtimeConfig.workflowEventSink,
+		AppID:                     runtimeConfig.id,
+		Namespace:                 namespace,
+		Actors:                    actors,
+		Spec:                      globalConfig.GetWorkflowSpec(),
+		BackendManager:            processor.WorkflowBackend(),
+		Resiliency:                resiliencyProvider,
+		SchedulerReminders:        globalConfig.IsFeatureEnabled(config.SchedulerReminders),
+		EventSink:                 runtimeConfig.workflowEventSink,
+		EnableClusteredDeployment: globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
 	})
 
 	rt := &DaprRuntime{
