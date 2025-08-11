@@ -43,7 +43,6 @@ type customJWKSTest struct {
 	jwksBytes  []byte
 	jwksKeyID  string
 	privKeyPEM []byte
-	issuerURL  string
 	baseURL    string
 	certFile   string
 	keyFile    string
@@ -181,7 +180,8 @@ func (c *customJWKSTest) testIssuedTokenMatchesJWKS(t *testing.T, ctx context.Co
 	aud := tok.Audience()
 	assert.Contains(t, aud, "custom-aud")
 	assert.Contains(t, aud, "localhost") // trust domain automatically added
-	assert.Equal(t, fmt.Sprintf("spiffe://localhost/ns/default/%s", "custom-app"), tok.Subject())
+	expectedSub := "spiffe://localhost/ns/default/" + "custom-app"
+	assert.Equal(t, expectedSub, tok.Subject())
 
 	// Decode header to assert kid
 	parts := strings.Split(jwtTok.GetValue(), ".")
