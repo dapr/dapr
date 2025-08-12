@@ -331,6 +331,9 @@ func (r *router) callStream(ctx context.Context, req *internalv1pb.InternalInvok
 	}
 
 	if err = r.callLocalActorStream(ctx, req, stream); err != nil {
+		if targetserrors.IsClosed(err) {
+			return err
+		}
 		return backoff.Permanent(err)
 	}
 
