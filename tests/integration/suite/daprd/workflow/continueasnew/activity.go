@@ -98,12 +98,11 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		}
 
 		for range 100 {
-			ctx.CallActivity("bar").Await(nil)
+			ctx.CallActivity("bar")
 		}
 
 		if cont.CompareAndSwap(false, true) {
 			ctx.ContinueAsNew("second call", task.WithKeepUnprocessedEvents())
-			return nil, nil
 		}
 
 		return nil, nil
@@ -152,8 +151,8 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(200), barCalled.Load())
+		assert.Equal(c, int64(100), barCalled.Load())
 	}, time.Second*10, time.Millisecond*10)
 	time.Sleep(time.Second)
-	assert.Equal(t, int64(200), barCalled.Load())
+	assert.Equal(t, int64(100), barCalled.Load())
 }

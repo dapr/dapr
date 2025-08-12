@@ -95,6 +95,10 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
+	if !o.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	o.wg.Add(1)
 
 	unlock, err := o.lock.ContextLock(ctx)
@@ -105,8 +109,15 @@ func (o *orchestrator) Deactivate(ctx context.Context) error {
 	defer unlock()
 	o.wg.Done()
 
-	o.cleanup()
-	log.Debugf("Workflow actor '%s': deactivated", o.actorID)
+	o.table.Delete(o.actorID)
+	o.state = nil
+	o.rstate = nil
+	o.ometa = nil
+	o.ometaBroadcaster.Close()
+	o.lock.Close()
+	o.wg.Wait()
+	orchestratorCache.Put(o)
+
 	return nil
 }
 

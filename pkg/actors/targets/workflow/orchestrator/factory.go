@@ -109,7 +109,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	deactivateCh := make(chan *orchestrator, 10)
 	go func() {
 		for orchestrator := range deactivateCh {
-			orchestrator.cleanup()
+			orchestrator.Deactivate(ctx)
 		}
 	}()
 
@@ -149,7 +149,6 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	or := o.(*orchestrator)
 
-	or.wg.Wait()
 	or.factory = f
 	or.actorID = actorID
 	if or.ometaBroadcaster != nil {
