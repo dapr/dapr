@@ -172,12 +172,12 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
-	target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
-	if err != nil {
-		return backoff.Permanent(err)
-	}
-
 	for {
+		target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+
 		if req.IsTimer {
 			err = target.InvokeTimer(ctx, req)
 		} else {
