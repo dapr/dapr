@@ -73,6 +73,8 @@ type factory struct {
 	schedulerReminders bool
 	scheduler          todo.WorkflowScheduler
 
+	deactivateCh chan *orchestrator
+
 	table sync.Map
 	lock  sync.Mutex
 }
@@ -104,6 +106,13 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		reminderInterval = *opts.ReminderInterval
 	}
 
+	deactivateCh := make(chan *orchestrator, 10)
+	go func() {
+		for orchestrator := range deactivateCh {
+			orchestrator.Deactivate(ctx)
+		}
+	}()
+
 	return &factory{
 		appID:              opts.AppID,
 		actorType:          opts.WorkflowActorType,
@@ -118,6 +127,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		actorTypeBuilder:   opts.ActorTypeBuilder,
 		placement:          placement,
 		scheduler:          opts.Scheduler,
+		deactivateCh:       deactivateCh,
 	}, nil
 }
 
@@ -139,7 +149,6 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	or := o.(*orchestrator)
 
-	or.wg.Wait()
 	or.factory = f
 	or.actorID = actorID
 	if or.ometaBroadcaster != nil {
@@ -147,10 +156,15 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	}
 	or.ometaBroadcaster = broadcaster.New[*backend.OrchestrationMetadata]()
 	or.closed.Store(false)
+	or.lock.Init()
 
 	if f.eventSink != nil {
 		ch := make(chan *backend.OrchestrationMetadata)
-		go or.runEventSink(ch, f.eventSink)
+		or.wg.Add(1)
+		go func() {
+			or.runEventSink(ch, f.eventSink)
+			or.wg.Done()
+		}()
 		// We use a Background context since this subscription should be
 		// maintained for the entire lifecycle of this workflow actor. The
 		// subscription will be shutdown during the actor deactivation.
@@ -221,4 +235,8 @@ func (f *factory) Len() int {
 	var count int
 	f.table.Range(func(_, _ any) bool { count++; return true })
 	return count
+}
+
+func (f *factory) deactivate(orchestrator *orchestrator) {
+	f.deactivateCh <- orchestrator
 }
