@@ -15,9 +15,6 @@ package app
 
 import (
 	"context"
-	"crypto/tls"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -96,6 +93,12 @@ func Run() {
 		jwksPath = opts.JWT.JWKSFilename
 	}
 
+	if opts.OIDC.TLSCertFile != nil && opts.OIDC.TLSKeyFile != nil {
+		log.Info("Using OIDC TLS certificate and key files: %s, %s", *opts.OIDC.TLSCertFile, *opts.OIDC.TLSKeyFile)
+	} else if opts.OIDC.TLSCertFile != nil || opts.OIDC.TLSKeyFile != nil {
+		log.Fatal("both OIDC TLS certificate and key must be provided if one is specified")
+	}
+
 	m := make(map[string]struct{})
 	// we need to watch over all these relevant directories
 	for _, path := range []*string{
@@ -104,6 +107,8 @@ func Run() {
 		&rootCertPath,
 		&jwtKeyPath,
 		&jwksPath,
+		opts.OIDC.TLSCertFile,
+		opts.OIDC.TLSKeyFile,
 	} {
 		if path != nil {
 			dir := filepath.Dir(*path)
@@ -159,17 +164,6 @@ func Run() {
 			Healthz:   healthz,
 		})
 
-		// Configure TLS for OIDC HTTP server if needed
-		var oidcTLSConfig *tls.Config
-		if opts.OIDC.TLSCertFile != nil && opts.OIDC.TLSKeyFile != nil {
-			oidcTLSConfig, err = createOIDCTLSConfig(*opts.OIDC.TLSCertFile, *opts.OIDC.TLSKeyFile)
-			if err != nil {
-				return fmt.Errorf("failed to create OIDC TLS config: %v", err)
-			}
-		} else if opts.OIDC.TLSCertFile != nil || opts.OIDC.TLSKeyFile != nil {
-			return errors.New("both OIDC TLS certificate and key must be provided if one is specified")
-		}
-
 		sentry, serr := sentry.New(ctx, sentry.Options{
 			Config:  cfg,
 			Healthz: healthz,
@@ -180,7 +174,8 @@ func Run() {
 				JWKSURI:             opts.OIDC.JWKSURI,
 				PathPrefix:          opts.OIDC.PathPrefix,
 				Domains:             opts.OIDC.AllowedHosts,
-				TLSConfig:           oidcTLSConfig,
+				TLSCertPath:         opts.OIDC.TLSCertFile,
+				TLSKeyPath:          opts.OIDC.TLSKeyFile,
 			},
 		})
 		if serr != nil {
@@ -253,18 +248,4 @@ func Run() {
 		log.Fatal(err)
 	}
 	log.Info("Sentry shut down gracefully")
-}
-
-// createOIDCTLSConfig creates a TLS configuration for the OIDC HTTP server
-func createOIDCTLSConfig(certFile, keyFile string) (*tls.Config, error) {
-	return &tls.Config{
-		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-			cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-			if err != nil {
-				return nil, err
-			}
-			return &cert, nil
-		},
-		MinVersion: tls.VersionTLS12,
-	}, nil
 }

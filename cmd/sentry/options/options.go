@@ -136,7 +136,7 @@ func New(origArgs []string) *Options {
 	fs.DurationVar(&opts.JWT.TTL, "jwt-ttl", config.DefaultJWTTTL, "Time-to-live for JWT tokens (default 24h)")
 	fs.BoolVar(&opts.OIDC.Enabled, "oidc-enabled", false, "Enable OIDC HTTP server for Dapr Sentry")
 	fs.IntVar(&opts.OIDC.ServerListenPort, "oidc-server-listen-port", 9080, "The port for the OIDC HTTP server")
-	fs.StringVar(&opts.OIDC.ServerListenAddress, "oidc-server-listen-address", "0.0.0.0", "The address for the OIDC HTTP server")
+	fs.StringVar(&opts.OIDC.ServerListenAddress, "oidc-server-listen-address", "localhost", "The address for the OIDC HTTP server")
 	fs.BoolVar(&opts.OIDC.TLSEnabled, "oidc-server-tls-enabled", true, "Serve OIDC HTTP with TLS")
 	fs.StringVar(&opts.OIDC.tlsCertFile, "oidc-server-tls-cert-file", "", "TLS certificate file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
 	fs.StringVar(&opts.OIDC.tlsKeyFile, "oidc-server-tls-key-file", "", "TLS key file for the OIDC HTTP server (required when OIDC HTTP server is enabled)")
