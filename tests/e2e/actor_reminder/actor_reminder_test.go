@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -45,13 +46,16 @@ const (
 	numHealthChecks              = 60                                 // Number of get calls before starting tests.
 	numActorsPerThread           = 10                                 // Number of get calls before starting tests.
 	secondsToCheckReminderResult = 20                                 // How much time to wait to make sure the result is in logs.
-	actorName                    = "testactorreminder"                // Actor name
-	actorNameMis                 = "testactorremindermiss"            // Actor name
-	actorNameScheduler           = "testactorreminderscheduler"       // Actor name
 	actorInvokeURLFormat         = "%s/test/%s/%s/%s/%s"              // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat           = "%s/test/logs"                     // URL to fetch logs from test app.
 	shutdownURLFormat            = "%s/test/shutdown"                 // URL to shutdown sidecar and app.
 	misconfiguredAppName         = "actor-reminder-no-state-store"    // Actor-reminder app without a state store (should fail to start)
+)
+
+var (
+	actorName          = uuid.New().String()
+	actorNameMis       = uuid.New().String()
+	actorNameScheduler = uuid.New().String()
 )
 
 // represents a response for the APIs in this app.
@@ -357,7 +361,7 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 			for i := 0; i < numActorsPerThread; i++ {
 				actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
 				count := countActorAction(resp, actorID, restartReminderName)
-				require.True(t, count == 0, "After restart, reminder %s for Actor %s was invoked %d times.", restartReminderName, actorID, count)
+				require.Equal(t, 0, count, "After restart, reminder %s for Actor %s was invoked %d times.", restartReminderName, actorID, count)
 			}
 		}
 
