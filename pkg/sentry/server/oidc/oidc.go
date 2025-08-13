@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -66,8 +67,8 @@ type Options struct {
 	// AllowedHosts is a list of allowed hosts that a client request will be valid for.
 	AllowedHosts []string
 
-	// TLSConfig is an optional custom TLS configuration
-	TLSConfig *tls.Config
+	TLSCertPath *string
+	TLSKeyPath  *string
 
 	// JWTIssuer is the issuer to use for JWT tokens (if not set, issuer not set)
 	JWTIssuer *string
@@ -90,7 +91,8 @@ type Server struct {
 	htarget           healthz.Target
 	jwksURI           *string
 	allowedHosts      []string
-	tlsConfig         *tls.Config
+	tlsCertPath       *string
+	tlsKeyPath        *string
 	jwtIssuer         *string
 	pathPrefix        *string
 	discovery         *discoveryDocument
@@ -163,7 +165,8 @@ func New(opts Options) (*Server, error) {
 		htarget:           opts.Healthz.AddTarget("oidc-server"),
 		jwksURI:           opts.JWKSURI,
 		allowedHosts:      opts.AllowedHosts,
-		tlsConfig:         opts.TLSConfig,
+		tlsCertPath:       opts.TLSCertPath,
+		tlsKeyPath:        opts.TLSKeyPath,
 		jwtIssuer:         opts.JWTIssuer,
 		pathPrefix:        opts.PathPrefix,
 		authorizeEndpoint: authorizeEndpoint,
@@ -190,10 +193,40 @@ func (s *Server) Run(ctx context.Context) error {
 		log.Info("OIDC server will accept requests for any host")
 	}
 
+	var tlsConfig *tls.Config
+	if s.tlsCertPath != nil && s.tlsKeyPath != nil {
+		for {
+			_, errC := os.Stat(*s.tlsCertPath)
+			_, errK := os.Stat(*s.tlsKeyPath)
+			if errC == nil && errK == nil {
+				break
+			}
+
+			log.Warnf("Waiting for TLS certificate and key files to be available: %s, %s", s.tlsCertPath, s.tlsKeyPath)
+
+			select {
+			case <-time.After(5 * time.Second):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+
+		cert, err := tls.LoadX509KeyPair(*s.tlsCertPath, *s.tlsKeyPath)
+		if err != nil {
+			return fmt.Errorf("failed to load TLS certificate and key: %w", err)
+		}
+
+		tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}
+
+		log.Infof("Loaded TLS certificate from %s and key from %s", *s.tlsCertPath, *s.tlsKeyPath)
+	}
+
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
-		TLSConfig:         s.tlsConfig,
+		TLSConfig:         tlsConfig,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -204,7 +237,7 @@ func (s *Server) Run(ctx context.Context) error {
 				return fmt.Errorf("failed to listen on %s: %w", addr, err)
 			}
 			s.htarget.Ready()
-			if s.tlsConfig == nil {
+			if tlsConfig == nil {
 				log.Infof("Starting OIDC HTTP server (insecure) on %s", addr)
 				if err := server.Serve(listener); err != http.ErrServerClosed {
 					return fmt.Errorf("OIDC HTTP server error: %w", err)
@@ -212,7 +245,7 @@ func (s *Server) Run(ctx context.Context) error {
 				return nil
 			}
 			log.Infof("Starting OIDC HTTP server on %s", addr)
-			tlsListener := tls.NewListener(listener, s.tlsConfig)
+			tlsListener := tls.NewListener(listener, tlsConfig)
 			if err := server.Serve(tlsListener); err != http.ErrServerClosed {
 				return fmt.Errorf("OIDC HTTP server error: %w", err)
 			}
@@ -323,7 +356,7 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
 
 		scheme := r.URL.Scheme
 		if scheme == "" {
-			if s.tlsConfig != nil {
+			if s.tlsCertPath != nil && s.tlsKeyPath != nil {
 				scheme = "https"
 			} else {
 				scheme = "http"

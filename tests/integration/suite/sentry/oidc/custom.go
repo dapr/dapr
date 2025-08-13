@@ -293,9 +293,10 @@ func (o *customOIDCServer) testInsecureHTTPMode(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
-	go func() {
-		httpSentry.Run(t, ctx)
-	}()
+	httpSentry.Run(t, ctx)
+	t.Cleanup(func() {
+		httpSentry.Cleanup(t)
+	})
 
 	httpSentry.WaitUntilRunning(t, ctx)
 

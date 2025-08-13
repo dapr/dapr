@@ -213,6 +213,7 @@ spec:
 {{- end }}
 {{- if .Values.oidc.enabled }}
         - "--oidc-enabled=true"
+        - "--oidc-server-listen-address=0.0.0.0"
 {{- if .Values.oidc.jwksURI }}
         - "--oidc-jwks-uri={{ .Values.oidc.jwksURI }}"
 {{- end }}

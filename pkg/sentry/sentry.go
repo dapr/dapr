@@ -16,7 +16,6 @@ package sentry
 import (
 	"context"
 	"crypto"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"errors"
@@ -53,13 +52,14 @@ type Options struct {
 }
 
 type OIDCOptions struct {
-	Enabled             bool        // Enable OIDC HTTP endpoints
-	ServerListenAddress string      // Address for OIDC HTTP server
-	ServerListenPort    int         // Port for OIDC HTTP endpoints
-	TLSConfig           *tls.Config // custom TLS configuration for the HTTP server (Optional)
-	Domains             []string    // Domains that public endpoints can be accessed from (Optional)
-	JWKSURI             *string     // Force the public JWKS URI to this value (Optional)
-	PathPrefix          *string     // Path prefix for HTTP endpoints (Optional)
+	Enabled             bool     // Enable OIDC HTTP endpoints
+	ServerListenAddress string   // Address for OIDC HTTP server
+	ServerListenPort    int      // Port for OIDC HTTP endpoints
+	Domains             []string // Domains that public endpoints can be accessed from (Optional)
+	JWKSURI             *string  // Force the public JWKS URI to this value (Optional)
+	PathPrefix          *string  // Path prefix for HTTP endpoints (Optional)
+	TLSCertPath         *string
+	TLSKeyPath          *string
 }
 
 // CertificateAuthority is the interface for the Sentry Certificate Authority.
@@ -193,7 +193,8 @@ func newOIDCServerRunner(opts Options, camngr ca.Signer) (concurrency.Runner, er
 		JWTIssuer:          &issuer,
 		Healthz:            opts.Healthz,
 		AllowedHosts:       opts.OIDC.Domains,
-		TLSConfig:          opts.OIDC.TLSConfig,
+		TLSCertPath:        opts.OIDC.TLSCertPath,
+		TLSKeyPath:         opts.OIDC.TLSKeyPath,
 		SignatureAlgorithm: signAlg,
 	}
 
