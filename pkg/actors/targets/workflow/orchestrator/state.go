@@ -97,7 +97,7 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 		return err
 	}
 
-	o.cleanup()
+	o.factory.deactivate(o)
 
 	return nil
 }
@@ -137,23 +137,6 @@ func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState,
 		FailureDetails:   failureDetails,
 		ParentInstanceId: parentInstanceID,
 	}
-}
-
-func (o *orchestrator) cleanup() {
-	if !o.closed.CompareAndSwap(false, true) {
-		return
-	}
-
-	o.table.Delete(o.actorID)
-	o.state = nil
-	o.rstate = nil
-	o.ometa = nil
-	o.ometaBroadcaster.Close()
-
-	go func() {
-		o.wg.Wait()
-		orchestratorCache.Put(o)
-	}()
 }
 
 // This method purges all the completed activity data from a workflow associated with the given actorID

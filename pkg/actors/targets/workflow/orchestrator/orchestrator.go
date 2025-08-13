@@ -16,11 +16,11 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	targetserrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/lock"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -57,13 +57,9 @@ func (o *orchestrator) InvokeMethod(ctx context.Context, req *internalsv1pb.Inte
 
 	unlock, err := o.lock.ContextLock(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to invoke method for workflow '%s': %w", o.actorID, err)
 	}
 	defer unlock()
-
-	if err := o.checkClosed("invoke"); err != nil {
-		return nil, err
-	}
 
 	return o.handleInvoke(ctx, req)
 }
@@ -75,13 +71,9 @@ func (o *orchestrator) InvokeReminder(ctx context.Context, reminder *actorapi.Re
 
 	unlock, err := o.lock.ContextLock(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to invoke reminder for workflow '%s': %w", o.actorID, err)
 	}
 	defer unlock()
-
-	if err := o.checkClosed("reminder"); err != nil {
-		return err
-	}
 
 	return o.handleReminder(ctx, reminder)
 }
@@ -103,17 +95,29 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
+	if !o.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	o.wg.Add(1)
-	defer o.wg.Done()
 
 	unlock, err := o.lock.ContextLock(ctx)
 	if err != nil {
-		return err
+		o.wg.Done()
+		return fmt.Errorf("failed to deactivate workflow '%s': %w", o.actorID, err)
 	}
 	defer unlock()
+	o.wg.Done()
 
-	o.cleanup()
-	log.Debugf("Workflow actor '%s': deactivated", o.actorID)
+	o.table.Delete(o.actorID)
+	o.state = nil
+	o.rstate = nil
+	o.ometa = nil
+	o.ometaBroadcaster.Close()
+	o.lock.Close()
+	o.wg.Wait()
+	orchestratorCache.Put(o)
+
 	return nil
 }
 
@@ -130,12 +134,4 @@ func (o *orchestrator) Type() string {
 // ID returns the ID for this unique actor.
 func (o *orchestrator) ID() string {
 	return o.actorID
-}
-
-func (o *orchestrator) checkClosed(method string) error {
-	if o.closed.Load() {
-		return targetserrors.NewClosed(method)
-	}
-
-	return nil
 }
