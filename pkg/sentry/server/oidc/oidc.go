@@ -218,6 +218,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 		tlsConfig = &tls.Config{
 			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
 		}
 
 		log.Infof("Loaded TLS certificate from %s and key from %s", *s.tlsCertPath, *s.tlsKeyPath)

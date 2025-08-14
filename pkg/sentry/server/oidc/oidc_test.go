@@ -18,7 +18,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
@@ -26,6 +25,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -251,16 +251,9 @@ func TestHandleDiscovery(t *testing.T) {
 
 	t.Run("with tls config", func(t *testing.T) {
 		// Create a test TLS certificate
-		cert, key := createTestCertificate(t)
-		tlsCert, err := tls.X509KeyPair(cert, key)
-		require.NoError(t, err)
+		certFile, keyFile := createTestCertificate(t)
 
-		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{tlsCert},
-			MinVersion:   tls.VersionTLS12,
-		}
-
-		s := createTestServer(t, WithJWKS(jwks), WithTLSConfig(tlsConfig))
+		s := createTestServer(t, WithJWKS(jwks), WithTLS(certFile, keyFile))
 
 		req, err := http.NewRequest(http.MethodGet, OIDCDiscoveryEndpoint, nil)
 		req.Host = testHost
@@ -375,17 +368,11 @@ func TestServer_Start(t *testing.T) {
 	jwks := []byte(`{"keys":[{"kty":"EC","use":"sig","kid":"test-key","crv":"P-256","x":"test-x","y":"test-y"}]}`)
 
 	// Create a test certificate for TLS
-	cert, key := createTestCertificate(t)
-	tlsCert, err := tls.X509KeyPair(cert, key)
-	require.NoError(t, err)
-
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{tlsCert},
-		MinVersion:   tls.VersionTLS12,
-	}
+	certFile, keyFile := createTestCertificate(t)
 
 	s := createTestServer(t, WithJWKS(jwks))
-	s.tlsConfig = tlsConfig
+	s.tlsCertPath = ptr.Of(certFile)
+	s.tlsKeyPath = ptr.Of(keyFile)
 	s.jwksURI = ptr.Of("https://example.com/jwks.json")
 
 	// Start the server in a goroutine
@@ -510,7 +497,7 @@ func createTestServer(t *testing.T, opts ...OptionsBuilder) *Server {
 }
 
 // Helper function to create a test TLS certificate.
-func createTestCertificate(t *testing.T) ([]byte, []byte) {
+func createTestCertificate(t *testing.T) (string, string) {
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 
@@ -537,7 +524,12 @@ func createTestCertificate(t *testing.T) ([]byte, []byte) {
 	require.NoError(t, err)
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privKeyBytes})
 
-	return certPEM, keyPEM
+	dir := t.TempDir()
+	certFile, keyFile := dir+"/test_cert.pem", dir+"/test_key.pem"
+	require.NoError(t, os.WriteFile(certFile, certPEM, 0o600))
+	require.NoError(t, os.WriteFile(keyFile, keyPEM, 0o600))
+
+	return certFile, keyFile
 }
 
 type OptionsBuilder func(*Options)
@@ -566,9 +558,10 @@ func WithIssuer(issuer string) OptionsBuilder {
 	}
 }
 
-func WithTLSConfig(tlsConfig *tls.Config) OptionsBuilder {
+func WithTLS(certFile, keyFile string) OptionsBuilder {
 	return func(opts *Options) {
-		opts.TLSConfig = tlsConfig
+		opts.TLSCertPath = ptr.Of(certFile)
+		opts.TLSKeyPath = ptr.Of(keyFile)
 	}
 }
 
