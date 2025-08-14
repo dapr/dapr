@@ -172,22 +172,24 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
-	target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
-	if err != nil {
+	for {
+		target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+
+		if req.IsTimer {
+			err = target.InvokeTimer(ctx, req)
+		} else {
+			err = target.InvokeReminder(ctx, req)
+		}
+
+		if targetserrors.IsClosed(err) {
+			continue
+		}
+
 		return backoff.Permanent(err)
 	}
-
-	if req.IsTimer {
-		err = target.InvokeTimer(ctx, req)
-	} else {
-		err = target.InvokeReminder(ctx, req)
-	}
-
-	if targetserrors.IsClosed(err) {
-		return err
-	}
-
-	return backoff.Permanent(err)
 }
 
 func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -214,15 +216,17 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if lar.Local {
-		var resp *internalv1pb.InternalInvokeResponse
-		resp, err = r.callLocalActor(ctx, req)
-		if err != nil {
-			if targetserrors.IsClosed(err) {
-				return resp, err
+		for {
+			var resp *internalv1pb.InternalInvokeResponse
+			resp, err = r.callLocalActor(ctx, req)
+			if err != nil {
+				if targetserrors.IsClosed(err) {
+					continue
+				}
+				return resp, backoff.Permanent(err)
 			}
-			return resp, backoff.Permanent(err)
+			return resp, nil
 		}
-		return resp, nil
 	}
 
 	// If this is a dapr-dapr call and the actor didn't pass the local check
@@ -330,11 +334,16 @@ func (r *router) callStream(ctx context.Context, req *internalv1pb.InternalInvok
 		return r.callRemoteActorStream(ctx, lar, req, stream)
 	}
 
-	if err = r.callLocalActorStream(ctx, req, stream); err != nil {
-		return backoff.Permanent(err)
-	}
+	for {
+		if err = r.callLocalActorStream(ctx, req, stream); err != nil {
+			if targetserrors.IsClosed(err) {
+				continue
+			}
+			return backoff.Permanent(err)
+		}
 
-	return nil
+		return nil
+	}
 }
 
 func (r *router) callLocalActorStream(ctx context.Context,

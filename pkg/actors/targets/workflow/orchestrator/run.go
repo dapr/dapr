@@ -202,10 +202,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			wfExecutionElapsedTime = o.calculateWorkflowExecutionLatency(state)
 		}
 	}
+
 	if runtimestate.IsCompleted(rs) {
 		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", o.actorID, runtimestate.RuntimeStatus(rs).String(), workflowName)
 		return todo.RunCompletedTrue, nil
 	}
+
 	return todo.RunCompletedFalse, nil
 }
 
