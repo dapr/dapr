@@ -137,7 +137,7 @@ func (rw *pathMatchingRW) Header() http.Header {
 }
 
 func (rw *pathMatchingRW) Write(b []byte) (int, error) {
-	return 0, nil
+	return len(b), nil
 }
 
 func (rw *pathMatchingRW) WriteHeader(statusCode int) {
