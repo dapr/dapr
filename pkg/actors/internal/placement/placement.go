@@ -100,7 +100,6 @@ type placement struct {
 	namespace string
 	hostname  string
 	port      string
-	isReady   atomic.Bool
 	readyCh   chan struct{}
 	wg        sync.WaitGroup
 	closedCh  chan struct{}
@@ -348,26 +347,18 @@ func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string
 func (p *placement) handleUnlockOperation(ctx context.Context) {
 	p.updateVersion.Add(1)
 
-	found := true
-	for _, actorType := range p.actorTable.Types() {
-		if _, ok := p.hashTable.Entries[actorType]; !ok {
-			found = false
-			break
-		}
-	}
-
-	if found {
-		if p.reminders != nil {
-			p.reminders.OnPlacementTablesUpdated(ctx, func(ctx context.Context, req *api.LookupActorRequest) bool {
-				if ctx.Err() != nil {
-					return false
-				}
-				lar, err := p.LookupActor(ctx, req)
-				return err == nil && lar.Local
-			})
+	select {
+	case <-p.readyCh:
+	default:
+		found := true
+		for _, actorType := range p.actorTable.Types() {
+			if _, ok := p.hashTable.Entries[actorType]; !ok {
+				found = false
+				break
+			}
 		}
 
-		if p.isReady.CompareAndSwap(false, true) {
+		if found {
 			close(p.readyCh)
 		}
 	}
@@ -380,6 +371,16 @@ func (p *placement) handleUnlockOperation(ctx context.Context) {
 	p.htarget.Ready()
 	p.tableUnlock()
 	p.tableUnlock = nil
+
+	if p.reminders != nil {
+		p.reminders.OnPlacementTablesUpdated(ctx, func(ctx context.Context, req *api.LookupActorRequest) bool {
+			if ctx.Err() != nil {
+				return false
+			}
+			lar, err := p.LookupActor(ctx, req)
+			return err == nil && lar.Local
+		})
+	}
 }
 
 func (p *placement) isActorLocal(targetActorAddress, hostAddress string, port string) bool {
