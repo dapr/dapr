@@ -39,13 +39,12 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/metrics"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 type Daprd struct {
-	exec       process.Interface
+	exec       *exec.Exec
 	ports      *ports.Ports
 	httpClient *http.Client
 
@@ -486,4 +485,8 @@ func (d *Daprd) ActorInvokeURL(actorType, actorID, method string) string {
 
 func (d *Daprd) ActorReminderURL(actorType, actorID, method string) string {
 	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders/%s", d.HTTPAddress(), actorType, actorID, method)
+}
+
+func (d *Daprd) Kill(t *testing.T) {
+	d.exec.Kill(t)
 }
