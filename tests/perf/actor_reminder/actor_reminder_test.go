@@ -220,7 +220,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 
 	p := perf.Params(
 		perf.WithQPS(3000),
-		perf.WithConnections(8),
+		perf.WithConnections(24),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
 	)
@@ -373,7 +373,7 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
 		assert.NoError(c, err)
 		assert.GreaterOrEqual(c, gotCount, reminderCount*5)
-	}, 100*time.Second, time.Millisecond*100)
+	}, 100*time.Second, time.Second)
 	done = time.Since(start)
 	qps := float64(reminderCount*5) / done.Seconds()
 	t.Logf("Triggered %d reminders in %s (%.1fqps)", reminderCount*5, done, qps)
@@ -428,7 +428,7 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/%d/reminders/myreminder%d", testAppURL, actorTypeScheduler, i, i), reminderB)
 			assert.NoError(c, err)
-		}, 10*time.Second, time.Millisecond*100)
+		}, 10*time.Second, time.Second)
 
 		if (i+1)%10000 == 0 {
 			fmt.Printf("Reminders registered: %d\n", i+1)
@@ -468,7 +468,7 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
 		assert.NoError(c, err)
 		assert.GreaterOrEqual(c, gotCount, reminderCountScheduler*5)
-	}, 100*time.Second, time.Millisecond*100)
+	}, 100*time.Second, time.Second)
 	done = time.Since(start)
 	qps := float64(reminderCountScheduler*5) / done.Seconds()
 	t.Logf("Triggered %d reminders in %s (%.1fqps)", reminderCountScheduler*5, done, qps)
