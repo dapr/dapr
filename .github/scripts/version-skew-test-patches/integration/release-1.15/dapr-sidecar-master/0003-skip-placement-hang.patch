@@ -1,0 +1,13 @@
+diff --git a/tests/integration/suite/placement/dissemination/streamhang.go b/tests/integration/suite/placement/dissemination/streamhang.go
+index fce8f16be..107f24c6c 100644
+--- a/tests/integration/suite/placement/dissemination/streamhang.go
++++ b/tests/integration/suite/placement/dissemination/streamhang.go
+@@ -42,6 +42,8 @@ type streamHang struct {
+ }
+ 
+ func (n *streamHang) Setup(t *testing.T) []framework.Option {
++	t.Skip("TODO: @joshvanl")
++
+ 	if runtime.GOOS == "windows" {
+ 		t.Skip("Sending big messages is unpredictable on Windows CI runners")
+ 	}

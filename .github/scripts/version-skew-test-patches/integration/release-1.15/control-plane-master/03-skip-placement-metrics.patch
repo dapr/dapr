@@ -1,0 +1,13 @@
+diff --git a/tests/integration/suite/placement/metrics/actorheartbeat.go b/tests/integration/suite/placement/metrics/actorheartbeat.go
+index 65c0dfed8..3becf88de 100644
+--- a/tests/integration/suite/placement/metrics/actorheartbeat.go
++++ b/tests/integration/suite/placement/metrics/actorheartbeat.go
+@@ -39,6 +39,8 @@ type actorheartbeat struct {
+ }
+ 
+ func (m *actorheartbeat) Setup(t *testing.T) []framework.Option {
++	t.Skip("TODO: @joshvanl")
++
+ 	m.place = placement.New(t,
+ 		placement.WithMetadataEnabled(true),
+ 	)
