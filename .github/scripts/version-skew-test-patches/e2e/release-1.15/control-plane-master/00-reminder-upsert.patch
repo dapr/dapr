@@ -1,0 +1,12 @@
+diff --git a/tests/e2e/actor_features/actor_features_test.go b/tests/e2e/actor_features/actor_features_test.go
+index 3bca79311..8bc991736 100644
+--- a/tests/e2e/actor_features/actor_features_test.go
++++ b/tests/e2e/actor_features/actor_features_test.go
+@@ -331,6 +331,7 @@ func TestActorFeatures(t *testing.T) {
+ 	t.Run("Actor single fire reminder.", func(t *testing.T) {
+ 		// Each test needs to have a different actorID
+ 		actorID := "1001a"
++		t.Skip("Skipping test because reminders can not be upserted without overwrite flag")
+ 
+ 		// Reset reminder
+ 		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
