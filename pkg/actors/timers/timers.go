@@ -54,7 +54,7 @@ func (t *timers) Create(ctx context.Context, req *api.CreateTimerRequest) error 
 		return fmt.Errorf("can't create timer for actor %s: actor type not registered", req.ActorKey())
 	}
 
-	reminder, err := req.NewReminder(t.clock.Now())
+	reminder, err := req.NewReminder(t.clock.Now(), false)
 	if err != nil {
 		return err
 	}
