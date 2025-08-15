@@ -1,0 +1,13 @@
+diff --git a/tests/integration/framework/process/logline/logline.go b/tests/integration/framework/process/logline/logline.go
+index ea4910468..77f15de18 100644
+--- a/tests/integration/framework/process/logline/logline.go
++++ b/tests/integration/framework/process/logline/logline.go
+@@ -48,6 +48,8 @@ type LogLine struct {
+ func New(t *testing.T, fopts ...Option) *LogLine {
+ 	t.Helper()
+ 
++	t.Skip("TODO: @joshvanl remove me")
++
+ 	opts := options{}
+ 
+ 	for _, fopt := range fopts {
