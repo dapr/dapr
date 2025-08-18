@@ -139,7 +139,7 @@ func config(opts Options) (*embed.Config, error) {
 	// Must be set to false to prevent aggressive election ticks where leader changes can happen
 	// before the state is fully synced. This is especially important with higher WAL/snapshot counts
 	// as new leaders might not see previous job triggers, leading to duplicate job executions.
-	config.InitialElectionTickAdvance = false
+	config.InitialElectionTickAdvance = true
 
 	config.Metrics = opts.Metrics
 
