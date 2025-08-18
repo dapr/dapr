@@ -17,14 +17,15 @@ permissions: {}
 jobs:
   lint:
     name: Test (${{ matrix.os}})
-    
+
     strategy:
       fail-fast: false
       matrix:
-        os: 
+        os:
           - "ubuntu-latest"
           - "windows-latest"
-          - "macos-latest"
+          # TODO: @joshvanl Upgrade to latest once dns is fixed.
+          - "macos-14"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
