@@ -67,29 +67,33 @@ func TestSelhosted_store(t *testing.T) {
 		require.FileExists(t, issuerFile)
 		require.FileExists(t, keyFile)
 
-		info, err := os.Stat(rootFile)
-		require.NoError(t, err)
-		assert.Equal(t, writePerm, info.Mode().Perm())
+		// The writer is expected to place a symlink at the target that points
+		// to a temporary directory containing the actual file. Assert the
+		// target is a symlink, resolve it and read the inner file for content.
+		checkSymlink := func(path, expected string) {
+			info, err := os.Lstat(path)
+			require.NoError(t, err)
+			require.True(t, info.Mode()&os.ModeSymlink != 0, "%s should be a symlink", path)
 
-		info, err = os.Stat(issuerFile)
-		require.NoError(t, err)
-		assert.Equal(t, writePerm, info.Mode().Perm())
+			linkTarget, err := os.Readlink(path)
+			require.NoError(t, err)
 
-		info, err = os.Stat(keyFile)
-		require.NoError(t, err)
-		assert.Equal(t, writePerm, info.Mode().Perm())
+			inner := filepath.Join(linkTarget, filepath.Base(path))
+			finfo, err := os.Stat(inner)
+			require.NoError(t, err)
+			require.False(t, finfo.IsDir())
 
-		b, err := os.ReadFile(rootFile)
-		require.NoError(t, err)
-		assert.Equal(t, "root", string(b))
+			b, err := os.ReadFile(inner)
+			require.NoError(t, err)
+			assert.Equal(t, expected, string(b))
 
-		b, err = os.ReadFile(issuerFile)
-		require.NoError(t, err)
-		assert.Equal(t, "issuer", string(b))
+			require.NoError(t, err)
+			assert.Equal(t, writePerm, finfo.Mode().Perm())
+		}
 
-		b, err = os.ReadFile(keyFile)
-		require.NoError(t, err)
-		assert.Equal(t, "key", string(b))
+		checkSymlink(rootFile, "root")
+		checkSymlink(issuerFile, "issuer")
+		checkSymlink(keyFile, "key")
 	})
 }
 

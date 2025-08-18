@@ -17,11 +17,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
 	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	"github.com/dapr/kit/concurrency/dir"
 )
 
 // selfhosted is a store that uses the file system as the secret store.
@@ -49,7 +51,13 @@ func (s *selfhosted) store(_ context.Context, bundle ca_bundle.Bundle) error {
 			continue
 		}
 
-		if err := os.WriteFile(file.path, file.data, 0o600); err != nil {
+		d := dir.New(dir.Options{
+			Target: file.path,
+			Log:    log,
+		})
+		if err := d.Write(map[string][]byte{
+			filepath.Base(file.path): file.data,
+		}); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", file.path, err)
 		}
 	}
