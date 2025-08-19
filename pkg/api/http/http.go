@@ -83,6 +83,7 @@ type api struct {
 const (
 	apiVersionV1             = "v1.0"
 	apiVersionV1alpha1       = "v1.0-alpha1"
+	apiVersionV1alpha2       = "v1.0-alpha2"
 	apiVersionV1beta1        = "v1.0-beta1"
 	methodParam              = "method"
 	wildcardParam            = "*"

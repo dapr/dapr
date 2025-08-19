@@ -113,7 +113,7 @@ func New(opts Options) (*Server, error) {
 		raftLogStorePath: opts.LogStorePath,
 		clock:            cl,
 		raftReady:        make(chan struct{}),
-		htarget:          opts.Healthz.AddTarget(),
+		htarget:          opts.Healthz.AddTarget("placement-raft-server"),
 		sec:              opts.Security,
 		config:           opts.Config,
 		fsm: newFSM(DaprHostMemberStateConfig{

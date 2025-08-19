@@ -104,7 +104,7 @@ func New(opts Options) (validator.Validator, error) {
 		sentryAudience: opts.SentryID.String(),
 		controlPlaneNS: opts.ControlPlaneNS,
 		controlPlaneTD: opts.SentryID.TrustDomain(),
-		htarget:        opts.Healthz.AddTarget(),
+		htarget:        opts.Healthz.AddTarget("sentry-kubernetes-validator"),
 	}, nil
 }
 

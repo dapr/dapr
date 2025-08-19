@@ -30,14 +30,6 @@ const (
 	testStateStoreName           = "testStateStore"
 )
 
-func cleanupRegisteredViews() {
-	diag.CleanupRegisteredViews(
-		resiliencyCountViewName,
-		resiliencyLoadedViewName,
-		resiliencyActivationViewName,
-		resiliencyCBStateViewName)
-}
-
 func TestResiliencyCountMonitoring(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -186,10 +178,14 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cleanupRegisteredViews()
-			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(test.appID))
+			meter := view.NewMeter()
+			meter.Start()
+			t.Cleanup(func() {
+				meter.Stop()
+			})
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(meter, test.appID))
 			test.unitFn()
-			rows, err := view.RetrieveData(resiliencyCountViewName)
+			rows, err := meter.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
 				require.Error(t, err)
 			}
@@ -276,14 +272,18 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cleanupRegisteredViews()
-			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
+			meter := view.NewMeter()
+			meter.Start()
+			t.Cleanup(func() {
+				meter.Stop()
+			})
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(meter, testAppID))
 			test.unitFn()
-			rows, err := view.RetrieveData(resiliencyCountViewName)
+			rows, err := meter.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
 			require.Len(t, rows, test.wantNumberOfRows)
 
-			rowsCbState, err := view.RetrieveData(resiliencyCBStateViewName)
+			rowsCbState, err := meter.RetrieveData(resiliencyCBStateViewName)
 			require.NoError(t, err)
 			require.NotNil(t, rowsCbState)
 
@@ -458,10 +458,14 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cleanupRegisteredViews()
-			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
+			meter := view.NewMeter()
+			meter.Start()
+			t.Cleanup(func() {
+				meter.Stop()
+			})
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(meter, testAppID))
 			test.unitFn()
-			rows, err := view.RetrieveData(resiliencyActivationViewName)
+			rows, err := meter.RetrieveData(resiliencyActivationViewName)
 			require.NoError(t, err)
 			require.Len(t, rows, test.wantNumberOfRows)
 			if test.wantNumberOfRows == 0 {
@@ -515,11 +519,15 @@ func createDefaultTestResiliency(resiliencyName string, resiliencyNamespace stri
 
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
-		cleanupRegisteredViews()
-		require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
+		meter := view.NewMeter()
+		meter.Start()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		require.NoError(t, diag.DefaultResiliencyMonitoring.Init(meter, testAppID))
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
-		rows, err := view.RetrieveData(resiliencyLoadedViewName)
+		rows, err := meter.RetrieveData(resiliencyLoadedViewName)
 
 		require.NoError(t, err)
 		require.Len(t, rows, 1)

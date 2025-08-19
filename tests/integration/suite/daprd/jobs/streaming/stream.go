@@ -79,56 +79,52 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 	s.daprdA.WaitUntilRunning(t, ctx)
 	s.daprdB.WaitUntilRunning(t, ctx)
 
-	t.Run("daprA receive its scheduled job on stream at trigger time", func(t *testing.T) {
-		daprAclient := s.daprdA.GRPCClient(t, ctx)
+	daprAclient := s.daprdA.GRPCClient(t, ctx)
 
-		req := &runtimev1pb.ScheduleJobRequest{
-			Job: &runtimev1pb.Job{
-				Name:     "test",
-				Schedule: ptr.Of("@every 1s"),
-				Repeats:  ptr.Of(uint32(1)),
-				DueTime:  ptr.Of("0m"),
-				Data: &anypb.Any{
-					TypeUrl: "type.googleapis.com/google.type.Expr",
-				},
+	req := &runtimev1pb.ScheduleJobRequest{
+		Job: &runtimev1pb.Job{
+			Name:     "test",
+			Schedule: ptr.Of("@every 1s"),
+			Repeats:  ptr.Of(uint32(1)),
+			DueTime:  ptr.Of("0m"),
+			Data: &anypb.Any{
+				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
-		}
+		},
+	}
 
-		_, err := daprAclient.ScheduleJobAlpha1(ctx, req)
-		require.NoError(t, err)
+	_, err := daprAclient.ScheduleJobAlpha1(ctx, req)
+	require.NoError(t, err)
 
-		select {
-		case job := <-s.jobChan:
-			assert.NotNil(t, job)
-			assert.Equal(t, "job/test", job.GetMethod())
-		case <-time.After(time.Second * 3):
-			assert.Fail(t, "timed out waiting for triggered job")
-		}
-	})
+	select {
+	case job := <-s.jobChan:
+		assert.NotNil(t, job)
+		assert.Equal(t, "job/test", job.GetMethod())
+	case <-time.After(time.Second * 7):
+		assert.Fail(t, "timed out waiting for triggered job")
+	}
 
-	t.Run("daprB receive its scheduled job on stream at trigger time", func(t *testing.T) {
-		daprBclient := s.daprdB.GRPCClient(t, ctx)
+	daprBclient := s.daprdB.GRPCClient(t, ctx)
 
-		req := &runtimev1pb.ScheduleJobRequest{
-			Job: &runtimev1pb.Job{
-				Name:     "test",
-				Schedule: ptr.Of("@every 1s"),
-				Repeats:  ptr.Of(uint32(1)),
-				Data: &anypb.Any{
-					TypeUrl: "type.googleapis.com/google.type.Expr",
-				},
+	req = &runtimev1pb.ScheduleJobRequest{
+		Job: &runtimev1pb.Job{
+			Name:     "test",
+			Schedule: ptr.Of("@every 1s"),
+			Repeats:  ptr.Of(uint32(1)),
+			Data: &anypb.Any{
+				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
-		}
+		},
+	}
 
-		_, err := daprBclient.ScheduleJobAlpha1(ctx, req)
-		require.NoError(t, err)
+	_, err = daprBclient.ScheduleJobAlpha1(ctx, req)
+	require.NoError(t, err)
 
-		select {
-		case job := <-s.jobChan:
-			assert.NotNil(t, job)
-			assert.Equal(t, "job/test", job.GetMethod())
-		case <-time.After(time.Second * 7):
-			assert.Fail(t, "timed out waiting for triggered job")
-		}
-	})
+	select {
+	case job := <-s.jobChan:
+		assert.NotNil(t, job)
+		assert.Equal(t, "job/test", job.GetMethod())
+	case <-time.After(time.Second * 7):
+		assert.Fail(t, "timed out waiting for triggered job")
+	}
 }

@@ -17,7 +17,9 @@ import (
 	"context"
 	"runtime"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -31,11 +33,11 @@ import (
 )
 
 type Workflow struct {
-	registry *task.TaskRegistry
-	db       *sqlite.SQLite
-	place    *placement.Placement
-	sched    *scheduler.Scheduler
-	daprds   []*daprd.Daprd
+	taskregistry []*task.TaskRegistry
+	db           *sqlite.SQLite
+	place        *placement.Placement
+	sched        *scheduler.Scheduler
+	daprds       []*daprd.Daprd
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -46,7 +48,6 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	}
 
 	opts := options{
-		registry:        task.NewTaskRegistry(),
 		enableScheduler: true,
 		daprds:          1,
 	}
@@ -62,7 +63,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	)
 	place := placement.New(t)
 
-	dopts := []daprd.Option{
+	baseDopts := []daprd.Option{
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithResourceFiles(db.GetComponent(t)),
 	}
@@ -70,7 +71,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	var sched *scheduler.Scheduler
 	if opts.enableScheduler {
 		sched = scheduler.New(t)
-		dopts = append(dopts,
+		baseDopts = append(baseDopts,
 			daprd.WithScheduler(sched),
 			daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
@@ -85,20 +86,51 @@ spec:
 	}
 
 	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
-	daprds[0] = daprd.New(t, dopts...)
-	for i := range opts.daprds - 1 {
-		daprds[i+1] = daprd.New(t,
-			append(dopts, daprd.WithAppID(daprds[0].AppID()))...,
-		)
+
+	for i := range daprds {
+		dopts := make([]daprd.Option, 0, len(baseDopts))
+		dopts = append(dopts, baseDopts...)
+
+		// Add specific opts for this daprd
+		for _, daprdOpt := range opts.daprdOptions {
+			if daprdOpt.index == i {
+				dopts = append(dopts, daprdOpt.opts...)
+			}
+		}
+
+		daprds[i] = daprd.New(t, dopts...)
 	}
 
-	return &Workflow{
-		registry: opts.registry,
-		db:       db,
-		place:    place,
-		sched:    sched,
-		daprds:   daprds,
+	registries := make(map[int]*task.TaskRegistry)
+	for i := range daprds {
+		registries[i] = task.NewTaskRegistry()
 	}
+
+	// Apply orchestrators & activities to the registry
+	for _, orch := range opts.orchestrators {
+		if orch.index < len(daprds) {
+			require.NoError(t, registries[orch.index].AddOrchestratorN(orch.name, orch.fn))
+		}
+	}
+	for _, act := range opts.activities {
+		if act.index < len(daprds) {
+			require.NoError(t, registries[act.index].AddActivityN(act.name, act.fn))
+		}
+	}
+
+	workflow := &Workflow{
+		taskregistry: make([]*task.TaskRegistry, len(daprds)),
+		db:           db,
+		place:        place,
+		sched:        sched,
+		daprds:       daprds,
+	}
+
+	for i := range workflow.taskregistry {
+		workflow.taskregistry[i] = registries[i]
+	}
+
+	return workflow
 }
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {
@@ -134,19 +166,46 @@ func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
 }
 
 func (w *Workflow) Registry() *task.TaskRegistry {
-	return w.registry
+	return w.taskregistry[0]
+}
+
+// Registry returns the registry for a specific index
+func (w *Workflow) RegistryN(index int) *task.TaskRegistry {
+	return w.taskregistry[index]
 }
 
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
 	t.Helper()
-	backendClient := client.NewTaskHubGrpcClient(w.daprds[0].GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.registry))
+
+	return w.BackendClientN(t, ctx, 0)
+}
+
+// BackendClient returns a backend client for the specified index
+func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) *client.TaskHubGrpcClient {
+	t.Helper()
+	require.Less(t, index, len(w.daprds), "index out of range")
+
+	backendClient := client.NewTaskHubGrpcClient(w.daprds[index].GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.RegistryN(index)))
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c,
+			len(w.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
+	}, time.Second*10, time.Millisecond*10)
+
 	return backendClient
 }
 
 func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 	t.Helper()
 	return w.daprds[0].GRPCClient(t, ctx)
+}
+
+// GRPCClientForApp returns a GRPC client for the specified app index
+func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv1.DaprClient {
+	t.Helper()
+	require.Less(t, index, len(w.daprds), "index out of range")
+	return w.daprds[index].GRPCClient(t, ctx)
 }
 
 func (w *Workflow) Dapr() *daprd.Daprd {

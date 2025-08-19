@@ -15,22 +15,23 @@ package scheduler
 
 import (
 	"context"
-	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/client"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/cluster"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/handler"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients/wrapper"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops/connector"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops/hosts"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/watchhosts"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/events/loop"
+	"github.com/dapr/kit/ptr"
 )
-
-var log = logger.NewLogger("dapr.runtime.scheduler")
 
 type Options struct {
 	Namespace          string
@@ -42,97 +43,87 @@ type Options struct {
 	Security           security.Handler
 	Healthz            healthz.Healthz
 	SchedulerReminders bool
+	SchedulerStreams   uint
 }
 
 // Scheduler manages the connection to the cluster of schedulers.
 type Scheduler struct {
-	handler   *handler.Handler
-	security  security.Handler
-	cluster   *cluster.Cluster
-	addresses []string
+	connector  loop.Interface[loops.Event]
+	hosts      loop.Interface[loops.Event]
+	watchhosts *watchhosts.WatchHosts
+	client     client.Interface
 }
 
 func New(opts Options) *Scheduler {
-	cluster := cluster.New(cluster.Options{
-		Namespace: opts.Namespace,
-		AppID:     opts.AppID,
-		Actors:    opts.Actors,
-		Channels:  opts.Channels,
-		WFEngine:  opts.WFEngine,
-
+	connector := connector.New(connector.Options{
+		Namespace:          opts.Namespace,
+		AppID:              opts.AppID,
+		Actors:             opts.Actors,
+		Channels:           opts.Channels,
+		WFEngine:           opts.WFEngine,
 		SchedulerReminders: opts.SchedulerReminders,
 	})
 
+	hosts := hosts.New(hosts.Options{
+		Security:  opts.Security,
+		Connector: connector,
+		StreamN:   opts.SchedulerStreams,
+	})
+
+	clients := clients.New(clients.Options{
+		Security: opts.Security,
+	})
+
+	watchhosts := watchhosts.New(watchhosts.Options{
+		HostLoop:  hosts,
+		Addresses: opts.Addresses,
+		Security:  opts.Security,
+		Clients:   clients,
+		Healthz:   opts.Healthz,
+	})
+
 	return &Scheduler{
-		addresses: opts.Addresses,
-		security:  opts.Security,
-		cluster:   cluster,
-		handler: handler.New(handler.Options{
-			Security:  opts.Security,
-			Healthz:   opts.Healthz,
-			Cluster:   cluster,
-			Addresses: opts.Addresses,
+		connector:  connector,
+		hosts:      hosts,
+		watchhosts: watchhosts,
+		client: wrapper.New(wrapper.Options{
+			Clients: clients,
 		}),
 	}
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {
-	if s.handler.NotEnabled() {
-		log.Warn("Scheduler disabled, not connecting...")
-		<-ctx.Done()
-		return nil
-	}
-
-	for {
-		watchHosts := watchhosts.New(watchhosts.Options{
-			Addresses: s.addresses,
-			Security:  s.security,
-		})
-
-		err := concurrency.NewRunnerManager(
-			watchHosts.Run,
-			func(ctx context.Context) error {
-				addrsCh := watchHosts.Addresses(ctx)
-				for {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case actx := <-addrsCh:
-						if err := s.handler.ConnectClients(actx, actx.Addresses); err != nil {
-							return err
-						}
-						if ctx.Err() != nil {
-							return ctx.Err()
-						}
-
-						log.Infof("Attempting to reconnect to schedulers")
-					}
-				}
-			},
-		).Run(ctx)
-		if ctx.Err() != nil {
-			return err
-		}
-
-		if err != nil {
-			log.Errorf("Error connecting to Schedulers, reconnecting: %s", err)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(time.Second):
-			}
-		}
-	}
+	return concurrency.NewRunnerManager(
+		s.connector.Run,
+		s.hosts.Run,
+		s.watchhosts.Run,
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			s.hosts.Close(new(loops.Close))
+			s.connector.Close(new(loops.Close))
+			return ctx.Err()
+		},
+	).Run(ctx)
 }
 
-func (s *Scheduler) Client() client.Client {
-	return s.handler.Client()
+func (s *Scheduler) StartApp() {
+	s.connector.Enqueue(&loops.Reconnect{
+		AppTarget: ptr.Of(true),
+	})
 }
 
-func (s *Scheduler) StartApp(ctx context.Context) {
-	s.cluster.StartApp()
+func (s *Scheduler) StopApp() {
+	s.connector.Enqueue(&loops.Reconnect{
+		AppTarget: ptr.Of(false),
+	})
 }
 
-func (s *Scheduler) StopApp(ctx context.Context) {
-	s.cluster.StopApp()
+func (s *Scheduler) ReloadActorTypes(actorTypes []string) {
+	s.connector.Enqueue(&loops.Reconnect{
+		ActorTypes: ptr.Of(actorTypes),
+	})
+}
+
+func (s *Scheduler) Client() client.Interface {
+	return s.client
 }

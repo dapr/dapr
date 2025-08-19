@@ -28,8 +28,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/zipkin"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -298,14 +298,15 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	wfe := wfengine.New(wfengine.Options{
-		AppID:              runtimeConfig.id,
-		Namespace:          namespace,
-		Actors:             actors,
-		Spec:               globalConfig.GetWorkflowSpec(),
-		BackendManager:     processor.WorkflowBackend(),
-		Resiliency:         resiliencyProvider,
-		SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
-		EventSink:          runtimeConfig.workflowEventSink,
+		AppID:                     runtimeConfig.id,
+		Namespace:                 namespace,
+		Actors:                    actors,
+		Spec:                      globalConfig.GetWorkflowSpec(),
+		BackendManager:            processor.WorkflowBackend(),
+		Resiliency:                resiliencyProvider,
+		SchedulerReminders:        globalConfig.IsFeatureEnabled(config.SchedulerReminders),
+		EventSink:                 runtimeConfig.workflowEventSink,
+		EnableClusteredDeployment: globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
 	})
 
 	rt := &DaprRuntime{
@@ -336,9 +337,10 @@ func newDaprRuntime(ctx context.Context,
 			Actors:             actors,
 			Addresses:          runtimeConfig.schedulerAddress,
 			Security:           sec,
-			Healthz:            runtimeConfig.healthz,
 			WFEngine:           wfe,
+			Healthz:            runtimeConfig.healthz,
 			SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
+			SchedulerStreams:   runtimeConfig.schedulerStreams,
 		}),
 		initComplete:   make(chan struct{}),
 		isAppHealthy:   make(chan struct{}),
@@ -354,7 +356,7 @@ func newDaprRuntime(ctx context.Context,
 		gracePeriod = &duration
 	}
 
-	rtHealthz := rt.runtimeConfig.healthz.AddTarget()
+	rtHealthz := rt.runtimeConfig.healthz.AddTarget("runtime")
 	rt.runnerCloser = concurrency.NewRunnerCloserManager(log, gracePeriod,
 		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
@@ -695,7 +697,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize actors: %w", err)
 	}
 
-	a.runtimeConfig.outboundHealthz.AddTarget().Ready()
+	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
 	if err := a.blockUntilAppIsReady(ctx); err != nil {
 		return err
 	}
@@ -811,7 +813,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 			log.Warnf("Failed to register hosted actors: %s", err)
 		}
 
-		a.jobsManager.StartApp(ctx)
+		a.jobsManager.StartApp()
 	} else {
 		select {
 		case <-a.isAppHealthy:
@@ -819,7 +821,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 			close(a.isAppHealthy)
 		}
 
-		a.jobsManager.StopApp(ctx)
+		a.jobsManager.StopApp()
 
 		// Stop topic subscriptions and input bindings
 		a.processor.Subscriber().StopAppSubscriptions()
@@ -1073,10 +1075,11 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	}
 
 	if err := a.actors.Init(actors.InitOptions{
-		Hostname:        hostAddress,
-		StateStoreName:  actorStateStoreName,
-		GRPC:            a.grpc,
-		SchedulerClient: a.jobsManager.Client(),
+		Hostname:          hostAddress,
+		StateStoreName:    actorStateStoreName,
+		GRPC:              a.grpc,
+		SchedulerClient:   a.jobsManager.Client(),
+		SchedulerReloader: a.jobsManager,
 	}); err != nil {
 		return err
 	}
