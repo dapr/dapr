@@ -719,3 +719,59 @@ func TestProcessorWaitGroupError(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestProcessComponentErrorMessage(t *testing.T) {
+	t.Run("component init error includes component name", func(t *testing.T) {
+		proc, _ := newTestProc()
+		
+		// Create a component that will fail to initialize
+		failingComponent := componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "failing-component",
+			},
+			Spec: componentsapi.ComponentSpec{
+				Type:    "secretstores.nonexistent",  // This type doesn't exist
+				Version: "v1",
+			},
+		}
+		
+		err := proc.processComponentAndDependents(t.Context(), failingComponent)
+		require.Error(t, err)
+		
+		// The error should include the component name
+		assert.Contains(t, err.Error(), "failing-component")
+		assert.Contains(t, err.Error(), "failed to load component")
+	})
+
+	t.Run("process function wraps error with component info", func(t *testing.T) {
+		proc, _ := newTestProc()
+		
+		// Add a failing component to the queue
+		failingComponent := componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-secret-store",
+			},
+			Spec: componentsapi.ComponentSpec{
+				Type:    "secretstores.nonexistent",
+				Version: "v1",
+			},
+		}
+		
+		// Add component to pending queue
+		proc.AddPendingComponent(t.Context(), failingComponent)
+		
+		// Close the channel to stop processComponents
+		proc.chlock.Lock()
+		close(proc.pendingComponents)
+		proc.chlock.Unlock()
+		
+		// ProcessComponents should return an error that includes component information
+		err := proc.processComponents(t.Context())
+		require.Error(t, err)
+		
+		// The error should include the component name and descriptive text
+		errorText := err.Error()
+		assert.Contains(t, errorText, "test-secret-store")
+		assert.Contains(t, errorText, "failed to load component")
+	})
+}

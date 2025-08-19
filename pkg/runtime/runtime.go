@@ -602,7 +602,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.appendBuiltinSecretStore(ctx)
 	err = a.loadComponents(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to load components: %s", err)
+		return fmt.Errorf("failed to load components: %w", err)
 	}
 
 	a.flushOutstandingComponents(ctx)
