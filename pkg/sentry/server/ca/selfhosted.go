@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 
@@ -33,6 +35,8 @@ type selfhosted struct {
 
 // store saves the certificate bundle to the local filesystem.
 func (s *selfhosted) store(_ context.Context, bundle ca_bundle.Bundle) error {
+	dirs := make(map[string]map[string][]byte)
+
 	// Files to write with their corresponding data
 	files := []struct {
 		path string
@@ -45,21 +49,55 @@ func (s *selfhosted) store(_ context.Context, bundle ca_bundle.Bundle) error {
 		{s.config.JWT.JWKSPath, bundle.JWT.JWKSJson},
 	}
 
-	// Write each file if the path is specified and data exists
+	// Write each file if the path is specified and data exists.
 	for _, file := range files {
 		if file.path == "" || file.data == nil {
 			continue
 		}
 
+		if _, ok := dirs[filepath.Dir(file.path)]; !ok {
+			dirs[filepath.Dir(file.path)] = make(map[string][]byte)
+		}
+		dirs[filepath.Dir(file.path)][filepath.Base(file.path)] = file.data
+	}
+
+	for dirName, files := range dirs {
+		// if the directory exists and is not a symlink then we need to migrate
+		// it to a symlink to allow for the atomic writes.
+		if fi, err := os.Lstat(dirName); err == nil {
+			if fi.Mode()&os.ModeSymlink == 0 {
+				if fi.IsDir() {
+					if err := migrateDirToSymlink(dirName); err != nil {
+						return err
+					}
+				} else {
+					return fmt.Errorf("target path %s exists and is not a directory", dirName)
+				}
+			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to stat %s: %w", dirName, err)
+		}
+
 		d := dir.New(dir.Options{
-			Target: file.path,
+			Target: dirName,
 			Log:    log,
 		})
-		if err := d.Write(map[string][]byte{
-			filepath.Base(file.path): file.data,
-		}); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", file.path, err)
+		if err := d.Write(files); err != nil {
+			return fmt.Errorf("failed to write files %s: %w", dirName, err)
 		}
+
+		// After writing, ensure file permissions match expectations (0600 on unix, 0666 on windows).
+		perm := os.FileMode(0o600)
+		if runtime.GOOS == "windows" {
+			perm = 0o666
+		}
+		for name := range files {
+			path := filepath.Join(dirName, name)
+			if err := os.Chmod(path, perm); err != nil {
+				return fmt.Errorf("failed to set permissions on %s: %w", path, err)
+			}
+		}
+
 	}
 
 	return nil
@@ -160,4 +198,33 @@ func (s *selfhosted) loadAndValidateJWTBundle(bundle *ca_bundle.Bundle) (bool, e
 	}
 
 	return missingJWT, nil
+}
+
+func migrateDirToSymlink(target string) error {
+	base := filepath.Dir(target)
+	name := filepath.Base(target)
+	versioned := filepath.Join(base, fmt.Sprintf("%d-%s", time.Now().UTC().UnixNano(), name))
+
+	// Ensure base exists
+	if err := os.MkdirAll(base, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to ensure base dir %s: %w", base, err)
+	}
+
+	// Move the existing directory to the versioned path
+	if err := os.Rename(target, versioned); err != nil {
+		return fmt.Errorf("failed to move %s to %s: %w", target, versioned, err)
+	}
+
+	// Create a symlink back to the versioned dir
+	if err := os.Symlink(versioned, target+".new"); err != nil {
+		return fmt.Errorf("failed to create symlink %s.new -> %s: %w", target, versioned, err)
+	}
+
+	// Atomically rename the new link into place
+	if err := os.Rename(target+".new", target); err != nil {
+		return fmt.Errorf("failed to activate symlink at %s: %w", target, err)
+	}
+
+	log.Infof("Migrated %s to symlink pointing to %s", target, versioned)
+	return nil
 }

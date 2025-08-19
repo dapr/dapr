@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -41,7 +42,7 @@ func init() {
 	}
 }
 
-func TestSelhosted_store(t *testing.T) {
+func TestSelfhosted_store(t *testing.T) {
 	t.Run("storing file should write to disk with correct permissions", func(t *testing.T) {
 		rootFile := filepath.Join(t.TempDir(), "root.pem")
 		issuerFile := filepath.Join(t.TempDir(), "issuer.pem")
@@ -67,33 +68,29 @@ func TestSelhosted_store(t *testing.T) {
 		require.FileExists(t, issuerFile)
 		require.FileExists(t, keyFile)
 
-		// The writer is expected to place a symlink at the target that points
-		// to a temporary directory containing the actual file. Assert the
-		// target is a symlink, resolve it and read the inner file for content.
-		checkSymlink := func(path, expected string) {
-			info, err := os.Lstat(path)
-			require.NoError(t, err)
-			require.True(t, info.Mode()&os.ModeSymlink != 0, "%s should be a symlink", path)
+		info, err := os.Stat(rootFile)
+		require.NoError(t, err)
+		assert.Equal(t, writePerm, info.Mode().Perm())
 
-			linkTarget, err := os.Readlink(path)
-			require.NoError(t, err)
+		info, err = os.Stat(issuerFile)
+		require.NoError(t, err)
+		assert.Equal(t, writePerm, info.Mode().Perm())
 
-			inner := filepath.Join(linkTarget, filepath.Base(path))
-			finfo, err := os.Stat(inner)
-			require.NoError(t, err)
-			require.False(t, finfo.IsDir())
+		info, err = os.Stat(keyFile)
+		require.NoError(t, err)
+		assert.Equal(t, writePerm, info.Mode().Perm())
 
-			b, err := os.ReadFile(inner)
-			require.NoError(t, err)
-			assert.Equal(t, expected, string(b))
+		b, err := os.ReadFile(rootFile)
+		require.NoError(t, err)
+		assert.Equal(t, "root", string(b))
 
-			require.NoError(t, err)
-			assert.Equal(t, writePerm, finfo.Mode().Perm())
-		}
+		b, err = os.ReadFile(issuerFile)
+		require.NoError(t, err)
+		assert.Equal(t, "issuer", string(b))
 
-		checkSymlink(rootFile, "root")
-		checkSymlink(issuerFile, "issuer")
-		checkSymlink(keyFile, "key")
+		b, err = os.ReadFile(keyFile)
+		require.NoError(t, err)
+		assert.Equal(t, "key", string(b))
 	})
 }
 
@@ -350,4 +347,46 @@ func TestSelfhosted_get(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_migrateDirToSymlink(t *testing.T) {
+	base := t.TempDir()
+	target := filepath.Join(base, "bundle")
+
+	// Create a plain directory with some files
+	require.NoError(t, os.MkdirAll(target, 0o755))
+	f1 := filepath.Join(target, "a.txt")
+	f2 := filepath.Join(target, "b.txt")
+	require.NoError(t, os.WriteFile(f1, []byte("A"), 0o600))
+	require.NoError(t, os.WriteFile(f2, []byte("B"), 0o600))
+
+	// Migrate to symlinked layout
+	require.NoError(t, migrateDirToSymlink(target))
+
+	// The target should now be a symlink
+	fi, err := os.Lstat(target)
+	require.NoError(t, err)
+	if fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected %s to be a symlink after migration", target)
+	}
+
+	// Resolve the symlink and verify it points to a versioned directory
+	linkTarget, err := os.Readlink(target)
+	require.NoError(t, err)
+	assert.True(t, filepath.IsAbs(linkTarget), "symlink target should be absolute")
+	assert.DirExists(t, linkTarget)
+	assert.True(t, strings.HasSuffix(filepath.Base(linkTarget), "-"+filepath.Base(target)))
+
+	// Contents should be preserved
+	b, err := os.ReadFile(filepath.Join(target, "a.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "A", string(b))
+
+	b, err = os.ReadFile(filepath.Join(target, "b.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "B", string(b))
+
+	// Temporary .new link should not remain
+	_, err = os.Lstat(target + ".new")
+	assert.True(t, os.IsNotExist(err))
 }
