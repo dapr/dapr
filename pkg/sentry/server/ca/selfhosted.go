@@ -18,14 +18,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
 	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
-	"github.com/dapr/kit/concurrency/dir"
 )
 
 // selfhosted is a store that uses the file system as the secret store.
@@ -35,8 +33,6 @@ type selfhosted struct {
 
 // store saves the certificate bundle to the local filesystem.
 func (s *selfhosted) store(_ context.Context, bundle ca_bundle.Bundle) error {
-	dirs := make(map[string]map[string][]byte)
-
 	// Files to write with their corresponding data
 	files := []struct {
 		path string
@@ -49,53 +45,14 @@ func (s *selfhosted) store(_ context.Context, bundle ca_bundle.Bundle) error {
 		{s.config.JWT.JWKSPath, bundle.JWT.JWKSJson},
 	}
 
-	// Write each file if the path is specified and data exists.
+	// Write each file if the path is specified and data exists
 	for _, file := range files {
 		if file.path == "" || file.data == nil {
 			continue
 		}
 
-		if _, ok := dirs[filepath.Dir(file.path)]; !ok {
-			dirs[filepath.Dir(file.path)] = make(map[string][]byte)
-		}
-		dirs[filepath.Dir(file.path)][filepath.Base(file.path)] = file.data
-	}
-
-	for dirName, files := range dirs {
-		// if the directory exists and is not a symlink then we need to migrate
-		// it to a symlink to allow for the atomic writes.
-		if fi, lstatErr := os.Lstat(dirName); lstatErr == nil {
-			if fi.Mode()&os.ModeSymlink == 0 {
-				if fi.IsDir() {
-					if migErr := migrateDirToSymlink(dirName); migErr != nil {
-						return migErr
-					}
-				} else {
-					return fmt.Errorf("target path %s exists and is not a directory", dirName)
-				}
-			}
-		} else if !os.IsNotExist(lstatErr) {
-			return fmt.Errorf("failed to stat %s: %w", dirName, lstatErr)
-		}
-
-		d := dir.New(dir.Options{
-			Target: dirName,
-			Log:    log,
-		})
-		if writeErr := d.Write(files); writeErr != nil {
-			return fmt.Errorf("failed to write files %s: %w", dirName, writeErr)
-		}
-
-		// After writing, ensure file permissions match expectations (0600 on unix, 0666 on windows).
-		perm := os.FileMode(0o600)
-		if runtime.GOOS == "windows" {
-			perm = 0o666
-		}
-		for name := range files {
-			path := filepath.Join(dirName, name)
-			if chmodErr := os.Chmod(path, perm); chmodErr != nil {
-				return fmt.Errorf("failed to set permissions on %s: %w", path, chmodErr)
-			}
+		if err := os.WriteFile(file.path, file.data, 0o600); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", file.path, err)
 		}
 	}
 

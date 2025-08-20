@@ -22,7 +22,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -347,46 +346,4 @@ func TestSelfhosted_get(t *testing.T) {
 			}
 		})
 	}
-}
-
-func Test_migrateDirToSymlink(t *testing.T) {
-	base := t.TempDir()
-	target := filepath.Join(base, "bundle")
-
-	// Create a plain directory with some files
-	require.NoError(t, os.MkdirAll(target, 0o755))
-	f1 := filepath.Join(target, "a.txt")
-	f2 := filepath.Join(target, "b.txt")
-	require.NoError(t, os.WriteFile(f1, []byte("A"), 0o600))
-	require.NoError(t, os.WriteFile(f2, []byte("B"), 0o600))
-
-	// Migrate to symlinked layout
-	require.NoError(t, migrateDirToSymlink(target))
-
-	// The target should now be a symlink
-	fi, err := os.Lstat(target)
-	require.NoError(t, err)
-	if fi.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("expected %s to be a symlink after migration", target)
-	}
-
-	// Resolve the symlink and verify it points to a versioned directory
-	linkTarget, err := os.Readlink(target)
-	require.NoError(t, err)
-	assert.True(t, filepath.IsAbs(linkTarget), "symlink target should be absolute")
-	assert.DirExists(t, linkTarget)
-	assert.True(t, strings.HasSuffix(filepath.Base(linkTarget), "-"+filepath.Base(target)))
-
-	// Contents should be preserved
-	b, err := os.ReadFile(filepath.Join(target, "a.txt"))
-	require.NoError(t, err)
-	assert.Equal(t, "A", string(b))
-
-	b, err = os.ReadFile(filepath.Join(target, "b.txt"))
-	require.NoError(t, err)
-	assert.Equal(t, "B", string(b))
-
-	// Temporary .new link should not remain
-	_, err = os.Lstat(target + ".new")
-	assert.True(t, os.IsNotExist(err))
 }
