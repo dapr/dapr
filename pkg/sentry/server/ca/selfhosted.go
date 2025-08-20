@@ -64,26 +64,26 @@ func (s *selfhosted) store(_ context.Context, bundle ca_bundle.Bundle) error {
 	for dirName, files := range dirs {
 		// if the directory exists and is not a symlink then we need to migrate
 		// it to a symlink to allow for the atomic writes.
-		if fi, err := os.Lstat(dirName); err == nil {
+		if fi, lstatErr := os.Lstat(dirName); lstatErr == nil {
 			if fi.Mode()&os.ModeSymlink == 0 {
 				if fi.IsDir() {
-					if err := migrateDirToSymlink(dirName); err != nil {
-						return err
+					if migErr := migrateDirToSymlink(dirName); migErr != nil {
+						return migErr
 					}
 				} else {
 					return fmt.Errorf("target path %s exists and is not a directory", dirName)
 				}
 			}
-		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to stat %s: %w", dirName, err)
+		} else if !os.IsNotExist(lstatErr) {
+			return fmt.Errorf("failed to stat %s: %w", dirName, lstatErr)
 		}
 
 		d := dir.New(dir.Options{
 			Target: dirName,
 			Log:    log,
 		})
-		if err := d.Write(files); err != nil {
-			return fmt.Errorf("failed to write files %s: %w", dirName, err)
+		if writeErr := d.Write(files); writeErr != nil {
+			return fmt.Errorf("failed to write files %s: %w", dirName, writeErr)
 		}
 
 		// After writing, ensure file permissions match expectations (0600 on unix, 0666 on windows).
@@ -93,11 +93,10 @@ func (s *selfhosted) store(_ context.Context, bundle ca_bundle.Bundle) error {
 		}
 		for name := range files {
 			path := filepath.Join(dirName, name)
-			if err := os.Chmod(path, perm); err != nil {
-				return fmt.Errorf("failed to set permissions on %s: %w", path, err)
+			if chmodErr := os.Chmod(path, perm); chmodErr != nil {
+				return fmt.Errorf("failed to set permissions on %s: %w", path, chmodErr)
 			}
 		}
-
 	}
 
 	return nil
@@ -225,6 +224,5 @@ func migrateDirToSymlink(target string) error {
 		return fmt.Errorf("failed to activate symlink at %s: %w", target, err)
 	}
 
-	log.Infof("Migrated %s to symlink pointing to %s", target, versioned)
 	return nil
 }
