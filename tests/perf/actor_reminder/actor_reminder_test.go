@@ -17,6 +17,7 @@ limitations under the License.
 package actor_reminder_perf
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -53,7 +54,7 @@ const (
 
 	// Target for the QPS to trigger reminders.
 	targetTriggerQPS          float64 = 1000
-	targetSchedulerTriggerQPS float64 = 3800
+	targetSchedulerTriggerQPS float64 = 9000
 
 	// reminderCount is the number of reminders to register.
 	reminderCount          = 2000
@@ -205,14 +206,14 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
 		require.NoError(t, err)
 		var pod corev1.Pod
-		err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
 		require.NoError(t, err)
-		err = cl.Delete(t.Context(), &pod)
+		err = cl.Delete(context.Background(), &pod)
 		require.NoError(t, err)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			var sts appsv1.StatefulSet
-			err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
+			err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
 			assert.NoError(c, err)
 			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
 		}, time.Minute, time.Second)
@@ -389,14 +390,14 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
 		require.NoError(t, err)
 		var pod corev1.Pod
-		err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
 		require.NoError(t, err)
-		err = cl.Delete(t.Context(), &pod)
+		err = cl.Delete(context.Background(), &pod)
 		require.NoError(t, err)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			var sts appsv1.StatefulSet
-			err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
+			err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
 			assert.NoError(c, err)
 			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
 		}, time.Minute, time.Second)
