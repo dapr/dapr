@@ -17,8 +17,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 
@@ -154,32 +152,4 @@ func (s *selfhosted) loadAndValidateJWTBundle(bundle *ca_bundle.Bundle) (bool, e
 	}
 
 	return missingJWT, nil
-}
-
-func migrateDirToSymlink(target string) error {
-	base := filepath.Dir(target)
-	name := filepath.Base(target)
-	versioned := filepath.Join(base, fmt.Sprintf("%d-%s", time.Now().UTC().UnixNano(), name))
-
-	// Ensure base exists
-	if err := os.MkdirAll(base, os.ModePerm); err != nil {
-		return fmt.Errorf("failed to ensure base dir %s: %w", base, err)
-	}
-
-	// Move the existing directory to the versioned path
-	if err := os.Rename(target, versioned); err != nil {
-		return fmt.Errorf("failed to move %s to %s: %w", target, versioned, err)
-	}
-
-	// Create a symlink back to the versioned dir
-	if err := os.Symlink(versioned, target+".new"); err != nil {
-		return fmt.Errorf("failed to create symlink %s.new -> %s: %w", target, versioned, err)
-	}
-
-	// Atomically rename the new link into place
-	if err := os.Rename(target+".new", target); err != nil {
-		return fmt.Errorf("failed to activate symlink at %s: %w", target, err)
-	}
-
-	return nil
 }
