@@ -17,7 +17,6 @@ limitations under the License.
 package actor_reminder_perf
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -28,10 +27,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -198,27 +193,6 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 }
 
 func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
-	t.Cleanup(func() {
-		platform := tr.Platform.(*runner.KubeTestPlatform)
-		scheme := runtime.NewScheme()
-		require.NoError(t, corev1.AddToScheme(scheme))
-		require.NoError(t, appsv1.AddToScheme(scheme))
-		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
-		require.NoError(t, err)
-		var pod corev1.Pod
-		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-		require.NoError(t, err)
-		err = cl.Delete(context.Background(), &pod)
-		require.NoError(t, err)
-
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			var sts appsv1.StatefulSet
-			err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
-			assert.NoError(c, err)
-			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
-		}, time.Minute, time.Second)
-	})
-
 	p := perf.Params(
 		perf.WithQPS(3000),
 		perf.WithConnections(24),
@@ -382,27 +356,6 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 }
 
 func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
-	t.Cleanup(func() {
-		platform := tr.Platform.(*runner.KubeTestPlatform)
-		scheme := runtime.NewScheme()
-		require.NoError(t, corev1.AddToScheme(scheme))
-		require.NoError(t, appsv1.AddToScheme(scheme))
-		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
-		require.NoError(t, err)
-		var pod corev1.Pod
-		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-		require.NoError(t, err)
-		err = cl.Delete(context.Background(), &pod)
-		require.NoError(t, err)
-
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			var sts appsv1.StatefulSet
-			err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
-			assert.NoError(c, err)
-			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
-		}, time.Minute, time.Second)
-	})
-
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL(appNameScheduler)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
