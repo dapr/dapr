@@ -183,13 +183,6 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 					table = table.Outputf(subTestName+"Payload Size", "%dKB", int(payloadSize/1000))
 				}
 				table = addTestResults(t, subTestName, testAppName, testResult, table)
-
-				time.Sleep(5 * time.Second)
-
-				// Stop the workflow runtime
-				url = fmt.Sprintf("http://%s/shutdown-workflow-runtime", externalURL)
-				_, err = utils.HTTPGet(url)
-				require.NoError(t, err, "error shutdown workflow runtime")
 			})
 		}
 	}
