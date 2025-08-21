@@ -182,13 +182,6 @@ def run_workflow(run_id):
         except DaprInternalError as e:
             print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] error getting workflow status: {e.message}")
 
-        try:
-            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] terminating workflow")
-            terminate_resp = d.terminate_workflow(instance_id=instance_id, workflow_component=workflowComponent)
-        except DaprInternalError as e:
-            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] error terminating workflow: {e.message}")
-
-
         print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] workflow run complete")
         return "Workflow Run completed"
 
