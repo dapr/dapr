@@ -199,37 +199,37 @@ func TestWorkflowWithConstantVUs(t *testing.T) {
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, false, false)
 }
 
-//func TestWorkflowWithConstantIterations(t *testing.T) {
-//	workflowName := "sum_series_wf"
-//	inputs := []string{"100"}
-//	scenarios := []string{"t_30_300", "t_60_300", "t_90_300"} // t_workflowCount_iterations
-//	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
-//	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
-//}
-//
-//// Runs tests for `sum_series_wf` with Max VUs
-//func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
-//	workflowName := "sum_series_wf"
-//	inputs := []string{"100"}
-//	scenarios := []string{"t_350_1400"} // t_workflowCount_iterations
-//	rateChecks := [][]string{{"rate==1"}}
-//	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
-//}
-//
-//// Runs tests for `sum_parallel_wf` with Max VUs
-//func TestParallelWorkflowWithMaxVUs(t *testing.T) {
-//	workflowName := "sum_parallel_wf"
-//	inputs := []string{"100"}
-//	scenarios := []string{"t_110_440"} // t_workflowCount_iterations
-//	rateChecks := [][]string{{"rate==1"}}
-//	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
-//}
-//
-//// Runs tests for `state_wf` with different Payload
-//func TestWorkflowWithDifferentPayloads(t *testing.T) {
-//	workflowName := "state_wf"
-//	scenarios := []string{"t_30_300"} // t_workflowCount_iterations
-//	inputs := []string{"10000", "50000", "100000"}
-//	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
-//	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, true)
-//}
+func TestWorkflowWithConstantIterations(t *testing.T) {
+	workflowName := "sum_series_wf"
+	inputs := []string{"100"}
+	scenarios := []string{"t_30_300", "t_60_300", "t_90_300"} // t_workflowCount_iterations
+	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
+	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+}
+
+// Runs tests for `sum_series_wf` with Max VUs
+func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
+	workflowName := "sum_series_wf"
+	inputs := []string{"100"}
+	scenarios := []string{"t_350_1400"} // t_workflowCount_iterations
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+}
+
+// Runs tests for `sum_parallel_wf` with Max VUs
+func TestParallelWorkflowWithMaxVUs(t *testing.T) {
+	workflowName := "sum_parallel_wf"
+	inputs := []string{"100"}
+	scenarios := []string{"t_110_440"} // t_workflowCount_iterations
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+}
+
+// Runs tests for `state_wf` with different Payload
+func TestWorkflowWithDifferentPayloads(t *testing.T) {
+	workflowName := "state_wf"
+	scenarios := []string{"t_30_300"} // t_workflowCount_iterations
+	inputs := []string{"10000", "50000", "100000"}
+	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
+	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, true)
+}
