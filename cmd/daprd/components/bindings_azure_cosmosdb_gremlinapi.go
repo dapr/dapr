@@ -16,10 +16,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/bindings/azure/cosmosdb/gremlinapi"
+	cosmosdbgremlinapi "github.com/dapr/components-contrib/bindings/azure/cosmosdb/gremlinapi"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 )
 
 func init() {
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(gremlinapi.NewCosmosDBGremlinAPI, "azure.cosmosdb.gremlinapi")
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(cosmosdbgremlinapi.NewCosmosDBGremlinAPI, "azure.cosmosdb.gremlinapi")
 }
