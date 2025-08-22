@@ -74,7 +74,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there, my phone number is <PHONE_NUMBER>"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"well hello there, my phone number is <PHONE_NUMBER>"}}]}]}`, string(respBody))
 	})
 
 	t.Run("scrub input email", func(t *testing.T) {
@@ -102,7 +102,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there from <IP>"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"well hello there from <IP>"}}]}]}`, string(respBody))
 	})
 
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
@@ -116,7 +116,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there from <IP>\nwell hello there, my email is <EMAIL_ADDRESS>"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"well hello there from <IP>\nwell hello there, my email is <EMAIL_ADDRESS>"}}]}]}`, string(respBody))
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {
@@ -130,6 +130,6 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"well hello there"}}]}]}`, string(respBody))
 	})
 }

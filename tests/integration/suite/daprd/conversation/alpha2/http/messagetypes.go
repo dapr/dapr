@@ -75,7 +75,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"user message"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"user message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_system", func(t *testing.T) {
@@ -89,7 +89,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"system message"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"system message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_developer", func(t *testing.T) {
@@ -118,7 +118,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		// Echo component returns the assistant message with tool calls
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"assistant message","toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":"test-string"}}]}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"assistant message","toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":"test-string"}}]}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
@@ -195,45 +195,15 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		// echo component returns one output per message
+		// echo component now combines multiple messages into a single output
 		expectedResponse := `{
 			"outputs": [
 				{
 					"choices": [
 						{
-							"finishReason": "stop",
+							"finishReason": "tool_calls",
 							"message": {
-								"content": "first user message"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"message": {
-								"content": "first assistant response"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"message": {
-								"content": "second user message"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"message": {
-								"content": "system instruction"
+								"content": "first user message\nfirst assistant response\nsecond user message\nsystem instruction"
 							}
 						}
 					]
