@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"strings"
 
-	crypto "github.com/dapr/components-contrib/crypto"
+	"github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/kit/logger"
 )

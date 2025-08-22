@@ -14,7 +14,7 @@ limitations under the License.
 package compstore
 
 import (
-	crypto "github.com/dapr/components-contrib/cryptography"
+	"github.com/dapr/components-contrib/crypto"
 )
 
 func (c *ComponentStore) AddCryptoProvider(name string, provider crypto.SubtleCrypto) {

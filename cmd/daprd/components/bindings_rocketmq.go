@@ -19,7 +19,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/rocketmq"
 	"github.com/dapr/dapr/pkg/components/bindings"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/kit/logger"
 )
 
 func init() {
