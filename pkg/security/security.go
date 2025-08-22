@@ -128,6 +128,18 @@ type Options struct {
 	// written to the `tls.cert` and `tls.key` files respectively in the given
 	// directory.
 	WriteIdentityToFile *string
+
+	// JSONWebKeySet is the JSON Web Key Set for this Dapr installation. Cannot be
+	// used with JSONWebKeySetFile or TrustAnchorsFile.
+	JSONWebKeySet []byte
+
+	// JSONWebKeySetFile is the path to the JSON Web Key Set for this Dapr
+	// installation. Prefer this over JSONWebKeySet so changes to the file are
+	// automatically picked up. Cannot be used with JSONWebKeySet or TrustAnchors.
+	JSONWebKeySetFile *string
+
+	// JwtAudiences is the list of JWT audiences to be included in the certificate request.
+	JwtAudiences []string
 }
 
 type provider struct {
@@ -183,18 +195,32 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 				return nil, errors.New("trust anchors are required")
 			}
 
+			if len(opts.JSONWebKeySet) > 0 && opts.JSONWebKeySetFile != nil {
+				return nil, errors.New("json web key set cannot be specified in both JSONWebKeySet and JSONWebKeySetFile")
+			}
+
+			if len(opts.TrustAnchors) > 0 && opts.JSONWebKeySetFile != nil {
+				return nil, errors.New("json web key set file cannot be used with trust anchors")
+			}
+
+			if len(opts.JSONWebKeySet) > 0 && opts.TrustAnchorsFile != nil {
+				return nil, errors.New("trust anchors file cannot be used with json web key set")
+			}
+
 			switch {
 			case len(opts.TrustAnchors) > 0:
 				trustAnchors, err = static.From(static.Options{
 					Anchors: opts.TrustAnchors,
+					Jwks:    opts.JSONWebKeySet,
 				})
 				if err != nil {
 					return nil, err
 				}
 			case opts.TrustAnchorsFile != nil:
 				trustAnchors = file.From(file.Options{
-					Log:    log,
-					CAPath: *opts.TrustAnchorsFile,
+					Log:      log,
+					CAPath:   *opts.TrustAnchorsFile,
+					JwksPath: opts.JSONWebKeySetFile,
 				})
 			}
 		}

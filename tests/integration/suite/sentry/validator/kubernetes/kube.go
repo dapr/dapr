@@ -18,6 +18,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 	"testing"
@@ -28,7 +29,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/modes"
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -49,7 +50,21 @@ type kube struct {
 func (k *kube) Setup(t *testing.T) []framework.Option {
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
+
+	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	bundle, err := bundle.Generate(bundle.GenerateOptions{
+		X509RootKey:      rootKey,
+		JWTRootKey:       jwtKey,
+		TrustDomain:      "integration.test.dapr.io",
+		AllowedClockSkew: time.Second * 5,
+		OverrideCATTL:    nil,
+		MissingCredentials: bundle.MissingCredentials{
+			X509: true,
+			JWT:  false,
+		},
+	})
 	require.NoError(t, err)
 
 	kubeAPI := utils.KubeAPI(t, utils.KubeAPIOptions{
@@ -102,9 +117,9 @@ func (k *kube) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Len(t, certs, 2)
 	require.NoError(t, certs[0].CheckSignatureFrom(certs[1]))
-	require.Len(t, k.sentry.CABundle().IssChain, 1)
-	assert.Equal(t, k.sentry.CABundle().IssChain[0].Raw, certs[1].Raw)
-	trustBundle, err := secpem.DecodePEMCertificates(k.sentry.CABundle().TrustAnchors)
+	require.Len(t, k.sentry.CABundle().X509.IssChain, 1)
+	assert.Equal(t, k.sentry.CABundle().X509.IssChain[0].Raw, certs[1].Raw)
+	trustBundle, err := secpem.DecodePEMCertificates(k.sentry.CABundle().X509.TrustAnchors)
 	require.NoError(t, err)
 	require.Len(t, trustBundle, 1)
 	require.NoError(t, certs[1].CheckSignatureFrom(trustBundle[0]))

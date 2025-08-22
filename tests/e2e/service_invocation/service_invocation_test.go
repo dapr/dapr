@@ -892,6 +892,8 @@ func TestHeaders(t *testing.T) {
 				_ = assert.NotEmpty(t, requestHeaders["Forwarded"]) &&
 					assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
 
+				_ = assert.NotEmpty(t, requestHeaders["Dapr-Caller-Namespace"]) &&
+					assert.Equal(t, kube.DaprTestNamespace, requestHeaders["Dapr-Caller-Namespace"][0])
 				_ = assert.NotEmpty(t, requestHeaders["Dapr-Caller-App-Id"]) &&
 					assert.Equal(t, targetApp, requestHeaders["Dapr-Caller-App-Id"][0])
 				_ = assert.NotEmpty(t, requestHeaders["Dapr-Callee-App-Id"]) &&
@@ -1727,7 +1729,7 @@ func TestNegativeCasesExternal(t *testing.T) {
 			  	require.Nil(t, err)
 			  })*/
 
-			//TODO(@Sam): test service timeout, parse error from service, and large data
+			// TODO(@Sam): test service timeout, parse error from service, and large data
 		}
 	}
 
