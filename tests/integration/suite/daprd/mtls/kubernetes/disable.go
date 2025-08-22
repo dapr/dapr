@@ -59,11 +59,11 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 	e.sentry = sentry.New(t)
 
 	bundle := e.sentry.CABundle()
-	e.trustAnchors = bundle.TrustAnchors
+	e.trustAnchors = bundle.X509.TrustAnchors
 
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
-	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
+	require.NoError(t, os.WriteFile(taFile, bundle.X509.TrustAnchors, 0o600))
 
 	e.placement = placement.New(t,
 		placement.WithEnableTLS(true),
@@ -81,7 +81,7 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 	e.daprd = procdaprd.New(t,
 		procdaprd.WithAppID("my-app"),
 		procdaprd.WithMode("kubernetes"),
-		procdaprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
+		procdaprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.X509.TrustAnchors))),
 		procdaprd.WithSentryAddress(e.sentry.Address()),
 		procdaprd.WithControlPlaneAddress(e.operator.Address(t)),
 		procdaprd.WithDisableK8sSecretStore(true),

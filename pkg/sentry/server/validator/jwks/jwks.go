@@ -98,26 +98,26 @@ func (j *jwks) Start(ctx context.Context) error {
 	return nil
 }
 
-func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
+func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
 	if req.GetToken() == "" {
-		return spiffeid.TrustDomain{}, errors.New("the request does not contain a token")
+		return validator.ValidateResult{}, errors.New("the request does not contain a token")
 	}
 
 	if err := j.cache.WaitForCacheReady(ctx); err != nil {
-		return spiffeid.TrustDomain{}, errors.New("jwks validator not ready")
+		return validator.ValidateResult{}, errors.New("jwks validator not ready")
 	}
 
 	// Validate the internal request
 	// This also returns the trust domain.
 	td, err := internal.Validate(ctx, req)
 	if err != nil {
-		return spiffeid.TrustDomain{}, err
+		return validator.ValidateResult{}, err
 	}
 
 	// Construct the expected value for the subject, which is the SPIFFE ID of the requestor
 	sub, err := spiffeid.FromSegments(td, "ns", req.GetNamespace(), req.GetId())
 	if err != nil {
-		return spiffeid.TrustDomain{}, fmt.Errorf("failed to construct SPIFFE ID for requestor: %w", err)
+		return validator.ValidateResult{}, fmt.Errorf("failed to construct SPIFFE ID for requestor: %w", err)
 	}
 
 	// Validate the authorization token
@@ -130,8 +130,10 @@ func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequ
 		jwt.WithSubject(sub.String()),
 	)
 	if err != nil {
-		return spiffeid.TrustDomain{}, fmt.Errorf("token validation failed: %w", err)
+		return validator.ValidateResult{}, fmt.Errorf("token validation failed: %w", err)
 	}
 
-	return td, nil
+	return validator.ValidateResult{
+		TrustDomain: td,
+	}, nil
 }
