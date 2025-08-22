@@ -51,7 +51,7 @@ type Options struct {
 	AppID                     string
 	Namespace                 string
 	Actors                    actors.Interface
-	Spec                      config.WorkflowSpec
+	Spec                      *config.WorkflowSpec
 	BackendManager            processor.WorkflowBackendManager
 	Resiliency                resiliency.Provider
 	SchedulerReminders        bool
@@ -117,17 +117,33 @@ func New(opts Options) Interface {
 		backend.WithStreamSendTimeout(time.Second*10),
 	)
 
+	var topts []backend.NewTaskWorkerOptions
+	if opts.Spec.GetMaxConcurrentWorkflowInvocations() != nil {
+		topts = []backend.NewTaskWorkerOptions{
+			backend.WithMaxParallelism(*opts.Spec.GetMaxConcurrentWorkflowInvocations()),
+		}
+	}
+
 	// There are separate "workers" for executing orchestrations (workflows) and activities
 	oworker := backend.NewOrchestrationWorker(
 		abackend,
 		executor,
 		wfBackendLogger,
-		backend.WithMaxParallelism(opts.Spec.GetMaxConcurrentWorkflowInvocations()))
+		topts...,
+	)
+
+	topts = nil
+	if opts.Spec.GetMaxConcurrentActivityInvocations() != nil {
+		topts = []backend.NewTaskWorkerOptions{
+			backend.WithMaxParallelism(*opts.Spec.GetMaxConcurrentActivityInvocations()),
+		}
+	}
 	aworker := backend.NewActivityTaskWorker(
 		abackend,
 		executor,
 		wfBackendLogger,
-		backend.WithMaxParallelism(opts.Spec.GetMaxConcurrentActivityInvocations()))
+		topts...,
+	)
 	worker := backend.NewTaskHubWorker(abackend, oworker, aworker, wfBackendLogger)
 
 	return &engine{
