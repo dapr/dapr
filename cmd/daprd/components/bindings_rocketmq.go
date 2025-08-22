@@ -16,18 +16,18 @@ limitations under the License.
 package components
 
 import (
+	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/bindings/rocketmq"
-	"github.com/dapr/dapr/pkg/components/bindings"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/kit/logger"
 )
 
 func init() {
 	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
-		return rocketmq.NewRocketMQInput(l)
+		return rocketmq.NewRocketMQ(l)
 	}, "rocketmq")
 
 	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
-		return rocketmq.NewRocketMQOutput(l)
+		return rocketmq.NewRocketMQ(l)
 	}, "rocketmq")
 }
