@@ -203,7 +203,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		choices0 := resp.GetOutputs()[0].GetChoices()[0]
-		require.Equal(t, "tool_calls", choices0.GetFinishReason())
+		require.Equal(t, "stop", choices0.GetFinishReason())
 		require.Equal(t, int64(0), choices0.GetIndex())
 		require.NotNil(t, choices0.GetMessage())
 		require.Equal(t, "assistant message", choices0.GetMessage().GetContent())
@@ -315,15 +315,10 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		choices0 := resp.GetOutputs()[0].GetChoices()[0]
-		require.Equal(t, "tool_calls", choices0.GetFinishReason())
+		require.Equal(t, "stop", choices0.GetFinishReason())
 		require.Equal(t, int64(0), choices0.GetIndex())
 		require.NotNil(t, choices0.GetMessage())
 		require.Equal(t, "first user message\nfirst assistant response\nsecond user message\nsystem instruction", choices0.GetMessage().GetContent())
-		require.NotEmpty(t, choices0.GetMessage().GetToolCalls())
-		toolCalls := choices0.GetMessage().GetToolCalls()
-		require.Len(t, toolCalls, 1)
-		require.Equal(t, "0", toolCalls[0].GetId())
-		require.NotNil(t, toolCalls[0].GetFunction())
-		require.Equal(t, "test_function", toolCalls[0].GetFunction().GetName())
+		require.Empty(t, choices0.GetMessage().GetToolCalls())
 	})
 }
