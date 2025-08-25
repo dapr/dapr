@@ -16,10 +16,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/pubsub/azure/servicebus/queues"
-	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	"github.com/dapr/components-contrib/nameresolution/hashicorp/consul"
+	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 )
 
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(queues.NewAzureServiceBusQueues, "azure.servicebus.queues", "azure.servicebusqueues")
+	nrLoader.DefaultRegistry.RegisterComponent(consul.NewResolver, "hashicorp.consul", "consul")
 }
