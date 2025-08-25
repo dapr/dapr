@@ -203,7 +203,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		choices0 := resp.GetOutputs()[0].GetChoices()[0]
-		require.Equal(t, "stop", choices0.GetFinishReason())
+		require.Equal(t, "tool_calls", choices0.GetFinishReason())
 		require.Equal(t, int64(0), choices0.GetIndex())
 		require.NotNil(t, choices0.GetMessage())
 		require.Equal(t, "assistant message", choices0.GetMessage().GetContent())

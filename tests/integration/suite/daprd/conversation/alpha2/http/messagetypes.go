@@ -118,7 +118,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		// Echo component returns the assistant message with tool calls
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"assistant message","toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":"test-string"}}]}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"assistant message","toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":"test-string"}}]}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
