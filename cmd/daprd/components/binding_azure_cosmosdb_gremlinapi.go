@@ -16,7 +16,7 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/bindings/azure/cosmosdbgremlinapi"
+	cosmosdbgremlinapi "github.com/dapr/components-contrib/bindings/azure/cosmosdb/gremlinapi"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 )
 
