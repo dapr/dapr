@@ -312,6 +312,44 @@ func TestNew(t *testing.T) {
 			_, err := New(t.Context(), config)
 			require.Error(t, err)
 		})
+
+	t.Run("if existing pool exists but root and intermediate are the same, new should fail when asked to generate JWT keys",
+		func(t *testing.T) {
+			dir := t.TempDir()
+			rootCertPath := filepath.Join(dir, "root.cert")
+			issuerCertPath := filepath.Join(dir, "issuer.cert")
+			issuerKeyPath := filepath.Join(dir, "issuer.key")
+			jwksPath := filepath.Join(dir, "jwks.json")
+			jwtKeyPath := filepath.Join(dir, "jwt.key")
+			config := config.Config{
+				RootCertPath:   rootCertPath,
+				IssuerCertPath: issuerCertPath,
+				IssuerKeyPath:  issuerKeyPath,
+				JWT: config.ConfigJWT{
+					Enabled:          true,
+					JWKSPath:         jwksPath,
+					SigningKeyPath:   jwtKeyPath,
+					SigningAlgorithm: ca_bundle.DefaultJWTSignatureAlgorithm.String(),
+					TTL:              config.DefaultJWTTTL,
+				},
+				TrustDomain: "test.example.com",
+				Mode:        modes.StandaloneMode,
+			}
+
+			rootPEM, _, rootPEMKey, _ := genCrt(t, "root", nil, nil)
+
+			// both root and intermediate are the same document
+			rootFileContents := rootPEM
+			issuerFileContents := rootPEM
+			issuerKeyFileContents := rootPEMKey
+
+			require.NoError(t, os.WriteFile(rootCertPath, rootFileContents, 0o600))
+			require.NoError(t, os.WriteFile(issuerCertPath, issuerFileContents, 0o600))
+			require.NoError(t, os.WriteFile(issuerKeyPath, issuerKeyFileContents, 0o600))
+
+			_, err := New(t.Context(), config)
+			require.Error(t, err)
+		})
 }
 
 func TestSignIdentity(t *testing.T) {

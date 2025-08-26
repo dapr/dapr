@@ -85,6 +85,9 @@ func verifyX509Bundle(trustAnchors, issChainPEM, issKeyPEM []byte) (*bundle.X509
 	if len(issChainPEM) == 0 {
 		return nil, errors.New("issuer chain is empty after re-encoding")
 	}
+	if len(issChainPEM) == 0 {
+		return nil, errors.New("issuer chain is empty after re-encoding")
+	}
 
 	issKey, err := pem.DecodePEMPrivateKey(issKeyPEM)
 	if err != nil {
