@@ -113,7 +113,7 @@ func (s *subscriptions) Setup(t *testing.T) []framework.Option {
 		daprd.WithEnableMTLS(true),
 		daprd.WithNamespace("default"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors),
 		)),
 	)
 

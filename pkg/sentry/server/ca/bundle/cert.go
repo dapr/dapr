@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ca
+package bundle
 
 import (
 	"crypto/rand"
@@ -26,7 +26,10 @@ import (
 
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.sentry.bundle.Bundle")
 
 const (
 	// defaultCATTL is the default CA certificate TTL.
@@ -113,8 +116,8 @@ func generateIssuerCert(trustDomain string, skew time.Duration, overrideTTL *tim
 	return cert, nil
 }
 
-// generateWorkloadCert returns a CA issuing x509 Certificate.
-func generateWorkloadCert(sig x509.SignatureAlgorithm, ttl, skew time.Duration, id *spiffe.Parsed) (*x509.Certificate, error) {
+// GenerateWorkloadCert returns a CA issuing x509 Certificate.
+func GenerateWorkloadCert(sig x509.SignatureAlgorithm, ttl, skew time.Duration, id *spiffe.Parsed) (*x509.Certificate, error) {
 	cert, err := generateBaseCert(ttl, skew)
 	if err != nil {
 		return nil, err

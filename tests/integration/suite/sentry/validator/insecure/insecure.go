@@ -30,7 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -171,7 +171,7 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 	})
 }
 
-func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID string) {
+func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle bundle.Bundle, expectSPIFFEID string) {
 	t.Helper()
 
 	require.NotEmpty(t, res.GetWorkloadCertificate())

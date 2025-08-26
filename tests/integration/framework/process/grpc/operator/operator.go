@@ -159,7 +159,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 				SentryAddress:           "localhost:" + strconv.Itoa(opts.sentry.Port()),
 				ControlPlaneTrustDomain: "localhost",
 				ControlPlaneNamespace:   "default",
-				TrustAnchors:            opts.sentry.CABundle().TrustAnchors,
+				TrustAnchors:            opts.sentry.CABundle().X509.TrustAnchors,
 				AppID:                   "dapr-operator",
 				MTLSEnabled:             true,
 				Healthz:                 healthz.New(),

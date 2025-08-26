@@ -313,7 +313,7 @@ func WithDaprAPIToken(t *testing.T, token string) Option {
 
 func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 	return func(o *options) {
-		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)))(o)
+		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors)))(o)
 		WithSentryAddress(sentry.Address())(o)
 		WithEnableMTLS(true)(o)
 	}
