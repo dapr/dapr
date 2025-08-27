@@ -116,18 +116,20 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 	// Generate a test root key for JWT signing
 	jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	bundle, err := bundle.Generate(bundle.GenerateOptions{
+
+	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
 		X509RootKey:      x509RootKey,
-		JWTRootKey:       jwtRootKey,
 		TrustDomain:      "integration.test.dapr.io",
 		AllowedClockSkew: time.Second * 5,
-		OverrideCATTL:    nil,
-		MissingCredentials: bundle.MissingCredentials{
-			X509: true,
-			JWT:  true,
-		},
+		OverrideCATTL:    nil, // Use default CA TTL
 	})
 	require.NoError(t, err)
+	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+		JWTRootKey:  jwtRootKey,
+		TrustDomain: "integration.test.dapr.io",
+	})
+	require.NoError(t, err)
+
 	leafpk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	leafCert := &x509.Certificate{
@@ -139,12 +141,12 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 		DNSNames:           []string{"cluster.local"},
 		SignatureAlgorithm: x509.ECDSAWithSHA256,
 	}
-	leafCertDER, err := x509.CreateCertificate(rand.Reader, leafCert, bundle.X509.IssChain[0], leafpk.Public(), bundle.X509.IssKey)
+	leafCertDER, err := x509.CreateCertificate(rand.Reader, leafCert, x509bundle.IssChain[0], leafpk.Public(), x509bundle.IssKey)
 	require.NoError(t, err)
 	leafCert, err = x509.ParseCertificate(leafCertDER)
 	require.NoError(t, err)
 
-	chainPEM, err := cryptopem.EncodeX509Chain(append([]*x509.Certificate{leafCert}, bundle.X509.IssChain...))
+	chainPEM, err := cryptopem.EncodeX509Chain(append([]*x509.Certificate{leafCert}, x509bundle.IssChain...))
 	require.NoError(t, err)
 	keyPEM, err := cryptopem.EncodePrivateKey(leafpk)
 	require.NoError(t, err)
@@ -152,9 +154,12 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 	return &Kubernetes{
 		http: prochttp.New(t,
 			prochttp.WithHandler(handler),
-			prochttp.WithMTLS(t, bundle.X509.TrustAnchors, chainPEM, keyPEM),
+			prochttp.WithMTLS(t, x509bundle.TrustAnchors, chainPEM, keyPEM),
 		),
-		bundle:   bundle,
+		bundle: bundle.Bundle{
+			X509: x509bundle,
+			JWT:  jwtbundle,
+		},
 		informer: informer,
 	}
 }

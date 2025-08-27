@@ -51,34 +51,11 @@ func TestKube_get(t *testing.T) {
 	jwks, err := jwk.Parse(jwksBytes)
 	require.NoError(t, err)
 
-	shouldGenX509 := func(g ca_bundle.MissingCredentials) bool {
-		return g.X509
-	}
-	shouldNotGenX509 := func(g ca_bundle.MissingCredentials) bool {
-		return !g.X509
-	}
-	shouldGenJWT := func(g ca_bundle.MissingCredentials) bool {
-		return g.JWT
-	}
-	shouldGenX509Exclusive := func(g ca_bundle.MissingCredentials) bool {
-		return g.X509 && !g.JWT
-	}
-	shouldGenJWTExclusive := func(g ca_bundle.MissingCredentials) bool {
-		return !g.X509 && g.JWT
-	}
-	shouldGenAll := func(g ca_bundle.MissingCredentials) bool {
-		return g.X509 && g.JWT
-	}
-	shouldNotGen := func(g ca_bundle.MissingCredentials) bool {
-		return !g.X509 && !g.JWT
-	}
-
 	tests := map[string]struct {
-		sec         *corev1.Secret
-		cm          *corev1.ConfigMap
-		expBundle   ca_bundle.Bundle
-		expGenCheck func(ca_bundle.MissingCredentials) bool
-		expErr      bool
+		sec       *corev1.Secret
+		cm        *corev1.ConfigMap
+		expBundle ca_bundle.Bundle
+		expErr    bool
 	}{
 		"if secret doesn't exist, expect error": {
 			sec: nil,
@@ -89,9 +66,8 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      true,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    true,
 		},
 		"if configmap doesn't exist, expect error": {
 			sec: &corev1.Secret{
@@ -105,10 +81,9 @@ func TestKube_get(t *testing.T) {
 					"tls.crt": intPEM,
 				},
 			},
-			cm:          nil,
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      true,
+			cm:        nil,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    true,
 		},
 		"if secret doesn't include ca.crt, expect to generate x509": {
 			sec: &corev1.Secret{
@@ -128,9 +103,8 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: shouldGenX509,
-			expErr:      false,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    false,
 		},
 		"if secret doesn't include tls.crt, expect to generate x509": {
 			sec: &corev1.Secret{
@@ -150,9 +124,8 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: shouldGenX509,
-			expErr:      false,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    false,
 		},
 		"if secret doesn't include tls.key, expect to generate x509": {
 			sec: &corev1.Secret{
@@ -172,9 +145,8 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: shouldGenX509,
-			expErr:      false,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    false,
 		},
 		"if configmap doesn't include ca.crt, expect to generate x509": {
 			sec: &corev1.Secret{
@@ -195,9 +167,8 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{},
 			},
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: shouldGenX509,
-			expErr:      false,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    false,
 		},
 		"if trust anchors do not match, expect not to generate x509": {
 			sec: &corev1.Secret{
@@ -218,9 +189,8 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM) + "\n" + string(rootPEM2)},
 			},
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: shouldGenX509,
-			expErr:      false,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    false,
 		},
 		"if bundle fails to verify x509, expect error": {
 			sec: &corev1.Secret{
@@ -241,9 +211,8 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM2)},
 			},
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      true,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    true,
 		},
 		"if x509 only bundle is valid, expect to not generate x509 and return bundle": {
 			sec: &corev1.Secret{
@@ -265,7 +234,7 @@ func TestKube_get(t *testing.T) {
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
 			expBundle: ca_bundle.Bundle{
-				X509: ca_bundle.X509{
+				X509: &ca_bundle.X509{
 					TrustAnchors: rootPEM,
 					IssChainPEM:  intPEM,
 					IssKeyPEM:    intPKPEM,
@@ -273,8 +242,7 @@ func TestKube_get(t *testing.T) {
 					IssKey:       intPK,
 				},
 			},
-			expGenCheck: shouldNotGenX509,
-			expErr:      false,
+			expErr: false,
 		},
 		"if secret doesn't include jwt.key, expect to generate jwt": {
 			sec: &corev1.Secret{
@@ -296,7 +264,7 @@ func TestKube_get(t *testing.T) {
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
 			expBundle: ca_bundle.Bundle{
-				X509: ca_bundle.X509{
+				X509: &ca_bundle.X509{
 					TrustAnchors: rootPEM,
 					IssChainPEM:  intPEM,
 					IssKeyPEM:    intPKPEM,
@@ -304,8 +272,7 @@ func TestKube_get(t *testing.T) {
 					IssKey:       intPK,
 				},
 			},
-			expGenCheck: shouldGenJWT,
-			expErr:      false,
+			expErr: false,
 		},
 		"if secret doesn't include jwks.json, expect to generate jwt": {
 			sec: &corev1.Secret{
@@ -328,7 +295,7 @@ func TestKube_get(t *testing.T) {
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
 			expBundle: ca_bundle.Bundle{
-				X509: ca_bundle.X509{
+				X509: &ca_bundle.X509{
 					TrustAnchors: rootPEM,
 					IssChainPEM:  intPEM,
 					IssKeyPEM:    intPKPEM,
@@ -336,8 +303,7 @@ func TestKube_get(t *testing.T) {
 					IssKey:       intPK,
 				},
 			},
-			expGenCheck: shouldGenJWT,
-			expErr:      false,
+			expErr: false,
 		},
 		"if secret doesn't include jwt.key or jwks.json, expect to generate jwt": {
 			sec: &corev1.Secret{
@@ -359,7 +325,7 @@ func TestKube_get(t *testing.T) {
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
 			expBundle: ca_bundle.Bundle{
-				X509: ca_bundle.X509{
+				X509: &ca_bundle.X509{
 					TrustAnchors: rootPEM,
 					IssChainPEM:  intPEM,
 					IssKeyPEM:    intPKPEM,
@@ -367,8 +333,7 @@ func TestKube_get(t *testing.T) {
 					IssKey:       intPK,
 				},
 			},
-			expGenCheck: shouldGenJWT,
-			expErr:      false,
+			expErr: false,
 		},
 		"if jwt.key is invalid, expect error": {
 			sec: &corev1.Secret{
@@ -391,9 +356,8 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      true,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    true,
 		},
 		"if jwks.json is invalid, expect error": {
 			sec: &corev1.Secret{
@@ -416,9 +380,8 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      true,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    true,
 		},
 		"valid bundle with both x509 and jwt components": {
 			sec: &corev1.Secret{
@@ -442,22 +405,21 @@ func TestKube_get(t *testing.T) {
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
 			expBundle: ca_bundle.Bundle{
-				X509: ca_bundle.X509{
+				X509: &ca_bundle.X509{
 					TrustAnchors: rootPEM,
 					IssChainPEM:  intPEM,
 					IssKeyPEM:    intPKPEM,
 					IssChain:     []*x509.Certificate{intCrt},
 					IssKey:       intPK,
 				},
-				JWT: ca_bundle.JWT{
+				JWT: &ca_bundle.JWT{
 					SigningKey:    signingKey,
 					SigningKeyPEM: signingKeyPEM,
 					JWKS:          jwks,
 					JWKSJson:      jwksBytes,
 				},
 			},
-			expGenCheck: shouldNotGen,
-			expErr:      false,
+			expErr: false,
 		},
 		"missing both x509 and jwt components": {
 			sec: &corev1.Secret{
@@ -474,9 +436,8 @@ func TestKube_get(t *testing.T) {
 				},
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
-			expBundle:   ca_bundle.Bundle{},
-			expGenCheck: shouldGenAll,
-			expErr:      false,
+			expBundle: ca_bundle.Bundle{},
+			expErr:    false,
 		},
 		"only jwt components present": {
 			sec: &corev1.Secret{
@@ -497,15 +458,14 @@ func TestKube_get(t *testing.T) {
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
 			expBundle: ca_bundle.Bundle{
-				JWT: ca_bundle.JWT{
+				JWT: &ca_bundle.JWT{
 					SigningKey:    signingKey,
 					SigningKeyPEM: signingKeyPEM,
 					JWKS:          jwks,
 					JWKSJson:      jwksBytes,
 				},
 			},
-			expGenCheck: shouldGenX509Exclusive,
-			expErr:      false,
+			expErr: false,
 		},
 		"only x509 components present with jwt keys requested": {
 			sec: &corev1.Secret{
@@ -527,7 +487,7 @@ func TestKube_get(t *testing.T) {
 				Data: map[string]string{"ca.crt": string(rootPEM)},
 			},
 			expBundle: ca_bundle.Bundle{
-				X509: ca_bundle.X509{
+				X509: &ca_bundle.X509{
 					TrustAnchors: rootPEM,
 					IssChainPEM:  intPEM,
 					IssKeyPEM:    intPKPEM,
@@ -535,8 +495,7 @@ func TestKube_get(t *testing.T) {
 					IssKey:       intPK,
 				},
 			},
-			expGenCheck: shouldGenJWTExclusive,
-			expErr:      false,
+			expErr: false,
 		},
 	}
 
@@ -567,12 +526,9 @@ func TestKube_get(t *testing.T) {
 				namespace: "dapr-system-test",
 			}
 
-			bundle, gen, err := k.get(t.Context())
+			bundle, err := k.get(t.Context())
 			assert.Equal(t, test.expErr, err != nil, "expected error: %v, but got %v", test.expErr, err)
 			bundlesEqual(t, test.expBundle, bundle)
-			if test.expGenCheck != nil {
-				assert.True(t, test.expGenCheck(gen), "generate check failed, got %v", gen)
-			}
 		})
 	}
 }
@@ -580,13 +536,15 @@ func TestKube_get(t *testing.T) {
 func bundlesEqual(t *testing.T, expected, actual ca_bundle.Bundle) {
 	t.Helper()
 
-	assert.Equal(t, expected.X509.TrustAnchors, actual.X509.TrustAnchors)
-	assert.Equal(t, expected.X509.IssChainPEM, actual.X509.IssChainPEM)
-	assert.Equal(t, expected.X509.IssKeyPEM, actual.X509.IssKeyPEM)
-	assert.Equal(t, len(expected.X509.IssChain), len(actual.X509.IssChain))
-	for i := range expected.X509.IssChain {
-		assert.Equal(t, expected.X509.IssChain[i].Subject, actual.X509.IssChain[i].Subject)
+	require.Equal(t, expected.X509 == nil, actual.X509 == nil)
+	if expected.X509 != nil {
+		assert.Equal(t, expected.X509.TrustAnchors, actual.X509.TrustAnchors)
+		assert.Equal(t, expected.X509.IssChainPEM, actual.X509.IssChainPEM)
+		assert.Equal(t, expected.X509.IssKeyPEM, actual.X509.IssKeyPEM)
+		assert.Equal(t, len(expected.X509.IssChain), len(actual.X509.IssChain))
+		for i := range expected.X509.IssChain {
+			assert.Equal(t, expected.X509.IssChain[i].Subject, actual.X509.IssChain[i].Subject)
+		}
 	}
-	assert.Equal(t, expected.JWT.SigningKeyPEM, actual.JWT.SigningKeyPEM)
-	assert.Equal(t, expected.JWT.JWKSJson, actual.JWT.JWKSJson)
+	assert.Equal(t, expected.JWT, actual.JWT)
 }

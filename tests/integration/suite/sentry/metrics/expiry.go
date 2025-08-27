@@ -48,24 +48,27 @@ type expiry struct {
 }
 
 func (e *expiry) Setup(t *testing.T) []framework.Option {
+	onemonth := time.Hour * 24 * 30
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-
-	onemonth := time.Hour * 24 * 30
-	bundle, err := bundle.Generate(bundle.GenerateOptions{
+	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
 		X509RootKey:      rootKey,
-		JWTRootKey:       jwtKey,
 		TrustDomain:      "integration.test.dapr.io",
-		AllowedClockSkew: time.Second * 5,
+		AllowedClockSkew: time.Second * 20,
 		OverrideCATTL:    &onemonth,
-		MissingCredentials: bundle.MissingCredentials{
-			X509: true,
-			JWT:  true,
-		},
 	})
 	require.NoError(t, err)
+	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+		JWTRootKey:  jwtKey,
+		TrustDomain: "integration.test.dapr.io",
+	})
+	require.NoError(t, err)
+	bundle := bundle.Bundle{
+		X509: x509bundle,
+		JWT:  jwtbundle,
+	}
 
 	e.notGiven = procsentry.New(t, procsentry.WithWriteTrustBundle(false))
 	e.given = procsentry.New(t, procsentry.WithCABundle(bundle))

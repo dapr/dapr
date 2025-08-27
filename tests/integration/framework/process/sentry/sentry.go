@@ -95,19 +95,22 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
 		require.NoError(t, err)
 
-		bundle, err := bundle.Generate(bundle.GenerateOptions{
+		x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
 			X509RootKey:      x509RootKey,
-			JWTRootKey:       jwtRootKey,
 			TrustDomain:      td,
 			AllowedClockSkew: time.Second * 5,
 			OverrideCATTL:    nil, // Use default CA TTL
-			MissingCredentials: bundle.MissingCredentials{
-				X509: true,
-				JWT:  true,
-			},
 		})
 		require.NoError(t, err)
-		opts.bundle = &bundle
+		jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+			JWTRootKey:  jwtRootKey,
+			TrustDomain: td,
+		})
+		require.NoError(t, err)
+		opts.bundle = &bundle.Bundle{
+			X509: x509bundle,
+			JWT:  jwtbundle,
+		}
 	}
 
 	args := []string{
