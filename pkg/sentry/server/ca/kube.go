@@ -149,7 +149,10 @@ func (k *kube) store(ctx context.Context, bundle bundle.Bundle) error {
 	// If the OIDC server is enabled, clients could use that to access the JWKS
 	// to verify JWTs. However, the OIDC server is not required and so it is
 	// useful to also distribute the JWKS in the configmap.
-	configMap.Data[filepath.Base(k.config.JWT.JWKSPath)] = string(bundle.JWT.JWKSJson)
+	delete(configMap.Data, filepath.Base(k.config.JWT.JWKSPath))
+	if bundle.JWT != nil {
+		configMap.Data[filepath.Base(k.config.JWT.JWKSPath)] = string(bundle.JWT.JWKSJson)
+	}
 
 	if _, err = k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, configMap, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("failed to update trust bundle configmap: %w", err)
