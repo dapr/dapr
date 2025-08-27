@@ -18,6 +18,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"testing"
 	"time"
 
@@ -46,16 +47,25 @@ type disable struct {
 func (d *disable) Setup(t *testing.T) []framework.Option {
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	bundle, err := bundle.Generate(bundle.GenerateOptions{
+
+	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
 		X509RootKey:      rootKey,
 		TrustDomain:      "integration.test.dapr.io",
-		AllowedClockSkew: time.Second * 5,
+		AllowedClockSkew: time.Second * 20,
 		OverrideCATTL:    nil,
-		MissingCredentials: bundle.MissingCredentials{
-			X509: true,
-		},
 	})
 	require.NoError(t, err)
+	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+		JWTRootKey:  jwtKey,
+		TrustDomain: "integration.test.dapr.io",
+	})
+	require.NoError(t, err)
+	bundle := bundle.Bundle{
+		X509: x509bundle,
+		JWT:  jwtbundle,
+	}
 
 	kubeAPI := utils.KubeAPI(t, utils.KubeAPIOptions{
 		Bundle:         bundle,

@@ -101,91 +101,89 @@ func TestVerifyBundle(t *testing.T) {
 		issKeyPEM   []byte
 		trustBundle []byte
 		expErr      bool
-		expBundle   bundle.Bundle
+		expBundle   *bundle.X509
 	}{
 		"if issuer chain pem empty, expect error": {
 			issChainPEM: nil,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: rootPEM,
 			expErr:      true,
-			expBundle:   bundle.Bundle{},
+			expBundle:   nil,
 		},
 		"if issuer key pem empty, expect error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   nil,
 			trustBundle: rootPEM,
 			expErr:      true,
-			expBundle:   bundle.Bundle{},
+			expBundle:   nil,
 		},
 		"if issuer trust bundle pem empty, expect error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: nil,
 			expErr:      true,
-			expBundle:   bundle.Bundle{},
+			expBundle:   nil,
 		},
 		"invalid issuer chain PEM should error": {
 			issChainPEM: []byte("invalid"),
 			issKeyPEM:   int1PKPEM,
 			trustBundle: rootPEM,
 			expErr:      true,
-			expBundle:   bundle.Bundle{},
+			expBundle:   nil,
 		},
 		"invalid issuer key PEM should error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   []byte("invalid"),
 			trustBundle: rootPEM,
 			expErr:      true,
-			expBundle:   bundle.Bundle{},
+			expBundle:   nil,
 		},
 		"invalid trust bundle PEM should error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: []byte("invalid"),
 			expErr:      true,
-			expBundle:   bundle.Bundle{},
+			expBundle:   nil,
 		},
 		"if issuer chain is in wrong order, expect error": {
 			issChainPEM: joinPEM(int1PEM, int2PEM),
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      true,
-			expBundle:   bundle.Bundle{},
+			expBundle:   nil,
 		},
 		"if issuer key does not belong to issuer certificate, expect error": {
 			issChainPEM: joinPEM(int2PEM, int1PEM),
 			issKeyPEM:   int1PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      true,
-			expBundle:   bundle.Bundle{},
+			expBundle:   nil,
 		},
 		"if trust anchors contains non root certificates, exp error": {
 			issChainPEM: joinPEM(int2PEM, int1PEM),
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM, int1PEM),
 			expErr:      true,
-			expBundle:   bundle.Bundle{},
+			expBundle:   nil,
 		},
 		"if issuer chain doesn't belong to trust anchors, expect error": {
 			issChainPEM: joinPEM(int2PEM, int1PEM),
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootBPEM),
 			expErr:      true,
-			expBundle:   bundle.Bundle{},
+			expBundle:   nil,
 		},
 		"valid chain should not error": {
 			issChainPEM: int1PEM,
 			issKeyPEM:   int1PKPEM,
 			trustBundle: rootPEM,
 			expErr:      false,
-			expBundle: bundle.Bundle{
-				X509: bundle.X509{
-					TrustAnchors: rootPEM,
-					IssChainPEM:  joinPEM(int1PEM),
-					IssKeyPEM:    int1PKPEM,
-					IssChain:     []*x509.Certificate{int1Crt},
-					IssKey:       int1PK,
-				},
+			expBundle: &bundle.X509{
+				TrustAnchors: rootPEM,
+				IssChainPEM:  joinPEM(int1PEM),
+				IssKeyPEM:    int1PKPEM,
+				IssChain:     []*x509.Certificate{int1Crt},
+				IssKey:       int1PK,
 			},
 		},
 		"valid long chain should not error": {
@@ -193,14 +191,12 @@ func TestVerifyBundle(t *testing.T) {
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      false,
-			expBundle: bundle.Bundle{
-				X509: bundle.X509{
-					TrustAnchors: joinPEM(rootPEM, rootBPEM),
-					IssChainPEM:  joinPEM(int2PEM, int1PEM),
-					IssKeyPEM:    int2PKPEM,
-					IssChain:     []*x509.Certificate{int2Crt, int1Crt},
-					IssKey:       int2PK,
-				},
+			expBundle: &bundle.X509{
+				TrustAnchors: joinPEM(rootPEM, rootBPEM),
+				IssChainPEM:  joinPEM(int2PEM, int1PEM),
+				IssKeyPEM:    int2PKPEM,
+				IssChain:     []*x509.Certificate{int2Crt, int1Crt},
+				IssKey:       int2PK,
 			},
 		},
 		"is root certificate in chain, expect to be removed": {
@@ -208,14 +204,12 @@ func TestVerifyBundle(t *testing.T) {
 			issKeyPEM:   int2PKPEM,
 			trustBundle: joinPEM(rootPEM, rootBPEM),
 			expErr:      false,
-			expBundle: bundle.Bundle{
-				X509: bundle.X509{
-					TrustAnchors: joinPEM(rootPEM, rootBPEM),
-					IssChainPEM:  joinPEM(int2PEM, int1PEM),
-					IssKeyPEM:    int2PKPEM,
-					IssChain:     []*x509.Certificate{int2Crt, int1Crt},
-					IssKey:       int2PK,
-				},
+			expBundle: &bundle.X509{
+				TrustAnchors: joinPEM(rootPEM, rootBPEM),
+				IssChainPEM:  joinPEM(int2PEM, int1PEM),
+				IssKeyPEM:    int2PKPEM,
+				IssChain:     []*x509.Certificate{int2Crt, int1Crt},
+				IssKey:       int2PK,
 			},
 		},
 		"comments are removed from parsed issuer chain, private key and trust anchors": {
@@ -239,21 +233,19 @@ func TestVerifyBundle(t *testing.T) {
 				[]byte("# this is a comment\n"),
 			),
 			expErr: false,
-			expBundle: bundle.Bundle{
-				X509: bundle.X509{
-					TrustAnchors: joinPEM(rootPEM, rootBPEM),
-					IssChainPEM:  joinPEM(int2PEM, int1PEM),
-					IssKeyPEM:    int2PKPEM,
-					IssChain:     []*x509.Certificate{int2Crt, int1Crt},
-					IssKey:       int2PK,
-				},
+			expBundle: &bundle.X509{
+				TrustAnchors: joinPEM(rootPEM, rootBPEM),
+				IssChainPEM:  joinPEM(int2PEM, int1PEM),
+				IssKeyPEM:    int2PKPEM,
+				IssChain:     []*x509.Certificate{int2Crt, int1Crt},
+				IssKey:       int2PK,
 			},
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			Bundle, err := verifyBundle(test.trustBundle, test.issChainPEM, test.issKeyPEM)
+			Bundle, err := verifyX509Bundle(test.trustBundle, test.issChainPEM, test.issKeyPEM)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			require.Equal(t, test.expBundle, Bundle)
 		})
