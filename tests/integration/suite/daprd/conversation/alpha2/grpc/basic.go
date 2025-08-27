@@ -178,18 +178,25 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			ToolChoice:  ptr.Of("auto"),
 		})
 		require.NoError(t, err)
-		// Echo component returns one output following current chat completion API and other providers
+		// Echo component returns one output combining all input messages
 		require.Len(t, resp.GetOutputs(), 1)
 		require.Equal(t, contextID, resp.GetContextId())
 
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		choices0 := resp.GetOutputs()[0].GetChoices()[0]
-		require.Equal(t, "stop", choices0.GetFinishReason())
+		require.Equal(t, "tool_calls", choices0.GetFinishReason())
 		require.Equal(t, int64(0), choices0.GetIndex())
 		require.NotNil(t, choices0.GetMessage())
+		// echo combines all input messages into one output
 		require.Equal(t, "well hello there\nYou are a helpful assistant", choices0.GetMessage().GetContent())
-		require.Len(t, choices0.GetMessage().GetToolCalls(), 1)
+		require.NotEmpty(t, choices0.GetMessage().GetToolCalls())
+
+		toolCalls := choices0.GetMessage().GetToolCalls()
+		require.Len(t, toolCalls, 1)
+		require.Equal(t, "0", toolCalls[0].GetId())
+		require.Equal(t, "test_function", toolCalls[0].GetFunction().GetName())
+		require.Equal(t, "param1", toolCalls[0].GetFunction().GetArguments())
 	})
 
 	t.Run("invalid json - malformed request", func(t *testing.T) {

@@ -31,11 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/loadtest"
 	"github.com/dapr/dapr/tests/runner/summary"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -146,30 +142,6 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 		for index2, scenario := range scenarios {
 			subTestName := "[" + strings.ToUpper(scenario) + "]: "
 			t.Run(subTestName, func(t *testing.T) {
-				// restart scheduler if the app is the one using scheduler for reminders under the hood
-				if strings.Contains(testAppName, "-scheduler") {
-					platform, ok := tr.Platform.(*runner.KubeTestPlatform)
-					if !ok {
-						t.Skip("skipping test; only supported on kubernetes")
-					}
-
-					scheme := runtime.NewScheme()
-					require.NoError(t, corev1.AddToScheme(scheme))
-					cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
-					require.NoError(t, err)
-					var pod corev1.Pod
-					err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-					require.NoError(t, err)
-					err = cl.Delete(t.Context(), &pod)
-					require.NoError(t, err)
-					assert.EventuallyWithT(t, func(c *assert.CollectT) {
-						err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-						if assert.NoError(c, err) {
-							assert.Equal(c, corev1.PodRunning, pod.Status.Phase)
-						}
-					}, 30*time.Second, time.Millisecond*100)
-				}
-
 				// Re-starting the app to clear previous run's memory
 				if restart {
 					log.Printf("Restarting app %s", testAppName)
@@ -211,13 +183,6 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 					table = table.Outputf(subTestName+"Payload Size", "%dKB", int(payloadSize/1000))
 				}
 				table = addTestResults(t, subTestName, testAppName, testResult, table)
-
-				time.Sleep(5 * time.Second)
-
-				// Stop the workflow runtime
-				url = fmt.Sprintf("http://%s/shutdown-workflow-runtime", externalURL)
-				_, err = utils.HTTPGet(url)
-				require.NoError(t, err, "error shutdown workflow runtime")
 			})
 		}
 	}

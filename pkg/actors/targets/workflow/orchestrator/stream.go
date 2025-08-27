@@ -143,7 +143,7 @@ func (o *orchestrator) handleStreamInitial(ctx context.Context, req *internalsv1
 	}
 
 	if api.OrchestrationMetadataIsComplete(ometa) {
-		o.cleanup()
+		o.factory.deactivate(o)
 	}
 
 	select {

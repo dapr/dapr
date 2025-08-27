@@ -203,7 +203,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		choices0 := resp.GetOutputs()[0].GetChoices()[0]
-		require.Equal(t, "stop", choices0.GetFinishReason())
+		require.Equal(t, "tool_calls", choices0.GetFinishReason())
 		require.Equal(t, int64(0), choices0.GetIndex())
 		require.NotNil(t, choices0.GetMessage())
 		require.Equal(t, "assistant message", choices0.GetMessage().GetContent())
@@ -244,7 +244,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "stop", choices.GetFinishReason())
 		require.Equal(t, int64(0), choices.GetIndex())
 		require.NotNil(t, choices.GetMessage())
-		require.Equal(t, "Tool Response for tool ID 'tool-123' with name 'tool name': tool message", choices.GetMessage().GetContent())
+		require.Equal(t, "tool message", choices.GetMessage().GetContent())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
 	})
 
@@ -308,10 +308,10 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 			},
 		})
 		require.NoError(t, err)
-		// Echo component returns one output following current chat completion API and other providers
+		// Echo component combines multiple messages into a single output
 		require.Len(t, resp.GetOutputs(), 1)
 
-		// First output - first user message
+		// Single output with combined content
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		choices0 := resp.GetOutputs()[0].GetChoices()[0]
