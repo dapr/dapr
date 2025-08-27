@@ -23,7 +23,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
-	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 )
 
 const (
@@ -41,11 +41,11 @@ type kube struct {
 }
 
 // get retrieves the existing certificate bundle from Kubernetes.
-func (k *kube) get(ctx context.Context) (ca_bundle.Bundle, ca_bundle.MissingCredentials, error) {
+func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 	// Get the trust bundle secret
 	secret, err := k.client.CoreV1().Secrets(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
-		return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to get trust bundle secret: %w", err)
+		return bundle.Bundle{}, fmt.Errorf("failed to get trust bundle secret: %w", err)
 	}
 
 	// Check if X.509 certificates need to be generated
@@ -58,7 +58,7 @@ func (k *kube) get(ctx context.Context) (ca_bundle.Bundle, ca_bundle.MissingCred
 	// Also check if the ConfigMap is in sync
 	configMap, err := k.client.CoreV1().ConfigMaps(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
-		return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, err
+		return bundle.Bundle{}, err
 	}
 
 	if configMapRootCert, ok := configMap.Data[filepath.Base(k.config.RootCertPath)]; !ok || (hasRootCert && configMapRootCert != string(trustAnchors)) {
@@ -66,11 +66,11 @@ func (k *kube) get(ctx context.Context) (ca_bundle.Bundle, ca_bundle.MissingCred
 	}
 
 	// Create a bundle if certificates are available
-	var bundle ca_bundle.Bundle
+	var bndle bundle.Bundle
 	if !generateX509 {
-		bundle, err = verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
+		bndle.X509, err = verifyX509Bundle(trustAnchors, issChainPEM, issKeyPEM)
 		if err != nil {
-			return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to verify CA bundle: %w", err)
+			return bundle.Bundle{}, fmt.Errorf("failed to verify CA bundle: %w", err)
 		}
 	}
 
@@ -78,35 +78,32 @@ func (k *kube) get(ctx context.Context) (ca_bundle.Bundle, ca_bundle.MissingCred
 	jwtKeyPEM, hasJWTKey := secret.Data[filepath.Base(k.config.JWT.SigningKeyPath)]
 	jwks, hasJWKS := secret.Data[filepath.Base(k.config.JWT.JWKSPath)]
 
-	generateJWT := !hasJWTKey || !hasJWKS
-
 	if hasJWTKey && hasJWKS {
 		jwtKey, jwtErr := loadJWTSigningKey(jwtKeyPEM)
 		if jwtErr != nil {
-			return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to load JWT signing key: %w", jwtErr)
+			return bundle.Bundle{}, fmt.Errorf("failed to load JWT signing key: %w", jwtErr)
 		}
 
 		if verifyErr := verifyJWKS(jwks, jwtKey, k.config.JWT.KeyID); verifyErr != nil {
-			return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to verify JWKS: %w", verifyErr)
+			return bundle.Bundle{}, fmt.Errorf("failed to verify JWKS: %w", verifyErr)
 		}
 
-		bundle.JWT.SigningKey = jwtKey
-		bundle.JWT.SigningKeyPEM = jwtKeyPEM
-		bundle.JWT.JWKSJson = jwks
-		bundle.JWT.JWKS, err = jwk.Parse(jwks)
+		bndle.JWT = &bundle.JWT{
+			SigningKey:    jwtKey,
+			SigningKeyPEM: jwtKeyPEM,
+			JWKSJson:      jwks,
+		}
+		bndle.JWT.JWKS, err = jwk.Parse(jwks)
 		if err != nil {
-			return ca_bundle.Bundle{}, ca_bundle.MissingCredentials{}, fmt.Errorf("failed to parse JWKS: %w", err)
+			return bundle.Bundle{}, fmt.Errorf("failed to parse JWKS: %w", err)
 		}
 	}
 
-	return bundle, ca_bundle.MissingCredentials{
-		X509: generateX509,
-		JWT:  generateJWT,
-	}, nil
+	return bndle, nil
 }
 
 // store saves the certificate bundle to Kubernetes.
-func (k *kube) store(ctx context.Context, bundle ca_bundle.Bundle) error {
+func (k *kube) store(ctx context.Context, bundle bundle.Bundle) error {
 	// Update the Secret with all certificate data
 	secret, err := k.client.CoreV1().Secrets(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {

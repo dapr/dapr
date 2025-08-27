@@ -28,7 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	cabundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -64,10 +64,12 @@ func (c *customJWKSTest) Setup(t *testing.T) []framework.Option {
 	// Set JWT data on bundle
 	set := jwk.NewSet()
 	set.AddKey(pubJWK)
-	x509Bundle.JWT.SigningKey = privKey
-	x509Bundle.JWT.SigningKeyPEM = c.privKeyPEM
-	x509Bundle.JWT.JWKS = set
-	x509Bundle.JWT.JWKSJson = jwksJSON
+	x509Bundle.JWT = &bundle.JWT{
+		SigningKey:    privKey,
+		SigningKeyPEM: c.privKeyPEM,
+		JWKS:          set,
+		JWKSJson:      jwksJSON,
+	}
 
 	// TLS cert for OIDC
 	cert, key := c.generateTLSServerCert(t)
@@ -197,19 +199,19 @@ func (c *customJWKSTest) testIssuedTokenMatchesJWKS(t *testing.T, ctx context.Co
 // testInvalidSentryJWKSSetup spins up ephemeral Sentry instances that should fail initialization
 func (c *customJWKSTest) testInvalidSentryJWKSSetup(t *testing.T, parentCtx context.Context) {
 	// Helper to build a base X509 bundle
-	buildBase := func() cabundle.Bundle { return c.generateX509Bundle(t) }
+	buildBase := func() bundle.Bundle { return c.generateX509Bundle(t) }
 
 	// Valid signing key for baseline
 	validPriv, pubJWK, validJWKS, _ := c.generateJWTKeyAndJWKS(t)
 
 	tests := []struct {
 		name string
-		mut  func(b *cabundle.Bundle)
+		mut  func(b *bundle.Bundle)
 		msg  string
 	}{
 		{
 			name: "missing jwks json",
-			mut: func(b *cabundle.Bundle) {
+			mut: func(b *bundle.Bundle) {
 				b.JWT.SigningKey = validPriv
 				der, _ := x509.MarshalPKCS8PrivateKey(validPriv)
 				b.JWT.SigningKeyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
@@ -219,7 +221,7 @@ func (c *customJWKSTest) testInvalidSentryJWKSSetup(t *testing.T, parentCtx cont
 		},
 		{
 			name: "empty jwks set",
-			mut: func(b *cabundle.Bundle) {
+			mut: func(b *bundle.Bundle) {
 				b.JWT.SigningKey = validPriv
 				der, _ := x509.MarshalPKCS8PrivateKey(validPriv)
 				b.JWT.SigningKeyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
@@ -232,7 +234,7 @@ func (c *customJWKSTest) testInvalidSentryJWKSSetup(t *testing.T, parentCtx cont
 		},
 		{
 			name: "mismatched jwks key",
-			mut: func(b *cabundle.Bundle) {
+			mut: func(b *bundle.Bundle) {
 				// valid signing key
 				b.JWT.SigningKey = validPriv
 				der, _ := x509.MarshalPKCS8PrivateKey(validPriv)
@@ -260,6 +262,7 @@ func (c *customJWKSTest) testInvalidSentryJWKSSetup(t *testing.T, parentCtx cont
 		_ = pub
 		_ = jwksJSON
 		_ = kid
+		b.JWT = new(bundle.JWT)
 		if tc.mut != nil {
 			tc.mut(&b)
 		}
@@ -312,6 +315,7 @@ func (c *customJWKSTest) testExplicitUserProvidedKID(t *testing.T, ctx context.C
 		require.NoError(t, err)
 		der, err := x509.MarshalPKCS8PrivateKey(priv)
 		require.NoError(t, err)
+		x509Bundle.JWT = new(bundle.JWT)
 		x509Bundle.JWT.SigningKey = priv
 		x509Bundle.JWT.SigningKeyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
 		x509Bundle.JWT.JWKS = set
@@ -378,20 +382,19 @@ func (c *customJWKSTest) testExplicitUserProvidedKID(t *testing.T, ctx context.C
 }
 
 // Helper: generate only X509 portion of bundle
-func (c *customJWKSTest) generateX509Bundle(t *testing.T) cabundle.Bundle {
+func (c *customJWKSTest) generateX509Bundle(t *testing.T) bundle.Bundle {
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	b, err := cabundle.Generate(cabundle.GenerateOptions{
+	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
 		X509RootKey:      rootKey,
-		TrustDomain:      "localhost",
-		AllowedClockSkew: 5 * time.Second,
-		MissingCredentials: cabundle.MissingCredentials{
-			X509: true,
-			JWT:  false,
-		},
+		TrustDomain:      "integration.test.dapr.io",
+		AllowedClockSkew: time.Second * 20,
+		OverrideCATTL:    nil,
 	})
 	require.NoError(t, err)
-	return b
+	return bundle.Bundle{
+		X509: x509bundle,
+	}
 }
 
 // Helper: generate RSA signing key + JWKS JSON
@@ -402,7 +405,7 @@ func (c *customJWKSTest) generateJWTKeyAndJWKS(t *testing.T) (*rsa.PrivateKey, j
 	require.NoError(t, err)
 	require.NoError(t, pubJWK.Set(jwk.KeyUsageKey, "sig"))
 	require.NoError(t, pubJWK.Set(jwk.AlgorithmKey, "RS256"))
-	thumb, err := pubJWK.Thumbprint(cabundle.DefaultKeyThumbprintAlgorithm)
+	thumb, err := pubJWK.Thumbprint(bundle.DefaultKeyThumbprintAlgorithm)
 	require.NoError(t, err)
 	kid := base64.StdEncoding.EncodeToString(thumb)
 	require.NoError(t, pubJWK.Set(jwk.KeyIDKey, kid))

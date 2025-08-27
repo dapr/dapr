@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
-	ca_bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
+	bundle "github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/pkg/sentry/server/ca/jwt"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
@@ -83,13 +83,13 @@ type Signer interface {
 
 // store is the interface for the trust bundle backend store.
 type store interface {
-	store(context.Context, ca_bundle.Bundle) error
-	get(context.Context) (ca_bundle.Bundle, ca_bundle.MissingCredentials, error)
+	store(context.Context, bundle.Bundle) error
+	get(context.Context) (bundle.Bundle, error)
 }
 
 // ca is the implementation of the CA Signer.
 type ca struct {
-	bundle ca_bundle.Bundle
+	bundle bundle.Bundle
 	config config.Config
 	jwt.Issuer
 }
@@ -114,12 +114,15 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		castore = &selfhosted{config: conf}
 	}
 
-	bundle, missingCreds, err := castore.get(ctx)
+	bndle, err := castore.get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CA bundle: %w", err)
 	}
 
-	if missingCreds.MissingRootKeys() {
+	var needsWrite bool
+	if bndle.X509 == nil {
+		needsWrite = true
+
 		log.Info("Root and issuer certs not found: generating self signed CA")
 
 		// Generate a key for X.509 certificates
@@ -128,6 +131,24 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 			return nil, fmt.Errorf("failed to generate ECDSA key for X.509 certificates: %w", err)
 		}
 
+		certBundle, err := bundle.GenerateX509(bundle.OptionsX509{
+			X509RootKey:      x509RootKey,
+			TrustDomain:      conf.TrustDomain,
+			AllowedClockSkew: conf.AllowedClockSkew,
+			OverrideCATTL:    nil,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate CA bundle: %w", err)
+		}
+
+		bndle.X509 = certBundle
+
+		log.Info("Generating self-signed CA certs and persisting to store")
+	}
+
+	if bndle.JWT == nil && conf.JWT.Enabled {
+		needsWrite = true
+
 		// Generate a key for JWT signing
 		jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
@@ -135,54 +156,50 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		}
 		conf.JWT.SigningAlgorithm = jwa.RS256.String()
 
-		generatedBundle, err := ca_bundle.Generate(ca_bundle.GenerateOptions{
-			X509RootKey:        x509RootKey,
-			JWTRootKey:         jwtRootKey,
-			TrustDomain:        conf.TrustDomain,
-			AllowedClockSkew:   conf.AllowedClockSkew,
-			OverrideCATTL:      nil,
-			MissingCredentials: missingCreds,
+		jwt, err := bundle.GenerateJWT(bundle.OptionsJWT{
+			TrustDomain: conf.TrustDomain,
+			JWTRootKey:  jwtRootKey,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate CA bundle: %w", err)
+			return nil, fmt.Errorf("failed to generate JWT bundle: %w", err)
 		}
 
-		if missingCreds.X509 {
-			bundle.X509 = generatedBundle.X509
-		}
-		if missingCreds.JWT {
-			bundle.JWT = generatedBundle.JWT
-		}
+		bndle.JWT = jwt
+		log.Info("Generating JWT signing key and persisting to store")
+	}
 
-		if err := castore.store(ctx, bundle); err != nil {
+	if needsWrite {
+		if err := castore.store(ctx, bndle); err != nil {
 			return nil, fmt.Errorf("failed to store CA bundle: %w", err)
 		}
+		log.Info("Self-signed certs and JWT root key generated and persisted successfully")
 
-		log.Info("Self-signed certs generated and persisted successfully")
 		monitoring.IssuerCertChanged()
 	} else {
 		log.Info("Root and issuer certs found: using credentials from store")
 	}
-	monitoring.IssuerCertExpiry(bundle.X509.IssChain[0].NotAfter)
+
+	monitoring.IssuerCertExpiry(bndle.X509.IssChain[0].NotAfter)
 
 	var jwtIss jwt.Issuer
+
 	if conf.JWT.Enabled {
 		log.Info("JWT issuing enabled")
 
-		if bundle.JWT.SigningKey == nil {
+		if bndle.JWT.SigningKey == nil {
 			return nil, errors.New("JWT signing key not found in bundle")
 		}
-		if bundle.JWT.SigningKeyPEM == nil {
+		if bndle.JWT.SigningKeyPEM == nil {
 			return nil, errors.New("JWT signing key PEM not found in bundle")
 		}
-		if bundle.JWT.JWKS == nil {
+		if bndle.JWT.JWKS == nil {
 			return nil, errors.New("JWKS not found in bundle")
 		}
-		if bundle.JWT.JWKSJson == nil {
+		if bndle.JWT.JWKSJson == nil {
 			return nil, errors.New("JWKS JSON not found in bundle")
 		}
 
-		signKey, err := jwk.FromRaw(bundle.JWT.SigningKey)
+		signKey, err := jwk.FromRaw(bndle.JWT.SigningKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWK from key: %w", err)
 		}
@@ -192,7 +209,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 			return nil, errors.New("JWT signing algorithm required")
 		}
 		jwtSignAlg := jwa.SignatureAlgorithm(conf.JWT.SigningAlgorithm)
-		if validateErr := validateKeyAlgorithmCompatibility(bundle.JWT.SigningKey, jwtSignAlg); validateErr != nil {
+		if validateErr := validateKeyAlgorithmCompatibility(bndle.JWT.SigningKey, jwtSignAlg); validateErr != nil {
 			return nil, fmt.Errorf("JWT signing key is incompatible with algorithm %s: %w", jwtSignAlg, validateErr)
 		}
 
@@ -207,7 +224,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 				kid = *conf.JWT.KeyID
 				log.Infof("Using JWT kid from configuration: %s", kid)
 			} else {
-				thumbprint, thumbErr := signKey.Thumbprint(ca_bundle.DefaultKeyThumbprintAlgorithm)
+				thumbprint, thumbErr := signKey.Thumbprint(bundle.DefaultKeyThumbprintAlgorithm)
 				if thumbErr != nil {
 					return nil, fmt.Errorf("failed to generate JWK thumbprint: %w", thumbErr)
 				}
@@ -227,7 +244,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 			SignKey:          signKey,
 			Issuer:           conf.JWT.Issuer,
 			AllowedClockSkew: conf.AllowedClockSkew,
-			JWKS:             bundle.JWT.JWKS,
+			JWKS:             bndle.JWT.JWKS,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWT issuer: %w", err)
@@ -235,7 +252,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	}
 
 	return &ca{
-		bundle: bundle,
+		bundle: bndle,
 		config: conf,
 		Issuer: jwtIss,
 	}, nil
@@ -252,7 +269,7 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 
-	tmpl, err := ca_bundle.GenerateWorkloadCert(req.SignatureAlgorithm, c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
+	tmpl, err := bundle.GenerateWorkloadCert(req.SignatureAlgorithm, c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
 	if err != nil {
 		return nil, err
 	}

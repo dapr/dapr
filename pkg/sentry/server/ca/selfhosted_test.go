@@ -56,7 +56,7 @@ func TestSelfhosted_store(t *testing.T) {
 		}
 
 		require.NoError(t, s.store(t.Context(), bundle.Bundle{
-			X509: bundle.X509{
+			X509: &bundle.X509{
 				TrustAnchors: []byte("root"),
 				IssChainPEM:  []byte("issuer"),
 				IssKeyPEM:    []byte("key"),
@@ -109,79 +109,59 @@ func TestSelfhosted_get(t *testing.T) {
 	jwks, err := jwk.Parse(jwksBytes)
 	require.NoError(t, err)
 
-	// Define check functions for generation flags
-	genX509Check := func(g bundle.MissingCredentials) bool {
-		return g.X509
-	}
-	genJWTCheck := func(g bundle.MissingCredentials) bool {
-		return g.JWT
-	}
-	genAllCheck := func(g bundle.MissingCredentials) bool {
-		return g.X509 && g.JWT
-	}
-	genNoneCheck := func(g bundle.MissingCredentials) bool {
-		return !g.X509 && !g.JWT
-	}
-
 	tests := map[string]struct {
-		rootFile    *[]byte
-		issuer      *[]byte
-		key         *[]byte
-		jwtKey      *[]byte
-		jwksData    *[]byte
-		expBundle   bundle.Bundle
-		expGenCheck func(bundle.MissingCredentials) bool
-		expErr      bool
+		rootFile  *[]byte
+		issuer    *[]byte
+		key       *[]byte
+		jwtKey    *[]byte
+		jwksData  *[]byte
+		expBundle bundle.Bundle
+		expErr    bool
 	}{
 		"if no files exist, return not ok": {
-			rootFile:    nil,
-			issuer:      nil,
-			key:         nil,
-			jwtKey:      nil,
-			jwksData:    nil,
-			expBundle:   bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      false,
+			rootFile:  nil,
+			issuer:    nil,
+			key:       nil,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
+			expErr:    false,
 		},
 		"if root file doesn't exist, return not ok": {
-			rootFile:    nil,
-			issuer:      &intPEM,
-			key:         &intPKPEM,
-			jwtKey:      nil,
-			jwksData:    nil,
-			expBundle:   bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      false,
+			rootFile:  nil,
+			issuer:    &intPEM,
+			key:       &intPKPEM,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
+			expErr:    false,
 		},
 		"if issuer file doesn't exist, return not ok": {
-			rootFile:    &rootPEM,
-			issuer:      nil,
-			key:         &intPKPEM,
-			jwtKey:      nil,
-			jwksData:    nil,
-			expBundle:   bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      false,
+			rootFile:  &rootPEM,
+			issuer:    nil,
+			key:       &intPKPEM,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
+			expErr:    false,
 		},
 		"if issuer key file doesn't exist, return not ok": {
-			rootFile:    &rootPEM,
-			issuer:      &intPEM,
-			key:         nil,
-			jwtKey:      nil,
-			jwksData:    nil,
-			expBundle:   bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      false,
+			rootFile:  &rootPEM,
+			issuer:    &intPEM,
+			key:       nil,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
+			expErr:    false,
 		},
 		"if failed to verify CA bundle, return error": {
-			rootFile:    &intPEM,
-			issuer:      &intPEM,
-			key:         &intPKPEM,
-			jwtKey:      nil,
-			jwksData:    nil,
-			expBundle:   bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      true,
+			rootFile:  &intPEM,
+			issuer:    &intPEM,
+			key:       &intPKPEM,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
+			expErr:    true,
 		},
 		"if all x509 files exist but no JWT files, return certs and expect to generate JWT": {
 			rootFile: &rootPEM,
@@ -190,7 +170,7 @@ func TestSelfhosted_get(t *testing.T) {
 			jwtKey:   nil,
 			jwksData: nil,
 			expBundle: bundle.Bundle{
-				X509: bundle.X509{
+				X509: &bundle.X509{
 					TrustAnchors: rootPEM,
 					IssChainPEM:  intPEM,
 					IssKeyPEM:    intPKPEM,
@@ -198,8 +178,7 @@ func TestSelfhosted_get(t *testing.T) {
 					IssKey:       intPK,
 				},
 			},
-			expGenCheck: genJWTCheck,
-			expErr:      false,
+			expErr: false,
 		},
 		"if jwt key exists but jwks doesn't, expect to generate JWT": {
 			rootFile: &rootPEM,
@@ -207,7 +186,7 @@ func TestSelfhosted_get(t *testing.T) {
 			key:      &intPKPEM,
 			jwksData: nil,
 			expBundle: bundle.Bundle{
-				X509: bundle.X509{
+				X509: &bundle.X509{
 					TrustAnchors: rootPEM,
 					IssChainPEM:  intPEM,
 					IssKeyPEM:    intPKPEM,
@@ -215,38 +194,42 @@ func TestSelfhosted_get(t *testing.T) {
 					IssKey:       intPK,
 				},
 			},
-			expGenCheck: genJWTCheck,
-			expErr:      false,
+			expErr: false,
 		},
-		"if jwks exists but jwt key doesn't, expect error": {
-			rootFile:    &rootPEM,
-			issuer:      &intPEM,
-			key:         &intPKPEM,
-			jwtKey:      nil,
-			jwksData:    &jwksBytes,
-			expBundle:   bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      true,
+		"if jwks exists but jwt key doesn't, expect nil": {
+			rootFile: &rootPEM,
+			issuer:   &intPEM,
+			key:      &intPKPEM,
+			jwtKey:   nil,
+			jwksData: &jwksBytes,
+			expBundle: bundle.Bundle{
+				X509: &bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expErr: false,
 		},
 		"if jwt key is invalid, expect error": {
-			rootFile:    &rootPEM,
-			issuer:      &intPEM,
-			key:         &intPKPEM,
-			jwtKey:      &intPKPEM, // Using an invalid JWT key
-			jwksData:    &jwksBytes,
-			expBundle:   bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      true,
+			rootFile:  &rootPEM,
+			issuer:    &intPEM,
+			key:       &intPKPEM,
+			jwtKey:    &intPKPEM, // Using an invalid JWT key
+			jwksData:  &jwksBytes,
+			expBundle: bundle.Bundle{},
+			expErr:    true,
 		},
 		"if jwks is invalid, expect error": {
-			rootFile:    &rootPEM,
-			issuer:      &intPEM,
-			key:         &intPKPEM,
-			jwtKey:      &signingKeyPEM,
-			jwksData:    &intPKPEM, // Using invalid JWKS data
-			expBundle:   bundle.Bundle{},
-			expGenCheck: nil,
-			expErr:      true,
+			rootFile:  &rootPEM,
+			issuer:    &intPEM,
+			key:       &intPKPEM,
+			jwtKey:    &signingKeyPEM,
+			jwksData:  &intPKPEM, // Using invalid JWKS data
+			expBundle: bundle.Bundle{},
+			expErr:    true,
 		},
 		"if all files exist including valid JWT components, return complete bundle": {
 			rootFile: &rootPEM,
@@ -255,22 +238,21 @@ func TestSelfhosted_get(t *testing.T) {
 			jwtKey:   &signingKeyPEM,
 			jwksData: &jwksBytes,
 			expBundle: bundle.Bundle{
-				X509: bundle.X509{
+				X509: &bundle.X509{
 					TrustAnchors: rootPEM,
 					IssChainPEM:  intPEM,
 					IssKeyPEM:    intPKPEM,
 					IssChain:     []*x509.Certificate{intCrt},
 					IssKey:       intPK,
 				},
-				JWT: bundle.JWT{
+				JWT: &bundle.JWT{
 					SigningKey:    signingKey,
 					SigningKeyPEM: signingKeyPEM,
 					JWKSJson:      jwksBytes,
 					JWKS:          jwks,
 				},
 			},
-			expGenCheck: genNoneCheck,
-			expErr:      false,
+			expErr: false,
 		},
 		"if only JWT files exist but no x509 files, expect to generate x509": {
 			rootFile: nil,
@@ -279,30 +261,30 @@ func TestSelfhosted_get(t *testing.T) {
 			jwtKey:   &signingKeyPEM,
 			jwksData: &jwksBytes,
 			expBundle: bundle.Bundle{
-				JWT: bundle.JWT{
+				JWT: &bundle.JWT{
 					SigningKey:    signingKey,
 					SigningKeyPEM: signingKeyPEM,
 					JWKSJson:      jwksBytes,
 					JWKS:          jwks,
 				},
 			},
-			expGenCheck: genX509Check,
-			expErr:      false,
+			expErr: false,
 		},
 		"if no files exist at all, expect to generate both x509 and JWT": {
-			rootFile:    nil,
-			issuer:      nil,
-			key:         nil,
-			jwtKey:      nil,
-			jwksData:    nil,
-			expBundle:   bundle.Bundle{},
-			expGenCheck: genAllCheck,
-			expErr:      false,
+			rootFile:  nil,
+			issuer:    nil,
+			key:       nil,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
+			expErr:    false,
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Helper()
+
 			dir := t.TempDir()
 			rootFile := filepath.Join(dir, "root.pem")
 			issuerFile := filepath.Join(dir, "issuer.pem")
@@ -338,12 +320,9 @@ func TestSelfhosted_get(t *testing.T) {
 				require.NoError(t, os.WriteFile(jwksFile, *test.jwksData, writePerm))
 			}
 
-			bundle, gen, err := s.get(t.Context())
+			bundle, err := s.get(t.Context())
 			assert.Equal(t, test.expErr, err != nil, "expected error: %v, but got %v", test.expErr, err)
 			bundlesEqual(t, test.expBundle, bundle)
-			if test.expGenCheck != nil {
-				assert.True(t, test.expGenCheck(gen), "generate check failed, got %v", gen)
-			}
 		})
 	}
 }
