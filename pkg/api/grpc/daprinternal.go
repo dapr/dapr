@@ -193,6 +193,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	}
+	if res == nil {
+		statusCode = int32(codes.Internal)
+		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, errors.New("no response received from stream"))
+	}
+
 	defer res.Close()
 	statusCode = res.Status().GetCode()
 
