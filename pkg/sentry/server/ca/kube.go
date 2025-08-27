@@ -120,11 +120,13 @@ func (k *kube) store(ctx context.Context, bundle bundle.Bundle) error {
 	secret.Data[filepath.Base(k.config.IssuerKeyPath)] = bundle.X509.IssKeyPEM
 
 	// Add JWT related data if available
-	if bundle.JWT.SigningKeyPEM != nil {
-		secret.Data[filepath.Base(k.config.JWT.SigningKeyPath)] = bundle.JWT.SigningKeyPEM
-	}
-	if bundle.JWT.JWKSJson != nil {
-		secret.Data[filepath.Base(k.config.JWT.JWKSPath)] = bundle.JWT.JWKSJson
+	if bundle.JWT != nil {
+		if bundle.JWT.SigningKeyPEM != nil {
+			secret.Data[filepath.Base(k.config.JWT.SigningKeyPath)] = bundle.JWT.SigningKeyPEM
+		}
+		if bundle.JWT.JWKSJson != nil {
+			secret.Data[filepath.Base(k.config.JWT.JWKSPath)] = bundle.JWT.JWKSJson
+		}
 	}
 
 	// Update the Secret
