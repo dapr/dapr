@@ -81,6 +81,90 @@ func TestParseEnvString(t *testing.T) {
 				},
 			},
 		},
+		{
+			testName: "OTEL_RESOURCE_ATTRIBUTES with equals in value",
+			envStr:   "OTEL_SERVICE_NAME=todo-service-daprd,OTEL_RESOURCE_ATTRIBUTES=service.namespace=testing-fix",
+			expLen:   2,
+			expKeys:  []string{"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "OTEL_SERVICE_NAME",
+					Value: "todo-service-daprd",
+				},
+				{
+					Name:  "OTEL_RESOURCE_ATTRIBUTES",
+					Value: "service.namespace=testing-fix",
+				},
+			},
+		},
+		{
+			testName: "OTEL_RESOURCE_ATTRIBUTES in middle with other env vars",
+			envStr:   "ENV_BEFORE=value1,OTEL_RESOURCE_ATTRIBUTES=service.namespace=prod,service.version=1.0.0,ENV_AFTER=value2",
+			expLen:   3,
+			expKeys:  []string{"ENV_BEFORE", "OTEL_RESOURCE_ATTRIBUTES", "ENV_AFTER"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "ENV_BEFORE",
+					Value: "value1",
+				},
+				{
+					Name:  "OTEL_RESOURCE_ATTRIBUTES",
+					Value: "service.namespace=prod,service.version=1.0.0",
+				},
+				{
+					Name:  "ENV_AFTER",
+					Value: "value2",
+				},
+			},
+		},
+		{
+			testName: "Multiple env vars with OTEL_RESOURCE_ATTRIBUTES containing multiple attributes",
+			envStr:   "OTEL_SERVICE_NAME=my-sidecar,OTEL_RESOURCE_ATTRIBUTES=service.namespace=prod,k8s.pod.name=my-pod,k8s.deployment.name=my-app,DEBUG=true,LOG_LEVEL=info",
+			expLen:   4,
+			expKeys:  []string{"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES", "DEBUG", "LOG_LEVEL"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "OTEL_SERVICE_NAME",
+					Value: "my-sidecar",
+				},
+				{
+					Name:  "OTEL_RESOURCE_ATTRIBUTES",
+					Value: "service.namespace=prod,k8s.pod.name=my-pod,k8s.deployment.name=my-app",
+				},
+				{
+					Name:  "DEBUG",
+					Value: "true",
+				},
+				{
+					Name:  "LOG_LEVEL",
+					Value: "info",
+				},
+			},
+		},
+		{
+			testName: "Complex scenario with spaces and multiple equals",
+			envStr:   "APP_NAME=test-app , OTEL_RESOURCE_ATTRIBUTES=service.namespace=staging,deployment.environment.name=test,service.instance.id=abc-123 , DB_CONNECTION=host=localhost;port=5432;user=admin , ENABLE_METRICS=true",
+			expLen:   4,
+			expKeys:  []string{"APP_NAME", "OTEL_RESOURCE_ATTRIBUTES", "DB_CONNECTION", "ENABLE_METRICS"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "APP_NAME",
+					Value: "test-app",
+				},
+				{
+					Name:  "OTEL_RESOURCE_ATTRIBUTES",
+					Value: "service.namespace=staging,deployment.environment.name=test,service.instance.id=abc-123",
+				},
+				{
+					Name:  "DB_CONNECTION",
+					Value: "host=localhost;port=5432;user=admin",
+				},
+				{
+					Name:  "ENABLE_METRICS",
+					Value: "true",
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {

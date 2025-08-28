@@ -492,7 +492,7 @@ func parseEnvVars(envString string, fromSecret bool) (envKeys []string, envVars 
 	envVars = make([]corev1.EnvVar, 0, len(parts))
 
 	for _, s := range parts {
-		pairs := strings.Split(strings.TrimSpace(s), "=")
+		pairs := strings.SplitN(strings.TrimSpace(s), "=", 2)
 		if len(pairs) != 2 {
 			continue
 		}
