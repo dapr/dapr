@@ -50,16 +50,16 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 
 	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	bundle, err := bundle.Generate(bundle.GenerateOptions{
+	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
 		X509RootKey:      rootKey,
-		JWTRootKey:       jwtKey,
 		TrustDomain:      "integration.test.dapr.io",
 		AllowedClockSkew: time.Second * 20,
 		OverrideCATTL:    nil,
-		MissingCredentials: bundle.MissingCredentials{
-			X509: true,
-			JWT:  true,
-		},
+	})
+	require.NoError(t, err)
+	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+		JWTRootKey:  jwtKey,
+		TrustDomain: "integration.test.dapr.io",
 	})
 	require.NoError(t, err)
 
@@ -73,20 +73,23 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 			spiffeid.RequireFromString("spiffe://localhost/ns/default/dapr-sentry").URL(),
 		},
 	}
-	leafCertDer, err := x509.CreateCertificate(rand.Reader, leafCert, bundle.X509.IssChain[0], &leafKey.PublicKey, bundle.X509.IssKey)
+	leafCertDer, err := x509.CreateCertificate(rand.Reader, leafCert, x509bundle.IssChain[0], &leafKey.PublicKey, x509bundle.IssKey)
 	require.NoError(t, err)
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS13,
 		Certificates: []tls.Certificate{
 			{
-				Certificate: [][]byte{leafCertDer, bundle.X509.IssChain[0].Raw},
+				Certificate: [][]byte{leafCertDer, x509bundle.IssChain[0].Raw},
 				PrivateKey:  leafKey,
 			},
 		},
 	}
 
 	s := &Sentry{
-		bundle: bundle,
+		bundle: bundle.Bundle{
+			X509: x509bundle,
+			JWT:  jwtbundle,
+		},
 	}
 
 	opts := options{
