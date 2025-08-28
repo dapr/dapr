@@ -309,6 +309,10 @@ func newDaprRuntime(ctx context.Context,
 		EnableClusteredDeployment: globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
 	})
 
+	if runtimeConfig.schedulerStreams < 1 {
+		return nil, fmt.Errorf("must define at least 1 scheduler stream, got %d", runtimeConfig.schedulerStreams)
+	}
+
 	rt := &DaprRuntime{
 		runtimeConfig:         runtimeConfig,
 		globalConfig:          globalConfig,
