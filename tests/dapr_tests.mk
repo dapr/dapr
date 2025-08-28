@@ -490,6 +490,7 @@ setup-test-env-kafka:
 	  --set broker.persistence.size=1Gi \
 	  --set broker.logPersistence.size=1Gi \
 	  --set zookeeper.persistence.size=1Gi \
+	  --set image.repository=bitnamilegacy/kafka \
 	  --timeout 10m0s
 
 # install rabbitmq to the cluster
