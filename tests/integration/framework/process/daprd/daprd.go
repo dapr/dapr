@@ -156,6 +156,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.maxBodySize != nil {
 		args = append(args, "--max-body-size="+*opts.maxBodySize)
 	}
+	if opts.allowedOrigins != nil {
+		args = append(args, "--allowed-origins="+*opts.allowedOrigins)
+	}
 
 	ns := "default"
 	if opts.namespace != nil {
