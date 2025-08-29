@@ -132,7 +132,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"tool message"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"Tool Response for tool ID 'tool-123' with name 'tool name': tool message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("multiple messages in conversation", func(t *testing.T) {
