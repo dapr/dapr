@@ -2196,10 +2196,10 @@ func testSecurity(t *testing.T) security.Handler {
 func TestOtelResourceDetection(t *testing.T) {
 	tests := []struct {
 		name                string
-		otelServiceName     string            
-		otelResourceAttrs   string            
-		fallbackAppID       string            
-		expectedServiceName string            
+		otelServiceName     string
+		otelResourceAttrs   string
+		fallbackAppID       string
+		expectedServiceName string
 		expectedAttrs       map[string]string
 	}{
 		{
@@ -2225,9 +2225,9 @@ func TestOtelResourceDetection(t *testing.T) {
 			fallbackAppID:       "my-app",
 			expectedServiceName: "my-app",
 			expectedAttrs: map[string]string{
-				"k8s.pod.uid":       "123-456-789",
+				"k8s.pod.uid":        "123-456-789",
 				"k8s.namespace.name": "default",
-				"k8s.pod.name":      "my-pod",
+				"k8s.pod.name":       "my-pod",
 			},
 		},
 		{
@@ -2260,7 +2260,7 @@ func TestOtelResourceDetection(t *testing.T) {
 			t.Setenv("OTEL_SERVICE_NAME", tc.otelServiceName)
 			t.Setenv("OTEL_RESOURCE_ATTRIBUTES", tc.otelResourceAttrs)
 
-			ctx := context.Background()
+			ctx := t.Context()
 			r := createOtelResource(ctx, tc.fallbackAppID)
 
 			// Convert attributes to map for easier assertions
@@ -2269,11 +2269,11 @@ func TestOtelResourceDetection(t *testing.T) {
 			for _, attr := range attrs {
 				attrMap[string(attr.Key)] = attr.Value.AsString()
 			}
-			
+
 			// Verify service.name attribute
 			serviceName, exists := attrMap["service.name"]
 			require.True(t, exists, "service.name attribute should exist")
-			assert.Equal(t, tc.expectedServiceName, serviceName, 
+			assert.Equal(t, tc.expectedServiceName, serviceName,
 				"service.name should be %s, but got %s", tc.expectedServiceName, serviceName)
 
 			// Verify additional expected attributes
@@ -2281,7 +2281,7 @@ func TestOtelResourceDetection(t *testing.T) {
 				value, exists := attrMap[key]
 				assert.True(t, exists, "Expected attribute %s to exist", key)
 				if exists {
-					assert.Equal(t, expectedValue, value, 
+					assert.Equal(t, expectedValue, value,
 						"Attribute %s should be %s, but got %s", key, expectedValue, value)
 				}
 			}
