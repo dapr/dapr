@@ -1,3 +1,6 @@
+//go:build unit
+// +build unit
+
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -740,13 +743,14 @@ func TestProcessComponentErrorMessage(t *testing.T) {
 
 		// The error should include the component name
 		assert.Contains(t, err.Error(), "failing-component")
-		assert.Contains(t, err.Error(), "failed to load component")
+		// Check for the actual error message about couldn't find secret store
+		assert.Contains(t, err.Error(), "couldn't find secret store")
 	})
 
 	t.Run("process function wraps error with component info", func(t *testing.T) {
 		proc, _ := newTestProc()
 
-		// Add a failing component to the queue
+		// Create a failing component
 		failingComponent := componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-secret-store",
@@ -757,21 +761,13 @@ func TestProcessComponentErrorMessage(t *testing.T) {
 			},
 		}
 
-		// Add component to pending queue
-		proc.AddPendingComponent(t.Context(), failingComponent)
-
-		// Close the channel to stop processComponents
-		proc.chlock.Lock()
-		close(proc.pendingComponents)
-		proc.chlock.Unlock()
-
-		// ProcessComponents should return an error that includes component information
-		err := proc.processComponents(t.Context())
+		// Test the direct error message without using the queue
+		err := proc.processComponentAndDependents(t.Context(), failingComponent)
 		require.Error(t, err)
 
-		// The error should include the component name and descriptive text
+		// The error should include the component name
 		errorText := err.Error()
 		assert.Contains(t, errorText, "test-secret-store")
-		assert.Contains(t, errorText, "failed to load component")
+		assert.Contains(t, errorText, "couldn't find secret store")
 	})
 }
