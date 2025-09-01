@@ -28,6 +28,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 )
 
 func TestGetMetadata(t *testing.T) {
@@ -107,6 +108,11 @@ func TestGetMetadata(t *testing.T) {
 				},
 				appConnectionConfig: appConnectionConfig,
 				globalConfig:        &config.Configuration{},
+				workflowEngine: wfenginefake.New().WithRuntimeMetadata(func() *runtimev1pb.MetadataWorkflows {
+					return &runtimev1pb.MetadataWorkflows{
+						ConnectedWorkers: 1,
+					}
+				}),
 			}
 
 			response, err := fakeAPI.GetMetadata(t.Context(), &runtimev1pb.GetMetadataRequest{})
@@ -127,7 +133,7 @@ func TestGetMetadata(t *testing.T) {
 				`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead","type":2}],` +
 				`"app_connection_properties":{"port":1234,"protocol":"http","channel_address":"1.2.3.4","max_concurrency":10` +
 				healthCheckJSON +
-				`"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true}}`
+				`"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true},"workflows":{"connected_workers":1}}`
 			assert.Equal(t, expectedResponse, string(bytes))
 		})
 	}
