@@ -22,18 +22,18 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/state/http/memory"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {
 	suite.Register(new(httpTest))
-	fmt.Println("Registering HTTP state test")
 }
 
 type httpTest struct {
@@ -77,7 +77,6 @@ func (h *httpTest) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		assert.Equal(t, `"value1"`, string(body))
-
 	})
 
 	t.Run("Slash containing keys", func(t *testing.T) {
@@ -105,9 +104,8 @@ func (h *httpTest) Run(t *testing.T, ctx context.Context) {
 
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.Equal(t, 0, len(body), "Always give empty body with 204")
+		assert.Empty(t, body, "Always give empty body with 204")
 	})
-
 }
 
 func saveKey(t *testing.T, httpClient *http.Client, postURL, key string, value string, ctx context.Context) {
