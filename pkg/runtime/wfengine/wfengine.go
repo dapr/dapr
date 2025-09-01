@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -27,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/config"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
@@ -43,6 +45,7 @@ type Interface interface {
 	Run(context.Context) error
 	RegisterGrpcServer(*grpc.Server)
 	Client() workflows.Workflow
+	RuntimeMetadata() *runtimev1pb.MetadataWorkflows
 
 	ActivityActorType() string
 }
@@ -60,9 +63,10 @@ type Options struct {
 }
 
 type engine struct {
-	appID     string
-	namespace string
-	actors    actors.Interface
+	appID             string
+	namespace         string
+	actors            actors.Interface
+	getWorkItemsCount *atomic.Int64
 
 	worker  backend.TaskHubWorker
 	backend *backendactors.Actors
@@ -83,15 +87,15 @@ func New(opts Options) Interface {
 		EnableClusteredDeployment: opts.EnableClusteredDeployment,
 	})
 
-	var activeConns uint64
+	var getWorkItemsCount *atomic.Int64 = new(atomic.Int64)
 	var lock sync.Mutex
 	executor, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
 			lock.Lock()
 			defer lock.Unlock()
 
-			activeConns++
-			if activeConns == 1 {
+			getWorkItemsCount.Add(1)
+			if getWorkItemsCount.Load() == 1 {
 				log.Debug("Registering workflow actors")
 				return abackend.RegisterActors(ctx)
 			}
@@ -106,8 +110,8 @@ func New(opts Options) Interface {
 				ctx = context.Background()
 			}
 
-			activeConns--
-			if activeConns == 0 {
+			getWorkItemsCount.Add(-1)
+			if getWorkItemsCount.Load() == 0 {
 				log.Debug("Unregistering workflow actors")
 				return abackend.UnRegisterActors(ctx)
 			}
@@ -153,6 +157,7 @@ func New(opts Options) Interface {
 		worker:               worker,
 		backend:              abackend,
 		registerGrpcServerFn: registerGrpcServerFn,
+		getWorkItemsCount:    getWorkItemsCount,
 		client: &client{
 			logger: wfBackendLogger,
 			client: backend.NewTaskHubClient(abackend),
@@ -193,4 +198,10 @@ func (wfe *engine) Client() workflows.Workflow {
 
 func (wfe *engine) ActivityActorType() string {
 	return wfe.backend.ActivityActorType()
+}
+
+func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
+	return &runtimev1pb.MetadataWorkflows{
+		ConnectedWorkers: int32(wfe.getWorkItemsCount.Load()),
+	}
 }

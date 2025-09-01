@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/workflows"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 type Fake struct {
@@ -88,4 +89,8 @@ func (f *Fake) Client() workflows.Workflow {
 
 func (f *Fake) ActivityActorType() string {
 	return ""
+}
+
+func (f *Fake) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
+	return &runtimev1pb.MetadataWorkflows{}
 }
