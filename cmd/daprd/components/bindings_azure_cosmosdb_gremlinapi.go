@@ -16,17 +16,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/bindings/alicloud/dingtalk/webhook"
+	"github.com/dapr/components-contrib/bindings/azure/cosmosdb/gremlinapi"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/kit/logger"
 )
 
 func init() {
-	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
-		return webhook.NewDingTalkWebhook(l)
-	}, "dingtalk.webhook")
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
-		return webhook.NewDingTalkWebhook(l)
-	}, "dingtalk.webhook")
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(gremlinapi.NewCosmosDBGremlinAPI, "azure.cosmosdb.gremlinapi")
 }

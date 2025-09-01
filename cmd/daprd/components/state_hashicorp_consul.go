@@ -16,10 +16,10 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/nameresolution/consul"
-	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
+	"github.com/dapr/components-contrib/state/hashicorp/consul"
+	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
 func init() {
-	nrLoader.DefaultRegistry.RegisterComponent(consul.NewResolver, "consul")
+	stateLoader.DefaultRegistry.RegisterComponent(consul.NewConsulStateStore, "hashicorp.consul", "consul")
 }

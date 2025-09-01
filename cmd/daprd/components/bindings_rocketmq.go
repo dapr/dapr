@@ -1,7 +1,7 @@
 //go:build allcomponents
 
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,10 +16,18 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/pubsub/azure/servicebus/queues"
-	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
+	"github.com/dapr/components-contrib/bindings/rocketmq"
+	"github.com/dapr/dapr/pkg/components/bindings"
+	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	"github.com/dapr/dapr/pkg/logger"
 )
 
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(queues.NewAzureServiceBusQueues, "azure.servicebus.queues", "azure.servicebusqueues")
+	bindingsLoader.DefaultRegistry.RegisterInputBinding(func(l logger.Logger) bindings.InputBinding {
+		return rocketmq.NewRocketMQInput(l)
+	}, "rocketmq")
+
+	bindingsLoader.DefaultRegistry.RegisterOutputBinding(func(l logger.Logger) bindings.OutputBinding {
+		return rocketmq.NewRocketMQOutput(l)
+	}, "rocketmq")
 }
