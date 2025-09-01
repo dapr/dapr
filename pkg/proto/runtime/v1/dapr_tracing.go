@@ -14,6 +14,8 @@ limitations under the License.
 package runtime
 
 import (
+	"strconv"
+	
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 )
 
@@ -29,12 +31,26 @@ func (x *PublishEventRequest) AppendSpanAttributes(rpcMethod string, m map[strin
 	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
 	m[diagConsts.MessagingSystemSpanAttributeKey] = diagConsts.PubsubBuildingBlockType
 	m[diagConsts.MessagingDestinationSpanAttributeKey] = x.GetTopic()
+	m[diagConsts.MessagingOperationNameSpanAttributeKey] = "publish"
+	// Update span name to follow semantic conventions
+	m[diagConsts.DaprAPISpanNameInternal] = "publish " + x.GetTopic()
+	// Add message body size if data is present
+	if data := x.GetData(); data != nil {
+		m[diagConsts.MessagingMessageBodySizeSpanAttributeKey] = strconv.Itoa(len(data))
+	}
 }
 
 func (x *BulkPublishRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
 	m[diagConsts.MessagingSystemSpanAttributeKey] = diagConsts.PubsubBuildingBlockType
 	m[diagConsts.MessagingDestinationSpanAttributeKey] = x.GetTopic()
+	m[diagConsts.MessagingOperationNameSpanAttributeKey] = "publish"
+	// Update span name to follow semantic conventions
+	m[diagConsts.DaprAPISpanNameInternal] = "publish " + x.GetTopic()
+	// Add batch message count
+	if entries := x.GetEntries(); entries != nil {
+		m[diagConsts.MessagingBatchMessageCountSpanAttributeKey] = strconv.Itoa(len(entries))
+	}
 }
 
 func (x *InvokeBindingRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {

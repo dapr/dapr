@@ -102,8 +102,11 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			// For the dapr.proto.internals package, this generates ServerSpan.
 			// This is invoked by other Dapr runtimes during service invocation.
 			spanKind = trace.WithSpanKind(trace.SpanKindServer)
+		} else if strings.Contains(info.FullMethod, "PublishEvent") || strings.Contains(info.FullMethod, "BulkPublish") {
+			// For publish operations, use Producer span kind (semantic conventions)
+			spanKind = trace.WithSpanKind(trace.SpanKindProducer)
 		} else {
-			// For the dapr.proto.runtime package, this generates ClientSpan.
+			// For other dapr.proto.runtime package calls, this generates ClientSpan.
 			// This is invoked by clients (apps) while invoking Dapr APIs.
 			spanKind = trace.WithSpanKind(trace.SpanKindClient)
 		}

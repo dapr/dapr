@@ -29,6 +29,7 @@ import (
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -96,7 +97,19 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	statusCode := int(resp.Status().GetCode())
 
 	if span != nil {
-		m := diag.ConstructSubscriptionSpanAttributes(msg.Topic)
+		// Extract message ID from cloud event
+		messageID := ""
+		if msgID, ok := cloudEvent[contribpubsub.IDField]; ok {
+			messageID = fmt.Sprintf("%v", msgID)
+		}
+		// Use SubscriberID as consumer group name
+		consumerGroup := string(msg.SubscriberID)
+		
+		m := diag.ConstructSubscriptionSpanAttributesWithMessage(msg.Topic, messageID, consumerGroup)
+		// Add message body size if available
+		if len(msg.Data) > 0 {
+			m[diagConsts.MessagingMessageBodySizeSpanAttributeKey] = fmt.Sprintf("%d", len(msg.Data))
+		}
 		diag.AddAttributesToSpan(span, m)
 		diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
 		span.End()
