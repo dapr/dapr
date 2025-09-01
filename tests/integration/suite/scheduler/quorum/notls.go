@@ -122,9 +122,9 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 	// Check if the job's key exists in the etcd database
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		chosenSchedulerEtcdKeys := getEtcdKeys(t, ctx, chosenSchedulerPort)
-		n.checkKeysForJobName(t, "testJob", chosenSchedulerEtcdKeys)
-	}, time.Second*40, time.Millisecond*10, "failed to find job's key in etcd")
+		chosenSchedulerEtcdKeys := getEtcdKeys(c, ctx, chosenSchedulerPort)
+		n.checkKeysForJobName(c, "testJob", chosenSchedulerEtcdKeys)
+	}, time.Second*20, time.Millisecond*10, "failed to find job's key in etcd")
 
 	// ensure data exists on ALL schedulers
 	for i := range n.schedulers {
@@ -134,15 +134,13 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		require.NotEmptyf(t, diffSchedulerPort, "diffSchedulerPort should not be empty")
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			diffSchedulerEtcdKeys := getEtcdKeys(t, ctx, diffSchedulerPort)
-			n.checkKeysForJobName(t, "testJob", diffSchedulerEtcdKeys)
-		}, time.Second*40, time.Millisecond*10, "failed to find job's key in etcd")
+			diffSchedulerEtcdKeys := getEtcdKeys(c, ctx, diffSchedulerPort)
+			n.checkKeysForJobName(c, "testJob", diffSchedulerEtcdKeys)
+		}, time.Second*20, time.Millisecond*10, "failed to find job's key in etcd")
 	}
 }
 
-func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
-	t.Helper()
-
+func (n *notls) checkKeysForJobName(c *assert.CollectT, jobName string, keys []*mvccpb.KeyValue) {
 	// should have the same path separator across OS
 	jobPrefix := "dapr/jobs/app"
 	found := false
@@ -152,20 +150,20 @@ func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb
 			break
 		}
 	}
-	require.True(t, found, "job's key not found: '%s'", jobName)
+	assert.True(c, found, "job's key not found: '%s'", jobName)
 }
 
-func getEtcdKeys(t *testing.T, ctx context.Context, port int) []*mvccpb.KeyValue {
+func getEtcdKeys(c *assert.CollectT, ctx context.Context, port int) []*mvccpb.KeyValue {
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(port)},
 		DialTimeout: 40 * time.Second,
 	})
-	require.NoError(t, err)
+	require.NoError(c, err)
 	defer client.Close()
 
 	// Get keys with prefix
 	resp, err := client.Get(ctx, "", clientv3.WithPrefix())
-	require.NoError(t, err)
+	require.NoError(c, err)
 
 	return resp.Kvs
 }
