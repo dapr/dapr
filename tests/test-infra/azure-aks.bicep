@@ -72,9 +72,10 @@ resource roleAssignContainerRegistry 'Microsoft.Authorization/roleAssignments@20
 // Network profile when the cluster has Windows nodes
 var networkProfileWindows = {
   networkPlugin: 'azure'
-  serviceCidr: '10.0.0.0/16'
-  dnsServiceIP: '10.0.0.10'
+  serviceCidr: '10.96.0.0/16'
+  dnsServiceIP: '10.96.0.10'
   dockerBridgeCidr: '172.17.0.1/16'
+  podCidrs: ['192.168.0.0/16']
 }
 
 // Network profile when the cluster has only Linux nodes
