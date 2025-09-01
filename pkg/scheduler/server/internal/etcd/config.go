@@ -58,7 +58,7 @@ func config(opts Options) (*embed.Config, error) {
 			ClientCertFile: filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
 			ClientKeyFile:  filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
 			TrustedCAFile:  filepath.Join(*opts.Security.IdentityDir(), "ca.pem"),
-			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc", opts.Name, opts.Security.ControlPlaneNamespace()),
+			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc.cluster.local", opts.Name, opts.Security.ControlPlaneNamespace()),
 		}
 
 		b, err := os.ReadFile(filepath.Join(*opts.Security.IdentityDir(), "cert.pem"))
