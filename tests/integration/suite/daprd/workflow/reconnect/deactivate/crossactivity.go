@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reconnect
+package deactivate
 
 import (
 	"context"
@@ -78,6 +78,11 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(cancel)
 	require.NoError(t, cl.StartWorkItemListener(cctx, c.workflow.Registry()))
 
+	// verify worker is connected by checking the expected registered actors
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		assert.Len(col, c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+	}, time.Second*10, time.Millisecond*10)
+
 	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
 
@@ -86,6 +91,10 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	cancel()
+	// verify worker is disconnected by checking the expected registered actors
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		assert.Len(col, c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 0)
+	}, time.Second*10, time.Millisecond*10)
 	close(c.waitCh)
 
 	cl = client.NewTaskHubGrpcClient(c.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
@@ -93,7 +102,9 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(cancel)
 	require.NoError(t, cl.StartWorkItemListener(cctx, c.workflow.Registry()))
 
-	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
+	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+	t.Cleanup(waitCompletionCancel)
+	meta, err := cl.WaitForOrchestrationCompletion(waitCompletionCtx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 

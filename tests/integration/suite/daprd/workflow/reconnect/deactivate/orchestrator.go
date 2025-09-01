@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reconnect
+package deactivate
 
 import (
 	"context"
@@ -32,16 +32,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(activity))
+	suite.Register(new(orchestrator))
 }
 
-type activity struct {
+type orchestrator struct {
 	workflow *workflow.Workflow
 	called   atomic.Int64
 	waitCh   chan struct{}
 }
 
-func (a *activity) Setup(t *testing.T) []framework.Option {
+func (a *orchestrator) Setup(t *testing.T) []framework.Option {
 	a.waitCh = make(chan struct{})
 	a.workflow = workflow.New(t)
 
@@ -50,15 +50,15 @@ func (a *activity) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (a *activity) Run(t *testing.T, ctx context.Context) {
+func (a *orchestrator) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
 	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+		a.called.Add(1)
+		<-a.waitCh
 		return nil, ctx.CallActivity("bar").Await(nil)
 	})
 	a.workflow.Registry().AddActivityN("bar", func(c task.ActivityContext) (any, error) {
-		a.called.Add(1)
-		<-a.waitCh
 		return "", nil
 	})
 
@@ -68,7 +68,14 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+	// verify worker is connected by checking the expected registered actors
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+	}, time.Second*10, time.Millisecond*10)
+
+	// scheduling a workflow with a provided start time
+	// this call won't wait for the workflow to start executing
+	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithStartTime(time.Now()))
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -76,15 +83,21 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	cancel()
+	// verify worker is disconnected by checking the expected registered actors
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 0)
+	}, time.Second*10, time.Millisecond*10)
 	close(a.waitCh)
 
 	cctx, cancel = context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
 
-	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+	t.Cleanup(waitCompletionCancel)
+	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 
-	assert.Equal(t, int64(2), a.called.Load())
+	assert.Equal(t, int64(3), a.called.Load())
 }

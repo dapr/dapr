@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reconnect
+package reuse
 
 import (
 	"context"
@@ -59,12 +59,11 @@ func (a *startretry) Run(t *testing.T, ctx context.Context) {
 	worker1Ctx, worker1Cancel := context.WithCancel(ctx)
 
 	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		if a.orchestratorCalls.Load() == 0 {
+		a.orchestratorCalls.Add(1)
+		if a.orchestratorCalls.Load() == 1 {
 			close(a.workflowStarted)
 			<-a.workflowScheduled
-			worker1Cancel()
 		}
-		a.orchestratorCalls.Add(1)
 		return nil, ctx.CallActivity("bar").Await(nil)
 	})
 	a.workflow.Registry().AddActivityN("bar", func(c task.ActivityContext) (any, error) {
@@ -92,11 +91,19 @@ func (a *startretry) Run(t *testing.T, ctx context.Context) {
 	// start another worker so the actors don't get deactivated
 	require.NoError(t, client.StartWorkItemListener(ctx, a.workflow.Registry()))
 
-	// TODO add workflows streams count to metadata
-	// TODO poll until there are 2 streams
-	// closing this channel will trigger closing the first worker
+	// verify we have 2 connected workers
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int(2), a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+	}, time.Second*10, time.Millisecond*10)
+
+	// stop first worker
+	worker1Cancel()
+	// verify one worker disconnected
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int(1), a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+	}, time.Second*10, time.Millisecond*10)
+
 	close(a.workflowScheduled)
-	// TODO poll until there are 1 stream
 
 	// verify a worker is still connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -110,5 +117,4 @@ func (a *startretry) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
 
 	assert.Equal(t, int64(1), a.activityCalls.Load())
-	assert.Equal(t, int64(3), a.orchestratorCalls.Load())
 }
