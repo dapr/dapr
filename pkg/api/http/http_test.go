@@ -80,6 +80,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
+	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
@@ -1643,6 +1644,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			AppConnectionConfig: appConnectionConfig,
 			GlobalConfig:        &config.Configuration{},
 			Actors:              actors,
+			WorkflowEngine:      wfenginefake.New(),
 		}),
 	}
 

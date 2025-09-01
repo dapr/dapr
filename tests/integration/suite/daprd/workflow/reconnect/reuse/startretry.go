@@ -93,14 +93,14 @@ func (a *startretry) Run(t *testing.T, ctx context.Context) {
 
 	// verify we have 2 connected workers
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int(2), a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+		assert.Equal(c, 2, a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
 	}, time.Second*10, time.Millisecond*10)
 
 	// stop first worker
 	worker1Cancel()
 	// verify one worker disconnected
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int(1), a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+		assert.Equal(c, 1, a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
 	}, time.Second*10, time.Millisecond*10)
 
 	close(a.workflowScheduled)

@@ -93,7 +93,7 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	cancel()
 	// verify worker is disconnected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		assert.Len(col, c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 0)
+		assert.Empty(col, c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
 	}, time.Second*10, time.Millisecond*10)
 	close(c.waitCh)
 

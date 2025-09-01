@@ -4218,7 +4218,8 @@ func TestMetadata(t *testing.T) {
 					Threshold:     3,
 				},
 			},
-			GlobalConfig: &config.Configuration{},
+			GlobalConfig:   &config.Configuration{},
+			WorkflowEngine: wfenginefake.New(),
 		}),
 	}
 

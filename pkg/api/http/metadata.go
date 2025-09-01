@@ -131,7 +131,7 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 
 				if out.GetWorkflows() != nil {
 					res.Workflows = metadataWorkflows{
-						ConnectedWorkers: int(out.GetWorkflows().GetConnectedWorkers()),
+						ConnectedWorkers: out.GetWorkflows().GetConnectedWorkers(),
 					}
 				}
 
@@ -181,7 +181,7 @@ type metadataResponse struct {
 }
 
 type metadataWorkflows struct {
-	ConnectedWorkers int `json:"connectedWorkers,omitempty"`
+	ConnectedWorkers int32 `json:"connectedWorkers,omitempty"`
 }
 
 type metadataActorRuntime struct {

@@ -91,14 +91,14 @@ func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client.StartWorkItemListener(ctx, r.workflow.Registry()))
 	// verify we have 2 connected workers
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int(2), r.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+		assert.Equal(c, 2, r.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
 	}, time.Second*10, time.Millisecond*10)
 
 	// stop first worker
 	cancel()
 	// verify one worker disconnected
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int(1), r.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+		assert.Equal(c, 1, r.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
 	}, time.Second*10, time.Millisecond*10)
 
 	close(r.awaitingAck)

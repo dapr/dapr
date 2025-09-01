@@ -66,7 +66,7 @@ type engine struct {
 	appID             string
 	namespace         string
 	actors            actors.Interface
-	getWorkItemsCount *atomic.Int64
+	getWorkItemsCount *atomic.Int32
 
 	worker  backend.TaskHubWorker
 	backend *backendactors.Actors
@@ -87,15 +87,14 @@ func New(opts Options) Interface {
 		EnableClusteredDeployment: opts.EnableClusteredDeployment,
 	})
 
-	var getWorkItemsCount *atomic.Int64 = new(atomic.Int64)
+	var getWorkItemsCount atomic.Int32
 	var lock sync.Mutex
 	executor, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
 			lock.Lock()
 			defer lock.Unlock()
 
-			getWorkItemsCount.Add(1)
-			if getWorkItemsCount.Load() == 1 {
+			if getWorkItemsCount.Add(1) == 1 {
 				log.Debug("Registering workflow actors")
 				return abackend.RegisterActors(ctx)
 			}
@@ -110,8 +109,7 @@ func New(opts Options) Interface {
 				ctx = context.Background()
 			}
 
-			getWorkItemsCount.Add(-1)
-			if getWorkItemsCount.Load() == 0 {
+			if getWorkItemsCount.Add(-1) == 0 {
 				log.Debug("Unregistering workflow actors")
 				return abackend.UnRegisterActors(ctx)
 			}
@@ -157,7 +155,7 @@ func New(opts Options) Interface {
 		worker:               worker,
 		backend:              abackend,
 		registerGrpcServerFn: registerGrpcServerFn,
-		getWorkItemsCount:    getWorkItemsCount,
+		getWorkItemsCount:    &getWorkItemsCount,
 		client: &client{
 			logger: wfBackendLogger,
 			client: backend.NewTaskHubClient(abackend),
@@ -202,6 +200,6 @@ func (wfe *engine) ActivityActorType() string {
 
 func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
 	return &runtimev1pb.MetadataWorkflows{
-		ConnectedWorkers: int32(wfe.getWorkItemsCount.Load()),
+		ConnectedWorkers: wfe.getWorkItemsCount.Load(),
 	}
 }
