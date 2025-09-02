@@ -435,6 +435,7 @@ type Metadata struct {
 	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
 	Scheduler            *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
 	ActorRuntime         *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
+	Workflows            *MetadataWorkflows                   `json:"workflows"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
@@ -457,6 +458,10 @@ type MetadataActorRuntime struct {
 	HostReady     bool                               `json:"hostReady"`
 	Placement     string                             `json:"placement"`
 	ActiveActors  []*MetadataActorRuntimeActiveActor `json:"activeActors"`
+}
+
+type MetadataWorkflows struct {
+	ConnectedWorkers int `json:"connectedWorkers,omitempty"`
 }
 
 type MetadataActorRuntimeActiveActor struct {

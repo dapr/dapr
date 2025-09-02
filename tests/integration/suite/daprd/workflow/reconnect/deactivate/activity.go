@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reconnect
+package deactivate
 
 import (
 	"context"
@@ -32,83 +32,70 @@ import (
 )
 
 func init() {
-	suite.Register(new(startretry))
+	suite.Register(new(activity))
 }
 
-type startretry struct {
-	workflow          *workflow.Workflow
-	orchestratorCalls atomic.Int64
-	activityCalls     atomic.Int64
-	workflowStarted   chan struct{}
-	workflowScheduled chan struct{}
+type activity struct {
+	workflow *workflow.Workflow
+	called   atomic.Int64
+	waitCh   chan struct{}
 }
 
-func (a *startretry) Setup(t *testing.T) []framework.Option {
+func (a *activity) Setup(t *testing.T) []framework.Option {
+	a.waitCh = make(chan struct{})
 	a.workflow = workflow.New(t)
-	a.workflowScheduled = make(chan struct{}, 1)
-	a.workflowStarted = make(chan struct{}, 1)
 
 	return []framework.Option{
 		framework.WithProcesses(a.workflow),
 	}
 }
 
-func (a *startretry) Run(t *testing.T, ctx context.Context) {
+func (a *activity) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	worker1Ctx, worker1Cancel := context.WithCancel(ctx)
-
 	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		if a.orchestratorCalls.Load() == 0 {
-			close(a.workflowStarted)
-			<-a.workflowScheduled
-			worker1Cancel()
-		}
-		a.orchestratorCalls.Add(1)
 		return nil, ctx.CallActivity("bar").Await(nil)
 	})
 	a.workflow.Registry().AddActivityN("bar", func(c task.ActivityContext) (any, error) {
-		a.activityCalls.Add(1)
+		a.called.Add(1)
+		<-a.waitCh
 		return "", nil
 	})
 
 	client := client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
 
-	require.NoError(t, client.StartWorkItemListener(worker1Ctx, a.workflow.Registry()))
-	t.Cleanup(worker1Cancel)
+	cctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
 
 	// verify worker is connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
 	}, time.Second*10, time.Millisecond*10)
 
-	// scheduling a workflow with a provided start time
-	// this call won't wait for the workflow to start executing
-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithStartTime(time.Now()))
+	id, err := client.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
 
-	<-a.workflowStarted
-
-	// start another worker so the actors don't get deactivated
-	require.NoError(t, client.StartWorkItemListener(ctx, a.workflow.Registry()))
-
-	// TODO add workflows streams count to metadata
-	// TODO poll until there are 2 streams
-	// closing this channel will trigger closing the first worker
-	close(a.workflowScheduled)
-	// TODO poll until there are 1 stream
-
-	// verify a worker is still connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+		assert.Equal(c, int64(1), a.called.Load())
 	}, time.Second*10, time.Millisecond*10)
+
+	cancel()
+	// verify worker is disconnected by checking the expected registered actors
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Empty(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
+	}, time.Second*10, time.Millisecond*10)
+	close(a.waitCh)
+
+	cctx, cancel = context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
 
 	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
 	t.Cleanup(waitCompletionCancel)
 	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
+	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 
-	assert.Equal(t, int64(1), a.activityCalls.Load())
-	assert.Equal(t, int64(3), a.orchestratorCalls.Load())
+	assert.Equal(t, int64(2), a.called.Load())
 }
