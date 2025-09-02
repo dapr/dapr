@@ -14,6 +14,7 @@ limitations under the License.
 package etcd
 
 import (
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"math"
@@ -83,7 +84,8 @@ func config(opts Options) (*embed.Config, error) {
 			return nil, err
 		}
 
-		certs, err := pem.DecodePEMCertificatesChain(b)
+		var certs []*x509.Certificate
+		certs, err = pem.DecodePEMCertificates(b)
 		if err != nil {
 			return nil, err
 		}
