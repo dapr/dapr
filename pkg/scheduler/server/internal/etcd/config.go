@@ -55,7 +55,7 @@ func config(opts Options) (*embed.Config, error) {
 		}
 
 		clusterDomain := utils.DefaultKubeClusterDomain
-		if modes.DaprMode(opts.Mode) == modes.KubernetesMode {
+		if opts.Mode == modes.KubernetesMode {
 			clusterDomain, err = utils.GetKubeClusterDomain()
 			if err != nil {
 				log.Warnf("Failed to get Kubernetes cluster domain, defaulting to %s: %v", utils.DefaultKubeClusterDomain, err)
@@ -77,7 +77,8 @@ func config(opts Options) (*embed.Config, error) {
 			ServerName:          fmt.Sprintf("%s.dapr-scheduler-server.%s.svc.%s", opts.Name, opts.Security.ControlPlaneNamespace(), clusterDomain),
 		}
 
-		b, err := os.ReadFile(filepath.Join(*opts.Security.IdentityDir(), "cert.pem"))
+		var b []byte
+		b, err = os.ReadFile(filepath.Join(*opts.Security.IdentityDir(), "cert.pem"))
 		if err != nil {
 			return nil, err
 		}
