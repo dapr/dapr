@@ -87,8 +87,6 @@ func config(opts Options) (*embed.Config, error) {
 			return nil, err
 		}
 
-		fmt.Printf(">>%s\n", certs[0].DNSNames)
-		fmt.Printf(">>%s\n", info.ServerName)
 		if !slices.Contains(certs[0].DNSNames, info.ServerName) {
 			return nil, fmt.Errorf("peer certificate does not contain the expected DNS name %s", info.ServerName)
 		}
