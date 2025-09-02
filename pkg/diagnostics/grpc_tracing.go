@@ -259,7 +259,7 @@ func userDefinedMetadata(ctx context.Context) map[string]string {
 	}
 
 	for k, v := range md {
-		if strings.HasPrefix(k, daprHeaderPrefix) && !strings.HasSuffix(k, daprHeaderBinSuffix) {
+		if strings.HasPrefix(k, daprHeaderPrefix) && !strings.HasSuffix(k, daprHeaderBinSuffix) && !strings.HasSuffix(k, daprHeaderTokenSuffix) {
 			daprMetadata[k] = v[0]
 		}
 	}

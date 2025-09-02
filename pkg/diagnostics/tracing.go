@@ -29,9 +29,10 @@ import (
 )
 
 const (
-	daprHeaderPrefix    = "dapr-"
-	daprHeaderBinSuffix = "-bin"
-	tracerName          = "dapr-diagnostics"
+	daprHeaderPrefix      = "dapr-"
+	daprHeaderBinSuffix   = "-bin"
+	daprHeaderTokenSuffix = "-token"
+	tracerName            = "dapr-diagnostics"
 )
 
 var tracer trace.Tracer = otel.Tracer(tracerName)

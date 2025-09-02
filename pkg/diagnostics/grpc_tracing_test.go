@@ -73,6 +73,7 @@ func TestUserDefinedMetadata(t *testing.T) {
 	md := grpcMetadata.MD{
 		"dapr-userdefined-1": []string{"value1"},
 		"DAPR-userdefined-2": []string{"value2", "value3"}, // Will be lowercased
+		"dapr-api-token":     []string{"tokenValue"},       // Will be ignored having the `-token` suffix
 		"no-attr":            []string{"value3"},
 	}
 
