@@ -65,9 +65,6 @@ spec:
 			w.Write([]byte(`{"entities": ["foo"]}`))
 		}),
 		app.WithHandlerFunc("/actors/", func(http.ResponseWriter, *http.Request) {}),
-		app.WithHandlerFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Printf(">>>%s\n", r.URL.Path)
-		}),
 	)
 
 	n.place = placement.New(t)
@@ -123,6 +120,7 @@ func (n *nostore) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
 		assert.JSONEq(t, test.err, string(body))
 	}
 }
