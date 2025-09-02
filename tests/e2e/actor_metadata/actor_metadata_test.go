@@ -120,7 +120,7 @@ func TestMain(m *testing.M) {
 			AppCPULimit:         "2.0",
 			AppCPURequest:       "0.1",
 			AppEnv: map[string]string{
-				"TEST_APP_ACTOR_REMINDERS_PARTITIONS": "0",
+				"TEST_APP_ACTOR_REMINDERS_PARTITIONS": "4",
 				"TEST_APP_ACTOR_TYPE":                 actorName,
 			},
 		},
@@ -137,7 +137,7 @@ func TestMain(m *testing.M) {
 			AppCPULimit:         "2.0",
 			AppCPURequest:       "0.1",
 			AppEnv: map[string]string{
-				"TEST_APP_ACTOR_REMINDERS_PARTITIONS": "0",
+				"TEST_APP_ACTOR_REMINDERS_PARTITIONS": "4",
 				"TEST_APP_ACTOR_TYPE":                 actorName,
 			},
 		},

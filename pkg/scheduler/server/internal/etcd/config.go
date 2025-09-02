@@ -56,7 +56,7 @@ func config(opts Options) (*embed.Config, error) {
 		}
 
 		clusterDomain := utils.DefaultKubeClusterDomain
-		if opts.Mode == modes.KubernetesMode {
+		if _, ok := os.LookupEnv("KUBERNETES_SERVICE_HOST"); ok && opts.Mode == modes.KubernetesMode {
 			clusterDomain, err = utils.GetKubeClusterDomain()
 			if err != nil {
 				log.Warnf("Failed to get Kubernetes cluster domain, defaulting to %s: %v", utils.DefaultKubeClusterDomain, err)
