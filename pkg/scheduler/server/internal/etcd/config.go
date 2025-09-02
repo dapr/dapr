@@ -31,6 +31,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/crypto/pem"
 )
 
@@ -42,23 +43,38 @@ func config(opts Options) (*embed.Config, error) {
 	config.MaxRequestBytes = math.MaxInt32
 	config.ExperimentalWarningApplyDuration = time.Second * 5
 
+	urls, err := peerURLs(opts.InitialCluster)
+	if err != nil {
+		return nil, fmt.Errorf("invalid format for initial cluster. Make sure to include 'http://' or 'https://' in Scheduler URL: %s", err)
+	}
+
 	if opts.Security.MTLSEnabled() {
+		hosts := make([]string, 0, len(urls))
+		for _, u := range urls {
+			hosts = append(hosts, u.Hostname())
+		}
+
+		clusterDomain := utils.DefaultKubeClusterDomain
+		if modes.DaprMode(opts.Mode) == modes.KubernetesMode {
+			clusterDomain, err = utils.GetKubeClusterDomain()
+			if err != nil {
+				log.Warnf("Failed to get Kubernetes cluster domain, defaulting to %s: %v", utils.DefaultKubeClusterDomain, err)
+				clusterDomain = utils.DefaultKubeClusterDomain
+			}
+		}
+
 		info := transport.TLSInfo{
 			ClientCertAuth:      true,
 			InsecureSkipVerify:  false,
 			SkipClientSANVerify: false,
-			AllowedHostnames: []string{
-				fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.cluster.local", opts.Security.ControlPlaneNamespace()),
-				fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.cluster.local", opts.Security.ControlPlaneNamespace()),
-				fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.cluster.local", opts.Security.ControlPlaneNamespace()),
-			},
-			EmptyCN:        true,
-			CertFile:       filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
-			KeyFile:        filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
-			ClientCertFile: filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
-			ClientKeyFile:  filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
-			TrustedCAFile:  filepath.Join(*opts.Security.IdentityDir(), "ca.pem"),
-			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc.cluster.local", opts.Name, opts.Security.ControlPlaneNamespace()),
+			AllowedHostnames:    hosts,
+			EmptyCN:             true,
+			CertFile:            filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
+			KeyFile:             filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
+			ClientCertFile:      filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
+			ClientKeyFile:       filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
+			TrustedCAFile:       filepath.Join(*opts.Security.IdentityDir(), "ca.pem"),
+			ServerName:          fmt.Sprintf("%s.dapr-scheduler-server.%s.svc.%s", opts.Name, opts.Security.ControlPlaneNamespace(), clusterDomain),
 		}
 
 		b, err := os.ReadFile(filepath.Join(*opts.Security.IdentityDir(), "cert.pem"))
@@ -71,6 +87,8 @@ func config(opts Options) (*embed.Config, error) {
 			return nil, err
 		}
 
+		fmt.Printf(">>%s\n", certs[0].DNSNames)
+		fmt.Printf(">>%s\n", info.ServerName)
 		if !slices.Contains(certs[0].DNSNames, info.ServerName) {
 			return nil, fmt.Errorf("peer certificate does not contain the expected DNS name %s", info.ServerName)
 		}
@@ -78,11 +96,6 @@ func config(opts Options) (*embed.Config, error) {
 		config.ClientTLSInfo = info
 		config.PeerTLSInfo = info
 		config.PeerAutoTLS = true
-	}
-
-	urls, err := peerURLs(opts.InitialCluster)
-	if err != nil {
-		return nil, fmt.Errorf("invalid format for initial cluster. Make sure to include 'http://' or 'https://' in Scheduler URL: %s", err)
 	}
 
 	etcdURL, ok := urls[opts.Name]

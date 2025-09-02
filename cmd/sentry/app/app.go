@@ -150,6 +150,15 @@ func Run() {
 
 	cfg.JWT.TTL = opts.JWT.TTL
 
+	clusterDomain := utils.DefaultKubeClusterDomain
+	if modes.DaprMode(opts.Mode) == modes.KubernetesMode {
+		clusterDomain, err = utils.GetKubeClusterDomain()
+		if err != nil {
+			log.Warnf("Failed to get Kubernetes cluster domain, defaulting to %s: %v", utils.DefaultKubeClusterDomain, err)
+			clusterDomain = utils.DefaultKubeClusterDomain
+		}
+	}
+
 	// We use runner manager inception here since we want the inner manager to be
 	// restarted when the CA server needs to be restarted because of file events.
 	// We don't want to restart the healthz server and file watcher on file
@@ -165,8 +174,9 @@ func Run() {
 		})
 
 		sentry, serr := sentry.New(ctx, sentry.Options{
-			Config:  cfg,
-			Healthz: healthz,
+			Config:        cfg,
+			Healthz:       healthz,
+			ClusterDomain: clusterDomain,
 			OIDC: sentry.OIDCOptions{
 				Enabled:             opts.OIDC.Enabled,
 				ServerListenAddress: opts.OIDC.ServerListenAddress,

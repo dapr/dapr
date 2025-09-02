@@ -46,9 +46,10 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 type Options struct {
-	Config  config.Config
-	Healthz healthz.Healthz
-	OIDC    OIDCOptions
+	Config        config.Config
+	Healthz       healthz.Healthz
+	OIDC          OIDCOptions
+	ClusterDomain string
 }
 
 type OIDCOptions struct {
@@ -135,6 +136,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 			ListenAddress:    opts.Config.ListenAddress,
 			JWTEnabled:       opts.Config.JWT.Enabled,
 			JWTTTL:           opts.Config.JWT.TTL,
+			ClusterDomain:    opts.ClusterDomain,
 		}).Start,
 	)
 
