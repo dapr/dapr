@@ -96,16 +96,19 @@ func (e *executor) Deactivate(_ context.Context) error {
 	return nil
 }
 
-func (e *executor) InvokeStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, ch chan<- *internalsv1pb.InternalInvokeResponse) error {
+func (e *executor) InvokeStream(ctx context.Context,
+	req *internalsv1pb.InternalInvokeRequest,
+	stream func(*internalsv1pb.InternalInvokeResponse) (bool, error),
+) error {
 	switch req.GetMessage().GetMethod() {
 	case MethodWatchComplete:
-		return e.watchComplete(ctx, ch)
+		return e.watchComplete(ctx, stream)
 	default:
 		return errors.New("unknown method: " + req.GetMessage().GetMethod())
 	}
 }
 
-func (e *executor) watchComplete(ctx context.Context, ch chan<- *internalsv1pb.InternalInvokeResponse) error {
+func (e *executor) watchComplete(ctx context.Context, stream func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
 	defer e.Deactivate(ctx)
 
 	select {
@@ -125,15 +128,15 @@ func (e *executor) watchComplete(ctx context.Context, ch chan<- *internalsv1pb.I
 	case <-e.closeCh:
 		return errors.New("executor closed")
 	case <-e.cancelCh:
-		ch <- &internalsv1pb.InternalInvokeResponse{
+		_, err := stream(&internalsv1pb.InternalInvokeResponse{
 			Status: &internalsv1pb.Status{
 				Code: int32(codes.Aborted),
 			},
-		}
-		return nil
+		})
+		return err
 	case d := <-e.completeCh:
-		ch <- d
-		return nil
+		_, err := stream(d)
+		return err
 	}
 }
 
