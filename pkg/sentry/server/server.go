@@ -68,8 +68,6 @@ type Options struct {
 
 	// JWTTTL is the time to live for the JWT token.
 	JWTTTL time.Duration
-
-	ClusterDomain string
 }
 
 // Server is the gRPC server for the Sentry service.
@@ -83,8 +81,6 @@ type Server struct {
 	htarget          healthz.Target
 	jwtEnabled       bool
 	jwtTTL           time.Duration
-
-	clusterDomain string
 }
 
 func New(opts Options) *Server {
@@ -98,7 +94,6 @@ func New(opts Options) *Server {
 		htarget:          opts.Healthz.AddTarget("sentry-server"),
 		jwtEnabled:       opts.JWTEnabled,
 		jwtTTL:           opts.JWTTTL,
-		clusterDomain:    opts.ClusterDomain,
 	}
 }
 
@@ -204,9 +199,9 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		dns = []string{fmt.Sprintf("dapr-webhook.%s.svc", req.GetNamespace())}
 	case req.GetNamespace() == security.CurrentNamespace() && req.GetId() == "dapr-scheduler":
 		dns = []string{
-			fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.%s", req.GetNamespace(), s.clusterDomain),
-			fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.%s", req.GetNamespace(), s.clusterDomain),
-			fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.%s", req.GetNamespace(), s.clusterDomain),
+			fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.cluster.local", req.GetNamespace()),
+			fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.cluster.local", req.GetNamespace()),
+			fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.cluster.local", req.GetNamespace()),
 		}
 	}
 
