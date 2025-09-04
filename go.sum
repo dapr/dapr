@@ -513,8 +513,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.16.0-rc.5 h1:wlenzFiSW+XUQpAkiC2/LIc4aTjAEjukaBMXaWQSDUE=
-github.com/dapr/components-contrib v1.16.0-rc.5/go.mod h1:mPT6lNeoQxJoJ0y9HyOGWozscSmTdf4yVJTTJMjSOJE=
+github.com/dapr/components-contrib v1.16.0-rc.6 h1:AB04RdqmWdZ84PBaHcUQFMHHl7XaIgOl67BeHKZzqM4=
+github.com/dapr/components-contrib v1.16.0-rc.6/go.mod h1:mPT6lNeoQxJoJ0y9HyOGWozscSmTdf4yVJTTJMjSOJE=
 github.com/dapr/durabletask-go v0.9.0 h1:b2/aNOJau7VS639JodSES/+momwnjjrroAtbn7rp1PI=
 github.com/dapr/durabletask-go v0.9.0/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
 github.com/dapr/kit v0.16.1 h1:MqLAhHVg8trPy2WJChMZFU7ToeondvxcNHYVvMDiVf4=
