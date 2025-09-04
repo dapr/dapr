@@ -17,7 +17,7 @@ param namePrefix string
 @description('The location of the resources')
 param location string = resourceGroup().location
 
-param cosmosDbThroughput int = 10000
+param cosmosDbThroughput int = 1000
 
 var databaseAccountName = '${namePrefix}db'
 

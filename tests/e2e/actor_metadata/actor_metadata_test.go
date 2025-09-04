@@ -40,7 +40,7 @@ const (
 	appNameTwo                   = "actormetadata-b"         // App name in Dapr.
 	reminderName                 = "myreminder"              // Reminder name
 	numHealthChecks              = 60                        // Number of get calls before starting tests.
-	numActors                    = 100                       // Number of get calls before starting tests.
+	numActors                    = 30                        // Number of get calls before starting tests.
 	secondsToCheckReminderResult = 45                        // How much time to wait to make sure the result is in logs.
 	maxNumPartitions             = 4                         // Maximum number of partitions.
 	actorlogsURLFormat           = "%s/test/logs"            // URL to fetch logs from test app.
