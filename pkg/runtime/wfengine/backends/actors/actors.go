@@ -49,7 +49,6 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/local"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
-	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -455,7 +454,7 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 	return runtimeState, nil
 }
 
-func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, ch chan<- *backend.OrchestrationMetadata) error {
+func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, condition func(*backend.OrchestrationMetadata) bool) error {
 	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
 
 	router, err := abe.actors.Router(ctx)
@@ -468,46 +467,20 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 		WithActor(abe.workflowActorType, string(id)).
 		WithContentType(invokev1.ProtobufContentType)
 
-	stream := make(chan *internalsv1pb.InternalInvokeResponse, 5)
-
-	for {
-		err = concurrency.NewRunnerManager(
-			func(ctx context.Context) error {
-				return router.CallStream(ctx, req, stream)
-			},
-			func(ctx context.Context) error {
-				for {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case val := <-stream:
-						var meta backend.OrchestrationMetadata
-						if perr := val.GetMessage().GetData().UnmarshalTo(&meta); perr != nil {
-							log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
-							return perr
-						}
-						select {
-						case ch <- &meta:
-						case <-ctx.Done():
-							return ctx.Err()
-						}
-					}
-				}
-			},
-		).Run(ctx)
-		if err != nil {
-			status, ok := status.FromError(err)
-			if ok && status.Code() == codes.Canceled {
-				return nil
-			}
-
-			return err
+	err = router.CallStream(ctx, req, func(resp *internalsv1pb.InternalInvokeResponse) (bool, error) {
+		var meta backend.OrchestrationMetadata
+		if perr := resp.GetMessage().GetData().UnmarshalTo(&meta); perr != nil {
+			log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
+			return false, perr
 		}
 
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
+		return condition(&meta), nil
+	})
+	if err != nil {
+		return err
 	}
+
+	return nil
 }
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
