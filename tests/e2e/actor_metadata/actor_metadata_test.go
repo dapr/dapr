@@ -26,26 +26,31 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/require"
 )
 
 const (
-	testRunnerName               = "actormetadata"                      // Name of the test runner.
-	appNameOne                   = "actormetadata-a"                    // App name in Dapr.
-	appNameTwo                   = "actormetadata-b"                    // App name in Dapr.
-	reminderName                 = "myreminder"                         // Reminder name
-	numHealthChecks              = 60                                   // Number of get calls before starting tests.
-	numActors                    = 100                                  // Number of get calls before starting tests.
-	secondsToCheckReminderResult = 45                                   // How much time to wait to make sure the result is in logs.
-	maxNumPartitions             = 4                                    // Maximum number of partitions.
-	actorName                    = "testactormetadata"                  // Actor name
-	actorInvokeURLFormat         = "%s/test/" + actorName + "/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
-	actorlogsURLFormat           = "%s/test/logs"                       // URL to fetch logs from test app.
-	envURLFormat                 = "%s/test/env/%s"                     // URL to fetch or set env var from test app.
-	shutdownSidecarURLFormat     = "%s/test/shutdownsidecar"            // URL to shutdown sidecar only.
+	testRunnerName               = "actormetadata"           // Name of the test runner.
+	appNameOne                   = "actormetadata-a"         // App name in Dapr.
+	appNameTwo                   = "actormetadata-b"         // App name in Dapr.
+	reminderName                 = "myreminder"              // Reminder name
+	numHealthChecks              = 60                        // Number of get calls before starting tests.
+	numActors                    = 100                       // Number of get calls before starting tests.
+	secondsToCheckReminderResult = 45                        // How much time to wait to make sure the result is in logs.
+	maxNumPartitions             = 4                         // Maximum number of partitions.
+	actorlogsURLFormat           = "%s/test/logs"            // URL to fetch logs from test app.
+	envURLFormat                 = "%s/test/env/%s"          // URL to fetch or set env var from test app.
+	shutdownSidecarURLFormat     = "%s/test/shutdownsidecar" // URL to shutdown sidecar only.
+)
+
+var (
+	actorName            = "testactormetadata-" + uuid.NewString() // Actor name
+	actorInvokeURLFormat = "%s/test/" + actorName + "/%s/%s/%s"    // URL to invoke a Dapr's actor method in test app.
 )
 
 // represents a response for the APIs in this app.
