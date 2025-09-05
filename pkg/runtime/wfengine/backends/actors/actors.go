@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -93,6 +94,8 @@ type Actors struct {
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
+
+	stopped atomic.Bool
 }
 
 func New(opts Options) *Actors {
@@ -509,11 +512,13 @@ func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceI
 
 // Start implements backend.Backend
 func (abe *Actors) Start(ctx context.Context) error {
+	abe.stopped.Store(false)
 	return nil
 }
 
 // Stop implements backend.Backend
-func (*Actors) Stop(context.Context) error {
+func (abe *Actors) Stop(context.Context) error {
+	abe.stopped.Store(true)
 	return nil
 }
 
@@ -585,6 +590,9 @@ func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.Instan
 		if err != nil && ctx.Err() == nil {
 			log.Warnf("error completing activity task: %v, retrying...", err)
 		}
+		if abe.stopped.Load() {
+			return backoff.Permanent(err)
+		}
 		return err
 	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
 }
@@ -595,6 +603,9 @@ func (abe *Actors) CancelOrchestratorTask(ctx context.Context, instanceID api.In
 		err := abe.pendingTasksBackend.CancelOrchestratorTask(ctx, instanceID)
 		if err != nil && ctx.Err() == nil {
 			log.Warnf("error completing activity task: %v, retrying...", err)
+		}
+		if abe.stopped.Load() {
+			return backoff.Permanent(err)
 		}
 		return err
 	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
@@ -607,6 +618,9 @@ func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.Ac
 		if err != nil && ctx.Err() == nil {
 			log.Warnf("error completing activity task: %v, retrying...", err)
 		}
+		if abe.stopped.Load() {
+			return backoff.Permanent(err)
+		}
 		return err
 	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
 }
@@ -617,6 +631,9 @@ func (abe *Actors) CompleteOrchestratorTask(ctx context.Context, response *proto
 		err := abe.pendingTasksBackend.CompleteOrchestratorTask(ctx, response)
 		if err != nil && ctx.Err() == nil {
 			log.Warnf("error completing activity task: %v, retrying...", err)
+		}
+		if abe.stopped.Load() {
+			return backoff.Permanent(err)
 		}
 		return err
 	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
