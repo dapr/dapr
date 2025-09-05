@@ -14,7 +14,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/dapr/components-contrib v1.16.0-rc.6
 	github.com/dapr/durabletask-go v0.9.0
-	github.com/dapr/kit v0.16.0
+	github.com/dapr/kit v0.16.1
 	github.com/diagridio/go-etcd-cron v0.9.1
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
