@@ -492,26 +492,24 @@ func parseEnvVars(envString string, fromSecret bool) (envKeys []string, envVars 
 	envVars = make([]corev1.EnvVar, 0, len(parts))
 
 	for _, s := range parts {
-		pairs := strings.SplitN(strings.TrimSpace(s), "=", 2)
-		if len(pairs) != 2 {
+		k, v, found := strings.Cut(strings.TrimSpace(s), "=")
+		if !found {
 			continue
 		}
-		envKey := pairs[0]
-		envValue := pairs[1]
-		envKeys = append(envKeys, envKey)
+		envKeys = append(envKeys, k)
 
 		if fromSecret {
-			secretSource := createSecretSource(envValue)
+			secretSource := createSecretSource(v)
 			if secretSource != nil {
 				envVars = append(envVars, corev1.EnvVar{
-					Name:      envKey,
+					Name:      k,
 					ValueFrom: secretSource,
 				})
 			}
 		} else {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  envKey,
-				Value: envValue,
+				Name:  k,
+				Value: v,
 			})
 		}
 	}
