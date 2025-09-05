@@ -17,8 +17,7 @@ param namePrefix string
 @description('The location of the resources')
 param location string = resourceGroup().location
 
-@description('Desired throughput for Cosmos DB, in RU/s. Set to 0 to use "serverless"')
-param cosmosDbThroughput int = 0
+param cosmosDbThroughput int = 1000
 
 var databaseAccountName = '${namePrefix}db'
 
