@@ -580,22 +580,46 @@ func (abe *Actors) ActivityActorType() string {
 
 // CancelActivityTask implements backend.Backend.
 func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
-	return abe.pendingTasksBackend.CancelActivityTask(ctx, instanceID, taskID)
+	return backoff.Retry(func() error {
+		err := abe.pendingTasksBackend.CancelActivityTask(ctx, instanceID, taskID)
+		if err != nil && ctx.Err() == nil {
+			log.Warnf("error completing activity task: %v, retrying...", err)
+		}
+		return err
+	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
 }
 
 // CancelOrchestratorTask implements backend.Backend.
 func (abe *Actors) CancelOrchestratorTask(ctx context.Context, instanceID api.InstanceID) error {
-	return abe.pendingTasksBackend.CancelOrchestratorTask(ctx, instanceID)
+	return backoff.Retry(func() error {
+		err := abe.pendingTasksBackend.CancelOrchestratorTask(ctx, instanceID)
+		if err != nil && ctx.Err() == nil {
+			log.Warnf("error completing activity task: %v, retrying...", err)
+		}
+		return err
+	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
 }
 
 // CompleteActivityTask implements backend.Backend.
 func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.ActivityResponse) error {
-	return abe.pendingTasksBackend.CompleteActivityTask(ctx, response)
+	return backoff.Retry(func() error {
+		err := abe.pendingTasksBackend.CompleteActivityTask(ctx, response)
+		if err != nil && ctx.Err() == nil {
+			log.Warnf("error completing activity task: %v, retrying...", err)
+		}
+		return err
+	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
 }
 
 // CompleteOrchestratorTask implements backend.Backend.
 func (abe *Actors) CompleteOrchestratorTask(ctx context.Context, response *protos.OrchestratorResponse) error {
-	return abe.pendingTasksBackend.CompleteOrchestratorTask(ctx, response)
+	return backoff.Retry(func() error {
+		err := abe.pendingTasksBackend.CompleteOrchestratorTask(ctx, response)
+		if err != nil && ctx.Err() == nil {
+			log.Warnf("error completing activity task: %v, retrying...", err)
+		}
+		return err
+	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
 }
 
 // WaitForActivityCompletion implements backend.Backend.
