@@ -585,50 +585,35 @@ func (abe *Actors) ActivityActorType() string {
 
 // CancelActivityTask implements backend.Backend.
 func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
-	return backoff.Retry(func() error {
-		err := abe.pendingTasksBackend.CancelActivityTask(ctx, instanceID, taskID)
-		if err != nil && ctx.Err() == nil {
-			log.Warnf("error completing activity task: %v, retrying...", err)
-		}
-		if abe.stopped.Load() {
-			return backoff.Permanent(err)
-		}
-		return err
-	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
+	return abe.callWithBackoff(ctx, func() error {
+		return abe.pendingTasksBackend.CancelActivityTask(ctx, instanceID, taskID)
+	})
 }
 
 // CancelOrchestratorTask implements backend.Backend.
 func (abe *Actors) CancelOrchestratorTask(ctx context.Context, instanceID api.InstanceID) error {
-	return backoff.Retry(func() error {
-		err := abe.pendingTasksBackend.CancelOrchestratorTask(ctx, instanceID)
-		if err != nil && ctx.Err() == nil {
-			log.Warnf("error completing activity task: %v, retrying...", err)
-		}
-		if abe.stopped.Load() {
-			return backoff.Permanent(err)
-		}
-		return err
-	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
+	return abe.callWithBackoff(ctx, func() error {
+		return abe.pendingTasksBackend.CancelOrchestratorTask(ctx, instanceID)
+	})
 }
 
 // CompleteActivityTask implements backend.Backend.
 func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.ActivityResponse) error {
-	return backoff.Retry(func() error {
-		err := abe.pendingTasksBackend.CompleteActivityTask(ctx, response)
-		if err != nil && ctx.Err() == nil {
-			log.Warnf("error completing activity task: %v, retrying...", err)
-		}
-		if abe.stopped.Load() {
-			return backoff.Permanent(err)
-		}
-		return err
-	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
+	return abe.callWithBackoff(ctx, func() error {
+		return abe.pendingTasksBackend.CompleteActivityTask(ctx, response)
+	})
 }
 
 // CompleteOrchestratorTask implements backend.Backend.
 func (abe *Actors) CompleteOrchestratorTask(ctx context.Context, response *protos.OrchestratorResponse) error {
+	return abe.callWithBackoff(ctx, func() error {
+		return abe.pendingTasksBackend.CompleteOrchestratorTask(ctx, response)
+	})
+}
+
+func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 	return backoff.Retry(func() error {
-		err := abe.pendingTasksBackend.CompleteOrchestratorTask(ctx, response)
+		err := fn()
 		if err != nil && ctx.Err() == nil {
 			log.Warnf("error completing activity task: %v, retrying...", err)
 		}
@@ -636,7 +621,11 @@ func (abe *Actors) CompleteOrchestratorTask(ctx context.Context, response *proto
 			return backoff.Permanent(err)
 		}
 		return err
-	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
+	}, backoff.WithContext(
+		backoff.NewExponentialBackOff(
+			backoff.WithMaxInterval(3*time.Second),
+			backoff.WithRandomizationFactor(0.3),
+		), ctx))
 }
 
 // WaitForActivityCompletion implements backend.Backend.

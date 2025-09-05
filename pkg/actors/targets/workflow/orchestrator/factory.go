@@ -220,5 +220,8 @@ func (f *factory) Len() int {
 }
 
 func (f *factory) deactivate(orchestrator *orchestrator) {
+	if !orchestrator.closed.CompareAndSwap(false, true) {
+		return
+	}
 	f.deactivateCh <- orchestrator
 }
