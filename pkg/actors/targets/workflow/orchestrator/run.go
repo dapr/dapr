@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -55,7 +57,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			return todo.RunCompletedFalse, nil
 		}
 
-		state.Inbox = append(state.Inbox, durableTimer.GetTimerEvent())
+		timerEvent := durableTimer.GetTimerEvent()
+		// timer fired event is precreated at the moment of creating the timer
+		// set the timestamp to now so it is accurately recorded in the history
+		timerEvent.Timestamp = timestamppb.Now()
+		state.Inbox = append(state.Inbox, timerEvent)
 	}
 
 	if len(state.Inbox) == 0 {
