@@ -109,7 +109,7 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
-	if !orchestrator.closed.CompareAndSwap(false, true) {
+	if !o.closed.CompareAndSwap(false, true) {
 		return nil
 	}
 
