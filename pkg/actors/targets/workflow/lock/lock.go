@@ -48,5 +48,9 @@ func (l *Lock) Init() {
 }
 
 func (l *Lock) Close() {
-	close(l.closeCh)
+	select {
+	case <-l.closeCh:
+	default:
+		close(l.closeCh)
+	}
 }

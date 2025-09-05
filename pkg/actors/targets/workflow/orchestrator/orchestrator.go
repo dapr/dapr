@@ -109,6 +109,10 @@ func (o *orchestrator) InvokeStream(ctx context.Context, req *internalsv1pb.Inte
 
 // DeactivateActor implements actors.InternalActor
 func (o *orchestrator) Deactivate(ctx context.Context) error {
+	if !orchestrator.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	unlock, err := o.lock.ContextLock(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to deactivate workflow '%s': %w", o.actorID, err)
