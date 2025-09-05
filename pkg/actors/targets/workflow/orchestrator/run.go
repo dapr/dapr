@@ -44,7 +44,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedTrue, nil
 	}
 
-	if strings.HasPrefix(reminder.Name, "timer-") {
+	if strings.HasPrefix(reminder.Name, "timer-") && !runtimestate.IsCompleted(o.rstate) {
 		var durableTimer backend.DurableTimer
 		if err = reminder.Data.UnmarshalTo(&durableTimer); err != nil {
 			// Likely the result of an incompatible durable task timer format change.
@@ -68,7 +68,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		// This can happen after multiple events are processed in batches; there may still be reminders around
 		// for some of those already processed events.
 		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
-		return todo.RunCompletedFalse, nil
+		return todo.RunCompletedTrue, nil
 	}
 
 	var esHistoryEvent *backend.HistoryEvent
