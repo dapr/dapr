@@ -47,20 +47,26 @@ type Options struct {
 	Port                      int
 	Mode                      modes.DaprMode
 	KubeConfig                *string
-	EtcdDataDir               string
-	EtcdName                  string
-	EtcdInitialCluster        []string
-	EtcdClientPort            uint64
-	EtcdSpaceQuota            int64
-	EtcdCompactionMode        string
-	EtcdCompactionRetention   string
-	EtcdSnapshotCount         uint64
-	EtcdMaxSnapshots          uint
-	EtcdMaxWALs               uint
-	EtcdBackendBatchLimit     int
-	EtcdBackendBatchInterval  string
-	EtcdDefrabThresholdMB     uint
-	EtcdMetrics               string
+
+	EtcdEmbed                bool
+	EtcdDataDir              string
+	EtcdName                 string
+	EtcdInitialCluster       []string
+	EtcdClientPort           uint64
+	EtcdSpaceQuota           int64
+	EtcdCompactionMode       string
+	EtcdCompactionRetention  string
+	EtcdSnapshotCount        uint64
+	EtcdMaxSnapshots         uint
+	EtcdMaxWALs              uint
+	EtcdBackendBatchLimit    int
+	EtcdBackendBatchInterval string
+	EtcdDefrabThresholdMB    uint
+	EtcdMetrics              string
+
+	EtcdClientEndpoints []string
+	EtcdClientUsername  string
+	EtcdClientPassword  string
 }
 
 // Server is the gRPC server for the Scheduler service.
@@ -98,6 +104,7 @@ func New(opts Options) (*Server, error) {
 
 	etcd, err := etcd.New(etcd.Options{
 		Name:                 opts.EtcdName,
+		Embed:                opts.EtcdEmbed,
 		InitialCluster:       opts.EtcdInitialCluster,
 		ClientPort:           opts.EtcdClientPort,
 		SpaceQuota:           opts.EtcdSpaceQuota,
@@ -114,6 +121,10 @@ func New(opts Options) (*Server, error) {
 		DataDir:              opts.EtcdDataDir,
 		Healthz:              opts.Healthz,
 		Mode:                 opts.Mode,
+
+		ClientEndpoints: opts.EtcdClientEndpoints,
+		ClientUsername:  opts.EtcdClientUsername,
+		ClientPassword:  opts.EtcdClientPassword,
 	})
 	if err != nil {
 		return nil, err
@@ -150,7 +161,7 @@ func New(opts Options) (*Server, error) {
 			Security: opts.Security,
 		}),
 		closeCh:     make(chan struct{}),
-		hzAPIServer: opts.Healthz.AddTarget(),
+		hzAPIServer: opts.Healthz.AddTarget("scheduler-server"),
 	}, nil
 }
 
@@ -185,7 +196,7 @@ func (s *Server) Run(ctx context.Context) error {
 		runners = append(runners, s.controller)
 	}
 
-	mngr := concurrency.NewRunnerCloserManager(nil, runners...)
+	mngr := concurrency.NewRunnerCloserManager(log, nil, runners...)
 	if err := mngr.AddCloser(s.etcd); err != nil {
 		return err
 	}

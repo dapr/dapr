@@ -15,8 +15,6 @@ package store
 
 import (
 	"context"
-
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/connection"
 )
 
 type store struct {
@@ -31,7 +29,7 @@ func newStore() *store {
 	}
 }
 
-func (s *store) add(conn *connection.Connection, opts Options) context.CancelFunc {
+func (s *store) add(conn *StreamConnection, opts Options) context.CancelFunc {
 	// We don't know how many allocations we will have!
 	//nolint:prealloc
 	var fns []context.CancelFunc

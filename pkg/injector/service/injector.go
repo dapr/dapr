@@ -59,6 +59,8 @@ var AllowedServiceAccountInfos = []string{
 	"kube-system:daemon-set-controller",
 	"openshift-operator-lifecycle-manager:olm-operator-serviceaccount",
 	"tekton-pipelines:tekton-pipelines-controller",
+	//nolint:misspell
+	"mirrord:mirrord-operator",
 }
 
 type (
@@ -158,7 +160,7 @@ func NewInjector(opts Options) (Injector, error) {
 		authUIDs:                opts.AuthUIDs,
 		controlPlaneNamespace:   opts.ControlPlaneNamespace,
 		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
-		htarget:                 opts.Healthz.AddTarget(),
+		htarget:                 opts.Healthz.AddTarget("injector-service"),
 	}
 
 	matcher, err := createNamespaceNameMatcher(opts.Config.AllowedServiceAccountsPrefixNames)

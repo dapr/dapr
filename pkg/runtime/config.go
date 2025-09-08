@@ -22,8 +22,10 @@ import (
 	"strings"
 	"time"
 
+	"go.opencensus.io/stats/view"
+
 	"github.com/dapr/dapr/pkg/acl"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
@@ -99,6 +101,7 @@ type Config struct {
 	ActorsService                 string
 	RemindersService              string
 	SchedulerAddress              []string
+	SchedulerStreams              uint
 	DaprAPIListenAddresses        string
 	AppHealthProbeInterval        int
 	AppHealthProbeTimeout         int
@@ -115,7 +118,7 @@ type Config struct {
 	Registry                      *registry.Options
 	Security                      security.Handler
 	Healthz                       healthz.Healthz
-	WorkflowEventSink             workflow.EventSink
+	WorkflowEventSink             orchestrator.EventSink
 }
 
 type internalConfig struct {
@@ -134,6 +137,7 @@ type internalConfig struct {
 	actorsService                string
 	remindersService             string
 	schedulerAddress             []string
+	schedulerStreams             uint
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
@@ -151,7 +155,7 @@ type internalConfig struct {
 	metricsExporter              metrics.Exporter
 	healthz                      healthz.Healthz
 	outboundHealthz              healthz.Healthz
-	workflowEventSink            workflow.EventSink
+	workflowEventSink            orchestrator.EventSink
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -244,7 +248,21 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	// Initialize metrics only if MetricSpec is enabled.
 	metricsSpec := globalConfig.GetMetricsSpec()
 	if metricsSpec.GetEnabled() {
-		err = diag.InitMetrics(intc.id, namespace, metricsSpec)
+		// We create or use a provided meter to avoid
+		// using the default meter which relies on
+		// global state which can be problematic in tests
+		// or when decoupling the runtimes lifecycle from
+		// the proccesses lifecycle.
+		var meter view.Meter
+		if cfg.Metrics.Meter == nil {
+			log.Debug("Creating a new meter for metrics")
+			meter = view.NewMeter() // Create a new meter if not provided
+		} else {
+			log.Debug("Using provided meter for metrics")
+			meter = cfg.Metrics.Meter
+		}
+
+		err = diag.InitMetrics(meter, intc.id, namespace, metricsSpec)
 		if err != nil {
 			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
 		}
@@ -314,6 +332,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		actorsService:             c.ActorsService,
 		remindersService:          c.RemindersService,
 		schedulerAddress:          c.SchedulerAddress,
+		schedulerStreams:          c.SchedulerStreams,
 		publicListenAddress:       c.DaprPublicListenAddress,
 		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
 		healthz:                   c.Healthz,

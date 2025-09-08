@@ -19,12 +19,13 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/processor"
@@ -47,14 +48,15 @@ type Interface interface {
 }
 
 type Options struct {
-	AppID              string
-	Namespace          string
-	Actors             actors.Interface
-	Spec               config.WorkflowSpec
-	BackendManager     processor.WorkflowBackendManager
-	Resiliency         resiliency.Provider
-	SchedulerReminders bool
-	EventSink          workflow.EventSink
+	AppID                     string
+	Namespace                 string
+	Actors                    actors.Interface
+	Spec                      config.WorkflowSpec
+	BackendManager            processor.WorkflowBackendManager
+	Resiliency                resiliency.Provider
+	SchedulerReminders        bool
+	EventSink                 orchestrator.EventSink
+	EnableClusteredDeployment bool
 }
 
 type engine struct {
@@ -72,12 +74,13 @@ type engine struct {
 func New(opts Options) Interface {
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend := backendactors.New(backendactors.Options{
-		AppID:              opts.AppID,
-		Namespace:          opts.Namespace,
-		Actors:             opts.Actors,
-		Resiliency:         opts.Resiliency,
-		SchedulerReminders: opts.SchedulerReminders,
-		EventSink:          opts.EventSink,
+		AppID:                     opts.AppID,
+		Namespace:                 opts.Namespace,
+		Actors:                    opts.Actors,
+		Resiliency:                opts.Resiliency,
+		SchedulerReminders:        opts.SchedulerReminders,
+		EventSink:                 opts.EventSink,
+		EnableClusteredDeployment: opts.EnableClusteredDeployment,
 	})
 
 	var activeConns uint64
@@ -111,6 +114,7 @@ func New(opts Options) Interface {
 
 			return nil
 		}),
+		backend.WithStreamSendTimeout(time.Second*10),
 	)
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
@@ -145,7 +149,7 @@ func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
 }
 
 func (wfe *engine) Run(ctx context.Context) error {
-	_, err := wfe.actors.Engine(ctx)
+	_, err := wfe.actors.Router(ctx)
 	if err != nil {
 		<-ctx.Done()
 		return ctx.Err()

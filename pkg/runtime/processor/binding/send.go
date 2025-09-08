@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
@@ -33,10 +34,12 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/processor/binding/input"
 )
 
 func (b *binding) StartReadingFromBindings(ctx context.Context) error {
@@ -54,10 +57,16 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	}
 
 	// Clean any previous state
-	for _, cancel := range b.inputCancels {
-		cancel()
+	var wg sync.WaitGroup
+	wg.Add(len(b.activeInputs))
+	for _, inp := range b.activeInputs {
+		go func(input *input.Input) {
+			input.Stop()
+			wg.Done()
+		}(inp)
 	}
-	b.inputCancels = make(map[string]context.CancelFunc)
+	wg.Wait()
+	clear(b.activeInputs)
 
 	comps := b.compStore.ListComponents()
 	bindings := make(map[string]componentsV1alpha1.Component)
@@ -86,31 +95,34 @@ func (b *binding) startInputBinding(comp componentsV1alpha1.Component, binding b
 
 	m := meta.Properties
 
-	ctx, cancel := context.WithCancel(context.Background())
 	if isBindingOfExplicitDirection(ComponentTypeInput, m) {
 		isSubscribed = true
 	} else {
-		var err error
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		defer cancel()
 		isSubscribed, err = b.isAppSubscribedToBinding(ctx, comp.Name)
 		if err != nil {
-			cancel()
 			return err
 		}
 	}
 
 	if !isSubscribed {
 		log.Infof("app has not subscribed to binding %s.", comp.Name)
-		cancel()
 		return nil
 	}
 
-	if err := b.readFromBinding(ctx, comp.Name, binding); err != nil {
+	input, err := input.Run(input.Options{
+		Name:    comp.Name,
+		Binding: binding,
+		Handler: b.sendBindingEventToApp,
+	})
+	if err != nil {
 		log.Errorf("error reading from input binding %s: %s", comp.Name, err)
-		cancel()
-		return nil
+		return err
 	}
 
-	b.inputCancels[comp.Name] = cancel
+	b.activeInputs[comp.Name] = input
+
 	return nil
 }
 
@@ -125,10 +137,16 @@ func (b *binding) StopReadingFromBindings(forever bool) {
 
 	b.readingBindings = false
 
-	for _, cancel := range b.inputCancels {
-		cancel()
+	var wg sync.WaitGroup
+	wg.Add(len(b.activeInputs))
+	for _, inp := range b.activeInputs {
+		go func(input *input.Input) {
+			input.Stop()
+			wg.Done()
+		}(inp)
 	}
-	b.inputCancels = make(map[string]context.CancelFunc)
+	wg.Wait()
+	clear(b.activeInputs)
 }
 
 func (b *binding) sendBatchOutputBindingsParallel(ctx context.Context, to []string, data []byte) {
@@ -233,16 +251,16 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 
 	// Check the grpc-trace-bin with fallback to traceparent.
 	validTraceparent := false
-	if val, ok := metadata[diag.GRPCTraceContextKey]; ok {
+	if val, ok := metadata[diagConsts.GRPCTraceContextKey]; ok {
 		if sc, ok := diagUtils.SpanContextFromBinary([]byte(val)); ok {
 			spanContext = sc
 		}
-	} else if val, ok := metadata[diag.TraceparentHeader]; ok {
+	} else if val, ok := metadata[diagConsts.TraceparentHeader]; ok {
 		if sc, ok := diag.SpanContextFromW3CString(val); ok {
 			spanContext = sc
 			validTraceparent = true
 			// Only parse the tracestate if we've successfully parsed the traceparent.
-			if val, ok := metadata[diag.TracestateHeader]; ok {
+			if val, ok := metadata[diagConsts.TracestateHeader]; ok {
 				ts := diag.TraceStateFromW3CString(val)
 				spanContext.WithTraceState(*ts)
 			}
@@ -340,11 +358,13 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 		for k, v := range metadata {
 			reqMetadata[k] = []string{v}
 		}
+
 		req := invokev1.NewInvokeMethodRequest(path).
 			WithHTTPExtension(http.MethodPost, "").
 			WithRawDataBytes(data).
 			WithContentType(invokev1.JSONContentType).
 			WithMetadata(reqMetadata)
+
 		if policyDef != nil {
 			req.WithReplay(policyDef.HasRetries())
 		}
@@ -404,26 +424,6 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 	}
 
 	return appResponseBody, nil
-}
-
-func (b *binding) readFromBinding(readCtx context.Context, name string, binding bindings.InputBinding) error {
-	return binding.Read(readCtx, func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
-		if resp == nil {
-			return nil, nil
-		}
-
-		start := time.Now()
-		b, err := b.sendBindingEventToApp(ctx, name, resp.Data, resp.Metadata)
-		elapsed := diag.ElapsedSince(start)
-
-		diag.DefaultComponentMonitoring.InputBindingEvent(context.Background(), name, err == nil, elapsed)
-
-		if err != nil {
-			log.Debugf("error from app consumer for binding [%s]: %s", name, err)
-			return nil, err
-		}
-		return b, nil
-	})
 }
 
 func (b *binding) getSubscribedBindingsGRPC(ctx context.Context) ([]string, error) {

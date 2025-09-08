@@ -31,6 +31,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -57,11 +58,6 @@ const (
 	// gRPCBinaryMetadata is the suffix of grpc metadata binary value.
 	gRPCBinaryMetadataSuffix = "-bin"
 
-	// W3C trace correlation headers.
-	traceparentHeader = "traceparent"
-	tracestateHeader  = "tracestate"
-	tracebinMetadata  = "grpc-trace-bin"
-
 	// DestinationIDHeader is the header carrying the value of the invoked app id.
 	DestinationIDHeader = "destination-app-id"
 
@@ -74,8 +70,9 @@ const (
 	errorInfoHTTPCodeMetadata  = "http.code"
 	errorInfoHTTPErrorMetadata = "http.error_message"
 
-	CallerIDHeader = DaprHeaderPrefix + "caller-app-id"
-	CalleeIDHeader = DaprHeaderPrefix + "callee-app-id"
+	CallerNamespaceHeader = DaprHeaderPrefix + "caller-namespace"
+	CallerIDHeader        = DaprHeaderPrefix + "caller-app-id"
+	CalleeIDHeader        = DaprHeaderPrefix + "callee-app-id"
 )
 
 // BufPool is a pool of *[]byte used by direct messaging (for sending on both the server and client). Their size is fixed at StreamBufferSize.
@@ -149,13 +146,13 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 		keyName := strings.ToLower(k)
 		// get both the trace headers for HTTP/GRPC and continue
 		switch keyName {
-		case traceparentHeader:
+		case diagConsts.TraceparentHeader:
 			traceparentValue = listVal.GetValues()[0]
 			continue
-		case tracestateHeader:
+		case diagConsts.TracestateHeader:
 			tracestateValue = listVal.GetValues()[0]
 			continue
-		case tracebinMetadata:
+		case diagConsts.GRPCTraceContextKey:
 			grpctracebinValue = listVal.GetValues()[0]
 			continue
 		case DestinationIDHeader:
@@ -220,16 +217,19 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 		keyName := strings.ToLower(k)
 		// get both the trace headers for HTTP/GRPC and continue
 		switch keyName {
-		case traceparentHeader:
+		case diagConsts.TraceparentHeader:
 			traceparentValue = listVal.GetValues()[0]
 			continue
-		case tracestateHeader:
+		case diagConsts.TracestateHeader:
 			tracestateValue = listVal.GetValues()[0]
 			continue
-		case tracebinMetadata:
+		case diagConsts.GRPCTraceContextKey:
 			grpctracebinValue = listVal.GetValues()[0]
 			continue
 		case DestinationIDHeader:
+			continue
+		case diagConsts.BaggageHeader:
+			setHeader(diagConsts.BaggageHeader, listVal.GetValues()[0])
 			continue
 		}
 
@@ -387,9 +387,9 @@ func processHTTPToHTTPTraceHeaders(ctx context.Context, traceparentValue, traceS
 		span := diagUtils.SpanFromContext(ctx)
 		diag.SpanContextToHTTPHeaders(span.SpanContext(), setHeader)
 	} else {
-		setHeader(traceparentHeader, traceparentValue)
+		setHeader(diagConsts.TraceparentHeader, traceparentValue)
 		if traceStateValue != "" {
-			setHeader(tracestateHeader, traceStateValue)
+			setHeader(diagConsts.TracestateHeader, traceStateValue)
 		}
 	}
 }
@@ -410,7 +410,7 @@ func processHTTPToGRPCTraceHeader(ctx context.Context, md metadata.MD, tracepare
 	diag.SpanContextToHTTPHeaders(sc, func(header, value string) {
 		md.Set(header, value)
 	})
-	md.Set(tracebinMetadata, string(diagUtils.BinaryFromSpanContext(sc)))
+	md.Set(diagConsts.GRPCTraceContextKey, string(diagUtils.BinaryFromSpanContext(sc)))
 }
 
 func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctracebinValue string) {
@@ -424,7 +424,7 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 		diag.SpanContextToHTTPHeaders(sc, func(header, value string) {
 			md.Set(header, value)
 		})
-		md.Set(tracebinMetadata, string(diagUtils.BinaryFromSpanContext(sc)))
+		md.Set(diagConsts.GRPCTraceContextKey, string(diagUtils.BinaryFromSpanContext(sc)))
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(grpctracebinValue)
 		if err == nil {
@@ -436,7 +436,7 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 					md.Set(header, value)
 				})
 			}
-			md.Set(tracebinMetadata, string(decoded))
+			md.Set(diagConsts.GRPCTraceContextKey, string(decoded))
 		}
 	}
 }

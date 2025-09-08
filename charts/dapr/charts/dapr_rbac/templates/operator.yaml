@@ -3,6 +3,10 @@ kind: ServiceAccount
 metadata:
   name: dapr-operator
   namespace: {{ .Release.Namespace }}
+  {{- with .Values.serviceAccount.operator.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   labels:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}

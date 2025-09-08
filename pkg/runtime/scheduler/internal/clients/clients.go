@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -29,42 +30,88 @@ var log = logger.NewLogger("dapr.runtime.scheduler.clients")
 
 // Options contains the configuration options for the Scheduler clients.
 type Options struct {
-	Addresses []string
-	Security  security.Handler
+	Security security.Handler
 }
 
 // Clients builds Scheduler clients and provides those clients in a round-robin
 // fashion.
 type Clients struct {
+	security security.Handler
+
 	clients     []schedulerv1pb.SchedulerClient
+	closeFns    []context.CancelFunc
 	lastUsedIdx atomic.Uint64
+
+	disabled     chan struct{}
+	currentAddrs []string
+
+	lock    sync.RWMutex
+	hasInit chan struct{}
 }
 
-func New(ctx context.Context, opts Options) (*Clients, error) {
-	clients := make([]schedulerv1pb.SchedulerClient, len(opts.Addresses))
+func New(opts Options) *Clients {
+	return &Clients{
+		security: opts.Security,
+		hasInit:  make(chan struct{}),
+		disabled: make(chan struct{}),
+	}
+}
 
-	for i, address := range opts.Addresses {
+func (c *Clients) Disable() {
+	close(c.disabled)
+}
+
+func (c *Clients) Reload(ctx context.Context, addresses []string) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.currentAddrs = []string{}
+	c.close()
+
+	c.clients = make([]schedulerv1pb.SchedulerClient, 0, len(addresses))
+	c.closeFns = make([]context.CancelFunc, 0, len(addresses))
+
+	for _, address := range addresses {
 		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
-		client, err := client.New(ctx, address, opts.Security)
+		client, closeFn, err := client.New(ctx, address, c.security)
 		if err != nil {
-			return nil, fmt.Errorf("scheduler client not initialized for address %s: %s", address, err)
+			c.close()
+			return fmt.Errorf("scheduler client not initialized for address %s: %s", address, err)
 		}
 
 		log.Infof("Scheduler client initialized for address: %s", address)
-		clients[i] = client
+		c.clients = append(c.clients, client)
+		c.closeFns = append(c.closeFns, closeFn)
 	}
 
-	if len(clients) > 0 {
+	if len(c.clients) > 0 {
 		log.Info("Scheduler clients initialized")
 	}
 
-	return &Clients{
-		clients: clients,
-	}, nil
+	c.currentAddrs = addresses
+
+	select {
+	case <-c.hasInit:
+	default:
+		close(c.hasInit)
+	}
+
+	return nil
 }
 
 // Next returns the next client in a round-robin manner.
-func (c *Clients) Next() (schedulerv1pb.SchedulerClient, error) {
+func (c *Clients) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, error) {
+	select {
+	case <-c.hasInit:
+	case <-c.disabled:
+		return nil, errors.New("scheduler clients are disabled")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
 	if len(c.clients) == 0 {
 		return nil, errors.New("no scheduler client initialized")
 	}
@@ -73,7 +120,20 @@ func (c *Clients) Next() (schedulerv1pb.SchedulerClient, error) {
 	return c.clients[int(c.lastUsedIdx.Add(1))%len(c.clients)], nil
 }
 
-// All returns all scheduler clients.
-func (c *Clients) All() []schedulerv1pb.SchedulerClient {
-	return c.clients
+func (c *Clients) Addresses() []string {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	return c.currentAddrs
+}
+
+func (c *Clients) close() {
+	var wg sync.WaitGroup
+	wg.Add(len(c.closeFns))
+	for _, closeFn := range c.closeFns {
+		go func() {
+			closeFn()
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }

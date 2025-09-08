@@ -33,7 +33,7 @@ import (
 
 // GetWorkflow is the API handler for getting workflow details
 func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if _, err := a.ActorEngine(ctx); err != nil {
+	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
@@ -47,12 +47,14 @@ func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflow
 	response, err := a.workflowEngine.Client().Get(ctx, &req)
 	if err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId(), err)
+			err = nil
 		} else {
 			err = messages.ErrWorkflowGetResponse.WithFormat(in.GetInstanceId(), err)
 		}
 		a.logger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
+		return &runtimev1pb.GetWorkflowResponse{
+			InstanceId: in.GetInstanceId(),
+		}, err
 	}
 
 	res := &runtimev1pb.GetWorkflowResponse{
@@ -68,7 +70,7 @@ func (a *Universal) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflow
 
 // StartWorkflow is the API handler for starting a workflow
 func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
-	if _, err := a.ActorEngine(ctx); err != nil {
+	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
 	// The instance ID is optional. If not specified, we generate a random one.
@@ -118,7 +120,7 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 
 // TerminateWorkflow is the API handler for terminating a workflow
 func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
-	if _, err := a.ActorEngine(ctx); err != nil {
+	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
 	emptyResponse := &emptypb.Empty{}
@@ -146,7 +148,7 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 
 // RaiseEventWorkflow is the API handler for raising an event to a workflow
 func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
-	if _, err := a.ActorEngine(ctx); err != nil {
+	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
 	emptyResponse := &emptypb.Empty{}
@@ -180,7 +182,7 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 
 // PauseWorkflow is the API handler for pausing a workflow
 func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
-	if _, err := a.ActorEngine(ctx); err != nil {
+	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
 	emptyResponse := &emptypb.Empty{}
@@ -203,7 +205,7 @@ func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWork
 
 // ResumeWorkflow is the API handler for resuming a workflow
 func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
-	if _, err := a.ActorEngine(ctx); err != nil {
+	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
 	emptyResponse := &emptypb.Empty{}
@@ -226,7 +228,7 @@ func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWo
 
 // PurgeWorkflow is the API handler for purging a workflow
 func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
-	if _, err := a.ActorEngine(ctx); err != nil {
+	if _, err := a.ActorRouter(ctx); err != nil {
 		return nil, err
 	}
 	emptyResponse := &emptypb.Empty{}

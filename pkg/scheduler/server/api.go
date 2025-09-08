@@ -19,10 +19,13 @@ import (
 	"fmt"
 	"strings"
 
+	apierrors "github.com/diagridio/go-etcd-cron/api/errors"
+
 	"github.com/diagridio/go-etcd-cron/api"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
@@ -52,11 +55,22 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		FailurePolicy: schedFPToCron(job.FailurePolicy),
 	}
 
-	err = cron.Add(ctx, serialized.Name(), apiJob)
+	if req.GetOverwrite() {
+		err = cron.Add(ctx, serialized.Name(), apiJob)
+	} else {
+		err = cron.AddIfNotExists(ctx, serialized.Name(), apiJob)
+	}
+
+	logWithField := log.WithFields(map[string]any{"overwrite": req.GetOverwrite()})
 	if err != nil {
-		log.Errorf("error scheduling job %s: %s", req.GetName(), err)
+		logWithField.Errorf("error scheduling job %s: %s", req.GetName(), err)
+		if apierrors.IsJobAlreadyExists(err) {
+			return nil, status.Errorf(codes.AlreadyExists, "%s", err.Error())
+		}
+
 		return nil, err
 	}
+
 	monitoring.RecordJobsScheduledCount(req.GetMetadata())
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }
@@ -171,8 +185,6 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 		return err
 	}
 
-	monitoring.RecordSidecarsConnectedCount(1)
-	defer monitoring.RecordSidecarsConnectedCount(-1)
 	select {
 	case <-s.closeCh:
 		return errors.New("server is closing")
@@ -188,13 +200,13 @@ func (s *Server) WatchHosts(_ *schedulerv1pb.WatchHostsRequest, stream scheduler
 }
 
 //nolint:protogetter
-func schedFPToCron(fp *schedulerv1pb.FailurePolicy) *api.FailurePolicy {
+func schedFPToCron(fp *commonv1pb.JobFailurePolicy) *api.FailurePolicy {
 	if fp == nil {
 		return nil
 	}
 
 	switch fp.GetPolicy().(type) {
-	case *schedulerv1pb.FailurePolicy_Constant:
+	case *commonv1pb.JobFailurePolicy_Constant:
 		return &api.FailurePolicy{
 			Policy: &api.FailurePolicy_Constant{
 				Constant: &api.FailurePolicyConstant{
@@ -203,7 +215,7 @@ func schedFPToCron(fp *schedulerv1pb.FailurePolicy) *api.FailurePolicy {
 				},
 			},
 		}
-	case *schedulerv1pb.FailurePolicy_Drop:
+	case *commonv1pb.JobFailurePolicy_Drop:
 		return &api.FailurePolicy{
 			Policy: &api.FailurePolicy_Drop{
 				Drop: new(api.FailurePolicyDrop),
@@ -216,25 +228,25 @@ func schedFPToCron(fp *schedulerv1pb.FailurePolicy) *api.FailurePolicy {
 }
 
 //nolint:protogetter
-func cronFPToSched(fp *api.FailurePolicy) *schedulerv1pb.FailurePolicy {
+func cronFPToSched(fp *api.FailurePolicy) *commonv1pb.JobFailurePolicy {
 	if fp == nil {
 		return nil
 	}
 
 	switch fp.GetPolicy().(type) {
 	case *api.FailurePolicy_Constant:
-		return &schedulerv1pb.FailurePolicy{
-			Policy: &schedulerv1pb.FailurePolicy_Constant{
-				Constant: &schedulerv1pb.FailurePolicyConstant{
+		return &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Constant{
+				Constant: &commonv1pb.JobFailurePolicyConstant{
 					Interval:   fp.GetConstant().Interval,
 					MaxRetries: fp.GetConstant().MaxRetries,
 				},
 			},
 		}
 	case *api.FailurePolicy_Drop:
-		return &schedulerv1pb.FailurePolicy{
-			Policy: &schedulerv1pb.FailurePolicy_Drop{
-				Drop: new(schedulerv1pb.FailurePolicyDrop),
+		return &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Drop{
+				Drop: new(commonv1pb.JobFailurePolicyDrop),
 			},
 		}
 

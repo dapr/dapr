@@ -19,13 +19,14 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/router"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -37,11 +38,12 @@ type streamer struct {
 	stream   schedulerv1pb.Scheduler_WatchJobsClient
 	resultCh chan *schedulerv1pb.WatchJobsRequest
 
-	actors   engine.Interface
+	actors   router.Interface
 	channels *channels.Channels
 	wfengine wfengine.Interface
 
-	wg sync.WaitGroup
+	wg       sync.WaitGroup
+	inflight atomic.Int64
 }
 
 // run starts the streamer and blocks until the stream is closed or an error occurs.
@@ -53,7 +55,10 @@ func (s *streamer) run(ctx context.Context) error {
 // scheduler job messages. It then invokes the appropriate app or actor
 // reminder based on the job metadata.
 func (s *streamer) receive(ctx context.Context) error {
-	defer s.wg.Wait()
+	defer func() {
+		s.wg.Wait()
+		s.stream.CloseSend()
+	}()
 
 	for {
 		resp, err := s.stream.Recv()
@@ -65,12 +70,15 @@ func (s *streamer) receive(ctx context.Context) error {
 		}
 
 		s.wg.Add(1)
+		s.inflight.Add(1)
 		go func() {
-			defer s.wg.Done()
+			defer func() {
+				s.wg.Done()
+				s.inflight.Add(-1)
+			}()
+
 			result := s.handleJob(ctx, resp)
 			select {
-			case <-ctx.Done():
-			case <-s.stream.Context().Done():
 			case s.resultCh <- &schedulerv1pb.WatchJobsRequest{
 				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
 					Result: &schedulerv1pb.WatchJobsRequestResult{
@@ -79,6 +87,8 @@ func (s *streamer) receive(ctx context.Context) error {
 					},
 				},
 			}:
+			case <-s.stream.Context().Done():
+			case <-ctx.Done():
 			}
 		}()
 	}
@@ -93,13 +103,13 @@ func (s *streamer) outgoing(ctx context.Context) error {
 
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-s.stream.Context().Done():
-			return s.stream.Context().Err()
 		case result := <-s.resultCh:
 			if err := s.stream.Send(result); err != nil {
 				return err
+			}
+		case <-ctx.Done():
+			if s.inflight.Load() == 0 && len(s.resultCh) == 0 {
+				return ctx.Err()
 			}
 		}
 	}
@@ -123,6 +133,10 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 		}
 
+		if errors.Is(err, context.Canceled) {
+			return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
+		}
+
 		if errors.Is(err, actorerrors.ErrReminderCanceled) {
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 		}
@@ -130,6 +144,9 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		// If the actor was hosted on another instance, the error will be a gRPC status error,
 		// so we need to unwrap it and match on the error message
 		if st, ok := status.FromError(err); ok {
+			if st.Code() == codes.FailedPrecondition {
+				return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
+			}
 			if st.Message() == actorerrors.ErrReminderCanceled.Error() {
 				return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 			}

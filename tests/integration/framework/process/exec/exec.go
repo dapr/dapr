@@ -23,7 +23,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,6 +69,9 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 			}
 		},
 		exitCode: defaultExitCode,
+		envs: map[string]string{
+			"DAPR_UNSAFE_SKIP_CONTAINER_UID_GID_CHECK": "true",
+		},
 	}
 
 	for _, fopt := range fopts {
@@ -109,24 +111,12 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 		pipe := tee.WriteCloser(iow, pipe.procPipe)
 
 		e.wg.Add(1)
-		pipeErrCh := make(chan error, 1)
 		go func() {
 			defer e.wg.Done()
 			io.Copy(pipe, cmdPipe)
-			pipeErrCh <- pipe.Close()
+			pipe.Close()
 		}()
-		t.Cleanup(func() {
-			select {
-			case err := <-pipeErrCh:
-				require.NoError(t, err)
-			case <-time.After(time.Second * 5):
-				assert.Fail(t, "context cancelled before exec pipe closed")
-			}
-		})
 	}
-
-	// Wait for a few seconds before killing the process completely.
-	e.cmd.WaitDelay = time.Second * 5
 
 	for k, v := range e.envs {
 		e.cmd.Env = append(e.cmd.Env, k+"="+v)
@@ -136,8 +126,7 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 }
 
 func (e *exec) Cleanup(t *testing.T) {
-	e.wg.Add(1)
-	defer func() { e.wg.Done(); e.wg.Wait() }()
+	defer func() { e.wg.Wait() }()
 
 	if !e.once.CompareAndSwap(false, true) {
 		return

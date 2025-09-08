@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -28,10 +27,16 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors/targets/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/activity"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -40,18 +45,21 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/local"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.wfengine.backend.actors")
 
 const (
-	defaultNamespace     = "default"
 	WorkflowNameLabelKey = "workflow"
 	ActivityNameLabelKey = "activity"
+	ExecutorNameLabelKey = "executor"
 	ActorTypePrefix      = "dapr.internal."
 )
 
@@ -61,52 +69,66 @@ type Options struct {
 	Actors             actors.Interface
 	Resiliency         resiliency.Provider
 	SchedulerReminders bool
-	EventSink          workflow.EventSink
+	EventSink          orchestrator.EventSink
+	// experimental feature
+	// enabling this will use the cluster tasks backend for pending tasks, instead of the default local implementation
+	// the cluster tasks backend uses actors to share the state of pending tasks
+	// allowing to deploy multiple daprd replicas and expose them through a loadbalancer
+	EnableClusteredDeployment bool
 }
 
 type Actors struct {
 	appID             string
+	namespace         string
 	workflowActorType string
 	activityActorType string
+	executorActorType string
 
-	defaultReminderInterval *time.Duration
-	resiliency              resiliency.Provider
-	actors                  actors.Interface
-	schedulerReminders      bool
-	eventSink               workflow.EventSink
+	enableClusteredDeployment bool
+	pendingTasksBackend       PendingTasksBackend
+	defaultReminderInterval   *time.Duration
+	resiliency                resiliency.Provider
+	actors                    actors.Interface
+	schedulerReminders        bool
+	eventSink                 orchestrator.EventSink
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
-
-	registeredCh chan struct{}
-	lock         sync.RWMutex
 }
 
 func New(opts Options) *Actors {
+	var pendingTasksBackend PendingTasksBackend = local.NewTasksBackend()
+	if opts.EnableClusteredDeployment {
+		pendingTasksBackend = NewClusterTasksBackend(ClusterTasksBackendOptions{
+			Actors:            opts.Actors,
+			ExecutorActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
+		})
+	}
 	return &Actors{
 		appID:                     opts.AppID,
+		namespace:                 opts.Namespace,
 		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
+		executorActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		schedulerReminders:        opts.SchedulerReminders,
+		pendingTasksBackend:       pendingTasksBackend,
+		enableClusteredDeployment: opts.EnableClusteredDeployment,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
-		registeredCh:              make(chan struct{}),
 		eventSink:                 opts.EventSink,
 	}
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-	defer cancel()
-
 	atable, err := abe.actors.Table(ctx)
 	if err != nil {
 		return err
 	}
 
-	workflowFactory, err := workflow.WorkflowFactory(ctx, workflow.WorkflowOptions{
+	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
+	oopts := orchestrator.Options{
 		AppID:             abe.appID,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
@@ -124,12 +146,10 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		SchedulerReminders: abe.schedulerReminders,
 		EventSink:          abe.eventSink,
-	})
-	if err != nil {
-		return err
+		ActorTypeBuilder:   actorTypeBuilder,
 	}
 
-	activityFactory, err := workflow.ActivityFactory(ctx, workflow.ActivityOptions{
+	aopts := activity.Options{
 		AppID:             abe.appID,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
@@ -149,27 +169,42 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		},
 		Actors:             abe.actors,
 		SchedulerReminders: abe.schedulerReminders,
-	})
+		ActorTypeBuilder:   actorTypeBuilder,
+	}
+
+	workflowFactory, activityFactory, err := workflow.Factories(ctx, oopts, aopts)
 	if err != nil {
 		return err
 	}
 
-	atable.RegisterActorTypes(
-		table.RegisterActorTypeOptions{
-			Factories: []table.ActorTypeFactory{
-				{
-					Factory: workflowFactory,
-					Type:    abe.workflowActorType,
-				},
-				{
-					Factory: activityFactory,
-					Type:    abe.activityActorType,
-				},
-			},
+	factories := []table.ActorTypeFactory{
+		{
+			Factory: workflowFactory,
+			Type:    abe.workflowActorType,
 		},
-	)
+		{
+			Factory: activityFactory,
+			Type:    abe.activityActorType,
+		},
+	}
 
-	close(abe.registeredCh)
+	if abe.enableClusteredDeployment {
+		executorFactory, err := executor.New(ctx, executor.Options{
+			ActorType: abe.executorActorType,
+			Actors:    abe.actors,
+		})
+		if err != nil {
+			return err
+		}
+		factories = append(factories, table.ActorTypeFactory{
+			Factory: executorFactory,
+			Type:    abe.executorActorType,
+		})
+	}
+
+	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
+		Factories: factories,
+	})
 
 	return nil
 }
@@ -180,13 +215,54 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 		return err
 	}
 
-	defer func() {
-		abe.lock.Lock()
-		abe.registeredCh = make(chan struct{})
-		abe.lock.Unlock()
-	}()
+	actorTypes := []string{abe.workflowActorType, abe.activityActorType}
+	if abe.enableClusteredDeployment {
+		actorTypes = append(actorTypes, abe.executorActorType)
+	}
 
-	return table.UnRegisterActorTypes(abe.workflowActorType, abe.activityActorType)
+	return table.UnRegisterActorTypes(actorTypes...)
+}
+
+// RerunWorkflowFromEvent implements backend.Backend and reruns a workflow from
+// a specific event ID.
+func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.RerunWorkflowFromEventRequest) (api.InstanceID, error) {
+	if len(req.GetSourceInstanceID()) == 0 {
+		return "", status.Error(codes.InvalidArgument, "rerun workflow source instance ID is required")
+	}
+
+	if req.NewInstanceID == nil {
+		u, err := uuid.NewRandom()
+		if err != nil {
+			return "", fmt.Errorf("failed to generate instance ID: %w", err)
+		}
+		req.NewInstanceID = ptr.Of(u.String())
+	}
+
+	if req.GetSourceInstanceID() == req.GetNewInstanceID() {
+		return "", status.Error(codes.InvalidArgument, "rerun workflow instance ID must be different from the original instance ID")
+	}
+
+	requestBytes, err := proto.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal RerunWorkflowFromEvent: %w", err)
+	}
+
+	areq := internalsv1pb.NewInternalInvokeRequest(todo.ForkWorkflowHistory).
+		WithActor(abe.workflowActorType, req.GetSourceInstanceID()).
+		WithData(requestBytes).
+		WithContentType(invokev1.ProtobufContentType)
+
+	engine, err := abe.actors.Router(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = engine.Call(ctx, areq)
+	if err != nil {
+		return "", err
+	}
+
+	return api.InstanceID(req.GetNewInstanceID()), nil
 }
 
 // CreateOrchestrationInstance implements backend.Backend and creates a new workflow instance.
@@ -195,16 +271,6 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
 func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
-	abe.lock.RLock()
-	ch := abe.registeredCh
-	abe.lock.RUnlock()
-
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
 	var workflowInstanceID string
 	if es := e.GetExecutionStarted(); es == nil {
 		return errors.New("the history event must be an ExecutionStartedEvent")
@@ -235,15 +301,18 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		WithContentType(invokev1.ProtobufContentType)
 	start := time.Now()
 
-	engine, err := abe.actors.Engine(ctx)
+	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
 
 	err = backoff.Retry(func() error {
-		_, eerr := engine.Call(ctx, req)
+		_, eerr := router.Call(ctx, req)
 		status, ok := status.FromError(eerr)
 		if ok && status.Code() == codes.FailedPrecondition {
+			return eerr
+		}
+		if errors.Is(eerr, actorerrors.ErrCreatingActor) {
 			return eerr
 		}
 		return backoff.Permanent(eerr)
@@ -331,13 +400,13 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
 
-	engine, err := abe.actors.Engine(ctx)
+	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
 
 	start := time.Now()
-	_, err = engine.Call(ctx, req)
+	_, err = router.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to ADD EVENT, record count and latency metrics.
@@ -389,7 +458,7 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, ch chan<- *backend.OrchestrationMetadata) error {
 	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
 
-	engine, err := abe.actors.Engine(ctx)
+	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
@@ -404,7 +473,7 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 	for {
 		err = concurrency.NewRunnerManager(
 			func(ctx context.Context) error {
-				return engine.CallStream(ctx, req, stream)
+				return router.CallStream(ctx, req, stream)
 			},
 			func(ctx context.Context) error {
 				for {
@@ -447,13 +516,13 @@ func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceI
 		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
 		WithActor(abe.workflowActorType, string(id))
 
-	engine, err := abe.actors.Engine(ctx)
+	router, err := abe.actors.Router(ctx)
 	if err != nil {
 		return err
 	}
 
 	start := time.Now()
-	_, err = engine.Call(ctx, req)
+	_, err = router.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to PURGE WORKFLOW, record latency and count metrics.
@@ -534,4 +603,34 @@ func (abe *Actors) NextActivityWorkItem(ctx context.Context) (*backend.ActivityW
 
 func (abe *Actors) ActivityActorType() string {
 	return abe.activityActorType
+}
+
+// CancelActivityTask implements backend.Backend.
+func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
+	return abe.pendingTasksBackend.CancelActivityTask(ctx, instanceID, taskID)
+}
+
+// CancelOrchestratorTask implements backend.Backend.
+func (abe *Actors) CancelOrchestratorTask(ctx context.Context, instanceID api.InstanceID) error {
+	return abe.pendingTasksBackend.CancelOrchestratorTask(ctx, instanceID)
+}
+
+// CompleteActivityTask implements backend.Backend.
+func (abe *Actors) CompleteActivityTask(ctx context.Context, response *protos.ActivityResponse) error {
+	return abe.pendingTasksBackend.CompleteActivityTask(ctx, response)
+}
+
+// CompleteOrchestratorTask implements backend.Backend.
+func (abe *Actors) CompleteOrchestratorTask(ctx context.Context, response *protos.OrchestratorResponse) error {
+	return abe.pendingTasksBackend.CompleteOrchestratorTask(ctx, response)
+}
+
+// WaitForActivityCompletion implements backend.Backend.
+func (abe *Actors) WaitForActivityCompletion(ctx context.Context, request *protos.ActivityRequest) (*protos.ActivityResponse, error) {
+	return abe.pendingTasksBackend.WaitForActivityCompletion(ctx, request)
+}
+
+// WaitForOrchestratorCompletion implements backend.Backend.
+func (abe *Actors) WaitForOrchestratorCompletion(ctx context.Context, request *protos.OrchestratorRequest) (*protos.OrchestratorResponse, error) {
+	return abe.pendingTasksBackend.WaitForOrchestratorCompletion(ctx, request)
 }

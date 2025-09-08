@@ -34,7 +34,7 @@ const (
 )
 
 func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
-	return a.scheduleJob(ctx, inReq.GetJob())
+	return a.scheduleJob(ctx, inReq)
 }
 
 func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1pb.JobHTTPRequest) (*runtimev1pb.ScheduleJobResponse, error) {
@@ -44,22 +44,26 @@ func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1p
 	}
 
 	//nolint:protogetter
-	return a.scheduleJob(ctx, &runtimev1pb.Job{
-		Name:     job.GetName(),
-		Schedule: job.Schedule,
-		Repeats:  job.Repeats,
-		DueTime:  job.DueTime,
-		Ttl:      job.Ttl,
-		Data:     data,
+	return a.scheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
+		Job: &runtimev1pb.Job{
+			Name:          job.GetName(),
+			Schedule:      job.Schedule,
+			Repeats:       job.Repeats,
+			DueTime:       job.DueTime,
+			Ttl:           job.Ttl,
+			Data:          data,
+			FailurePolicy: job.GetFailurePolicy(),
+		},
+		Overwrite: job.GetOverwrite(),
 	})
 }
 
-func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*runtimev1pb.ScheduleJobResponse, error) {
+func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
 	}
-
+	job := jobRequest.GetJob()
 	if job == nil {
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Job", errMetadata, errorcodes.SchedulerEmpty)
 	}
@@ -83,26 +87,22 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 				},
 			},
 		},
+		Overwrite: jobRequest.GetOverwrite(),
 		//nolint:protogetter
 		Job: &schedulerv1pb.Job{
-			Schedule: job.Schedule,
-			Data:     job.GetData(),
-			Repeats:  job.Repeats,
-			DueTime:  job.DueTime,
-			Ttl:      job.Ttl,
+			Schedule:      job.Schedule,
+			Data:          job.GetData(),
+			Repeats:       job.Repeats,
+			DueTime:       job.DueTime,
+			Ttl:           job.Ttl,
+			FailurePolicy: job.GetFailurePolicy(),
 		},
 	}
 
 	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	client, err := a.scheduler.Next(ctx)
-	if err != nil {
-		a.logger.Errorf("Error getting scheduler client: %s", err)
-		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
-	}
-
-	_, err = client.ScheduleJob(schedCtx, internalScheduleJobReq, grpc.WaitForReady(true))
+	_, err := a.scheduler.ScheduleJob(schedCtx, internalScheduleJobReq, grpc.WaitForReady(true))
 	if err != nil {
 		a.logger.Errorf("Error scheduling job %s due to: %s", job.GetName(), err)
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
@@ -138,13 +138,7 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	client, err := a.scheduler.Next(ctx)
-	if err != nil {
-		a.logger.Errorf("Error getting scheduler client: %s", err)
-		return &runtimev1pb.DeleteJobResponse{}, apierrors.SchedulerDeleteJob(errMetadata, err)
-	}
-
-	_, err = client.DeleteJob(schedCtx, internalDeleteJobReq, grpc.WaitForReady(true))
+	_, err := a.scheduler.DeleteJob(schedCtx, internalDeleteJobReq, grpc.WaitForReady(true))
 	if err != nil {
 		a.logger.Errorf("Error deleting job: %s due to: %s", inReq.GetName(), err)
 		return &runtimev1pb.DeleteJobResponse{}, apierrors.SchedulerDeleteJob(errMetadata, err)
@@ -180,13 +174,7 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	client, err := a.scheduler.Next(ctx)
-	if err != nil {
-		a.logger.Errorf("Error getting scheduler client: %s", err)
-		return nil, apierrors.SchedulerGetJob(errMetadata, err)
-	}
-
-	resp, err := client.GetJob(schedCtx, internalGetJobReq, grpc.WaitForReady(true))
+	resp, err := a.scheduler.GetJob(schedCtx, internalGetJobReq, grpc.WaitForReady(true))
 	if err != nil {
 		a.logger.Errorf("Error getting job %s due to: %s", inReq.GetName(), err)
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
@@ -194,12 +182,13 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 
 	return &runtimev1pb.GetJobResponse{
 		Job: &runtimev1pb.Job{
-			Name:     inReq.GetName(),
-			Schedule: resp.GetJob().Schedule, //nolint:protogetter
-			Data:     resp.GetJob().GetData(),
-			Repeats:  resp.GetJob().Repeats, //nolint:protogetter
-			DueTime:  resp.GetJob().DueTime, //nolint:protogetter
-			Ttl:      resp.GetJob().Ttl,     //nolint:protogetter
+			Name:          inReq.GetName(),
+			Schedule:      resp.GetJob().Schedule, //nolint:protogetter
+			Data:          resp.GetJob().GetData(),
+			Repeats:       resp.GetJob().Repeats, //nolint:protogetter
+			DueTime:       resp.GetJob().DueTime, //nolint:protogetter
+			Ttl:           resp.GetJob().Ttl,     //nolint:protogetter
+			FailurePolicy: resp.GetJob().GetFailurePolicy(),
 		},
 	}, nil
 }

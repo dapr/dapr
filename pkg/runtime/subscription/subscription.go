@@ -19,6 +19,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
@@ -27,9 +30,9 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/runtime/channels"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/subscription/postman"
 	"github.com/dapr/kit/logger"
 )
 
@@ -38,36 +41,41 @@ type Options struct {
 	Namespace       string
 	PubSubName      string
 	Topic           string
-	IsHTTP          bool
 	PubSub          *rtpubsub.PubsubItem
 	Resiliency      resiliency.Provider
 	TraceSpec       *config.TracingSpec
 	Route           rtpubsub.Subscription
-	Channels        *channels.Channels
 	GRPC            *manager.Manager
 	Adapter         rtpubsub.Adapter
 	AdapterStreamer rtpubsub.AdapterStreamer
+	ConnectionID    rtpubsub.ConnectionID
+	Postman         postman.Interface
 }
 
 type Subscription struct {
-	appID           string
-	namespace       string
-	pubsubName      string
-	topic           string
-	isHTTP          bool
-	pubsub          *rtpubsub.PubsubItem
-	resiliency      resiliency.Provider
-	route           rtpubsub.Subscription
-	tracingSpec     *config.TracingSpec
-	channels        *channels.Channels
-	grpc            *manager.Manager
-	adapter         rtpubsub.Adapter
-	adapterStreamer rtpubsub.AdapterStreamer
+	appID        string
+	namespace    string
+	pubsubName   string
+	topic        string
+	pubsub       *rtpubsub.PubsubItem
+	resiliency   resiliency.Provider
+	route        rtpubsub.Subscription
+	tracingSpec  *config.TracingSpec
+	grpc         *manager.Manager
+	connectionID rtpubsub.ConnectionID
 
-	cancel func()
+	adapterStreamer rtpubsub.AdapterStreamer
+	adapter         rtpubsub.Adapter
+
+	cancel   func(cause error)
+	closed   atomic.Bool
+	wg       sync.WaitGroup
+	inflight atomic.Int64
+
+	postman postman.Interface
 }
 
-var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription")
+var log = logger.NewLogger("dapr.runtime.processor.subscription")
 
 const BinaryCloudEventHeaderPrefix = "ce_"
 
@@ -77,23 +85,23 @@ func New(opts Options) (*Subscription, error) {
 		return nil, fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", opts.Topic, opts.PubSubName)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancelCause(context.Background())
 
 	s := &Subscription{
 		appID:           opts.AppID,
 		namespace:       opts.Namespace,
 		pubsubName:      opts.PubSubName,
 		topic:           opts.Topic,
-		isHTTP:          opts.IsHTTP,
 		pubsub:          opts.PubSub,
 		resiliency:      opts.Resiliency,
 		route:           opts.Route,
 		tracingSpec:     opts.TraceSpec,
-		channels:        opts.Channels,
 		grpc:            opts.GRPC,
 		cancel:          cancel,
 		adapter:         opts.Adapter,
+		connectionID:    opts.ConnectionID,
 		adapterStreamer: opts.AdapterStreamer,
+		postman:         opts.Postman,
 	}
 
 	name := s.pubsubName
@@ -106,13 +114,12 @@ func New(opts Options) (*Subscription, error) {
 	if route.BulkSubscribe != nil && route.BulkSubscribe.Enabled {
 		err := s.bulkSubscribeTopic(ctx, policyDef)
 		if err != nil {
-			cancel()
+			cancel(nil)
 			return nil, fmt.Errorf("failed to bulk subscribe to topic %s: %w", s.topic, err)
 		}
 		return s, nil
 	}
 
-	// TODO: @joshvanl: move subsscribedTopic to struct
 	subscribeTopic := s.topic
 	if namespaced {
 		subscribeTopic = s.namespace + s.topic
@@ -122,6 +129,17 @@ func New(opts Options) (*Subscription, error) {
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
+		s.wg.Add(1)
+		s.inflight.Add(1)
+		defer func() {
+			s.wg.Done()
+			s.inflight.Add(-1)
+		}()
+
+		if s.closed.Load() {
+			return errors.New("subscription is closed")
+		}
+
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
 		}
@@ -272,25 +290,17 @@ func New(opts Options) (*Subscription, error) {
 		}
 
 		sm := &rtpubsub.SubscribedMessage{
-			CloudEvent: cloudEvent,
-			Data:       data,
-			Topic:      msgTopic,
-			Metadata:   msg.Metadata,
-			Path:       routePath,
-			PubSub:     name,
+			CloudEvent:   cloudEvent,
+			Data:         data,
+			Topic:        msgTopic,
+			Metadata:     msg.Metadata,
+			Path:         routePath,
+			PubSub:       name,
+			SubscriberID: s.connectionID,
 		}
 		policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
-			var pErr error
-			if s.adapterStreamer != nil {
-				pErr = s.adapterStreamer.Publish(ctx, sm)
-			} else {
-				if s.isHTTP {
-					pErr = s.publishMessageHTTP(ctx, sm)
-				} else {
-					pErr = s.publishMessageGRPC(ctx, sm)
-				}
-			}
+			pErr := s.postman.Deliver(ctx, sm)
 
 			var rErr *rterrors.RetriableError
 			if errors.As(pErr, &rErr) {
@@ -327,18 +337,33 @@ func New(opts Options) (*Subscription, error) {
 		return err
 	})
 	if err != nil {
-		cancel()
+		cancel(nil)
 		return nil, fmt.Errorf("failed to subscribe to topic %s: %w", s.topic, err)
 	}
 
 	return s, nil
 }
 
-func (s *Subscription) Stop() {
-	s.cancel()
+func (s *Subscription) Stop(err ...error) {
+	s.closed.Store(true)
+	inflight := s.inflight.Load() > 0
+
+	s.wg.Wait()
 	if s.adapterStreamer != nil {
-		s.adapterStreamer.Close(s.adapterStreamer.StreamerKey(s.pubsubName, s.topic))
+		s.adapterStreamer.Close(s.adapterStreamer.StreamerKey(s.pubsubName, s.topic), s.connectionID)
 	}
+	// If there were in-flight requests then wait some time for the result to be
+	// sent to the broker. This is because the message result context is
+	// disparate.
+	if inflight {
+		time.Sleep(time.Millisecond * 400)
+	}
+	if err != nil && len(err) > 0 {
+		s.cancel(errors.Join(err...))
+		return
+	}
+
+	s.cancel(nil)
 }
 
 func (s *Subscription) sendToDeadLetter(ctx context.Context, name string, msg *contribpubsub.NewMessage, deadLetterTopic string) error {

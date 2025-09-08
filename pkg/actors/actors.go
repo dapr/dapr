@@ -24,11 +24,13 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
+
 	"github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
-	"github.com/dapr/dapr/pkg/actors/internal/locker"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
@@ -37,9 +39,9 @@ import (
 	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/internal/timers/inmemory"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/router"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/app"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
@@ -47,14 +49,11 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
+	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/events/queue"
-	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -73,13 +72,15 @@ type Options struct {
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled    bool
 	MaxRequestBodySize int
+	Mode               modes.DaprMode
 }
 
 type InitOptions struct {
-	StateStoreName   string
-	Hostname         string
-	GRPC             *manager.Manager
-	SchedulerClients clients.Clients
+	StateStoreName    string
+	Hostname          string
+	GRPC              *manager.Manager
+	SchedulerClient   schedulerv1pb.SchedulerClient
+	SchedulerReloader schedclient.Reloader
 }
 
 // Interface is the main runtime for the actors subsystem.
@@ -88,11 +89,12 @@ type InitOptions struct {
 type Interface interface {
 	Init(InitOptions) error
 	Run(context.Context) error
-	Engine(context.Context) (engine.Interface, error)
+	Router(context.Context) (router.Interface, error)
 	Table(context.Context) (table.Interface, error)
 	State(context.Context) (actorstate.Interface, error)
 	Timers(context.Context) (timers.Interface, error)
 	Reminders(context.Context) (reminders.Interface, error)
+	Placement(context.Context) (placement.Interface, error)
 	RuntimeStatus() *runtimev1pb.ActorRuntime
 	RegisterHosted(hostconfig.Config) error
 	UnRegisterHosted(actorTypes ...string)
@@ -114,16 +116,16 @@ type actors struct {
 	stateTTLEnabled    bool
 	maxRequestBodySize int
 
-	reminders      reminders.Interface
-	table          table.Interface
-	placement      placement.Interface
-	engine         engine.Interface
-	timerStorage   internaltimers.Storage
-	timers         timers.Interface
-	idlerQueue     *queue.Processor[string, targets.Idlable]
-	stateReminders *statestore.Statestore
-	reminderStore  storage.Interface
-	state          actorstate.Interface
+	reminders       reminders.Interface
+	table           table.Interface
+	placement       placement.Interface
+	router          router.Interface
+	timerStorage    internaltimers.Storage
+	timers          timers.Interface
+	stateReminders  *statestore.Statestore
+	reminderStore   storage.Interface
+	state           actorstate.Interface
+	reentrancyStore *reentrancystore.Store
 
 	disabled   *atomic.Pointer[error]
 	readyCh    chan struct{}
@@ -134,6 +136,7 @@ type actors struct {
 	registerDoneLock sync.RWMutex
 
 	clock clock.Clock
+	mode  modes.DaprMode
 }
 
 // New create a new actors runtime with given config.
@@ -165,6 +168,8 @@ func New(opts Options) Interface {
 		initDoneCh:         make(chan struct{}),
 		registerDoneCh:     make(chan struct{}),
 		maxRequestBodySize: opts.MaxRequestBodySize,
+		mode:               opts.Mode,
+		reentrancyStore:    reentrancystore.New(),
 	}
 }
 
@@ -175,30 +180,18 @@ func (a *actors) Init(opts InitOptions) error {
 		return nil
 	}
 
-	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
-
-	rStore := reentrancystore.New()
-
-	locker := locker.New(locker.Options{
-		ConfigStore: rStore,
-	})
-
 	a.table = table.New(table.Options{
-		IdlerQueue:      a.idlerQueue,
-		Locker:          locker,
-		ReentrancyStore: rStore,
+		ReentrancyStore: a.reentrancyStore,
 	})
 
 	apiLevel := apilevel.New()
 
 	storeEnabled := a.buildStateStore(opts, apiLevel)
 
-	if a.reminderStore != nil {
-		a.reminders = reminders.New(reminders.Options{
-			Storage: a.reminderStore,
-			Table:   a.table,
-		})
-	}
+	a.reminders = reminders.New(reminders.Options{
+		Storage: a.reminderStore,
+		Table:   a.table,
+	})
 
 	var err error
 	a.placement, err = placement.New(placement.Options{
@@ -212,6 +205,8 @@ func (a *actors) Init(opts InitOptions) error {
 		Reminders: a.reminderStore,
 		APILevel:  apiLevel,
 		Healthz:   a.healthz,
+		Mode:      a.mode,
+		Scheduler: opts.SchedulerReloader,
 	})
 	if err != nil {
 		return err
@@ -229,21 +224,19 @@ func (a *actors) Init(opts InitOptions) error {
 		})
 	}
 
-	a.engine = engine.New(engine.Options{
+	a.router = router.New(router.Options{
 		Namespace:          a.namespace,
 		SchedulerReminders: a.schedulerReminders,
 		Placement:          a.placement,
 		GRPC:               opts.GRPC,
 		Table:              a.table,
 		Resiliency:         a.resiliency,
-		IdlerQueue:         a.idlerQueue,
 		Reminders:          a.reminders,
-		Locker:             locker,
 		MaxRequestBodySize: a.maxRequestBodySize,
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
-		Engine: a.engine,
+		Router: a.router,
 	})
 	a.timers = timers.New(timers.Options{
 		Storage: a.timerStorage,
@@ -251,7 +244,7 @@ func (a *actors) Init(opts InitOptions) error {
 	})
 
 	if a.stateReminders != nil {
-		a.stateReminders.SetEngine(a.engine)
+		a.stateReminders.SetRouter(a.router)
 	}
 
 	return nil
@@ -278,7 +271,7 @@ func (a *actors) Run(ctx context.Context) error {
 
 	log.Info("Actor runtime started")
 
-	mngr := concurrency.NewRunnerCloserManager(nil,
+	mngr := concurrency.NewRunnerCloserManager(log, nil,
 		func(ctx context.Context) error {
 			// Only wait for host registration before starting the placement client,
 			// since registering Actor host types is dependent on the Actor state
@@ -302,7 +295,6 @@ func (a *actors) Run(ctx context.Context) error {
 	if err := mngr.AddCloser(
 		a.table,
 		a.timerStorage,
-		a.idlerQueue,
 	); err != nil {
 		return err
 	}
@@ -320,12 +312,12 @@ func (a *actors) Run(ctx context.Context) error {
 	return mngr.Run(ctx)
 }
 
-func (a *actors) Engine(ctx context.Context) (engine.Interface, error) {
+func (a *actors) Router(ctx context.Context) (router.Interface, error) {
 	if err := a.waitForReady(ctx); err != nil {
 		return nil, err
 	}
 
-	return a.engine, nil
+	return a.router, nil
 }
 
 func (a *actors) Table(ctx context.Context) (table.Interface, error) {
@@ -344,6 +336,14 @@ func (a *actors) State(ctx context.Context) (actorstate.Interface, error) {
 	return a.state, nil
 }
 
+func (a *actors) Placement(ctx context.Context) (placement.Interface, error) {
+	if err := a.waitForReady(ctx); err != nil {
+		return nil, err
+	}
+
+	return a.placement, nil
+}
+
 func (a *actors) Timers(ctx context.Context) (timers.Interface, error) {
 	if err := a.waitForReady(ctx); err != nil {
 		return nil, err
@@ -355,6 +355,10 @@ func (a *actors) Timers(ctx context.Context) (timers.Interface, error) {
 func (a *actors) Reminders(ctx context.Context) (reminders.Interface, error) {
 	if err := a.waitForReady(ctx); err != nil {
 		return nil, err
+	}
+
+	if a.reminders == nil {
+		return nil, messages.ErrActorRuntimeNotFound
 	}
 
 	return a.reminders, nil
@@ -374,7 +378,7 @@ func (a *actors) waitForReady(ctx context.Context) error {
 		}
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return messages.ErrActorRuntimeNotFound
 	}
 }
 
@@ -447,12 +451,14 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		factories = append(factories, table.ActorTypeFactory{
 			Type:       actorType,
 			Reentrancy: reentrancy,
-			Factory: app.Factory(app.Options{
-				ActorType:   actorType,
-				AppChannel:  cfg.AppChannel,
-				Resiliency:  a.resiliency,
-				IdleQueue:   a.idlerQueue,
-				IdleTimeout: idleTimeout,
+			Factory: app.New(app.Options{
+				ActorType:               actorType,
+				AppChannel:              cfg.AppChannel,
+				Resiliency:              a.resiliency,
+				IdleTimeout:             idleTimeout,
+				Reentrancy:              a.reentrancyStore,
+				DrainOngoingCallTimeout: drainOngoingCallTimeout,
+				Placement:               a.placement,
 			}),
 		})
 	}
@@ -503,24 +509,6 @@ func (a *actors) WaitForRegisteredHosts(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	}
-}
-
-func (a *actors) handleIdleActor(target targets.Idlable) {
-	// We don't use the placement context here as we are already deactivating the
-	// actor.
-	_, cancel, err := a.placement.Lock(context.Background())
-	if err != nil {
-		log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
-		return
-	}
-	defer cancel()
-
-	log.Debugf("Actor %s is idle, deactivating", target.Key())
-
-	if err := a.table.HaltIdlable(context.Background(), target); err != nil {
-		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
-		return
 	}
 }
 
@@ -609,7 +597,7 @@ func (a *actors) buildStateStore(opts InitOptions, apiLevel *apilevel.APILevel) 
 		a.reminderStore = scheduler.New(scheduler.Options{
 			Namespace:     a.namespace,
 			AppID:         a.appID,
-			Clients:       opts.SchedulerClients,
+			Client:        opts.SchedulerClient,
 			StateReminder: a.stateReminders,
 			Table:         a.table,
 			Healthz:       a.healthz,

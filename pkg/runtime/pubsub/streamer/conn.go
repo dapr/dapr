@@ -18,36 +18,54 @@ import (
 	"sync/atomic"
 
 	rtv1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 type conn struct {
 	lock             sync.RWMutex
 	streamLock       sync.Mutex
 	stream           rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
-	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
 	closeCh          chan struct{}
 	closed           atomic.Bool
+	connectionID     rtpubsub.ConnectionID
+	publishResponses PublishResponses
 }
 
 func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, func()) {
 	ch := make(chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, 1)
 	c.lock.Lock()
-	c.publishResponses[id] = ch
+
+	if c.publishResponses[id] == nil {
+		c.publishResponses[id] = make(ConnectionChannel)
+	}
+	c.publishResponses[id][c.connectionID] = ch
+
 	c.lock.Unlock()
 	return ch, func() {
 		c.lock.Lock()
-		delete(c.publishResponses, id)
+
+		delete(c.publishResponses[id], c.connectionID)
+		if len(c.publishResponses[id]) == 0 {
+			delete(c.publishResponses, id)
+		}
+
 		c.lock.Unlock()
+		// Ensure channel is closed to prevent goroutine leaks
+		select {
+		case <-ch: // drain if there's a value
+		default:
+		}
+		close(ch)
 	}
 }
 
 func (c *conn) notifyPublishResponse(resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1) {
 	c.lock.RLock()
-	ch, ok := c.publishResponses[resp.GetId()]
+	ch, ok := c.publishResponses[resp.GetId()][c.connectionID]
 	c.lock.RUnlock()
 
 	if !ok {
-		log.Errorf("no client stream expecting publish response for id %q", resp.GetId())
+		log.Errorf("no client stream expecting publish response for id %s ConnectionID%d", resp.GetId(), c.connectionID)
 		return
 	}
 

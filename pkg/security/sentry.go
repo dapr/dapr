@@ -15,7 +15,6 @@ package security
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"os"
@@ -67,7 +66,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 	sentryTokenFile := opts.SentryTokenFile
 	kubernetesMode := opts.Mode == modes.KubernetesMode
 
-	fn := func(ctx context.Context, csrDER []byte) ([]*x509.Certificate, error) {
+	fn := func(ctx context.Context, csrDER []byte) (*spiffe.SVIDResponse, error) {
 		unaryClientInterceptor := retry.UnaryClientInterceptor(
 			retry.WithMax(sentryMaxRetries),
 			retry.WithPerRetryTimeout(sentrySignTimeout),
@@ -137,7 +136,9 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			return nil, fmt.Errorf("error parsing newly signed certificate: %w", err)
 		}
 
-		return workloadcert, nil
+		return &spiffe.SVIDResponse{
+			X509Certificates: workloadcert,
+		}, nil
 	}
 
 	return fn, nil

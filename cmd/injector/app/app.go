@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"encoding/base64"
+	"math"
 	"os"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,8 +79,13 @@ func Run() {
 		log.Fatalf("Error getting config: %v", err)
 	}
 
-	kubeClient := utils.GetKubeClient()
 	conf := utils.GetConfig()
+
+	// Disable rate limiting for the Dapr client
+	conf.RateLimiter = nil
+	conf.QPS = math.MaxFloat32
+	conf.Burst = math.MaxInt
+	kubeClient := utils.GetKubeClient(conf)
 	daprClient, err := scheme.NewForConfig(conf)
 	if err != nil {
 		log.Fatalf("Error creating Dapr client: %v", err)
@@ -123,7 +129,7 @@ func Run() {
 		log.Fatalf("Error creating injector: %v", err)
 	}
 
-	webConfHealthTarget := healthz.AddTarget()
+	webConfHealthTarget := healthz.AddTarget("webhook-configuration")
 
 	caBundleCh := make(chan []byte)
 	mngr := concurrency.NewRunnerManager(

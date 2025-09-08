@@ -64,7 +64,9 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_scheduler_sidecars_connected: The total number of dapr sidecars connected to the scheduler service.
 * dapr_scheduler_jobs_created_total: The total number of jobs scheduled.
 * dapr_scheduler_jobs_triggered_total: The total number of successfully triggered jobs.
-* dapr_scheduler_trigger_latency: The latency of triggering jobs from the scheduler service.
+* dapr_scheduler_trigger_jobs_failed_total: The total time it takes to trigger a job from the scheduler service.
+* dapr_scheduler_trigger_jobs_undelivered_total: The total number of undelivered jobs.
+* dapr_scheduler_trigger_latency: The total time it takes to trigger a job from the scheduler service.
 
 ## Dapr Runtime metrics
 
@@ -128,6 +130,8 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_workflow_operation_count: The number of successful/failed workflow operation requests.
 * dapr_runtime_workflow_operation_latency: The latencies of responses for workflow operation requests.
 * dapr_runtime_workflow_execution_count: The number of successful/failed/recoverable workflow executions.
+* dapr_runtime_workflow_activity_operation_count: The number of successful/failed/recoverable activity requests.
+* dapr_runtime_workflow_activity_operation_latency: The total time taken to run an activity request.
 * dapr_runtime_workflow_activity_execution_count: The number of successful/failed/recoverable activity executions.
 * dapr_runtime_workflow_activity_execution_latency: The total time taken to run an activity to completion.
 

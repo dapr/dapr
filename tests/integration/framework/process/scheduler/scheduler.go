@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -147,6 +148,19 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 	if opts.overrideBroadcastHostPort != nil {
 		args = append(args, "--override-broadcast-host-port="+*opts.overrideBroadcastHostPort)
+	}
+
+	if opts.embed != nil {
+		args = append(args, "--etcd-embed="+strconv.FormatBool(*opts.embed))
+	}
+	if opts.clientEndpoints != nil {
+		args = append(args, "--etcd-client-endpoints="+strings.Join(*opts.clientEndpoints, ","))
+	}
+	if opts.clientUsername != nil {
+		args = append(args, "--etcd-client-username="+*opts.clientUsername)
+	}
+	if opts.clientPassword != nil {
+		args = append(args, "--etcd-client-password="+*opts.clientPassword)
 	}
 
 	return &Scheduler{
@@ -323,6 +337,10 @@ func (s *Scheduler) MetricsAddress() string {
 // Metrics returns a subset of metrics scraped from the metrics endpoint
 func (s *Scheduler) Metrics(t assert.TestingT, ctx context.Context) *metrics.Metrics {
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
+}
+
+func (s *Scheduler) MetricsWithLabels(t *testing.T, ctx context.Context) *metrics.MetricsWithLabels {
+	return metrics.NewWithLabels(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 
 func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Client {

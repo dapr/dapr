@@ -45,11 +45,11 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/workflows"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/engine"
-	enginefake "github.com/dapr/dapr/pkg/actors/engine/fake"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
+	"github.com/dapr/dapr/pkg/actors/router"
+	routerfake "github.com/dapr/dapr/pkg/actors/router/fake"
 	actorsstate "github.com/dapr/dapr/pkg/actors/state"
 	statefake "github.com/dapr/dapr/pkg/actors/state/fake"
 	"github.com/dapr/dapr/pkg/actors/timers"
@@ -1031,7 +1031,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
 			return nil, messages.ErrActorRuntimeNotFound
-		}).WithEngine(func(context.Context) (engine.Interface, error) {
+		}).WithRouter(func(context.Context) (router.Interface, error) {
 			return nil, messages.ErrActorRuntimeNotFound
 		}).WithTimers(func(context.Context) (timers.Interface, error) {
 			return nil, messages.ErrActorRuntimeNotFound
@@ -1081,7 +1081,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest) (*actorsapi.StateResponse, error) {
+			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
 				return &actorsapi.StateResponse{
 					Data: fakeData,
 					Metadata: map[string]string{
@@ -1104,7 +1104,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 204 No Content", func(t *testing.T) {
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest) (*actorsapi.StateResponse, error) {
+			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
 				return nil, nil
 			}), nil
 		})
@@ -1122,7 +1122,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 500 on GetState failure", func(t *testing.T) {
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest) (*actorsapi.StateResponse, error) {
+			return statefake.New().WithGetFn(func(context.Context, *actorsapi.GetStateRequest, bool) (*actorsapi.StateResponse, error) {
 				return nil, errors.New("UPSTREAM_ERROR")
 			}), nil
 		})
@@ -1243,7 +1243,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return statefake.New().WithTransactionalStateOperationFn(func(context.Context, bool, *actorsapi.TransactionalRequest) error {
+			return statefake.New().WithTransactionalStateOperationFn(func(context.Context, bool, *actorsapi.TransactionalRequest, bool) error {
 				return errors.New("UPSTREAM_ERROR")
 			}), nil
 		})
@@ -1508,8 +1508,8 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		actors.WithEngine(func(context.Context) (engine.Interface, error) {
-			return enginefake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+		actors.WithRouter(func(context.Context) (router.Interface, error) {
+			return routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 				return response, nil
 			}), nil
 		})
@@ -1524,8 +1524,8 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Direct Message - 500 for actor call failure", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
 
-		actors.WithEngine(func(context.Context) (engine.Interface, error) {
-			return enginefake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+		actors.WithRouter(func(context.Context) (router.Interface, error) {
+			return routerfake.New().WithCallFn(func(context.Context, *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 				return nil, errors.New("UPSTREAM_ERROR")
 			}), nil
 		})
@@ -1735,7 +1735,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return astate.WithGetFn(func(ctx context.Context, req *actorsapi.GetStateRequest) (*actorsapi.StateResponse, error) {
+			return astate.WithGetFn(func(ctx context.Context, req *actorsapi.GetStateRequest, _ bool) (*actorsapi.StateResponse, error) {
 				called.Add(1)
 				return &actorsapi.StateResponse{
 					Data: fakeData,
@@ -4061,7 +4061,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	const appID = "fakeAPI"
 	healthz := healthz.New()
-	htarget := healthz.AddTarget()
+	htarget := healthz.AddTarget("test-target")
 	testAPI := &api{
 		healthz: healthz,
 		universal: universal.New(universal.Options{

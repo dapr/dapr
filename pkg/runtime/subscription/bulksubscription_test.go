@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
+	googlegrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -41,9 +41,11 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/pubsub"
 	publisherfake "github.com/dapr/dapr/pkg/runtime/pubsub/publisher/fake"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/runtime/subscription/postman/grpc"
+	"github.com/dapr/dapr/pkg/runtime/subscription/postman/http"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testinggrpc "github.com/dapr/dapr/pkg/testing/grpc"
 	"github.com/dapr/kit/logger"
@@ -149,22 +151,25 @@ func TestBulkSubscribe(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules:    []*runtimePubsub.Rule{{Path: "orders"}},
+			Route: pubsub.Subscription{
+				Rules:    []*pubsub.Rule{{Path: "orders"}},
 				Metadata: map[string]string{"rawPayload": "true"},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -201,21 +206,24 @@ func TestBulkSubscribe(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		order := `{"data":{"orderId":1},"datacontenttype":"application/json","id":"8b540b03-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
 
@@ -253,23 +261,26 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.Init()
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
+		channels := new(channels.Channels).WithAppChannel(mockAppChannel)
+
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman:    http.New(http.Options{Channels: channels}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(2)
 
@@ -293,7 +304,7 @@ func TestBulkSubscribe(t *testing.T) {
 		defer fakeResp2.Close()
 		mockAppChannel1 := new(channelt.MockAppChannel)
 		mockAppChannel1.Init()
-		ps.channels.WithAppChannel(mockAppChannel1)
+		channels.WithAppChannel(mockAppChannel1)
 		mockAppChannel1.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp2, nil)
 
 		msgArr = getBulkMessageEntries(3)
@@ -320,7 +331,7 @@ func TestBulkSubscribe(t *testing.T) {
 		defer fakeResp3.Close()
 		mockAppChannel2 := new(channelt.MockAppChannel)
 		mockAppChannel2.Init()
-		ps.channels.WithAppChannel(mockAppChannel2)
+		channels.WithAppChannel(mockAppChannel2)
 		mockAppChannel2.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp3, nil)
 
 		msgArr = getBulkMessageEntries(4)
@@ -346,7 +357,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel3 := new(channelt.MockAppChannel)
 		mockAppChannel3.Init()
-		ps.channels.WithAppChannel(mockAppChannel3)
+		channels.WithAppChannel(mockAppChannel3)
 		mockAppChannel3.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("Mock error"))
 		msgArr = getBulkMessageEntries(1)
 
@@ -387,28 +398,31 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.Init()
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
-		rule1, err := runtimePubsub.CreateRoutingRule(`event.type == "type1"`, "orders1")
+		rule1, err := pubsub.CreateRoutingRule(`event.type == "type1"`, "orders1")
 		require.NoError(t, err)
-		rule2, err := runtimePubsub.CreateRoutingRule(`event.type == "type2"`, "orders2")
+		rule2, err := pubsub.CreateRoutingRule(`event.type == "type2"`, "orders2")
 		require.NoError(t, err)
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{rule1, rule2},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{rule1, rule2},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(2)
 
@@ -470,28 +484,31 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders1")).Return(respInvoke1, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders2")).Return(respInvoke2, nil)
 
-		rule1, err := runtimePubsub.CreateRoutingRule(`event.type == "type1"`, orders1)
+		rule1, err := pubsub.CreateRoutingRule(`event.type == "type1"`, orders1)
 		require.NoError(t, err)
-		rule2, err := runtimePubsub.CreateRoutingRule(`event.type == "type2"`, "orders2")
+		rule2, err := pubsub.CreateRoutingRule(`event.type == "type2"`, "orders2")
 		require.NoError(t, err)
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{rule1, rule2},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{rule1, rule2},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(10)
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
@@ -543,21 +560,24 @@ func TestBulkSubscribe(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(4)
 		msgArr[0].EntryId = ""
@@ -617,21 +637,24 @@ func TestBulkSubscribe(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(5)
 
@@ -695,21 +718,24 @@ func TestBulkSubscribe(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		msgArr := getBulkMessageEntries(5)
 
@@ -802,14 +828,14 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		g := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 
 		// create a new AppChannel and gRPC client for every test
 		mockAppChannel := channels.New(channels.Options{
 			Registry:       registry.New(registry.NewOptions()),
 			ComponentStore: compstore.New(),
 			GlobalConfig:   new(config.Configuration),
-			GRPC:           grpc,
+			GRPC:           g,
 			AppConnectionConfig: config.AppConnectionConfig{
 				Port: port,
 			},
@@ -818,23 +844,24 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     false,
-			GRPC:       grpc,
-			Channels:   mockAppChannel,
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			GRPC:       g,
+			Postman:    grpc.New(grpc.Options{Channel: g}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules:    []*runtimePubsub.Rule{{Path: "orders"}},
+			Route: pubsub.Subscription{
+				Rules:    []*pubsub.Rule{{Path: "orders"}},
 				Metadata: map[string]string{"rawPayload": "true"},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -889,9 +916,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 		require.NoError(t, comp.Init(t.Context(), contribpubsub.Metadata{}))
 
-		rule1, err := runtimePubsub.CreateRoutingRule(`event.type == "type1"`, orders1)
+		rule1, err := pubsub.CreateRoutingRule(`event.type == "type1"`, orders1)
 		require.NoError(t, err)
-		rule2, err := runtimePubsub.CreateRoutingRule(`event.type == "type2"`, "orders2")
+		rule2, err := pubsub.CreateRoutingRule(`event.type == "type2"`, "orders2")
 		require.NoError(t, err)
 
 		msgArr := getBulkMessageEntries(10)
@@ -947,34 +974,35 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		// create a new AppChannel and gRPC client for every test
-		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		g := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 		mockAppChannel := channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
-			GRPC:                grpc,
+			GRPC:                g,
 		})
 		require.NoError(t, mockAppChannel.Refresh())
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     false,
-			GRPC:       grpc,
-			Channels:   mockAppChannel,
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			GRPC:       g,
+			Postman:    grpc.New(grpc.Options{Channel: g}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{rule1, rule2},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{rule1, rule2},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -1041,12 +1069,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		g := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 		mockAppChannel := channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
-			GRPC:                grpc,
+			GRPC:                g,
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
 		require.NoError(t, err)
@@ -1054,22 +1082,23 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     false,
-			GRPC:       grpc,
-			Channels:   mockAppChannel,
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			GRPC:       g,
+			Postman:    grpc.New(grpc.Options{Channel: g}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -1138,12 +1167,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		g := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 		mockAppChannel := channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
-			GRPC:                grpc,
+			GRPC:                g,
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
 		require.NoError(t, err)
@@ -1151,22 +1180,23 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     false,
-			GRPC:       grpc,
-			Channels:   mockAppChannel,
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			GRPC:       g,
+			Postman:    grpc.New(grpc.Options{Channel: g}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -1230,12 +1260,12 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		g := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 		mockAppChannel := channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
-			GRPC:                grpc,
+			GRPC:                g,
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
 		require.NoError(t, err)
@@ -1243,22 +1273,23 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     false,
-			GRPC:       grpc,
-			Channels:   mockAppChannel,
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			GRPC:       g,
+			Postman:    grpc.New(grpc.Options{Channel: g}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -1308,34 +1339,35 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		g := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 		mockAppChannel := channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
-			GRPC:                grpc,
+			GRPC:                g,
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
 		require.NoError(t, mockAppChannel.Refresh())
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     false,
-			GRPC:       grpc,
-			Channels:   mockAppChannel,
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			GRPC:       g,
+			Postman:    grpc.New(grpc.Options{Channel: g}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		_, err = comp.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
@@ -1354,10 +1386,10 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 	})
 }
 
-func startTestAppCallbackAlphaGRPCServer(t *testing.T, port int, mockServer *channelt.MockServer) *grpc.Server {
+func startTestAppCallbackAlphaGRPCServer(t *testing.T, port int, mockServer *channelt.MockServer) *googlegrpc.Server {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	require.NoError(t, err)
-	grpcServer := grpc.NewServer()
+	grpcServer := googlegrpc.NewServer()
 	go func() {
 		runtimev1pb.RegisterAppCallbackServer(grpcServer, mockServer)
 		runtimev1pb.RegisterAppCallbackAlphaServer(grpcServer, mockServer)
@@ -1578,25 +1610,28 @@ func TestPubSubDeadLetter(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.New(log),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Adapter:    adapter,
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{
 					{Path: "orders"},
 				},
 				DeadLetterTopic: "topic1",
-				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+				BulkSubscribe: &pubsub.BulkSubscribe{
 					Enabled: true,
 				},
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
@@ -1629,22 +1664,25 @@ func TestPubSubDeadLetter(t *testing.T) {
 
 		ps, err := New(Options{
 			Resiliency: resiliency.FromConfigurations(logger.NewLogger("test"), daprt.TestResiliency),
-			IsHTTP:     true,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
-			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Postman: http.New(http.Options{
+				Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+			}),
+			PubSub:     &pubsub.PubsubItem{Component: comp},
 			AppID:      TestRuntimeConfigID,
 			PubSubName: testDeadLetterPubsub,
 			Topic:      "topic0",
 			Adapter:    adapter,
-			Route: runtimePubsub.Subscription{
-				Rules: []*runtimePubsub.Rule{
+			Route: pubsub.Subscription{
+				Rules: []*pubsub.Rule{
 					{Path: "orders"},
 				},
 				DeadLetterTopic: "topic1",
 			},
 		})
 		require.NoError(t, err)
-		t.Cleanup(ps.Stop)
+		t.Cleanup(func() {
+			ps.Stop()
+		})
 
 		err = comp.Publish(t.Context(), &contribpubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,

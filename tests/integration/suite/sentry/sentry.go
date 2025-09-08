@@ -15,5 +15,6 @@ package sentry
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry/metrics"
+	_ "github.com/dapr/dapr/tests/integration/suite/sentry/usergroup"
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry/validator"
 )

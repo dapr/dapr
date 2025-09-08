@@ -16,6 +16,7 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -61,14 +62,17 @@ func (c *contentlength) Run(t *testing.T, ctx context.Context) {
 
 	client := client.HTTP(t)
 
+	body := strings.Repeat("a", 1024)
 	url := fmt.Sprintf("http://%s/v1.0/invoke/%s/method/hi", c.daprd1.HTTPAddress(), c.daprd2.AppID())
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader("helloworld"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
 	require.NoError(t, err)
 	req.Header.Set("content-length", "1024")
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(b))
 	require.NoError(t, resp.Body.Close())
 
 	gclient := c.daprd1.GRPCClient(t, ctx)

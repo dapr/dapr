@@ -16,15 +16,15 @@ package workflow
 import (
 	"context"
 	"runtime"
-	"sync"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
@@ -33,15 +33,11 @@ import (
 )
 
 type Workflow struct {
-	registry *task.TaskRegistry
-	app      *app.App
-	db       *sqlite.SQLite
-	place    *placement.Placement
-	sched    *scheduler.Scheduler
-	daprd    *daprd.Daprd
-
-	runOnce     sync.Once
-	cleanupOnce sync.Once
+	taskregistry []*task.TaskRegistry
+	db           *sqlite.SQLite
+	place        *placement.Placement
+	sched        *scheduler.Scheduler
+	daprds       []*daprd.Daprd
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -52,22 +48,22 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	}
 
 	opts := options{
-		registry:        task.NewTaskRegistry(),
 		enableScheduler: true,
+		daprds:          1,
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
 
-	app := app.New(t)
+	require.GreaterOrEqual(t, opts.daprds, 1, "at least one daprd instance is required")
+
 	db := sqlite.New(t,
 		sqlite.WithActorStateStore(true),
 		sqlite.WithCreateStateTables(),
 	)
 	place := placement.New(t)
 
-	dopts := []daprd.Option{
-		daprd.WithAppPort(app.Port()),
+	baseDopts := []daprd.Option{
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithResourceFiles(db.GetComponent(t)),
 	}
@@ -75,7 +71,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	var sched *scheduler.Scheduler
 	if opts.enableScheduler {
 		sched = scheduler.New(t)
-		dopts = append(dopts,
+		baseDopts = append(baseDopts,
 			daprd.WithScheduler(sched),
 			daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
@@ -89,38 +85,74 @@ spec:
 `))
 	}
 
-	return &Workflow{
-		registry: opts.registry,
-		app:      app,
-		db:       db,
-		place:    place,
-		sched:    sched,
-		daprd:    daprd.New(t, dopts...),
+	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
+
+	for i := range daprds {
+		dopts := make([]daprd.Option, 0, len(baseDopts))
+		dopts = append(dopts, baseDopts...)
+
+		// Add specific opts for this daprd
+		for _, daprdOpt := range opts.daprdOptions {
+			if daprdOpt.index == i {
+				dopts = append(dopts, daprdOpt.opts...)
+			}
+		}
+
+		daprds[i] = daprd.New(t, dopts...)
 	}
+
+	registries := make(map[int]*task.TaskRegistry)
+	for i := range daprds {
+		registries[i] = task.NewTaskRegistry()
+	}
+
+	// Apply orchestrators & activities to the registry
+	for _, orch := range opts.orchestrators {
+		if orch.index < len(daprds) {
+			require.NoError(t, registries[orch.index].AddOrchestratorN(orch.name, orch.fn))
+		}
+	}
+	for _, act := range opts.activities {
+		if act.index < len(daprds) {
+			require.NoError(t, registries[act.index].AddActivityN(act.name, act.fn))
+		}
+	}
+
+	workflow := &Workflow{
+		taskregistry: make([]*task.TaskRegistry, len(daprds)),
+		db:           db,
+		place:        place,
+		sched:        sched,
+		daprds:       daprds,
+	}
+
+	for i := range workflow.taskregistry {
+		workflow.taskregistry[i] = registries[i]
+	}
+
+	return workflow
 }
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {
-	w.runOnce.Do(func() {
-		w.app.Run(t, ctx)
-		w.db.Run(t, ctx)
-		w.place.Run(t, ctx)
-		if w.sched != nil {
-			w.sched.Run(t, ctx)
-		}
-		w.daprd.Run(t, ctx)
-	})
+	w.db.Run(t, ctx)
+	w.place.Run(t, ctx)
+	if w.sched != nil {
+		w.sched.Run(t, ctx)
+	}
+	for _, daprd := range w.daprds {
+		daprd.Run(t, ctx)
+	}
 }
 
 func (w *Workflow) Cleanup(t *testing.T) {
-	w.cleanupOnce.Do(func() {
-		w.daprd.Cleanup(t)
-		if w.sched != nil {
-			w.sched.Cleanup(t)
-		}
-		w.place.Cleanup(t)
-		w.db.Cleanup(t)
-		w.app.Cleanup(t)
-	})
+	for _, daprd := range w.daprds {
+		daprd.Cleanup(t)
+	}
+	if w.sched != nil {
+		w.sched.Cleanup(t)
+	}
+	w.place.Cleanup(t)
+	w.db.Cleanup(t)
 }
 
 func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -128,32 +160,65 @@ func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	if w.sched != nil {
 		w.sched.WaitUntilRunning(t, ctx)
 	}
-	w.daprd.WaitUntilRunning(t, ctx)
+	for _, daprd := range w.daprds {
+		daprd.WaitUntilRunning(t, ctx)
+	}
 }
 
 func (w *Workflow) Registry() *task.TaskRegistry {
-	return w.registry
+	return w.taskregistry[0]
+}
+
+// Registry returns the registry for a specific index
+func (w *Workflow) RegistryN(index int) *task.TaskRegistry {
+	return w.taskregistry[index]
 }
 
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
 	t.Helper()
-	backendClient := client.NewTaskHubGrpcClient(w.daprd.GRPCConn(t, ctx), logger.New(t))
-	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.registry))
+
+	return w.BackendClientN(t, ctx, 0)
+}
+
+// BackendClient returns a backend client for the specified index
+func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) *client.TaskHubGrpcClient {
+	t.Helper()
+	require.Less(t, index, len(w.daprds), "index out of range")
+
+	backendClient := client.NewTaskHubGrpcClient(w.daprds[index].GRPCConn(t, ctx), logger.New(t))
+	require.NoError(t, backendClient.StartWorkItemListener(ctx, w.RegistryN(index)))
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c,
+			len(w.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
+	}, time.Second*10, time.Millisecond*10)
+
 	return backendClient
 }
 
 func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 	t.Helper()
-	return w.daprd.GRPCClient(t, ctx)
+	return w.daprds[0].GRPCClient(t, ctx)
+}
+
+// GRPCClientForApp returns a GRPC client for the specified app index
+func (w *Workflow) GRPCClientN(t *testing.T, ctx context.Context, index int) rtv1.DaprClient {
+	t.Helper()
+	require.Less(t, index, len(w.daprds), "index out of range")
+	return w.daprds[index].GRPCClient(t, ctx)
 }
 
 func (w *Workflow) Dapr() *daprd.Daprd {
-	return w.daprd
+	return w.daprds[0]
+}
+
+func (w *Workflow) DaprN(i int) *daprd.Daprd {
+	return w.daprds[i]
 }
 
 func (w *Workflow) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
-	return w.daprd.Metrics(t, ctx).All()
+	return w.daprds[0].Metrics(t, ctx).All()
 }
 
 func (w *Workflow) DB() *sqlite.SQLite {

@@ -300,7 +300,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 
 	d.addForwardedHeadersToMetadata(req)
 	d.addDestinationAppIDHeaderToMetadata(appID, req)
-	d.addCallerAndCalleeAppIDHeaderToMetadata(d.appID, appID, req)
+	d.addCallerAndCalleeAppIDHeaderToMetadata(d.namespace, d.appID, appID, req)
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 
@@ -535,7 +535,10 @@ func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req 
 	}
 }
 
-func (d *directMessaging) addCallerAndCalleeAppIDHeaderToMetadata(callerAppID, calleeAppID string, req *invokev1.InvokeMethodRequest) {
+func (d *directMessaging) addCallerAndCalleeAppIDHeaderToMetadata(callerNamespace, callerAppID, calleeAppID string, req *invokev1.InvokeMethodRequest) {
+	req.Metadata()[invokev1.CallerNamespaceHeader] = &internalv1pb.ListStringValue{
+		Values: []string{callerNamespace},
+	}
 	req.Metadata()[invokev1.CallerIDHeader] = &internalv1pb.ListStringValue{
 		Values: []string{callerAppID},
 	}

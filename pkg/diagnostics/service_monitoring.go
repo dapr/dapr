@@ -84,6 +84,7 @@ type serviceMetrics struct {
 	enabled               bool
 	pendingActorCalls     map[string]int32
 	pendingActorCallsLock sync.Mutex
+	meter                 stats.Recorder
 }
 
 // newServiceMetrics returns serviceMetrics instance with default service metric stats.
@@ -215,11 +216,12 @@ func newServiceMetrics() *serviceMetrics {
 }
 
 // Init initialize metrics views for metrics.
-func (s *serviceMetrics) Init(appID string, latencyDistribution *view.Aggregation) error {
+func (s *serviceMetrics) Init(meter view.Meter, appID string, latencyDistribution *view.Aggregation) error {
 	s.appID = appID
 	s.enabled = true
+	s.meter = meter
 
-	return view.Register(
+	return meter.Register(
 		diagUtils.NewMeasureView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(s.componentInitCompleted, []tag.Key{appIDKey, componentKey}, view.Count()),
 		diagUtils.NewMeasureView(s.componentInitFailed, []tag.Key{appIDKey, componentKey, failReasonKey, componentNameKey}, view.Count()),
@@ -235,7 +237,7 @@ func (s *serviceMetrics) Init(appID string, latencyDistribution *view.Aggregatio
 		diagUtils.NewMeasureView(s.actorRebalancedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.actorDeactivationTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.actorDeactivationFailedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
-		diagUtils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
+		diagUtils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 		diagUtils.NewMeasureView(s.actorTimers, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 		diagUtils.NewMeasureView(s.actorReminders, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 		diagUtils.NewMeasureView(s.actorReminderFiredTotal, []tag.Key{appIDKey, actorTypeKey, successKey}, view.Count()),
@@ -257,269 +259,296 @@ func (s *serviceMetrics) Init(appID string, latencyDistribution *view.Aggregatio
 // ComponentLoaded records metric when component is loaded successfully.
 func (s *serviceMetrics) ComponentLoaded() {
 	if s.enabled {
-		stats.RecordWithTags(s.ctx, diagUtils.WithTags(s.componentLoaded.Name(), appIDKey, s.appID), s.componentLoaded.M(1))
+		stats.RecordWithOptions(s.ctx,
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.componentLoaded.Name(), appIDKey, s.appID)...),
+			stats.WithMeasurements(s.componentLoaded.M(1)))
 	}
 }
 
 // ComponentInitialized records metric when component is initialized.
 func (s *serviceMetrics) ComponentInitialized(component string) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(s.componentInitCompleted.Name(), appIDKey, s.appID, componentKey, component),
-			s.componentInitCompleted.M(1))
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.componentInitCompleted.Name(), appIDKey, s.appID, componentKey, component)...),
+			stats.WithMeasurements(s.componentInitCompleted.M(1)))
 	}
 }
 
 // ComponentInitFailed records metric when component initialization is failed.
 func (s *serviceMetrics) ComponentInitFailed(component string, reason string, name string) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(s.componentInitFailed.Name(), appIDKey, s.appID, componentKey, component, failReasonKey, reason, componentNameKey, name),
-			s.componentInitFailed.M(1))
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.componentInitFailed.Name(), appIDKey, s.appID, componentKey, component, failReasonKey, reason, componentNameKey, name)...),
+			stats.WithMeasurements(s.componentInitFailed.M(1)))
 	}
 }
 
 // MTLSInitCompleted records metric when component is initialized.
 func (s *serviceMetrics) MTLSInitCompleted() {
 	if s.enabled {
-		stats.RecordWithTags(s.ctx, diagUtils.WithTags(s.mtlsInitCompleted.Name(), appIDKey, s.appID), s.mtlsInitCompleted.M(1))
+		stats.RecordWithOptions(s.ctx, stats.WithRecorder(s.meter), stats.WithTags(diagUtils.WithTags(s.mtlsInitCompleted.Name(), appIDKey, s.appID)...), stats.WithMeasurements(s.mtlsInitCompleted.M(1)))
 	}
 }
 
 // MTLSInitFailed records metric when component initialization is failed.
 func (s *serviceMetrics) MTLSInitFailed(reason string) {
 	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(s.mtlsInitFailed.Name(), appIDKey, s.appID, failReasonKey, reason),
-			s.mtlsInitFailed.M(1))
+		stats.RecordWithOptions(
+			s.ctx,
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.mtlsInitFailed.Name(), appIDKey, s.appID, failReasonKey, reason)...),
+			stats.WithMeasurements(s.mtlsInitFailed.M(1)))
 	}
 }
 
 // MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded.
 func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
 	if s.enabled {
-		stats.RecordWithTags(s.ctx, diagUtils.WithTags(s.mtlsWorkloadCertRotated.Name(), appIDKey, s.appID), s.mtlsWorkloadCertRotated.M(1))
+		stats.RecordWithOptions(s.ctx, stats.WithRecorder(s.meter), stats.WithTags(diagUtils.WithTags(s.mtlsWorkloadCertRotated.Name(), appIDKey, s.appID)...), stats.WithMeasurements(s.mtlsWorkloadCertRotated.M(1)))
 	}
 }
 
 // MTLSWorkLoadCertRotationFailed records metric when workload certificate rotation is failed.
 func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
 	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(s.mtlsWorkloadCertRotatedFailed.Name(), appIDKey, s.appID, failReasonKey, reason),
-			s.mtlsWorkloadCertRotatedFailed.M(1))
+		stats.RecordWithOptions(
+			s.ctx,
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.mtlsWorkloadCertRotatedFailed.Name(), appIDKey, s.appID, failReasonKey, reason)...),
+			stats.WithMeasurements(s.mtlsWorkloadCertRotatedFailed.M(1)))
 	}
 }
 
 // ActorStatusReported records metrics when status is reported to placement service.
 func (s *serviceMetrics) ActorStatusReported(operation string) {
 	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(s.actorStatusReportTotal.Name(), appIDKey, s.appID, operationKey, operation),
-			s.actorStatusReportTotal.M(1))
+		stats.RecordWithOptions(
+			s.ctx,
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorStatusReportTotal.Name(), appIDKey, s.appID, operationKey, operation)...),
+			stats.WithMeasurements(s.actorStatusReportTotal.M(1)))
 	}
 }
 
 // ActorStatusReportFailed records metrics when status report to placement service is failed.
 func (s *serviceMetrics) ActorStatusReportFailed(operation string, reason string) {
 	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(s.actorStatusReportFailedTotal.Name(), appIDKey, s.appID, operationKey, operation, failReasonKey, reason),
-			s.actorStatusReportFailedTotal.M(1))
+		stats.RecordWithOptions(
+			s.ctx,
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorStatusReportFailedTotal.Name(), appIDKey, s.appID, operationKey, operation, failReasonKey, reason)...),
+			stats.WithMeasurements(s.actorStatusReportFailedTotal.M(1)))
 	}
 }
 
 // ActorPlacementTableOperationReceived records metric when runtime receives table operation.
 func (s *serviceMetrics) ActorPlacementTableOperationReceived(operation string) {
 	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx, diagUtils.WithTags(s.actorTableOperationRecvTotal.Name(), appIDKey, s.appID, operationKey, operation),
-			s.actorTableOperationRecvTotal.M(1))
+		stats.RecordWithOptions(
+			s.ctx,
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorTableOperationRecvTotal.Name(), appIDKey, s.appID, operationKey, operation)...),
+			stats.WithMeasurements(s.actorTableOperationRecvTotal.M(1)))
 	}
 }
 
 // ActorRebalanced records metric when actors are drained.
 func (s *serviceMetrics) ActorRebalanced(actorType string) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(s.actorRebalancedTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType),
-			s.actorRebalancedTotal.M(1))
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorRebalancedTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType)...),
+			stats.WithMeasurements(s.actorRebalancedTotal.M(1)))
 	}
 }
 
 // ActorDeactivated records metric when actor is deactivated.
 func (s *serviceMetrics) ActorDeactivated(actorType string) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(s.actorDeactivationTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType),
-			s.actorDeactivationTotal.M(1))
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorDeactivationTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType)...),
+			stats.WithMeasurements(s.actorDeactivationTotal.M(1)))
 	}
 }
 
 // ActorDeactivationFailed records metric when actor deactivation is failed.
 func (s *serviceMetrics) ActorDeactivationFailed(actorType string, reason string) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(s.actorDeactivationFailedTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
-			s.actorDeactivationFailedTotal.M(1))
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorDeactivationFailedTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason)...),
+			stats.WithMeasurements(s.actorDeactivationFailedTotal.M(1)))
 	}
 }
 
 // ActorReminderFired records metric when actor reminder is fired.
 func (s *serviceMetrics) ActorReminderFired(actorType string, success bool) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(s.actorReminderFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, successKey, strconv.FormatBool(success)),
-			s.actorReminderFiredTotal.M(1))
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorReminderFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, successKey, strconv.FormatBool(success))...),
+			stats.WithMeasurements(s.actorReminderFiredTotal.M(1)))
 	}
 }
 
 // ActorTimerFired records metric when actor timer is fired.
 func (s *serviceMetrics) ActorTimerFired(actorType string, success bool) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(s.actorTimerFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, successKey, strconv.FormatBool(success)),
-			s.actorTimerFiredTotal.M(1))
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorTimerFiredTotal.Name(), appIDKey, s.appID, actorTypeKey, actorType, successKey, strconv.FormatBool(success))...),
+			stats.WithMeasurements(s.actorTimerFiredTotal.M(1)))
 	}
 }
 
 // ActorReminders records the current number of reminders for an actor type.
 func (s *serviceMetrics) ActorReminders(actorType string, reminders int64) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(s.actorReminders.Name(), appIDKey, s.appID, actorTypeKey, actorType),
-			s.actorReminders.M(reminders))
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorReminders.Name(), appIDKey, s.appID, actorTypeKey, actorType)...),
+			stats.WithMeasurements(s.actorReminders.M(reminders)))
 	}
 }
 
 // ActorTimers records the current number of timers for an actor type.
 func (s *serviceMetrics) ActorTimers(actorType string, timers int64) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(s.actorTimers.Name(), appIDKey, s.appID, actorTypeKey, actorType),
-			s.actorTimers.M(timers))
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorTimers.Name(), appIDKey, s.appID, actorTypeKey, actorType)...),
+			stats.WithMeasurements(s.actorTimers.M(timers)))
 	}
 }
 
 // ReportActorPendingCalls records the current pending actor locks.
 func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks int32) {
-	// TODO: This is growing forever, ensure metrics are removed when the value
-	// is 0.
 	if s.enabled {
 		s.pendingActorCallsLock.Lock()
 		defer s.pendingActorCallsLock.Unlock()
 		s.pendingActorCalls[actorType] += pendingLocks
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(s.actorPendingCalls.Name(), appIDKey, s.appID, actorTypeKey, actorType),
-			s.actorPendingCalls.M(int64(s.pendingActorCalls[actorType])))
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorPendingCalls.Name(), appIDKey, s.appID, actorTypeKey, actorType)...),
+			stats.WithMeasurements(s.actorPendingCalls.M(int64(s.pendingActorCalls[actorType]))))
 	}
 }
 
 // RequestAllowedByAppAction records the requests allowed due to a match with the action specified in the access control policy for the app.
 func (s *serviceMetrics) RequestAllowedByAppAction(spiffeID *spiffe.Parsed) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.appPolicyActionAllowed.Name(),
 				appIDKey, spiffeID.AppID(),
 				trustDomainKey, spiffeID.TrustDomain().String(),
-				namespaceKey, spiffeID.Namespace()),
-			s.appPolicyActionAllowed.M(1))
+				namespaceKey, spiffeID.Namespace())...),
+			stats.WithMeasurements(s.appPolicyActionAllowed.M(1)))
 	}
 }
 
 // RequestBlockedByAppAction records the requests blocked due to a match with the action specified in the access control policy for the app.
 func (s *serviceMetrics) RequestBlockedByAppAction(spiffeID *spiffe.Parsed) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.appPolicyActionBlocked.Name(),
 				appIDKey, spiffeID.AppID(),
 				trustDomainKey, spiffeID.TrustDomain().String(),
-				namespaceKey, spiffeID.Namespace()),
-			s.appPolicyActionBlocked.M(1))
+				namespaceKey, spiffeID.Namespace())...),
+			stats.WithMeasurements(s.appPolicyActionBlocked.M(1)))
 	}
 }
 
 // RequestAllowedByGlobalAction records the requests allowed due to a match with the global action in the access control policy.
 func (s *serviceMetrics) RequestAllowedByGlobalAction(spiffeID *spiffe.Parsed) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.globalPolicyActionAllowed.Name(),
 				appIDKey, spiffeID.AppID(),
 				trustDomainKey, spiffeID.TrustDomain().String(),
-				namespaceKey, spiffeID.Namespace()),
-			s.globalPolicyActionAllowed.M(1))
+				namespaceKey, spiffeID.Namespace())...),
+			stats.WithMeasurements(s.globalPolicyActionAllowed.M(1)))
 	}
 }
 
 // RequestBlockedByGlobalAction records the requests blocked due to a match with the global action in the access control policy.
 func (s *serviceMetrics) RequestBlockedByGlobalAction(spiffeID *spiffe.Parsed) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.globalPolicyActionBlocked.Name(),
 				appIDKey, spiffeID.AppID(),
 				trustDomainKey, spiffeID.TrustDomain().String(),
-				namespaceKey, spiffeID.Namespace()),
-			s.globalPolicyActionBlocked.M(1))
+				namespaceKey, spiffeID.Namespace())...),
+			stats.WithMeasurements(s.globalPolicyActionBlocked.M(1)))
 	}
 }
 
 // ServiceInvocationRequestSent records the number of service invocation requests sent.
 func (s *serviceMetrics) ServiceInvocationRequestSent(destinationAppID string) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.serviceInvocationRequestSentTotal.Name(),
 				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
-				typeKey, typeUnary,
-			),
-			s.serviceInvocationRequestSentTotal.M(1))
+				typeKey, typeUnary)...),
+			stats.WithMeasurements(s.serviceInvocationRequestSentTotal.M(1)))
 	}
 }
 
 // ServiceInvocationRequestSent records the number of service invocation requests sent.
 func (s *serviceMetrics) ServiceInvocationStreamingRequestSent(destinationAppID string) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.serviceInvocationRequestSentTotal.Name(),
 				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
-				typeKey, typeStreaming),
-			s.serviceInvocationRequestSentTotal.M(1))
+				typeKey, typeStreaming)...),
+			stats.WithMeasurements(s.serviceInvocationRequestSentTotal.M(1)))
 	}
 }
 
 // ServiceInvocationRequestReceived records the number of service invocation requests received.
 func (s *serviceMetrics) ServiceInvocationRequestReceived(sourceAppID string) {
 	if s.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.serviceInvocationRequestReceivedTotal.Name(),
 				appIDKey, s.appID,
-				sourceAppIDKey, sourceAppID),
-			s.serviceInvocationRequestReceivedTotal.M(1))
+				sourceAppIDKey, sourceAppID)...),
+			stats.WithMeasurements(s.serviceInvocationRequestReceivedTotal.M(1)))
 	}
 }
 
@@ -527,14 +556,15 @@ func (s *serviceMetrics) ServiceInvocationRequestReceived(sourceAppID string) {
 func (s *serviceMetrics) ServiceInvocationResponseSent(destinationAppID string, status int32) {
 	if s.enabled {
 		statusCode := strconv.Itoa(int(status))
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.serviceInvocationResponseSentTotal.Name(),
 				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
-				statusKey, statusCode),
-			s.serviceInvocationResponseSentTotal.M(1))
+				statusKey, statusCode)...),
+			stats.WithMeasurements(s.serviceInvocationResponseSentTotal.M(1)))
 	}
 }
 
@@ -542,23 +572,25 @@ func (s *serviceMetrics) ServiceInvocationResponseSent(destinationAppID string, 
 func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID string, status int32, start time.Time) {
 	if s.enabled {
 		statusCode := strconv.Itoa(int(status))
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.serviceInvocationResponseReceivedTotal.Name(),
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
 				statusKey, statusCode,
-				typeKey, typeUnary),
-			s.serviceInvocationResponseReceivedTotal.M(1))
-		stats.RecordWithTags(
+				typeKey, typeUnary)...),
+			stats.WithMeasurements(s.serviceInvocationResponseReceivedTotal.M(1)))
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.serviceInvocationResponseReceivedLatency.Name(),
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
-				statusKey, statusCode),
-			s.serviceInvocationResponseReceivedLatency.M(ElapsedSince(start)))
+				statusKey, statusCode)...),
+			stats.WithMeasurements(s.serviceInvocationResponseReceivedLatency.M(ElapsedSince(start))))
 	}
 }
 
@@ -567,14 +599,15 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID string, s
 func (s *serviceMetrics) ServiceInvocationStreamingResponseReceived(sourceAppID string, status int32) {
 	if s.enabled {
 		statusCode := strconv.Itoa(int(status))
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			s.ctx,
-			diagUtils.WithTags(
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
 				s.serviceInvocationResponseReceivedTotal.Name(),
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
 				statusKey, statusCode,
-				typeKey, typeStreaming),
-			s.serviceInvocationResponseReceivedTotal.M(1))
+				typeKey, typeStreaming)...),
+			stats.WithMeasurements(s.serviceInvocationResponseReceivedTotal.M(1)))
 	}
 }
