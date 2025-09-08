@@ -13,6 +13,12 @@ limitations under the License.
 
 package errors
 
+import (
+	"errors"
+
+	"github.com/dapr/kit/ptr"
+)
+
 type closed struct {
 	method string
 }
@@ -21,9 +27,10 @@ func NewClosed(method string) error {
 	return &closed{method: method}
 }
 
+var cl = ptr.Of(new(closed))
+
 func IsClosed(err error) bool {
-	_, ok := err.(*closed)
-	return ok
+	return errors.As(err, cl)
 }
 
 func (c *closed) Error() string {

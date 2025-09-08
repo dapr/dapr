@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reconnect
+package deactivate
 
 import (
 	"context"
@@ -68,6 +68,11 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
 
+	// verify worker is connected by checking the expected registered actors
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+	}, time.Second*10, time.Millisecond*10)
+
 	id, err := client.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
 
@@ -76,13 +81,19 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	cancel()
+	// verify worker is disconnected by checking the expected registered actors
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Empty(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
+	}, time.Second*10, time.Millisecond*10)
 	close(a.waitCh)
 
 	cctx, cancel = context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
 
-	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+	t.Cleanup(waitCompletionCancel)
+	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 

@@ -15,9 +15,13 @@ package orchestrator
 
 import (
 	"context"
+	"net/http"
 
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -73,7 +77,36 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	o.state = state
 	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
-	o.ometaBroadcaster.Broadcast(o.ometa)
+	if o.factory.eventSink != nil {
+		o.factory.eventSink(o.ometa)
+	}
+
+	if len(o.streamFns) > 0 {
+		arstate, err := anypb.New(o.ometa)
+		if err != nil {
+			return err
+		}
+
+		streamReq := &internalsv1pb.InternalInvokeResponse{
+			Status:  &internalsv1pb.Status{Code: http.StatusOK},
+			Message: &commonv1pb.InvokeResponse{Data: arstate},
+		}
+
+		var ok bool
+		for idx, stream := range o.streamFns {
+			if stream.done.Load() {
+				delete(o.streamFns, idx)
+				continue
+			}
+
+			ok, err = stream.fn(streamReq)
+			if err != nil || ok {
+				stream.errCh <- err
+				delete(o.streamFns, idx)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -97,7 +130,7 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 		return err
 	}
 
-	o.cleanup()
+	o.factory.deactivate(o)
 
 	return nil
 }
@@ -139,23 +172,6 @@ func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState,
 	}
 }
 
-func (o *orchestrator) cleanup() {
-	if !o.closed.CompareAndSwap(false, true) {
-		return
-	}
-
-	o.table.Delete(o.actorID)
-	o.state = nil
-	o.rstate = nil
-	o.ometa = nil
-	o.ometaBroadcaster.Close()
-
-	go func() {
-		o.wg.Wait()
-		orchestratorCache.Put(o)
-	}()
-}
-
 // This method purges all the completed activity data from a workflow associated with the given actorID
 func (o *orchestrator) purgeWorkflowState(ctx context.Context) error {
 	state, _, err := o.loadInternalState(ctx)
@@ -165,7 +181,6 @@ func (o *orchestrator) purgeWorkflowState(ctx context.Context) error {
 	if state == nil {
 		return api.ErrInstanceNotFound
 	}
-	o.completed.Store(true)
 	return o.cleanupWorkflowStateInternal(ctx, state, !runtimestate.IsCompleted(o.rstate))
 }
 
