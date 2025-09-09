@@ -72,5 +72,4 @@ func (a *raise1) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 		assert.Equal(c, 8, count)
 	}, time.Second*10, time.Millisecond*10)
-
 }
