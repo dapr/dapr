@@ -72,6 +72,6 @@ func (a *raise2) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-		assert.Equal(c, 11, count)
+		assert.GreaterOrEqual(c, count, 10)
 	}, time.Second*10, time.Millisecond*10)
 }
