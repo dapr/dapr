@@ -12,7 +12,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.14.1
-	github.com/dapr/components-contrib v1.16.0-rc.7
+	github.com/dapr/components-contrib v1.16.0-rc.8
 	github.com/dapr/durabletask-go v0.9.0
 	github.com/dapr/kit v0.16.1
 	github.com/diagridio/go-etcd-cron v0.9.1
@@ -92,19 +92,15 @@ require (
 require (
 	cel.dev/expr v0.23.0 // indirect
 	cloud.google.com/go v0.120.0 // indirect
-	cloud.google.com/go/ai v0.7.0 // indirect
-	cloud.google.com/go/aiplatform v1.86.0 // indirect
 	cloud.google.com/go/auth v0.16.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	cloud.google.com/go/datastore v1.20.0 // indirect
 	cloud.google.com/go/iam v1.5.2 // indirect
-	cloud.google.com/go/longrunning v0.6.7 // indirect
 	cloud.google.com/go/monitoring v1.24.2 // indirect
 	cloud.google.com/go/pubsub v1.49.0 // indirect
 	cloud.google.com/go/secretmanager v1.14.7 // indirect
 	cloud.google.com/go/storage v1.50.0 // indirect
-	cloud.google.com/go/vertexai v0.12.0 // indirect
 	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20230118042253-4f159a2b38f3 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.1 // indirect
@@ -186,6 +182,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.10.17 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.17 // indirect
+	github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.32.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sns v1.34.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.38.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.25.5 // indirect
@@ -285,7 +282,6 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
-	github.com/google/generative-ai-go v0.15.1 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/pprof v0.0.0-20241029153458-d1b30febd7db // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
