@@ -68,6 +68,21 @@ func (a *subworkflow1) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
+	/*
+				1. ExecutionStarted – records orchestration begins
+				2. OrchestratorStarted
+				3. ExecutionStarted
+				4. TaskScheduled
+				5. OrchestratorCompleted
+				6. ExecutionStarted – records2 orchestration begins
+				7. OrchestratorStarted
+				8. OrchestratorCompleted
+				9. ExecutionCompleted
+				10. TaskCompleted – result of records2
+				11. OrchestratorStarted
+				12. ExecutionCompleted
+				13. OrchestratorCompleted
+		*/
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 	assert.Equal(t, 13, count)
 }
