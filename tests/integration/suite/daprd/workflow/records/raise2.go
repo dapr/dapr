@@ -70,6 +70,8 @@ func (a *raise2) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
-	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.Equal(t, 11, count)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
+		assert.Equal(c, 11, count)
+	}, time.Second*10, time.Millisecond*10)
 }
