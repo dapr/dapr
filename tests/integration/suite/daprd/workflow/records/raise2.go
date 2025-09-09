@@ -47,8 +47,8 @@ func (a *raise2) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
 	a.workflow.Registry().AddOrchestratorN("records", func(ctx *task.OrchestrationContext) (any, error) {
-		require.NoError(t, ctx.WaitForSingleEvent("event", time.Hour).Await(nil))
-		require.NoError(t, ctx.WaitForSingleEvent("event", time.Hour).Await(nil))
+		require.NoError(t, ctx.WaitForSingleEvent("event1", time.Hour).Await(nil))
+		require.NoError(t, ctx.WaitForSingleEvent("event2", time.Hour).Await(nil))
 		return nil, nil
 	})
 
@@ -64,8 +64,8 @@ func (a *raise2) Run(t *testing.T, ctx context.Context) {
 	id, err := client.ScheduleNewOrchestration(ctx, "records")
 	require.NoError(t, err)
 
-	require.NoError(t, client.RaiseEvent(ctx, id, "event"))
-	require.NoError(t, client.RaiseEvent(ctx, id, "event"))
+	require.NoError(t, client.RaiseEvent(ctx, id, "event1"))
+	require.NoError(t, client.RaiseEvent(ctx, id, "event2"))
 
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
