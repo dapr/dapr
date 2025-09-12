@@ -104,7 +104,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		reminderInterval = *opts.ReminderInterval
 	}
 
-	deactivateCh := make(chan *orchestrator, 10)
+	deactivateCh := make(chan *orchestrator, 100)
 	go func() {
 		for orchestrator := range deactivateCh {
 			orchestrator.Deactivate(ctx)
