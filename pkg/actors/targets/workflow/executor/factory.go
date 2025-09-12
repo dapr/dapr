@@ -41,7 +41,8 @@ type Options struct {
 type factory struct {
 	actorType string
 
-	placement placement.Interface
+	placement    placement.Interface
+	deactivateCh chan *executor
 
 	table sync.Map
 	lock  sync.Mutex
@@ -53,9 +54,17 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
+	deactivateCh := make(chan *executor, 100)
+	go func() {
+		for executor := range deactivateCh {
+			executor.Deactivate(ctx)
+		}
+	}()
+
 	return &factory{
-		actorType: opts.ActorType,
-		placement: placement,
+		actorType:    opts.ActorType,
+		placement:    placement,
+		deactivateCh: deactivateCh,
 	}, nil
 }
 
@@ -79,6 +88,7 @@ func (f *factory) initExecutor(a any, actorID string) *executor {
 	act.factory = f
 	act.actorID = actorID
 
+	act.closed.Store(false)
 	act.completeCh = make(chan *internalsv1pb.InternalInvokeResponse, 1)
 	act.cancelCh = make(chan struct{})
 	act.closeCh = make(chan struct{})
