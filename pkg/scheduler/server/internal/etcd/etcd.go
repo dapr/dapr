@@ -34,7 +34,8 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.etcd")
 
 type Options struct {
-	Name string
+	Name     string
+	LogLevel string
 
 	Embed bool
 
