@@ -538,7 +538,7 @@ delete-test-env-kafka:
 setup-test-env-postgres:
 	$(HELM) upgrade \
 	  --install dapr-postgres bitnami/postgresql \
-	  --version 12.8.0 \
+	  --version 16.7.27 \
 	  -f ./tests/config/postgres_override.yaml \
 	  --set primary.persistence.size=1Gi \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
