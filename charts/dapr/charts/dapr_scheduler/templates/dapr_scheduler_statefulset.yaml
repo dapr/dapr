@@ -286,4 +286,3 @@ spec:
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}
-{{- end }}
