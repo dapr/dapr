@@ -1,4 +1,3 @@
-{{- if (eq .Values.global.scheduler.enabled true) }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
