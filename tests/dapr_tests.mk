@@ -480,7 +480,6 @@ setup-test-env-redis:
 	  --wait \
 	  --timeout 5m0s \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
-	  --set image.repository=bitnamilegacy/redis \
 	 --set master.persistence.size=1Gi \
 	  -f ./tests/config/redis_override.yaml
 
@@ -509,7 +508,6 @@ setup-test-env-rabbitmq:
 	  --set auth.password='admin' \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
 	  --set persistence.size=1Gi \
-	  --set image.repository=bitnamilegacy/rabbitmq \
 	  --timeout 10m0s
 
 # install mqtt to the cluster
