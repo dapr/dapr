@@ -16,6 +16,7 @@ package exec
 import (
 	"context"
 	"io"
+	"os"
 	oexec "os/exec"
 	"path/filepath"
 	"runtime"
@@ -30,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
 	"github.com/dapr/dapr/tests/integration/framework/tee"
+	"github.com/dapr/dapr/utils"
 )
 
 type Option func(*options)
@@ -72,6 +74,10 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *Exec {
 		envs: map[string]string{
 			"DAPR_UNSAFE_SKIP_CONTAINER_UID_GID_CHECK": "true",
 		},
+	}
+
+	if hostIPOverride := os.Getenv(utils.HostIPEnvVar); hostIPOverride != "" {
+		opts.envs[utils.HostIPEnvVar] = hostIPOverride
 	}
 
 	for _, fopt := range fopts {
