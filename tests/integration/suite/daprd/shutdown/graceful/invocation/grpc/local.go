@@ -65,13 +65,12 @@ func (l *local) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app),
+		framework.WithProcesses(app, l.daprd),
 	}
 }
 
 func (l *local) Run(t *testing.T, ctx context.Context) {
-	l.daprd.Run(t, ctx)
-	t.Cleanup(func() { l.daprd.Cleanup(t) })
+	l.daprd.WaitUntilRunning(t, ctx)
 
 	client := l.daprd.GRPCClient(t, ctx)
 

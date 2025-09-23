@@ -49,20 +49,21 @@ type Options struct {
 
 	ID string
 
-	EtcdEmbed                bool
-	EtcdInitialCluster       []string
-	EtcdDataDir              string
-	EtcdClientPort           uint64
-	EtcdSpaceQuota           int64
-	EtcdCompactionMode       string
-	EtcdCompactionRetention  string
-	EtcdSnapshotCount        uint64
-	EtcdMaxSnapshots         uint
-	EtcdMaxWALs              uint
-	EtcdBackendBatchLimit    int
-	EtcdBackendBatchInterval string
-	EtcdDefragThresholdMB    uint
-	EtcdMetrics              string
+	EtcdEmbed                      bool
+	EtcdInitialCluster             []string
+	EtcdDataDir                    string
+	EtcdClientPort                 uint64
+	EtcdSpaceQuota                 int64
+	EtcdCompactionMode             string
+	EtcdCompactionRetention        string
+	EtcdSnapshotCount              uint64
+	EtcdMaxSnapshots               uint
+	EtcdMaxWALs                    uint
+	EtcdBackendBatchLimit          int
+	EtcdBackendBatchInterval       string
+	EtcdDefragThresholdMB          uint
+	EtcdInitialElectionTickAdvance bool
+	EtcdMetrics                    string
 
 	// TODO: @joshvanl: add Etcd client TLS enabled flag.
 	EtcdClientEndpoints []string
@@ -119,6 +120,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.IntVar(&opts.EtcdBackendBatchLimit, "etcd-backend-batch-limit", 5000, "Maximum operations before committing the backend transaction.")
 	fs.StringVar(&opts.EtcdBackendBatchInterval, "etcd-backend-batch-interval", "50ms", "Maximum time before committing the backend transaction.")
 	fs.UintVar(&opts.EtcdDefragThresholdMB, "etcd-experimental-bootstrap-defrag-threshold-megabytes", 100, "Minimum number of megabytes needed to be freed for etcd to consider running defrag during bootstrap. Needs to be set to non-zero value to take effect.")
+	fs.BoolVar(&opts.EtcdInitialElectionTickAdvance, "etcd-initial-election-tick-advance", false, "Whether to fast-forward initial election ticks on boot for faster election. When it is true, then local member fast-forwards election ticks to speed up “initial” leader election trigger. This benefits the case of larger election ticks. Disabling this would slow down initial bootstrap process for cross datacenter deployments. Make your own tradeoffs by configuring this flag at the cost of slow initial bootstrap.")
 	fs.StringVar(&opts.EtcdMetrics, "etcd-metrics", "basic", "Level of detail for exported metrics, specify ’extensive’ to include histogram metrics.")
 
 	fs.StringArrayVar(&opts.EtcdClientEndpoints, "etcd-client-endpoints", []string{}, "Comma-separated list of etcd client endpoints to connect to. Only used when --etcd-embed is false.")

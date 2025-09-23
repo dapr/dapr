@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/logger"
 )
@@ -289,8 +288,8 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	// Load inbox, history, and custom status using a bulk request
 	wState := NewState(opts)
 	wState.Generation = metadata.GetGeneration()
-	wState.Inbox = make([]*backend.HistoryEvent, metadata.GetInboxLength())
-	wState.History = make([]*backend.HistoryEvent, metadata.GetHistoryLength())
+	wState.Inbox = make([]*backend.HistoryEvent, 0, metadata.GetInboxLength())
+	wState.History = make([]*backend.HistoryEvent, 0, metadata.GetHistoryLength())
 
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
@@ -320,8 +319,8 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	defer func() {
 		// TODO: @joshvanl: remove in v1.16 where we will no longer have legacy
 		// state parsing issues.
-		if recover() != nil {
-			wfLogger.Warnf("Found legacy workflow state, ignoring and overwriting with new storage API: %s", actorID)
+		if rerr := recover(); rerr != nil {
+			wfLogger.Warnf("Found legacy workflow state, ignoring and overwriting with new storage API: %s; %v", actorID, rerr)
 		}
 	}()
 
@@ -331,23 +330,25 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
 		if bulkRes[key] == nil {
 			wfLogger.Warnf("Failed to load inbox state key '%s': not found", key)
-			return nil, nil
+			continue
 		}
-		wState.Inbox[i] = &protos.HistoryEvent{}
-		if err = proto.Unmarshal(bulkRes[key], wState.Inbox[i]); err != nil {
+		var hist backend.HistoryEvent
+		if err = proto.Unmarshal(bulkRes[key], &hist); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
 		}
+		wState.Inbox = append(wState.Inbox, &hist)
 	}
 	for i := range metadata.GetHistoryLength() {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
 		if bulkRes[key] == nil {
 			wfLogger.Warnf("Failed to load history state key '%s': not found", key)
-			return nil, nil
+			continue
 		}
-		wState.History[i] = &protos.HistoryEvent{}
-		if err = proto.Unmarshal(bulkRes[key], wState.History[i]); err != nil {
+		var hist backend.HistoryEvent
+		if err = proto.Unmarshal(bulkRes[key], &hist); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
 		}
+		wState.History = append(wState.History, &hist)
 	}
 
 	if len(bulkRes[customStatusKey]) > 0 {
@@ -364,7 +365,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 	}
 
-	wfLogger.Infof("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
+	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
 	return wState, nil
 }
 

@@ -134,23 +134,23 @@ func (k *kubernetes) Start(ctx context.Context) error {
 	return nil
 }
 
-func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
+func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
 	if !k.ready(ctx) {
-		return spiffeid.TrustDomain{}, errors.New("validator not ready")
+		return validator.ValidateResult{}, errors.New("validator not ready")
 	}
 
 	// The TrustDomain field is ignored by the Kubernetes validator.
 	if _, err := internal.Validate(ctx, req); err != nil {
-		return spiffeid.TrustDomain{}, err
+		return validator.ValidateResult{}, err
 	}
 
 	prts, err := k.executeTokenReview(ctx, req.GetToken(), LegacyServiceAccountAudience, k.sentryAudience)
 	if err != nil {
-		return spiffeid.TrustDomain{}, err
+		return validator.ValidateResult{}, err
 	}
 
 	if len(prts) != 4 || prts[0] != "system" {
-		return spiffeid.TrustDomain{}, errors.New("provided token is not a properly structured service account token")
+		return validator.ValidateResult{}, errors.New("provided token is not a properly structured service account token")
 	}
 
 	saNamespace := prts[2]
@@ -159,65 +159,77 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	// we do not need to supply a key.
 	ptoken, err := jwt.ParseInsecure([]byte(req.GetToken()), jwt.WithTypedClaim("kubernetes.io", new(k8sClaims)))
 	if err != nil {
-		return spiffeid.TrustDomain{}, fmt.Errorf("failed to parse Kubernetes token: %s", err)
+		return validator.ValidateResult{}, fmt.Errorf("failed to parse Kubernetes token: %s", err)
 	}
 	claimsT, ok := ptoken.Get("kubernetes.io")
 	if !ok {
-		return spiffeid.TrustDomain{}, errMissingPodClaim
+		return validator.ValidateResult{}, errMissingPodClaim
 	}
 	claims, ok := claimsT.(*k8sClaims)
 	if !ok || len(claims.Pod.Name) == 0 {
-		return spiffeid.TrustDomain{}, errMissingPodClaim
+		return validator.ValidateResult{}, errMissingPodClaim
 	}
 
 	var pod corev1.Pod
 	err = k.client.Get(ctx, types.NamespacedName{Namespace: saNamespace, Name: claims.Pod.Name}, &pod)
 	if err != nil {
 		log.Errorf("Failed to get pod %s/%s for requested identity: %s", saNamespace, claims.Pod.Name, err)
-		return spiffeid.TrustDomain{}, errors.New("failed to get pod of identity")
+		return validator.ValidateResult{}, errors.New("failed to get pod of identity")
 	}
 
 	if saNamespace != req.GetNamespace() {
-		return spiffeid.TrustDomain{}, fmt.Errorf("namespace mismatch; received namespace: %s", req.GetNamespace())
+		return validator.ValidateResult{}, fmt.Errorf("namespace mismatch; received namespace: %s", req.GetNamespace())
 	}
 
 	if pod.Spec.ServiceAccountName != prts[3] {
 		log.Errorf("Service account on pod %s/%s does not match token", req.GetNamespace(), claims.Pod.Name)
-		return spiffeid.TrustDomain{}, errors.New("pod service account mismatch")
+		return validator.ValidateResult{}, errors.New("pod service account mismatch")
 	}
 
 	expID, isControlPlane, err := k.expectedID(&pod)
 	if err != nil {
 		log.Errorf("Failed to get expected ID for pod %s/%s: %s", req.GetNamespace(), claims.Pod.Name, err)
-		return spiffeid.TrustDomain{}, err
+		return validator.ValidateResult{}, err
 	}
 
 	if expID != req.GetId() {
-		return spiffeid.TrustDomain{}, fmt.Errorf("app-id mismatch. expected: %s, received: %s", expID, req.GetId())
+		return validator.ValidateResult{}, fmt.Errorf("app-id mismatch. expected: %s, received: %s", expID, req.GetId())
 	}
 
 	if isControlPlane {
-		return k.controlPlaneTD, nil
+		return validator.ValidateResult{
+			TrustDomain: k.controlPlaneTD,
+		}, nil
 	}
 
 	configName, ok := pod.GetAnnotations()[annotations.KeyConfig]
 	if !ok {
 		// Return early with default trust domain if no config annotation is found.
-		return spiffeid.RequireTrustDomainFromString("public"), nil
+		return validator.ValidateResult{
+			TrustDomain: spiffeid.RequireTrustDomainFromString("public"),
+		}, nil
 	}
 
 	var config configv1alpha1.Configuration
 	err = k.client.Get(ctx, types.NamespacedName{Namespace: req.GetNamespace(), Name: configName}, &config)
 	if err != nil {
 		log.Errorf("Failed to get configuration %q: %v", configName, err)
-		return spiffeid.TrustDomain{}, errors.New("failed to get configuration")
+		return validator.ValidateResult{}, errors.New("failed to get configuration")
 	}
 
 	if config.Spec.AccessControlSpec == nil || len(config.Spec.AccessControlSpec.TrustDomain) == 0 {
-		return spiffeid.RequireTrustDomainFromString("public"), nil
+		return validator.ValidateResult{
+			TrustDomain: spiffeid.RequireTrustDomainFromString("public"),
+		}, nil
 	}
 
-	return spiffeid.TrustDomainFromString(config.Spec.AccessControlSpec.TrustDomain)
+	td, err := spiffeid.TrustDomainFromString(config.Spec.AccessControlSpec.TrustDomain)
+	if err != nil {
+		return validator.ValidateResult{}, fmt.Errorf("failed to parse trust domain %q: %w", config.Spec.AccessControlSpec.TrustDomain, err)
+	}
+	return validator.ValidateResult{
+		TrustDomain: td,
+	}, nil
 }
 
 // expectedID returns the expected ID for the pod. If the pod is a control

@@ -52,7 +52,7 @@ type disable struct {
 
 func (e *disable) Setup(t *testing.T) []framework.Option {
 	e.sentry = sentry.New(t)
-	e.trustAnchors = e.sentry.CABundle().TrustAnchors
+	e.trustAnchors = e.sentry.CABundle().X509.TrustAnchors
 
 	e.placement = placement.New(t,
 		placement.WithEnableTLS(false),

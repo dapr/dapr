@@ -83,8 +83,10 @@ func TestRun(t *testing.T) {
 			sec: securityfake.New().WithGRPCServerOptionNoClientAuthFn(func() grpc.ServerOption {
 				return grpc.Creds(insecure.NewCredentials())
 			}),
-			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-				return spiffeid.RequireTrustDomainFromString("test"), nil
+			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+				return validator.ValidateResult{
+					TrustDomain: spiffeid.RequireTrustDomainFromString("test"),
+				}, nil
 			}),
 			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 				return []*x509.Certificate{}, nil
@@ -107,8 +109,10 @@ func TestRun(t *testing.T) {
 			sec: securityfake.New().WithGRPCServerOptionNoClientAuthFn(func() grpc.ServerOption {
 				return grpc.Creds(insecure.NewCredentials())
 			}),
-			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-				return spiffeid.RequireTrustDomainFromString("test"), nil
+			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+				return validator.ValidateResult{
+					TrustDomain: spiffeid.RequireTrustDomainFromString("test"),
+				}, nil
 			}),
 			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 				return nil, errors.New("signing error")
@@ -131,8 +135,10 @@ func TestRun(t *testing.T) {
 			sec: securityfake.New().WithGRPCServerOptionNoClientAuthFn(func() grpc.ServerOption {
 				return grpc.Creds(insecure.NewCredentials())
 			}),
-			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-				return spiffeid.RequireTrustDomainFromString("my-trust-domain"), nil
+			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+				return validator.ValidateResult{
+					TrustDomain: spiffeid.RequireTrustDomainFromString("my-trust-domain"),
+				}, nil
 			}),
 			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 				return []*x509.Certificate{crtX509}, nil
@@ -155,8 +161,8 @@ func TestRun(t *testing.T) {
 			sec: securityfake.New().WithGRPCServerOptionNoClientAuthFn(func() grpc.ServerOption {
 				return grpc.Creds(insecure.NewCredentials())
 			}),
-			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-				return spiffeid.TrustDomain{}, errors.New("validation error")
+			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+				return validator.ValidateResult{}, errors.New("validation error")
 			}),
 			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 				return []*x509.Certificate{crtX509}, nil
@@ -179,8 +185,10 @@ func TestRun(t *testing.T) {
 			sec: securityfake.New().WithGRPCServerOptionNoClientAuthFn(func() grpc.ServerOption {
 				return grpc.Creds(insecure.NewCredentials())
 			}),
-			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-				return spiffeid.RequireTrustDomainFromString("my-trust-domain"), nil
+			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+				return validator.ValidateResult{
+					TrustDomain: spiffeid.RequireTrustDomainFromString("my-trust-domain"),
+				}, nil
 			}),
 			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 				return []*x509.Certificate{crtX509}, nil
@@ -207,8 +215,10 @@ func TestRun(t *testing.T) {
 			sec: securityfake.New().WithGRPCServerOptionNoClientAuthFn(func() grpc.ServerOption {
 				return grpc.Creds(insecure.NewCredentials())
 			}),
-			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-				return spiffeid.RequireTrustDomainFromString("my-trust-domain"), nil
+			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+				return validator.ValidateResult{
+					TrustDomain: spiffeid.RequireTrustDomainFromString("my-trust-domain"),
+				}, nil
 			}),
 			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 				assert.Equal(t, []string{"dapr-sidecar-injector.default.svc"}, req.DNS)
@@ -236,8 +246,10 @@ func TestRun(t *testing.T) {
 			sec: securityfake.New().WithGRPCServerOptionNoClientAuthFn(func() grpc.ServerOption {
 				return grpc.Creds(insecure.NewCredentials())
 			}),
-			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-				return spiffeid.RequireTrustDomainFromString("my-trust-domain"), nil
+			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (validator.ValidateResult, error) {
+				return validator.ValidateResult{
+					TrustDomain: spiffeid.RequireTrustDomainFromString("my-trust-domain"),
+				}, nil
 			}),
 			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 				assert.Equal(t, []string{"dapr-webhook.default.svc"}, req.DNS)
