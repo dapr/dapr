@@ -1323,6 +1323,11 @@ func (a *DaprRuntime) loadAppConfiguration(ctx context.Context) {
 		return
 	}
 
+	if utils.Contains(a.runtimeConfig.disableInitEndpoints, "config") {
+		log.Warn("Skipping programmatic dapr configuration loading (see 'disable-init-endpoints' flag/annotation)")
+		return
+	}
+
 	appConfig, err := a.channels.AppChannel().GetAppConfig(ctx, a.runtimeConfig.id)
 	if err != nil {
 		return
