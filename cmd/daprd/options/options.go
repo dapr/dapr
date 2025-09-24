@@ -83,6 +83,7 @@ type Options struct {
 	SentryRequestJwtAudiences     []string
 	Logger                        logger.Options
 	Metrics                       *metrics.FlagOptions
+	DisableInitEndpoints          string
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -165,6 +166,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.IntVar(&opts.AppHealthProbeTimeout, "app-health-probe-timeout", int(config.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
 	fs.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(config.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 	fs.StringVar(&opts.AppChannelAddress, "app-channel-address", runtime.DefaultChannelAddress, "The network address the application listens on")
+	fs.StringVar(&opts.DisableInitEndpoints, "disable-init-endpoints", "", "List of initialization endpoints to disable. Supported values: config, pubsub,. If not specified, all endpoints will be enabled")
 
 	// Add flags for actors, placement, and reminders
 	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
