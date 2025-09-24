@@ -173,8 +173,7 @@ def run_workflow(run_id):
 
         sleep(0.5)
 
-        workflow_state = workflowClient.wait_for_workflow_completion(
-                instance_id=instance_id, timeout_in_seconds=250)
+        workflow_state = workflowClient.wait_for_workflow_completion(instance_id=instance_id)
         assert workflow_state.runtime_status == WorkflowStatus.COMPLETED
 
         try:
@@ -182,18 +181,6 @@ def run_workflow(run_id):
             print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] workflow instance_id {get_resp.instance_id} runtime_status {get_resp.runtime_status}")
         except DaprInternalError as e:
             print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] error getting workflow status: {e.message}")
-
-        try:
-            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] terminating workflow")
-            terminate_resp = d.terminate_workflow(instance_id=instance_id, workflow_component=workflowComponent)
-        except DaprInternalError as e:
-            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] error terminating workflow: {e.message}")
-
-        try:
-            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] purging workflow")
-            d.purge_workflow(instance_id=instance_id, workflow_component=workflowComponent)
-        except DaprInternalError as e:
-            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] error purging workflow: {e.message}")
 
         print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] workflow run complete")
         return "Workflow Run completed"

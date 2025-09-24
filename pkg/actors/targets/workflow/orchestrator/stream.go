@@ -24,85 +24,60 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) handleStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	ch, err := o.handleStreamInitial(ctx, req, stream)
-	if err != nil {
-		return err
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-o.closeCh:
-			return nil
-		case val, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			d, err := anypb.New(val)
-			if err != nil {
-				return err
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-o.closeCh:
-				return nil
-			case stream <- &internalsv1pb.InternalInvokeResponse{
-				Status:  &internalsv1pb.Status{Code: http.StatusOK},
-				Message: &commonv1pb.InvokeResponse{Data: d},
-			}:
-			}
-		}
-	}
-}
-
-func (o *orchestrator) handleStreamInitial(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) (chan *backend.OrchestrationMetadata, error) {
+func (o *orchestrator) handleStream(ctx context.Context,
+	req *internalsv1pb.InternalInvokeRequest,
+	stream func(*internalsv1pb.InternalInvokeResponse) (bool, error),
+	unlock context.CancelFunc,
+) (bool, error) {
 	if m := req.GetMessage().GetMethod(); m != todo.WaitForRuntimeStatus {
-		return nil, fmt.Errorf("unsupported stream method: %s", m)
+		return false, fmt.Errorf("unsupported stream method: %s", m)
 	}
-
-	unlock, err := o.lock.ContextLock(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	ch := make(chan *backend.OrchestrationMetadata)
-	o.ometaBroadcaster.Subscribe(ctx, ch)
 
 	_, ometa, err := o.loadInternalState(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if ometa != nil {
+		var arstate *anypb.Any
+		arstate, err = anypb.New(ometa)
+		if err != nil {
+			return false, err
+		}
+
+		var ok bool
+		ok, err = stream(&internalsv1pb.InternalInvokeResponse{
+			Status:  &internalsv1pb.Status{Code: http.StatusOK},
+			Message: &commonv1pb.InvokeResponse{Data: arstate},
+		})
+		if err != nil || ok {
+			if api.OrchestrationMetadataIsComplete(ometa) {
+				o.factory.deactivate(o)
+			}
+			return false, err
+		}
+	}
+
+	idx := o.streamIDx
+	o.streamIDx++
+
+	sf := &streamFn{
+		fn:    stream,
+		errCh: make(chan error, 1),
+	}
+	defer sf.done.Store(true)
+
+	o.streamFns[idx] = sf
+
+	// unlock this orchestrator actor.
 	unlock()
-	if err != nil {
-		return nil, err
-	}
-
-	if ometa == nil {
-		return ch, nil
-	}
-
-	arstate, err := anypb.New(ometa)
-	if err != nil {
-		return nil, err
-	}
-
-	if api.OrchestrationMetadataIsComplete(ometa) {
-		o.cleanup()
-	}
 
 	select {
 	case <-ctx.Done():
-	case stream <- &internalsv1pb.InternalInvokeResponse{
-		Status:  &internalsv1pb.Status{Code: http.StatusOK},
-		Message: &commonv1pb.InvokeResponse{Data: arstate},
-	}:
+		return true, ctx.Err()
+	case err = <-sf.errCh:
+		return true, err
 	}
-
-	return ch, nil
 }

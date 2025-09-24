@@ -133,9 +133,9 @@ spec:
   {{- if eq .Values.cluster.forceInMemoryLog false }}
         - "--raft-logstore-path"
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
-        - "{{ .Values.cluster.logStoreWinPath }}\\cluster-v2-$(PLACEMENT_ID)"
+        - "{{ .Values.cluster.logStoreWinPath }}\\cluster-v2-nonroot-$(PLACEMENT_ID)"
     {{- else }}
-        - "{{ .Values.cluster.logStorePath }}/cluster-v2-$(PLACEMENT_ID)"
+        - "{{ .Values.cluster.logStorePath }}/cluster-v2-nonroot-$(PLACEMENT_ID)"
     {{- end }}
   {{- end }}
 {{- end }}

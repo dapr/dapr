@@ -4219,6 +4219,11 @@ func TestMetadata(t *testing.T) {
 				},
 			},
 			GlobalConfig: &config.Configuration{},
+			WorkflowEngine: wfenginefake.New().WithRuntimeMetadata(func() *runtimev1pb.MetadataWorkflows {
+				return &runtimev1pb.MetadataWorkflows{
+					ConnectedWorkers: 1,
+				}
+			}),
 		}),
 	}
 
@@ -4246,7 +4251,7 @@ func TestMetadata(t *testing.T) {
 		bytes, err := json.Marshal(res)
 		require.NoError(t, err)
 
-		expectedResponse := `{"id":"fakeAPI","active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended_metadata":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead","type":2}],"http_endpoints":[{"name":"MockHTTPEndpoint"}],"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true}}`
+		expectedResponse := `{"id":"fakeAPI","active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended_metadata":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead","type":2}],"http_endpoints":[{"name":"MockHTTPEndpoint"}],"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true},"workflows":{"connected_workers":1}}`
 		assert.Equal(t, expectedResponse, string(bytes))
 	})
 }

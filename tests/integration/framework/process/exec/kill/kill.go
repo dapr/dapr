@@ -18,7 +18,7 @@ import (
 	"testing"
 )
 
-func Kill(t *testing.T, cmd *exec.Cmd) {
+func Interrupt(t *testing.T, cmd *exec.Cmd) {
 	t.Helper()
 
 	if cmd == nil || cmd.ProcessState != nil {
@@ -28,4 +28,16 @@ func Kill(t *testing.T, cmd *exec.Cmd) {
 	t.Logf("interrupting %s process", cmd.Path)
 
 	interrupt(t, cmd)
+}
+
+func Kill(t *testing.T, cmd *exec.Cmd) {
+	t.Helper()
+
+	if cmd == nil || cmd.ProcessState != nil {
+		return
+	}
+
+	t.Logf("killing %s process", cmd.Path)
+
+	kill(t, cmd)
 }

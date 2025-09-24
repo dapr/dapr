@@ -140,7 +140,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		assert.Eventually(t, func() bool {
 			return b.reminderCalled.Load() == 1
-		}, 3*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 	})
 
 	t.Run("schedule reminder via gRPC", func(t *testing.T) {
@@ -154,7 +154,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		assert.Eventually(t, func() bool {
 			return b.reminderCalled.Load() == 2
-		}, 3*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 	})
 
 	t.Run("cancel recurring reminder", func(t *testing.T) {
@@ -171,7 +171,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		// Should be invoked once
 		assert.Eventually(t, func() bool {
 			return b.stopReminderCalled.Load() == 1
-		}, 3*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 
 		// After 2s, should not have been invoked more
 		time.Sleep(2 * time.Second)

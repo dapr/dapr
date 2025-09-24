@@ -64,7 +64,7 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_scheduler_sidecars_connected: The total number of dapr sidecars connected to the scheduler service.
 * dapr_scheduler_jobs_created_total: The total number of jobs scheduled.
 * dapr_scheduler_jobs_triggered_total: The total number of successfully triggered jobs.
-* dapr_scheduler_trigger_jobs_failed_total: The total time it takes to trigger a job from the scheduler service.
+* dapr_scheduler_trigger_jobs_failed_total: The total number of failed jobs.
 * dapr_scheduler_trigger_jobs_undelivered_total: The total number of undelivered jobs.
 * dapr_scheduler_trigger_latency: The total time it takes to trigger a job from the scheduler service.
 

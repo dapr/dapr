@@ -1,4 +1,3 @@
-{{- if (eq .Values.global.scheduler.enabled true) }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -141,7 +140,7 @@ spec:
         - "--id"
         - "$(SCHEDULER_ID)"
         - "--etcd-initial-cluster"
-        - "dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.{{ .Release.Namespace }}.svc:2380,dapr-scheduler-server-1=https://dapr-scheduler-server-1.dapr-scheduler-server.{{ .Release.Namespace }}.svc:2380,dapr-scheduler-server-2=https://dapr-scheduler-server-2.dapr-scheduler-server.{{ .Release.Namespace }}.svc:2380"
+        - "dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.{{ .Release.Namespace }}.svc{{ .Values.global.dnsSuffix }}:2380,dapr-scheduler-server-1=https://dapr-scheduler-server-1.dapr-scheduler-server.{{ .Release.Namespace }}.svc{{ .Values.global.dnsSuffix }}:2380,dapr-scheduler-server-2=https://dapr-scheduler-server-2.dapr-scheduler-server.{{ .Release.Namespace }}.svc{{ .Values.global.dnsSuffix }}:2380"
         - "--etcd-embed"
         - "{{ .Values.etcdEmbed }}"
 {{- if gt (len .Values.etcdClientEndpoints) 0 }}
@@ -180,6 +179,7 @@ spec:
         - "--etcd-backend-batch-limit={{ .Values.etcdBackendBatchLimit }}"
         - "--etcd-backend-batch-interval={{ .Values.etcdBackendBatchInterval }}"
         - "--etcd-experimental-bootstrap-defrag-threshold-megabytes={{ .Values.etcdDefragThresholdMB }}"
+        - "--etcd-initial-election-tick-advance={{ .Values.etcdInitialElectionTickAdvance }}"
         - "--etcd-metrics={{ .Values.etcdMetrics }}"
         - "--tls-enabled"
         - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
@@ -285,5 +285,4 @@ spec:
 {{- if .Values.global.priorityClassName }}
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
-{{- end }}
 {{- end }}

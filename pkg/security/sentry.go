@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,12 +16,14 @@ package security
 import (
 	"context"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
@@ -34,6 +36,7 @@ import (
 	cryptopem "github.com/dapr/kit/crypto/pem"
 	"github.com/dapr/kit/crypto/spiffe"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -114,6 +117,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			Token:          token,
 			Namespace:      ns,
 			TokenValidator: tokenValidator,
+			JwtAudiences:   opts.JwtAudiences,
 		}
 
 		if trustDomain != nil {
@@ -136,8 +140,33 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			return nil, fmt.Errorf("error parsing newly signed certificate: %w", err)
 		}
 
+		var jwtVal *string
+		if resp.GetJwt() != nil && resp.GetJwt().GetValue() != "" {
+			// NOTE: We do not verify the signature of the token here
+			// as the token was passed over a secure channel. This avoids
+			// potential issues where the workload does not yet have an
+			// authority used by Sentry but that would be successfully
+			// validated by a 3rd party via the OIDC server.
+			tkn, err := jwt.Parse([]byte(resp.GetJwt().GetValue()),
+				jwt.WithAcceptableSkew(5*time.Minute),
+				jwt.WithContext(ctx),
+				jwt.WithVerify(false))
+			if err != nil {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_parse")
+				return nil, fmt.Errorf("error parsing JWT: %w", err)
+			}
+
+			if len(tkn.Audience()) == 0 {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_aud")
+				return nil, errors.New("JWT audience is empty")
+			}
+
+			jwtVal = ptr.Of(resp.GetJwt().GetValue())
+		}
+
 		return &spiffe.SVIDResponse{
 			X509Certificates: workloadcert,
+			JWT:              jwtVal,
 		}, nil
 	}
 

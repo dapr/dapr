@@ -27,11 +27,18 @@ type options struct {
 	handler      http.Handler
 	handlerFuncs map[string]http.HandlerFunc
 	tlsConfig    *tls.Config
+	port         *int
 }
 
 func WithHandler(handler http.Handler) Option {
 	return func(o *options) {
 		o.handler = handler
+	}
+}
+
+func WithPort(port int) Option {
+	return func(o *options) {
+		o.port = &port
 	}
 }
 

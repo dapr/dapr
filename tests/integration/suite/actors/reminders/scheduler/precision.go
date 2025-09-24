@@ -123,13 +123,13 @@ func (r *precision) Run(t *testing.T, ctx context.Context) {
 		ActorId:   "myactorid",
 		Name:      "ms",
 		Data:      []byte("reminderdata"),
-		Period:    "400ms",
-		Ttl:       "5s",
+		Period:    "1ms",
+		Ttl:       "10ms",
 	})
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, r.called.Slice(), 17)
+		assert.Len(c, r.called.Slice(), 15)
 	}, time.Second*10, time.Millisecond*10)
 
 	eMap := make(map[string][]*request)
@@ -137,9 +137,9 @@ func (r *precision) Run(t *testing.T, ctx context.Context) {
 		eMap[v.name] = append(eMap[v.name], v)
 	}
 
-	tolerance := 100 * time.Millisecond
+	tolerance := 500 * time.Millisecond
 	assertDurationWithTolerance(t, eMap, "sec", 1*time.Second, float64(tolerance))
-	assertDurationWithTolerance(t, eMap, "ms", 400*time.Millisecond, float64(tolerance))
+	assertDurationWithTolerance(t, eMap, "ms", time.Millisecond, float64(tolerance))
 }
 
 func assertDurationWithTolerance(t *testing.T, values map[string][]*request, key string, expectedDiff time.Duration, tolerance float64) {

@@ -46,7 +46,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 	}
 
 	if state == nil {
-		defer o.cleanup()
+		defer o.factory.deactivate(o)
 		return status.Errorf(codes.NotFound, "workflow instance does not exist with ID '%s'", o.actorID)
 	}
 
@@ -54,7 +54,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 		return status.Errorf(codes.InvalidArgument, "'%s' is not in a terminal state", o.actorID)
 	}
 
-	defer o.cleanup()
+	defer o.factory.deactivate(o)
 
 	fork := fork.New(fork.Options{
 		AppID:             o.appID,

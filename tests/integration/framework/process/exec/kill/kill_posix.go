@@ -27,3 +27,7 @@ import (
 func interrupt(t *testing.T, cmd *exec.Cmd) {
 	require.NoError(t, cmd.Process.Signal(os.Interrupt))
 }
+
+func kill(t *testing.T, cmd *exec.Cmd) {
+	require.NoError(t, cmd.Process.Signal(os.Kill))
+}

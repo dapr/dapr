@@ -699,6 +699,11 @@ message GetMetadataResponse {
   repeated string enabled_features = 9 [json_name = "enabledFeatures"];
   ActorRuntime actor_runtime = 10 [json_name = "actorRuntime"];
   optional MetadataScheduler scheduler = 11 [json_name = "scheduler"];
+  optional MetadataWorkflows workflows = 12 [json_name = "workflows"];
+}
+
+message MetadataWorkflows {
+  int32 connected_workers = 1 [json_name = "connectedWorkers"];
 }
 
 // MetadataScheduler is a message that contains the list of addresses of the

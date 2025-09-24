@@ -137,7 +137,7 @@ func (r *Statestore) DrainRebalancedReminders() {
 
 func (r *Statestore) Create(ctx context.Context, req *api.CreateReminderRequest) error {
 	// Create the new reminder object
-	reminder, err := req.NewReminder(r.clock.Now())
+	reminder, err := req.NewReminder(r.clock.Now(), true)
 	if err != nil {
 		return err
 	}

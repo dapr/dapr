@@ -129,6 +129,12 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 					Placement:    actorRuntime.GetPlacement(),
 				}
 
+				if out.GetWorkflows() != nil {
+					res.Workflows = metadataWorkflows{
+						ConnectedWorkers: out.GetWorkflows().GetConnectedWorkers(),
+					}
+				}
+
 				return res, nil
 			},
 		},
@@ -171,6 +177,11 @@ type metadataResponse struct {
 	AppConnectionProperties metadataResponseAppConnectionProperties `json:"appConnectionProperties,omitempty"`
 	ActorRuntime            metadataActorRuntime                    `json:"actorRuntime,omitempty"`
 	Scheduler               *runtimev1pb.MetadataScheduler          `json:"scheduler,omitempty"`
+	Workflows               metadataWorkflows                       `json:"workflows,omitempty"`
+}
+
+type metadataWorkflows struct {
+	ConnectedWorkers int32 `json:"connectedWorkers,omitempty"`
 }
 
 type metadataActorRuntime struct {

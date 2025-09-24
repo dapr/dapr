@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
+	targetserrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -41,7 +42,7 @@ import (
 type Interface interface {
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	CallReminder(ctx context.Context, reminder *api.Reminder) error
-	CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error
+	CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, fn func(*internalv1pb.InternalInvokeResponse) (bool, error)) error
 }
 
 type Options struct {
@@ -125,15 +126,18 @@ func (r *router) CallReminder(ctx context.Context, req *api.Reminder) error {
 	}
 }
 
-func (r *router) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+func (r *router) CallStream(ctx context.Context,
+	req *internalv1pb.InternalInvokeRequest,
+	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
+) error {
 	policyRunner := resiliency.NewRunner[struct{}](ctx, r.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
 	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
-		err := r.callStream(ctx, req, stream)
+		serr := r.callStream(ctx, req, stream)
 		// Suppress EOF errors as this simply means the stream is closing.
-		if errors.Is(err, io.EOF) {
+		if errors.Is(serr, io.EOF) {
 			return struct{}{}, nil
 		}
-		return struct{}{}, err
+		return struct{}{}, serr
 	})
 
 	return err
@@ -171,18 +175,24 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 		return err
 	}
 
-	target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
-	if err != nil {
+	for {
+		target, err := r.table.GetOrCreate(req.ActorType, req.ActorID)
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+
+		if req.IsTimer {
+			err = target.InvokeTimer(ctx, req)
+		} else {
+			err = target.InvokeReminder(ctx, req)
+		}
+
+		if targetserrors.IsClosed(err) {
+			continue
+		}
+
 		return backoff.Permanent(err)
 	}
-
-	if req.IsTimer {
-		err = target.InvokeTimer(ctx, req)
-	} else {
-		err = target.InvokeReminder(ctx, req)
-	}
-
-	return backoff.Permanent(err)
 }
 
 func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -209,12 +219,17 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if lar.Local {
-		var resp *internalv1pb.InternalInvokeResponse
-		resp, err = r.callLocalActor(ctx, req)
-		if err != nil {
-			return resp, backoff.Permanent(err)
+		for {
+			var resp *internalv1pb.InternalInvokeResponse
+			resp, err = r.callLocalActor(ctx, req)
+			if err != nil {
+				if targetserrors.IsClosed(err) {
+					continue
+				}
+				return resp, backoff.Permanent(err)
+			}
+			return resp, nil
 		}
-		return resp, nil
 	}
 
 	// If this is a dapr-dapr call and the actor didn't pass the local check
@@ -297,7 +312,10 @@ func (r *router) callLocalActor(ctx context.Context, req *internalv1pb.InternalI
 	return target.InvokeMethod(ctx, req)
 }
 
-func (r *router) callStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+func (r *router) callStream(ctx context.Context,
+	req *internalv1pb.InternalInvokeRequest,
+	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
+) error {
 	ctx, pcancel, err := r.placement.Lock(ctx)
 	if err != nil {
 		return backoff.Permanent(err)
@@ -322,16 +340,12 @@ func (r *router) callStream(ctx context.Context, req *internalv1pb.InternalInvok
 		return r.callRemoteActorStream(ctx, lar, req, stream)
 	}
 
-	if err = r.callLocalActorStream(ctx, req, stream); err != nil {
-		return backoff.Permanent(err)
-	}
-
-	return nil
+	return r.callLocalActorStream(ctx, req, stream)
 }
 
 func (r *router) callLocalActorStream(ctx context.Context,
 	req *internalv1pb.InternalInvokeRequest,
-	stream chan<- *internalv1pb.InternalInvokeResponse,
+	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
 ) error {
 	target, err := r.table.GetOrCreate(req.GetActor().GetActorType(), req.GetActor().GetActorId())
 	if err != nil {
@@ -344,7 +358,7 @@ func (r *router) callLocalActorStream(ctx context.Context,
 func (r *router) callRemoteActorStream(ctx context.Context,
 	lar *api.LookupActorResponse,
 	req *internalv1pb.InternalInvokeRequest,
-	stream chan<- *internalv1pb.InternalInvokeResponse,
+	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
 ) error {
 	conn, cancel, err := r.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, r.namespace)
 	if err != nil {
@@ -367,10 +381,8 @@ func (r *router) callRemoteActorStream(ctx context.Context,
 			return err
 		}
 
-		select {
-		case stream <- resp:
-		case <-ctx.Done():
-			return ctx.Err()
+		if ok, err := stream(resp); err != nil || ok {
+			return err
 		}
 	}
 }

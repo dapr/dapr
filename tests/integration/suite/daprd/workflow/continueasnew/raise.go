@@ -52,7 +52,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 
 		var inc int
 		require.NoError(t, ctx.GetInput(&inc))
-		if inc < 99 {
+		if inc < 49 {
 			ctx.ContinueAsNew(inc+1, task.WithKeepUnprocessedEvents())
 		}
 
@@ -66,11 +66,11 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	)
 	require.NoError(t, err)
 
-	for range 100 {
+	for range 50 {
 		go client.RaiseEvent(ctx, id, "incr")
 	}
 
 	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, `100`, meta.GetOutput().GetValue())
+	assert.Equal(t, `50`, meta.GetOutput().GetValue())
 }

@@ -38,7 +38,7 @@ func (r *ReminderTrack) MarshalJSON() ([]byte, error) {
 	}
 
 	if !r.LastFiredTime.IsZero() {
-		m.LastFiredTime = r.LastFiredTime.Format(time.RFC3339Nano)
+		m.LastFiredTime = r.LastFiredTime.Format(time.RFC3339)
 	}
 
 	return json.Marshal(m)
@@ -60,11 +60,12 @@ func (r *ReminderTrack) UnmarshalJSON(data []byte) error {
 	}
 
 	if m.LastFiredTime != "" {
-		// Try RFC3339Nano
-		r.LastFiredTime, err = time.Parse(time.RFC3339Nano, m.LastFiredTime)
+		r.LastFiredTime, err = time.Parse(time.RFC3339, m.LastFiredTime)
 		if err != nil {
 			return fmt.Errorf("failed to parse LastFiredTime: %w", err)
 		}
+		r.LastFiredTime = r.LastFiredTime.Truncate(time.Second)
 	}
+
 	return nil
 }

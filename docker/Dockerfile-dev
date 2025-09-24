@@ -1,7 +1,7 @@
 # Based on https://github.com/microsoft/vscode-dev-containers/tree/v0.224.3/containers/go/.devcontainer/base.Dockerfile
 
-# [Choice] Go version: 1, 1.24.4, etc
-ARG GOVERSION=1.24.4
+# [Choice] Go version: 1, 1.24.6, etc
+ARG GOVERSION=1.24.6
 FROM golang:${GOVERSION}-bullseye
 
 # [Option] Install zsh

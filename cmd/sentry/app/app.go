@@ -67,30 +67,57 @@ func Run() {
 		mngr        = concurrency.NewRunnerManager()
 	)
 
-	issuerCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.IssuerCertFilename)
-	if filepath.IsAbs(opts.IssuerCertFilename) {
-		log.Debugf("Using user provided issuer cert path: %s", opts.IssuerCertFilename)
-		issuerCertPath = opts.IssuerCertFilename
+	issuerCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.X509.IssuerCertFilename)
+	if filepath.IsAbs(opts.X509.IssuerCertFilename) {
+		log.Debugf("Using user provided issuer cert path: %s", opts.X509.IssuerCertFilename)
+		issuerCertPath = opts.X509.IssuerCertFilename
 	}
-	issuerKeyPath := filepath.Join(opts.IssuerCredentialsPath, opts.IssuerKeyFilename)
-	if filepath.IsAbs(opts.IssuerKeyFilename) {
-		log.Debugf("Using user provided issuer key path: %s", opts.IssuerKeyFilename)
-		issuerKeyPath = opts.IssuerKeyFilename
+	issuerKeyPath := filepath.Join(opts.IssuerCredentialsPath, opts.X509.IssuerKeyFilename)
+	if filepath.IsAbs(opts.X509.IssuerKeyFilename) {
+		log.Debugf("Using user provided issuer key path: %s", opts.X509.IssuerKeyFilename)
+		issuerKeyPath = opts.X509.IssuerKeyFilename
 	}
-	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.RootCAFilename)
-	if filepath.IsAbs(opts.RootCAFilename) {
-		log.Debugf("Using user provided root cert path: %s", opts.RootCAFilename)
-		rootCertPath = opts.RootCAFilename
+	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.X509.RootCAFilename)
+	if filepath.IsAbs(opts.X509.RootCAFilename) {
+		log.Debugf("Using user provided root cert path: %s", opts.X509.RootCAFilename)
+		rootCertPath = opts.X509.RootCAFilename
+	}
+	jwtKeyPath := filepath.Join(opts.IssuerCredentialsPath, config.DefaultJWTSigningKeyFilename)
+	if filepath.IsAbs(opts.JWT.SigningKeyFilename) {
+		log.Debugf("Using user provided JWT signing key path: %s", opts.JWT.SigningKeyFilename)
+		jwtKeyPath = opts.JWT.SigningKeyFilename
+	}
+	jwksPath := filepath.Join(opts.IssuerCredentialsPath, config.DefaultJWKSFilename)
+	if filepath.IsAbs(opts.JWT.JWKSFilename) {
+		log.Debugf("Using user provided JWKS path: %s", opts.JWT.JWKSFilename)
+		jwksPath = opts.JWT.JWKSFilename
+	}
+
+	if opts.OIDC.TLSCertFile != nil && opts.OIDC.TLSKeyFile != nil {
+		log.Info("Using OIDC TLS certificate and key files: %s, %s", *opts.OIDC.TLSCertFile, *opts.OIDC.TLSKeyFile)
+	} else if opts.OIDC.TLSCertFile != nil || opts.OIDC.TLSKeyFile != nil {
+		log.Fatal("both OIDC TLS certificate and key must be provided if one is specified")
 	}
 
 	m := make(map[string]struct{})
 	// we need to watch over all these relevant directories
-	for _, path := range []string{issuerCertPath, issuerKeyPath, rootCertPath} {
-		dir := filepath.Dir(path)
-		if _, ok := m[dir]; !ok {
-			m[dir] = struct{}{}
+	for _, path := range []*string{
+		&issuerCertPath,
+		&issuerKeyPath,
+		&rootCertPath,
+		&jwtKeyPath,
+		&jwksPath,
+		opts.OIDC.TLSCertFile,
+		opts.OIDC.TLSKeyFile,
+	} {
+		if path != nil {
+			dir := filepath.Dir(*path)
+			if _, ok := m[dir]; !ok {
+				m[dir] = struct{}{}
+			}
 		}
 	}
+
 	watchDirs := make([]string, 0, len(m))
 	for dir := range m {
 		watchDirs = append(watchDirs, dir)
@@ -104,10 +131,24 @@ func Run() {
 	cfg.IssuerCertPath = issuerCertPath
 	cfg.IssuerKeyPath = issuerKeyPath
 	cfg.RootCertPath = rootCertPath
+	cfg.JWT.SigningKeyPath = jwtKeyPath
+	cfg.JWT.Enabled = opts.JWT.Enabled
+	cfg.JWT.JWKSPath = jwksPath
+	cfg.JWT.SigningAlgorithm = opts.JWT.SigningAlgorithm
 	cfg.TrustDomain = opts.TrustDomain
 	cfg.Port = opts.Port
 	cfg.ListenAddress = opts.ListenAddress
 	cfg.Mode = modes.DaprMode(opts.Mode)
+
+	if opts.JWT.Issuer != nil {
+		cfg.JWT.Issuer = opts.JWT.Issuer
+	}
+
+	if opts.JWT.KeyID != nil {
+		cfg.JWT.KeyID = opts.JWT.KeyID
+	}
+
+	cfg.JWT.TTL = opts.JWT.TTL
 
 	// We use runner manager inception here since we want the inner manager to be
 	// restarted when the CA server needs to be restarted because of file events.
@@ -122,9 +163,20 @@ func Run() {
 			Port:      opts.Metrics.Port(),
 			Healthz:   healthz,
 		})
+
 		sentry, serr := sentry.New(ctx, sentry.Options{
 			Config:  cfg,
 			Healthz: healthz,
+			OIDC: sentry.OIDCOptions{
+				Enabled:             opts.OIDC.Enabled,
+				ServerListenAddress: opts.OIDC.ServerListenAddress,
+				ServerListenPort:    opts.OIDC.ServerListenPort,
+				JWKSURI:             opts.OIDC.JWKSURI,
+				PathPrefix:          opts.OIDC.PathPrefix,
+				Domains:             opts.OIDC.AllowedHosts,
+				TLSCertPath:         opts.OIDC.TLSCertFile,
+				TLSKeyPath:          opts.OIDC.TLSKeyFile,
+			},
 		})
 		if serr != nil {
 			return serr

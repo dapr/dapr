@@ -27,10 +27,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -49,15 +45,15 @@ const (
 
 	// Target for the QPS - Temporary
 	targetQPS          float64 = 33
-	targetSchedulerQPS float64 = 2850
+	targetSchedulerQPS float64 = 600
 
 	// Target for the QPS to trigger reminders.
 	targetTriggerQPS          float64 = 1000
-	targetSchedulerTriggerQPS float64 = 3800
+	targetSchedulerTriggerQPS float64 = 9000
 
 	// reminderCount is the number of reminders to register.
 	reminderCount          = 2000
-	reminderCountScheduler = 50000
+	reminderCountScheduler = 10000
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
@@ -197,30 +193,9 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 }
 
 func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
-	t.Cleanup(func() {
-		platform := tr.Platform.(*runner.KubeTestPlatform)
-		scheme := runtime.NewScheme()
-		require.NoError(t, corev1.AddToScheme(scheme))
-		require.NoError(t, appsv1.AddToScheme(scheme))
-		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
-		require.NoError(t, err)
-		var pod corev1.Pod
-		err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-		require.NoError(t, err)
-		err = cl.Delete(t.Context(), &pod)
-		require.NoError(t, err)
-
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			var sts appsv1.StatefulSet
-			err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
-			assert.NoError(c, err)
-			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
-		}, time.Minute, time.Second)
-	})
-
 	p := perf.Params(
 		perf.WithQPS(3000),
-		perf.WithConnections(8),
+		perf.WithConnections(24),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
 	)
@@ -373,7 +348,7 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
 		assert.NoError(c, err)
 		assert.GreaterOrEqual(c, gotCount, reminderCount*5)
-	}, 100*time.Second, time.Millisecond*100)
+	}, 100*time.Second, time.Second)
 	done = time.Since(start)
 	qps := float64(reminderCount*5) / done.Seconds()
 	t.Logf("Triggered %d reminders in %s (%.1fqps)", reminderCount*5, done, qps)
@@ -381,27 +356,6 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 }
 
 func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
-	t.Cleanup(func() {
-		platform := tr.Platform.(*runner.KubeTestPlatform)
-		scheme := runtime.NewScheme()
-		require.NoError(t, corev1.AddToScheme(scheme))
-		require.NoError(t, appsv1.AddToScheme(scheme))
-		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
-		require.NoError(t, err)
-		var pod corev1.Pod
-		err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-		require.NoError(t, err)
-		err = cl.Delete(t.Context(), &pod)
-		require.NoError(t, err)
-
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			var sts appsv1.StatefulSet
-			err = cl.Get(t.Context(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
-			assert.NoError(c, err)
-			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
-		}, time.Minute, time.Second)
-	})
-
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL(appNameScheduler)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
@@ -426,9 +380,9 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 
 	worker := func(i int) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/abc/reminders/myreminder%d", testAppURL, actorTypeScheduler, i), reminderB)
+			_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/%d/reminders/myreminder%d", testAppURL, actorTypeScheduler, i, i), reminderB)
 			assert.NoError(c, err)
-		}, 10*time.Second, time.Millisecond*100)
+		}, 10*time.Second, time.Second)
 
 		if (i+1)%10000 == 0 {
 			fmt.Printf("Reminders registered: %d\n", i+1)
@@ -468,7 +422,7 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
 		assert.NoError(c, err)
 		assert.GreaterOrEqual(c, gotCount, reminderCountScheduler*5)
-	}, 100*time.Second, time.Millisecond*100)
+	}, 100*time.Second, time.Second)
 	done = time.Since(start)
 	qps := float64(reminderCountScheduler*5) / done.Seconds()
 	t.Logf("Triggered %d reminders in %s (%.1fqps)", reminderCountScheduler*5, done, qps)

@@ -28,7 +28,7 @@ type Interface interface {
 	InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	InvokeReminder(ctx context.Context, reminder *api.Reminder) error
 	InvokeTimer(ctx context.Context, reminder *api.Reminder) error
-	InvokeStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error
+	InvokeStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream func(*internalv1pb.InternalInvokeResponse) (bool, error)) error
 	Deactivate(context.Context) error
 }
 

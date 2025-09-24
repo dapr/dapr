@@ -388,7 +388,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		//nolint:bodyclose
 		clientResp, clientErr := h.client.Do(r)
 		if clientResp != nil {
-			if sse {
+			if sse && req.HTTPResponseWriter() != nil {
 				callerResponseWriter := req.HTTPResponseWriter()
 
 				callerResponseWriter.Header().Set(headerContentType, mimeEventStream)
