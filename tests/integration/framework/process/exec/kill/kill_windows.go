@@ -24,6 +24,10 @@ import (
 )
 
 func interrupt(_ *testing.T, cmd *exec.Cmd) {
+	kill(nil, cmd)
+}
+
+func kill(_ *testing.T, cmd *exec.Cmd) {
 	kill := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid))
 	kill.Stdout = os.Stdout
 	kill.Stderr = os.Stderr

@@ -16,6 +16,7 @@ syntax = "proto3";
 package dapr.proto.sentry.v1;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/sentry/v1;sentry";
 
@@ -46,6 +47,8 @@ message SignCertificateRequest {
   bytes certificate_signing_request = 5;
   // Name of the validator to use, if not the default for the environemtn. 
   TokenValidator token_validator = 6;
+  // List of audiences for the JWT.
+  repeated string jwt_audiences = 7;
 }
 
 message SignCertificateResponse {
@@ -57,4 +60,9 @@ message SignCertificateResponse {
   repeated bytes trust_chain_certificates = 2;
 
   google.protobuf.Timestamp valid_until = 3;
+
+  // JWT token for authentication. Always provided by Sentry if configured to
+  // issue JWTs (not requested). The JWT contains the same identity information
+  // as the certificate and is signed by the same issuing authority.
+  optional google.protobuf.StringValue jwt = 4;
 }

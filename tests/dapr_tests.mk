@@ -496,6 +496,7 @@ setup-test-env-kafka:
 	  --set broker.persistence.size=1Gi \
 	  --set broker.logPersistence.size=1Gi \
 	  --set zookeeper.persistence.size=1Gi \
+	  --set image.repository=bitnamilegacy/kafka \
 	  --timeout 10m0s
 
 # install rabbitmq to the cluster
@@ -507,6 +508,7 @@ setup-test-env-rabbitmq:
 	  --set auth.password='admin' \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
 	  --set persistence.size=1Gi \
+	  --set image.repository=bitnamilegacy/rabbitmq \
 	  --timeout 10m0s
 
 # install mqtt to the cluster
@@ -540,6 +542,7 @@ setup-test-env-postgres:
 	  --version 12.8.0 \
 	  -f ./tests/config/postgres_override.yaml \
 	  --set primary.persistence.size=1Gi \
+	  --set image.repository=bitnamilegacy/postgresql \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
 	  --wait \
 	  --timeout 5m0s
