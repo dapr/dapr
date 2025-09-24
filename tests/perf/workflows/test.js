@@ -80,7 +80,6 @@ function execute() {
         headers: {
             'Content-Type': 'application/json',
         },
-        timeout: '250s',
     }
     const res = http.post(
         `${__ENV.TARGET_URL}/${exec.scenario.iterationInTest}`,

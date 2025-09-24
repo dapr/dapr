@@ -18,29 +18,18 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"sync"
 
 	"github.com/dapr/durabletask-go/backend"
 )
 
 func (o *orchestrator) createTimers(ctx context.Context, es []*backend.HistoryEvent, generation uint64) error {
-	errs := make([]error, len(es))
-
-	var wg sync.WaitGroup
-	wg.Add(len(es))
-	for i, e := range es {
-		go func(i int, e *backend.HistoryEvent) {
-			defer wg.Done()
-
-			if err := o.createTimer(ctx, e, generation); err != nil {
-				errs[i] = err
-			}
-		}(i, e)
+	for _, e := range es {
+		if err := o.createTimer(ctx, e, generation); err != nil {
+			return err
+		}
 	}
 
-	wg.Wait()
-
-	return errors.Join(errs...)
+	return nil
 }
 
 func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent, generation uint64) error {

@@ -104,8 +104,9 @@ func (s *server) StartNonBlocking() error {
 	s.useContextSetup(r)
 	s.useTracing(r)
 	s.useMetrics(r)
-	s.useAPIAuthentication(r)
 	s.useCors(r)
+	// register API authentication middleware after CORS middleware
+	s.useAPIAuthentication(r)
 	s.useComponents(r)
 	s.useAPILogging(r)
 
@@ -361,15 +362,23 @@ func (s *server) useComponents(r chi.Router) {
 }
 
 func (s *server) useCors(r chi.Router) {
-	// TODO: Technically, if "AllowedOrigins" is "*", all origins should be allowed
-	// This behavior is not quite correct as in this case we are disallowing all origins
 	if s.config.AllowedOrigins == corsDapr.DefaultAllowedOrigins {
+		r.Use(cors.AllowAll().Handler)
 		return
 	}
 
 	log.Info("Enabled CORS HTTP middleware")
 	r.Use(cors.New(cors.Options{
 		AllowedOrigins: strings.Split(s.config.AllowedOrigins, ","),
+		AllowedMethods: []string{
+			http.MethodHead,
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodDelete,
+		},
+		AllowedHeaders: []string{"*"},
 		Debug:          false,
 	}).Handler)
 }

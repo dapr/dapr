@@ -24,6 +24,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -44,6 +45,8 @@ type raise struct {
 }
 
 func (r *raise) Setup(t *testing.T) []framework.Option {
+	os.SkipWindows(t)
+
 	app := app.New(t)
 	place := placement.New(t)
 	scheduler := scheduler.New(t)

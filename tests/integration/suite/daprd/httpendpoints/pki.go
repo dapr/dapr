@@ -129,7 +129,7 @@ func (p *pki) Setup(t *testing.T) []framework.Option {
 		daprd.WithNamespace("default"),
 		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors),
 		)),
 		daprd.WithAppPort(app.Port(t)),
 	)

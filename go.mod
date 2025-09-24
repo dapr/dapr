@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.24.4
+go 1.24.6
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -11,10 +11,11 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.15.1-0.20250725163610-adc76bd6ec85
-	github.com/dapr/durabletask-go v0.7.3-0.20250711135247-7a35af6fe0e5
-	github.com/dapr/kit v0.15.3-0.20250717140748-8b780b4d81c5
-	github.com/diagridio/go-etcd-cron v0.8.3-0.20250711135408-17bb34390b59
+	github.com/coreos/go-oidc/v3 v3.14.1
+	github.com/dapr/components-contrib v1.16.0
+	github.com/dapr/durabletask-go v0.9.0
+	github.com/dapr/kit v0.16.1
+	github.com/diagridio/go-etcd-cron v0.9.1
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/cors v1.2.1
@@ -67,6 +68,7 @@ require (
 	go.uber.org/ratelimit v0.3.0
 	golang.org/x/crypto v0.39.0
 	golang.org/x/net v0.41.0
+	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.15.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822
@@ -90,19 +92,15 @@ require (
 require (
 	cel.dev/expr v0.23.0 // indirect
 	cloud.google.com/go v0.120.0 // indirect
-	cloud.google.com/go/ai v0.7.0 // indirect
-	cloud.google.com/go/aiplatform v1.86.0 // indirect
 	cloud.google.com/go/auth v0.16.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	cloud.google.com/go/datastore v1.20.0 // indirect
 	cloud.google.com/go/iam v1.5.2 // indirect
-	cloud.google.com/go/longrunning v0.6.7 // indirect
 	cloud.google.com/go/monitoring v1.24.2 // indirect
 	cloud.google.com/go/pubsub v1.49.0 // indirect
 	cloud.google.com/go/secretmanager v1.14.7 // indirect
 	cloud.google.com/go/storage v1.50.0 // indirect
-	cloud.google.com/go/vertexai v0.12.0 // indirect
 	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20230118042253-4f159a2b38f3 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.1 // indirect
@@ -153,12 +151,14 @@ require (
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.9+incompatible // indirect
 	github.com/aliyun/aliyun-tablestore-go-sdk v1.7.10 // indirect
 	github.com/aliyun/credentials-go v1.1.2 // indirect
+	github.com/aliyunmq/mq-http-go-sdk v1.0.3 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/anshal21/go-worker v1.1.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/apache/dubbo-getty v1.4.9-0.20220610060150-8af010f3f3dc // indirect
 	github.com/apache/dubbo-go-hessian2 v1.11.5 // indirect
 	github.com/apache/pulsar-client-go v0.14.0 // indirect
+	github.com/apache/rocketmq-client-go v1.2.5 // indirect
 	github.com/apache/rocketmq-client-go/v2 v2.1.2-0.20230412142645-25003f6f083d // indirect
 	github.com/apache/thrift v0.13.0 // indirect
 	github.com/ardielle/ardielle-go v1.5.2 // indirect
@@ -173,27 +173,23 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.19.3 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.32 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.3.10 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.83 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.36 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.36 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.3 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.36 // indirect
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.17.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.43.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/dynamodbstreams v1.25.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.7.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.10.17 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.17 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.18.17 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.83.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.32.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sns v1.34.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.38.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.25.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.30.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.34.0 // indirect
 	github.com/aws/rolesanywhere-credential-helper v1.0.4 // indirect
-	github.com/aws/smithy-go v1.22.4 // indirect
+	github.com/aws/smithy-go v1.22.5 // indirect
 	github.com/awslabs/kinesis-aggregation/go v0.0.0-20210630091500-54e17340d32f // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -207,6 +203,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chebyrash/promise v0.0.0-20230709133807-42ec49ba1459 // indirect
 	github.com/choleraehyq/pid v0.0.20 // indirect
+	github.com/cinience/go_rocketmq v0.0.2 // indirect
 	github.com/clbanning/mxj/v2 v2.5.6 // indirect
 	github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.14.0 // indirect
 	github.com/cloudwego/fastpb v0.0.4-0.20230131074846-6fc453d58b96 // indirect
@@ -274,6 +271,8 @@ require (
 	github.com/gocql/gocql v1.5.2 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
+	github.com/gogap/errors v0.0.0-20200228125012-531a6449b28c // indirect
+	github.com/gogap/stack v0.0.0-20150131034635-fef68dddd4f8 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
@@ -283,7 +282,6 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
-	github.com/google/generative-ai-go v0.15.1 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/pprof v0.0.0-20241029153458-d1b30febd7db // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
@@ -346,7 +344,7 @@ require (
 	github.com/lestrrat-go/iter v1.0.2 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
-	github.com/linkedin/goavro/v2 v2.12.0 // indirect
+	github.com/linkedin/goavro/v2 v2.14.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/machinebox/graphql v0.2.2 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
@@ -400,7 +398,7 @@ require (
 	github.com/rabbitmq/amqp091-go v1.9.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/riferrei/srclient v0.6.0 // indirect
+	github.com/riferrei/srclient v0.7.2 // indirect
 	github.com/rs/zerolog v1.31.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
@@ -464,7 +462,6 @@ require (
 	golang.org/x/arch v0.10.0 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/mod v0.25.0 // indirect
-	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/term v0.32.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
