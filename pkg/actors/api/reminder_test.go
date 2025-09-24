@@ -131,31 +131,6 @@ func TestReminderProperties(t *testing.T) {
 			require.False(t, r.TickExecuted())
 		}
 	})
-
-	// Update the object to set an expiration
-	r.RegisteredTime = time1
-	r.ExpirationTime = time1.Add(30 * time.Millisecond)
-	r.Period, err = NewReminderPeriod("10ms")
-	require.NoError(t, err)
-
-	t.Run("with expiration time in milliseconds", func(t *testing.T) {
-		require.True(t, r.HasRepeats())
-		require.Equal(t, -1, r.RepeatsLeft())
-		require.Equal(t, -1, r.Period.repeats)
-
-		for i := range 4 {
-			nextTick, active := r.NextTick()
-			require.Equal(t, time1.Add((10*time.Millisecond)*time.Duration(i)), nextTick)
-
-			if i == 3 {
-				require.False(t, active)
-			} else {
-				require.True(t, active)
-			}
-
-			require.False(t, r.TickExecuted())
-		}
-	})
 }
 
 func TestReminderJSON(t *testing.T) {
@@ -163,8 +138,6 @@ func TestReminderJSON(t *testing.T) {
 
 	time1, _ := time.Parse(time.RFC3339, "2023-03-07T18:29:04Z")
 	time2, _ := time.Parse(time.RFC3339, "2023-02-01T11:02:01Z")
-	time3, _ := time.Parse(time.RFC3339Nano, "2023-03-07T18:29:04.123Z")
-	time4, _ := time.Parse(time.RFC3339Nano, "2023-02-01T11:02:01.456Z")
 
 	type fields struct {
 		ActorID        string
@@ -184,10 +157,8 @@ func TestReminderJSON(t *testing.T) {
 		{name: "base test", fields: fields{ActorID: "id", ActorType: "type", Name: "name"}, want: `{"actorID":"id","actorType":"type","name":"name"}`},
 		{name: "with data", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Data: "hi"}, want: `{"data":"hi","actorID":"id","actorType":"type","name":"name"}`},
 		{name: "with period", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s"}, want: `{"period":"2s","actorID":"id","actorType":"type","name":"name"}`},
-		{name: "with due time(RFC3339)", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", DueTime: "2m", RegisteredTime: time1}, want: `{"registeredTime":"2023-03-07T18:29:04Z","period":"2s","actorID":"id","actorType":"type","name":"name","dueTime":"2m"}`},
-		{name: "with expiration time(RFC3339)", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", ExpirationTime: time2}, want: `{"expirationTime":"2023-02-01T11:02:01Z","period":"2s","actorID":"id","actorType":"type","name":"name"}`},
-		{name: "with due time(RFC3339Nano)", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", DueTime: "2m", RegisteredTime: time3}, want: `{"registeredTime":"2023-03-07T18:29:04.123Z","period":"2s","actorID":"id","actorType":"type","name":"name","dueTime":"2m"}`},
-		{name: "with expiration time(RFC3339Nano)", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", ExpirationTime: time4}, want: `{"expirationTime":"2023-02-01T11:02:01.456Z","period":"2s","actorID":"id","actorType":"type","name":"name"}`},
+		{name: "with due time", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", DueTime: "2m", RegisteredTime: time1}, want: `{"registeredTime":"2023-03-07T18:29:04Z","period":"2s","actorID":"id","actorType":"type","name":"name","dueTime":"2m"}`},
+		{name: "with expiration time", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", ExpirationTime: time2}, want: `{"expirationTime":"2023-02-01T11:02:01Z","period":"2s","actorID":"id","actorType":"type","name":"name"}`},
 		{name: "with data as JSON object", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Data: json.RawMessage(`{  "foo": [ 12, 4 ] } `)}, want: `{"data":{"foo":[12,4]},"actorID":"id","actorType":"type","name":"name"}`},
 	}
 	for _, tt := range tests {
@@ -261,8 +232,6 @@ func TestReminderString(t *testing.T) {
 
 	time1, _ := time.Parse(time.RFC3339, "2023-03-07T18:29:04Z")
 	time2, _ := time.Parse(time.RFC3339, "2023-02-01T11:02:01Z")
-	time3, _ := time.Parse(time.RFC3339Nano, "2023-02-01T11:02:01.123Z")
-	time4, _ := time.Parse(time.RFC3339Nano, "2023-03-07T18:29:04.456Z")
 
 	type fields struct {
 		ActorID        string
@@ -282,10 +251,8 @@ func TestReminderString(t *testing.T) {
 		{name: "base test", fields: fields{ActorID: "id", ActorType: "type", Name: "name"}, want: `name='type||id||name' hasData=false period=nil dueTime=nil expirationTime=nil`},
 		{name: "with data", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Data: json.RawMessage(`"hi"`)}, want: `name='type||id||name' hasData=true period=nil dueTime=nil expirationTime=nil`},
 		{name: "with period", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s"}, want: `name='type||id||name' hasData=false period='2s' dueTime=nil expirationTime=nil`},
-		{name: "with due time(RFC3339)", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", DueTimeReq: "2m", DueTime: time1}, want: `name='type||id||name' hasData=false period='2s' dueTime='2023-03-07T18:29:04Z' expirationTime=nil`},
-		{name: "with due time(RFC3339Nano)", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", DueTimeReq: "2m", DueTime: time4}, want: `name='type||id||name' hasData=false period='2s' dueTime='2023-03-07T18:29:04.456Z' expirationTime=nil`},
-		{name: "with expiration time(RFC3339)", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", ExpirationTime: time2}, want: `name='type||id||name' hasData=false period='2s' dueTime=nil expirationTime='2023-02-01T11:02:01Z'`},
-		{name: "with expiration time(RFC3339Nano)", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", ExpirationTime: time3}, want: `name='type||id||name' hasData=false period='2s' dueTime=nil expirationTime='2023-02-01T11:02:01.123Z'`},
+		{name: "with due time", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", DueTimeReq: "2m", DueTime: time1}, want: `name='type||id||name' hasData=false period='2s' dueTime='2023-03-07T18:29:04Z' expirationTime=nil`},
+		{name: "with expiration time", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", ExpirationTime: time2}, want: `name='type||id||name' hasData=false period='2s' dueTime=nil expirationTime='2023-02-01T11:02:01Z'`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

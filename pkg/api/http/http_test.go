@@ -1643,6 +1643,11 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			AppConnectionConfig: appConnectionConfig,
 			GlobalConfig:        &config.Configuration{},
 			Actors:              actors,
+			WorkflowEngine: fake.New().WithRuntimeMetadata(func() *runtimev1pb.MetadataWorkflows {
+				return &runtimev1pb.MetadataWorkflows{
+					ConnectedWorkers: 1,
+				}
+			}),
 		}),
 	}
 
@@ -1653,7 +1658,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
-	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead","type":"PROGRAMMATIC"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"INITIALIZING","hostReady":false},"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}]}`
+	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead","type":"PROGRAMMATIC"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"INITIALIZING","hostReady":false},"workflows":{"connectedWorkers":1}}`
 
 	t.Run("Get Metadata", func(t *testing.T) {
 		var called atomic.Int64
@@ -4054,56 +4059,6 @@ func (l *fakeLockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*l
 	return &lock.UnlockResponse{
 		Status: 0,
 	}, nil
-}
-
-func TestV1HealthzEndpoint(t *testing.T) {
-	fakeServer := newFakeHTTPServer()
-
-	const appID = "fakeAPI"
-	healthz := healthz.New()
-	htarget := healthz.AddTarget("test-target")
-	testAPI := &api{
-		healthz: healthz,
-		universal: universal.New(universal.Options{
-			AppID: appID,
-		}),
-	}
-
-	fakeServer.StartServer(testAPI.constructHealthzEndpoints(), nil)
-
-	t.Run("Healthz - 500 ERR_HEALTH_NOT_READY", func(t *testing.T) {
-		apiPath := "v1.0/healthz"
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-		assert.Equal(t, 500, resp.StatusCode, "dapr not ready should return 500")
-	})
-
-	t.Run("Healthz - 204 No Content", func(t *testing.T) {
-		apiPath := "v1.0/healthz"
-		htarget.Ready()
-		t.Cleanup(htarget.NotReady)
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-		assert.Equal(t, 204, resp.StatusCode)
-	})
-
-	t.Run("Healthz - 500 No AppId Match", func(t *testing.T) {
-		apiPath := "v1.0/healthz"
-		htarget.Ready()
-		t.Cleanup(htarget.NotReady)
-		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": "not-test"})
-		assert.Equal(t, 500, resp.StatusCode)
-	})
-
-	t.Run("Healthz - 204 AppId Match", func(t *testing.T) {
-		apiPath := "v1.0/healthz"
-		htarget.Ready()
-		t.Cleanup(htarget.NotReady)
-		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
-		assert.Equal(t, 204, resp.StatusCode)
-	})
-
-	fakeServer.Shutdown()
 }
 
 func TestV1TransactionEndpoints(t *testing.T) {

@@ -65,6 +65,7 @@ type options struct {
 	controlPlaneTrustDomain *string
 	schedulerAddresses      []string
 	maxBodySize             *string
+	allowedOrigins          *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -311,9 +312,15 @@ func WithDaprAPIToken(t *testing.T, token string) Option {
 	))
 }
 
+func WithAllowedOrigins(t *testing.T, origins string) Option {
+	return func(o *options) {
+		o.allowedOrigins = &origins
+	}
+}
+
 func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 	return func(o *options) {
-		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)))(o)
+		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors)))(o)
 		WithSentryAddress(sentry.Address())(o)
 		WithEnableMTLS(true)(o)
 	}

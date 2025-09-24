@@ -1,6 +1,6 @@
 module build-tools
 
-go 1.24.4
+go 1.24.6
 
 require (
 	github.com/google/go-containerregistry v0.11.1-0.20220802162123-c1f9836a4fa9

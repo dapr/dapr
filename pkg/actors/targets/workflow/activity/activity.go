@@ -75,7 +75,10 @@ func (a *activity) Deactivate(context.Context) error {
 	return nil
 }
 
-func (a *activity) InvokeStream(context.Context, *internalsv1pb.InternalInvokeRequest, chan<- *internalsv1pb.InternalInvokeResponse) error {
+func (a *activity) InvokeStream(context.Context,
+	*internalsv1pb.InternalInvokeRequest,
+	func(*internalsv1pb.InternalInvokeResponse) (bool, error),
+) error {
 	return errors.New("not implemented")
 }
 

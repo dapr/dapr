@@ -18,11 +18,15 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/proto/common/v1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -40,7 +44,11 @@ type timein struct {
 func (i *timein) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	app := prochttp.New(t, prochttp.WithHandler(http.NewServeMux()))
+	app := app.New(t,
+		app.WithHandlerFunc("/foo",
+			func(http.ResponseWriter, *http.Request) {},
+		),
+	)
 
 	logline := logline.New(t,
 		logline.WithStdoutLineContains(
@@ -60,4 +68,13 @@ func (i *timein) Setup(t *testing.T) []framework.Option {
 
 func (i *timein) Run(t *testing.T, ctx context.Context) {
 	i.daprd.WaitUntilRunning(t, ctx)
+
+	_, err := i.daprd.GRPCClient(t, ctx).InvokeService(ctx, &rtv1.InvokeServiceRequest{
+		Id: i.daprd.AppID(),
+		Message: &common.InvokeRequest{
+			Method:        "foo",
+			HttpExtension: &common.HTTPExtension{Verb: common.HTTPExtension_GET},
+		},
+	})
+	require.NoError(t, err)
 }

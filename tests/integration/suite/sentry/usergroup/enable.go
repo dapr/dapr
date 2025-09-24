@@ -18,14 +18,16 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -41,10 +43,28 @@ type enable struct {
 }
 
 func (e *enable) Setup(t *testing.T) []framework.Option {
+	os.SkipWindows(t)
+
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
+	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
+		X509RootKey:      rootKey,
+		TrustDomain:      "integration.test.dapr.io",
+		AllowedClockSkew: time.Second * 20,
+		OverrideCATTL:    nil,
+	})
+	require.NoError(t, err)
+	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+		JWTRootKey:  jwtKey,
+		TrustDomain: "integration.test.dapr.io",
+	})
+	require.NoError(t, err)
+	bundle := bundle.Bundle{
+		X509: x509bundle,
+		JWT:  jwtbundle,
+	}
 
 	kubeAPI := utils.KubeAPI(t, utils.KubeAPIOptions{
 		Bundle:         bundle,

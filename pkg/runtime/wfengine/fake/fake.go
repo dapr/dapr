@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/workflows"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 type Fake struct {
@@ -29,6 +30,7 @@ type Fake struct {
 	registerGrpcServerFn func(*grpc.Server)
 	waitForReadyFn       func(context.Context) error
 	clientFn             func() workflows.Workflow
+	runtimeMetadataFn    func() *runtimev1pb.MetadataWorkflows
 }
 
 func New() *Fake {
@@ -38,6 +40,7 @@ func New() *Fake {
 		registerGrpcServerFn: func(*grpc.Server) {},
 		waitForReadyFn:       func(context.Context) error { return nil },
 		clientFn:             func() workflows.Workflow { return NewClient() },
+		runtimeMetadataFn:    func() *runtimev1pb.MetadataWorkflows { return &runtimev1pb.MetadataWorkflows{} },
 	}
 }
 
@@ -66,6 +69,11 @@ func (f *Fake) WithClient(clientFn func() workflows.Workflow) *Fake {
 	return f
 }
 
+func (f *Fake) WithRuntimeMetadata(runtimeMetadataFn func() *runtimev1pb.MetadataWorkflows) *Fake {
+	f.runtimeMetadataFn = runtimeMetadataFn
+	return f
+}
+
 func (f *Fake) Run(ctx context.Context) error {
 	return f.runFn(ctx)
 }
@@ -88,4 +96,8 @@ func (f *Fake) Client() workflows.Workflow {
 
 func (f *Fake) ActivityActorType() string {
 	return ""
+}
+
+func (f *Fake) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
+	return f.runtimeMetadataFn()
 }

@@ -15,6 +15,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -54,7 +55,7 @@ type Scheduler struct {
 	client     client.Interface
 }
 
-func New(opts Options) *Scheduler {
+func New(opts Options) (*Scheduler, error) {
 	connector := connector.New(connector.Options{
 		Namespace:          opts.Namespace,
 		AppID:              opts.AppID,
@@ -63,6 +64,10 @@ func New(opts Options) *Scheduler {
 		WFEngine:           opts.WFEngine,
 		SchedulerReminders: opts.SchedulerReminders,
 	})
+
+	if opts.SchedulerStreams < 1 {
+		return nil, fmt.Errorf("must define at least 1 scheduler stream, got %d", opts.SchedulerStreams)
+	}
 
 	hosts := hosts.New(hosts.Options{
 		Security:  opts.Security,
@@ -89,7 +94,7 @@ func New(opts Options) *Scheduler {
 		client: wrapper.New(wrapper.Options{
 			Clients: clients,
 		}),
-	}
+	}, nil
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {

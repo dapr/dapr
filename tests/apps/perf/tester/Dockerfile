@@ -1,11 +1,11 @@
-FROM golang:1.24.4-bullseye as build_env
+FROM golang:1.24.6-bullseye as build_env
 
 ENV CGO_ENABLED=0
 WORKDIR /app
 COPY *.go go.mod ./
 RUN go get -d -v && go build -o tester .
 
-FROM golang:1.24.4-bullseye as fortio_build_env
+FROM golang:1.24.6-bullseye as fortio_build_env
 
 WORKDIR /fortio
 ADD "https://api.github.com/repos/dapr/fortio/branches/v1.38.4-dapr" skipcache

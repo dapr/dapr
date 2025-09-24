@@ -23,6 +23,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	timeutils "github.com/dapr/kit/time"
 )
 
 // Reminder represents a reminder or timer for a unique actor.
@@ -121,10 +123,10 @@ func (r *Reminder) MarshalJSON() ([]byte, error) {
 	}
 
 	if !r.RegisteredTime.IsZero() {
-		m.RegisteredTime = r.RegisteredTime.Format(time.RFC3339Nano)
+		m.RegisteredTime = r.RegisteredTime.Format(time.RFC3339)
 	}
 	if !r.ExpirationTime.IsZero() {
-		m.ExpirationTime = r.ExpirationTime.Format(time.RFC3339Nano)
+		m.ExpirationTime = r.ExpirationTime.Format(time.RFC3339)
 	}
 
 	m.Period = r.Period.String()
@@ -155,7 +157,7 @@ func (r *Reminder) UnmarshalJSON(data []byte) error {
 		Period: NewEmptyReminderPeriod(),
 	}
 
-	// Parse RegisteredTime and ExpirationTime as dates in the RFC3339Nano or RFC3339 format
+	// Parse RegisteredTime and ExpirationTime as dates in the RFC3339 format
 	m := &struct {
 		ExpirationTime string          `json:"expirationTime"`
 		RegisteredTime string          `json:"registeredTime"`
@@ -177,17 +179,19 @@ func (r *Reminder) UnmarshalJSON(data []byte) error {
 	}
 
 	if m.RegisteredTime != "" {
-		r.RegisteredTime, err = time.Parse(time.RFC3339Nano, m.RegisteredTime)
+		r.RegisteredTime, err = time.Parse(time.RFC3339, m.RegisteredTime)
 		if err != nil {
 			return fmt.Errorf("failed to parse RegisteredTime: %w", err)
 		}
+		r.RegisteredTime = r.RegisteredTime.Truncate(time.Second)
 	}
 
 	if m.ExpirationTime != "" {
-		r.ExpirationTime, err = time.Parse(time.RFC3339Nano, m.ExpirationTime)
+		r.ExpirationTime, err = time.Parse(time.RFC3339, m.ExpirationTime)
 		if err != nil {
 			return fmt.Errorf("failed to parse ExpirationTime: %w", err)
 		}
+		r.ExpirationTime = r.ExpirationTime.Truncate(time.Second)
 	}
 
 	return nil
@@ -215,11 +219,11 @@ func (r Reminder) String() string {
 	hasData := r.Data != nil
 	dueTime := "nil"
 	if !r.RegisteredTime.IsZero() {
-		dueTime = "'" + r.RegisteredTime.Format(time.RFC3339Nano) + "'"
+		dueTime = "'" + r.RegisteredTime.Format(time.RFC3339) + "'"
 	}
 	expirationTime := "nil"
 	if !r.ExpirationTime.IsZero() {
-		expirationTime = "'" + r.ExpirationTime.Format(time.RFC3339Nano) + "'"
+		expirationTime = "'" + r.ExpirationTime.Format(time.RFC3339) + "'"
 	}
 	period := r.Period.String()
 	if period == "" {
@@ -247,4 +251,16 @@ func (r *Reminder) RequiresUpdating(new *Reminder) bool {
 		!new.ExpirationTime.IsZero() ||
 		(!r.ExpirationTime.IsZero() && new.ExpirationTime.IsZero()) ||
 		!reflect.DeepEqual(r.Data, new.Data)
+}
+
+// parseTimeTruncateSeconds is a wrapper around timeutils.ParseTime that truncates the time to seconds.
+func parseTimeTruncateSeconds(val string, now *time.Time, truncate bool) (time.Time, error) {
+	t, err := timeutils.ParseTime(val, now)
+	if err != nil {
+		return t, err
+	}
+	if truncate {
+		t = t.Truncate(time.Second)
+	}
+	return t, nil
 }

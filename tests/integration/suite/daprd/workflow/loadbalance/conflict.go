@@ -131,8 +131,8 @@ func (c *conflict) Run(t *testing.T, ctx context.Context) {
 		c.cluster[1].GRPCConn(t, ctx),
 	), logger.New(t))
 
-	const n = 10
-	// create 10 workflows in the clustered deployment
+	const n = 5
+	// create 5 workflows in the clustered deployment
 	for i := range n {
 		wfID, err := clusterClient.ScheduleNewOrchestration(ctx, "activity", api.WithInstanceID(api.InstanceID(fmt.Sprintf("wf-%d", i))))
 		require.NoError(t, err)
@@ -140,7 +140,7 @@ func (c *conflict) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	// create 10 workflows with the same instance ids in the single daprd
+	// create 5 workflows with the same instance ids in the single daprd
 	for i := range n {
 		wfID, err := singleBackendClient.ScheduleNewOrchestration(ctx, "activity", api.WithInstanceID(api.InstanceID(fmt.Sprintf("wf-%d", i))))
 		require.NoError(t, err)

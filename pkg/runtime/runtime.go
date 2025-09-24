@@ -301,13 +301,29 @@ func newDaprRuntime(ctx context.Context,
 		AppID:                     runtimeConfig.id,
 		Namespace:                 namespace,
 		Actors:                    actors,
-		Spec:                      globalConfig.GetWorkflowSpec(),
+		Spec:                      globalConfig.Spec.WorkflowSpec,
 		BackendManager:            processor.WorkflowBackend(),
 		Resiliency:                resiliencyProvider,
 		SchedulerReminders:        globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 		EventSink:                 runtimeConfig.workflowEventSink,
 		EnableClusteredDeployment: globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
 	})
+
+	jobsManager, err := scheduler.New(scheduler.Options{
+		Namespace:          namespace,
+		AppID:              runtimeConfig.id,
+		Channels:           channels,
+		Actors:             actors,
+		Addresses:          runtimeConfig.schedulerAddress,
+		Security:           sec,
+		WFEngine:           wfe,
+		Healthz:            runtimeConfig.healthz,
+		SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
+		SchedulerStreams:   runtimeConfig.schedulerStreams,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	rt := &DaprRuntime{
 		runtimeConfig:         runtimeConfig,
@@ -326,28 +342,17 @@ func newDaprRuntime(ctx context.Context,
 		channels:              channels,
 		sec:                   sec,
 		processor:             processor,
+		jobsManager:           jobsManager,
 		authz:                 authz,
 		reloader:              reloader,
 		namespace:             namespace,
 		podName:               podName,
-		jobsManager: scheduler.New(scheduler.Options{
-			Namespace:          namespace,
-			AppID:              runtimeConfig.id,
-			Channels:           channels,
-			Actors:             actors,
-			Addresses:          runtimeConfig.schedulerAddress,
-			Security:           sec,
-			WFEngine:           wfe,
-			Healthz:            runtimeConfig.healthz,
-			SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
-			SchedulerStreams:   runtimeConfig.schedulerStreams,
-		}),
-		initComplete:   make(chan struct{}),
-		isAppHealthy:   make(chan struct{}),
-		clock:          new(clock.RealClock),
-		httpMiddleware: httpMiddleware,
-		actors:         actors,
-		wfengine:       wfe,
+		initComplete:          make(chan struct{}),
+		isAppHealthy:          make(chan struct{}),
+		clock:                 new(clock.RealClock),
+		httpMiddleware:        httpMiddleware,
+		actors:                actors,
+		wfengine:              wfe,
 	}
 	close(rt.isAppHealthy)
 

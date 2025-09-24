@@ -138,6 +138,11 @@ spec:
           containerPort: {{ .Values.debug.port }}
           protocol: TCP
 {{- end }}
+{{- if .Values.oidc.enabled }}
+        - name: oidc
+          containerPort: 9080
+          protocol: TCP
+{{- end }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
@@ -188,6 +193,47 @@ spec:
         - "--issuer-key-filename"
         - "{{ .key }}"
 {{- end }}
+{{- if .Values.jwt.enabled }}
+        - "--jwt-enabled=true"
+{{- if .Values.jwt.keyFilename }}
+        - "--jwt-key-filename={{ .Values.jwt.keyFilename }}"
+{{- end }}
+{{- if .Values.jwt.jwksFilename }}
+        - "--jwks-filename={{ .Values.jwt.jwksFilename }}"
+{{- end }}
+{{- if .Values.jwt.issuer }}
+        - "--jwt-issuer={{ .Values.jwt.issuer }}"
+{{- end }}
+{{- if .Values.jwt.signingAlgorithm }}
+        - "--jwt-signing-algorithm={{ .Values.jwt.signingAlgorithm }}"
+{{- end }}
+{{- if .Values.jwt.keyID }}
+        - "--jwt-key-id={{ .Values.jwt.keyID }}"
+{{- end }}
+{{- end }}
+{{- if .Values.oidc.enabled }}
+        - "--oidc-enabled=true"
+        - "--oidc-server-listen-address=0.0.0.0"
+{{- if .Values.oidc.jwksURI }}
+        - "--oidc-jwks-uri={{ .Values.oidc.jwksURI }}"
+{{- end }}
+{{- if .Values.oidc.pathPrefix }}
+        - "--oidc-path-prefix={{ .Values.oidc.pathPrefix }}"
+{{- end }}
+{{- if .Values.oidc.allowedHosts }}
+        - "--oidc-allowed-hosts={{ join "," .Values.oidc.allowedHosts }}"
+{{- end }}
+{{- if .Values.oidc.tls.certFile }}
+        - "--oidc-server-tls-cert-file={{ .Values.oidc.tls.certFile }}"
+{{- end }}
+{{- if .Values.oidc.tls.keyFile }}
+        - "--oidc-server-tls-key-file={{ .Values.oidc.tls.keyFile }}"
+{{- end }}
+{{- if .Values.oidc.tls.enabled }}
+        - "--oidc-server-tls-enabled={{ .Values.oidc.tls.enabled }}"
+{{- end }}
+{{- end }}
+
       serviceAccountName: dapr-sentry
       volumes:
         - name: credentials

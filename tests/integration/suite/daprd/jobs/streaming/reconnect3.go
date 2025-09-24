@@ -127,7 +127,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 		r.lock.Unlock()
 	}, time.Second*5, time.Millisecond*10)
 
-	r.scheduler2.Cleanup(t)
+	r.scheduler2.Kill(t)
 
 	time.Sleep(time.Second * 5)
 
@@ -138,7 +138,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 	r.scheduler4.Run(t, ctx)
 	r.scheduler4.WaitUntilRunning(t, ctx)
 	r.scheduler4.WaitUntilLeadership(t, ctx, 3)
-	t.Cleanup(func() { r.scheduler4.Cleanup(t) })
+	t.Cleanup(func() { r.scheduler4.Kill(t) })
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()

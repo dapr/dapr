@@ -297,6 +297,19 @@ func TestGetMetricsMethodExcludeVerbs(t *testing.T) {
 	assert.Equal(t, "", testHTTP.getMetricsMethod("INVALID"))
 }
 
+func TestHTTPMetricsPathMatchingWithRedirect(t *testing.T) {
+	const testPath = "/redirect-test"
+
+	pm := newPathMatching([]string{"/other-path"}, false)
+	pm.mux.HandleFunc(testPath, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/redirected", http.StatusFound)
+	})
+
+	matchedPath, ok := pm.match(testPath)
+	require.True(t, ok, "Expected path matching to succeed")
+	require.Equal(t, testPath, matchedPath, "Expected matched path to be %q", testPath)
+}
+
 func fakeHTTPRequest(body string) *http.Request {
 	req, err := http.NewRequest(http.MethodPost, "http://dapr.io/invoke/method/testmethod", strings.NewReader(body))
 	if err != nil {

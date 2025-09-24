@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 )
 
 const (
@@ -106,7 +106,7 @@ func signJWT(builder *jwt.Builder) ([]byte, error) {
 	return jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtSigningKeyPriv))
 }
 
-func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID string) {
+func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle bundle.Bundle, expectSPIFFEID string) {
 	t.Helper()
 
 	require.NotEmpty(t, res.GetWorkloadCertificate())

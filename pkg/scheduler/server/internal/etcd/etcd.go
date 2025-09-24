@@ -38,18 +38,19 @@ type Options struct {
 
 	Embed bool
 
-	InitialCluster       []string
-	ClientPort           uint64
-	SpaceQuota           int64
-	CompactionMode       string
-	CompactionRetention  string
-	SnapshotCount        uint64
-	MaxSnapshots         uint
-	MaxWALs              uint
-	BackendBatchLimit    int
-	BackendBatchInterval string
-	DefragThresholdMB    uint
-	Metrics              string
+	InitialCluster             []string
+	ClientPort                 uint64
+	SpaceQuota                 int64
+	CompactionMode             string
+	CompactionRetention        string
+	SnapshotCount              uint64
+	MaxSnapshots               uint
+	MaxWALs                    uint
+	BackendBatchLimit          int
+	BackendBatchInterval       string
+	DefragThresholdMB          uint
+	InitialElectionTickAdvance bool
+	Metrics                    string
 
 	ClientEndpoints []string
 	ClientUsername  string

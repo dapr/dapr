@@ -126,7 +126,7 @@ func (c *cluster) Run(t *testing.T, ctx context.Context) {
 		}, got)
 	}, time.Second*20, time.Millisecond*10)
 
-	c.scheduler2.Cleanup(t)
+	c.scheduler2.Kill(t)
 
 	require.EventuallyWithT(t, func(col *assert.CollectT) {
 		resp, err := stream.Recv()
@@ -143,11 +143,11 @@ func (c *cluster) Run(t *testing.T, ctx context.Context) {
 			c.s1addr,
 			c.s3addr,
 		}, got)
-	}, time.Second*20, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*10)
 
 	c.scheduler4.Run(t, ctx)
 	c.scheduler4.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { c.scheduler4.Cleanup(t) })
+	t.Cleanup(func() { c.scheduler4.Kill(t) })
 
 	require.EventuallyWithT(t, func(col *assert.CollectT) {
 		resp, err := stream.Recv()

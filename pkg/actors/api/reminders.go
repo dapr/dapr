@@ -20,8 +20,6 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-
-	timeutils "github.com/dapr/kit/time"
 )
 
 // GetReminderRequest is the request object to get an existing reminder.
@@ -56,7 +54,7 @@ func (req CreateReminderRequest) Key() string {
 }
 
 // NewReminder returns a new Reminder from a CreateReminderRequest object.
-func (req CreateReminderRequest) NewReminder(now time.Time) (reminder *Reminder, err error) {
+func (req CreateReminderRequest) NewReminder(now time.Time, truncate bool) (reminder *Reminder, err error) {
 	reminder = &Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
@@ -64,7 +62,7 @@ func (req CreateReminderRequest) NewReminder(now time.Time) (reminder *Reminder,
 		Data:      req.Data,
 	}
 
-	err = setReminderTimes(reminder, req.DueTime, req.Period, req.TTL, now, "reminder")
+	err = setReminderTimes(reminder, req.DueTime, req.Period, req.TTL, now, "reminder", truncate)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +122,7 @@ func (req CreateTimerRequest) Key() string {
 }
 
 // NewReminder returns a new Timer from a CreateTimerRequest object.
-func (req CreateTimerRequest) NewReminder(now time.Time) (reminder *Reminder, err error) {
+func (req CreateTimerRequest) NewReminder(now time.Time, truncate bool) (reminder *Reminder, err error) {
 	reminder = &Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
@@ -133,7 +131,7 @@ func (req CreateTimerRequest) NewReminder(now time.Time) (reminder *Reminder, er
 		Data:      req.Data,
 	}
 
-	err = setReminderTimes(reminder, req.DueTime, req.Period, req.TTL, now, "timer")
+	err = setReminderTimes(reminder, req.DueTime, req.Period, req.TTL, now, "timer", truncate)
 	if err != nil {
 		return nil, err
 	}
@@ -168,12 +166,12 @@ func (req *CreateTimerRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl string, now time.Time, logMsg string) (err error) {
+func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl string, now time.Time, logMsg string, truncate bool) (err error) {
 	// Due time and registered time
 	reminder.RegisteredTime = now
 	reminder.DueTime = dueTime
 	if dueTime != "" {
-		reminder.RegisteredTime, err = timeutils.ParseTime(dueTime, &now)
+		reminder.RegisteredTime, err = parseTimeTruncateSeconds(dueTime, &now, truncate)
 		if err != nil {
 			return fmt.Errorf("error parsing %s due time: %w", logMsg, err)
 		}
@@ -187,7 +185,7 @@ func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl str
 
 	// Set expiration time if configured
 	if ttl != "" {
-		reminder.ExpirationTime, err = timeutils.ParseTime(ttl, &reminder.RegisteredTime)
+		reminder.ExpirationTime, err = parseTimeTruncateSeconds(ttl, &reminder.RegisteredTime, truncate)
 		if err != nil {
 			return fmt.Errorf("error parsing %s TTL: %w", logMsg, err)
 		}

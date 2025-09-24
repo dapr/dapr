@@ -67,7 +67,11 @@ func (n *Namespace) Add(opts Options) context.CancelCauseFunc {
 		monitoring.RecordSidecarsConnectedCount(-1)
 		n.lock.Lock()
 		defer n.lock.Unlock()
-		log.Debugf("Closing connection to %s [appID=%v] [actorTypes=%v]", opts.Namespace, opts.AppID, opts.ActorTypes)
+		var appID string
+		if opts.AppID != nil {
+			appID = *opts.AppID
+		}
+		log.Debugf("Closing connection to %s [appID=%q] [actorTypes=%v]", opts.Namespace, appID, opts.ActorTypes)
 
 		opts.Connection.Cancel(err)
 		remove()

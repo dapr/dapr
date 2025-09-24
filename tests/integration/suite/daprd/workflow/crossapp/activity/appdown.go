@@ -73,10 +73,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
 		}
 
-		select {
-		case a.activityStarted <- struct{}{}:
-		default:
-		}
+		close(a.activityStarted)
 
 		// Block until allowed to proceed (which will never happen in this test)
 		// bc triggering this app to go down mid-activity execution and ensure the wf hangs
@@ -146,30 +143,22 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	err = client2.StartWorkItemListener(cctx, a.registry2)
 	require.NoError(t, err)
 
-	var id api.InstanceID
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		id, err = client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
-		assert.NoError(c, err)
+	id, err := client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
+	require.NoError(t, err)
 
-		// Wait for activity to start
-		select {
-		case <-a.activityStarted:
-		case <-time.After(5 * time.Second):
-			c.Errorf("Timeout waiting for activity to start")
-		}
-	}, 20*time.Second, 100*time.Millisecond)
+	select {
+	case <-a.activityStarted:
+	case <-time.After(15 * time.Second):
+		require.Fail(t, "Timed out waiting for activity to start in app2")
+	}
 
 	// Stop app2 to simulate app going down mid-execution
 	ccancel()
 	daprd2Cancel()
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		// Expect completion to hang, so timeout
-		waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
-		defer waitCancel()
-
-		_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
-		assert.Error(c, err)
-		assert.EqualError(c, err, "context deadline exceeded")
-	}, 20*time.Second, 100*time.Millisecond)
+	waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer waitCancel()
+	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+	require.Error(t, err)
+	assert.EqualError(t, err, "context deadline exceeded")
 }

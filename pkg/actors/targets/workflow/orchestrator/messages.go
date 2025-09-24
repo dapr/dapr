@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 
 	"google.golang.org/protobuf/proto"
 
@@ -56,20 +55,13 @@ func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*b
 }
 
 func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, method string) error {
-	errs := make([]error, len(msgs))
-
-	var wg sync.WaitGroup
-	wg.Add(len(msgs))
 	for i, msg := range msgs {
-		go func(i int, msg proto.Message, historyEvent *backend.HistoryEvent, target string) {
-			defer wg.Done()
-			errs[i] = o.callStateMessage(ctx, msg, historyEvent, target, method)
-		}(i, msg, historyEvents[i], targets[i])
+		if err := o.callStateMessage(ctx, msg, historyEvents[i], targets[i], method); err != nil {
+			return err
+		}
 	}
 
-	wg.Wait()
-
-	return errors.Join(errs...)
+	return nil
 }
 
 func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, historyEvent *backend.HistoryEvent, target string, method string) error {

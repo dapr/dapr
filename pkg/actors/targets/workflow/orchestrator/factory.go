@@ -29,9 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/lock"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/events/broadcaster"
 )
 
 var orchestratorCache = sync.Pool{
@@ -73,6 +71,8 @@ type factory struct {
 	schedulerReminders bool
 	scheduler          todo.WorkflowScheduler
 
+	deactivateCh chan *orchestrator
+
 	table sync.Map
 	lock  sync.Mutex
 }
@@ -104,6 +104,13 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		reminderInterval = *opts.ReminderInterval
 	}
 
+	deactivateCh := make(chan *orchestrator, 100)
+	go func() {
+		for orchestrator := range deactivateCh {
+			orchestrator.Deactivate(ctx)
+		}
+	}()
+
 	return &factory{
 		appID:              opts.AppID,
 		actorType:          opts.WorkflowActorType,
@@ -118,6 +125,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		actorTypeBuilder:   opts.ActorTypeBuilder,
 		placement:          placement,
 		scheduler:          opts.Scheduler,
+		deactivateCh:       deactivateCh,
 	}, nil
 }
 
@@ -140,20 +148,14 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 
 	or.factory = f
 	or.actorID = actorID
-	if or.ometaBroadcaster != nil {
-		or.ometaBroadcaster.Close()
-	}
-	or.ometaBroadcaster = broadcaster.New[*backend.OrchestrationMetadata]()
-	or.closeCh = make(chan struct{})
 	or.closed.Store(false)
+	or.lock.Init()
 
-	if f.eventSink != nil {
-		ch := make(chan *backend.OrchestrationMetadata)
-		go or.runEventSink(ch, f.eventSink)
-		// We use a Background context since this subscription should be
-		// maintained for the entire lifecycle of this workflow actor. The
-		// subscription will be shutdown during the actor deactivation.
-		or.ometaBroadcaster.Subscribe(context.Background(), ch)
+	or.state = nil
+	or.rstate = nil
+	or.ometa = nil
+	if or.streamFns == nil {
+		or.streamFns = make(map[int64]*streamFn)
 	}
 
 	// Reset the cache state to force a reload from the state store
@@ -220,4 +222,11 @@ func (f *factory) Len() int {
 	var count int
 	f.table.Range(func(_, _ any) bool { count++; return true })
 	return count
+}
+
+func (f *factory) deactivate(orchestrator *orchestrator) {
+	if !orchestrator.closed.CompareAndSwap(false, true) {
+		return
+	}
+	f.deactivateCh <- orchestrator
 }

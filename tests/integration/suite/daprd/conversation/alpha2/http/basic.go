@@ -145,26 +145,25 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		// Echo component returns one output per input message
+		// Echo component combines multiple inputs into a single output
 		expectedResponse := `{
 			"contextId": "test-conversation-123",
 			"outputs": [
 				{
 					"choices": [
 						{
-							"finishReason": "stop",
+							"finishReason": "tool_calls",
 							"message": {
-								"content": "well hello there"
-							}
-						}
-					]
-				},
-				{
-					"choices": [
-						{
-							"finishReason": "stop",
-							"message": {
-								"content": "You are a helpful assistant"
+								"content": "well hello there\nYou are a helpful assistant",
+								"toolCalls": [
+									{
+										"function": {
+											"arguments": "param1",
+											"name": "test_function"
+										},
+										"id": "0"
+									}
+								]
 							}
 						}
 					]
@@ -232,7 +231,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				{
 					"choices": [
 						{
-							"finishReason": "stop",
+							"finishReason": "tool_calls",
 							"message": {
 								"content": "assistant message",
 								"toolCalls": [

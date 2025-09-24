@@ -18,6 +18,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
@@ -33,7 +34,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
 
-	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/informer"
 	cryptopem "github.com/dapr/kit/crypto/pem"
@@ -49,7 +50,7 @@ type Option func(*options)
 // Kubernetes is a mock Kubernetes API server process.
 type Kubernetes struct {
 	http     *prochttp.HTTP
-	bundle   ca.Bundle
+	bundle   bundle.Bundle
 	informer *informer.Informer
 }
 
@@ -110,10 +111,25 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 
 	// We need to run the Kubernetes API server with TLS so that HTTP/2.0 is
 	// enabled, which is required for informers.
-	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	bundle, err := ca.GenerateBundle(pk, "kubernetes.integration.dapr.io", time.Second*5, nil)
+	// Generate a test root key for JWT signing
+	jwtRootKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+
+	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
+		X509RootKey:      x509RootKey,
+		TrustDomain:      "integration.test.dapr.io",
+		AllowedClockSkew: time.Second * 5,
+		OverrideCATTL:    nil, // Use default CA TTL
+	})
+	require.NoError(t, err)
+	jwtbundle, err := bundle.GenerateJWT(bundle.OptionsJWT{
+		JWTRootKey:  jwtRootKey,
+		TrustDomain: "integration.test.dapr.io",
+	})
+	require.NoError(t, err)
+
 	leafpk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	leafCert := &x509.Certificate{
@@ -125,12 +141,12 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 		DNSNames:           []string{"cluster.local"},
 		SignatureAlgorithm: x509.ECDSAWithSHA256,
 	}
-	leafCertDER, err := x509.CreateCertificate(rand.Reader, leafCert, bundle.IssChain[0], leafpk.Public(), bundle.IssKey)
+	leafCertDER, err := x509.CreateCertificate(rand.Reader, leafCert, x509bundle.IssChain[0], leafpk.Public(), x509bundle.IssKey)
 	require.NoError(t, err)
 	leafCert, err = x509.ParseCertificate(leafCertDER)
 	require.NoError(t, err)
 
-	chainPEM, err := cryptopem.EncodeX509Chain(append([]*x509.Certificate{leafCert}, bundle.IssChain...))
+	chainPEM, err := cryptopem.EncodeX509Chain(append([]*x509.Certificate{leafCert}, x509bundle.IssChain...))
 	require.NoError(t, err)
 	keyPEM, err := cryptopem.EncodePrivateKey(leafpk)
 	require.NoError(t, err)
@@ -138,9 +154,12 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 	return &Kubernetes{
 		http: prochttp.New(t,
 			prochttp.WithHandler(handler),
-			prochttp.WithMTLS(t, bundle.TrustAnchors, chainPEM, keyPEM),
+			prochttp.WithMTLS(t, x509bundle.TrustAnchors, chainPEM, keyPEM),
 		),
-		bundle:   bundle,
+		bundle: bundle.Bundle{
+			X509: x509bundle,
+			JWT:  jwtbundle,
+		},
 		informer: informer,
 	}
 }
@@ -160,9 +179,9 @@ func (k *Kubernetes) KubeconfigPath(t *testing.T) string {
 	caPath := filepath.Join(t.TempDir(), "ca.crt")
 	certPath := filepath.Join(t.TempDir(), "tls.crt")
 	keyPath := filepath.Join(t.TempDir(), "tls.key")
-	require.NoError(t, os.WriteFile(caPath, k.bundle.TrustAnchors, 0o600))
-	require.NoError(t, os.WriteFile(certPath, k.bundle.IssChainPEM, 0o600))
-	require.NoError(t, os.WriteFile(keyPath, k.bundle.IssKeyPEM, 0o600))
+	require.NoError(t, os.WriteFile(caPath, k.bundle.X509.TrustAnchors, 0o600))
+	require.NoError(t, os.WriteFile(certPath, k.bundle.X509.IssChainPEM, 0o600))
+	require.NoError(t, os.WriteFile(keyPath, k.bundle.X509.IssKeyPEM, 0o600))
 
 	path := filepath.Join(t.TempDir(), "kubeconfig")
 	kubeconfig := fmt.Sprintf(`

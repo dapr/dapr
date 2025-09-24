@@ -178,27 +178,25 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			ToolChoice:  ptr.Of("auto"),
 		})
 		require.NoError(t, err)
-		// Echo component returns one output per input message
-		require.Len(t, resp.GetOutputs(), 2)
+		// Echo component returns one output combining all input messages
+		require.Len(t, resp.GetOutputs(), 1)
 		require.Equal(t, contextID, resp.GetContextId())
 
 		require.NotNil(t, resp.GetOutputs()[0].GetChoices())
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		choices0 := resp.GetOutputs()[0].GetChoices()[0]
-		require.Equal(t, "stop", choices0.GetFinishReason())
+		require.Equal(t, "tool_calls", choices0.GetFinishReason())
 		require.Equal(t, int64(0), choices0.GetIndex())
 		require.NotNil(t, choices0.GetMessage())
-		require.Equal(t, "well hello there", choices0.GetMessage().GetContent())
-		require.Empty(t, choices0.GetMessage().GetToolCalls())
+		// echo combines all input messages into one output
+		require.Equal(t, "well hello there\nYou are a helpful assistant", choices0.GetMessage().GetContent())
+		require.NotEmpty(t, choices0.GetMessage().GetToolCalls())
 
-		require.NotNil(t, resp.GetOutputs()[1].GetChoices())
-		require.Len(t, resp.GetOutputs()[1].GetChoices(), 1)
-		choices1 := resp.GetOutputs()[1].GetChoices()[0]
-		require.Equal(t, "stop", choices1.GetFinishReason())
-		require.Equal(t, int64(0), choices1.GetIndex())
-		require.NotNil(t, choices1.GetMessage())
-		require.Equal(t, "You are a helpful assistant", choices1.GetMessage().GetContent())
-		require.Empty(t, choices1.GetMessage().GetToolCalls())
+		toolCalls := choices0.GetMessage().GetToolCalls()
+		require.Len(t, toolCalls, 1)
+		require.Equal(t, "0", toolCalls[0].GetId())
+		require.Equal(t, "test_function", toolCalls[0].GetFunction().GetName())
+		require.Equal(t, "param1", toolCalls[0].GetFunction().GetArguments())
 	})
 
 	t.Run("invalid json - malformed request", func(t *testing.T) {

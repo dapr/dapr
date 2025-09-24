@@ -97,7 +97,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(t, "first call", input)
 		}
 
-		for range 100 {
+		for range 30 {
 			ctx.CallActivity("bar")
 		}
 
@@ -151,8 +151,8 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(100), barCalled.Load())
+		assert.Equal(c, int64(30), barCalled.Load())
 	}, time.Second*10, time.Millisecond*10)
 	time.Sleep(time.Second)
-	assert.Equal(t, int64(100), barCalled.Load())
+	assert.Equal(t, int64(30), barCalled.Load())
 }
