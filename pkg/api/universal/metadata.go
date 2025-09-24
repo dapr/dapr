@@ -39,6 +39,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	extendedMetadata[daprRuntimeVersionKey] = buildinfo.Version()
 
 	actorRuntime := a.actors.RuntimeStatus()
+	workflowsMetadata := a.workflowEngine.RuntimeMetadata()
 
 	// App connection information
 	appConnectionProperties := &runtimev1pb.AppConnectionProperties{
@@ -121,6 +122,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		EnabledFeatures:         a.globalConfig.EnabledFeatures(),
 		ActorRuntime:            actorRuntime,
 		Scheduler:               sched,
+		Workflows:               workflowsMetadata,
 	}, nil
 }
 

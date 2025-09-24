@@ -48,9 +48,9 @@ func config(opts Options) (*embed.Config, error) {
 			InsecureSkipVerify:  false,
 			SkipClientSANVerify: false,
 			AllowedHostnames: []string{
-				fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc", opts.Security.ControlPlaneNamespace()),
-				fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc", opts.Security.ControlPlaneNamespace()),
-				fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc", opts.Security.ControlPlaneNamespace()),
+				fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.cluster.local", opts.Security.ControlPlaneNamespace()),
+				fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.cluster.local", opts.Security.ControlPlaneNamespace()),
+				fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.cluster.local", opts.Security.ControlPlaneNamespace()),
 			},
 			EmptyCN:        true,
 			CertFile:       filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
@@ -58,7 +58,7 @@ func config(opts Options) (*embed.Config, error) {
 			ClientCertFile: filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
 			ClientKeyFile:  filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
 			TrustedCAFile:  filepath.Join(*opts.Security.IdentityDir(), "ca.pem"),
-			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc", opts.Name, opts.Security.ControlPlaneNamespace()),
+			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc.cluster.local", opts.Name, opts.Security.ControlPlaneNamespace()),
 		}
 
 		b, err := os.ReadFile(filepath.Join(*opts.Security.IdentityDir(), "cert.pem"))
@@ -139,7 +139,7 @@ func config(opts Options) (*embed.Config, error) {
 	// Must be set to false to prevent aggressive election ticks where leader changes can happen
 	// before the state is fully synced. This is especially important with higher WAL/snapshot counts
 	// as new leaders might not see previous job triggers, leading to duplicate job executions.
-	config.InitialElectionTickAdvance = false
+	config.InitialElectionTickAdvance = opts.InitialElectionTickAdvance
 
 	config.Metrics = opts.Metrics
 

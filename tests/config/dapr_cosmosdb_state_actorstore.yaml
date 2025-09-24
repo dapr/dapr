@@ -42,6 +42,7 @@ scopes:
 - actorfeatures
 - reentrantactor
 - actorreminder
+- actorreminderscheduler
 - actorreminderpartition
 - actorinvocationapp
 - actormetadata-a

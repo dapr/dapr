@@ -143,10 +143,8 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.place.WaitUntilRunning(t, ctx)
 	r.daprd1.WaitUntilRunning(t, ctx)
 
-	daprd2Ctx, daprd2Cancel := context.WithCancel(t.Context())
-	t.Cleanup(daprd2Cancel)
-	r.daprd2.Run(t, daprd2Ctx)
-	r.daprd2.WaitUntilRunning(t, daprd2Ctx)
+	r.daprd2.Run(t, ctx)
+	r.daprd2.WaitUntilRunning(t, ctx)
 
 	// Start workflow listeners for each app
 	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
@@ -166,7 +164,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 
 	// Stop app2 to simulate app going down mid-execution
 	ccancel()
-	daprd2Cancel()
+	r.daprd2.Kill(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		// Expect completion to hang, so timeout
@@ -190,7 +188,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.daprd2.Run(t, ctx)
 	r.daprd2.WaitUntilRunning(t, ctx)
 	t.Cleanup(func() {
-		r.daprd2.Cleanup(t)
+		r.daprd2.Kill(t)
 	})
 
 	// Restart the listener for app2 & ensure wf completion
