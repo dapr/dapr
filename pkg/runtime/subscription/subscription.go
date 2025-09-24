@@ -23,9 +23,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	contribContenttype "github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
-	contribContenttype "github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -77,7 +77,11 @@ type Subscription struct {
 
 var log = logger.NewLogger("dapr.runtime.processor.subscription")
 
-const BinaryCloudEventHeaderPrefix = "ce_"
+const (
+	BinaryCloudEventHeaderPrefix = "ce_"
+	DefaultCloudEventContentType = "application/json"
+	ContentTypeMetadataKey       = "content-type"
+)
 
 func New(opts Options) (*Subscription, error) {
 	allowed := rtpubsub.IsOperationAllowed(opts.Topic, opts.PubSub, opts.PubSub.ScopedSubscriptions)
@@ -145,15 +149,13 @@ func New(opts Options) (*Subscription, error) {
 		}
 
 		if msg.ContentType != nil {
-			msg.Metadata["content-type"] = *msg.ContentType
+			msg.Metadata[ContentTypeMetadataKey] = *msg.ContentType
 		}
 
-		contentType, ok := msg.Metadata["content-type"]
+		contentType, ok := msg.Metadata[ContentTypeMetadataKey]
 
 		if !ok {
-
-			// default to application/json content type
-			contentType = "application/json"
+			contentType = DefaultCloudEventContentType
 		}
 
 		msg.Metadata[rtpubsub.MetadataKeyPubSub] = name
@@ -179,7 +181,8 @@ func New(opts Options) (*Subscription, error) {
 
 		var cloudEvent map[string]interface{}
 		data := msg.Data
-		if rawPayload {
+		switch {
+		case rawPayload:
 			cloudEvent = contribpubsub.FromRawPayload(msg.Data, msgTopic, name)
 			if traceid, ok := msg.Metadata[contribpubsub.TraceIDField]; ok {
 				cloudEvent[contribpubsub.TraceIDField] = traceid
@@ -205,21 +208,19 @@ func New(opts Options) (*Subscription, error) {
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
 				return err
 			}
-		} else if contribContenttype.IsBinaryContentType(contentType)  {
+		case contribContenttype.IsBinaryContentType(contentType):
 			cloudEvent = make(map[string]interface{})
-
 			// Reconstruct CloudEvent from metadata
-            for k, v := range msg.Metadata {
-                if strings.HasPrefix(strings.ToLower(k), BinaryCloudEventHeaderPrefix) {
-            ceKey := strings.TrimPrefix(strings.ToLower(k), BinaryCloudEventHeaderPrefix)
-            cloudEvent[ceKey] = v
-		}
-
+			for k, v := range msg.Metadata {
+				if strings.HasPrefix(strings.ToLower(k), BinaryCloudEventHeaderPrefix) {
+					ceKey := strings.TrimPrefix(strings.ToLower(k), BinaryCloudEventHeaderPrefix)
+					cloudEvent[ceKey] = v
+				}
+			}
 			cloudEvent[contribpubsub.DataField] = msg.Data
 			cloudEvent[contribpubsub.DataContentTypeField] = contentType
-				}
-		} else {
-			// all messages consumed with "rawPayload=false" are deserialized as a CloudEvent, even when the payload is not a CloudEvent
+		default:
+			// all messages consumed with "rawPayload=false" are deserialized as a CloudEvent
 			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
 				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
