@@ -23,7 +23,10 @@ import (
 )
 
 // TODO: @joshvanl: move errors package
-var ErrReminderOpActorNotHosted = errors.New("operations on actor reminders are only possible on hosted actor types")
+var (
+	ErrReminderOpActorNotHosted = errors.New("operations on actor reminders are only possible on hosted actor types")
+	ErrReminderStorageNotSet    = errors.New("reminder storage is not configured")
+)
 
 type Interface interface {
 	// Get retrieves an actor reminder.
@@ -54,6 +57,10 @@ func New(opts Options) Interface {
 }
 
 func (r *reminders) Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error) {
+	if r.storage == nil {
+		return nil, ErrReminderStorageNotSet
+	}
+
 	if !r.table.IsActorTypeHosted(req.ActorType) {
 		return nil, ErrReminderOpActorNotHosted
 	}
@@ -62,6 +69,10 @@ func (r *reminders) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 }
 
 func (r *reminders) Create(ctx context.Context, req *api.CreateReminderRequest) error {
+	if r.storage == nil {
+		return ErrReminderStorageNotSet
+	}
+
 	if !r.table.IsActorTypeHosted(req.ActorType) {
 		return ErrReminderOpActorNotHosted
 	}
@@ -70,6 +81,10 @@ func (r *reminders) Create(ctx context.Context, req *api.CreateReminderRequest) 
 }
 
 func (r *reminders) Delete(ctx context.Context, req *api.DeleteReminderRequest) error {
+	if r.storage == nil {
+		return ErrReminderStorageNotSet
+	}
+
 	if !r.table.IsActorTypeHosted(req.ActorType) {
 		return ErrReminderOpActorNotHosted
 	}

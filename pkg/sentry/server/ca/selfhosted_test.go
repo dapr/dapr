@@ -14,16 +14,22 @@ limitations under the License.
 package ca
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/x509"
+	"encoding/pem"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
 )
 
 var writePerm os.FileMode
@@ -35,7 +41,7 @@ func init() {
 	}
 }
 
-func TestSelhosted_store(t *testing.T) {
+func TestSelfhosted_store(t *testing.T) {
 	t.Run("storing file should write to disk with correct permissions", func(t *testing.T) {
 		rootFile := filepath.Join(t.TempDir(), "root.pem")
 		issuerFile := filepath.Join(t.TempDir(), "issuer.pem")
@@ -49,10 +55,12 @@ func TestSelhosted_store(t *testing.T) {
 			},
 		}
 
-		require.NoError(t, s.store(t.Context(), Bundle{
-			TrustAnchors: []byte("root"),
-			IssChainPEM:  []byte("issuer"),
-			IssKeyPEM:    []byte("key"),
+		require.NoError(t, s.store(t.Context(), bundle.Bundle{
+			X509: &bundle.X509{
+				TrustAnchors: []byte("root"),
+				IssChainPEM:  []byte("issuer"),
+				IssKeyPEM:    []byte("key"),
+			},
 		}))
 
 		require.FileExists(t, rootFile)
@@ -89,81 +97,210 @@ func TestSelfhosted_get(t *testing.T) {
 	rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)
 	intPEM, intCrt, intPKPEM, intPK := genCrt(t, "int", rootCrt, rootPK)
 
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	jwtKeyDer, err := x509.MarshalPKCS8PrivateKey(signingKey)
+	require.NoError(t, err)
+
+	signingKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: jwtKeyDer})
+
+	jwksBytes := createJWKS(t, signingKey, "kid")
+	jwks, err := jwk.Parse(jwksBytes)
+	require.NoError(t, err)
+
 	tests := map[string]struct {
 		rootFile  *[]byte
 		issuer    *[]byte
 		key       *[]byte
-		expBundle Bundle
-		expOk     bool
+		jwtKey    *[]byte
+		jwksData  *[]byte
+		expBundle bundle.Bundle
 		expErr    bool
 	}{
 		"if no files exist, return not ok": {
 			rootFile:  nil,
 			issuer:    nil,
 			key:       nil,
-			expBundle: Bundle{},
-			expOk:     false,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
 			expErr:    false,
 		},
 		"if root file doesn't exist, return not ok": {
 			rootFile:  nil,
 			issuer:    &intPEM,
 			key:       &intPKPEM,
-			expBundle: Bundle{},
-			expOk:     false,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
 			expErr:    false,
 		},
 		"if issuer file doesn't exist, return not ok": {
 			rootFile:  &rootPEM,
 			issuer:    nil,
 			key:       &intPKPEM,
-			expBundle: Bundle{},
-			expOk:     false,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
 			expErr:    false,
 		},
 		"if issuer key file doesn't exist, return not ok": {
 			rootFile:  &rootPEM,
 			issuer:    &intPEM,
 			key:       nil,
-			expBundle: Bundle{},
-			expOk:     false,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
 			expErr:    false,
 		},
 		"if failed to verify CA bundle, return error": {
 			rootFile:  &intPEM,
 			issuer:    &intPEM,
 			key:       &intPKPEM,
-			expBundle: Bundle{},
-			expOk:     false,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
 			expErr:    true,
 		},
-		"if all files exist, return certs": {
+		"if all x509 files exist but no JWT files, return certs and expect to generate JWT": {
 			rootFile: &rootPEM,
 			issuer:   &intPEM,
 			key:      &intPKPEM,
-			expBundle: Bundle{
-				TrustAnchors: rootPEM,
-				IssChainPEM:  intPEM,
-				IssKeyPEM:    intPKPEM,
-				IssChain:     []*x509.Certificate{intCrt},
-				IssKey:       intPK,
+			jwtKey:   nil,
+			jwksData: nil,
+			expBundle: bundle.Bundle{
+				X509: &bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
 			},
-			expOk:  true,
 			expErr: false,
+		},
+		"if jwt key exists but jwks doesn't, expect to generate JWT": {
+			rootFile: &rootPEM,
+			issuer:   &intPEM,
+			key:      &intPKPEM,
+			jwksData: nil,
+			expBundle: bundle.Bundle{
+				X509: &bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expErr: false,
+		},
+		"if jwks exists but jwt key doesn't, expect nil": {
+			rootFile: &rootPEM,
+			issuer:   &intPEM,
+			key:      &intPKPEM,
+			jwtKey:   nil,
+			jwksData: &jwksBytes,
+			expBundle: bundle.Bundle{
+				X509: &bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+			},
+			expErr: false,
+		},
+		"if jwt key is invalid, expect error": {
+			rootFile:  &rootPEM,
+			issuer:    &intPEM,
+			key:       &intPKPEM,
+			jwtKey:    &intPKPEM, // Using an invalid JWT key
+			jwksData:  &jwksBytes,
+			expBundle: bundle.Bundle{},
+			expErr:    true,
+		},
+		"if jwks is invalid, expect error": {
+			rootFile:  &rootPEM,
+			issuer:    &intPEM,
+			key:       &intPKPEM,
+			jwtKey:    &signingKeyPEM,
+			jwksData:  &intPKPEM, // Using invalid JWKS data
+			expBundle: bundle.Bundle{},
+			expErr:    true,
+		},
+		"if all files exist including valid JWT components, return complete bundle": {
+			rootFile: &rootPEM,
+			issuer:   &intPEM,
+			key:      &intPKPEM,
+			jwtKey:   &signingKeyPEM,
+			jwksData: &jwksBytes,
+			expBundle: bundle.Bundle{
+				X509: &bundle.X509{
+					TrustAnchors: rootPEM,
+					IssChainPEM:  intPEM,
+					IssKeyPEM:    intPKPEM,
+					IssChain:     []*x509.Certificate{intCrt},
+					IssKey:       intPK,
+				},
+				JWT: &bundle.JWT{
+					SigningKey:    signingKey,
+					SigningKeyPEM: signingKeyPEM,
+					JWKSJson:      jwksBytes,
+					JWKS:          jwks,
+				},
+			},
+			expErr: false,
+		},
+		"if only JWT files exist but no x509 files, expect to generate x509": {
+			rootFile: nil,
+			issuer:   nil,
+			key:      nil,
+			jwtKey:   &signingKeyPEM,
+			jwksData: &jwksBytes,
+			expBundle: bundle.Bundle{
+				JWT: &bundle.JWT{
+					SigningKey:    signingKey,
+					SigningKeyPEM: signingKeyPEM,
+					JWKSJson:      jwksBytes,
+					JWKS:          jwks,
+				},
+			},
+			expErr: false,
+		},
+		"if no files exist at all, expect to generate both x509 and JWT": {
+			rootFile:  nil,
+			issuer:    nil,
+			key:       nil,
+			jwtKey:    nil,
+			jwksData:  nil,
+			expBundle: bundle.Bundle{},
+			expErr:    false,
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Helper()
+
 			dir := t.TempDir()
 			rootFile := filepath.Join(dir, "root.pem")
 			issuerFile := filepath.Join(dir, "issuer.pem")
 			keyFile := filepath.Join(dir, "key.pem")
+			jwtKeyFile := filepath.Join(dir, "jwt.key")
+			jwksFile := filepath.Join(dir, "jwks.json")
 			s := &selfhosted{
 				config: config.Config{
 					RootCertPath:   rootFile,
 					IssuerCertPath: issuerFile,
 					IssuerKeyPath:  keyFile,
+					JWT: config.ConfigJWT{
+						SigningKeyPath: jwtKeyFile,
+						JWKSPath:       jwksFile,
+						TTL:            config.DefaultJWTTTL,
+					},
 				},
 			}
 
@@ -176,11 +313,16 @@ func TestSelfhosted_get(t *testing.T) {
 			if test.key != nil {
 				require.NoError(t, os.WriteFile(keyFile, *test.key, writePerm))
 			}
+			if test.jwtKey != nil {
+				require.NoError(t, os.WriteFile(jwtKeyFile, *test.jwtKey, writePerm))
+			}
+			if test.jwksData != nil {
+				require.NoError(t, os.WriteFile(jwksFile, *test.jwksData, writePerm))
+			}
 
-			got, ok, err := s.get(t.Context())
-			assert.Equal(t, test.expBundle, got)
-			assert.Equal(t, test.expOk, ok)
-			assert.Equal(t, test.expErr, err != nil, "%v", err)
+			bundle, err := s.get(t.Context())
+			assert.Equal(t, test.expErr, err != nil, "expected error: %v, but got %v", test.expErr, err)
+			bundlesEqual(t, test.expBundle, bundle)
 		})
 	}
 }

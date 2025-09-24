@@ -60,6 +60,7 @@ func TestValidate(t *testing.T) {
 		sentryAudience string
 
 		expTD  spiffeid.TrustDomain
+		expAud []string
 		expErr bool
 	}{
 		"if pod in different namespace, expect error": {
@@ -1216,6 +1217,54 @@ func TestValidate(t *testing.T) {
 			expErr: true,
 			expTD:  spiffeid.TrustDomain{},
 		},
+		"valid authentication, config with audiences should return audiences in response": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
+					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:my-ns:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "my-ns",
+				Token:                     newToken(t, "my-ns", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "my-app-id",
+				JwtAudiences:              []string{"custom-audience-1", "custom-audience-2"},
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "my-ns",
+					Annotations: map[string]string{
+						"dapr.io/app-id": "my-app-id",
+						"dapr.io/config": "my-config",
+					},
+				},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
+			},
+			config: &configapi.Configuration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-config",
+					Namespace: "my-ns",
+				},
+				Spec: configapi.ConfigurationSpec{
+					AccessControlSpec: &configapi.AccessControlSpec{
+						TrustDomain: "example.test.dapr.io",
+					},
+				},
+			},
+			expErr: false,
+			expTD:  spiffeid.RequireTrustDomainFromString("example.test.dapr.io"),
+			expAud: []string{"custom-audience-1", "custom-audience-2"},
+		},
 	}
 
 	for name, test := range tests {
@@ -1245,9 +1294,9 @@ func TestValidate(t *testing.T) {
 				ready:          func(_ context.Context) bool { return true },
 			}
 
-			td, err := k.Validate(t.Context(), test.req)
+			res, err := k.Validate(t.Context(), test.req)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
-			assert.Equal(t, test.expTD, td)
+			assert.Equal(t, test.expTD, res.TrustDomain, "%v", res.TrustDomain)
 		})
 	}
 }

@@ -48,21 +48,22 @@ type Options struct {
 	Mode                      modes.DaprMode
 	KubeConfig                *string
 
-	EtcdEmbed                bool
-	EtcdDataDir              string
-	EtcdName                 string
-	EtcdInitialCluster       []string
-	EtcdClientPort           uint64
-	EtcdSpaceQuota           int64
-	EtcdCompactionMode       string
-	EtcdCompactionRetention  string
-	EtcdSnapshotCount        uint64
-	EtcdMaxSnapshots         uint
-	EtcdMaxWALs              uint
-	EtcdBackendBatchLimit    int
-	EtcdBackendBatchInterval string
-	EtcdDefrabThresholdMB    uint
-	EtcdMetrics              string
+	EtcdEmbed                      bool
+	EtcdDataDir                    string
+	EtcdName                       string
+	EtcdInitialCluster             []string
+	EtcdClientPort                 uint64
+	EtcdSpaceQuota                 int64
+	EtcdCompactionMode             string
+	EtcdCompactionRetention        string
+	EtcdSnapshotCount              uint64
+	EtcdMaxSnapshots               uint
+	EtcdMaxWALs                    uint
+	EtcdBackendBatchLimit          int
+	EtcdBackendBatchInterval       string
+	EtcdDefragThresholdMB          uint
+	EtcdInitialElectionTickAdvance bool
+	EtcdMetrics                    string
 
 	EtcdClientEndpoints []string
 	EtcdClientUsername  string
@@ -103,24 +104,25 @@ func New(opts Options) (*Server, error) {
 	}
 
 	etcd, err := etcd.New(etcd.Options{
-		Name:                 opts.EtcdName,
-		Embed:                opts.EtcdEmbed,
-		InitialCluster:       opts.EtcdInitialCluster,
-		ClientPort:           opts.EtcdClientPort,
-		SpaceQuota:           opts.EtcdSpaceQuota,
-		CompactionMode:       opts.EtcdCompactionMode,
-		CompactionRetention:  opts.EtcdCompactionRetention,
-		SnapshotCount:        opts.EtcdSnapshotCount,
-		MaxSnapshots:         opts.EtcdMaxSnapshots,
-		MaxWALs:              opts.EtcdMaxWALs,
-		BackendBatchLimit:    opts.EtcdBackendBatchLimit,
-		BackendBatchInterval: opts.EtcdBackendBatchInterval,
-		DefragThresholdMB:    opts.EtcdDefrabThresholdMB,
-		Metrics:              opts.EtcdMetrics,
-		Security:             opts.Security,
-		DataDir:              opts.EtcdDataDir,
-		Healthz:              opts.Healthz,
-		Mode:                 opts.Mode,
+		Name:                       opts.EtcdName,
+		Embed:                      opts.EtcdEmbed,
+		InitialCluster:             opts.EtcdInitialCluster,
+		ClientPort:                 opts.EtcdClientPort,
+		SpaceQuota:                 opts.EtcdSpaceQuota,
+		CompactionMode:             opts.EtcdCompactionMode,
+		CompactionRetention:        opts.EtcdCompactionRetention,
+		SnapshotCount:              opts.EtcdSnapshotCount,
+		MaxSnapshots:               opts.EtcdMaxSnapshots,
+		MaxWALs:                    opts.EtcdMaxWALs,
+		BackendBatchLimit:          opts.EtcdBackendBatchLimit,
+		BackendBatchInterval:       opts.EtcdBackendBatchInterval,
+		DefragThresholdMB:          opts.EtcdDefragThresholdMB,
+		InitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
+		Metrics:                    opts.EtcdMetrics,
+		Security:                   opts.Security,
+		DataDir:                    opts.EtcdDataDir,
+		Healthz:                    opts.Healthz,
+		Mode:                       opts.Mode,
 
 		ClientEndpoints: opts.EtcdClientEndpoints,
 		ClientUsername:  opts.EtcdClientUsername,

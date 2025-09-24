@@ -35,7 +35,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/dapr/kit/concurrency"
 )
 
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
@@ -193,6 +192,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	}
+	if res == nil {
+		statusCode = int32(codes.Internal)
+		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, errors.New("no response received from stream"))
+	}
+
 	defer res.Close()
 	statusCode = res.Status().GetCode()
 
@@ -337,25 +341,14 @@ func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream in
 	}
 	req.Metadata["X-Dapr-Remote"] = &internalv1pb.ListStringValue{Values: []string{"true"}}
 
-	ch := make(chan *internalv1pb.InternalInvokeResponse)
+	err = router.CallStream(stream.Context(), req, func(req *internalv1pb.InternalInvokeResponse) (bool, error) {
+		return false, stream.Send(req)
+	})
+	if err != nil {
+		return err
+	}
 
-	return concurrency.NewRunnerManager(
-		func(ctx context.Context) error {
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case val := <-ch:
-					if err := stream.Send(val); err != nil {
-						return err
-					}
-				}
-			}
-		},
-		func(ctx context.Context) error {
-			return router.CallStream(stream.Context(), req, ch)
-		},
-	).Run(stream.Context())
+	return nil
 }
 
 // Used by CallLocal and CallLocalStream to check the request against the access control list

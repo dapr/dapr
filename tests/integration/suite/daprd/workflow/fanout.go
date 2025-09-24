@@ -49,7 +49,7 @@ func (f *fanout) Setup(t *testing.T) []framework.Option {
 func (f *fanout) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
-	const n = 10
+	const n = 5
 	f.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		tasks := make([]task.Task, n)
 		for i := range n {

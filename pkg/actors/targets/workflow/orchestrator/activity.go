@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"sync"
 
 	"google.golang.org/protobuf/proto"
 
@@ -29,29 +28,19 @@ import (
 )
 
 func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, generation uint64) error {
-	errs := make([]error, len(es))
-
-	var wg sync.WaitGroup
-	wg.Add(len(es))
-	for i, e := range es {
-		go func(i int, e *backend.HistoryEvent) {
-			defer wg.Done()
-
-			err := o.callActivity(ctx, e, generation)
+	for _, e := range es {
+		err := o.callActivity(ctx, e, generation)
+		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
-				return
+				continue
 			}
 
-			if err != nil {
-				errs[i] = err
-			}
-		}(i, e)
+			return err
+		}
 	}
 
-	wg.Wait()
-
-	return errors.Join(errs...)
+	return nil
 }
 
 func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, generation uint64) error {
@@ -72,7 +61,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		activityActorType = o.actorTypeBuilder.Activity(router.GetTargetAppID())
 	}
 
-	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), o.state.Generation)
+	targetActorID := buildActivityActorID(o.actorID, e.GetEventId(), generation)
 
 	o.activityResultAwaited.Store(true)
 
