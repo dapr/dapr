@@ -13,29 +13,44 @@ limitations under the License.
 
 package lock
 
-import "context"
+import (
+	"context"
+
+	"github.com/dapr/dapr/pkg/actors/targets/errors"
+)
 
 type Lock struct {
-	ch chan struct{}
+	ch      chan struct{}
+	closeCh chan struct{}
 }
 
 func New() *Lock {
 	return &Lock{
-		ch: make(chan struct{}, 1),
+		ch:      make(chan struct{}, 1),
+		closeCh: make(chan struct{}),
 	}
-}
-
-func (l *Lock) Lock() context.CancelFunc {
-	l.ch <- struct{}{}
-	return func() { <-l.ch }
 }
 
 func (l *Lock) ContextLock(ctx context.Context) (context.CancelFunc, error) {
 	select {
 	case l.ch <- struct{}{}:
+	case <-l.closeCh:
+		return nil, errors.NewClosed("lock")
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
 
 	return func() { <-l.ch }, nil
+}
+
+func (l *Lock) Init() {
+	l.closeCh = make(chan struct{})
+}
+
+func (l *Lock) Close() {
+	select {
+	case <-l.closeCh:
+	default:
+		close(l.closeCh)
+	}
 }

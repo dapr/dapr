@@ -515,14 +515,14 @@ spec:
                     description: |-
                       maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
                       Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-                      If omitted, the default value of 100 will be used.
+                      If If omitted, no maximum will be enforced.
                     format: int32
                     type: integer
                   maxConcurrentWorkflowInvocations:
                     description: |-
                       maxConcurrentWorkflowInvocations is the maximum number of concurrent workflow invocations that can be scheduled by a single Dapr instance.
                       Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-                      If omitted, the default value of 100 will be used.
+                      If omitted, no maximum will be enforced.
                     format: int32
                     type: integer
                 type: object

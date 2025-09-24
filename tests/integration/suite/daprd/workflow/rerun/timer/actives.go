@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -63,7 +64,7 @@ func (a *actives) Run(t *testing.T, ctx context.Context) {
 
 	client := a.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "active-timers")
+	id, err := client.ScheduleNewOrchestration(ctx, "active-timers", api.WithInstanceID("abc"))
 	require.NoError(t, err)
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
