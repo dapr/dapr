@@ -526,12 +526,12 @@ func (s *Subscriber) initProgrammaticSubscriptions(ctx context.Context) error {
 		return nil
 	}
 
+	s.hasInitProg = true
+
 	if !s.programmaticSubscriptionEnabled {
 		log.Warn("Skipping programmatic subscription loading (see 'disable-init-endpoints' flag/annotation)")
 		return nil
 	}
-
-	s.hasInitProg = true
 
 	var (
 		subscriptions []rtpubsub.Subscription
