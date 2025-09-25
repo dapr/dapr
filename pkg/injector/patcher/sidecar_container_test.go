@@ -165,6 +165,42 @@ func TestParseEnvString(t *testing.T) {
 				},
 			},
 		},
+		{
+			testName: "Multiple equals signs in values",
+			envStr:   "KEY1=value=with=equals,KEY2=normal,KEY3=another=complex=value",
+			expLen:   3,
+			expKeys:  []string{"KEY1", "KEY2", "KEY3"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "KEY1",
+					Value: "value=with=equals",
+				},
+				{
+					Name:  "KEY2",
+					Value: "normal",
+				},
+				{
+					Name:  "KEY3",
+					Value: "another=complex=value",
+				},
+			},
+		},
+		{
+			testName: "OTEL_RESOURCE_ATTRIBUTES with complex values containing equals",
+			envStr:   "OTEL_SERVICE_NAME=my-service,OTEL_RESOURCE_ATTRIBUTES=service.name=my-service,service.version=1.0.0,deployment.environment=production,k8s.pod.name=my-pod-123",
+			expLen:   2,
+			expKeys:  []string{"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "OTEL_SERVICE_NAME",
+					Value: "my-service",
+				},
+				{
+					Name:  "OTEL_RESOURCE_ATTRIBUTES",
+					Value: "service.name=my-service,service.version=1.0.0,deployment.environment=production,k8s.pod.name=my-pod-123",
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
