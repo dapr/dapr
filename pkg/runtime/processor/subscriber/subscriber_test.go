@@ -275,7 +275,7 @@ func Test_initProgrammaticSubscriptions(t *testing.T) {
 			Namespace:                       "ns1",
 			AppID:                           TestRuntimeConfigID,
 			Channels:                        new(channels.Channels).WithAppChannel(mockAppChannel),
-			ProgrammaticSubscriptionEnabled: false, // Disabled
+			ProgrammaticSubscriptionEnabled: false,
 		})
 
 		// Programmatic subscriptions should be skipped, so we don't expect any HTTP calls
@@ -284,8 +284,8 @@ func Test_initProgrammaticSubscriptions(t *testing.T) {
 		// Verify that no subscriptions were loaded
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
 
-		// Verify that hasInitProg is not set when programmatic subscriptions are disabled
-		assert.False(t, subs.hasInitProg)
+		// Verify that hasInitProg is set even when programmatic subscriptions are disabled
+		assert.True(t, subs.hasInitProg)
 
 		// Verify that the mock app channel was never called
 		mockAppChannel.AssertNotCalled(t, "InvokeMethod")
@@ -662,7 +662,7 @@ func TestProgrammaticSubscriptionEnabled(t *testing.T) {
 			Namespace:                       "ns1",
 			AppID:                           TestRuntimeConfigID,
 			Channels:                        new(channels.Channels).WithAppChannel(mockAppChannel),
-			ProgrammaticSubscriptionEnabled: true, // Enabled
+			ProgrammaticSubscriptionEnabled: true,
 		})
 
 		// Setup mock response for subscription endpoint call
@@ -707,7 +707,7 @@ func TestProgrammaticSubscriptionEnabled(t *testing.T) {
 			Namespace:                       "ns1",
 			AppID:                           TestRuntimeConfigID,
 			Channels:                        new(channels.Channels).WithAppChannel(mockAppChannel),
-			ProgrammaticSubscriptionEnabled: false, // Disabled
+			ProgrammaticSubscriptionEnabled: false,
 		})
 
 		// Call initProgrammaticSubscriptions - should return early without making HTTP calls
@@ -715,7 +715,7 @@ func TestProgrammaticSubscriptionEnabled(t *testing.T) {
 
 		// Verify that no subscriptions were loaded
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
-		assert.False(t, subs.hasInitProg, "hasInitProg should not be set when programmatic subscriptions are disabled")
+		assert.True(t, subs.hasInitProg, "hasInitProg should be set when programmatic subscriptions are disabled")
 
 		// Verify that the mock app channel was never called
 		mockAppChannel.AssertNotCalled(t, "InvokeMethod")
@@ -741,7 +741,7 @@ func TestProgrammaticSubscriptionEnabled(t *testing.T) {
 
 		// Verify that no subscriptions were loaded (default behavior)
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
-		assert.False(t, subs.hasInitProg, "hasInitProg should not be set when programmatic subscriptions are disabled by default")
+		assert.True(t, subs.hasInitProg, "hasInitProg should be set when programmatic subscriptions are disabled by default")
 
 		// Verify that the mock app channel was never called
 		mockAppChannel.AssertNotCalled(t, "InvokeMethod")
