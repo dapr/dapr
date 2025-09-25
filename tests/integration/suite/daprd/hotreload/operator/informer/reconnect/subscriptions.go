@@ -15,7 +15,6 @@ package reconnect
 
 import (
 	"context"
-	"runtime"
 	"testing"
 	"time"
 
@@ -53,10 +52,6 @@ type subscriptions struct {
 }
 
 func (s *subscriptions) Setup(t *testing.T) []framework.Option {
-	if runtime.GOOS == "windows" {
-		t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
-	}
-
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
 	s.compStore = store.New(metav1.GroupVersionKind{
@@ -118,7 +113,7 @@ func (s *subscriptions) Setup(t *testing.T) []framework.Option {
 		daprd.WithEnableMTLS(true),
 		daprd.WithNamespace("default"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().X509.TrustAnchors),
 		)),
 	)
 

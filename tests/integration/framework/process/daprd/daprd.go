@@ -39,13 +39,12 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/metrics"
-	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 type Daprd struct {
-	exec       process.Interface
+	exec       *exec.Exec
 	ports      *ports.Ports
 	httpClient *http.Client
 
@@ -157,6 +156,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.maxBodySize != nil {
 		args = append(args, "--max-body-size="+*opts.maxBodySize)
 	}
+	if opts.allowedOrigins != nil {
+		args = append(args, "--allowed-origins="+*opts.allowedOrigins)
+	}
 
 	ns := "default"
 	if opts.namespace != nil {
@@ -221,7 +223,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
 		}
-	}, 20*time.Second, 10*time.Millisecond)
+	}, 30*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
@@ -433,6 +435,7 @@ type Metadata struct {
 	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
 	Scheduler            *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
 	ActorRuntime         *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
+	Workflows            *MetadataWorkflows                   `json:"workflows"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
@@ -455,6 +458,10 @@ type MetadataActorRuntime struct {
 	HostReady     bool                               `json:"hostReady"`
 	Placement     string                             `json:"placement"`
 	ActiveActors  []*MetadataActorRuntimeActiveActor `json:"activeActors"`
+}
+
+type MetadataWorkflows struct {
+	ConnectedWorkers int `json:"connectedWorkers,omitempty"`
 }
 
 type MetadataActorRuntimeActiveActor struct {
@@ -486,4 +493,8 @@ func (d *Daprd) ActorInvokeURL(actorType, actorID, method string) string {
 
 func (d *Daprd) ActorReminderURL(actorType, actorID, method string) string {
 	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders/%s", d.HTTPAddress(), actorType, actorID, method)
+}
+
+func (d *Daprd) Kill(t *testing.T) {
+	d.exec.Kill(t)
 }

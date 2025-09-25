@@ -82,6 +82,7 @@ func (c *callee) Setup(t *testing.T) []framework.Option {
 }
 
 func (c *callee) Run(t *testing.T, ctx context.Context) {
+	c.daprd1.WaitUntilRunning(t, ctx)
 	c.daprd2.Run(t, ctx)
 	c.daprd2.WaitUntilRunning(t, ctx)
 	t.Cleanup(func() {

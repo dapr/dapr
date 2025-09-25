@@ -49,7 +49,7 @@ func (m *mtls) Setup(t *testing.T) []framework.Option {
 	m.sentry = sentry.New(t)
 
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
-	require.NoError(t, os.WriteFile(taFile, m.sentry.CABundle().TrustAnchors, 0o600))
+	require.NoError(t, os.WriteFile(taFile, m.sentry.CABundle().X509.TrustAnchors, 0o600))
 	m.place = placement.New(t,
 		placement.WithEnableTLS(true),
 		placement.WithSentryAddress(m.sentry.Address()),
@@ -69,7 +69,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 		SentryAddress:           m.sentry.Address(),
 		ControlPlaneTrustDomain: "localhost",
 		ControlPlaneNamespace:   "default",
-		TrustAnchors:            m.sentry.CABundle().TrustAnchors,
+		TrustAnchors:            m.sentry.CABundle().X509.TrustAnchors,
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
 		Healthz:                 healthz.New(),
