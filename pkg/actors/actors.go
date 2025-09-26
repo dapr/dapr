@@ -492,6 +492,10 @@ func (a *actors) UnRegisterHosted(actorTypes ...string) {
 		return
 	}
 
+	if len(actorTypes) == 0 {
+		return
+	}
+
 	a.table.UnRegisterActorTypes(actorTypes...)
 
 	a.registerDoneLock.Lock()

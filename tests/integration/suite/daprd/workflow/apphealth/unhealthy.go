@@ -37,16 +37,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(apphealth))
+	suite.Register(new(unhealthy))
 }
 
-type apphealth struct {
+type unhealthy struct {
 	healthy  atomic.Bool
 	app      *app.App
 	workflow *workflow.Workflow
 }
 
-func (a *apphealth) Setup(t *testing.T) []framework.Option {
+func (a *unhealthy) Setup(t *testing.T) []framework.Option {
 	a.healthy.Store(true)
 	a.app = app.New(t,
 		app.WithHealthCheckFn(func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
@@ -72,7 +72,7 @@ func (a *apphealth) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (a *apphealth) Run(t *testing.T, ctx context.Context) {
+func (a *unhealthy) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
 	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
@@ -91,7 +91,6 @@ func (a *apphealth) Run(t *testing.T, ctx context.Context) {
 	// app starts unhealthy
 	a.healthy.Store(false)
 	// we have no way of knowing when the sidecar detected if the app is unhealthy
-	// this sleep could be avoided if we could inspect the watched job types from the scheduler
 	time.Sleep(time.Second * 3)
 
 	require.Equal(t, 0, len(a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors))
@@ -101,7 +100,6 @@ func (a *apphealth) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client.StartWorkItemListener(ctx, a.workflow.Registry()))
 	// app is unhealthy but still workflow actors get registered
 	// this check makes sure you get the placement tables update before the application becomes healthy
-	// the root cause of the bug we were following was that the app transitioning to healthy was wiping out the actor types
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		require.GreaterOrEqual(c,
 			len(a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
@@ -109,17 +107,6 @@ func (a *apphealth) Run(t *testing.T, ctx context.Context) {
 	// this sleep is the key, it makes sure the sidecar is watching for actor reminder jobs
 	// if we could inspect the watched job types from the scheduler we could avoid this sleep
 	time.Sleep(time.Second * 10)
-
-	// app transitions to healthy
-	a.healthy.Store(true)
-	// we have no way of knowing when the sidecar detected if the app is unhealthy
-	// this sleep could be avoided if we could inspect the watched job types from the scheduler
-	time.Sleep(time.Second * 3)
-	// check actors have not been wiped out
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		require.GreaterOrEqual(c,
-			len(a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
-	}, time.Second*10, time.Millisecond*10)
 
 	scheduleCtx, scheduleCancel := context.WithTimeout(ctx, time.Second*10)
 	t.Cleanup(scheduleCancel)
