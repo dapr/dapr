@@ -94,7 +94,7 @@ func (a *apphealth) Run(t *testing.T, ctx context.Context) {
 	// this sleep could be avoided if we could inspect the watched job types from the scheduler
 	time.Sleep(time.Second * 3)
 
-	require.Empty(t, len(a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors))
+	require.Empty(t, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
 
 	// connect the worker
 	client := durabletask_client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))

@@ -93,7 +93,7 @@ func (a *unhealthy) Run(t *testing.T, ctx context.Context) {
 	// we have no way of knowing when the sidecar detected if the app is unhealthy
 	time.Sleep(time.Second * 3)
 
-	require.Empty(t, len(a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors))
+	require.Empty(t, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
 
 	// connect the worker
 	client := durabletask_client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
