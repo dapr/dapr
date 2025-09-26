@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+import "google/protobuf/struct.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+
+message VectorAlpha1 {
+  string id = 1;
+  repeated float vector = 2;
+  map<string, google.protobuf.Value> fields = 3;
+}
+
+enum DistanceMetric {
+  UNSPECIFIED_METRIC = 0;
+  COSINE = 1;
+  EUCLIDEAN = 2;
+  DOT_PRODUCT = 3;
+}
+
+message CreateCollectionRequestAlpha1 {
+  string collection_name = 1;
+  int32 vector_size = 2;
+  DistanceMetric distance_metric = 3;
+  // Optional provider-specific metadata.
+  map<string, string> metadata = 4;
+}
+
+message CreateCollectionResponseAlpha1 {}
+
+message DeleteCollectionRequestAlpha1 {
+  string collection_name = 1;
+}
+
+message DeleteCollectionResponseAlpha1 {}
+
+message UpsertVectorsRequestAlpha1 {
+  string collection_name = 1;
+  repeated VectorAlpha1 vectors = 2;
+}
+
+message UpsertVectorsResponseAlpha1 {}
+
+message GetVectorsRequestAlpha1 {
+  string collection_name = 1;
+  repeated string ids = 2;
+  // Optional provider-specific metadata.
+  map<string, string> metadata = 3;
+}
+
+message GetVectorsResponseAlpha1 {
+  repeated VectorAlpha1 vectors = 1;
+}
+
+message DeleteVectorsRequestAlpha1 {
+  string collection_name = 1;
+  repeated string ids = 2;
+  // Optional provider-specific metadata.
+  map<string, string> metadata = 3;
+}
+
+message DeleteVectorsResponseAlpha1 {}
+
+message ListVectorCollectionsRequestAlpha1 {}
+
+message ListVectorCollectionsResponseAlpha1 {
+  repeated string collection_names = 1;
+}
+
+message QueryVectorsRequestAlpha1 {
+  string collection_name = 1;
+  repeated float query_vector = 2;
+  int32 top_k = 3;
+  map<string, google.protobuf.Value> filter = 4;
+  // Optional
+  bool include_vector = 5;
+  // Optional provider-specific metadata.
+  map<string, string> metadata = 6;
+}
+
+message QueryResultAlpha1 {
+  VectorAlpha1 vector = 1;
+  float score = 2;
+}
+
+message QueryVectorsResponseAlpha1 {
+  repeated QueryResultAlpha1 results = 1;
+}
