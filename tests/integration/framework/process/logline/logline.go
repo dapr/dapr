@@ -100,6 +100,10 @@ func (l *LogLine) FoundAll() bool {
 	return l.done.Load() == 2
 }
 
+func (l *LogLine) FoundNone() bool {
+	return l.done.Load() == 0
+}
+
 func (l *LogLine) Cleanup(t *testing.T) {
 	select {
 	case <-l.doneCh:
@@ -152,4 +156,8 @@ func (l *LogLine) Stderr() io.WriteCloser {
 
 func (l *LogLine) EventuallyFoundAll(t *testing.T) {
 	assert.Eventually(t, l.FoundAll, time.Second*15, time.Millisecond*10)
+}
+
+func (l *LogLine) EventuallyFoundNone(t *testing.T) {
+	assert.Eventually(t, l.FoundNone, time.Second*15, time.Millisecond*10)
 }

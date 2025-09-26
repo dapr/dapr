@@ -1292,8 +1292,8 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		// prevents overwhelming the OS with open connections
-		case <-a.clock.After(time.Millisecond * 100): // .1 sec
-			if counter%100 == 0 { // log to notify user every 10 sec
+		case <-a.clock.After(time.Millisecond * 100):
+			if counter%100 == 0 {
 				log.Infof("waiting for application to listen on port %v", a.runtimeConfig.appConnectionConfig.Port)
 			}
 		}
