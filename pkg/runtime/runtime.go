@@ -696,10 +696,10 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 	log.Infof("Internal gRPC server is running on %s:%d", a.runtimeConfig.internalGRPCListenAddress, a.runtimeConfig.internalGRPCPort)
 
-	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
 	if err := a.blockUntilAppIsReady(ctx); err != nil {
 		return err
 	}
+	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
 
 	a.initDirectMessaging(a.nameResolver)
 

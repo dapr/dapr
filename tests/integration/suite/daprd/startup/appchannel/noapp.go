@@ -66,5 +66,4 @@ func (n *noApp) Run(t *testing.T, ctx context.Context) {
 	n.logLineActorErr.EventuallyFoundNone(t)
 
 	go n.daprd.Cleanup(t)
-
 }

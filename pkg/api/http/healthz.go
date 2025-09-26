@@ -78,9 +78,7 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) onGetOutboundHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.outboundHealthz.IsReady() {
-		msg := messages.ErrOutboundHealthNotReady
-		respondWithError(w, msg)
-		log.Debug(msg)
+		respondWithError(w, messages.ErrOutboundHealthNotReadyService)
 		return
 	}
 

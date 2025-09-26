@@ -74,5 +74,4 @@ func (w *wrongPort) Run(t *testing.T, ctx context.Context) {
 	w.logLineActorErr.EventuallyFoundNone(t)
 
 	go w.daprd.Cleanup(t)
-
 }
