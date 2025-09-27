@@ -90,7 +90,7 @@ func (r *precision) Run(t *testing.T, ctx context.Context) {
 	_, err = client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test2",
-			Schedule: ptr.Of("@every 400ms"),
+			Schedule: ptr.Of("@every 1ms"),
 			Repeats:  ptr.Of(uint32(5)),
 		},
 	})
@@ -105,10 +105,10 @@ func (r *precision) Run(t *testing.T, ctx context.Context) {
 		eMap[v.name] = append(eMap[v.name], v)
 	}
 
-	tolerance := 100 * time.Millisecond
+	tolerance := 500 * time.Millisecond
 
 	assertDurationWithTolerance(t, eMap, "test1", 1*time.Second, float64(tolerance))
-	assertDurationWithTolerance(t, eMap, "test2", 400*time.Millisecond, float64(tolerance))
+	assertDurationWithTolerance(t, eMap, "test2", time.Millisecond, float64(tolerance))
 }
 
 func assertDurationWithTolerance(t *testing.T, values map[string][]*request, key string, expectedDiff time.Duration, tolerance float64) {

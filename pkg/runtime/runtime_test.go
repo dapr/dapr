@@ -113,8 +113,9 @@ func TestNewRuntime(t *testing.T) {
 			Namespace: metrics.DefaultMetricNamespace,
 			Healthz:   healthz.New(),
 		}),
-		registry: registry.New(registry.NewOptions()),
-		healthz:  healthz.New(),
+		registry:         registry.New(registry.NewOptions()),
+		healthz:          healthz.New(),
+		schedulerStreams: 3,
 	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 	// assert
@@ -851,6 +852,7 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 		unixDomainSocket:             "",
 		gracefulShutdownDuration:     time.Second,
 		enableAPILogging:             ptr.Of(true),
+		schedulerStreams:             3,
 		disableBuiltinK8sSecretStore: false,
 		metricsExporter: metrics.New(metrics.Options{
 			Log:       log,
@@ -923,6 +925,7 @@ func TestInitActors(t *testing.T) {
 
 	t.Run("placement enable = false", func(t *testing.T) {
 		r, err := newDaprRuntime(t.Context(), testSecurity(t), &internalConfig{
+			schedulerStreams: 3,
 			metricsExporter: metrics.New(metrics.Options{
 				Log:       log,
 				Namespace: metrics.DefaultMetricNamespace,
@@ -947,9 +950,10 @@ func TestInitActors(t *testing.T) {
 				Namespace: metrics.DefaultMetricNamespace,
 				Healthz:   healthz.New(),
 			}),
-			mode:     modes.StandaloneMode,
-			registry: registry.New(registry.NewOptions()),
-			healthz:  healthz.New(),
+			mode:             modes.StandaloneMode,
+			registry:         registry.New(registry.NewOptions()),
+			healthz:          healthz.New(),
+			schedulerStreams: 3,
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
@@ -966,9 +970,10 @@ func TestInitActors(t *testing.T) {
 				Namespace: metrics.DefaultMetricNamespace,
 				Healthz:   healthz.New(),
 			}),
-			mode:     modes.StandaloneMode,
-			registry: registry.New(registry.NewOptions()),
-			healthz:  healthz.New(),
+			mode:             modes.StandaloneMode,
+			registry:         registry.New(registry.NewOptions()),
+			healthz:          healthz.New(),
+			schedulerStreams: 3,
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)

@@ -217,11 +217,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		})
 
 		require.NoError(t, err)
-		require.Len(t, resp.GetOutputs(), 2)
+		require.Len(t, resp.GetOutputs(), 1)
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
-		require.Len(t, resp.GetOutputs()[1].GetChoices(), 1)
-		require.Equal(t, "well hello there from <IP>", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetContent())
-		require.Equal(t, "well hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[1].GetChoices()[0].GetMessage().GetContent())
+		require.Equal(t, "well hello there from <IP>\nwell hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetContent())
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {

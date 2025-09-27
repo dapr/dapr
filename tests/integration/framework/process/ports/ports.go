@@ -33,6 +33,8 @@ var (
 	resvP    []*reservedPort
 )
 
+const blockSize = 500
+
 // Ports reserves network ports, and then frees them when the test is ready to
 // run so a  process can bind to them at runtime.
 type Ports struct {
@@ -58,8 +60,8 @@ func Reserve(t *testing.T, count int) *Ports {
 
 	resvPLen -= count
 	if count > resvPLen || resvPLen < 20 {
-		t.Logf("reserving 300 more ports")
-		for i := 0; i < 300; i++ {
+		t.Logf("reserving %d more ports", blockSize)
+		for i := 0; i < blockSize; i++ {
 			last++
 			if last+i > 65535 {
 				last = 1024
@@ -73,7 +75,7 @@ func Reserve(t *testing.T, count int) *Ports {
 			require.True(t, ok)
 			resvP = append(resvP, &reservedPort{ln, tcp.Port})
 		}
-		resvPLen += 300
+		resvPLen += blockSize
 	}
 
 	p := &Ports{

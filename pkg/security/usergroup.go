@@ -16,13 +16,14 @@ package security
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"syscall"
 
 	"github.com/dapr/dapr/pkg/modes"
 )
 
 func checkUserIDGroupID(mode modes.DaprMode) error {
-	if mode != modes.KubernetesMode {
+	if mode != modes.KubernetesMode || runtime.GOOS == "windows" {
 		return nil
 	}
 
