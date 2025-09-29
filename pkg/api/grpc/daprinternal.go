@@ -190,13 +190,12 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	isSSERequest, header := sse.IsSSEGrpcRequest(chunk.GetRequest())
 
 	if isSSERequest {
-		streamWriter := streamResponseWriter{
+		req.WithHTTPResponseWriter(&streamResponseWriter{
 			logger: a.logger,
 			header: header,
 			stream: stream,
 			appID:  a.AppID(),
-		}
-		req.WithHTTPResponseWriter(&streamWriter)
+		})
 	}
 
 	// Submit the request to the app
@@ -206,10 +205,9 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}
 
 	defer func() {
-		if res == nil {
-			return
+		if res != nil {
+			res.Close()
 		}
-		res.Close()
 	}()
 
 	if isSSERequest {

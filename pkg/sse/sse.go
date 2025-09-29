@@ -95,12 +95,6 @@ func FlushSSEResponse(ctx context.Context, writer http.ResponseWriter, reader io
 		}
 
 		n, err := reader.Read(buf)
-		if err != nil {
-			if err != io.EOF {
-				return err
-			}
-			break
-		}
 		if n > 0 {
 			_, err = writer.Write(buf[:n])
 			if err != nil {
@@ -109,6 +103,13 @@ func FlushSSEResponse(ctx context.Context, writer http.ResponseWriter, reader io
 			}
 			// Flush immediately for SSE
 			flusher.Flush()
+		}
+
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return nil
