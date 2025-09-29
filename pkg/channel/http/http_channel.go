@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -381,6 +382,10 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		sse = isSSE(r)
 		if sse {
 			r.Header.Set(headerAccept, mimeEventStream)
+			// Disable buffering for SSE requests
+			r.Header.Set("Cache-Control", "no-cache")
+			// Disable compression
+			r.Header.Set("Accept-Encoding", "identity")
 		}
 
 		// Send request to user application
@@ -401,11 +406,11 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 					return
 				}
 
-				buf := make([]byte, 1024)
+				reader := bufio.NewReader(clientResp.Body)
 				for {
-					n, cErr := clientResp.Body.Read(buf)
-					if n > 0 {
-						if _, writeErr := callerResponseWriter.Write(buf[:n]); writeErr != nil {
+					line, cErr := reader.ReadString('\n')
+					if len(line) > 0 {
+						if _, writeErr := callerResponseWriter.Write([]byte(line)); writeErr != nil {
 							return
 						}
 						flusher.Flush()
