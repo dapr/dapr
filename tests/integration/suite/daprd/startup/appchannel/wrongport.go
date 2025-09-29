@@ -66,12 +66,8 @@ func (w *wrongPort) Setup(t *testing.T) []framework.Option {
 }
 
 func (w *wrongPort) Run(t *testing.T, ctx context.Context) {
-	w.daprd.Run(t, ctx)
 	w.daprd.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { w.daprd.Cleanup(t) })
 
 	w.logLineAppWaiting.EventuallyFoundAll(t)
 	w.logLineActorErr.EventuallyFoundNone(t)
-
-	go w.daprd.Cleanup(t)
 }

@@ -66,12 +66,8 @@ func (s *withApp) Setup(t *testing.T) []framework.Option {
 }
 
 func (s *withApp) Run(t *testing.T, ctx context.Context) {
-	s.daprd.Run(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { s.daprd.Cleanup(t) })
 
 	s.logLineAppWaiting.EventuallyFoundAll(t)
 	s.logLineActorErr.EventuallyFoundNone(t)
-
-	go s.daprd.Cleanup(t)
 }

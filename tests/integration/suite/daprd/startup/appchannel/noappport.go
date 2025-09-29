@@ -64,12 +64,8 @@ func (n *noAppPort) Setup(t *testing.T) []framework.Option {
 }
 
 func (n *noAppPort) Run(t *testing.T, ctx context.Context) {
-	n.daprd.Run(t, ctx)
 	n.daprd.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { n.daprd.Cleanup(t) })
 
 	n.logLineAppWaiting.EventuallyFoundNone(t)
 	n.logLineActorErr.EventuallyFoundNone(t)
-
-	go n.daprd.Cleanup(t)
 }

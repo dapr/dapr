@@ -73,10 +73,9 @@ var (
 	ErrDirectInvokeNotReady = APIError{"invoke API is not ready", errorcodes.ServiceInvocationDirectInvoke, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Healthz.
-	ErrHealthNotReady                = APIError{"dapr is not ready: %v", errorcodes.HealthNotReady, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrOutboundHealthNotReady        = APIError{"dapr outbound is not ready", errorcodes.HealthOutboundNotReady, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrOutboundHealthNotReadyService = APIError{"dapr outbound is not ready", errorcodes.HealthOutboundNotReady, http.StatusServiceUnavailable, grpcCodes.Unavailable}
-	ErrHealthAppIDNotMatch           = APIError{"dapr app-id does not match", errorcodes.HealthAppidNotMatch, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrHealthNotReady         = APIError{"dapr is not ready: %v", errorcodes.HealthNotReady, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrOutboundHealthNotReady = APIError{"dapr outbound is not ready", errorcodes.HealthOutboundNotReady, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrHealthAppIDNotMatch    = APIError{"dapr app-id does not match", errorcodes.HealthAppidNotMatch, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Secrets.
 	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", errorcodes.SecretStoreNotConfigured, http.StatusInternalServerError, grpcCodes.FailedPrecondition}
