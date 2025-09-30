@@ -266,12 +266,14 @@ spec:
     spec:
       accessModes:
         - ReadWriteOnce
+      {{- if .Values.volumeclaims.createStorageClass }}
+      storageClassName: {{ include "dapr_placement.storageclass-name" . }}
+      {{- else if .Values.volumeclaims.storageClassName }}
+      storageClassName: {{ .Values.volumeclaims.storageClassName }}
+      {{- end }}
       resources:
         requests:
           storage: {{ .Values.volumeclaims.storageSize }}
-    {{- if .Values.volumeclaims.storageClassName }}
-      storageClassName: {{ .Values.volumeclaims.storageClassName }}
-    {{- end }}
   {{- end }}
 {{- end }}
 {{- end }}
