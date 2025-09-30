@@ -17,5 +17,6 @@ package tracing
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing/baggage"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing/binding"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing/otel"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing/serviceinvocation"
 )

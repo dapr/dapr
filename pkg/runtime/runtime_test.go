@@ -2198,27 +2198,97 @@ func testSecurity(t *testing.T) security.Handler {
 	return sec
 }
 
-func TestGetOtelServiceName(t *testing.T) {
-	// Save the original value of the OTEL_SERVICE_NAME variable and restore at the end
-
+func TestOtelResourceDetection(t *testing.T) {
 	tests := []struct {
-		env      string // The value of the OTEL_SERVICE_NAME variable
-		fallback string // The fallback value
-		expected string // The expected value
+		name                string
+		otelServiceName     string
+		otelResourceAttrs   string
+		fallbackAppID       string
+		expectedServiceName string
+		expectedAttrs       map[string]string
 	}{
-		{"", "my-app", "my-app"},                 // Case 1: No environment variable, use fallback
-		{"service-abc", "my-app", "service-abc"}, // Case 2: Environment variable set, use it
+		{
+			name:                "No environment variable, use fallback app ID",
+			otelServiceName:     "",
+			otelResourceAttrs:   "",
+			fallbackAppID:       "my-app",
+			expectedServiceName: "my-app",
+			expectedAttrs:       map[string]string{},
+		},
+		{
+			name:                "OTEL_SERVICE_NAME set, use it instead of fallback",
+			otelServiceName:     "service-abc",
+			otelResourceAttrs:   "",
+			fallbackAppID:       "my-app",
+			expectedServiceName: "service-abc",
+			expectedAttrs:       map[string]string{},
+		},
+		{
+			name:                "OTEL_RESOURCE_ATTRIBUTES with k8s attributes",
+			otelServiceName:     "",
+			otelResourceAttrs:   "k8s.pod.uid=123-456-789,k8s.namespace.name=default,k8s.pod.name=my-pod",
+			fallbackAppID:       "my-app",
+			expectedServiceName: "my-app",
+			expectedAttrs: map[string]string{
+				"k8s.pod.uid":        "123-456-789",
+				"k8s.namespace.name": "default",
+				"k8s.pod.name":       "my-pod",
+			},
+		},
+		{
+			name:                "OTEL_SERVICE_NAME takes precedence over service.name in OTEL_RESOURCE_ATTRIBUTES",
+			otelServiceName:     "service-from-env",
+			otelResourceAttrs:   "service.name=service-from-attrs,k8s.pod.name=my-pod",
+			fallbackAppID:       "my-app",
+			expectedServiceName: "service-from-env",
+			expectedAttrs: map[string]string{
+				"k8s.pod.name": "my-pod",
+			},
+		},
+		{
+			name:                "Both OTEL vars set with k8s attributes",
+			otelServiceName:     "my-dapr-sidecar",
+			otelResourceAttrs:   "k8s.pod.uid=abc-def,k8s.deployment.name=my-app,k8s.namespace.name=production",
+			fallbackAppID:       "fallback-id",
+			expectedServiceName: "my-dapr-sidecar",
+			expectedAttrs: map[string]string{
+				"k8s.pod.uid":         "abc-def",
+				"k8s.deployment.name": "my-app",
+				"k8s.namespace.name":  "production",
+			},
+		},
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.env, func(t *testing.T) {
-			// Set the environment variable to the test case value
-			t.Setenv("OTEL_SERVICE_NAME", tc.env)
-			// Call the function and check the result
-			got := getOtelServiceName(tc.fallback)
-			if got != tc.expected {
-				// Report an error if the result doesn't match
-				t.Errorf("getOtelServiceName(%q) = %q; expected %q", tc.fallback, got, tc.expected)
+		t.Run(tc.name, func(t *testing.T) {
+			// Set environment variables
+			t.Setenv("OTEL_SERVICE_NAME", tc.otelServiceName)
+			t.Setenv("OTEL_RESOURCE_ATTRIBUTES", tc.otelResourceAttrs)
+
+			ctx := t.Context()
+			r := createOtelResource(ctx, tc.fallbackAppID)
+
+			// Convert attributes to map for easier assertions
+			attrs := r.Attributes()
+			attrMap := make(map[string]string)
+			for _, attr := range attrs {
+				attrMap[string(attr.Key)] = attr.Value.AsString()
+			}
+
+			// Verify service.name attribute
+			serviceName, exists := attrMap["service.name"]
+			require.True(t, exists, "service.name attribute should exist")
+			assert.Equal(t, tc.expectedServiceName, serviceName,
+				"service.name should be %s, but got %s", tc.expectedServiceName, serviceName)
+
+			// Verify additional expected attributes
+			for key, expectedValue := range tc.expectedAttrs {
+				value, exists := attrMap[key]
+				assert.True(t, exists, "Expected attribute %s to exist", key)
+				if exists {
+					assert.Equal(t, expectedValue, value,
+						"Attribute %s should be %s, but got %s", key, expectedValue, value)
+				}
 			}
 		})
 	}
