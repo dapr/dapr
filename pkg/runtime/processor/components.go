@@ -166,7 +166,15 @@ func (p *Processor) processComponents(ctx context.Context) error {
 
 		err := p.processComponentAndDependents(ctx, comp)
 		if err != nil {
-			err = fmt.Errorf("process component %s error: %s", comp.Name, err)
+			// Check if this is already an InitError which contains component information
+			var initErr *rterrors.InitError
+			if errors.As(err, &initErr) {
+				// InitError already contains component information, don't duplicate it
+				err = fmt.Errorf("failed to load component: %w", err)
+			} else {
+				// For other types of errors, include the component name
+				err = fmt.Errorf("failed to load component %s: %w", comp.Name, err)
+			}
 			if !comp.Spec.IgnoreErrors {
 				log.Warnf("Error processing component, daprd will exit gracefully: %s", err)
 				return err

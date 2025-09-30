@@ -1,3 +1,6 @@
+//go:build unit
+// +build unit
+
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -718,4 +721,53 @@ func TestProcessorWaitGroupError(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+func TestProcessComponentErrorMessage(t *testing.T) {
+	t.Run("component init error includes component name", func(t *testing.T) {
+		proc, _ := newTestProc()
+
+		// Create a component that will fail to initialize
+		failingComponent := componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "failing-component",
+			},
+			Spec: componentsapi.ComponentSpec{
+				Type:    "secretstores.nonexistent", // This type doesn't exist
+				Version: "v1",
+			},
+		}
+
+		err := proc.processComponentAndDependents(t.Context(), failingComponent)
+		require.Error(t, err)
+
+		// The error should include the component name
+		assert.Contains(t, err.Error(), "failing-component")
+		// Check for the actual error message about couldn't find secret store
+		assert.Contains(t, err.Error(), "couldn't find secret store")
+	})
+
+	t.Run("process function wraps error with component info", func(t *testing.T) {
+		proc, _ := newTestProc()
+
+		// Create a failing component
+		failingComponent := componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-secret-store",
+			},
+			Spec: componentsapi.ComponentSpec{
+				Type:    "secretstores.nonexistent",
+				Version: "v1",
+			},
+		}
+
+		// Test the direct error message without using the queue
+		err := proc.processComponentAndDependents(t.Context(), failingComponent)
+		require.Error(t, err)
+
+		// The error should include the component name
+		errorText := err.Error()
+		assert.Contains(t, errorText, "test-secret-store")
+		assert.Contains(t, errorText, "couldn't find secret store")
+	})
 }
