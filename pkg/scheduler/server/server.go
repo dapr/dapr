@@ -47,6 +47,7 @@ type Options struct {
 	Port                      int
 	Mode                      modes.DaprMode
 	KubeConfig                *string
+	LogLevel                  string
 
 	EtcdEmbed                      bool
 	EtcdDataDir                    string
@@ -123,6 +124,7 @@ func New(opts Options) (*Server, error) {
 		DataDir:                    opts.EtcdDataDir,
 		Healthz:                    opts.Healthz,
 		Mode:                       opts.Mode,
+		LogLevel:                   opts.LogLevel,
 
 		ClientEndpoints: opts.EtcdClientEndpoints,
 		ClientUsername:  opts.EtcdClientUsername,

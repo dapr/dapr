@@ -97,6 +97,7 @@ func Run() {
 				Port:                      opts.Port,
 				ListenAddress:             opts.ListenAddress,
 				OverrideBroadcastHostPort: opts.OverrideBroadcastHostPort,
+				LogLevel:                  opts.Logger.OutputLevel,
 
 				Mode:     modes.DaprMode(opts.Mode),
 				Security: secHandler,

@@ -119,7 +119,7 @@ func config(opts Options) (*embed.Config, error) {
 
 	config.ListenPeerUrls = []url.URL{etcdURL}
 
-	config.LogLevel = "info"
+	config.LogLevel = opts.LogLevel
 
 	backendBatchInterval, err := time.ParseDuration(opts.BackendBatchInterval)
 	if err != nil {
