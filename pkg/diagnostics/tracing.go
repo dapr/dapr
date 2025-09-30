@@ -157,10 +157,24 @@ func ConstructInputBindingSpanAttributes(bindingName, url string) map[string]str
 
 // ConstructSubscriptionSpanAttributes creates span attributes for Pubsub subscription.
 func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
-	return map[string]string{
+	attrs := map[string]string{
 		diagConsts.MessagingSystemSpanAttributeKey:      diagConsts.PubsubBuildingBlockType,
 		diagConsts.MessagingDestinationSpanAttributeKey: topic,
+		diagConsts.MessagingOperationNameSpanAttributeKey: "process",
 	}
+	return attrs
+}
+
+// ConstructSubscriptionSpanAttributesWithMessage creates span attributes for Pubsub subscription with message details.
+func ConstructSubscriptionSpanAttributesWithMessage(topic string, messageID string, consumerGroup string) map[string]string {
+	attrs := ConstructSubscriptionSpanAttributes(topic)
+	if messageID != "" {
+		attrs[diagConsts.MessagingMessageIDSpanAttributeKey] = messageID
+	}
+	if consumerGroup != "" {
+		attrs[diagConsts.MessagingConsumerGroupNameSpanAttributeKey] = consumerGroup
+	}
+	return attrs
 }
 
 // StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
@@ -170,8 +184,19 @@ func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trac
 	}
 
 	ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
+	
+	// Use SpanKindConsumer for pubsub subscriptions (semantic conventions)
+	// Keep SpanKindClient for other callbacks like bindings
+	spanKind := trace.SpanKindClient
+	if strings.HasPrefix(spanName, "pubsub/") {
+		spanKind = trace.SpanKindConsumer
+		// Update span name to follow semantic conventions: "process {topic}"
+		topic := strings.TrimPrefix(spanName, "pubsub/")
+		spanName = "process " + topic
+	}
+	
 	//nolint:spancheck
-	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
+	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(spanKind))
 
 	//nolint:spancheck
 	return ctx, span
