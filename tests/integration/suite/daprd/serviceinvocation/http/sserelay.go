@@ -16,10 +16,12 @@ package http
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -77,7 +79,11 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 				select {
 				case <-time.After(600 * time.Millisecond):
 				case <-r.Context().Done():
-					assert.Fail(t, "client closed connection")
+					if errors.Is(r.Context().Err(), context.Canceled) {
+						log.Printf(">>SRVA>> client closed connection\n")
+					} else {
+						log.Printf(">>SRVA>> client closed connection: %v\n", r.Context().Err())
+					}
 					return
 				}
 			}
@@ -157,7 +163,7 @@ func (s *sserelay) Run(t *testing.T, ctx context.Context) {
 	s.daprdA.WaitUntilRunning(t, ctx)
 	s.daprdB.WaitUntilRunning(t, ctx)
 
-	client := client.HTTP(t)
+	client := client.HTTPWithTimeout(t, 60*time.Second)
 
 	url := fmt.Sprintf("http://localhost:%d/TOB", s.srvB.Port())
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -167,35 +173,62 @@ func (s *sserelay) Run(t *testing.T, ctx context.Context) {
 	req.Header.Set("Accept-Encoding", "identity")
 
 	resp, err := client.Do(req)
+	if resp != nil {
+		defer func() {
+			cErr := resp.Body.Close()
+			if cErr != nil {
+				t.Log("Response body close error: ", cErr)
+			}
+		}()
+	}
 	require.NoError(t, err)
-	defer resp.Body.Close()
 
 	log.Printf("status=%s proto=%s", resp.Status, resp.Proto)
 
 	// Verify SSE headers
 	require.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
 
-	var total int
-	var eventCount int
+	// And modify the test to be more resilient to connection issues:
+	// Replace the current event counting with timeout-based reading
+	timeoutCtx, timeoutCancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer timeoutCancel()
 
 	// Use direct reader for real-time streaming
-	reader := bufio.NewReader(resp.Body)
-	for {
-		line, rErr := reader.ReadString('\n')
-		if rErr == io.EOF {
-			return
-		}
-		require.NoError(t, rErr)
+	done := make(chan struct{})
+	errChan := make(chan error)
+	eventCount := atomic.Int32{}
+	go func() {
+		defer close(done)
+		reader := bufio.NewReader(resp.Body)
+		for {
+			line, rErr := reader.ReadString('\n')
+			if rErr == io.EOF {
+				return
+			}
+			if rErr != nil {
+				if !errors.Is(rErr, context.Canceled) {
+					errChan <- rErr
+				}
+				return
+			}
 
-		total += len(line)
-		eventCount++
-		log.Printf(">>TEST>> recv %d bytes: %q\n", len(line), line)
+			eventCount.Add(1)
+			log.Printf(">>TEST>> recv %d bytes: %q\n", len(line), line)
 
-		// Stop after receiving a certain number of events for testing
-		if eventCount >= 5 {
-			break
+			// Stop after receiving a certain number of events for testing
+			if eventCount.Load() > 5 {
+				errChan <- errors.New("received too many events")
+			}
 		}
+	}()
+
+	select {
+	case <-done:
+		assert.EqualValues(t, 5, eventCount.Load())
+		log.Printf("done; received %d events", eventCount.Load())
+	case err = <-errChan:
+		require.NoError(t, err)
+	case <-timeoutCtx.Done():
+		assert.Fail(t, "test timed out")
 	}
-
-	log.Printf("done; received %d bytes, %d events", total, eventCount)
 }
