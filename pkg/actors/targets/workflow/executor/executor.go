@@ -16,6 +16,8 @@ package executor
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 
@@ -41,9 +43,15 @@ type executor struct {
 	cancelCh   chan struct{}
 
 	watchLock chan struct{}
+
+	closed atomic.Bool
+	wg     sync.WaitGroup
 }
 
 func (e *executor) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	e.wg.Add(1)
+	defer e.wg.Done()
+
 	switch req.GetMessage().GetMethod() {
 	case MethodComplete:
 		return nil, e.complete(ctx, req)
@@ -90,8 +98,13 @@ func (e *executor) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 }
 
 func (e *executor) Deactivate(_ context.Context) error {
+	if !e.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
 	close(e.closeCh)
 	e.table.Delete(e.actorID)
+	e.wg.Wait()
 	executorCache.Put(e)
 	return nil
 }
@@ -100,6 +113,9 @@ func (e *executor) InvokeStream(ctx context.Context,
 	req *internalsv1pb.InternalInvokeRequest,
 	stream func(*internalsv1pb.InternalInvokeResponse) (bool, error),
 ) error {
+	e.wg.Add(1)
+	defer e.wg.Done()
+
 	switch req.GetMessage().GetMethod() {
 	case MethodWatchComplete:
 		return e.watchComplete(ctx, stream)
@@ -109,7 +125,9 @@ func (e *executor) InvokeStream(ctx context.Context,
 }
 
 func (e *executor) watchComplete(ctx context.Context, stream func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
-	defer e.Deactivate(ctx)
+	defer func() {
+		e.factory.deactivateCh <- e
+	}()
 
 	select {
 	case e.watchLock <- struct{}{}:

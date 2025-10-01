@@ -14,6 +14,7 @@ limitations under the License.
 package workflow
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/apphealth"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/basic"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/continueasnew"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp"
@@ -23,6 +24,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/memory"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/nostatestore"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reconnect"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/records"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/retries"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
