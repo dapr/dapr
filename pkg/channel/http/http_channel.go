@@ -393,7 +393,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		//nolint:bodyclose
 		clientResp, clientErr := h.client.Do(r)
 		if clientResp != nil {
-			if sse && req.HTTPResponseWriter() != nil {
+			statusOK := clientResp.StatusCode >= 200 && clientResp.StatusCode < 300
+			if sse && req.HTTPResponseWriter() != nil && statusOK {
 				callerResponseWriter := req.HTTPResponseWriter()
 
 				callerResponseWriter.Header().Set(headerContentType, mimeEventStream)
@@ -444,7 +445,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		return nil, err
 	}
 
-	if sse {
+	statusOK := rw.StatusCode() >= 200 && rw.StatusCode() < 300
+	if sse && statusOK {
 		return nil, nil
 	} else {
 		resp := rw.Result() //nolint:bodyclose

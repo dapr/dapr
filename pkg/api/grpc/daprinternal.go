@@ -218,6 +218,16 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		return nil
 	}
 
+	if res != nil && isSSE {
+		statusOK := res.Status().GetCode() >= 200 && res.Status().GetCode() < 300
+		msg := "no response received from stream"
+		if statusOK {
+			msg = "no expected response from stream"
+		}
+		statusCode = int32(codes.Internal)
+		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, errors.New(msg))
+	}
+
 	if res == nil {
 		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, errors.New("no response received from stream"))
