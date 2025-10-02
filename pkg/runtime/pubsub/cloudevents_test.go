@@ -56,6 +56,7 @@ func TestNewCloudEvent(t *testing.T) {
 			DataContentType: "", // defaults to "text/plain"
 			TraceID:         "d",
 			Type:            "", // defaults to "com.dapr.event.sent"
+			Subject:         "e",
 		}, map[string]string{})
 		require.NoError(t, err)
 		assert.Equal(t, "testid", ce["id"].(string))
@@ -65,7 +66,7 @@ func TestNewCloudEvent(t *testing.T) {
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
 		assert.Equal(t, "d", ce["traceid"].(string))
 		assert.Equal(t, "com.dapr.event.sent", ce["type"].(string))
-		assert.Equal(t, nil, ce["subject"])
+		assert.Equal(t, "e", ce["subject"].(string))
 	})
 
 	t.Run("cloud event metadata override", func(t *testing.T) {
