@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,9 +43,15 @@ func init() {
 type sserelay struct {
 	daprdA *daprd.Daprd
 	daprdB *daprd.Daprd
+	daprdC *daprd.Daprd
 
 	srvA *app.App
 	srvB *app.App
+	srvC *app.App
+
+	eventsA sync.Map
+	eventsB sync.Map
+	eventsC sync.Map
 }
 
 func (s *sserelay) Setup(t *testing.T) []framework.Option {
@@ -68,6 +75,7 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 			for count := range 5 {
 				now := time.Now().Format(time.RFC3339Nano)
 				payload := fmt.Sprintf("data: {\"n\":%d,\"t\":%q}\n", count, now)
+				s.eventsA.Store(count, payload)
 				_, err := w.Write([]byte(payload))
 				if err != nil {
 					t.Error(err)
@@ -128,6 +136,7 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 
 			// Use direct reader for real-time streaming
 			reader := bufio.NewReader(resp.Body)
+			count := 0
 			for {
 				line, rErr := reader.ReadString('\n')
 				if rErr == io.EOF {
@@ -140,7 +149,71 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 
 				if len(line) > 0 {
 					log.Printf(">>SRVB>> recv %d bytes: %q\n", len(line), line)
+					s.eventsB.Store(count, line)
+					count++
+					// Forward exactly what we received (includes \n)
+					io.WriteString(w, line)
 
+					// Flush immediately for real-time streaming
+					flusher.Flush()
+				}
+			}
+		}),
+	)
+
+	s.srvC = app.New(t,
+		app.WithHandlerFunc("/healthz", func(http.ResponseWriter, *http.Request) {}),
+		app.WithHandlerFunc("/TOC", func(w http.ResponseWriter, r *http.Request) {
+			url := fmt.Sprintf("http://%s/v1.0/invoke/%s/method/TOB", s.daprdC.HTTPAddress(), s.daprdB.AppID())
+			req, err := http.NewRequest(http.MethodGet, url, nil)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			req.Header.Set("Accept", "text/event-stream")
+			req.Header.Set("Cache-Control", "no-cache")
+			req.Header.Set("Accept-Encoding", "identity")
+
+			resp, err := client.HTTP(t).Do(req)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			defer resp.Body.Close()
+			log.Printf(">SRVC>>GOT>> status=%s proto=%s\n", resp.Status, resp.Proto)
+			// require.Equal(t, http.StatusOK, resp.StatusCode)
+
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache, no-transform")
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("X-Accel-Buffering", "no")
+
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+				return
+			}
+
+			log.Printf(">>SRVC>>/relay: piping %s → client (chunking/flush per SSE event)\n", url)
+
+			count := 0
+			// Use direct reader for real-time streaming
+			reader := bufio.NewReader(resp.Body)
+			for {
+				line, rErr := reader.ReadString('\n')
+				if rErr == io.EOF {
+					return
+				}
+				if rErr != nil {
+					http.Error(w, rErr.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				if len(line) > 0 {
+					log.Printf(">>SRVC>> recv %d bytes: %q\n", len(line), line)
+					s.eventsC.Store(count, line)
+					count++
 					// Forward exactly what we received (includes \n)
 					io.WriteString(w, line)
 
@@ -153,9 +226,10 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 
 	s.daprdA = daprd.New(t, daprd.WithAppID("daprdA"), daprd.WithAppPort(s.srvA.Port()))
 	s.daprdB = daprd.New(t, daprd.WithAppID("daprdB"), daprd.WithAppPort(s.srvB.Port()))
+	s.daprdC = daprd.New(t, daprd.WithAppID("daprdC"), daprd.WithAppPort(s.srvC.Port()))
 
 	return []framework.Option{
-		framework.WithProcesses(s.srvA, s.srvB, s.daprdA, s.daprdB),
+		framework.WithProcesses(s.srvA, s.srvB, s.srvC, s.daprdA, s.daprdB, s.daprdC),
 	}
 }
 
@@ -165,7 +239,7 @@ func (s *sserelay) Run(t *testing.T, ctx context.Context) {
 
 	client := client.HTTPWithTimeout(t, 60*time.Second)
 
-	url := fmt.Sprintf("http://localhost:%d/TOB", s.srvB.Port())
+	url := fmt.Sprintf("http://localhost:%d/TOC", s.srvC.Port())
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
@@ -212,9 +286,21 @@ func (s *sserelay) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 
-			eventCount.Add(1)
 			log.Printf(">>TEST>> recv %d bytes: %q\n", len(line), line)
 
+			val, ok := s.eventsA.Load(int(eventCount.Load()))
+			assert.True(t, ok)
+			assert.Equal(t, val, line)
+
+			val, ok = s.eventsB.Load(int(eventCount.Load()))
+			assert.True(t, ok)
+			assert.Equal(t, val, line)
+
+			val, ok = s.eventsC.Load(int(eventCount.Load()))
+			assert.True(t, ok)
+			assert.Equal(t, val, line)
+
+			eventCount.Add(1)
 			// Stop after receiving a certain number of events for testing
 			if eventCount.Load() > 5 {
 				errChan <- errors.New("received too many events")
