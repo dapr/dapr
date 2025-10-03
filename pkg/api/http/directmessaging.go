@@ -231,14 +231,65 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 
 		w.WriteHeader(int(rResp.Status().GetCode()))
 
-		_, rErr = io.Copy(w, rResp.RawData())
-		if rErr != nil {
-			// Do not return rResp here, we already have a deferred `Close` call on it
-			return nil, backoff.Permanent(rErr)
+		reader := rResp.RawData()
+		flusher, canFlush := w.(http.Flusher)
+
+		accept := r.Header.Get("Accept")
+		isSSE := strings.HasPrefix(accept, "text/event-stream")
+
+		if isSSE && canFlush {
+			// Add defer close for streaming case
+			defer func() {
+				if closer, ok := reader.(io.Closer); ok {
+					err := closer.Close()
+					if err != nil {
+						log.Warnf("Failed to close reader: %v", err)
+					}
+				}
+			}()
+
+			for {
+				// Stream SSE data in real-time
+				buf := make([]byte, 1024)
+
+				// Check if context is cancelled
+				select {
+				case <-r.Context().Done():
+					rErr = r.Context().Err()
+					return nil, rErr
+				default:
+				}
+
+				n, err := reader.Read(buf)
+				if n > 0 {
+					_, writeErr := w.Write(buf[:n])
+					if writeErr != nil {
+						// Client disconnected - break immediately
+						log.Debugf("Client disconnected during streaming: %v", writeErr)
+						rErr = writeErr
+						break
+					}
+					// Flush immediately for SSE
+					flusher.Flush()
+				}
+				if err != nil {
+					if err != io.EOF {
+						rErr = err
+					}
+					break
+				}
+			}
+		} else {
+			// Use regular io.Copy for non-streaming responses
+			_, rErr = io.Copy(w, reader)
+			if rErr != nil {
+				// Do not return rResp here, we already have a deferred `Close` call on it
+				return nil, backoff.Permanent(rErr)
+			}
 		}
 
 		// Do not return rResp here, we already have a deferred `Close` call on it
-		return nil, nil
+		return nil, rErr
 	})
 
 	// If there's no error, then everything is done already

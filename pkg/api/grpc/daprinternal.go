@@ -18,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -186,12 +188,46 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		pw.Close()
 	}()
 
+	header := http.Header{}
+	for k, v := range chunk.GetRequest().GetMetadata() {
+		for _, vv := range v.GetValues() {
+			header.Add(k, vv)
+		}
+	}
+
+	isSSE := false
+	// Or check the Accept header
+	if accept := header.Get("Accept"); strings.Contains(accept, "text/event-stream") {
+		isSSE = true
+		respwritter := loggingResponseWriter{
+			header: header,
+			stream: stream,
+			appID:  a.AppID(),
+		}
+		req.WithHTTPResponseWriter(&respwritter)
+	}
+
 	// Submit the request to the app
 	res, err := appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
 		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	}
+
+	if res == nil && isSSE {
+		return nil
+	}
+
+	if res != nil && isSSE {
+		statusOK := res.Status().GetCode() >= 200 && res.Status().GetCode() < 300
+		msg := "no response received from stream"
+		if statusOK {
+			msg = "no expected response from stream"
+		}
+		statusCode = int32(codes.Internal)
+		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, errors.New(msg))
+	}
+
 	if res == nil {
 		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, errors.New("no response received from stream"))
@@ -273,6 +309,56 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}
 
 	return nil
+}
+
+type loggingResponseWriter struct {
+	stream internalv1pb.ServiceInvocation_CallLocalStreamServer
+	header http.Header
+	buf    []byte
+	seq    uint64
+	status int
+	appID  string
+}
+
+func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
+	lrw.buf = append(lrw.buf, b...)
+	return len(b), nil
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(statusCode int) {
+	lrw.status = statusCode
+}
+
+func (lrw *loggingResponseWriter) Flush() {
+	r := &internalv1pb.InternalInvokeResponse{}
+
+	if lrw.seq == 0 {
+		r = &internalv1pb.InternalInvokeResponse{
+			Headers: internalv1pb.HTTPHeadersToInternalMetadata(lrw.header),
+			Status: &internalv1pb.Status{
+				Code: int32(codes.OK),
+			},
+		}
+	}
+
+	err := lrw.stream.Send(&internalv1pb.InternalInvokeResponseStream{
+		Response: r,
+		Payload: &commonv1pb.StreamPayload{
+			Data: lrw.buf,
+			Seq:  lrw.seq,
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	lrw.buf = []byte{}
+	lrw.seq++
+	lrw.status = 0
+}
+
+func (lrw *loggingResponseWriter) Header() http.Header {
+	return lrw.header
 }
 
 // CallActor invokes a virtual actor.
