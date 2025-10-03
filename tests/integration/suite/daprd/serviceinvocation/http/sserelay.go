@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -58,7 +57,7 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 	s.srvA = app.New(t,
 		app.WithHandlerFunc("/healthz", func(http.ResponseWriter, *http.Request) {}),
 		app.WithHandlerFunc("/TOA", func(w http.ResponseWriter, r *http.Request) {
-			log.Printf(">>SRVA>>%s\n", r.URL.Path)
+			t.Logf(">>SRVA>>%s\n", r.URL.Path)
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Connection", "keep-alive")
@@ -82,15 +81,15 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 					return
 				}
 
-				log.Printf(">>SRVA>> sent %d bytes: %q\n", len(payload), payload)
+				t.Logf(">>SRVA>> sent %d bytes: %q\n", len(payload), payload)
 				flusher.Flush()
 				select {
 				case <-time.After(600 * time.Millisecond):
 				case <-r.Context().Done():
 					if errors.Is(r.Context().Err(), context.Canceled) {
-						log.Printf(">>SRVA>> client closed connection\n")
+						t.Logf(">>SRVA>> client closed connection\n")
 					} else {
-						log.Printf(">>SRVA>> client closed connection: %v\n", r.Context().Err())
+						t.Logf(">>SRVA>> client closed connection: %v\n", r.Context().Err())
 					}
 					return
 				}
@@ -118,7 +117,7 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 				return
 			}
 			defer resp.Body.Close()
-			log.Printf(">SRVB>>GOT>> status=%s proto=%s\n", resp.Status, resp.Proto)
+			t.Logf(">SRVB>>GOT>> status=%s proto=%s\n", resp.Status, resp.Proto)
 			// require.Equal(t, http.StatusOK, resp.StatusCode)
 
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -132,7 +131,7 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 				return
 			}
 
-			log.Printf(">>SRVB>>/relay: piping %s → client (chunking/flush per SSE event)\n", url)
+			t.Logf(">>SRVB>>/relay: piping %s → client (chunking/flush per SSE event)\n", url)
 
 			// Use direct reader for real-time streaming
 			reader := bufio.NewReader(resp.Body)
@@ -148,7 +147,7 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 				}
 
 				if len(line) > 0 {
-					log.Printf(">>SRVB>> recv %d bytes: %q\n", len(line), line)
+					t.Logf(">>SRVB>> recv %d bytes: %q\n", len(line), line)
 					s.eventsB.Store(count, line)
 					count++
 					// Forward exactly what we received (includes \n)
@@ -181,7 +180,7 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 				return
 			}
 			defer resp.Body.Close()
-			log.Printf(">SRVC>>GOT>> status=%s proto=%s\n", resp.Status, resp.Proto)
+			t.Logf(">SRVC>>GOT>> status=%s proto=%s\n", resp.Status, resp.Proto)
 			// require.Equal(t, http.StatusOK, resp.StatusCode)
 
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -195,7 +194,7 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 				return
 			}
 
-			log.Printf(">>SRVC>>/relay: piping %s → client (chunking/flush per SSE event)\n", url)
+			t.Logf(">>SRVC>>/relay: piping %s → client (chunking/flush per SSE event)\n", url)
 
 			count := 0
 			// Use direct reader for real-time streaming
@@ -211,7 +210,7 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 				}
 
 				if len(line) > 0 {
-					log.Printf(">>SRVC>> recv %d bytes: %q\n", len(line), line)
+					t.Logf(">>SRVC>> recv %d bytes: %q\n", len(line), line)
 					s.eventsC.Store(count, line)
 					count++
 					// Forward exactly what we received (includes \n)
@@ -236,6 +235,7 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 func (s *sserelay) Run(t *testing.T, ctx context.Context) {
 	s.daprdA.WaitUntilRunning(t, ctx)
 	s.daprdB.WaitUntilRunning(t, ctx)
+	s.daprdC.WaitUntilRunning(t, ctx)
 
 	client := client.HTTPWithTimeout(t, 60*time.Second)
 
@@ -257,15 +257,10 @@ func (s *sserelay) Run(t *testing.T, ctx context.Context) {
 	}
 	require.NoError(t, err)
 
-	log.Printf("status=%s proto=%s", resp.Status, resp.Proto)
+	t.Logf("status=%s proto=%s", resp.Status, resp.Proto)
 
 	// Verify SSE headers
 	require.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
-
-	// And modify the test to be more resilient to connection issues:
-	// Replace the current event counting with timeout-based reading
-	timeoutCtx, timeoutCancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer timeoutCancel()
 
 	// Use direct reader for real-time streaming
 	done := make(chan struct{})
@@ -286,7 +281,7 @@ func (s *sserelay) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 
-			log.Printf(">>TEST>> recv %d bytes: %q\n", len(line), line)
+			t.Logf(">>TEST>> recv %d bytes: %q\n", len(line), line)
 
 			val, ok := s.eventsA.Load(int(eventCount.Load()))
 			assert.True(t, ok)
@@ -311,10 +306,10 @@ func (s *sserelay) Run(t *testing.T, ctx context.Context) {
 	select {
 	case <-done:
 		assert.EqualValues(t, 5, eventCount.Load())
-		log.Printf("done; received %d events", eventCount.Load())
+		t.Logf("done; received %d events", eventCount.Load())
 	case err = <-errChan:
 		require.NoError(t, err)
-	case <-timeoutCtx.Done():
+	case <-time.After(10 * time.Second):
 		assert.Fail(t, "test timed out")
 	}
 }
