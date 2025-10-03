@@ -14,10 +14,12 @@ limitations under the License.
 package http
 
 import (
+	"fmt"
 	"net/http"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
-	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 var endpointGroupHealthzV1 = &endpoints.EndpointGroup{
@@ -57,9 +59,13 @@ func (a *api) constructHealthzEndpoints() []endpoints.Endpoint {
 
 func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.healthz.IsReady() {
-		msg := messages.ErrHealthNotReady.WithFormat(a.healthz.GetUnhealthyTargets())
-		respondWithError(w, msg)
-		log.Debug(msg)
+		targets := a.healthz.GetUnhealthyTargets()
+		err := apierrors.Health(
+			errorcodes.HealthNotReady,
+			fmt.Sprintf("dapr is not ready: %v", targets),
+		)
+		respondWithError(w, err)
+		log.Debug(err)
 		return
 	}
 
@@ -67,9 +73,9 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	// This is used by some components (e.g. Consul nameresolver) to check if the app was replaced with a different one
 	qs := r.URL.Query()
 	if qs.Has("appid") && qs.Get("appid") != a.universal.AppID() {
-		msg := messages.ErrHealthAppIDNotMatch
-		respondWithError(w, msg)
-		log.Debug(msg)
+		err := apierrors.Health(errorcodes.HealthAppidNotMatch, "dapr app-id does not match")
+		respondWithError(w, err)
+		log.Debug(err)
 		return
 	}
 
@@ -78,9 +84,9 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) onGetOutboundHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.outboundHealthz.IsReady() {
-		msg := messages.ErrOutboundHealthNotReady
-		respondWithError(w, msg)
-		log.Debug(msg)
+		err := apierrors.Health(errorcodes.HealthOutboundNotReady, "dapr outbound is not ready")
+		respondWithError(w, err)
+		log.Debug(err)
 		return
 	}
 

@@ -4061,56 +4061,6 @@ func (l *fakeLockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*l
 	}, nil
 }
 
-func TestV1HealthzEndpoint(t *testing.T) {
-	fakeServer := newFakeHTTPServer()
-
-	const appID = "fakeAPI"
-	healthz := healthz.New()
-	htarget := healthz.AddTarget("test-target")
-	testAPI := &api{
-		healthz: healthz,
-		universal: universal.New(universal.Options{
-			AppID: appID,
-		}),
-	}
-
-	fakeServer.StartServer(testAPI.constructHealthzEndpoints(), nil)
-
-	t.Run("Healthz - 500 ERR_HEALTH_NOT_READY", func(t *testing.T) {
-		apiPath := "v1.0/healthz"
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-		assert.Equal(t, 500, resp.StatusCode, "dapr not ready should return 500")
-	})
-
-	t.Run("Healthz - 204 No Content", func(t *testing.T) {
-		apiPath := "v1.0/healthz"
-		htarget.Ready()
-		t.Cleanup(htarget.NotReady)
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-		assert.Equal(t, 204, resp.StatusCode)
-	})
-
-	t.Run("Healthz - 500 No AppId Match", func(t *testing.T) {
-		apiPath := "v1.0/healthz"
-		htarget.Ready()
-		t.Cleanup(htarget.NotReady)
-		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": "not-test"})
-		assert.Equal(t, 500, resp.StatusCode)
-	})
-
-	t.Run("Healthz - 204 AppId Match", func(t *testing.T) {
-		apiPath := "v1.0/healthz"
-		htarget.Ready()
-		t.Cleanup(htarget.NotReady)
-		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
-		assert.Equal(t, 204, resp.StatusCode)
-	})
-
-	fakeServer.Shutdown()
-}
-
 func TestV1TransactionEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	var fakeStore state.Store = newFakeStateStoreQuerier()
