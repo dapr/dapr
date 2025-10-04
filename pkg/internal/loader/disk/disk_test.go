@@ -237,6 +237,169 @@ metadata:
 	})
 }
 
+func TestLoadWithEnvVarSubstitution(t *testing.T) {
+	t.Run("substitute env vars in component manifest", func(t *testing.T) {
+		tmp := t.TempDir()
+
+		// Enable environment variable substitution
+		t.Setenv("DAPR_ENABLE_RESOURCES_ENV_VAR_SUBSTITUTION", "true")
+
+		yaml := `
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: redis-store
+spec:
+  type: state.redis
+  metadata:
+  - name: redisHost
+    value: "{{REDIS_HOST:localhost}}"
+  - name: redisPort
+    value: "{{REDIS_PORT:6379}}"
+  - name: redisPassword
+    value: "{{REDIS_PASSWORD}}"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, "redis.yaml"), []byte(yaml), fs.FileMode(0o600)))
+
+		// Set only REDIS_HOST environment variable
+		t.Setenv("REDIS_HOST", "redis.production.com")
+
+		loader := NewComponents(Options{Paths: []string{tmp}})
+		components, err := loader.Load(t.Context())
+		require.NoError(t, err)
+		require.Len(t, components, 1)
+
+		comp := components[0]
+		assert.Equal(t, "redis-store", comp.Name)
+
+		// Verify that env var substitution worked
+		metadata := comp.Spec.Metadata
+		require.Len(t, metadata, 3)
+
+		// REDIS_HOST should be substituted with env var value
+		assert.Equal(t, "redisHost", metadata[0].Name)
+		assert.Equal(t, "redis.production.com", metadata[0].Value.String())
+
+		// REDIS_PORT should use default value since env var is not set
+		assert.Equal(t, "redisPort", metadata[1].Name)
+		assert.Equal(t, "6379", metadata[1].Value.String())
+
+		// REDIS_PASSWORD should remain as template since no env var and no default
+		assert.Equal(t, "redisPassword", metadata[2].Name)
+		assert.Equal(t, "{{REDIS_PASSWORD}}", metadata[2].Value.String())
+	})
+
+	t.Run("multiple components with different env vars", func(t *testing.T) {
+		tmp := t.TempDir()
+
+		// Enable environment variable substitution
+		t.Setenv("DAPR_ENABLE_RESOURCES_ENV_VAR_SUBSTITUTION", "true")
+
+		yaml := `
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: postgres
+spec:
+  type: state.postgresql
+  metadata:
+  - name: connectionString
+    value: "host={{DB_HOST:localhost}} port={{DB_PORT:5432}}"
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: redis
+spec:
+  type: state.redis
+  metadata:
+  - name: host
+    value: "{{CACHE_HOST:localhost}}"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, "components.yaml"), []byte(yaml), fs.FileMode(0o600)))
+
+		t.Setenv("DB_HOST", "prod-postgres.example.com")
+		t.Setenv("CACHE_HOST", "prod-redis.example.com")
+
+		loader := NewComponents(Options{Paths: []string{tmp}})
+		components, err := loader.Load(t.Context())
+		require.NoError(t, err)
+		require.Len(t, components, 2)
+
+		// Check postgres component
+		postgresComp := components[0]
+		assert.Equal(t, "postgres", postgresComp.Name)
+		assert.Equal(t, "connectionString", postgresComp.Spec.Metadata[0].Name)
+		assert.Equal(t, "host=prod-postgres.example.com port=5432", postgresComp.Spec.Metadata[0].Value.String())
+
+		// Check redis component
+		redisComp := components[1]
+		assert.Equal(t, "redis", redisComp.Name)
+		assert.Equal(t, "host", redisComp.Spec.Metadata[0].Name)
+		assert.Equal(t, "prod-redis.example.com", redisComp.Spec.Metadata[0].Value.String())
+	})
+
+	t.Run("env var with empty value should be used", func(t *testing.T) {
+		tmp := t.TempDir()
+
+		// Enable environment variable substitution
+		t.Setenv("DAPR_ENABLE_RESOURCES_ENV_VAR_SUBSTITUTION", "true")
+
+		yaml := `
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: test-component
+spec:
+  type: test.type
+  metadata:
+  - name: value1
+    value: "{{EMPTY_VAR:default}}"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, "test.yaml"), []byte(yaml), fs.FileMode(0o600)))
+
+		// Set env var to empty string
+		t.Setenv("EMPTY_VAR", "")
+
+		loader := NewComponents(Options{Paths: []string{tmp}})
+		components, err := loader.Load(t.Context())
+		require.NoError(t, err)
+		require.Len(t, components, 1)
+
+		// Empty env var value should be used instead of default
+		assert.Equal(t, "", components[0].Spec.Metadata[0].Value.String())
+	})
+
+	t.Run("substitution disabled by default", func(t *testing.T) {
+		tmp := t.TempDir()
+
+		// Do NOT enable environment variable substitution
+
+		yaml := `
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: test-component
+spec:
+  type: test.type
+  metadata:
+  - name: value1
+    value: "{{TEST_VAR:default}}"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, "test.yaml"), []byte(yaml), fs.FileMode(0o600)))
+
+		t.Setenv("TEST_VAR", "actual_value")
+
+		loader := NewComponents(Options{Paths: []string{tmp}})
+		components, err := loader.Load(t.Context())
+		require.NoError(t, err)
+		require.Len(t, components, 1)
+
+		// Template should remain unchanged since substitution is disabled
+		assert.Equal(t, "{{TEST_VAR:default}}", components[0].Spec.Metadata[0].Value.String())
+	})
+}
+
 func Test_loadWithOrder(t *testing.T) {
 	t.Run("no file should return empty set", func(t *testing.T) {
 		tmp := t.TempDir()
