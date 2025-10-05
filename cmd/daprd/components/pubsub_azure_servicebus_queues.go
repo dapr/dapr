@@ -21,5 +21,5 @@ import (
 )
 
 func init() {
-	pubsubLoader.DefaultRegistry.RegisterComponent(queues.NewAzureServiceBusQueues, "azure.servicebus.queues")
+	pubsubLoader.DefaultRegistry.RegisterComponent(queues.NewAzureServiceBusQueues, "azure.servicebus.queues", "azure.servicebusqueues")
 }

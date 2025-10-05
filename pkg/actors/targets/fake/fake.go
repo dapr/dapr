@@ -30,7 +30,7 @@ type Fake struct {
 	fnInvokeMethod   func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	fnInvokeReminder func(context.Context, *api.Reminder) error
 	fnInvokeTimer    func(context.Context, *api.Reminder) error
-	fnInvokeStream   func(context.Context, *internalv1pb.InternalInvokeRequest, chan<- *internalv1pb.InternalInvokeResponse) error
+	fnInvokeStream   func(context.Context, *internalv1pb.InternalInvokeRequest, func(*internalv1pb.InternalInvokeResponse) (bool, error)) error
 	fnDeactivate     func(context.Context) error
 }
 
@@ -62,7 +62,7 @@ func New(actorType string) targets.Interface {
 		fnInvokeTimer: func(ctx context.Context, reminder *api.Reminder) error {
 			return nil
 		},
-		fnInvokeStream: func(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+		fnInvokeStream: func(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream func(*internalv1pb.InternalInvokeResponse) (bool, error)) error {
 			return nil
 		},
 		fnDeactivate: func(context.Context) error {
@@ -91,7 +91,7 @@ func (f *Fake) WithInvokeTimer(fn func(context.Context, *api.Reminder) error) *F
 	return f
 }
 
-func (f *Fake) WithInvokeStream(fn func(context.Context, *internalv1pb.InternalInvokeRequest, chan<- *internalv1pb.InternalInvokeResponse) error) *Fake {
+func (f *Fake) WithInvokeStream(fn func(context.Context, *internalv1pb.InternalInvokeRequest, func(*internalv1pb.InternalInvokeResponse) (bool, error)) error) *Fake {
 	f.fnInvokeStream = fn
 	return f
 }
@@ -125,7 +125,7 @@ func (f *Fake) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	return f.fnInvokeTimer(ctx, reminder)
 }
 
-func (f *Fake) InvokeStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+func (f *Fake) InvokeStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream func(*internalv1pb.InternalInvokeResponse) (bool, error)) error {
 	return f.fnInvokeStream(ctx, req, stream)
 }
 
