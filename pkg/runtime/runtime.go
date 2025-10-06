@@ -709,15 +709,15 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 	log.Infof("Internal gRPC server is running on %s:%d", a.runtimeConfig.internalGRPCListenAddress, a.runtimeConfig.internalGRPCPort)
 
+	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
+	if err := a.blockUntilAppIsReady(ctx); err != nil {
+		return err
+	}
+
 	a.initDirectMessaging(a.nameResolver)
 
 	if err := a.initActors(ctx); err != nil {
 		return fmt.Errorf("failed to initialize actors: %w", err)
-	}
-
-	a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
-	if err := a.blockUntilAppIsReady(ctx); err != nil {
-		return err
 	}
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
@@ -1278,6 +1278,7 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 
 	dialAddr := a.runtimeConfig.appConnectionConfig.ChannelAddress + ":" + strconv.Itoa(a.runtimeConfig.appConnectionConfig.Port)
 
+	counter := 0
 	for {
 		var (
 			conn net.Conn
@@ -1298,12 +1299,16 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 			break
 		}
 
+		counter++
 		select {
 		// Return
 		case <-ctx.Done():
 			return ctx.Err()
 		// prevents overwhelming the OS with open connections
 		case <-a.clock.After(time.Millisecond * 100):
+			if counter%100 == 0 {
+				log.Infof("waiting for application to listen on port %v", a.runtimeConfig.appConnectionConfig.Port)
+			}
 		}
 	}
 
