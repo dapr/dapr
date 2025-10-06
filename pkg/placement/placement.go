@@ -404,6 +404,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// Upsert incoming member only if the existing member info
 			// doesn't match with the incoming member info.
 			if p.raftNode.FSM().State().UpsertRequired(namespace, host) {
+				log.Debugf("Sending member change command; upserting appid %s in namespace %s with entities %v", appID, namespace, host.GetEntities())
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberUpsert,
 					host: raft.DaprHostMember{
