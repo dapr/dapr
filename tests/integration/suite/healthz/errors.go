@@ -27,6 +27,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -63,56 +64,37 @@ spec:
 	}
 }
 
-var respError struct {
-	Code    string `json:"errorCode"`
-	Message string `json:"message"`
-}
-
 func (r *richErrors) Run(t *testing.T, ctx context.Context) {
-	r.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := &http.Client{
-		Timeout: 5 * time.Second,
-	}
+	client := client.HTTP(t)
 
 	t.Run("health endpoint returns rich error on component failure", func(t *testing.T) {
-		// Give some time for component initialization to fail
-		assert.Eventually(t, func() bool {
-			url := fmt.Sprintf("http://localhost:%d/v1.0/healthz", r.daprd.HTTPPort())
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-			require.NoError(t, err)
+		r.daprd.WaitUntilTCPReady(t, ctx)
 
-			resp, err := httpClient.Do(req)
-			if err != nil {
-				return false
-			}
-			defer resp.Body.Close()
-
-			// Expect non-200 status when component fails
-			return resp.StatusCode != http.StatusOK
-		}, 10*time.Second, 100*time.Millisecond, "Expected health check to fail")
-
-		// Now verify the error structure
 		url := fmt.Sprintf("http://localhost:%d/v1.0/healthz", r.daprd.HTTPPort())
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		require.NoError(t, err)
 
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
+		assert.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
 
-		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			defer resp.Body.Close()
 
-		err = json.Unmarshal(body, &respError)
-		require.NoError(t, err)
+			var res respError
+			err = json.Unmarshal(body, &res)
+			require.NoError(t, err)
 
-		assert.Equal(t, errorcodes.HealthNotReady.Code, respError.Code)
-		assert.NotEmpty(t, respError.Message)
-		assert.Contains(t, respError.Message, "not ready")
+			assert.Equal(t, errorcodes.HealthNotReady.Code, res.Code)
+			assert.NotEmpty(t, res.Message)
+			assert.Contains(t, res.Message, "not ready")
+
+		}, 10*time.Second, 10*time.Millisecond)
 	})
 
 	t.Run("outbound health endpoint returns rich errors", func(t *testing.T) {
@@ -120,23 +102,30 @@ func (r *richErrors) Run(t *testing.T, ctx context.Context) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		require.NoError(t, err)
 
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
+		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 
-		// Outbound health checks component initialization
-		if resp.StatusCode != http.StatusOK {
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			defer resp.Body.Close()
 
-			err = json.Unmarshal(body, &respError)
+			var res respError
+			err = json.Unmarshal(body, &res)
 			require.NoError(t, err)
 
 			// Verify rich error structure
-			assert.Equal(t, errorcodes.HealthOutboundNotReady.Code, respError.Code)
-			assert.NotEmpty(t, respError.Message)
-			assert.Contains(t, respError.Message, "not ready")
-		}
+			assert.Equal(t, errorcodes.HealthOutboundNotReady.Code, res.Code)
+			assert.NotEmpty(t, res.Message)
+			assert.Contains(t, res.Message, "not ready")
+
+		}, 10*time.Second, 10*time.Millisecond)
 	})
+}
+
+type respError struct {
+	Code    string `json:"errorCode"`
+	Message string `json:"message"`
 }
