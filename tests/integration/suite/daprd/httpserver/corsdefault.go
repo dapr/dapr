@@ -72,7 +72,7 @@ func (h *corsdefault) Run(t *testing.T, ctx context.Context) {
 		res, err := h1Client.Do(req)
 		require.NoError(t, err)
 		defer closeBody(res.Body)
-		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Equal(t, http.StatusNotFound, res.StatusCode)
 
 		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
 		require.Empty(t, res.Header.Get("Vary"))
@@ -90,7 +90,7 @@ func (h *corsdefault) Run(t *testing.T, ctx context.Context) {
 		res, err := h1Client.Do(req)
 		require.NoError(t, err)
 		defer closeBody(res.Body)
-		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Equal(t, http.StatusNotFound, res.StatusCode)
 
 		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
 		require.Empty(t, res.Header.Get("Vary"))
