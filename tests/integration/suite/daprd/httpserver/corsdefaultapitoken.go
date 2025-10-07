@@ -67,19 +67,19 @@ func (h *corsdefaultapitoken) Run(t *testing.T, ctx context.Context) {
 		req.Header.Set("Origin", "*")
 		req.Header.Set("Access-Control-Request-Method", "GET")
 		// OPTIONS requests usually don't include the API token
+		// since API token is required in this test, it will return 401
 
 		// Body is closed below but the linter isn't seeing that
 		//nolint:bodyclose
 		res, err := h1Client.Do(req)
 		require.NoError(t, err)
 		defer closeBody(res.Body)
-		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Equal(t, http.StatusUnauthorized, res.StatusCode)
 
-		require.Equal(t, "*", res.Header.Get("Access-Control-Allow-Origin"))
-		require.NotEmpty(t, res.Header.Get("Vary"))
+		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
 	})
 
-	t.Run("OPTIONS, unnecessary token", func(t *testing.T) {
+	t.Run("OPTIONS, token", func(t *testing.T) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodOptions, fmt.Sprintf("http://localhost:%d/v1.0/metadata", h.proc.HTTPPort()), nil)
 		require.NoError(t, err)
 		req.Header.Set("Origin", "*")
@@ -93,8 +93,8 @@ func (h *corsdefaultapitoken) Run(t *testing.T, ctx context.Context) {
 		defer closeBody(res.Body)
 		require.Equal(t, http.StatusOK, res.StatusCode)
 
-		require.Equal(t, "*", res.Header.Get("Access-Control-Allow-Origin"))
-		require.NotEmpty(t, res.Header.Get("Vary"))
+		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
+		require.Empty(t, res.Header.Get("Vary"))
 	})
 
 	t.Run("GET", func(t *testing.T) {
