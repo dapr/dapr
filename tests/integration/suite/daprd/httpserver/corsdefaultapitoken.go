@@ -79,12 +79,29 @@ func (h *corsdefaultapitoken) Run(t *testing.T, ctx context.Context) {
 		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
 	})
 
-	t.Run("OPTIONS, token", func(t *testing.T) {
+	t.Run("OPTIONS, incorrect token", func(t *testing.T) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodOptions, fmt.Sprintf("http://localhost:%d/v1.0/metadata", h.proc.HTTPPort()), nil)
 		require.NoError(t, err)
 		req.Header.Set("Origin", "*")
 		req.Header.Set("Access-Control-Request-Method", "GET")
 		req.Header.Set("dapr-api-token", "foo")
+
+		// Body is closed below but the linter isn't seeing that
+		//nolint:bodyclose
+		res, err := h1Client.Do(req)
+		require.NoError(t, err)
+		defer closeBody(res.Body)
+		require.Equal(t, http.StatusUnauthorized, res.StatusCode)
+
+		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
+	})
+
+	t.Run("OPTIONS, correct token", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodOptions, fmt.Sprintf("http://localhost:%d/v1.0/metadata", h.proc.HTTPPort()), nil)
+		require.NoError(t, err)
+		req.Header.Set("Origin", "*")
+		req.Header.Set("Access-Control-Request-Method", "GET")
+		req.Header.Set("dapr-api-token", "test")
 
 		// Body is closed below but the linter isn't seeing that
 		//nolint:bodyclose
