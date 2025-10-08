@@ -35,6 +35,7 @@ func TestServerConf(t *testing.T) {
 			Name:                 "id2",
 			InitialCluster:       []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
 			ClientPort:           5001,
+			ClientListenAddress:  "127.0.0.1",
 			SpaceQuota:           0,
 			CompactionMode:       "",
 			CompactionRetention:  "",
@@ -68,6 +69,7 @@ func TestServerConf(t *testing.T) {
 			Name:                 "id2",
 			InitialCluster:       []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
 			ClientPort:           5002,
+			ClientListenAddress:  "0.0.0.0",
 			SpaceQuota:           0,
 			CompactionMode:       "",
 			CompactionRetention:  "",
@@ -89,7 +91,7 @@ func TestServerConf(t *testing.T) {
 		}
 		clientURL := url.URL{
 			Scheme: "http",
-			Host:   "127.0.0.1:5002",
+			Host:   "0.0.0.0:5002",
 		}
 
 		assert.Equal(t, listenURL, config.ListenPeerUrls[0])
@@ -106,6 +108,7 @@ func TestServerConf(t *testing.T) {
 			Name:                 "id2",
 			InitialCluster:       []string{"id1=http://hello1:5001", "id2=http://hello2:5002"},
 			ClientPort:           5002,
+			ClientListenAddress:  "localhost",
 			SpaceQuota:           0,
 			CompactionMode:       "",
 			CompactionRetention:  "",
@@ -122,7 +125,7 @@ func TestServerConf(t *testing.T) {
 		}
 		clientURL := url.URL{
 			Scheme: "http",
-			Host:   "127.0.0.1:5002",
+			Host:   "localhost:5002",
 		}
 		assert.Equal(t, listenURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
@@ -137,6 +140,7 @@ func TestServerConf(t *testing.T) {
 			Name:                 "id2",
 			InitialCluster:       []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
 			ClientPort:           5002,
+			ClientListenAddress:  "127.0.0.1",
 			SpaceQuota:           0,
 			CompactionMode:       "",
 			CompactionRetention:  "",
@@ -168,6 +172,7 @@ func TestServerConf(t *testing.T) {
 			Name:                 "id2",
 			InitialCluster:       []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
 			ClientPort:           5002,
+			ClientListenAddress:  "127.0.0.1",
 			SpaceQuota:           0,
 			CompactionMode:       "",
 			CompactionRetention:  "",

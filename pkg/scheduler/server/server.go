@@ -53,6 +53,7 @@ type Options struct {
 	EtcdName                       string
 	EtcdInitialCluster             []string
 	EtcdClientPort                 uint64
+	EtcdClientListenAddress        string
 	EtcdSpaceQuota                 int64
 	EtcdCompactionMode             string
 	EtcdCompactionRetention        string
@@ -108,6 +109,7 @@ func New(opts Options) (*Server, error) {
 		Embed:                      opts.EtcdEmbed,
 		InitialCluster:             opts.EtcdInitialCluster,
 		ClientPort:                 opts.EtcdClientPort,
+		ClientListenAddress:        opts.EtcdClientListenAddress,
 		SpaceQuota:                 opts.EtcdSpaceQuota,
 		CompactionMode:             opts.EtcdCompactionMode,
 		CompactionRetention:        opts.EtcdCompactionRetention,
