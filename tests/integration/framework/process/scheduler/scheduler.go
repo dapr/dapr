@@ -155,7 +155,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		args = append(args, "--etcd-embed="+strconv.FormatBool(*opts.embed))
 	}
 	if opts.clientEndpoints != nil {
-		args = append(args, "--etcd-client-endpoints="+strings.Join(*opts.clientEndpoints, ","))
+		args = append(args, `--etcd-client-endpoints=`+strings.Join(*opts.clientEndpoints, ","))
 	}
 
 	if opts.clientUsername != nil {

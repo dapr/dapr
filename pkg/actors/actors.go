@@ -397,6 +397,10 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		return nil
 	}
 
+	if len(cfg.HostedActorTypes) == 0 {
+		return nil
+	}
+
 	entityConfigs := make(map[string]api.EntityConfig)
 	for _, entityConfg := range cfg.EntityConfigs {
 		config := api.TranslateEntityConfig(entityConfg)
@@ -485,6 +489,10 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 
 func (a *actors) UnRegisterHosted(actorTypes ...string) {
 	if a.disabled.Load() != nil {
+		return
+	}
+
+	if len(actorTypes) == 0 {
 		return
 	}
 
