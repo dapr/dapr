@@ -15,6 +15,7 @@ package raft
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"sync"
@@ -37,6 +38,19 @@ const (
 	// TableDisseminate is the reserved command for dissemination loop.
 	TableDisseminate CommandType = 100
 )
+
+func (c CommandType) String() string {
+	switch c {
+	case MemberUpsert:
+		return "MemberUpsert"
+	case MemberRemove:
+		return "MemberRemove"
+	case TableDisseminate:
+		return "TableDisseminate"
+	default:
+		return fmt.Sprintf("Unknown CommandType: %d", c)
+	}
+}
 
 // FSM implements a finite state machine that is used
 // along with Raft to provide strong consistency. We implement

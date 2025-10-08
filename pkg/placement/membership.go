@@ -95,10 +95,12 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 
 				cnt, ok := p.memberUpdateCount.Get(ns)
 				if !ok {
+					log.Debugf("not adding raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s is not found", ns)
 					return true
 				}
 				c := cnt.Load()
 				if c == 0 {
+					log.Debugf("not adding raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s is 0", ns)
 					return true
 				}
 				if len(p.membershipCh) == 0 {
@@ -120,6 +122,7 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case op := <-p.membershipCh:
+			log.Debugf("processMembershipCommands: %v %s/%s", op.cmdType.String(), op.host.Namespace, op.host.AppID)
 			switch op.cmdType {
 			case raft.MemberUpsert, raft.MemberRemove:
 				// MemberUpsert updates the state of dapr runtime host whenever
@@ -134,6 +137,7 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 					default:
 					}
 
+					log.Debugf("taking disseminateLockslock to schedule dissemination for namespace %s", op.host.Namespace)
 					p.disseminateLocks.Lock(op.host.Namespace)
 					defer p.disseminateLocks.Unlock(op.host.Namespace)
 
@@ -170,7 +174,11 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 						// it will keep moving the time to disseminate the table, which will
 						// reduce the unnecessary table dissemination.
 						val, _ := p.disseminateNextTime.GetOrSet(op.host.Namespace, &atomic.Int64{})
-						val.Store(p.clock.Now().Add(p.disseminateTimeout).UnixNano())
+						nextDisseminateTime := p.clock.Now().Add(p.disseminateTimeout)
+						val.Store(nextDisseminateTime.UnixNano())
+						log.Debugf("dissemination scheduled for namespace %s at %v", op.host.Namespace, nextDisseminateTime)
+					} else {
+						log.Debugf("dissemination not scheduled for namespace %s", op.host.Namespace)
 					}
 				}()
 
@@ -190,6 +198,7 @@ func (p *Service) isLastMemberInNamespace(op hostMemberChange) bool {
 }
 
 func (p *Service) handleLastDisconnectedMemberInNamespace(op hostMemberChange) {
+	log.Debugf("handling last disconnected member in namespace %s , appid %s", op.host.Namespace, op.host.AppID)
 	// If this is the last host in the namespace, we should:
 	// - remove namespace-specific data structures to prevent memory-leaks
 	// - prevent next dissemination, because there are no more hosts in the namespace
@@ -201,6 +210,7 @@ func (p *Service) handleLastDisconnectedMemberInNamespace(op hostMemberChange) {
 func (p *Service) performTableDissemination(ctx context.Context, ns string) error {
 	nStreamConnPool := p.streamConnPool.getStreamCount(ns)
 	if nStreamConnPool == 0 {
+		log.Debugf("skipping table dissemination for namespace %s, no streams", ns)
 		return nil
 	}
 
@@ -208,6 +218,7 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	ac, _ := p.memberUpdateCount.GetOrSet(ns, &atomic.Uint32{})
 	cnt := ac.Load()
 	if cnt == 0 {
+		log.Debugf("skipping table dissemination for namespace %s, no member update", ns)
 		return nil
 	}
 
@@ -217,6 +228,7 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	default:
 	}
 
+	log.Debugf("taking disseminateLockslock for table dissemination for namespace %s", ns)
 	p.disseminateLocks.Lock(ns)
 	defer p.disseminateLocks.Unlock(ns)
 
