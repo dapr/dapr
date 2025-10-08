@@ -16,6 +16,7 @@ package helm
 import (
 	"context"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -102,6 +103,18 @@ func requireArgsValue(t *testing.T, args []string, arg, value string) {
 				require.Equal(t, value, args[i+1])
 				return
 			}
+		}
+	}
+	assert.Fail(t, "arg not found", arg)
+}
+
+func requireArgsBoolValue(t *testing.T, args []string, arg, value string) {
+	t.Helper()
+	for _, a := range args {
+		if a == arg {
+			v := strings.Split(a, "=")
+			require.Equal(t, value, v[1])
+			return
 		}
 	}
 	assert.Fail(t, "arg not found", arg)

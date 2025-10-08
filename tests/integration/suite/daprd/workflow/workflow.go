@@ -14,6 +14,7 @@ limitations under the License.
 package workflow
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/apphealth"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/basic"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/continueasnew"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp"

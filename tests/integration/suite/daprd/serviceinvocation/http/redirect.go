@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -42,14 +41,10 @@ type redirect struct {
 }
 
 func (r *redirect) Setup(t *testing.T) []framework.Option {
-	fp := ports.Reserve(t, 1)
-	r.port = fp.Port(t)
-
 	redirectHandler := func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(w, req, fmt.Sprintf("http://localhost:%d/helloworld", r.port), http.StatusMovedPermanently)
 	}
 
-	fp.Free(t)
 	srv1 := prochttp.New(t,
 		prochttp.WithPort(r.port),
 		prochttp.WithHandlerFunc("/events", redirectHandler),
@@ -57,6 +52,8 @@ func (r *redirect) Setup(t *testing.T) []framework.Option {
 			r.called.Store(true)
 		}),
 	)
+
+	r.port = srv1.Port()
 
 	r.daprd = daprd.New(t,
 		daprd.WithConfigManifests(t, `
@@ -80,7 +77,7 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(fp, srv1, r.daprd),
+		framework.WithProcesses(srv1, r.daprd),
 	}
 }
 
