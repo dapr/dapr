@@ -19,9 +19,6 @@
 package runtime
 
 import (
-	reflect "reflect"
-	sync "sync"
-
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -29,6 +26,8 @@ import (
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
 )
 
 const (
@@ -10279,7 +10278,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP() []byte {
 }
 
 var file_dapr_proto_runtime_v1_dapr_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_dapr_proto_runtime_v1_dapr_proto_msgTypes = make([]protoimpl.MessageInfo, 157)
+var file_dapr_proto_runtime_v1_dapr_proto_msgTypes = make([]protoimpl.MessageInfo, 158)
 var file_dapr_proto_runtime_v1_dapr_proto_goTypes = []interface{}{
 	(PubsubSubscriptionType)(0),                        // 0: dapr.proto.runtime.v1.PubsubSubscriptionType
 	(ActorRuntime_ActorRuntimeStatus)(0),               // 1: dapr.proto.runtime.v1.ActorRuntime.ActorRuntimeStatus
@@ -12224,7 +12223,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_runtime_v1_dapr_proto_rawDesc,
 			NumEnums:      4,
-			NumMessages:   157,
+			NumMessages:   158,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
