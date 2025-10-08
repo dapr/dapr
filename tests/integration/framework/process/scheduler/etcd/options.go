@@ -19,7 +19,7 @@ type options struct {
 	username *string
 	password *string
 
-	nodes uint64
+	nodes int
 }
 
 func WithUsername(username string) Option {
@@ -34,7 +34,7 @@ func WithPassword(password string) Option {
 	}
 }
 
-func WithNodes(nodes uint64) Option {
+func WithNodes(nodes int) Option {
 	return func(o *options) {
 		o.nodes = nodes
 	}

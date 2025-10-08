@@ -49,8 +49,9 @@ func New(t *testing.T, fopts ...Option) *Etcd {
 	}
 
 	require.Equal(t, opts.username != nil, opts.password != nil, "username and password must be set together")
+	require.Positive(t, opts.nodes, "nodes must be greater than 0")
 
-	fp := ports.Reserve(t, int(opts.nodes*2))
+	fp := ports.Reserve(t, opts.nodes*2)
 
 	configs := make([]*embed.Config, opts.nodes)
 	endpoints := make([]string, opts.nodes)
@@ -75,7 +76,7 @@ func New(t *testing.T, fopts ...Option) *Etcd {
 
 		config.ListenMetricsUrls = nil
 
-		config.Name = "etcd" + strconv.FormatUint(i, 10)
+		config.Name = "etcd" + strconv.Itoa(i)
 
 		configs[i] = config
 		endpoints[i] = clientEndpoint
