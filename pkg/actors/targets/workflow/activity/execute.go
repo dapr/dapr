@@ -112,7 +112,10 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	// send completed event to orchestrator wf actor
 	wfActorType := a.workflowActorType
 	if router := taskEvent.GetRouter(); router != nil {
-		wfActorType = a.actorTypeBuilder.Workflow(router.GetSourceAppID())
+		src := router.GetSourceAppID()
+		if src != "" {
+			wfActorType = a.actorTypeBuilder.Workflow(src)
+		}
 	}
 
 	req := internalsv1pb.

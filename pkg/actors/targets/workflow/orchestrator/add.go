@@ -53,7 +53,9 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	sourceAppID := o.appID
 	returningToParent := e.GetSubOrchestrationInstanceCompleted() != nil || e.GetSubOrchestrationInstanceFailed() != nil
 	if !returningToParent && e.GetRouter() != nil {
-		sourceAppID = e.GetRouter().GetSourceAppID()
+		if v := e.GetRouter().GetSourceAppID(); v != "" {
+			sourceAppID = v
+		}
 	}
 
 	if _, err := o.createReminder(ctx, "new-event", nil, nil, sourceAppID); err != nil {
