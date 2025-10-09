@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
@@ -30,8 +32,6 @@ import (
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/otel"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -40,7 +40,6 @@ func init() {
 
 type otelenv struct {
 	httpapp      *prochttp.HTTP
-	daprdNoEnv   *daprd.Daprd
 	daprdWithEnv *daprd.Daprd
 	collector    *otel.Collector
 }
@@ -116,14 +115,14 @@ func (o *otelenv) Run(t *testing.T, ctx context.Context) {
 
 		// Get spans and verify service name
 		spans := o.collector.GetSpans()
-		require.Greater(t, len(spans), 0, "Should have received spans")
+		require.NotEmpty(t, spans, "Should have received spans")
 
 		// Find span with custom service name
 		var foundSpan *tracepb.ResourceSpans
 		for _, span := range spans {
-			if span.Resource != nil {
-				for _, attr := range span.Resource.Attributes {
-					if attr.Key == "service.name" && attr.Value.GetStringValue() == "my-custom-service" {
+			if span.GetResource() != nil {
+				for _, attr := range span.GetResource().GetAttributes() {
+					if attr.GetKey() == "service.name" && attr.GetValue().GetStringValue() == "my-custom-service" {
 						foundSpan = span
 						break
 					}
@@ -133,10 +132,10 @@ func (o *otelenv) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, foundSpan, "Should find span with custom service name")
 
 		// Verify custom service name from OTEL_SERVICE_NAME && resource attributes from OTEL_RESOURCE_ATTRIBUTES
-		serviceName := getResourceAttribute(foundSpan.Resource, "service.name")
+		serviceName := getResourceAttribute(foundSpan.GetResource(), "service.name")
 		require.Equal(t, "my-custom-service", serviceName)
-		namespace := getResourceAttribute(foundSpan.Resource, "service.namespace")
-		podName := getResourceAttribute(foundSpan.Resource, "k8s.pod.name")
+		namespace := getResourceAttribute(foundSpan.GetResource(), "service.namespace")
+		podName := getResourceAttribute(foundSpan.GetResource(), "k8s.pod.name")
 		require.Equal(t, "production", namespace)
 		require.Equal(t, "pod-123", podName)
 	})
@@ -147,9 +146,9 @@ func getResourceAttribute(resource *resourcepb.Resource, key string) string {
 	if resource == nil {
 		return ""
 	}
-	for _, attr := range resource.Attributes {
-		if attr.Key == key {
-			return attr.Value.GetStringValue()
+	for _, attr := range resource.GetAttributes() {
+		if attr.GetKey() == key {
+			return attr.GetValue().GetStringValue()
 		}
 	}
 	return ""

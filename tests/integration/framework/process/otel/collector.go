@@ -25,6 +25,8 @@ import (
 	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
@@ -98,10 +100,17 @@ func (c *Collector) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	t.Helper()
 
 	require.EventuallyWithT(t, func(co *assert.CollectT) {
-		conn, err := grpc.DialContext(ctx, c.OTLPGRPCAddress(), grpc.WithInsecure(), grpc.WithBlock())
-		if assert.NoError(co, err) {
-			defer conn.Close()
+		conn, err := grpc.NewClient(c.OTLPGRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if !assert.NoError(co, err) {
+			return
 		}
+		defer conn.Close()
+
+		// Actually test the connection by checking its state
+		conn.Connect()
+		state := conn.GetState()
+		assert.NotEqual(co, connectivity.TransientFailure, state, "connection should not be in transient failure state")
+		assert.NotEqual(co, connectivity.Shutdown, state, "connection should not be shutdown")
 	}, 20*time.Second, 10*time.Millisecond)
 }
 
@@ -119,7 +128,7 @@ func (c *Collector) Export(ctx context.Context, req *coltracepb.ExportTraceServi
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.spans = append(c.spans, req.ResourceSpans...)
+	c.spans = append(c.spans, req.GetResourceSpans()...)
 	return &coltracepb.ExportTraceServiceResponse{}, nil
 }
 
