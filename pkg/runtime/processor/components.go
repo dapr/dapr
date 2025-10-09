@@ -33,6 +33,10 @@ import (
 // Init initializes a component of a category and reports the result.
 func (p *Processor) Init(ctx context.Context, comp componentsapi.Component) error {
 	initerr := p.init(ctx, comp)
+	// If the context is canceled, we want  to return an init error.
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		initerr = errors.Join(initerr, fmt.Errorf("init timeout for component %s", comp.LogName()))
+	}
 
 	// after performing the initialization, report the result
 	condition := operatorv1.ResourceConditionStatus_STATUS_SUCCESS
@@ -216,10 +220,6 @@ func (p *Processor) processComponentAndDependents(ctx context.Context, comp comp
 	defer cancel()
 
 	err = p.Init(ctx, comp)
-	// If the context is canceled, we want  to return an init error.
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		err = fmt.Errorf("init timeout for component %s exceeded after %s", comp.LogName(), timeout.String())
-	}
 	if err != nil {
 		log.Errorf("Failed to init component %s: %s", comp.LogName(), err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
