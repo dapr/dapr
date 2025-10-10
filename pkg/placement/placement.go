@@ -48,10 +48,7 @@ var log = logger.NewLogger("dapr.placement")
 const (
 	// membershipChangeChSize is the channel size of membership change request from Dapr runtime.
 	// MembershipChangeWorker will process actor host member change request.
-	membershipChangeChSize = 100
-
-	// disseminateTimerInterval is the interval to disseminate the latest consistent hashing table.
-	disseminateTimerInterval = 500 * time.Millisecond
+	membershipChangeChSize = 10000
 
 	// faultyHostDetectDuration is the maximum duration after which a host is considered faulty.
 	// Dapr runtime sends a heartbeat (stored in lastHeartBeat) every second.
@@ -113,9 +110,6 @@ type Service struct {
 
 	// disseminateLocks is a map of lock per namespace for disseminating the hashing tables
 	disseminateLocks cmap.Mutex[string]
-
-	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
-	disseminateNextTime haxmap.Map[string, *atomic.Int64]
 
 	// keepaliveTime sets the interval at which the placement service sends keepalive pings to daprd
 	// on the gRPC stream to check if the connection is still alive. Default is 2 seconds.
@@ -200,23 +194,22 @@ func New(opts ServiceOpts) (*Service, error) {
 	}
 
 	return &Service{
-		streamConnPool:      newStreamConnPool(),
-		membershipCh:        make(chan hostMemberChange, membershipChangeChSize),
-		raftNode:            raftServer,
-		maxAPILevel:         opts.MaxAPILevel,
-		minAPILevel:         opts.MinAPILevel,
-		clock:               &clock.RealClock{},
-		closedCh:            make(chan struct{}),
-		sec:                 opts.SecProvider,
-		disseminateLocks:    cmap.NewMutex[string](),
-		memberUpdateCount:   *haxmap.New[string, *atomic.Uint32](),
-		disseminateNextTime: *haxmap.New[string, *atomic.Int64](),
-		keepAliveTime:       opts.KeepAliveTime,
-		keepAliveTimeout:    opts.KeepAliveTimeout,
-		disseminateTimeout:  opts.DisseminateTimeout,
-		port:                opts.Port,
-		listenAddress:       opts.ListenAddress,
-		htarget:             opts.Healthz.AddTarget("placement-service"),
+		streamConnPool:     newStreamConnPool(),
+		membershipCh:       make(chan hostMemberChange, membershipChangeChSize),
+		raftNode:           raftServer,
+		maxAPILevel:        opts.MaxAPILevel,
+		minAPILevel:        opts.MinAPILevel,
+		clock:              &clock.RealClock{},
+		closedCh:           make(chan struct{}),
+		sec:                opts.SecProvider,
+		disseminateLocks:   cmap.NewMutex[string](),
+		memberUpdateCount:  *haxmap.New[string, *atomic.Uint32](),
+		keepAliveTime:      opts.KeepAliveTime,
+		keepAliveTimeout:   opts.KeepAliveTimeout,
+		disseminateTimeout: opts.DisseminateTimeout,
+		port:               opts.Port,
+		listenAddress:      opts.ListenAddress,
+		htarget:            opts.Healthz.AddTarget("placement-service"),
 	}, nil
 }
 
@@ -233,6 +226,7 @@ func (p *Service) Run(ctx context.Context) error {
 		p.MonitorLeadership,
 		func(ctx context.Context) error {
 			<-ctx.Done()
+			log.Info("Placement service is stopping...")
 			close(p.closedCh)
 			return nil
 		},
