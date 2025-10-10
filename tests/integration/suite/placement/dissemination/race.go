@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -15,7 +15,9 @@ package dissemination
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -50,7 +52,13 @@ func (r *race) Setup(t *testing.T) []framework.Option {
 func (r *race) Run(t *testing.T, ctx context.Context) {
 	r.place.WaitUntilRunning(t, ctx)
 
-	for i := range 10 {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		metrics := r.place.Metrics(c, ctx)
+		assert.Len(c, metrics.MatchMetric("dapr_placement_leader_status"), 1)
+		assert.Len(c, metrics.MatchMetric("dapr_placement_raft_leader_status"), 1)
+	}, time.Second*15, time.Millisecond*10)
+
+	for i := range 1100 {
 		host := &v1pb.Host{
 			Name:      fmt.Sprintf("inithost%d", i),
 			Namespace: fmt.Sprintf("initns%d", i),
@@ -59,10 +67,11 @@ func (r *race) Run(t *testing.T, ctx context.Context) {
 			Id:        fmt.Sprintf("initapp%d", i),
 			ApiLevel:  uint32(20),
 		}
-		_ = r.place.RegisterHost(t, ctx, host)
+		r.simulateHost(t, ctx, host)
 	}
+	time.Sleep(3 * time.Second)
 
-	t.Run("register and unregister in loop", func(t *testing.T) {
+	t.Run("register mode hosts", func(t *testing.T) {
 		host := &v1pb.Host{
 			Name:      "myapp1",
 			Namespace: "appns",
@@ -80,7 +89,7 @@ func (r *race) Run(t *testing.T, ctx context.Context) {
 			ApiLevel:  uint32(20),
 		}
 		// wait for placement to be ready and register the initial host
-		stream := r.waitForPlacementReady(t, ctx, host)
+		stream := r.reportDaprStatusAndWaitForAck(t, ctx, host)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			placementTables, errR := stream.Recv()
@@ -97,35 +106,44 @@ func (r *race) Run(t *testing.T, ctx context.Context) {
 			}
 		}, time.Second*15, time.Millisecond*10)
 
-		tableUpdates := r.collectPlacementTableUpdates(t, ctx, stream)
-
-		time.Sleep(5 * time.Second)
-		tableUpdates.mu.RLock()
-		require.Empty(t, tableUpdates.tables)
-		tableUpdates.mu.RUnlock()
-
-		for range 50 {
-			require.NoError(t, stream.Send(emptyHost))
-			time.Sleep(50 * time.Millisecond)
-			require.NoError(t, stream.Send(host))
-		}
+		time.Sleep(1 * time.Second)
+		require.NoError(t, stream.Send(emptyHost))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			tableUpdates.mu.RLock()
-			defer tableUpdates.mu.RUnlock()
-			assert.GreaterOrEqual(c, len(tableUpdates.tables), 1)
-		}, time.Second*10, time.Millisecond*10)
+			placementTables, errR := stream.Recv()
+			if !assert.NoError(c, errR) {
+				_ = stream.CloseSend()
+				return
+			}
 
-		// check last table update
-		tableUpdates.mu.RLock()
-		lastTableUpdate := tableUpdates.tables[len(tableUpdates.tables)-1]
-		tableUpdates.mu.RUnlock()
-		require.Len(t, lastTableUpdate.GetEntries(), 1)
-		require.Contains(t, lastTableUpdate.GetEntries(), "appactor1")
+			t.Logf("received operation: %s", placementTables.GetOperation())
+
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Empty(c, placementTables.GetTables().GetEntries())
+			}
+		}, time.Second*15, time.Millisecond*10)
+
+		time.Sleep(1 * time.Second)
+		require.NoError(t, stream.Send(host))
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, errR := stream.Recv()
+			if !assert.NoError(c, errR) {
+				_ = stream.CloseSend()
+				return
+			}
+
+			t.Logf("received operation: %s", placementTables.GetOperation())
+
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
+				assert.Contains(c, placementTables.GetTables().GetEntries(), "appactor1")
+			}
+		}, time.Second*15, time.Millisecond*10)
 	})
 }
 
-func (r *race) waitForPlacementReady(t *testing.T, ctx context.Context, initialHost *v1pb.Host) v1pb.Placement_ReportDaprStatusClient {
+func (r *race) getPlacementClient(t *testing.T, ctx context.Context) v1pb.PlacementClient {
 	t.Helper()
 
 	//nolint:staticcheck
@@ -135,9 +153,16 @@ func (r *race) waitForPlacementReady(t *testing.T, ctx context.Context, initialH
 	)
 	require.NoError(t, err)
 	client := v1pb.NewPlacementClient(conn)
+	return client
+}
+
+func (r *race) reportDaprStatusAndWaitForAck(t *testing.T, ctx context.Context, initialHost *v1pb.Host) v1pb.Placement_ReportDaprStatusClient {
+	t.Helper()
+	client := r.getPlacementClient(t, ctx)
 
 	var stream v1pb.Placement_ReportDaprStatusClient
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var err error
 		stream, err = client.ReportDaprStatus(ctx)
 		if !assert.NoError(c, err) {
 			return
@@ -161,37 +186,60 @@ func (r *race) waitForPlacementReady(t *testing.T, ctx context.Context, initialH
 	return stream
 }
 
-type placementTablesUpdates struct {
-	mu     sync.RWMutex
-	tables []*v1pb.PlacementTables
-}
+func (r *race) simulateHost(t *testing.T, ctx context.Context, host *v1pb.Host) {
+	pclient := r.getPlacementClient(t, ctx)
+	doneCh := make(chan error)
+	streamCtx, streamCancel := context.WithCancel(ctx)
 
-func (r *race) collectPlacementTableUpdates(t *testing.T, ctx context.Context, stream v1pb.Placement_ReportDaprStatusClient) *placementTablesUpdates {
-	updates := &placementTablesUpdates{}
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
+	t.Cleanup(func() {
+		streamCancel()
+		select {
+		case err := <-doneCh:
+			if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
+				require.NoError(t, err)
 			}
-
-			in, err := stream.Recv()
-			if err != nil {
-				return
-			}
-
-			if in.GetOperation() == "update" {
-				tables := in.GetTables()
-				assert.NotEmptyf(t, tables, "Placement table is empty")
-
-				updates.mu.Lock()
-				updates.tables = append(updates.tables, tables)
-				updates.mu.Unlock()
-			}
+		case <-time.After(time.Second * 5):
+			assert.Fail(t, "timeout waiting for stream to close")
 		}
-	}()
+	})
+	go func(pclient v1pb.PlacementClient) {
+		stream, err := pclient.ReportDaprStatus(streamCtx)
+		mu := sync.Mutex{}
+		if err != nil {
+			doneCh <- err
+			return
+		}
+		err = stream.Send(host)
+		if err != nil {
+			doneCh <- err
+			return
+		}
+		_, err = stream.Recv()
+		if err != nil {
+			doneCh <- err
+			return
+		}
 
-	return updates
+		// Send dapr status messages every second
+		go func(stream v1pb.Placement_ReportDaprStatusClient) {
+			for {
+				select {
+				case <-streamCtx.Done():
+					return
+				case <-time.After(1 * time.Second):
+					mu.Lock()
+					err := stream.Send(host)
+					mu.Unlock()
+					if err != nil {
+						doneCh <- err
+						return
+					}
+				}
+			}
+		}(stream)
+		<-streamCtx.Done()
+		mu.Lock()
+		defer mu.Unlock()
+		doneCh <- stream.CloseSend()
+	}(pclient)
 }
