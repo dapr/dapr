@@ -15,7 +15,6 @@ package actors
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -65,20 +64,6 @@ func WithPlacement(placement *placement.Placement) Option {
 func WithScheduler(scheduler *scheduler.Scheduler) Option {
 	return func(o *options) {
 		o.scheduler = scheduler
-	}
-}
-
-func WithFeatureSchedulerReminders(enabled bool) Option {
-	return func(o *options) {
-		o.daprdConfigs = append(o.daprdConfigs, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: appconfig
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: `+strconv.FormatBool(enabled))
 	}
 }
 

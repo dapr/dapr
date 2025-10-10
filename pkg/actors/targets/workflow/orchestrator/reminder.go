@@ -41,14 +41,6 @@ func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, da
 
 	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
 
-	var period string
-	var oneshot bool
-	if o.schedulerReminders {
-		oneshot = true
-	} else {
-		period = o.reminderInterval.String()
-	}
-
 	var adata *anypb.Any
 	if data != nil {
 		adata, err = anypb.New(data)
@@ -66,7 +58,6 @@ func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, da
 		Data:      adata,
 		DueTime:   dueTime,
 		Name:      reminderName,
-		Period:    period,
-		IsOneShot: oneshot,
+		IsOneShot: true,
 	})
 }

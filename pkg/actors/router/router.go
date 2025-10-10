@@ -53,13 +53,11 @@ type Options struct {
 	Resiliency         resiliency.Provider
 	Reminders          reminders.Interface
 	GRPC               *manager.Manager
-	SchedulerReminders bool
 	MaxRequestBodySize int
 }
 
 type router struct {
-	namespace          string
-	schedulerReminders bool
+	namespace string
 
 	table      table.Interface
 	placement  placement.Interface
@@ -74,14 +72,13 @@ type router struct {
 
 func New(opts Options) Interface {
 	return &router{
-		namespace:          opts.Namespace,
-		schedulerReminders: opts.SchedulerReminders,
-		table:              opts.Table,
-		placement:          opts.Placement,
-		resiliency:         opts.Resiliency,
-		grpc:               opts.GRPC,
-		reminders:          opts.Reminders,
-		clock:              clock.RealClock{},
+		namespace:  opts.Namespace,
+		table:      opts.Table,
+		placement:  opts.Placement,
+		resiliency: opts.Resiliency,
+		grpc:       opts.GRPC,
+		reminders:  opts.Reminders,
+		clock:      clock.RealClock{},
 		callOptions: []grpc.CallOption{
 			grpc.MaxCallRecvMsgSize(opts.MaxRequestBodySize),
 			grpc.MaxCallSendMsgSize(opts.MaxRequestBodySize),
