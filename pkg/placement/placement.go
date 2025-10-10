@@ -377,12 +377,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	for p.hasLeadership.Load() {
 		select {
 		case <-ctx.Done():
-			return p.handleErrorOnStream(ctx.Err(), hostName, &isActorHost, namespace)
+			return p.handleErrorOnStream(ctx.Err(), firstMessage, &isActorHost)
 		case <-p.closedCh:
 			return errors.New("placement service is closed")
 		case in := <-daprStream.recvCh:
 			if in.err != nil {
-				return p.handleErrorOnStream(in.err, hostName, &isActorHost, namespace)
+				return p.handleErrorOnStream(in.err, firstMessage, &isActorHost)
 			}
 
 			host := in.host
@@ -504,7 +504,7 @@ func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
 	return nil
 }
 
-func (p *Service) handleErrorOnStream(err error, hostName string, isActorHost *atomic.Bool, namespace string) error {
+func (p *Service) handleErrorOnStream(err error, firstMessage *placementv1pb.Host, isActorHost *atomic.Bool) error {
 	// Unwrap and check if it's a gRPC status error
 	if st, ok := status.FromError(err); ok {
 		if st.Code() == codes.Canceled {
@@ -513,16 +513,20 @@ func (p *Service) handleErrorOnStream(err error, hostName string, isActorHost *a
 	}
 
 	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
-		log.Infof("Stream connection for app %s is disconnected gracefully: %s", hostName, err)
+		log.Infof("Stream connection for app %s is disconnected gracefully: %s", firstMessage.GetName(), err)
 	} else {
-		log.Errorf("Stream connection for app %s is disconnected with the error: %v.", hostName, err)
+		log.Errorf("Stream connection for app %s is disconnected with the error: %v.", firstMessage.GetName(), err)
 	}
 
 	if isActorHost.Load() {
 		select {
 		case p.membershipCh <- hostMemberChange{
 			cmdType: raft.MemberRemove,
-			host:    raft.DaprHostMember{Name: hostName, Namespace: namespace},
+			host: raft.DaprHostMember{
+				Name:      firstMessage.GetName(),
+				Namespace: firstMessage.GetNamespace(),
+				AppID:     firstMessage.GetId(),
+			},
 		}:
 		case <-p.closedCh:
 			return errors.New("placement service is closed")
@@ -540,7 +544,7 @@ func requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *atomi
 
 	reportsActors := len(req.GetEntities()) > 0
 	existsInPlacementTables := isActorHost.Load() // if the member had previously reported actors
-	isActorHost.Store(reportsActors)
+	isActorHost.Store(reportsActors || existsInPlacementTables)
 
 	return reportsActors || existsInPlacementTables
 }
