@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -180,18 +179,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 			assert.Equal(c, 2, testServer.streamConnPool.getStreamCount("ns2"))
 			assert.Equal(c, uint32(3), testServer.streamConnPool.streamIndex.Load())
 			assert.Len(c, testServer.streamConnPool.reverseLookup, 3)
-
-			// This indicates the member has been added to the dissemination queue and is
-			// going to be disseminated in the next tick
-			ts1, ok := testServer.disseminateNextTime.Get("ns1")
-			if assert.True(c, ok) {
-				assert.Equal(c, clock.Now().Add(testServer.disseminateTimeout).UnixNano(), ts1.Load())
-			}
-
-			ts2, ok := testServer.disseminateNextTime.Get("ns2")
-			if assert.True(c, ok) {
-				assert.Equal(c, clock.Now().Add(testServer.disseminateTimeout).UnixNano(), ts2.Load())
-			}
 		}, 10*time.Second, 100*time.Millisecond)
 
 		// Move the clock forward so dissemination is triggered
@@ -206,10 +193,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 			}
 			return updateMsgCnt == 3
 		}, 20*time.Second, 100*time.Millisecond)
-
-		// Ignore the next disseminateTimeout.
-		val, _ := testServer.disseminateNextTime.GetOrSet("ns1", &atomic.Int64{})
-		val.Store(0)
 
 		// Check members has been saved correctly in the raft store
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -246,7 +229,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		}, 10*time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
 
 		// Wait until next table dissemination and check there haven't been any updates
-		clock.Step(disseminateTimerInterval)
+		clock.Step(time.Second)
 		require.Eventually(t, func() bool {
 			cnt, ok := testServer.memberUpdateCount.Get("ns1")
 			if !ok {
@@ -263,14 +246,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 			// Disseminate locks have been deleted for ns1, but not ns2
 			assert.Equal(c, 1, testServer.disseminateLocks.ItemCount())
 
-			// Disseminate timers have been deleted for ns1, but not ns2
-			_, ok := testServer.disseminateNextTime.Get("ns1")
-			assert.False(c, ok)
-			_, ok = testServer.disseminateNextTime.Get("ns2")
-			assert.True(c, ok)
-
 			// Member update counts have been deleted for ns1, but not ns2
-			_, ok = testServer.memberUpdateCount.Get("ns1")
+			_, ok := testServer.memberUpdateCount.Get("ns1")
 			assert.False(c, ok)
 			_, ok = testServer.memberUpdateCount.Get("ns2")
 			assert.True(c, ok)
@@ -291,16 +268,9 @@ func TestMembershipChangeWorker(t *testing.T) {
 			// Disseminate lock for ns2 hasn't been deleted
 			assert.Equal(c, 1, testServer.disseminateLocks.ItemCount())
 
-			// Disseminate timer for ns2 hasn't been deleted,
-			// because there's still streams in the namespace
-			_, ok := testServer.disseminateNextTime.Get("ns1")
-			assert.False(c, ok)
-			_, ok = testServer.disseminateNextTime.Get("ns2")
-			assert.True(c, ok)
-
 			// Member update count for ns2 hasn't been deleted,
 			// because there's still streams in the namespace
-			_, ok = testServer.memberUpdateCount.Get("ns2")
+			_, ok := testServer.memberUpdateCount.Get("ns2")
 			assert.True(c, ok)
 
 			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns1"))
@@ -319,14 +289,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 			// Disseminate locks have been deleted
 			assert.Equal(c, 0, testServer.disseminateLocks.ItemCount())
 
-			// Disseminate timers have been deleted
-			_, ok := testServer.disseminateNextTime.Get("ns1")
-			assert.False(c, ok)
-			_, ok = testServer.disseminateNextTime.Get("ns2")
-			assert.False(c, ok)
-
 			// Member update counts have been deleted
-			_, ok = testServer.memberUpdateCount.Get("ns1")
+			_, ok := testServer.memberUpdateCount.Get("ns1")
 			assert.False(c, ok)
 			_, ok = testServer.memberUpdateCount.Get("ns2")
 			assert.False(c, ok)
@@ -397,10 +361,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 				return false
 			}
 		}, 10*time.Second, 100*time.Millisecond)
-
-		// Ignore the next disseminateTimeout.
-		val, _ := testServer.disseminateNextTime.GetOrSet("ns1", &atomic.Int64{})
-		val.Store(0)
 
 		// Check members have been correctly saved in the raft store
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
