@@ -276,8 +276,13 @@ func (p *placement) Lock(ctx context.Context) (context.Context, context.CancelFu
 }
 
 func (p *placement) handleLockOperation(ctx context.Context) {
-	p.tableUnlock = p.lock.Lock()
 	lockVersion := p.lockVersion.Add(1)
+
+	if p.tableUnlock != nil {
+		return
+	}
+
+	p.tableUnlock = p.lock.Lock()
 
 	clear(p.hashTable.Entries)
 
@@ -345,7 +350,9 @@ func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string
 }
 
 func (p *placement) handleUnlockOperation(ctx context.Context) {
-	p.updateVersion.Add(1)
+	if p.updateVersion.Add(1) != p.lockVersion.Load() {
+		return
+	}
 
 	select {
 	case <-p.readyCh:
