@@ -56,6 +56,8 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-faultyHostDetectCh:
+			log.Debugf("faultyHostDetectCh triggered")
+			defer log.Debugf("faultyHostDetectCh done")
 			// This only runs once when the placement service acquires leadership
 			// It loops through all the members in the raft store that have been connected to the
 			// previous leader and checks if they have already sent a heartbeat. If they haven't,
@@ -74,7 +76,11 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					log.Debugf("Try to remove outdated host: %s, no heartbeat record", h.Name)
 					p.membershipCh <- hostMemberChange{
 						cmdType: raft.MemberRemove,
-						host:    raft.DaprHostMember{Name: h.Name, Namespace: h.Namespace},
+						host: raft.DaprHostMember{
+							Name:      h.Name,
+							Namespace: h.Namespace,
+							AppID:     h.AppID,
+						},
 					}
 				}
 				return true
@@ -86,10 +92,11 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 				continue
 			}
 
-			now := t.UnixNano()
+			log.Debugf("disseminateTimer triggered")
+			defer log.Debugf("disseminateTimer done")
 			// Check if there are actor runtime member changes per namespace.
 			p.disseminateNextTime.ForEach(func(ns string, disseminateTime *atomic.Int64) bool {
-				if disseminateTime.Load() > now {
+				if disseminateTime.Load() > t.UnixNano() {
 					return true // Continue to the next namespace
 				}
 
@@ -214,6 +221,10 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		return nil
 	}
 
+	log.Debugf("taking disseminateLockslock for table dissemination for namespace %s", ns)
+	p.disseminateLocks.Lock(ns)
+	defer p.disseminateLocks.Unlock(ns)
+
 	// Ignore dissemination if there is no member update
 	ac, _ := p.memberUpdateCount.GetOrSet(ns, &atomic.Uint32{})
 	cnt := ac.Load()
@@ -227,10 +238,6 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		return nil
 	default:
 	}
-
-	log.Debugf("taking disseminateLockslock for table dissemination for namespace %s", ns)
-	p.disseminateLocks.Lock(ns)
-	defer p.disseminateLocks.Unlock(ns)
 
 	// Get a snapshot copy of the current streams, so we don't have to
 	// lock them while we're doing the dissemination (long operation)
