@@ -15,7 +15,6 @@ package service
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,12 +86,12 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
 		injectorDeployment := findInjectorDeployment(deployments)
 		require.NotNil(t, injectorDeployment, "dapr-sidecar-injector deployment should exist")
 		containers := injectorDeployment.Spec.Template.Spec.Containers
-		assert.Greater(t, len(containers), 0, "Sidecar injector should have at least one container")
+		assert.NotEmpty(t, containers, "Sidecar injector should have at least one container")
 
 		// No OTEL env vars are set by default
 		injectorContainer := containers[0]
 		for _, envvar := range injectorContainer.Env {
-			assert.False(t, strings.Contains(envvar.Name, "OTEL"), "Base configuration should not have any OTEL environment variables")
+			assert.NotContains(t, envvar.Name, "OTEL", "Base configuration should not have any OTEL environment variables")
 		}
 	})
 
@@ -101,7 +100,7 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
 		injectorDeployment := findInjectorDeployment(deployments)
 		require.NotNil(t, injectorDeployment, "dapr-sidecar-injector deployment should exist")
 		containers := injectorDeployment.Spec.Template.Spec.Containers
-		assert.Greater(t, len(containers), 0, "Sidecar injector should have at least one container")
+		assert.NotEmpty(t, containers, "Sidecar injector should have at least one container")
 
 		injectorContainer := containers[0]
 		envMap := make(map[string]string)
@@ -120,7 +119,7 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
 		injectorDeployment := findInjectorDeployment(deployments)
 		require.NotNil(t, injectorDeployment, "dapr-sidecar-injector deployment should exist")
 		containers := injectorDeployment.Spec.Template.Spec.Containers
-		assert.Greater(t, len(containers), 0, "Sidecar injector should have at least one container")
+		assert.NotEmpty(t, containers, "Sidecar injector should have at least one container")
 
 		injectorContainer := containers[0]
 		envMap := make(map[string]string)
