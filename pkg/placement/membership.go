@@ -34,9 +34,6 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 	baselineHeartbeatTimestamp := p.clock.Now().UnixNano()
 	log.Infof("Baseline membership heartbeat timestamp: %v", baselineHeartbeatTimestamp)
 
-	disseminateTimer := p.clock.NewTicker(disseminateTimerInterval)
-	defer disseminateTimer.Stop()
-
 	// Reset memberUpdateCount to zero for every namespace when leadership is acquired.
 	p.streamConnPool.forEachNamespace(func(ns string, _ map[uint32]*daprdStream) {
 		val, _ := p.memberUpdateCount.GetOrSet(ns, &atomic.Uint32{})
@@ -86,36 +83,6 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 				return true
 			})
 			faultyHostDetectCh = nil
-		case t := <-disseminateTimer.C():
-			// Earlier stop when leadership is lost.
-			if !p.hasLeadership.Load() {
-				continue
-			}
-
-			log.Debugf("disseminateTimer triggered")
-			defer log.Debugf("disseminateTimer done")
-			// Check if there are actor runtime member changes per namespace.
-			p.disseminateNextTime.ForEach(func(ns string, disseminateTime *atomic.Int64) bool {
-				if disseminateTime.Load() > t.UnixNano() {
-					return true // Continue to the next namespace
-				}
-
-				cnt, ok := p.memberUpdateCount.Get(ns)
-				if !ok {
-					log.Debugf("not adding raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s is not found", ns)
-					return true
-				}
-				c := cnt.Load()
-				if c == 0 {
-					log.Debugf("not adding raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s is 0", ns)
-					return true
-				}
-				if len(p.membershipCh) == 0 {
-					log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s: %d", ns, c)
-					p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate, host: raft.DaprHostMember{Namespace: ns}}
-				}
-				return true
-			})
 		}
 	}
 }
@@ -129,75 +96,84 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case op := <-p.membershipCh:
-			log.Debugf("processMembershipCommands: %v %s/%s", op.cmdType.String(), op.host.Namespace, op.host.AppID)
-			switch op.cmdType {
-			case raft.MemberUpsert, raft.MemberRemove:
-				// MemberUpsert updates the state of dapr runtime host whenever
-				// Dapr runtime sends heartbeats every X seconds.
-				// MemberRemove will be queued by faultHostDetectTimer.
-				// Even if ApplyCommand is failed, both commands will retry
-				// until the state is consistent.
-				func() {
-					select {
-					case <-ctx.Done():
-						return
-					default:
-					}
-
-					log.Debugf("taking disseminateLockslock to schedule dissemination for namespace %s", op.host.Namespace)
-					p.disseminateLocks.Lock(op.host.Namespace)
-					defer p.disseminateLocks.Unlock(op.host.Namespace)
-
-					// ApplyCommand returns true only if the command changes the hashing table.
-					updateCount, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
-					if raftErr != nil {
-						log.Errorf("fail to apply command: %v", raftErr)
-						return
-					}
-
-					numActorTypesInNamespace := p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace)
-
-					var lastMemberInNamespace bool
-					if op.cmdType == raft.MemberRemove {
-						lastMemberInNamespace = p.isLastMemberInNamespace(op)
-						p.lastHeartBeat.Delete(op.host.NamespaceAndName())
-						if lastMemberInNamespace {
-							p.handleLastDisconnectedMemberInNamespace(op)
-						}
-					}
-
-					if updateCount || lastMemberInNamespace {
-						monitoring.RecordActorRuntimesCount(numActorTypesInNamespace, op.host.Namespace)
-					}
-
-					// If the change is removing the last member in the namespace,
-					// we can skip the dissemination, because there are no more
-					// hosts in the namespace to disseminate to
-					if updateCount && !lastMemberInNamespace {
-						c, _ := p.memberUpdateCount.GetOrSet(op.host.Namespace, &atomic.Uint32{})
-						c.Add(1)
-
-						// disseminateNextTime will be updated whenever apply is done, so that
-						// it will keep moving the time to disseminate the table, which will
-						// reduce the unnecessary table dissemination.
-						val, _ := p.disseminateNextTime.GetOrSet(op.host.Namespace, &atomic.Int64{})
-						nextDisseminateTime := p.clock.Now().Add(p.disseminateTimeout)
-						val.Store(nextDisseminateTime.UnixNano())
-						log.Debugf("dissemination scheduled for namespace %s at %v", op.host.Namespace, nextDisseminateTime)
-					} else {
-						log.Debugf("dissemination not scheduled for namespace %s", op.host.Namespace)
-					}
-				}()
-
-			case raft.TableDisseminate:
-				// TableDisseminate will be triggered by disseminateTimer.
-				// This disseminates the latest consistent hashing tables to Dapr runtime.
-				if err := p.performTableDissemination(ctx, op.host.Namespace); err != nil {
-					log.Errorf("fail to perform table dissemination. Details: %v", err)
-				}
+			if p.membershipUpsertRemove(ctx, op) {
+				log.Debugf("dissemination running for namespace %s", op.host.Namespace)
+				p.membershipUpsertRemove(ctx, hostMemberChange{cmdType: raft.TableDisseminate, host: raft.DaprHostMember{Namespace: op.host.Namespace}})
 			}
 		}
 	}
+}
+
+func (p *Service) membershipUpsertRemove(ctx context.Context, op hostMemberChange) bool {
+	log.Debugf("processMembershipCommands: %v %s/%s", op.cmdType.String(), op.host.Namespace, op.host.AppID)
+	switch op.cmdType {
+	case raft.MemberUpsert, raft.MemberRemove:
+		// MemberUpsert updates the state of dapr runtime host whenever
+		// Dapr runtime sends heartbeats every X seconds.
+		// MemberRemove will be queued by faultHostDetectTimer.
+		// Even if ApplyCommand is failed, both commands will retry
+		// until the state is consistent.
+		log.Debugf("taking disseminateLockslock to schedule dissemination for namespace %s", op.host.Namespace)
+		p.disseminateLocks.Lock(op.host.Namespace)
+		defer p.disseminateLocks.Unlock(op.host.Namespace)
+
+		if ctx.Err() != nil {
+			return false
+		}
+
+		// ApplyCommand returns true only if the command changes the hashing table.
+		updateCount, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
+		if raftErr != nil {
+			log.Errorf("fail to apply command: %v", raftErr)
+			return false
+		}
+
+		numActorTypesInNamespace := p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace)
+
+		var lastMemberInNamespace bool
+		if op.cmdType == raft.MemberRemove {
+			lastMemberInNamespace = p.isLastMemberInNamespace(op)
+			p.lastHeartBeat.Delete(op.host.NamespaceAndName())
+			if lastMemberInNamespace {
+				p.handleLastDisconnectedMemberInNamespace(op)
+			}
+		}
+
+		if updateCount || lastMemberInNamespace {
+			monitoring.RecordActorRuntimesCount(numActorTypesInNamespace, op.host.Namespace)
+		}
+
+		// If the change is removing the last member in the namespace,
+		// we can skip the dissemination, because there are no more
+		// hosts in the namespace to disseminate to
+		if updateCount && !lastMemberInNamespace {
+			c, _ := p.memberUpdateCount.GetOrSet(op.host.Namespace, &atomic.Uint32{})
+			c.Add(1)
+
+			cnt, ok := p.memberUpdateCount.Get(op.host.Namespace)
+			if !ok {
+				return false
+			}
+			cc := cnt.Load()
+			if cc == 0 {
+				return false
+			}
+
+			log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s: %d", op.host.Namespace, cc)
+			return true
+		} else {
+			log.Debugf("dissemination not scheduled for namespace %s", op.host.Namespace)
+		}
+
+	case raft.TableDisseminate:
+		// TableDisseminate will be triggered by disseminateTimer.
+		// This disseminates the latest consistent hashing tables to Dapr runtime.
+		if err := p.performTableDissemination(ctx, op.host.Namespace); err != nil {
+			log.Errorf("fail to perform table dissemination. Details: %v", err)
+		}
+	}
+
+	return false
 }
 
 func (p *Service) isLastMemberInNamespace(op hostMemberChange) bool {
@@ -210,7 +186,6 @@ func (p *Service) handleLastDisconnectedMemberInNamespace(op hostMemberChange) {
 	// - remove namespace-specific data structures to prevent memory-leaks
 	// - prevent next dissemination, because there are no more hosts in the namespace
 	p.disseminateLocks.Delete(op.host.Namespace)
-	p.disseminateNextTime.Del(op.host.Namespace)
 	p.memberUpdateCount.Del(op.host.Namespace)
 }
 

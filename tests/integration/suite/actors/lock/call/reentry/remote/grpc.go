@@ -80,6 +80,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 
 func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	g.app1.WaitUntilRunning(t, ctx)
+	g.app2.WaitUntilRunning(t, ctx)
 
 	client := g.app1.GRPCClient(t, ctx)
 
