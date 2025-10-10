@@ -31,21 +31,21 @@ import (
 )
 
 func init() {
-	suite.Register(new(corsdefault))
+	suite.Register(new(corsallowall))
 }
 
-type corsdefault struct {
+type corsallowall struct {
 	proc *procdaprd.Daprd
 }
 
-func (h *corsdefault) Setup(t *testing.T) []framework.Option {
-	h.proc = procdaprd.New(t)
+func (h *corsallowall) Setup(t *testing.T) []framework.Option {
+	h.proc = procdaprd.New(t, procdaprd.WithDaprAPIToken(t, "test"), procdaprd.WithAllowedOrigins(t, "*"))
 	return []framework.Option{
 		framework.WithProcesses(h.proc),
 	}
 }
 
-func (h *corsdefault) Run(t *testing.T, ctx context.Context) {
+func (h *corsallowall) Run(t *testing.T, ctx context.Context) {
 	h.proc.WaitUntilRunning(t, ctx)
 
 	h1Client := client.HTTP(t)
@@ -64,18 +64,19 @@ func (h *corsdefault) Run(t *testing.T, ctx context.Context) {
 	t.Run("OPTIONS", func(t *testing.T) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodOptions, fmt.Sprintf("http://localhost:%d/v1.0/metadata", h.proc.HTTPPort()), nil)
 		require.NoError(t, err)
-		req.Header.Set("Origin", "https://test.com")
+		req.Header.Set("Origin", "*")
 		req.Header.Set("Access-Control-Request-Method", "GET")
+		// OPTIONS requests usually don't include the API token
 
 		// Body is closed below but the linter isn't seeing that
 		//nolint:bodyclose
 		res, err := h1Client.Do(req)
 		require.NoError(t, err)
 		defer closeBody(res.Body)
-		require.Equal(t, http.StatusNotFound, res.StatusCode)
+		require.Equal(t, http.StatusOK, res.StatusCode)
 
-		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
-		require.Empty(t, res.Header.Get("Vary"))
+		require.Equal(t, "*", res.Header.Get("Access-Control-Allow-Origin"))
+		require.NotEmpty(t, res.Header.Get("Vary"))
 	})
 
 	t.Run("OPTIONS, unnecessary token", func(t *testing.T) {
@@ -90,27 +91,13 @@ func (h *corsdefault) Run(t *testing.T, ctx context.Context) {
 		res, err := h1Client.Do(req)
 		require.NoError(t, err)
 		defer closeBody(res.Body)
-		require.Equal(t, http.StatusNotFound, res.StatusCode)
+		require.Equal(t, http.StatusOK, res.StatusCode)
 
-		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
-		require.Empty(t, res.Header.Get("Vary"))
+		require.Equal(t, "*", res.Header.Get("Access-Control-Allow-Origin"))
+		require.NotEmpty(t, res.Header.Get("Vary"))
 	})
 
 	t.Run("GET", func(t *testing.T) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/metadata", h.proc.HTTPPort()), nil)
-		require.NoError(t, err)
-
-		// Body is closed below but the linter isn't seeing that
-		//nolint:bodyclose
-		res, err := h1Client.Do(req)
-		require.NoError(t, err)
-		defer closeBody(res.Body)
-		require.Equal(t, http.StatusOK, res.StatusCode)
-
-		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
-	})
-
-	t.Run("GET, unnecessary token", func(t *testing.T) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/metadata", h.proc.HTTPPort()), nil)
 		require.NoError(t, err)
 		req.Header.Set("dapr-api-token", "test")
@@ -121,6 +108,21 @@ func (h *corsdefault) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer closeBody(res.Body)
 		require.Equal(t, http.StatusOK, res.StatusCode)
+
+		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
+	})
+
+	t.Run("GET, incorrect token", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/metadata", h.proc.HTTPPort()), nil)
+		require.NoError(t, err)
+		req.Header.Set("dapr-api-token", "foo")
+
+		// Body is closed below but the linter isn't seeing that
+		//nolint:bodyclose
+		res, err := h1Client.Do(req)
+		require.NoError(t, err)
+		defer closeBody(res.Body)
+		require.Equal(t, http.StatusUnauthorized, res.StatusCode)
 
 		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
 	})

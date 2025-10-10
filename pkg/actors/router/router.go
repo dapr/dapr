@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc"
@@ -244,10 +245,15 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	attempt := resiliency.GetAttempt(ctx)
-	code := status.Code(err)
-	if code == codes.Unavailable {
-		// Destroy the connection and force a re-connection on the next attempt
-		return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
+	s, ok := status.FromError(err)
+	if ok {
+		if s.Code() == codes.Unavailable ||
+			(s.Code() == codes.Internal &&
+				(s.Message() == "error invoke actor method: remote actor moved" ||
+					strings.HasSuffix(s.Message(), ": placement is disseminating"))) {
+			// Destroy the connection and force a re-connection on the next attempt
+			return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
+		}
 	}
 
 	return res, backoff.Permanent(err)
