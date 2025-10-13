@@ -291,6 +291,16 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		)
 	}
 
+	// TODO: @joshvanl: remove in 1.17
+	if c.SkipReminderMigration {
+		env = append(env,
+			corev1.EnvVar{
+				Name:  "DAPR_SKIP_REMINDER_MIGRATION",
+				Value: "true",
+			},
+		)
+	}
+
 	container := &corev1.Container{
 		Name:            injectorConsts.SidecarContainerName,
 		Image:           c.SidecarImage,
