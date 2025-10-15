@@ -16,6 +16,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -71,6 +72,19 @@ func New(opts Options) storage.Interface {
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
 func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context, fn func(context.Context, *api.LookupActorRequest) bool) {
 	defer s.htarget.Ready()
+
+	// When enabled, skips the migration of legacy state store reminders to
+	// scheduler reminders. Useful to greatly improve placement actor
+	// dissemination time when no migration is required.
+	// TODO: @joshvanl: skip in v1.17
+	if os.Getenv("DAPR_SKIP_REMINDER_MIGRATION") == "true" {
+		log.Infof("Skipping migration of reminders to scheduler as requested.")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
+	defer cancel()
+
 	err := migration.ToScheduler(ctx, migration.ToSchedulerOptions{
 		Table:              s.table,
 		StateReminders:     s.stateReminder,
