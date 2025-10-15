@@ -81,6 +81,9 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.KubeClusterDomain = i.config.KubeClusterDomain
 	sidecar.SchedulerEnabled = i.schedulerEnabled
 
+	// TODO: @joshvanl: remove in v1.17
+	sidecar.SkipReminderMigration = i.config.SkipReminderMigration
+
 	// Set addresses for actor services only if it's not explicitly globally disabled
 	// Even if actors are disabled, however, the placement-host-address flag will still be included if explicitly set in the annotation dapr.io/placement-host-address
 	// So, if the annotation is already set, we accept that and also use placement for actors services

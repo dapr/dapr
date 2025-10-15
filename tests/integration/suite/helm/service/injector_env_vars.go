@@ -34,6 +34,7 @@ type env struct {
 	base                  *helm.Helm
 	withOtelEnvVars       *helm.Helm
 	withEscapedCommas     *helm.Helm
+	withSkipMigrations *helm.Helm
 	withSchedulerEnabled  *helm.Helm
 	withSchedulerDisabled *helm.Helm
 }
@@ -77,11 +78,19 @@ func (e *env) Setup(t *testing.T) []framework.Option {
 		),
 	)
 
+	e.withSkipMigrations = helm.New(t,
+		helm.WithShowOnly("charts/dapr_sidecar_injector", "dapr_sidecar_injector_deployment.yaml"),
+		helm.WithValues(
+			"global.reminders.skipMigration=true",
+		),
+	)
+
 	return []framework.Option{
 		framework.WithProcesses(
 			e.base,
 			e.withOtelEnvVars,
 			e.withEscapedCommas,
+			e.withSkipMigrations,
 			e.withSchedulerEnabled,
 			e.withSchedulerDisabled,
 		),
@@ -148,6 +157,21 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "escaped-test", envMap["OTEL_SERVICE_NAME"])
 		assert.Equal(t, "k8s.pod.name=my-pod,k8s.namespace.name=default,k8s.deployment.name=my-app", envMap["OTEL_RESOURCE_ATTRIBUTES"])
 		assert.Equal(t, "http://otel-collector:4317", envMap["OTEL_EXPORTER_OTLP_ENDPOINT"])
+	})
+
+	t.Run("skip migrations env var", func(t *testing.T) {
+		deployments := helm.UnmarshalStdout[appsv1.Deployment](t, e.withSkipMigrations)
+		injectorDeployment := findInjectorDeployment(deployments)
+		require.NotNil(t, injectorDeployment, "dapr-sidecar-injector deployment should exist")
+		containers := injectorDeployment.Spec.Template.Spec.Containers
+		assert.NotEmpty(t, containers, "Sidecar injector should have at least one container")
+
+		injectorContainer := containers[0]
+		envMap := make(map[string]string)
+		for _, envvar := range injectorContainer.Env {
+			envMap[envvar.Name] = envvar.Value
+		}
+		assert.Equal(t, "true", envMap["DAPR_SKIP_REMINDER_MIGRATION"])
 	})
 
 	t.Run("scheduler enabled", func(t *testing.T) {
