@@ -3,6 +3,7 @@ module github.com/dapr/dapr
 go 1.24.6
 
 require (
+	connectrpc.com/connect v1.19.1
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/PuerkitoBio/purell v1.2.1
@@ -74,7 +75,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822
 	google.golang.org/grpc v1.73.0
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.9
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.31.0
 	k8s.io/apiextensions-apiserver v0.31.0
