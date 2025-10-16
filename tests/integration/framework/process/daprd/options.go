@@ -1,4 +1,4 @@
-/*
+/*t *testing.T
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -359,4 +359,10 @@ func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
 	}
+}
+
+func WithSkipStateStoreReminderMigration(t *testing.T) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"DAPR_SKIP_REMINDER_MIGRATION", "true",
+	))
 }
