@@ -30,7 +30,7 @@ import (
 )
 
 type Etcd struct {
-	fp        *ports.Ports
+	fp        []*ports.Ports
 	configs   []*embed.Config
 	etcds     []*embed.Etcd
 	endpoints []string
@@ -51,24 +51,25 @@ func New(t *testing.T, fopts ...Option) *Etcd {
 	require.Equal(t, opts.username != nil, opts.password != nil, "username and password must be set together")
 	require.Positive(t, opts.nodes, "nodes must be greater than 0")
 
-	fp := ports.Reserve(t, opts.nodes*2)
-
 	configs := make([]*embed.Config, opts.nodes)
 	endpoints := make([]string, opts.nodes)
 	clusterEntries := make([]string, opts.nodes)
+	fp := make([]*ports.Ports, opts.nodes)
 
 	for i := range opts.nodes {
 		config := embed.NewConfig()
 		config.LogLevel = "error"
 		config.Dir = t.TempDir()
 
-		clientEndpoint := "http://127.0.0.1:" + strconv.Itoa(fp.Port(t))
+		fp[i] = ports.Reserve(t, 2)
+
+		clientEndpoint := "http://127.0.0.1:" + strconv.Itoa(fp[i].Port(t))
 		lurl, err := url.Parse(clientEndpoint)
 		require.NoError(t, err)
 		config.ListenClientUrls = []url.URL{*lurl}
 		config.AdvertiseClientUrls = []url.URL{*lurl}
 
-		peerEndpoint := "http://127.0.0.1:" + strconv.Itoa(fp.Port(t))
+		peerEndpoint := "http://127.0.0.1:" + strconv.Itoa(fp[i].Port(t))
 		lurl, err = url.Parse(peerEndpoint)
 		require.NoError(t, err)
 		config.ListenPeerUrls = []url.URL{*lurl}
@@ -98,9 +99,9 @@ func New(t *testing.T, fopts ...Option) *Etcd {
 func (e *Etcd) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
 
-	e.fp.Free(t)
+	for i, config := range e.configs {
+		e.fp[i].Free(t)
 
-	for _, config := range e.configs {
 		etcd, err := embed.StartEtcd(config)
 		require.NoError(t, err)
 
@@ -121,10 +122,10 @@ func (e *Etcd) Run(t *testing.T, ctx context.Context) {
 func (e *Etcd) Cleanup(t *testing.T) {
 	t.Helper()
 
-	for _, e := range e.etcds {
-		e.Close()
+	for i, et := range e.etcds {
+		et.Close()
+		e.fp[i].Cleanup(t)
 	}
-	e.fp.Cleanup(t)
 }
 
 func (e *Etcd) Endpoints() []string {
