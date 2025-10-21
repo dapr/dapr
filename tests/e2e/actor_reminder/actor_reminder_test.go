@@ -18,6 +18,7 @@ package actor_reminder_e2e
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -69,17 +70,6 @@ type actorReminder struct {
 	Period   string `json:"period,omitempty"`
 	TTL      string `json:"ttl,omitempty"`
 	Callback string `json:"callback,omitempty"`
-}
-
-type reminderResponse struct {
-	ActorID        string      `json:"actorID,omitempty"`
-	ActorType      string      `json:"actorType,omitempty"`
-	Name           string      `json:"name,omitempty"`
-	Data           interface{} `json:"data"`
-	Period         string      `json:"period"`
-	DueTime        string      `json:"dueTime"`
-	RegisteredTime string      `json:"registeredTime,omitempty"`
-	ExpirationTime string      `json:"expirationTime,omitempty"`
 }
 
 func parseLogEntries(resp []byte) []actorLogEntry {
@@ -235,6 +225,8 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 
 	t.Run("Actor reminder unregister then restart should not trigger anymore.", func(t *testing.T) {
 		var wg sync.WaitGroup
+		errCh := make(chan error, numIterations)
+
 		for iteration := 1; iteration <= numIterations; iteration++ {
 			wg.Add(1)
 			go func(iteration int) {
@@ -247,11 +239,17 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 
 					// Deleting pre-existing reminder, just in case…
 					_, errInternal := utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", restartReminderName))
-					require.NoError(t, errInternal)
+					if errInternal != nil {
+						errCh <- fmt.Errorf("iteration %d, actor %d: failed to delete reminder: %w", iteration, i, errInternal)
+						return
+					}
 
 					// Registering reminder
 					_, errInternal = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", restartReminderName), reminderBody)
-					require.NoError(t, errInternal)
+					if errInternal != nil {
+						errCh <- fmt.Errorf("iteration %d, actor %d: failed to register reminder: %w", iteration, i, errInternal)
+						return
+					}
 				}
 
 				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
@@ -259,13 +257,19 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 
 				for i := 0; i < numActorsPerThread; i++ {
 					_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-					require.NoError(t, err)
+					if err != nil {
+						errCh <- fmt.Errorf("iteration %d, actor %d: failed health check: %w", iteration, i, err)
+						return
+					}
 
 					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
 					// Unregistering reminder
 					t.Logf("Unregistering reminder: %s %s ...", actorID, restartReminderName)
 					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", restartReminderName))
-					require.NoError(t, err)
+					if err != nil {
+						errCh <- fmt.Errorf("iteration %d, actor %d: failed to unregister reminder: %w", iteration, i, err)
+						return
+					}
 				}
 
 				t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURL)
@@ -285,6 +289,14 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 			}(iteration)
 		}
 		wg.Wait()
+		close(errCh)
+
+		var errs []error
+		for err := range errCh {
+			errs = append(errs, err)
+		}
+
+		require.NoError(t, errors.Join(errs...))
 
 		err = backoff.RetryNotify(
 			func() error {
@@ -369,6 +381,8 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 
 	t.Run("Actor reminder register and get should succeed.", func(t *testing.T) {
 		var wg sync.WaitGroup
+		errCh := make(chan error, numIterations)
+
 		for iteration := 1; iteration <= numIterations; iteration++ {
 			wg.Add(1)
 			go func(iteration int) {
@@ -379,11 +393,17 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 					actorID := fmt.Sprintf(actorIDGetTemplate, i+(1000*iteration))
 					// Deleting pre-existing reminder
 					_, errInternal := utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
-					require.NoError(t, errInternal)
+					if errInternal != nil {
+						errCh <- fmt.Errorf("iteration %d, actor %d: failed to delete reminder: %w", iteration, i, errInternal)
+						return
+					}
 
 					// Registering reminder
 					_, errInternal = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet), reminderBody)
-					require.NoError(t, errInternal)
+					if errInternal != nil {
+						errCh <- fmt.Errorf("iteration %d, actor %d: failed to register reminder: %w", iteration, i, errInternal)
+						return
+					}
 				}
 
 				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
@@ -391,6 +411,14 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 			}(iteration)
 		}
 		wg.Wait()
+		close(errCh)
+
+		var errs []error
+		for err := range errCh {
+			errs = append(errs, err)
+		}
+
+		require.NoError(t, errors.Join(errs...))
 
 		t.Log("Checking reminders get succeed ...")
 		for iteration := 1; iteration <= numIterations; iteration++ {
@@ -441,7 +469,7 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 
 	t.Run("Actor reminder with repetition should run correct number of times", func(t *testing.T) {
 		reminderName := "repeatable-reminder"
-		actorID := "repetable-reminder-actor"
+		actorID := "repeatable-reminder-actor"
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName))
 		require.NoError(t, err)
 		logs, err := utils.HTTPDelete(logsURL)
