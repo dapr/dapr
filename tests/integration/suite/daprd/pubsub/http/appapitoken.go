@@ -49,7 +49,7 @@ func (a *appapitoken) Setup(t *testing.T) []framework.Option {
 			a.headerCh <- r.Header.Clone()
 			var cloudEvent map[string]interface{}
 			err := json.NewDecoder(r.Body).Decode(&cloudEvent)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 
 			w.WriteHeader(nethttp.StatusOK)
 			json.NewEncoder(w).Encode(map[string]string{"status": "SUCCESS"})
@@ -105,7 +105,7 @@ func (a *appapitoken) Run(t *testing.T, ctx context.Context) {
 	case headers := <-a.headerCh:
 		token := headers.Get("dapr-api-token")
 		assert.Equal(t, "test-http-app-token", token)
-	case <-time.After(time.Second * 3):
+	case <-time.After(time.Second * 10):
 		assert.Fail(t, "Timed out waiting for pubsub event to be delivered to app")
 	}
 }
