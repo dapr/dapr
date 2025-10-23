@@ -59,9 +59,6 @@ func (l *local) Setup(t *testing.T) []framework.Option {
 	l.daprd = daprd.New(t,
 		daprd.WithAppPort(app.Port()),
 		daprd.WithDaprGracefulShutdownSeconds(180),
-		daprd.WithAppHealthProbeInterval(1),
-		daprd.WithAppHealthProbeThreshold(1),
-		daprd.WithAppHealthCheck(true),
 	)
 
 	return []framework.Option{
