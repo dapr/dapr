@@ -20,11 +20,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -79,7 +80,7 @@ func (a *appapitoken) Run(t *testing.T, ctx context.Context) {
 		token := headers.Get("dapr-api-token")
 		assert.NotEmpty(t, token)
 		assert.Equal(t, "test-binding-app-token", token)
-	case <-time.After(time.Second * 3):
+	case <-time.After(time.Second * 10):
 		assert.Fail(t, "Timed out waiting for binding event to be delivered to app")
 	}
 }

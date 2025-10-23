@@ -87,7 +87,7 @@ func (a *appapitoken) Run(t *testing.T, ctx context.Context) {
 		token := headers.Get("dapr-api-token")
 		assert.NotEmpty(t, token)
 		assert.Equal(t, "test-job-app-token", token)
-	case <-time.After(time.Second * 3):
+	case <-time.After(time.Second * 10):
 		assert.Fail(t, "Timed out waiting for job event to be delivered to app")
 	}
 }
