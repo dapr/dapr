@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	grpcChannel "github.com/dapr/dapr/pkg/channel/grpc"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -557,6 +558,7 @@ func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDa
 	spans = spans[:n]
 	defer endSpans(spans)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.metadata)
+	ctx = grpcChannel.AddAppTokenToContext(ctx)
 
 	conn, err := s.grpc.GetAppClient()
 	if err != nil {

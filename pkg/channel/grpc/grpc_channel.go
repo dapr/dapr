@@ -110,6 +110,7 @@ func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 		}
 	}()
 
+	ctx = AddAppTokenToContext(ctx)
 	var header, trailer grpcMetadata.MD
 
 	_, err := g.appCallbackAlphaClient.OnJobEventAlpha1(ctx,
@@ -231,4 +232,13 @@ func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
 // SetAppHealth sets the apphealth.AppHealth object.
 func (g *Channel) SetAppHealth(ah *apphealth.AppHealth) {
 	g.appHealth = ah
+}
+
+// AddAppTokenToContext adds the APP_API_TOKEN to the outgoing gRPC ctx
+func AddAppTokenToContext(ctx context.Context) context.Context {
+	appMetadataToken := security.GetAppToken()
+	if appMetadataToken != "" {
+		return grpcMetadata.AppendToOutgoingContext(ctx, securityConsts.APITokenHeader, appMetadataToken)
+	}
+	return ctx
 }
