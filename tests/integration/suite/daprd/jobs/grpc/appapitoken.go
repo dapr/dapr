@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -73,10 +75,13 @@ func (a *appapitoken) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
 	client := a.daprd.GRPCClient(t, ctx)
-	_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	data, err := anypb.New(structpb.NewStringValue("test message"))
+	require.NoError(t, err)
+	_, err = client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     "test-job",
 			Schedule: ptr.Of("@every 1s"),
+			Data:     data,
 		},
 	})
 	require.NoError(t, err)
