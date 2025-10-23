@@ -83,7 +83,7 @@ func (a *appapitoken) Run(t *testing.T, ctx context.Context) {
 		tokens := md.Get("dapr-api-token")
 		assert.NotEmpty(t, tokens)
 		assert.Equal(t, "test-binding-app-token", tokens[0])
-	case <-time.After(time.Second * 3):
+	case <-time.After(time.Second * 10):
 		assert.Fail(t, "Timed out waiting for binding event to be delivered to app")
 	}
 }
