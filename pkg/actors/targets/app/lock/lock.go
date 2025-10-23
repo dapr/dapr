@@ -30,16 +30,7 @@ import (
 
 const headerReentrancyID = "Dapr-Reentrancy-Id"
 
-var (
-	ErrLockClosed = errors.New("actor lock is closed")
-
-	lockCache = &sync.Pool{
-		New: func() any {
-			var l *Lock
-			return l
-		},
-	}
-)
+var ErrLockClosed = errors.New("actor lock is closed")
 
 type Options struct {
 	ActorType   string
@@ -64,7 +55,7 @@ type Lock struct {
 }
 
 func New(opts Options) *Lock {
-	var reentrancyEnabled bool
+	reentrancyEnabled := false
 	maxStackDepth := api.DefaultReentrancyStackLimit
 
 	ree, ok := opts.ConfigStore.Load(opts.ActorType)
@@ -75,27 +66,14 @@ func New(opts Options) *Lock {
 		}
 	}
 
-	l := lockCache.Get().(*Lock)
-	if l == nil {
-		return &Lock{
-			actorType:         opts.ActorType,
-			reentrancyEnabled: reentrancyEnabled,
-			maxStackDepth:     maxStackDepth,
-			inflights:         ring.NewBuffered[inflight](2, 8),
-			lock:              make(chan struct{}, 1),
-			closeCh:           make(chan struct{}),
-		}
+	return &Lock{
+		actorType:         opts.ActorType,
+		reentrancyEnabled: reentrancyEnabled,
+		maxStackDepth:     maxStackDepth,
+		inflights:         ring.NewBuffered[inflight](2, 8),
+		lock:              make(chan struct{}, 1),
+		closeCh:           make(chan struct{}),
 	}
-
-	l.actorType = opts.ActorType
-	l.maxStackDepth = maxStackDepth
-	l.reentrancyEnabled = reentrancyEnabled
-	l.closeCh = make(chan struct{})
-	for range l.inflights.Len() {
-		l.inflights.RemoveFront()
-	}
-
-	return l
 }
 
 func (l *Lock) Lock(ctx context.Context) (context.Context, context.CancelFunc, error) {
@@ -163,10 +141,10 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 }
 
 func (l *Lock) Close(ctx context.Context) {
-	l.Lock(ctx)
 	close(l.closeCh)
+	l.lock <- struct{}{}
 	l.wg.Wait()
-	lockCache.Put(l)
+	<-l.lock
 }
 
 func (l *Lock) handleLock(ctx context.Context, msg *internalv1pb.InternalInvokeRequest) (*inflight, error) {
