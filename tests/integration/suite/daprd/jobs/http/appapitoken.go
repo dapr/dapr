@@ -73,9 +73,11 @@ func (a *appapitoken) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := client.HTTP(t)
 	postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/test-job", a.daprd.HTTPPort())
-	body := `{"schedule": "@every 1s"}`
+	body := `{"schedule": "@every 1s", "data": {"message": "test"}}`
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, postURL, strings.NewReader(body))
 	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := httpClient.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
