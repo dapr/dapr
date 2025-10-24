@@ -537,7 +537,7 @@ setup-test-env-postgres:
 	  --set primary.persistence.size=1Gi \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
 	  --wait \
-	  --timeout 5m0s
+	  --timeout 10m0s
 
 # delete postgres from cluster
 delete-test-env-postgres:
