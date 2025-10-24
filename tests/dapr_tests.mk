@@ -535,9 +535,10 @@ setup-test-env-postgres:
 	  --version 12.8.0 \
 	  -f ./tests/config/postgres_override.yaml \
 	  --set primary.persistence.size=1Gi \
+	  --set image.repository=bitnamilegacy/postgresql \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
 	  --wait \
-	  --timeout 10m0s
+	  --timeout 5m0s
 
 # delete postgres from cluster
 delete-test-env-postgres:
