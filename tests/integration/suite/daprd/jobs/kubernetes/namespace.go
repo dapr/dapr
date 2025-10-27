@@ -64,12 +64,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 	n.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString("localhost"), "default", sentry.Port()),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
-			Items: []configapi.Configuration{{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "schedulerreminders"},
-				Spec: configapi.ConfigurationSpec{
-					Features: []configapi.FeatureSpec{{Name: "SchedulerReminders", Enabled: ptr.Of(true)}},
-				},
-			}},
+			Items: []configapi.Configuration{},
 		}),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{manifest.ActorInMemoryStateComponent("default", "foo")},
@@ -106,7 +101,6 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithControlPlaneAddress(operator.Address()),
 		daprd.WithPlacementAddresses(n.placement.Address()),
-		daprd.WithConfigs("schedulerreminders"),
 	)
 
 	return []framework.Option{

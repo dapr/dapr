@@ -21,14 +21,13 @@ import (
 )
 
 type Config struct {
-	AppChannel                 channel.AppChannel
-	EntityConfigs              []config.EntityConfig
-	DrainRebalancedActors      bool
-	DrainOngoingCallTimeout    string
-	RemindersStoragePartitions int
-	HostedActorTypes           []string
-	DefaultIdleTimeout         string
-	Reentrancy                 config.ReentrancyConfig
+	AppChannel              channel.AppChannel
+	EntityConfigs           []config.EntityConfig
+	DrainRebalancedActors   bool
+	DrainOngoingCallTimeout string
+	HostedActorTypes        []string
+	DefaultIdleTimeout      string
+	Reentrancy              config.ReentrancyConfig
 }
 
 type HostConfig struct {

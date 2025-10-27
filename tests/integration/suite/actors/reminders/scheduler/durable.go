@@ -68,15 +68,6 @@ func (d *durable) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithAppPort(app.Port()),
 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`),
 	}
 
 	d.daprd1 = daprd.New(t, opts...)

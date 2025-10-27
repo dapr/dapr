@@ -40,18 +40,11 @@ type daprdOptionConfig struct {
 }
 
 type options struct {
-	daprds          int
-	enableScheduler bool
+	daprds int
 
 	orchestrators []orchestratorConfig
 	activities    []activityConfig
 	daprdOptions  []daprdOptionConfig
-}
-
-func WithScheduler(enable bool) Option {
-	return func(o *options) {
-		o.enableScheduler = enable
-	}
 }
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {

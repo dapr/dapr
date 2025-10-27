@@ -57,7 +57,6 @@ type Options struct {
 	Spec                      *config.WorkflowSpec
 	BackendManager            processor.WorkflowBackendManager
 	Resiliency                resiliency.Provider
-	SchedulerReminders        bool
 	EventSink                 orchestrator.EventSink
 	EnableClusteredDeployment bool
 }
@@ -82,7 +81,6 @@ func New(opts Options) Interface {
 		Namespace:                 opts.Namespace,
 		Actors:                    opts.Actors,
 		Resiliency:                opts.Resiliency,
-		SchedulerReminders:        opts.SchedulerReminders,
 		EventSink:                 opts.EventSink,
 		EnableClusteredDeployment: opts.EnableClusteredDeployment,
 	})
