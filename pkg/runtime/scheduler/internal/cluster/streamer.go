@@ -138,6 +138,8 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		}
 
 		if errors.Is(err, actorerrors.ErrReminderCanceled) {
+			// TODO: @joshvanl add support for cancelling a job with a new
+			// WatchJobsRequestResultStatus_CANCELED.
 			return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 		}
 

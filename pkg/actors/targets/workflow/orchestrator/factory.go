@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
@@ -44,14 +43,12 @@ type Options struct {
 	AppID             string
 	WorkflowActorType string
 	ActivityActorType string
-	ReminderInterval  *time.Duration
 
-	Resiliency         resiliency.Provider
-	Actors             actors.Interface
-	Scheduler          todo.WorkflowScheduler
-	SchedulerReminders bool
-	EventSink          EventSink
-	ActorTypeBuilder   *common.ActorTypeBuilder
+	Resiliency       resiliency.Provider
+	Actors           actors.Interface
+	Scheduler        todo.WorkflowScheduler
+	EventSink        EventSink
+	ActorTypeBuilder *common.ActorTypeBuilder
 }
 
 type factory struct {
@@ -67,9 +64,7 @@ type factory struct {
 	eventSink        EventSink
 	actorTypeBuilder *common.ActorTypeBuilder
 
-	reminderInterval   time.Duration
-	schedulerReminders bool
-	scheduler          todo.WorkflowScheduler
+	scheduler todo.WorkflowScheduler
 
 	deactivateCh chan *orchestrator
 
@@ -98,12 +93,6 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
-	reminderInterval := time.Minute * 1
-
-	if opts.ReminderInterval != nil {
-		reminderInterval = *opts.ReminderInterval
-	}
-
 	deactivateCh := make(chan *orchestrator, 100)
 	go func() {
 		for orchestrator := range deactivateCh {
@@ -112,20 +101,18 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 	}()
 
 	return &factory{
-		appID:              opts.AppID,
-		actorType:          opts.WorkflowActorType,
-		activityActorType:  opts.ActivityActorType,
-		resiliency:         opts.Resiliency,
-		router:             router,
-		reminders:          reminders,
-		actorState:         astate,
-		reminderInterval:   reminderInterval,
-		schedulerReminders: opts.SchedulerReminders,
-		eventSink:          opts.EventSink,
-		actorTypeBuilder:   opts.ActorTypeBuilder,
-		placement:          placement,
-		scheduler:          opts.Scheduler,
-		deactivateCh:       deactivateCh,
+		appID:             opts.AppID,
+		actorType:         opts.WorkflowActorType,
+		activityActorType: opts.ActivityActorType,
+		resiliency:        opts.Resiliency,
+		router:            router,
+		reminders:         reminders,
+		actorState:        astate,
+		eventSink:         opts.EventSink,
+		actorTypeBuilder:  opts.ActorTypeBuilder,
+		placement:         placement,
+		scheduler:         opts.Scheduler,
+		deactivateCh:      deactivateCh,
 	}, nil
 }
 

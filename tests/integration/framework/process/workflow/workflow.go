@@ -48,8 +48,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	}
 
 	opts := options{
-		enableScheduler: true,
-		daprds:          1,
+		daprds: 1,
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
@@ -68,22 +67,8 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 		daprd.WithResourceFiles(db.GetComponent(t)),
 	}
 
-	var sched *scheduler.Scheduler
-	if opts.enableScheduler {
-		sched = scheduler.New(t)
-		baseDopts = append(baseDopts,
-			daprd.WithScheduler(sched),
-			daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: appconfig
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true
-`))
-	}
+	sched := scheduler.New(t)
+	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
 
 	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
 

@@ -24,6 +24,8 @@ import (
 
 // ReminderPeriod contains the parsed period for a reminder.
 //
+// TODO: @joshvanl: remove this.
+//
 //nolint:recvcheck
 type ReminderPeriod struct {
 	value string // Raw value as received from the user

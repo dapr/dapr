@@ -25,14 +25,6 @@ type Option func(*options)
 
 type options struct {
 	registry *task.TaskRegistry
-
-	enableScheduler bool
-}
-
-func WithScheduler(enable bool) Option {
-	return func(o *options) {
-		o.enableScheduler = enable
-	}
 }
 
 func WithAddOrchestratorN(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
