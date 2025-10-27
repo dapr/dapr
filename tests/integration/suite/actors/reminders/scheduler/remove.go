@@ -17,8 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -50,17 +48,6 @@ type remove struct {
 }
 
 func (r *remove) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600))
-
 	fp := ports.Reserve(t, 2)
 	port1 := fp.Port(t)
 	port2 := fp.Port(t)
@@ -83,7 +70,6 @@ spec:
 	r.place = placement.New(t)
 
 	r.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),

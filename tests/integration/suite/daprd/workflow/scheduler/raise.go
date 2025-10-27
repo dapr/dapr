@@ -56,14 +56,6 @@ func (r *raise) Setup(t *testing.T) []framework.Option {
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
 		daprd.WithSchedulerAddresses(scheduler.Address()),
-		daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`),
 	)
 
 	return []framework.Option{

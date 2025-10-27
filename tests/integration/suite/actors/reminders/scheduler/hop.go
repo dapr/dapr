@@ -16,8 +16,6 @@ package scheduler
 import (
 	"context"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -50,17 +48,6 @@ type hop struct {
 }
 
 func (h *hop) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600))
-
 	newHTTP := func(called *atomic.Uint64) *prochttp.HTTP {
 		handler := http.NewServeMux()
 		handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
@@ -88,14 +75,12 @@ spec:
 	srv1 := newHTTP(&h.daprd1called)
 	srv2 := newHTTP(&h.daprd2called)
 	h.daprd1 = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(h.place.Address()),
 		daprd.WithSchedulerAddresses(h.scheduler.Address()),
 		daprd.WithAppPort(srv1.Port()),
 	)
 	h.daprd2 = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(h.place.Address()),
 		daprd.WithSchedulerAddresses(h.scheduler.Address()),
