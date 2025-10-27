@@ -26,14 +26,6 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 	const reminderName = "run-activity"
 	log.Debugf("Activity actor '%s||%s': creating reminder '%s' for immediate execution", a.actorType, a.actorID, reminderName)
 
-	var period string
-	var oneshot bool
-	if a.schedulerReminders {
-		oneshot = true
-	} else {
-		period = a.reminderInterval.String()
-	}
-
 	anydata, err := anypb.New(his)
 	if err != nil {
 		return err
@@ -45,8 +37,7 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 		ActorID:   a.actorID,
 		DueTime:   "0s",
 		Name:      reminderName,
-		Period:    period,
-		IsOneShot: oneshot,
+		IsOneShot: true,
 		Data:      anydata,
 	})
 }

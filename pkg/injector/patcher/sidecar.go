@@ -60,9 +60,6 @@ type SidecarConfig struct {
 	SidecarPublicPort           int32 `default:"3501"`
 	SchedulerAddressDNSA        string
 
-	// TODO: @joshvanl: remove in v1.17
-	SkipReminderMigration bool
-
 	Enabled                             bool    `annotation:"dapr.io/enabled"`
 	AppPort                             int32   `annotation:"dapr.io/app-port"`
 	Config                              string  `annotation:"dapr.io/config"`

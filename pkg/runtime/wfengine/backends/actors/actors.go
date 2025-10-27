@@ -64,12 +64,11 @@ const (
 )
 
 type Options struct {
-	AppID              string
-	Namespace          string
-	Actors             actors.Interface
-	Resiliency         resiliency.Provider
-	SchedulerReminders bool
-	EventSink          orchestrator.EventSink
+	AppID      string
+	Namespace  string
+	Actors     actors.Interface
+	Resiliency resiliency.Provider
+	EventSink  orchestrator.EventSink
 	// experimental feature
 	// enabling this will use the cluster tasks backend for pending tasks, instead of the default local implementation
 	// the cluster tasks backend uses actors to share the state of pending tasks
@@ -86,10 +85,8 @@ type Actors struct {
 
 	enableClusteredDeployment bool
 	pendingTasksBackend       PendingTasksBackend
-	defaultReminderInterval   *time.Duration
 	resiliency                resiliency.Provider
 	actors                    actors.Interface
-	schedulerReminders        bool
 	eventSink                 orchestrator.EventSink
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
@@ -114,7 +111,6 @@ func New(opts Options) *Actors {
 		executorActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
-		schedulerReminders:        opts.SchedulerReminders,
 		pendingTasksBackend:       pendingTasksBackend,
 		enableClusteredDeployment: opts.EnableClusteredDeployment,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
@@ -134,7 +130,6 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		AppID:             abe.appID,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
-		ReminderInterval:  abe.defaultReminderInterval,
 		Resiliency:        abe.resiliency,
 		Actors:            abe.actors,
 		Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
@@ -146,16 +141,14 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 				return nil
 			}
 		},
-		SchedulerReminders: abe.schedulerReminders,
-		EventSink:          abe.eventSink,
-		ActorTypeBuilder:   actorTypeBuilder,
+		EventSink:        abe.eventSink,
+		ActorTypeBuilder: actorTypeBuilder,
 	}
 
 	aopts := activity.Options{
 		AppID:             abe.appID,
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
-		ReminderInterval:  abe.defaultReminderInterval,
 		Scheduler: func(ctx context.Context, wi *backend.ActivityWorkItem) error {
 			log.Debugf(
 				"%s: scheduling [%s#%d] activity execution with durabletask engine",
@@ -169,9 +162,8 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 				return nil
 			}
 		},
-		Actors:             abe.actors,
-		SchedulerReminders: abe.schedulerReminders,
-		ActorTypeBuilder:   actorTypeBuilder,
+		Actors:           abe.actors,
+		ActorTypeBuilder: actorTypeBuilder,
 	}
 
 	workflowFactory, activityFactory, err := workflow.Factories(ctx, oopts, aopts)

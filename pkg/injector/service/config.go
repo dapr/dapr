@@ -49,9 +49,6 @@ type Config struct {
 	EnableK8sDownwardAPIs             string `envconfig:"ENABLE_K8S_DOWNWARD_APIS"`
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
 
-	// TODO: @joshvanl: remove in v1.17
-	SkipReminderMigration bool `envconfig:"DAPR_SKIP_REMINDER_MIGRATION" default:"false"`
-
 	TrustAnchorsFile        string `envconfig:"DAPR_TRUST_ANCHORS_FILE"`
 	ControlPlaneTrustDomain string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
 	SentryAddress           string `envconfig:"DAPR_SENTRY_ADDRESS"`

@@ -17,8 +17,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +33,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -45,6 +44,7 @@ func init() {
 type hdata struct {
 	daprd *daprd.Daprd
 	place *placement.Placement
+	sched *scheduler.Scheduler
 
 	lock sync.Mutex
 	data map[string]chan string
@@ -52,17 +52,6 @@ type hdata struct {
 
 func (h *hdata) Setup(t *testing.T) []framework.Option {
 	h.data = make(map[string]chan string)
-
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
- name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: false`), 0o600))
 
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
@@ -88,15 +77,16 @@ spec:
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	h.place = placement.New(t)
+	h.sched = scheduler.New(t)
 	h.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(h.place.Address()),
 		daprd.WithAppPort(srv.Port()),
+		daprd.WithScheduler(h.sched),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(h.place, srv, h.daprd),
+		framework.WithProcesses(h.sched, h.place, srv, h.daprd),
 	}
 }
 
@@ -125,32 +115,32 @@ func (h *hdata) Run(t *testing.T, ctx context.Context) {
 		expGRPC string
 	}{
 		``: {
-			`{"dueTime":"0s","period":""}`,
-			`{"dueTime":"0s","period":""}`,
+			`{"dueTime":"","period":""}`,
+			`{"dueTime":"","period":""}`,
 		},
 		`"foo"`: {
-			`{"data":"foo","dueTime":"0s","period":""}`,
-			`{"data":"ImZvbyI=","dueTime":"0s","period":""}`,
+			`{"data":"foo","dueTime":"","period":""}`,
+			`{"data":"ImZvbyI=","dueTime":"","period":""}`,
 		},
 		`{  "foo": [ 12, 4 ] }`: {
-			`{"data":{"foo":[12,4]},"dueTime":"0s","period":""}`,
-			`{"data":"eyAgImZvbyI6IFsgMTIsIDQgXSB9","dueTime":"0s","period":""}`,
+			`{"data":{"foo":[12,4]},"dueTime":"","period":""}`,
+			`{"data":"eyAgImZvbyI6IFsgMTIsIDQgXSB9","dueTime":"","period":""}`,
 		},
 		`true`: {
-			`{"data":true,"dueTime":"0s","period":""}`,
-			`{"data":"dHJ1ZQ==","dueTime":"0s","period":""}`,
+			`{"data":true,"dueTime":"","period":""}`,
+			`{"data":"dHJ1ZQ==","dueTime":"","period":""}`,
 		},
 		`null`: {
-			`{"data":null,"dueTime":"0s","period":""}`,
-			`{"data":"bnVsbA==","dueTime":"0s","period":""}`,
+			`{"data":null,"dueTime":"","period":""}`,
+			`{"data":"bnVsbA==","dueTime":"","period":""}`,
 		},
 		`[]`: {
-			`{"data":[],"dueTime":"0s","period":""}`,
-			`{"data":"W10=","dueTime":"0s","period":""}`,
+			`{"data":[],"dueTime":"","period":""}`,
+			`{"data":"W10=","dueTime":"","period":""}`,
 		},
 		`123`: {
-			`{"data":123,"dueTime":"0s","period":""}`,
-			`{"data":"MTIz","dueTime":"0s","period":""}`,
+			`{"data":123,"dueTime":"","period":""}`,
+			`{"data":"MTIz","dueTime":"","period":""}`,
 		},
 	}
 
