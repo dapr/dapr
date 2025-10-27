@@ -644,3 +644,138 @@ func matchDaprRequestMethod(method string) any {
 		return true
 	})
 }
+
+func TestSendToOutputBindingMaxBodySize(t *testing.T) {
+	t.Run("response within size limit succeeds", func(t *testing.T) {
+		compStore := compstore.New()
+		
+		// Create binding that returns 1KB of data
+		mockBinding := new(daprt.MockBinding)
+		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.GetOperation})
+		mockBinding.On("Invoke", mock.Anything, mock.Anything).Return(&bindings.InvokeResponse{
+			Data: make([]byte, 1024), // 1KB
+		}, nil)
+		compStore.AddOutputBinding("testBinding", mockBinding)
+
+		b := &binding{
+			compStore:          compStore,
+			resiliency:         resiliency.New(logger.NewLogger("test")),
+			maxRequestBodySize: 4 * 1024 * 1024, // 4MB limit
+		}
+
+		req := &bindings.InvokeRequest{
+			Operation: bindings.GetOperation,
+		}
+
+		resp, err := b.SendToOutputBinding(context.Background(), "testBinding", req)
+		require.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, 1024, len(resp.Data))
+	})
+
+	t.Run("response exceeding size limit fails", func(t *testing.T) {
+		compStore := compstore.New()
+		
+		// Create binding that returns 5MB of data
+		mockBinding := new(daprt.MockBinding)
+		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.GetOperation})
+		mockBinding.On("Invoke", mock.Anything, mock.Anything).Return(&bindings.InvokeResponse{
+			Data: make([]byte, 5*1024*1024), // 5MB
+		}, nil)
+		compStore.AddOutputBinding("testBinding", mockBinding)
+
+		b := &binding{
+			compStore:          compStore,
+			resiliency:         resiliency.New(logger.NewLogger("test")),
+			maxRequestBodySize: 4 * 1024 * 1024, // 4MB limit
+		}
+
+		req := &bindings.InvokeRequest{
+			Operation: bindings.GetOperation,
+		}
+
+		resp, err := b.SendToOutputBinding(context.Background(), "testBinding", req)
+		require.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "exceeding max size of 4194304 bytes")
+		assert.Contains(t, err.Error(), "5242880 bytes")
+	})
+
+	t.Run("zero max body size bypasses check", func(t *testing.T) {
+		compStore := compstore.New()
+		
+		// Create binding that returns 10MB of data
+		mockBinding := new(daprt.MockBinding)
+		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.GetOperation})
+		mockBinding.On("Invoke", mock.Anything, mock.Anything).Return(&bindings.InvokeResponse{
+			Data: make([]byte, 10*1024*1024), // 10MB
+		}, nil)
+		compStore.AddOutputBinding("testBinding", mockBinding)
+
+		b := &binding{
+			compStore:          compStore,
+			resiliency:         resiliency.New(logger.NewLogger("test")),
+			maxRequestBodySize: 0, // No limit
+		}
+
+		req := &bindings.InvokeRequest{
+			Operation: bindings.GetOperation,
+		}
+
+		resp, err := b.SendToOutputBinding(context.Background(), "testBinding", req)
+		require.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, 10*1024*1024, len(resp.Data))
+	})
+
+	t.Run("empty response data passes check", func(t *testing.T) {
+		compStore := compstore.New()
+		
+		// Create binding that returns no data
+		mockBinding := new(daprt.MockBinding)
+		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.CreateOperation})
+		mockBinding.On("Invoke", mock.Anything, mock.Anything).Return(&bindings.InvokeResponse{
+			Data: nil,
+		}, nil)
+		compStore.AddOutputBinding("testBinding", mockBinding)
+
+		b := &binding{
+			compStore:          compStore,
+			resiliency:         resiliency.New(logger.NewLogger("test")),
+			maxRequestBodySize: 1024, // 1KB limit
+		}
+
+		req := &bindings.InvokeRequest{
+			Operation: bindings.CreateOperation,
+		}
+
+		resp, err := b.SendToOutputBinding(context.Background(), "testBinding", req)
+		require.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+
+	t.Run("binding error bypasses size check", func(t *testing.T) {
+		compStore := compstore.New()
+		
+		// Create binding that returns error
+		mockBinding := new(daprt.MockBinding)
+		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.GetOperation})
+		mockBinding.On("Invoke", mock.Anything, mock.Anything).Return(nil, assert.AnError)
+		compStore.AddOutputBinding("testBinding", mockBinding)
+
+		b := &binding{
+			compStore:          compStore,
+			resiliency:         resiliency.New(logger.NewLogger("test")),
+			maxRequestBodySize: 1024, // 1KB limit
+		}
+
+		req := &bindings.InvokeRequest{
+			Operation: bindings.GetOperation,
+		}
+
+		resp, err := b.SendToOutputBinding(context.Background(), "testBinding", req)
+		require.Error(t, err)
+		assert.Equal(t, assert.AnError, err)
+		assert.Nil(t, resp)
+	})
+}

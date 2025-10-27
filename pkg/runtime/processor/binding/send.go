@@ -191,9 +191,18 @@ func (b *binding) SendToOutputBinding(ctx context.Context, name string, req *bin
 				policyRunner := resiliency.NewRunner[*bindings.InvokeResponse](ctx,
 					b.resiliency.ComponentOutboundPolicy(name, resiliency.Binding),
 				)
-				return policyRunner(func(ctx context.Context) (*bindings.InvokeResponse, error) {
+				resp, err := policyRunner(func(ctx context.Context) (*bindings.InvokeResponse, error) {
 					return binding.Invoke(ctx, req)
 				})
+
+				// Check response body size against max request body size limit
+				if err == nil && resp != nil && len(resp.Data) > 0 {
+					if b.maxRequestBodySize > 0 && len(resp.Data) > b.maxRequestBodySize {
+						return nil, fmt.Errorf("binding %s returned response body of %d bytes, exceeding max size of %d bytes", name, len(resp.Data), b.maxRequestBodySize)
+					}
+				}
+
+				return resp, err
 			}
 		}
 		supported := make([]string, 0, len(ops))
