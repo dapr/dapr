@@ -172,6 +172,6 @@ func TestHealthProbe(t *testing.T) {
 }
 
 func TestCreateLocalChannelWithBaseAddress(t *testing.T) {
-	ch := CreateLocalChannel(8080, 1, nil, config.TracingSpec{}, 1024, 1, "my.app")
+	ch := CreateLocalChannel(8080, 1, nil, config.TracingSpec{}, 1024, 1, "my.app", "")
 	assert.Equal(t, "my.app:8080", ch.baseAddress)
 }
