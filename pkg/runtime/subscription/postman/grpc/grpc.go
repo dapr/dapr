@@ -27,7 +27,6 @@ import (
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
-	grpcChannel "github.com/dapr/dapr/pkg/channel/grpc"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -71,7 +70,7 @@ func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	}
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
-	ctx = grpcChannel.AddAppTokenToContext(ctx)
+	ctx = g.channel.AddAppTokenToContext(ctx)
 
 	conn, err := g.channel.GetAppClient()
 	if err != nil {
@@ -199,7 +198,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	spans = spans[:n]
 	defer todo.EndSpans(spans)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.Metadata)
-	ctx = grpcChannel.AddAppTokenToContext(ctx)
+	ctx = g.channel.AddAppTokenToContext(ctx)
 
 	conn, err := g.channel.GetAppClient()
 	if err != nil {

@@ -31,7 +31,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/state"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	grpcChannel "github.com/dapr/dapr/pkg/channel/grpc"
 	"github.com/dapr/dapr/pkg/components"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -295,7 +294,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			}
 		}
 
-		ctx = grpcChannel.AddAppTokenToContext(ctx)
+		ctx = b.grpc.AddAppTokenToContext(ctx)
 		conn, err := b.grpc.GetAppClient()
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
