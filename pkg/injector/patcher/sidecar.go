@@ -60,51 +60,51 @@ type SidecarConfig struct {
 	SidecarPublicPort           int32 `default:"3501"`
 	SchedulerAddressDNSA        string
 
-	Enabled                             bool    `annotation:"dapr.io/enabled"`
+	Enabled                             bool    `annotation:"dapr.io/enabled"` // Description: Setting this parameter to true injects the Dapr sidecar into the pod.
 	AppPort                             int32   `annotation:"dapr.io/app-port"`
 	Config                              string  `annotation:"dapr.io/config"`
 	AppProtocol                         string  `annotation:"dapr.io/app-protocol" default:"http"`
-	AppSSL                              bool    `annotation:"dapr.io/app-ssl"` // TODO: Deprecated in Dapr 1.11; remove in a future Dapr version
+	AppSSL                              bool    `annotation:"dapr.io/app-ssl" deprecated:"true"` // TODO: Deprecated in Dapr 1.11; remove in a future Dapr version
 	AppID                               string  `annotation:"dapr.io/app-id"`
 	EnableProfiling                     bool    `annotation:"dapr.io/enable-profiling"`
 	LogLevel                            string  `annotation:"dapr.io/log-level" default:"info"`
-	APITokenSecret                      string  `annotation:"dapr.io/api-token-secret"`
-	AppTokenSecret                      string  `annotation:"dapr.io/app-token-secret"`
+	APITokenSecret                      string  `annotation:"dapr.io/api-token-secret"` // Description: Tells Dapr which Kubernetes secret to use for [token-based API authentication]({{< ref api-token >}}). By default this is not set
+	AppTokenSecret                      string  `annotation:"dapr.io/app-token-secret"` // Description: Tells Dapr which Kubernetes secret to use for [token-based application authentication]({{< ref app-api-token >}}). By default, this is not set.
 	LogAsJSON                           bool    `annotation:"dapr.io/log-as-json"`
 	AppMaxConcurrency                   *int    `annotation:"dapr.io/app-max-concurrency"`
 	EnableMetrics                       bool    `annotation:"dapr.io/enable-metrics" default:"true"`
 	SidecarMetricsPort                  int32   `annotation:"dapr.io/metrics-port" default:"9090"`
 	EnableDebug                         bool    `annotation:"dapr.io/enable-debug" default:"false"`
 	SidecarDebugPort                    int32   `annotation:"dapr.io/debug-port" default:"40000"`
-	Env                                 string  `annotation:"dapr.io/env"`
-	EnvFromSecret                       string  `annotation:"dapr.io/env-from-secret"`
+	Env                                 string  `annotation:"dapr.io/env"`             // Description: List of environment variable to be injected into the sidecar. Strings consisting of key=value pairs separated by a comma.
+	EnvFromSecret                       string  `annotation:"dapr.io/env-from-secret"` // Description: List of environment variables to be injected into the sidecar from secret. Strings consisting of `"key=secret-name:secret-key"` pairs are separated by a comma.
 	SidecarAPIGRPCPort                  int32   `annotation:"dapr.io/grpc-port" default:"50001"`
 	SidecarInternalGRPCPort             int32   `annotation:"dapr.io/internal-grpc-port" default:"50002"`
 	SidecarCPURequest                   string  `annotation:"dapr.io/sidecar-cpu-request"`
 	SidecarCPULimit                     string  `annotation:"dapr.io/sidecar-cpu-limit"`
 	SidecarMemoryRequest                string  `annotation:"dapr.io/sidecar-memory-request"`
 	SidecarMemoryLimit                  string  `annotation:"dapr.io/sidecar-memory-limit"`
-	SidecarListenAddresses              string  `annotation:"dapr.io/sidecar-listen-addresses" default:"[::1],127.0.0.1"`
-	SidecarLivenessProbeDelaySeconds    int32   `annotation:"dapr.io/sidecar-liveness-probe-delay-seconds"    default:"3"`
-	SidecarLivenessProbeTimeoutSeconds  int32   `annotation:"dapr.io/sidecar-liveness-probe-timeout-seconds"  default:"3"`
-	SidecarLivenessProbePeriodSeconds   int32   `annotation:"dapr.io/sidecar-liveness-probe-period-seconds"   default:"6"`
-	SidecarLivenessProbeThreshold       int32   `annotation:"dapr.io/sidecar-liveness-probe-threshold"        default:"3"`
-	SidecarReadinessProbeDelaySeconds   int32   `annotation:"dapr.io/sidecar-readiness-probe-delay-seconds"   default:"3"`
-	SidecarReadinessProbeTimeoutSeconds int32   `annotation:"dapr.io/sidecar-readiness-probe-timeout-seconds" default:"3"`
-	SidecarReadinessProbePeriodSeconds  int32   `annotation:"dapr.io/sidecar-readiness-probe-period-seconds"  default:"6"`
-	SidecarReadinessProbeThreshold      int32   `annotation:"dapr.io/sidecar-readiness-probe-threshold"       default:"3"`
+	SidecarListenAddresses              string  `annotation:"dapr.io/sidecar-listen-addresses" default:"[::1],127.0.0.1" daprdEquivalentFlag:"dapr-listen-address"`
+	SidecarLivenessProbeDelaySeconds    int32   `annotation:"dapr.io/sidecar-liveness-probe-delay-seconds"    default:"3"` // Description: Number of seconds after the sidecar container has started before liveness probe is initiated. Read more [here](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes).
+	SidecarLivenessProbeTimeoutSeconds  int32   `annotation:"dapr.io/sidecar-liveness-probe-timeout-seconds"  default:"3"` // Description: Number of seconds after which the sidecar liveness probe times out. Read more [here](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes).
+	SidecarLivenessProbePeriodSeconds   int32   `annotation:"dapr.io/sidecar-liveness-probe-period-seconds"   default:"6"` // Description: How often (in seconds) to perform the sidecar liveness probe. Read more [here](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes).
+	SidecarLivenessProbeThreshold       int32   `annotation:"dapr.io/sidecar-liveness-probe-threshold"        default:"3"` // Description: When the sidecar liveness probe fails, Kubernetes will try N times before giving up. In  this case, the Pod will be marked Unhealthy. Read more about `failureThreshold` [here](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes).
+	SidecarReadinessProbeDelaySeconds   int32   `annotation:"dapr.io/sidecar-readiness-probe-delay-seconds"   default:"3"` // Description: Number of seconds after the sidecar container has started before readiness probe is initiated. Read more [here](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes).
+	SidecarReadinessProbeTimeoutSeconds int32   `annotation:"dapr.io/sidecar-readiness-probe-timeout-seconds" default:"3"` // Description: Number of seconds after which the sidecar readiness probe times out. Read more [here](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes).
+	SidecarReadinessProbePeriodSeconds  int32   `annotation:"dapr.io/sidecar-readiness-probe-period-seconds"  default:"6"` // Description: How often (in seconds) to perform the sidecar readiness probe. Read more [here](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes).
+	SidecarReadinessProbeThreshold      int32   `annotation:"dapr.io/sidecar-readiness-probe-threshold"       default:"3"` // Description: When the sidecar readiness probe fails, Kubernetes will try N times before giving up. In  this case, the Pod will be marked Unready. Read more about `failureThreshold` [here](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes).
 	SidecarImage                        string  `annotation:"dapr.io/sidecar-image"`
-	SidecarSeccompProfileType           string  `annotation:"dapr.io/sidecar-seccomp-profile-type"`
-	HTTPMaxRequestSize                  *int    `annotation:"dapr.io/http-max-request-size"` // Legacy flag
+	SidecarSeccompProfileType           string  `annotation:"dapr.io/sidecar-seccomp-profile-type"` // Description: The seccomp profile type to use for the sidecar container
+	HTTPMaxRequestSize                  *int    `annotation:"dapr.io/http-max-request-size"`        // Legacy flag
 	MaxBodySize                         string  `annotation:"dapr.io/max-body-size"`
 	HTTPReadBufferSize                  *int    `annotation:"dapr.io/http-read-buffer-size"` // Legacy flag
 	ReadBufferSize                      string  `annotation:"dapr.io/read-buffer-size"`
 	GracefulShutdownSeconds             int     `annotation:"dapr.io/graceful-shutdown-seconds"               default:"-1"`
-	BlockShutdownDuration               *string `annotation:"dapr.io/block-shutdown-duration"`
+	BlockShutdownDuration               *string `annotation:"dapr.io/block-shutdown-duration" daprdEquivalentFlag:"block-shutdown-duration"`
 	EnableAPILogging                    *bool   `annotation:"dapr.io/enable-api-logging"`
 	UnixDomainSocketPath                string  `annotation:"dapr.io/unix-domain-socket-path"`
-	VolumeMounts                        string  `annotation:"dapr.io/volume-mounts"`
-	VolumeMountsRW                      string  `annotation:"dapr.io/volume-mounts-rw"`
+	VolumeMounts                        string  `annotation:"dapr.io/volume-mounts"`                   // Description: List of [pod volumes to be mounted to the sidecar container]({{< ref "kubernetes-volume-mounts" >}}) in read-only mode. Strings consisting of `volume:path` pairs separated by a comma. Example, `"volume-1:/tmp/mount1,volume-2:/home/root/mount2"`.
+	VolumeMountsRW                      string  `annotation:"dapr.io/volume-mounts-rw" description:""` // Description: List of [pod volumes to be mounted to the sidecar container]({{< ref "kubernetes-volume-mounts" >}}) in read-write mode. Strings consisting of `volume:path` pairs separated by a comma. Example, `"volume-1:/tmp/mount1,volume-2:/home/root/mount2"`.
 	DisableBuiltinK8sSecretStore        bool    `annotation:"dapr.io/disable-builtin-k8s-secret-store"`
 	EnableAppHealthCheck                bool    `annotation:"dapr.io/enable-app-health-check"`
 	AppHealthCheckPath                  string  `annotation:"dapr.io/app-health-check-path" default:"/healthz"`
