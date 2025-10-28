@@ -32,6 +32,12 @@ const (
 	DBConnectionStringSpanAttributeKey   = string(semconv.DBConnectionStringKey)
 	MessagingSystemSpanAttributeKey      = string(semconv.MessagingSystemKey)
 	MessagingDestinationSpanAttributeKey = string(semconv.MessagingDestinationNameKey)
+	// New semantic convention attributes for messaging
+	MessagingOperationNameSpanAttributeKey      = "messaging.operation.name"
+	MessagingMessageIDSpanAttributeKey          = "messaging.message.id"
+	MessagingMessageBodySizeSpanAttributeKey    = "messaging.message.body.size"
+	MessagingBatchMessageCountSpanAttributeKey  = "messaging.batch.message_count"
+	MessagingConsumerGroupNameSpanAttributeKey  = "messaging.consumer.group.name"
 	GrpcServiceSpanAttributeKey          = string(semconv.RPCServiceKey)
 	NetPeerNameSpanAttributeKey          = string(semconv.NetPeerNameKey)
 	RPCSystemSpanAttributeKey            = string(semconv.RPCSystemKey)
