@@ -34,7 +34,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
@@ -52,7 +51,7 @@ type Channel struct {
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
-func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress string) *Channel {
+func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress string, appAPIToken string) *Channel {
 	// readBufferSize is unused
 	c := &Channel{
 		appCallbackClient:      runtimev1pb.NewAppCallbackClient(conn),
@@ -60,7 +59,7 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 		conn:                   conn,
 		baseAddress:            net.JoinHostPort(baseAddress, strconv.Itoa(port)),
 		tracingSpec:            spec,
-		appMetadataToken:       security.GetAppToken(),
+		appMetadataToken:       appAPIToken,
 		maxRequestBodySize:     maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
@@ -110,7 +109,7 @@ func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 		}
 	}()
 
-	ctx = AddAppTokenToContext(ctx)
+	ctx = g.AddAppTokenToContext(ctx)
 	var header, trailer grpcMetadata.MD
 
 	_, err := g.appCallbackAlphaClient.OnJobEventAlpha1(ctx,
@@ -234,11 +233,11 @@ func (g *Channel) SetAppHealth(ah *apphealth.AppHealth) {
 	g.appHealth = ah
 }
 
-// AddAppTokenToContext adds the APP_API_TOKEN to the outgoing gRPC ctx
-func AddAppTokenToContext(ctx context.Context) context.Context {
-	appMetadataToken := security.GetAppToken()
-	if appMetadataToken != "" {
-		return grpcMetadata.AppendToOutgoingContext(ctx, securityConsts.APITokenHeader, appMetadataToken)
+// AddAppTokenToContext adds the app API token to the outgoing gRPC context using the
+// token captured at channel creation time
+func (g *Channel) AddAppTokenToContext(ctx context.Context) context.Context {
+	if g.appMetadataToken != "" {
+		return grpcMetadata.AppendToOutgoingContext(ctx, securityConsts.APITokenHeader, g.appMetadataToken)
 	}
 	return ctx
 }
