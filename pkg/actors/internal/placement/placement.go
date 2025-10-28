@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client"
-	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -71,7 +70,6 @@ type Options struct {
 	APILevel  *apilevel.APILevel
 	Security  security.Handler
 	Table     table.Interface
-	Reminders storage.Interface
 	Healthz   healthz.Healthz
 	Mode      modes.DaprMode
 }
@@ -79,7 +77,6 @@ type Options struct {
 type placement struct {
 	client     *client.Client
 	actorTable table.Interface
-	reminders  storage.Interface
 	apiLevel   *apilevel.APILevel
 	htarget    healthz.Target
 
@@ -133,7 +130,6 @@ func New(opts Options) (Interface, error) {
 		hashTable: &hashing.ConsistentHashTables{
 			Entries: make(map[string]*hashing.Consistent),
 		},
-		reminders:     opts.Reminders,
 		appID:         opts.AppID,
 		port:          strconv.Itoa(opts.Port),
 		namespace:     opts.Namespace,
@@ -325,10 +321,6 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 	p.hashTable.Version = in.GetVersion()
 	p.hashTable.Entries = entries
 
-	if p.reminders != nil {
-		p.reminders.DrainRebalancedReminders()
-	}
-
 	if err := p.actorTable.HaltNonHosted(ctx); err != nil {
 		log.Errorf("Error draining non-hosted actors: %s", err)
 	}
@@ -378,16 +370,6 @@ func (p *placement) handleUnlockOperation(ctx context.Context) {
 	p.htarget.Ready()
 	p.tableUnlock()
 	p.tableUnlock = nil
-
-	if p.reminders != nil {
-		p.reminders.OnPlacementTablesUpdated(ctx, func(ctx context.Context, req *api.LookupActorRequest) bool {
-			if ctx.Err() != nil {
-				return false
-			}
-			lar, err := p.LookupActor(ctx, req)
-			return err == nil && lar.Local
-		})
-	}
 }
 
 func (p *placement) isActorLocal(targetActorAddress, hostAddress string, port string) bool {

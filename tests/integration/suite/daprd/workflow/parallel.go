@@ -58,16 +58,7 @@ func (p *parallel) Setup(t *testing.T) []framework.Option {
 	}
 
 	p.legacy = daprd.New(t, opts...)
-	p.scheduler = daprd.New(t, append(opts, daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`))...,
-	)
+	p.scheduler = daprd.New(t, opts...)
 
 	return []framework.Option{
 		framework.WithProcesses(scheduler, place, app, p.legacy, p.scheduler),

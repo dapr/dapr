@@ -47,7 +47,6 @@ func (d *data) Setup(t *testing.T) []framework.Option {
 			assert.NoError(t, err)
 			d.got <- string(got)
 		}),
-		actors.WithFeatureSchedulerReminders(false),
 	)
 
 	return []framework.Option{
@@ -71,7 +70,7 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 
 	select {
 	case got := <-d.got:
-		assert.JSONEq(t, `{"data":"bXlkYXRh","dueTime":"0s","period":"1000s"}`, got)
+		assert.JSONEq(t, `{"data":"bXlkYXRh","dueTime":"","period":""}`, got)
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for reminder")
 	}

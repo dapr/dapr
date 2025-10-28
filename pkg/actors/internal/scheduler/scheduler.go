@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,7 +16,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -24,11 +24,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/internal/reminders/migration"
-	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/table"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
-	"github.com/dapr/dapr/pkg/healthz"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/kit/logger"
@@ -38,65 +35,40 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actor.reminders.scheduler")
 
+// Interface is the interface for the object that provides reminders backend
+// storage.
+type Interface interface {
+	io.Closer
+
+	Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error)
+	Create(ctx context.Context, req *api.CreateReminderRequest) error
+	Delete(ctx context.Context, req *api.DeleteReminderRequest) error
+	List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error)
+}
+
 type Options struct {
-	Namespace     string
-	AppID         string
-	Client        schedulerv1pb.SchedulerClient
-	StateReminder storage.Interface
-	Table         table.Interface
-	Healthz       healthz.Healthz
+	Namespace string
+	AppID     string
+	Client    schedulerv1pb.SchedulerClient
+	Table     table.Interface
 }
 
-// Implements a reminders provider that does nothing when using Scheduler Service.
 type scheduler struct {
-	namespace     string
-	appID         string
-	client        schedulerv1pb.SchedulerClient
-	table         table.Interface
-	stateReminder storage.Interface
-	htarget       healthz.Target
+	namespace string
+	appID     string
+	client    schedulerv1pb.SchedulerClient
+	table     table.Interface
 }
 
-func New(opts Options) storage.Interface {
+func New(opts Options) Interface {
 	log.Info("Using Scheduler service for reminders.")
 	return &scheduler{
-		client:        opts.Client,
-		namespace:     opts.Namespace,
-		appID:         opts.AppID,
-		stateReminder: opts.StateReminder,
-		table:         opts.Table,
-		htarget:       opts.Healthz.AddTarget("actors-reminders-scheduler"),
+		client:    opts.Client,
+		namespace: opts.Namespace,
+		appID:     opts.AppID,
+		table:     opts.Table,
 	}
 }
-
-// OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
-func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context, fn func(context.Context, *api.LookupActorRequest) bool) {
-	defer s.htarget.Ready()
-
-	// When enabled, skips the migration of legacy state store reminders to
-	// scheduler reminders. Useful to greatly improve placement actor
-	// dissemination time when no migration is required.
-	// TODO: @joshvanl: skip in v1.17
-	if os.Getenv("DAPR_SKIP_REMINDER_MIGRATION") == "true" {
-		log.Infof("Skipping migration of reminders to scheduler as requested.")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-	defer cancel()
-
-	err := migration.ToScheduler(ctx, migration.ToSchedulerOptions{
-		Table:              s.table,
-		StateReminders:     s.stateReminder,
-		SchedulerReminders: s,
-		LookupFn:           fn,
-	})
-	if err != nil {
-		log.Errorf("Error attempting to migrate reminders to scheduler: %s", err)
-	}
-}
-
-func (s *scheduler) DrainRebalancedReminders() {}
 
 func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequest) error {
 	var dueTime *string
