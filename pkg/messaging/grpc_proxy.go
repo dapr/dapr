@@ -31,6 +31,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 // Proxy is the interface for a gRPC transparent proxy.
@@ -134,11 +135,12 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 			return ctx, nil, nil, nopTeardown, err
 		}
 
-		outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
+		mdCopy := md.Copy()
+		delete(mdCopy, securityConsts.APITokenHeader)
+		outCtx := metadata.NewOutgoingContext(ctx, mdCopy)
 		if p.appendAppTokenFn != nil {
 			outCtx = p.appendAppTokenFn(outCtx)
 		}
-
 		return outCtx, appClient.(*grpc.ClientConn), nil, nopTeardown, nil
 	}
 
