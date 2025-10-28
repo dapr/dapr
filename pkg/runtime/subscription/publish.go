@@ -29,7 +29,6 @@ import (
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
-	grpcChannel "github.com/dapr/dapr/pkg/channel/grpc"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -143,7 +142,7 @@ func (s *Subscription) publishMessageGRPC(ctx context.Context, msg *rtpubsub.Sub
 	}
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
-	ctx = grpcChannel.AddAppTokenToContext(ctx)
+	ctx = s.grpc.AddAppTokenToContext(ctx)
 
 	conn, err := s.grpc.GetAppClient()
 	if err != nil {
