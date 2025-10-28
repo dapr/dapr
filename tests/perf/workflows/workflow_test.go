@@ -66,21 +66,6 @@ func TestMain(m *testing.M) {
 			AppMemoryRequest:  "800Mi",
 			AppPort:           -1,
 		},
-		{
-			AppName:           appNamePrefix + backend + "-scheduler",
-			DaprEnabled:       true,
-			ImageName:         "perf-workflowsapp",
-			Replicas:          1,
-			IngressEnabled:    true,
-			IngressPort:       3000,
-			MetricsEnabled:    true,
-			DaprMemoryLimit:   "800Mi",
-			DaprMemoryRequest: "800Mi",
-			AppMemoryLimit:    "800Mi",
-			AppMemoryRequest:  "800Mi",
-			AppPort:           -1,
-			Config:            "featureactorreminderscheduler",
-		},
 	}
 
 	tr = runner.NewTestRunner("workflow_test", testApps, []kube.ComponentDescription{}, nil)

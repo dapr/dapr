@@ -19,10 +19,12 @@ type ApplicationConfig struct {
 	// Duration. example: "1h".
 	ActorIdleTimeout string `json:"actorIdleTimeout"`
 	// Duration. example: "30s".
-	DrainOngoingCallTimeout    string           `json:"drainOngoingCallTimeout"`
-	DrainRebalancedActors      bool             `json:"drainRebalancedActors"`
-	Reentrancy                 ReentrancyConfig `json:"reentrancy,omitempty"`
-	RemindersStoragePartitions int              `json:"remindersStoragePartitions"`
+	DrainOngoingCallTimeout string           `json:"drainOngoingCallTimeout"`
+	DrainRebalancedActors   bool             `json:"drainRebalancedActors"`
+	Reentrancy              ReentrancyConfig `json:"reentrancy,omitempty"`
+
+	// DEPRECATED.
+	RemindersStoragePartitions int `json:"remindersStoragePartitions"`
 
 	// Duplicate of the above config so we can assign it to individual entities.
 	EntityConfigs []EntityConfig `json:"entitiesConfig,omitempty"`
@@ -38,8 +40,10 @@ type EntityConfig struct {
 	// Duration. example: "1h".
 	ActorIdleTimeout string `json:"actorIdleTimeout"`
 	// Duration. example: "30s".
-	DrainOngoingCallTimeout    string           `json:"drainOngoingCallTimeout"`
-	DrainRebalancedActors      bool             `json:"drainRebalancedActors"`
-	Reentrancy                 ReentrancyConfig `json:"reentrancy,omitempty"`
-	RemindersStoragePartitions int              `json:"remindersStoragePartitions"`
+	DrainOngoingCallTimeout string           `json:"drainOngoingCallTimeout"`
+	DrainRebalancedActors   bool             `json:"drainRebalancedActors"`
+	Reentrancy              ReentrancyConfig `json:"reentrancy,omitempty"`
+
+	// DEPRECATED.
+	RemindersStoragePartitions int `json:"remindersStoragePartitions"`
 }
