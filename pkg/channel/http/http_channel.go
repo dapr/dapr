@@ -42,7 +42,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	streamutils "github.com/dapr/kit/streams"
 )
@@ -92,6 +91,7 @@ type ChannelConfiguration struct {
 	TLSClientKey       string
 	TLSRootCA          string
 	TLSRenegotiation   string
+	AppAPIToken        string
 }
 
 // CreateHTTPChannel creates an HTTP AppChannel.
@@ -102,7 +102,7 @@ func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) 
 		compStore:           config.CompStore,
 		baseAddress:         config.Endpoint,
 		tracingSpec:         config.TracingSpec,
-		appHeaderToken:      security.GetAppToken(),
+		appHeaderToken:      config.AppAPIToken,
 		maxResponseBodySize: config.MaxRequestBodySize,
 	}
 
