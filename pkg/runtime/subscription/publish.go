@@ -142,6 +142,7 @@ func (s *Subscription) publishMessageGRPC(ctx context.Context, msg *rtpubsub.Sub
 	}
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
+	ctx = s.grpc.AddAppTokenToContext(ctx)
 
 	conn, err := s.grpc.GetAppClient()
 	if err != nil {

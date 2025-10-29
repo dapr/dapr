@@ -177,6 +177,9 @@ func TestIntercept(t *testing.T) {
 			AppClientFn:       appClientFn,
 			AppID:             "a",
 			Resiliency:        resiliency.New(nil),
+			AppendAppTokenFn: func(ctx context.Context) context.Context {
+				return metadata.AppendToOutgoingContext(ctx, securityConsts.APITokenHeader, "token1")
+			},
 		})
 		p.SetTelemetryFn(func(ctx context.Context) context.Context {
 			return ctx

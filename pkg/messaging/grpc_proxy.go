@@ -31,7 +31,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
@@ -48,6 +47,7 @@ type proxy struct {
 	connectionFactory  messageClientConnection
 	remoteAppFn        func(appID string) (remoteApp, error)
 	telemetryFn        func(context.Context) context.Context
+	appendAppTokenFn   func(context.Context) context.Context
 	acl                *config.AccessControlList
 	resiliency         resiliency.Provider
 	maxRequestBodySize int
@@ -61,6 +61,7 @@ type ProxyOpts struct {
 	ACL                *config.AccessControlList
 	Resiliency         resiliency.Provider
 	MaxRequestBodySize int
+	AppendAppTokenFn   func(context.Context) context.Context
 }
 
 // NewProxy returns a new proxy.
@@ -69,6 +70,7 @@ func NewProxy(opts ProxyOpts) Proxy {
 		appClientFn:        opts.AppClientFn,
 		appID:              opts.AppID,
 		connectionFactory:  opts.ConnectionFactory,
+		appendAppTokenFn:   opts.AppendAppTokenFn,
 		acl:                opts.ACL,
 		resiliency:         opts.Resiliency,
 		maxRequestBodySize: opts.MaxRequestBodySize,
@@ -133,13 +135,12 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 			return ctx, nil, nil, nopTeardown, err
 		}
 
-		appMetadataToken := security.GetAppToken()
-		if appMetadataToken != "" {
-			md.Set(securityConsts.APITokenHeader, appMetadataToken)
+		mdCopy := md.Copy()
+		delete(mdCopy, securityConsts.APITokenHeader)
+		outCtx := metadata.NewOutgoingContext(ctx, mdCopy)
+		if p.appendAppTokenFn != nil {
+			outCtx = p.appendAppTokenFn(outCtx)
 		}
-
-		outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
-
 		return outCtx, appClient.(*grpc.ClientConn), nil, nopTeardown, nil
 	}
 

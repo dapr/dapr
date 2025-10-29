@@ -557,6 +557,7 @@ func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDa
 	spans = spans[:n]
 	defer endSpans(spans)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.metadata)
+	ctx = s.grpc.AddAppTokenToContext(ctx)
 
 	conn, err := s.grpc.GetAppClient()
 	if err != nil {
