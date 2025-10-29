@@ -187,7 +187,8 @@ func newDaprRuntime(ctx context.Context,
 		return nil, err
 	}
 
-	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
+	appAPIToken := security.GetAppToken()
+	grpc := createGRPCManager(sec, runtimeConfig, globalConfig, appAPIToken)
 
 	authz := authorizer.New(authorizer.Options{
 		ID:           runtimeConfig.id,
@@ -207,6 +208,7 @@ func newDaprRuntime(ctx context.Context,
 		ReadBufferSize:      runtimeConfig.readBufferSize,
 		GRPC:                grpc,
 		AppMiddleware:       httpMiddlewareApp,
+		AppAPIToken:         appAPIToken,
 	})
 
 	pubsubAdapter := publisher.New(publisher.Options{
@@ -882,6 +884,7 @@ func (a *DaprRuntime) initProxy() {
 		ACL:                a.accessControlList,
 		Resiliency:         a.resiliency,
 		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
+		AppendAppTokenFn:   a.grpc.AddAppTokenToContext,
 	})
 }
 
@@ -1403,7 +1406,7 @@ func featureTypeToString(features interface{}) []string {
 	return featureStr
 }
 
-func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, globalConfig *config.Configuration) *manager.Manager {
+func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, globalConfig *config.Configuration, appAPIToken string) *manager.Manager {
 	grpcAppChannelConfig := &manager.AppChannelConfig{}
 	if globalConfig != nil {
 		grpcAppChannelConfig.TracingSpec = globalConfig.GetTracingSpec()
@@ -1417,6 +1420,7 @@ func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, glob
 		grpcAppChannelConfig.BaseAddress = runtimeConfig.appConnectionConfig.ChannelAddress
 	}
 
+	grpcAppChannelConfig.AppAPIToken = appAPIToken
 	m := manager.NewManager(sec, runtimeConfig.mode, grpcAppChannelConfig)
 	m.StartCollector()
 	return m
