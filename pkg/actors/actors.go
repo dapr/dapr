@@ -33,9 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
-	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
-	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/scheduler"
-	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/statestore"
+	"github.com/dapr/dapr/pkg/actors/internal/scheduler"
 	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/internal/timers/inmemory"
 	"github.com/dapr/dapr/pkg/actors/reminders"
@@ -63,7 +61,6 @@ type Options struct {
 	Namespace          string
 	Port               int
 	PlacementAddresses []string
-	SchedulerReminders bool
 	HealthEndpoint     string
 	Resiliency         resiliency.Provider
 	Security           security.Handler
@@ -106,7 +103,6 @@ type actors struct {
 	namespace          string
 	port               int
 	placementAddresses []string
-	schedulerReminders bool
 	healthEndpoint     string
 	resiliency         resiliency.Provider
 	security           security.Handler
@@ -122,8 +118,7 @@ type actors struct {
 	router          router.Interface
 	timerStorage    internaltimers.Storage
 	timers          timers.Interface
-	stateReminders  *statestore.Statestore
-	reminderStore   storage.Interface
+	scheduler       scheduler.Interface
 	state           actorstate.Interface
 	reentrancyStore *reentrancystore.Store
 
@@ -154,7 +149,6 @@ func New(opts Options) Interface {
 		namespace:          opts.Namespace,
 		port:               opts.Port,
 		placementAddresses: opts.PlacementAddresses,
-		schedulerReminders: opts.SchedulerReminders,
 		healthEndpoint:     opts.HealthEndpoint,
 		resiliency:         opts.Resiliency,
 		security:           opts.Security,
@@ -188,9 +182,15 @@ func (a *actors) Init(opts InitOptions) error {
 
 	storeEnabled := a.buildStateStore(opts, apiLevel)
 
+	a.scheduler = scheduler.New(scheduler.Options{
+		Namespace: a.namespace,
+		AppID:     a.appID,
+		Client:    opts.SchedulerClient,
+		Table:     a.table,
+	})
 	a.reminders = reminders.New(reminders.Options{
-		Storage: a.reminderStore,
-		Table:   a.table,
+		Scheduler: a.scheduler,
+		Table:     a.table,
 	})
 
 	var err error
@@ -202,7 +202,6 @@ func (a *actors) Init(opts InitOptions) error {
 		Namespace: a.namespace,
 		Hostname:  opts.Hostname,
 		Port:      a.port,
-		Reminders: a.reminderStore,
 		APILevel:  apiLevel,
 		Healthz:   a.healthz,
 		Mode:      a.mode,
@@ -226,7 +225,6 @@ func (a *actors) Init(opts InitOptions) error {
 
 	a.router = router.New(router.Options{
 		Namespace:          a.namespace,
-		SchedulerReminders: a.schedulerReminders,
 		Placement:          a.placement,
 		GRPC:               opts.GRPC,
 		Table:              a.table,
@@ -242,10 +240,6 @@ func (a *actors) Init(opts InitOptions) error {
 		Storage: a.timerStorage,
 		Table:   a.table,
 	})
-
-	if a.stateReminders != nil {
-		a.stateReminders.SetRouter(a.router)
-	}
 
 	return nil
 }
@@ -297,15 +291,6 @@ func (a *actors) Run(ctx context.Context) error {
 		a.timerStorage,
 	); err != nil {
 		return err
-	}
-
-	if a.stateReminders != nil {
-		if err := mngr.AddCloser(
-			a.stateReminders,
-			a.reminderStore,
-		); err != nil {
-			return err
-		}
 	}
 
 	defer log.Info("Actor runtime stopped")
@@ -467,13 +452,6 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		})
 	}
 
-	if a.stateReminders != nil {
-		a.stateReminders.SetEntityConfigsRemindersStoragePartitions(
-			entityConfigs,
-			cfg.RemindersStoragePartitions,
-		)
-	}
-
 	log.Infof("Registering hosted actors: %v", cfg.HostedActorTypes)
 	a.table.RegisterActorTypes(table.RegisterActorTypeOptions{
 		Factories: factories,
@@ -590,26 +568,6 @@ func (a *actors) buildStateStore(opts InitOptions, apiLevel *apilevel.APILevel) 
 	if !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
 		log.Warnf("Actor state store %s does not support required features: %s, %s", opts.StateStoreName, state.FeatureETag, state.FeatureTransactional)
 		return false
-	}
-
-	a.stateReminders = statestore.New(statestore.Options{
-		Resiliency: a.resiliency,
-		StateStore: store,
-		Table:      a.table,
-		StoreName:  opts.StateStoreName,
-		APILevel:   apiLevel,
-	})
-
-	a.reminderStore = a.stateReminders
-	if a.schedulerReminders {
-		a.reminderStore = scheduler.New(scheduler.Options{
-			Namespace:     a.namespace,
-			AppID:         a.appID,
-			Client:        opts.SchedulerClient,
-			StateReminder: a.stateReminders,
-			Table:         a.table,
-			Healthz:       a.healthz,
-		})
 	}
 
 	return true

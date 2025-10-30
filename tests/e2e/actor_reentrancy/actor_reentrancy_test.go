@@ -83,7 +83,6 @@ func TestMain(m *testing.M) {
 				DaprEnabled:         true,
 				DebugLoggingEnabled: true,
 				ImageName:           "e2e-actorreentrancy",
-				Config:              "featureactorreminderscheduler",
 				Replicas:            1,
 				IngressEnabled:      true,
 				MetricsEnabled:      true,
