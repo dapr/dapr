@@ -38,6 +38,8 @@ func init() {
 type delstate struct {
 	daprd1 *daprd.Daprd
 	daprd2 *daprd.Daprd
+	daprd3 *daprd.Daprd
+	daprd4 *daprd.Daprd
 	place  *placement.Placement
 	sched  *scheduler.Scheduler
 }
@@ -51,6 +53,18 @@ func (d *delstate) Setup(t *testing.T) []framework.Option {
 		daprd.WithSchedulerAddresses(d.sched.Address()),
 	)
 	d.daprd2 = daprd.New(t,
+		daprd.WithPlacementAddresses(d.place.Address()),
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithSchedulerAddresses(d.sched.Address()),
+		daprd.WithAppID(d.daprd1.AppID()),
+	)
+	d.daprd3 = daprd.New(t,
+		daprd.WithPlacementAddresses(d.place.Address()),
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithSchedulerAddresses(d.sched.Address()),
+		daprd.WithAppID(d.daprd1.AppID()),
+	)
+	d.daprd4 = daprd.New(t,
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithSchedulerAddresses(d.sched.Address()),
@@ -94,6 +108,16 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() {
 		d.daprd2.Kill(t)
 	})
+	d.daprd3.Run(t, ctx)
+	d.daprd3.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() {
+		d.daprd3.Kill(t)
+	})
+	d.daprd4.Run(t, ctx)
+	d.daprd4.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() {
+		d.daprd4.Kill(t)
+	})
 
 	cl = workflow.NewClient(d.daprd2.GRPCConn(t, ctx))
 	require.NoError(t, cl.StartWorker(ctx, reg))
@@ -112,6 +136,11 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 			"dapr_runtime_actor_reminders_fired_total|actor_type:dapr.internal.default.%s.activity|app_id:%s|success:true",
 			d.daprd2.AppID(), d.daprd2.AppID())]
 		assert.InDelta(c, 1.0, v, 0)
+
+		v = d.daprd2.Metrics(t, ctx).All()[fmt.Sprintf(
+			"dapr_runtime_actor_reminders_fired_total|actor_type:dapr.internal.default.%s.activity|app_id:%s|success:false",
+			d.daprd2.AppID(), d.daprd2.AppID())]
+		assert.InDelta(c, 0.0, v, 0)
 
 		v = d.daprd2.Metrics(t, ctx).All()[fmt.Sprintf(
 			"dapr_runtime_workflow_activity_execution_count|activity_name:bar|app_id:%s|namespace:|status:failed",
