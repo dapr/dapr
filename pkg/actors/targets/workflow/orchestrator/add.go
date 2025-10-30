@@ -29,6 +29,7 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	}
 
 	if state == nil {
+		log.Errorf("Workflow actor '%s': cannot add event to workflow as state has been purged. Ignoring event.", o.actorID)
 		return api.ErrInstanceNotFound
 	}
 
