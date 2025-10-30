@@ -65,10 +65,14 @@ type Options struct {
 }
 
 func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, error) {
+	// Refresh DNS entries before attempting connection
+	// This ensures we discover placement server changes (restarts, evictions, etc.)
+	if err := r.refreshEntries(ctx); err != nil {
+		return nil, fmt.Errorf("failed to refresh DNS addresses: %w", err)
+	}
+
 	if len(r.dnsEntries) == 0 {
-		if err := r.refreshEntries(ctx); err != nil {
-			return nil, fmt.Errorf("failed to refresh DNS addresses: %w", err)
-		}
+		return nil, fmt.Errorf("no DNS entries available for %s", r.host)
 	}
 
 	hostPort := net.JoinHostPort(r.dnsEntries[0], r.port)
