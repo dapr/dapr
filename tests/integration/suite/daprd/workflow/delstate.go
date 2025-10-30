@@ -125,16 +125,16 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 		v := d.daprd2.Metrics(t, ctx).All()[fmt.Sprintf(
 			"dapr_runtime_actor_reminders_fired_total|actor_type:dapr.internal.default.%s.activity|app_id:%s|success:true",
 			d.daprd2.AppID(), d.daprd2.AppID())]
-		assert.Equal(c, 1.0, v)
+		assert.InDelta(c, 1.0, v, 0)
 	}, time.Second*10, time.Millisecond*10)
 
 	v := d.daprd2.Metrics(t, ctx).All()[fmt.Sprintf(
 		"dapr_runtime_actor_reminders_fired_total|actor_type:dapr.internal.default.%s.activity|app_id:%s|success:false",
 		d.daprd2.AppID(), d.daprd2.AppID())]
-	assert.Equal(t, 0.0, v)
+	assert.InDelta(t, 0.0, v, 0)
 
 	v = d.daprd2.Metrics(t, ctx).All()[fmt.Sprintf(
 		"dapr_runtime_workflow_activity_execution_count|activity_name:bar|app_id:%s|namespace:|status:failed",
 		d.daprd2.AppID())]
-	assert.Equal(t, 1.0, v)
+	assert.InDelta(t, 1.0, v, 0)
 }
