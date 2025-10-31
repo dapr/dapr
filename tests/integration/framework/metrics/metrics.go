@@ -89,6 +89,9 @@ func New(t assert.TestingT, ctx context.Context, url string) *Metrics {
 }
 
 func (m *Metrics) All() map[string]float64 {
+	if m == nil {
+		return make(map[string]float64)
+	}
 	return m.metrics
 }
 
