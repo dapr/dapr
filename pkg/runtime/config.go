@@ -119,6 +119,7 @@ type Config struct {
 	Security                      security.Handler
 	Healthz                       healthz.Healthz
 	WorkflowEventSink             orchestrator.EventSink
+	DisableInitEndpoints          string
 }
 
 type internalConfig struct {
@@ -156,6 +157,7 @@ type internalConfig struct {
 	healthz                      healthz.Healthz
 	outboundHealthz              healthz.Healthz
 	workflowEventSink            orchestrator.EventSink
+	disableInitEndpoints         []string
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -454,6 +456,23 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	default:
 		return nil, fmt.Errorf("invalid value for 'app-protocol': %v", c.AppProtocol)
 	}
+
+	allowedEndpoints := map[string]struct{}{
+		"config":    {},
+		"subscribe": {},
+	}
+	filtered := []string{}
+	for _, e := range strings.Split(c.DisableInitEndpoints, ",") {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e == "" {
+			continue
+		}
+		if _, ok := allowedEndpoints[e]; !ok {
+			return nil, fmt.Errorf("invalid value for 'disable-init-endpoints': %v", e)
+		}
+		filtered = append(filtered, e)
+	}
+	intc.disableInitEndpoints = filtered
 
 	intc.apiListenAddresses = strings.Split(c.DaprAPIListenAddresses, ",")
 	if len(intc.apiListenAddresses) == 0 {
