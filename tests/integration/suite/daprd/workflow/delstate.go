@@ -118,6 +118,8 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, here.Load(), int64(2))
 	}, time.Second*10, time.Millisecond*10)
 
+	time.Sleep(time.Second * 3)
+
 	close(releaseCh)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
