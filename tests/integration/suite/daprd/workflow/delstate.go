@@ -16,6 +16,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -74,11 +75,13 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 	d.daprd1.WaitUntilRunning(t, ctx)
 
 	releaseCh := make(chan struct{})
+	var here atomic.Int64
 	reg := workflow.NewRegistry()
 	reg.AddWorkflowN("foo", func(ctx *workflow.WorkflowContext) (any, error) {
 		return nil, ctx.CallActivity("bar").Await(nil)
 	})
 	reg.AddActivityN("bar", func(ctx workflow.ActivityContext) (any, error) {
+		here.Add(1)
 		<-releaseCh
 		return nil, nil
 	})
@@ -87,6 +90,10 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, cl.StartWorker(ctx, reg))
 	_, err := cl.ScheduleWorkflow(ctx, "foo")
 	require.NoError(t, err)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int64(1), here.Load())
+	}, time.Second*10, time.Millisecond*10)
 
 	d.daprd1.Kill(t)
 	d.daprd2.Run(t, ctx)
@@ -104,7 +111,12 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, cl.StartWorker(ctx, reg))
 
 	require.NoError(t, workflow.NewClient(d.daprd3.GRPCConn(t, ctx)).StartWorker(ctx, reg))
-	time.Sleep(time.Second * 3)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, d.daprd2.GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+		assert.Len(c, d.daprd3.GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+		assert.GreaterOrEqual(c, here.Load(), int64(2))
+	}, time.Second*10, time.Millisecond*10)
 
 	close(releaseCh)
 
