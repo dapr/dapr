@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/validation/path"
@@ -32,9 +33,15 @@ import (
 	kitstrings "github.com/dapr/kit/strings"
 )
 
-const yamlSeparator = "\n---"
+const (
+	yamlSeparator                     = "\n---"
+	envVarTemplateSubstitutionEnabled = "DAPR_ENABLE_RESOURCES_ENV_VAR_SUBSTITUTION"
+)
 
-var log = logger.NewLogger("dapr.runtime.loader.disk")
+var (
+	log              = logger.NewLogger("dapr.runtime.loader.disk")
+	templateVarRegex = regexp.MustCompile(`\{\{([^}:]+)(?::([^}]*))?\}\}`)
+)
 
 type manifestSet[T meta.Resource] struct {
 	d *disk[T]
@@ -118,6 +125,12 @@ func (m *manifestSet[T]) decodeYaml(f io.Reader) error {
 		}
 
 		scannerBytes := scanner.Bytes()
+
+		// Substitute environment variables in the manifest content if enabled
+		if isEnvVarSubstitutionEnabled() {
+			scannerBytes = substituteEnvVars(scannerBytes)
+		}
+
 		var ti struct {
 			metav1.TypeMeta   `json:",inline"`
 			metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -184,6 +197,45 @@ func splitYamlDoc(data []byte, atEOF bool) (advance int, token []byte, err error
 	}
 	// Request more data.
 	return 0, nil, nil
+}
+
+// isEnvVarSubstitutionEnabled checks if environment variable substitution is enabled
+// via the DAPR_ENABLE_RESOURCES_ENV_VAR_SUBSTITUTION environment variable.
+func isEnvVarSubstitutionEnabled() bool {
+	val := os.Getenv(envVarTemplateSubstitutionEnabled)
+	return strings.EqualFold(val, "true") || val == "1"
+}
+
+// substituteEnvVars replaces template variables in the format {{env_var_name:default_value}}
+// or {{env_var_name}} with their corresponding environment variable values.
+// If the environment variable exists, it's used. If not, the default_value is used (if provided).
+// If neither exists, the original template is left unchanged.
+func substituteEnvVars(content []byte) []byte {
+	return templateVarRegex.ReplaceAllFunc(content, func(match []byte) []byte {
+		submatches := templateVarRegex.FindSubmatch(match)
+		if len(submatches) < 2 {
+			return match
+		}
+
+		envVarName := strings.TrimSpace(string(submatches[1]))
+		var defaultValue string
+		if len(submatches) > 2 && submatches[2] != nil {
+			defaultValue = string(submatches[2])
+		}
+
+		// Try to get the environment variable
+		if envValue, exists := os.LookupEnv(envVarName); exists {
+			return []byte(envValue)
+		}
+
+		// If env var doesn't exist and we have a default value, use it
+		if len(submatches) > 2 && submatches[2] != nil {
+			return []byte(defaultValue)
+		}
+
+		// Otherwise, leave the template as-is
+		return match
+	})
 }
 
 func (m *manifestSet[T]) Len() int {
