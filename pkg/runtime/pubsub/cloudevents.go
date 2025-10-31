@@ -33,6 +33,7 @@ type CloudEvent struct {
 	Source          string `mapstructure:"cloudevent.source"`
 	Type            string `mapstructure:"cloudevent.type"`
 	TraceParent     string `mapstructure:"cloudevent.traceparent"`
+	Subject         string `mapstructure:"cloudevent.subject"`
 }
 
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
@@ -53,5 +54,5 @@ func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]inte
 		req.TraceID = req.TraceParent
 	}
 	return contribPubsub.NewCloudEventsEnvelope(req.ID, req.Source, req.Type,
-		"", req.Topic, req.Pubsub, req.DataContentType, req.Data, req.TraceID, req.TraceState), nil
+		req.Subject, req.Topic, req.Pubsub, req.DataContentType, req.Data, req.TraceID, req.TraceState), nil
 }
