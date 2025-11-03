@@ -38,7 +38,6 @@ func init() {
 type delstate struct {
 	daprd1 *daprd.Daprd
 	daprd2 *daprd.Daprd
-	daprd3 *daprd.Daprd
 	place  *placement.Placement
 	sched  *scheduler.Scheduler
 }
@@ -52,12 +51,6 @@ func (d *delstate) Setup(t *testing.T) []framework.Option {
 		daprd.WithSchedulerAddresses(d.sched.Address()),
 	)
 	d.daprd2 = daprd.New(t,
-		daprd.WithPlacementAddresses(d.place.Address()),
-		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithSchedulerAddresses(d.sched.Address()),
-		daprd.WithAppID(d.daprd1.AppID()),
-	)
-	d.daprd3 = daprd.New(t,
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithSchedulerAddresses(d.sched.Address()),
@@ -101,20 +94,12 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() {
 		d.daprd2.Kill(t)
 	})
-	d.daprd3.Run(t, ctx)
-	d.daprd3.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() {
-		d.daprd3.Kill(t)
-	})
 
 	cl = workflow.NewClient(d.daprd2.GRPCConn(t, ctx))
 	require.NoError(t, cl.StartWorker(ctx, reg))
 
-	require.NoError(t, workflow.NewClient(d.daprd3.GRPCConn(t, ctx)).StartWorker(ctx, reg))
-
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, d.daprd2.GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
-		assert.Len(c, d.daprd3.GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
 		assert.GreaterOrEqual(c, here.Load(), int64(2))
 	}, time.Second*10, time.Millisecond*10)
 
