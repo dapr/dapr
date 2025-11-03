@@ -40,6 +40,7 @@ type Options struct {
 
 	InitialCluster             []string
 	ClientPort                 uint64
+	ClientListenAddress        string
 	SpaceQuota                 int64
 	CompactionMode             string
 	CompactionRetention        string

@@ -201,34 +201,39 @@ func TestRequiresUpdateInPlacementTables(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		isActorHost bool
-		host        *v1pb.Host
-		expected    bool
+		name                string
+		isActorHost         bool
+		host                *v1pb.Host
+		expected            bool
+		expectedIsActorHost bool
 	}{
 		{
-			name:        "host with actors - updating actor types",
-			isActorHost: true,
-			host:        hostWithActors,
-			expected:    true,
+			name:                "host with actors - updating actor types",
+			isActorHost:         true,
+			host:                hostWithActors,
+			expected:            true,
+			expectedIsActorHost: true,
 		},
 		{
-			name:        "host with no actors - registering new actors",
-			isActorHost: false,
-			host:        hostWithActors,
-			expected:    true,
+			name:                "host with no actors - registering new actors",
+			isActorHost:         false,
+			host:                hostWithActors,
+			expected:            true,
+			expectedIsActorHost: true,
 		},
 		{
-			name:        "host with actors - removing all actors",
-			isActorHost: true,
-			host:        hostWithNoActors,
-			expected:    true,
+			name:                "host with actors - removing all actors",
+			isActorHost:         true,
+			host:                hostWithNoActors,
+			expected:            true,
+			expectedIsActorHost: true,
 		},
 		{
-			name:        "host with no actors - not registering any new actors",
-			isActorHost: false,
-			host:        hostWithNoActors,
-			expected:    false,
+			name:                "host with no actors - not registering any new actors",
+			isActorHost:         false,
+			host:                hostWithNoActors,
+			expected:            false,
+			expectedIsActorHost: false,
 		},
 	}
 	for _, tt := range tests {
@@ -236,6 +241,7 @@ func TestRequiresUpdateInPlacementTables(t *testing.T) {
 			var isActorHost atomic.Bool
 			isActorHost.Store(tt.isActorHost)
 			assert.Equal(t, tt.expected, requiresUpdateInPlacementTables(tt.host, &isActorHost))
+			assert.Equal(t, tt.expectedIsActorHost, isActorHost.Load())
 		})
 	}
 }

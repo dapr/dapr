@@ -52,10 +52,6 @@ const (
 	// Enables support for hot reloading of Daprd Components.
 	HotReload Feature = "HotReload"
 
-	// Enables support for using the Scheduler control plane service
-	// for Actor Reminders.
-	SchedulerReminders Feature = "SchedulerReminders"
-
 	// Enables feature to support workflows in a clustered deployment.
 	WorkflowsClusteredDeployment Feature = "WorkflowsClusteredDeployment"
 )
@@ -73,9 +69,7 @@ const (
 	ActionPolicyGlobal  = "global"
 )
 
-var defaultFeatures = map[Feature]bool{
-	SchedulerReminders: true,
-}
+var defaultFeatures = make(map[Feature]bool)
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 //

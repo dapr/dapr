@@ -21,7 +21,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -66,32 +65,18 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 	// period interval
 	switch {
 	case err == nil:
-		if a.schedulerReminders {
-			return nil
-		}
-		// We delete the reminder on success and on non-recoverable errors.
-		return actorerrors.ErrReminderCanceled
+		return nil
 	case errors.Is(err, context.DeadlineExceeded):
 		log.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", a.actorID, reminder.Name, err)
 		return err
 	case errors.Is(err, context.Canceled):
 		log.Warnf("%s: received cancellation signal while waiting for activity execution '%s'", a.actorID, reminder.Name)
-		if a.schedulerReminders {
-			return err
-		}
-		return nil
+		return err
 	case wferrors.IsRecoverable(err):
 		log.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", a.actorID, err)
-		if a.schedulerReminders {
-			return err
-		}
-		return nil
+		return err
 	default: // Other error
 		log.Errorf("%s: execution failed with an error: %v", a.actorID, err)
-		if a.schedulerReminders {
-			return err
-		}
-		// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
-		return actorerrors.ErrReminderCanceled
+		return err
 	}
 }

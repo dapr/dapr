@@ -49,7 +49,6 @@ func (s *state) Setup(t *testing.T) []framework.Option {
 			return "", nil
 		}),
 		workflow.WithAddActivity(t, "bar", func(ctx task.ActivityContext) (any, error) { return "", nil }),
-		workflow.WithScheduler(true),
 	)
 
 	return []framework.Option{
