@@ -100,7 +100,7 @@ spec:
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 		}, resp)
 
@@ -143,15 +143,15 @@ spec:
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 			{
 				Name: "abc", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 			{
 				Name: "xyz", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 		}, resp)
 
@@ -184,15 +184,15 @@ spec:
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{
 					Name: "123", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 				{
 					Name: "abc", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "KEYS_LIKE", "ACTOR"},
 				},
 				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*10)
@@ -246,19 +246,19 @@ spec:
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "KEYS_LIKE", "ACTOR"},
 				},
 				{
 					Name: "abc", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 				{
 					Name: "foo", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*10)
@@ -291,19 +291,19 @@ spec:
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "KEYS_LIKE", "ACTOR"},
 				},
 				{
 					Name: "bar", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 				{
 					Name: "foo", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*10)
@@ -342,15 +342,15 @@ spec:
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "KEYS_LIKE", "ACTOR"},
 				},
 				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 				{
 					Name: "foo", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*10)
