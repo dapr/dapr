@@ -216,6 +216,12 @@ func (req DeleteReminderRequest) Key() string {
 	return req.ActorType + DaprSeparator + req.ActorID + DaprSeparator + req.Name
 }
 
+type DeleteRemindersByActorIDRequest struct {
+	ActorType       string
+	ActorID         string
+	MatchIDAsPrefix bool
+}
+
 type ListRemindersRequest struct {
 	ActorType string
 }
