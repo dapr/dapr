@@ -42,7 +42,9 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
@@ -64,11 +66,12 @@ const (
 )
 
 type Options struct {
-	AppID      string
-	Namespace  string
-	Actors     actors.Interface
-	Resiliency resiliency.Provider
-	EventSink  orchestrator.EventSink
+	AppID          string
+	Namespace      string
+	Actors         actors.Interface
+	Resiliency     resiliency.Provider
+	EventSink      orchestrator.EventSink
+	ComponentStore *compstore.ComponentStore
 	// experimental feature
 	// enabling this will use the cluster tasks backend for pending tasks, instead of the default local implementation
 	// the cluster tasks backend uses actors to share the state of pending tasks
@@ -88,6 +91,7 @@ type Actors struct {
 	resiliency                resiliency.Provider
 	actors                    actors.Interface
 	eventSink                 orchestrator.EventSink
+	compStore                 *compstore.ComponentStore
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -113,6 +117,7 @@ func New(opts Options) *Actors {
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       pendingTasksBackend,
 		enableClusteredDeployment: opts.EnableClusteredDeployment,
+		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
@@ -628,4 +633,40 @@ func (abe *Actors) WaitForActivityCompletion(ctx context.Context, request *proto
 // WaitForOrchestratorCompletion implements backend.Backend.
 func (abe *Actors) WaitForOrchestratorCompletion(ctx context.Context, request *protos.OrchestratorRequest) (*protos.OrchestratorResponse, error) {
 	return abe.pendingTasksBackend.WaitForOrchestratorCompletion(ctx, request)
+}
+
+func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
+	resp, err := list.ListInstanceIDs(ctx, list.ListOptions{
+		ComponentStore:    abe.compStore,
+		Namespace:         abe.namespace,
+		AppID:             abe.appID,
+		PageSize:          req.PageSize,
+		ContinuationToken: req.ContinuationToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &protos.ListInstanceIDsResponse{
+		InstanceIds:       resp.Keys,
+		ContinuationToken: resp.ContinuationToken,
+	}, nil
+}
+
+func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstanceHistoryRequest) (*protos.GetInstanceHistoryResponse, error) {
+	ss, err := abe.actors.State(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), state.Options{
+		AppID:             abe.appID,
+		WorkflowActorType: abe.workflowActorType,
+		ActivityActorType: abe.activityActorType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &protos.GetInstanceHistoryResponse{Events: resp.History}, nil
 }

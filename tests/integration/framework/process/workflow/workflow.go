@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
+	"github.com/dapr/durabletask-go/workflow"
 )
 
 type Workflow struct {
@@ -82,6 +83,11 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 				dopts = append(dopts, daprdOpt.opts...)
 			}
 		}
+
+		// TODO: @joshvanl
+		//if i > 0 {
+		//	dopts = append(dopts, daprd.WithAppID(daprds[0].AppID()))
+		//}
 
 		daprds[i] = daprd.New(t, dopts...)
 	}
@@ -163,6 +169,17 @@ func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.Task
 	t.Helper()
 
 	return w.BackendClientN(t, ctx, 0)
+}
+
+func (w *Workflow) WorkflowClient(t *testing.T, ctx context.Context) *workflow.Client {
+	t.Helper()
+	return workflow.NewClient(w.Dapr().GRPCConn(t, ctx))
+}
+
+func (w *Workflow) WorkflowClientN(t *testing.T, ctx context.Context, index int) *workflow.Client {
+	t.Helper()
+	require.Less(t, index, len(w.daprds), "index out of range")
+	return workflow.NewClient(w.DaprN(index).GRPCConn(t, ctx))
 }
 
 // BackendClient returns a backend client for the specified index
