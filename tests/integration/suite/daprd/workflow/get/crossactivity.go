@@ -93,6 +93,6 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[4].GetRouter().GetSourceAppID())
 	assert.Equal(t, c.workflow.DaprN(1).AppID(), evs[4].GetRouter().GetTargetAppID())
 
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[5].GetExecutionCompleted().OrchestrationStatus.String())
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[5].GetExecutionCompleted().GetOrchestrationStatus().String())
 	assert.Equal(t, c.workflow.Dapr().AppID(), evs[5].GetRouter().GetSourceAppID())
 }

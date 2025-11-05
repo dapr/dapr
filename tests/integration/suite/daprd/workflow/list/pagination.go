@@ -53,7 +53,7 @@ func (p *pagination) Run(t *testing.T, ctx context.Context) {
 	client := p.workflow.BackendClient(t, ctx)
 
 	ids := make([]string, 0, 1030)
-	for i := 0; i < 1030; i++ {
+	for range 1030 {
 		id, err := client.ScheduleNewOrchestration(ctx, "foo")
 		require.NoError(t, err)
 		ids = append(ids, id.String())

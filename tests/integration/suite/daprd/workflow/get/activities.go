@@ -101,6 +101,6 @@ func (a *activities) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"3"`, evs[10].GetTaskCompleted().GetResult().GetValue())
 	assert.Equal(t, a.workflow.Dapr().AppID(), evs[10].GetRouter().GetSourceAppID())
 
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[11].GetExecutionCompleted().OrchestrationStatus.String())
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[11].GetExecutionCompleted().GetOrchestrationStatus().String())
 	assert.Equal(t, a.workflow.Dapr().AppID(), evs[11].GetRouter().GetSourceAppID())
 }

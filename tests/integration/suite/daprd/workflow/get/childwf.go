@@ -87,7 +87,6 @@ func (c *childwf) Run(t *testing.T, ctx context.Context) {
 	assert.NotNil(t, evs[4].GetSubOrchestrationInstanceCompleted())
 
 	assert.NotNil(t, evs[5].GetExecutionCompleted())
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[5].GetExecutionCompleted().OrchestrationStatus.String())
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[5].GetExecutionCompleted().GetOrchestrationStatus().String())
 	assert.Equal(t, c.workflow.Dapr().AppID(), evs[5].GetRouter().GetSourceAppID())
-
 }

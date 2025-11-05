@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -75,7 +76,8 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 
 	ids = make([]string, 0, 5)
 	for range 5 {
-		id, err := client.ScheduleNewOrchestration(ctx, "foo")
+		var id api.InstanceID
+		id, err = client.ScheduleNewOrchestration(ctx, "foo")
 		require.NoError(t, err)
 		ids = append(ids, id.String())
 	}

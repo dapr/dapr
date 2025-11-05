@@ -84,11 +84,6 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 			}
 		}
 
-		// TODO: @joshvanl
-		//if i > 0 {
-		//	dopts = append(dopts, daprd.WithAppID(daprds[0].AppID()))
-		//}
-
 		daprds[i] = daprd.New(t, dopts...)
 	}
 

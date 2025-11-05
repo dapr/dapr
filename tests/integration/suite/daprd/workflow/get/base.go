@@ -72,6 +72,6 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "abc", evs[1].GetExecutionStarted().GetOrchestrationInstance().GetInstanceId())
 	assert.Equal(t, b.workflow.Dapr().AppID(), evs[1].GetRouter().GetSourceAppID())
 	assert.NotNil(t, evs[2].GetExecutionCompleted())
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[2].GetExecutionCompleted().OrchestrationStatus.String())
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[2].GetExecutionCompleted().GetOrchestrationStatus().String())
 	assert.Equal(t, b.workflow.Dapr().AppID(), evs[2].GetRouter().GetSourceAppID())
 }
