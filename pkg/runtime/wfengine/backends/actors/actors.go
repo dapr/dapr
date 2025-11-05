@@ -640,8 +640,8 @@ func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstance
 		ComponentStore:    abe.compStore,
 		Namespace:         abe.namespace,
 		AppID:             abe.appID,
-		PageSize:          req.PageSize,
-		ContinuationToken: req.ContinuationToken,
+		PageSize:          req.PageSize,          //nolint:protogetter
+		ContinuationToken: req.ContinuationToken, //nolint:protogetter
 	})
 	if err != nil {
 		return nil, err
