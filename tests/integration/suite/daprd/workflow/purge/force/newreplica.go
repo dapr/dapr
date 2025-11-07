@@ -18,6 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -25,8 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {
