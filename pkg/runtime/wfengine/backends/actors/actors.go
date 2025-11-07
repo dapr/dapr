@@ -479,24 +479,22 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 }
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
-func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
-	req := internalsv1pb.
-		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
-		WithActor(abe.workflowActorType, string(id))
-
-	router, err := abe.actors.Router(ctx)
-	if err != nil {
-		return err
+func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID, force bool) error {
+	start := time.Now()
+	var err error
+	if force {
+		err = abe.purgeWorkflowForce(ctx, id)
+	} else {
+		err = abe.purgeWorkflow(ctx, id)
 	}
 
-	start := time.Now()
-	_, err = router.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to PURGE WORKFLOW, record latency and count metrics.
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusFailed, elapsed)
 		return err
 	}
+
 	// successful request to PURGE WORKFLOW, record latency and count metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusSuccess, elapsed)
 	return nil
@@ -628,4 +626,55 @@ func (abe *Actors) WaitForActivityCompletion(ctx context.Context, request *proto
 // WaitForOrchestratorCompletion implements backend.Backend.
 func (abe *Actors) WaitForOrchestratorCompletion(ctx context.Context, request *protos.OrchestratorRequest) (*protos.OrchestratorResponse, error) {
 	return abe.pendingTasksBackend.WaitForOrchestratorCompletion(ctx, request)
+}
+
+func (abe *Actors) purgeWorkflow(ctx context.Context, id api.InstanceID) error {
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
+		WithActor(abe.workflowActorType, string(id))
+
+	router, err := abe.actors.Router(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = router.Call(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) error {
+	log.Warnf("Force purging workflow state of '%s'. This can cause corruption if the workflow is being processed", id.String())
+
+	astate, err := abe.actors.State(ctx)
+	if err != nil {
+		return err
+	}
+
+	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{
+		AppID:             abe.appID,
+		WorkflowActorType: abe.workflowActorType,
+		ActivityActorType: abe.activityActorType,
+	})
+	if err != nil {
+		return err
+	}
+
+	req, err := s.GetPurgeRequest(id.String())
+	if err != nil {
+		return err
+	}
+
+	err = astate.TransactionalStateOperation(ctx, true, req, false)
+	if err != nil {
+		return err
+	}
+
+	// TODO: @joshvanl: Delete all associated reminders	using once merged
+	// https://github.com/dapr/dapr/pull/9171
+
+	return nil
 }
