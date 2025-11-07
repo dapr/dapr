@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -79,6 +78,8 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.SentrySPIFFEID = i.sentrySPIFFEID.String()
 	sidecar.CurrentTrustAnchors = trustAnchors
 	sidecar.DisableTokenVolume = !token.HasKubernetesToken()
+	sidecar.KubeClusterDomain = i.config.KubeClusterDomain
+	sidecar.SchedulerEnabled = i.schedulerEnabled
 
 	// Set addresses for actor services only if it's not explicitly globally disabled
 	// Even if actors are disabled, however, the placement-host-address flag will still be included if explicitly set in the annotation dapr.io/placement-host-address
@@ -111,15 +112,6 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	if useRemindersSvc {
 		// Set the reminders-service CLI flag with "<name>:<address>"
 		sidecar.RemindersService = remindersSvcName + ":" + remindersSvc.Address(i.config.Namespace, i.config.KubeClusterDomain)
-	}
-
-	if sidecar.SchedulerAddress == "" {
-		allSchedulerAddresses := patcher.ServiceScheduler.AddressAllInstances(
-			i.schedulerReplicaCount, i.config.Namespace, i.config.KubeClusterDomain)
-		sidecar.SchedulerAddress = strings.Join(allSchedulerAddresses, ",")
-		if len(allSchedulerAddresses) > 0 {
-			sidecar.SchedulerAddressDNSA = fmt.Sprintf("dapr-scheduler-server-a.%s.svc.%s:443", i.controlPlaneNamespace, i.config.KubeClusterDomain)
-		}
 	}
 
 	// Default value for the sidecar image, which can be overridden by annotations
