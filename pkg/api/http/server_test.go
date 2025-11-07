@@ -48,9 +48,25 @@ func TestCorsHandler(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	t.Run("with default cors, middleware allow all", func(t *testing.T) {
+	t.Run("with default cors, middleware disabled", func(t *testing.T) {
 		srv := newServer()
 		srv.config.AllowedOrigins = cors.DefaultAllowedOrigins
+
+		h := chi.NewRouter()
+		srv.useCors(h)
+		h.Get("/", hf)
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodOptions, "/", nil)
+		r.Header.Set("Origin", "*")
+		r.Header.Set("Access-Control-Request-Method", "GET")
+		h.ServeHTTP(w, r)
+
+		assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
+	})
+
+	t.Run("with allow all origins, middleware allow all", func(t *testing.T) {
+		srv := newServer()
+		srv.config.AllowedOrigins = cors.AllowAllOrigins
 
 		h := chi.NewRouter()
 		srv.useCors(h)
@@ -64,9 +80,9 @@ func TestCorsHandler(t *testing.T) {
 		assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
 	})
 
-	t.Run("with default cors, api token auth not required", func(t *testing.T) {
+	t.Run("with allow all origins, api token auth not required", func(t *testing.T) {
 		srv := newServer()
-		srv.config.AllowedOrigins = cors.DefaultAllowedOrigins
+		srv.config.AllowedOrigins = cors.AllowAllOrigins
 
 		h := chi.NewRouter()
 		srv.useCors(h)

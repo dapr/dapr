@@ -35,16 +35,15 @@ import (
 )
 
 type Options struct {
-	Namespace          string
-	AppID              string
-	Actors             actors.Interface
-	Channels           *channels.Channels
-	WFEngine           wfengine.Interface
-	Addresses          []string
-	Security           security.Handler
-	Healthz            healthz.Healthz
-	SchedulerReminders bool
-	SchedulerStreams   uint
+	Namespace        string
+	AppID            string
+	Actors           actors.Interface
+	Channels         *channels.Channels
+	WFEngine         wfengine.Interface
+	Addresses        []string
+	Security         security.Handler
+	Healthz          healthz.Healthz
+	SchedulerStreams uint
 }
 
 // Scheduler manages the connection to the cluster of schedulers.
@@ -57,12 +56,11 @@ type Scheduler struct {
 
 func New(opts Options) (*Scheduler, error) {
 	connector := connector.New(connector.Options{
-		Namespace:          opts.Namespace,
-		AppID:              opts.AppID,
-		Actors:             opts.Actors,
-		Channels:           opts.Channels,
-		WFEngine:           opts.WFEngine,
-		SchedulerReminders: opts.SchedulerReminders,
+		Namespace: opts.Namespace,
+		AppID:     opts.AppID,
+		Actors:    opts.Actors,
+		Channels:  opts.Channels,
+		WFEngine:  opts.WFEngine,
 	})
 
 	if opts.SchedulerStreams < 1 {

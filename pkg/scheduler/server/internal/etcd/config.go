@@ -93,7 +93,7 @@ func config(opts Options) (*embed.Config, error) {
 	config.AdvertisePeerUrls = []url.URL{etcdURL}
 	config.ListenClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   "127.0.0.1:" + strconv.FormatUint(opts.ClientPort, 10),
+		Host:   opts.ClientListenAddress + ":" + strconv.FormatUint(opts.ClientPort, 10),
 	}}
 
 	switch opts.Mode {

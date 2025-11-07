@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	grpcKeepalive "google.golang.org/grpc/keepalive"
+	md "google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/channel"
 	grpcChannel "github.com/dapr/dapr/pkg/channel/grpc"
@@ -35,6 +36,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 const (
@@ -56,6 +58,7 @@ type AppChannelConfig struct {
 	MaxRequestBodySize int // In bytes
 	ReadBufferSize     int // In bytes
 	BaseAddress        string
+	AppAPIToken        string
 }
 
 // Manager is a wrapper around gRPC connection pooling.
@@ -103,6 +106,7 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 		g.channelConfig.MaxRequestBodySize,
 		g.channelConfig.ReadBufferSize,
 		g.channelConfig.BaseAddress,
+		g.channelConfig.AppAPIToken,
 	)
 	return ch, nil
 }
@@ -270,4 +274,15 @@ func (g *Manager) Close() error {
 
 func nopTeardown(destroy bool) {
 	// Nop
+}
+
+// AddAppTokenToContext appends the app API token to outgoing gRPC context.
+func (g *Manager) AddAppTokenToContext(ctx context.Context) context.Context {
+	if g == nil || g.channelConfig == nil {
+		return ctx
+	}
+	if g.channelConfig.AppAPIToken != "" {
+		return md.AppendToOutgoingContext(ctx, securityConsts.APITokenHeader, g.channelConfig.AppAPIToken)
+	}
+	return ctx
 }

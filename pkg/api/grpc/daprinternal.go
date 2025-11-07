@@ -35,6 +35,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/sse"
 )
 
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
@@ -186,18 +187,37 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		pw.Close()
 	}()
 
+	isSSERequest, header := sse.IsSSEGrpcRequest(chunk.GetRequest())
+
+	if isSSERequest {
+		req.WithHTTPResponseWriter(&streamResponseWriter{
+			logger: a.logger,
+			header: header,
+			stream: stream,
+			appID:  a.AppID(),
+		})
+	}
+
 	// Submit the request to the app
 	res, err := appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
-		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	}
+
+	defer func() {
+		if res != nil {
+			res.Close()
+		}
+	}()
+
+	if isSSERequest {
+		return sse.HandleSSEGrpcResponse(res)
+	}
+
 	if res == nil {
-		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, errors.New("no response received from stream"))
 	}
 
-	defer res.Close()
 	statusCode = res.Status().GetCode()
 
 	// Respond to the caller
