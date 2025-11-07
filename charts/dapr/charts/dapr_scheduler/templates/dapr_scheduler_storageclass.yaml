@@ -1,0 +1,38 @@
+{{- if .Values.cluster.createStorageClass }}
+{{- $_ := required "cluster.storageClass.provisioner is a required value" .Values.cluster.storageClass.provisioner }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ include "dapr_scheduler.storageclass-name" . }}
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+    {{- with .Values.cluster.storageClass.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  labels:
+    app: dapr-scheduler-server
+    {{- range $key, $value := .Values.cluster.storageClass.labels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+provisioner: {{ .Values.cluster.storageClass.provisioner }}
+allowVolumeExpansion: {{ .Values.cluster.storageClass.allowVolumeExpansion | default false }}
+{{- if .Values.cluster.storageClass.allowedTopologies }}
+allowedTopologies:
+  {{- with .Values.cluster.storageClass.allowedTopologies }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
+{{- if and .Values.cluster.storageClass.mountOptions ( gt ( len .Values.cluster.storageClass.mountOptions) 0 ) }} 
+mountOptions: {{- .Values.cluster.storageClass.mountOptions | toYaml | nindent 2 }}
+{{- else }}
+mountOptions: []
+{{- end }}
+{{- if .Values.cluster.storageClass.parameters }}
+parameters:
+  {{- with .Values.cluster.storageClass.parameters }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
+reclaimPolicy: {{ .Values.cluster.storageClass.reclaimPolicy | default "Retain" | quote }}
+volumeBindingMode: {{ .Values.cluster.storageClass.volumeBindingMode | default "WaitForFirstConsumer" | quote }}
+{{- end }}
