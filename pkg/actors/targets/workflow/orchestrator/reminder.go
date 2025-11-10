@@ -35,7 +35,6 @@ func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, da
 	}
 
 	dueTime := start.UTC().Format(time.RFC3339)
-
 	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
 
 	var adata *anypb.Any

@@ -17,6 +17,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -32,7 +35,18 @@ import (
 // returns immediately after creating the reminder, enabling the workflow to continue processing other events
 // in parallel.
 func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	log.Debugf("Activity actor '%s': invoking method '%s'", a.actorID, req.GetMessage().GetMethod())
+	method := req.GetMessage().GetMethod()
+
+	var dueTime time.Time
+	if s := strings.Split(method, "/"); len(s) == 2 {
+		unix, err := strconv.ParseInt(s[1], 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		dueTime = time.UnixMilli(unix)
+	}
+
+	log.Debugf("Activity actor '%s': invoking method '%s'", a.actorID, method)
 
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
 	if err != nil {
@@ -48,7 +62,7 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	}
 
 	// The actual execution is triggered by a reminder
-	return nil, a.createReminder(ctx, &his)
+	return nil, a.createReminder(ctx, &his, dueTime)
 }
 
 func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {

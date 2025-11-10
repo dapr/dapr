@@ -23,7 +23,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent) error {
+func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent, dueTime time.Time) error {
 	const reminderName = "run-activity"
 	log.Debugf("Activity actor '%s||%s': creating reminder '%s' for immediate execution", a.actorType, a.actorID, reminderName)
 
@@ -36,7 +36,7 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
-		DueTime:   his.GetTimestamp().AsTime().Format(time.RFC3339),
+		DueTime:   dueTime.Format(time.RFC3339),
 		Name:      reminderName,
 		IsOneShot: true,
 		Data:      anydata,

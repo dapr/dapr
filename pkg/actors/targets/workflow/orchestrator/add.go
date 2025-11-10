@@ -15,7 +15,6 @@ package orchestrator
 
 import (
 	"context"
-	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -58,10 +57,11 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 		sourceAppID = e.GetRouter().GetSourceAppID()
 	}
 
-	dueTime := time.Now()
+	dueTime := e.Timestamp.AsTime()
 	if len(state.History) > 0 {
 		dueTime = state.History[0].Timestamp.AsTime()
 	}
+
 	if _, err := o.createReminder(ctx, "new-event", nil, dueTime, sourceAppID); err != nil {
 		return err
 	}
