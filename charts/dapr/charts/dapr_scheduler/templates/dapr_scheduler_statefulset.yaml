@@ -268,7 +268,7 @@ spec:
                   operator: In
                   values:
                   - dapr-scheduler-server
-              topologyKey: topology.kubernetes.io/zone
+              topologyKey: {{ .Values.global.ha.topologyKey }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}
