@@ -667,7 +667,7 @@ func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 			Operation: bindings.GetOperation,
 		}
 
-		resp, err := b.SendToOutputBinding(context.Background(), "testBinding", req)
+		resp, err := b.SendToOutputBinding(t.Context(), "testBinding", req)
 		require.NoError(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, 1024, len(resp.Data))
@@ -694,7 +694,7 @@ func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 			Operation: bindings.GetOperation,
 		}
 
-		resp, err := b.SendToOutputBinding(context.Background(), "testBinding", req)
+		resp, err := b.SendToOutputBinding(t.Context(), "testBinding", req)
 		require.Error(t, err)
 		assert.Nil(t, resp)
 		assert.Contains(t, err.Error(), "exceeding max size of 4194304 bytes")
@@ -722,7 +722,7 @@ func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 			Operation: bindings.GetOperation,
 		}
 
-		resp, err := b.SendToOutputBinding(context.Background(), "testBinding", req)
+		resp, err := b.SendToOutputBinding(t.Context(), "testBinding", req)
 		require.NoError(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, 10*1024*1024, len(resp.Data))
@@ -749,7 +749,7 @@ func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 			Operation: bindings.CreateOperation,
 		}
 
-		resp, err := b.SendToOutputBinding(context.Background(), "testBinding", req)
+		resp, err := b.SendToOutputBinding(t.Context(), "testBinding", req)
 		require.NoError(t, err)
 		assert.NotNil(t, resp)
 	})
@@ -773,7 +773,7 @@ func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 			Operation: bindings.GetOperation,
 		}
 
-		resp, err := b.SendToOutputBinding(context.Background(), "testBinding", req)
+		resp, err := b.SendToOutputBinding(t.Context(), "testBinding", req)
 		require.Error(t, err)
 		assert.Equal(t, assert.AnError, err)
 		assert.Nil(t, resp)
