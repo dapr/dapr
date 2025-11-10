@@ -31,15 +31,30 @@ func init() {
 }
 
 type env struct {
-	base              *helm.Helm
-	withOtelEnvVars   *helm.Helm
-	withEscapedCommas *helm.Helm
+	base                  *helm.Helm
+	withOtelEnvVars       *helm.Helm
+	withEscapedCommas     *helm.Helm
+	withSchedulerEnabled  *helm.Helm
+	withSchedulerDisabled *helm.Helm
 }
 
 func (e *env) Setup(t *testing.T) []framework.Option {
 	// Base config with no custom env vars
 	e.base = helm.New(t,
 		helm.WithShowOnly("charts/dapr_sidecar_injector", "dapr_sidecar_injector_deployment.yaml"),
+	)
+
+	e.withSchedulerEnabled = helm.New(t,
+		helm.WithShowOnly("charts/dapr_sidecar_injector", "dapr_sidecar_injector_deployment.yaml"),
+		helm.WithValues(
+			"global.scheduler.enabled=true",
+		),
+	)
+	e.withSchedulerDisabled = helm.New(t,
+		helm.WithShowOnly("charts/dapr_sidecar_injector", "dapr_sidecar_injector_deployment.yaml"),
+		helm.WithValues(
+			"global.scheduler.enabled=false",
+		),
 	)
 
 	// config with OTEL env vars
@@ -67,6 +82,8 @@ func (e *env) Setup(t *testing.T) []framework.Option {
 			e.base,
 			e.withOtelEnvVars,
 			e.withEscapedCommas,
+			e.withSchedulerEnabled,
+			e.withSchedulerDisabled,
 		),
 	}
 }
@@ -131,5 +148,31 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "escaped-test", envMap["OTEL_SERVICE_NAME"])
 		assert.Equal(t, "k8s.pod.name=my-pod,k8s.namespace.name=default,k8s.deployment.name=my-app", envMap["OTEL_RESOURCE_ATTRIBUTES"])
 		assert.Equal(t, "http://otel-collector:4317", envMap["OTEL_EXPORTER_OTLP_ENDPOINT"])
+	})
+
+	t.Run("scheduler enabled", func(t *testing.T) {
+		deployments := helm.UnmarshalStdout[appsv1.Deployment](t, e.base)
+		injectorDeployment := findInjectorDeployment(deployments)
+		require.NotNil(t, injectorDeployment)
+		containers := injectorDeployment.Spec.Template.Spec.Containers
+		assert.NotEmpty(t, containers)
+		injectorContainer := containers[0]
+		assert.Contains(t, injectorContainer.Args, "--scheduler-enabled=true")
+
+		deployments = helm.UnmarshalStdout[appsv1.Deployment](t, e.withSchedulerEnabled)
+		injectorDeployment = findInjectorDeployment(deployments)
+		require.NotNil(t, injectorDeployment)
+		containers = injectorDeployment.Spec.Template.Spec.Containers
+		assert.NotEmpty(t, containers)
+		injectorContainer = containers[0]
+		assert.Contains(t, injectorContainer.Args, "--scheduler-enabled=true")
+
+		deployments = helm.UnmarshalStdout[appsv1.Deployment](t, e.withSchedulerDisabled)
+		injectorDeployment = findInjectorDeployment(deployments)
+		require.NotNil(t, injectorDeployment)
+		containers = injectorDeployment.Spec.Template.Spec.Containers
+		assert.NotEmpty(t, containers)
+		injectorContainer = containers[0]
+		assert.Contains(t, injectorContainer.Args, "--scheduler-enabled=false")
 	})
 }
