@@ -6,7 +6,8 @@ package codec
 import (
 	"fmt"
 
-	protoV1 "github.com/golang/protobuf/proto" //nolint:staticcheck
+	//nolint:staticcheck
+	protoV1 "github.com/golang/protobuf/proto"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/protobuf/proto"
 )
