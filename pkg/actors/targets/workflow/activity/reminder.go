@@ -15,6 +15,7 @@ package activity
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -35,7 +36,7 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
-		DueTime:   "0s",
+		DueTime:   his.GetTimestamp().AsTime().Format(time.RFC3339),
 		Name:      reminderName,
 		IsOneShot: true,
 		Data:      anydata,
