@@ -26,9 +26,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	admissionv1 "k8s.io/api/admission/v1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -73,13 +71,14 @@ type Injector interface {
 }
 
 type Options struct {
-	AuthUIDs      []string
-	Config        Config
-	DaprClient    scheme.Interface
-	KubeClient    kubernetes.Interface
-	Port          int
-	ListenAddress string
-	Healthz       healthz.Healthz
+	AuthUIDs         []string
+	Config           Config
+	DaprClient       scheme.Interface
+	KubeClient       kubernetes.Interface
+	Port             int
+	ListenAddress    string
+	Healthz          healthz.Healthz
+	SchedulerEnabled bool
 
 	ControlPlaneNamespace   string
 	ControlPlaneTrustDomain string
@@ -98,7 +97,7 @@ type injector struct {
 	controlPlaneTrustDomain string
 	currentTrustAnchors     currentTrustAnchorsFn
 	sentrySPIFFEID          spiffeid.ID
-	schedulerReplicaCount   int
+	schedulerEnabled        bool
 
 	htarget              healthz.Target
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
@@ -161,6 +160,7 @@ func NewInjector(opts Options) (Injector, error) {
 		controlPlaneNamespace:   opts.ControlPlaneNamespace,
 		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
 		htarget:                 opts.Healthz.AddTarget("injector-service"),
+		schedulerEnabled:        opts.SchedulerEnabled,
 	}
 
 	matcher, err := createNamespaceNameMatcher(opts.Config.AllowedServiceAccountsPrefixNames)
@@ -233,35 +233,6 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spif
 
 	i.currentTrustAnchors = currentTrustAnchors
 	i.sentrySPIFFEID = sentryID
-
-	for {
-		var sched *appsv1.StatefulSet
-		sched, err := i.kubeClient.AppsV1().StatefulSets(i.controlPlaneNamespace).Get(ctx, "dapr-scheduler-server", metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			log.Warnf("%s/dapr-scheduler-server StatefulSet not found, retrying in 5 seconds", i.controlPlaneNamespace)
-			select {
-			case <-time.After(5 * time.Second):
-				continue
-			case <-ctx.Done():
-				return fmt.Errorf("%s/dapr-scheduler-server StatefulSet not found", i.controlPlaneNamespace)
-			}
-		}
-
-		if err != nil {
-			return fmt.Errorf("error getting dapr-scheduler-server StatefulSet: %w", err)
-		}
-
-		if sched.Spec.Replicas == nil {
-			return errors.New("dapr-scheduler-server StatefulSet has no replicas")
-		}
-
-		i.schedulerReplicaCount = int(*sched.Spec.Replicas)
-		break
-	}
-
-	if i.schedulerReplicaCount > 0 {
-		log.Infof("Found dapr-scheduler-server StatefulSet %v replicas", i.schedulerReplicaCount)
-	}
 
 	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", i.port), tlsConfig)
 	if err != nil {
