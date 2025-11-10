@@ -194,7 +194,6 @@ func (b *binding) SendToOutputBinding(ctx context.Context, name string, req *bin
 				resp, err := policyRunner(func(ctx context.Context) (*bindings.InvokeResponse, error) {
 					return binding.Invoke(ctx, req)
 				})
-
 				if err != nil {
 					return nil, err
 				}

@@ -648,7 +648,7 @@ func matchDaprRequestMethod(method string) any {
 func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 	t.Run("response within size limit succeeds", func(t *testing.T) {
 		compStore := compstore.New()
-		
+
 		// Create binding that returns 1KB of data
 		mockBinding := new(daprt.MockBinding)
 		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.GetOperation})
@@ -670,12 +670,12 @@ func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 		resp, err := b.SendToOutputBinding(t.Context(), "testBinding", req)
 		require.NoError(t, err)
 		assert.NotNil(t, resp)
-		assert.Equal(t, 1024, len(resp.Data))
+		assert.Len(t, resp.Data, 1024)
 	})
 
 	t.Run("response exceeding size limit fails", func(t *testing.T) {
 		compStore := compstore.New()
-		
+
 		// Create binding that returns 5MB of data
 		mockBinding := new(daprt.MockBinding)
 		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.GetOperation})
@@ -703,7 +703,7 @@ func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 
 	t.Run("zero max body size bypasses check", func(t *testing.T) {
 		compStore := compstore.New()
-		
+
 		// Create binding that returns 10MB of data
 		mockBinding := new(daprt.MockBinding)
 		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.GetOperation})
@@ -725,12 +725,12 @@ func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 		resp, err := b.SendToOutputBinding(t.Context(), "testBinding", req)
 		require.NoError(t, err)
 		assert.NotNil(t, resp)
-		assert.Equal(t, 10*1024*1024, len(resp.Data))
+		assert.Len(t, resp.Data, 10*1024*1024)
 	})
 
 	t.Run("empty response data passes check", func(t *testing.T) {
 		compStore := compstore.New()
-		
+
 		// Create binding that returns no data
 		mockBinding := new(daprt.MockBinding)
 		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.CreateOperation})
@@ -756,7 +756,7 @@ func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 
 	t.Run("binding error bypasses size check", func(t *testing.T) {
 		compStore := compstore.New()
-		
+
 		// Create binding that returns error
 		mockBinding := new(daprt.MockBinding)
 		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.GetOperation})
