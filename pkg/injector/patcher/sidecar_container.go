@@ -192,6 +192,15 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--dapr-block-shutdown-duration", *c.BlockShutdownDuration)
 	}
 
+	if c.SchedulerAddress != nil {
+		args = append(args, "--scheduler-host-address", *c.SchedulerAddress)
+	} else if c.SchedulerEnabled {
+		args = append(args,
+			"--scheduler-host-address",
+			fmt.Sprintf("dapr-scheduler-server-a.%s.svc.%s:443", c.ControlPlaneNamespace, c.KubeClusterDomain),
+		)
+	}
+
 	// When debugging is enabled, we need to override the command and the flags
 	if c.EnableDebug {
 		ports = append(ports, corev1.ContainerPort{
@@ -271,22 +280,6 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 						FieldPath: "status.podIP",
 					},
 				},
-			},
-		)
-	}
-
-	// Scheduler address could be empty if scheduler service is disabled
-	// TODO: remove in v1.16 when daprd no longer needs all scheduler pod
-	// addresses for serving.
-	if strings.TrimSpace(c.SchedulerAddress) != "" {
-		env = append(env,
-			corev1.EnvVar{
-				Name:  injectorConsts.SchedulerHostAddressEnvVar,
-				Value: c.SchedulerAddress,
-			},
-			corev1.EnvVar{
-				Name:  injectorConsts.SchedulerHostAddressDNSAEnvVar,
-				Value: c.SchedulerAddressDNSA,
 			},
 		)
 	}

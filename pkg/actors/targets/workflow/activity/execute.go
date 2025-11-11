@@ -124,6 +124,12 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	_, err = a.router.Call(ctx, req)
 	switch {
 	case err != nil:
+		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", a.actorID, wi.InstanceID, err)
+			executionStatus = diag.StatusFailed
+			return nil
+		}
+
 		// Returning recoverable error, record metrics
 		executionStatus = diag.StatusRecoverable
 		return wferrors.NewRecoverable(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", todo.AddWorkflowEventMethod, err))
@@ -134,5 +140,6 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 		// Activity execution failed
 		executionStatus = diag.StatusFailed
 	}
+
 	return nil
 }

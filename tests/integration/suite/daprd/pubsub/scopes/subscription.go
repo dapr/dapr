@@ -213,4 +213,16 @@ func (s *subscription) Run(t *testing.T, ctx context.Context) {
 	s.sub.ExpectPublishNoReceive(t, ctx, s.daprd1, req)
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd2, req)
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd3, req)
+
+	binaryReq := newReq("all", "topic1")
+	binaryReq.Data = []byte{0xde, 0xad, 0xbe, 0xef}
+	binaryReq.DataContentType = "application/octet-stream"
+	binaryReq.Metadata = map[string]string{
+		"ce_id":          "aquadag-543",
+		"ce_source":      "tests/scopes",
+		"ce_type":        "tests.binary",
+		"ce_specversion": "1.0",
+	}
+
+	s.sub.ExpectPublishReceive(t, ctx, s.daprd1, binaryReq)
 }
