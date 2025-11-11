@@ -40,7 +40,7 @@ env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.30.0"
+  KUBECTLVER: "v1.34.1"
   # If not empty, uses cloud resources for testing
   TEST_CLOUD_ENV: "azure"
   # Version of Helm
@@ -67,8 +67,8 @@ env:
   DAPR_GO_BUILD_TAGS: "subtlecrypto"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
-  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.14.5"
-  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.13.6"
+  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.15.9"
+  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.14.5"
 
 jobs:
   deploy-infrastructure:

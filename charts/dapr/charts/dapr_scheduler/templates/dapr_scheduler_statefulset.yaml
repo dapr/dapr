@@ -1,3 +1,4 @@
+{{- if (eq .Values.global.scheduler.enabled true) }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -9,11 +10,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-  {{- $replicas := include "dapr_scheduler.get-replicas" . }}
-  {{- if and .Values.cluster.inMemoryStorage (gt (int $replicas) 1) }}
-  {{- fail "`inMemoryStorage` can only be enabled when running in non-HA mode)" }}
-  {{- end }}
-  replicas: {{ $replicas }}
+  replicas: 3
   serviceName: dapr-scheduler-server
   podManagementPolicy: Parallel
   selector:
@@ -284,4 +281,5 @@ spec:
 {{- if .Values.global.priorityClassName }}
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
+{{- end }}
 {{- end }}
