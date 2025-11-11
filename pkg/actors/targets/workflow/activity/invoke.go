@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -37,9 +36,9 @@ import (
 func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 	method := req.GetMessage().GetMethod()
 
-	var dueTime time.Time
-	if s := strings.Split(method, "/"); len(s) == 2 {
-		unix, err := strconv.ParseInt(s[1], 10, 64)
+	dueTime := time.Now()
+	if s, ok := req.GetMetadata()["dueTime"]; ok && len(s.GetValues()) > 0 {
+		unix, err := strconv.ParseInt(s.GetValues()[0], 10, 64)
 		if err != nil {
 			return nil, err
 		}

@@ -77,8 +77,11 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
 	_, err = o.router.Call(ctx, internalsv1pb.
-		NewInternalInvokeRequest("Execute/"+strconv.FormatInt(dueTime.UnixMilli(), 10)).
+		NewInternalInvokeRequest("Execute").
 		WithActor(activityActorType, targetActorID).
+		WithMetadata(map[string][]string{
+			"dueTime": {strconv.FormatInt(dueTime.UnixMilli(), 10)},
+		}).
 		WithData(eventData).
 		WithContentType(invokev1.ProtobufContentType),
 	)
