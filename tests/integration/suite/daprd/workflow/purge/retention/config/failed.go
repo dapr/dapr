@@ -87,7 +87,6 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 		assert.Equal(c, 0, count)
+		assert.Empty(c, f.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
 	}, time.Second*10, time.Millisecond*10)
-
-	assert.Empty(t, f.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
 }
