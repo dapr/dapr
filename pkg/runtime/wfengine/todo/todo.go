@@ -30,6 +30,8 @@ const (
 	WaitForRuntimeStatus         = "WaitForRuntimeStatus"
 	ForkWorkflowHistory          = "ForkWorkflowHistory"
 	RerunWorkflowInstance        = "RerunWorkflowInstance"
+
+	MetadataActivityRemidnerDueTime = "dueTime"
 )
 
 var (

@@ -26,6 +26,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -37,7 +38,7 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	method := req.GetMessage().GetMethod()
 
 	dueTime := time.Now()
-	if s, ok := req.GetMetadata()["dueTime"]; ok && len(s.GetValues()) > 0 {
+	if s, ok := req.GetMetadata()[todo.MetadataActivityRemidnerDueTime]; ok && len(s.GetValues()) > 0 {
 		unix, err := strconv.ParseInt(s.GetValues()[0], 10, 64)
 		if err != nil {
 			return nil, err
