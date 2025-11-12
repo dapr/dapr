@@ -75,7 +75,9 @@ func (m *manually) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	assert.Len(t, m.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), 1)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, m.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), 1)
+	}, time.Second*10, time.Millisecond*10)
 
 	require.NoError(t, client.PurgeWorkflowState(ctx, id))
 
