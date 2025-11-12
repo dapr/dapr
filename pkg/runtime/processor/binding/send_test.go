@@ -778,4 +778,39 @@ func TestSendToOutputBindingMaxBodySize(t *testing.T) {
 		assert.Equal(t, assert.AnError, err)
 		assert.Nil(t, resp)
 	})
+
+	t.Run("binding error with response metadata preserved", func(t *testing.T) {
+		compStore := compstore.New()
+
+		// Create binding that returns BOTH response (with metadata) and error
+		// This simulates HTTP binding returning 404 with status code in metadata
+		mockBinding := new(daprt.MockBinding)
+		mockBinding.On("Operations").Return([]bindings.OperationKind{bindings.GetOperation})
+		mockBinding.On("Invoke", mock.Anything, mock.Anything).Return(&bindings.InvokeResponse{
+			Data: []byte("error page content"),
+			Metadata: map[string]string{
+				"statuscode": "404",
+			},
+		}, assert.AnError)
+		compStore.AddOutputBinding("testBinding", mockBinding)
+
+		b := &binding{
+			compStore:          compStore,
+			resiliency:         resiliency.New(logger.NewLogger("test")),
+			maxRequestBodySize: 4 * 1024 * 1024, // 4MB limit
+		}
+
+		req := &bindings.InvokeRequest{
+			Operation: bindings.GetOperation,
+		}
+
+		resp, err := b.SendToOutputBinding(t.Context(), "testBinding", req)
+		// Error should be preserved
+		require.Error(t, err)
+		assert.Equal(t, assert.AnError, err)
+		// Response with metadata should also be preserved
+		require.NotNil(t, resp)
+		assert.Equal(t, "404", resp.Metadata["statuscode"])
+		assert.Equal(t, []byte("error page content"), resp.Data)
+	})
 }
