@@ -48,7 +48,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
 	msg := imReq.Message()
 	return policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
-		resData, err := o.executeMethod(ctx, msg.GetMethod(), msg.GetData().GetValue())
+		resData, err := o.executeMethod(ctx, msg.GetMethod(), req.GetMetadata(), msg.GetData().GetValue())
 		if err != nil {
 			return nil, err
 		}
@@ -66,7 +66,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	})
 }
 
-func (o *orchestrator) executeMethod(ctx context.Context, methodName string, request []byte) ([]byte, error) {
+func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte) ([]byte, error) {
 	log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
 
 	if o.actorState == nil {
@@ -81,7 +81,7 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, req
 		return nil, o.addWorkflowEvent(ctx, request)
 
 	case todo.PurgeWorkflowStateMethod:
-		return nil, o.purgeWorkflowState(ctx)
+		return nil, o.purgeWorkflowState(ctx, meta)
 
 	case todo.ForkWorkflowHistory:
 		return nil, backoff.Permanent(o.forkWorkflowHistory(ctx, request))

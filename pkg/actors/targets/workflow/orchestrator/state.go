@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -24,6 +25,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -37,7 +39,6 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	}
 
 	// state is not cached, so try to load it from the state store
-	log.Debugf("Workflow actor '%s': loading workflow state", o.actorID)
 	state, err := wfenginestate.LoadWorkflowState(ctx, o.actorState, o.actorID, wfenginestate.Options{
 		AppID:             o.appID,
 		WorkflowActorType: o.actorType,
@@ -112,38 +113,53 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 }
 
 // This method cleans up a workflow associated with the given actorID
-func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *wfenginestate.State, requiredAndNotCompleted bool) error {
-	// If the workflow is required to complete but it's not yet completed then return [ErrNotCompleted]
-	// This check is used by purging workflow
-	if requiredAndNotCompleted {
-		return api.ErrNotCompleted
-	}
-
-	// This will create a request to purge everything
+func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *wfenginestate.State, includeRetentionReminder bool) error {
+	// This will create a request to purge everything.
 	req, err := state.GetPurgeRequest(o.actorID)
 	if err != nil {
 		return err
 	}
 
-	// This will do the purging
-	err = o.actorState.TransactionalStateOperation(ctx, true, req, false)
-	if err != nil {
-		return err
+	errCh := make(chan error)
+	go func() {
+		// This will do the purging
+		errCh <- o.actorState.TransactionalStateOperation(ctx, true, req, false)
+	}()
+
+	go func() {
+		errCh <- o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			ActorType:       o.actorType,
+			ActorID:         o.actorID,
+			MatchIDAsPrefix: false,
+		})
+	}()
+
+	go func() {
+		errCh <- o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			ActorType:       o.activityActorType,
+			ActorID:         o.actorID + "::",
+			MatchIDAsPrefix: true,
+		})
+	}()
+
+	n := 3
+	if includeRetentionReminder {
+		n++
+		go func() {
+			errCh <- o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+				ActorType:       o.retentionActorType,
+				ActorID:         o.actorID,
+				MatchIDAsPrefix: false,
+			})
+		}()
 	}
 
-	if err = o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
-		ActorType:       o.actorType,
-		ActorID:         o.actorID,
-		MatchIDAsPrefix: false,
-	}); err != nil {
-		return err
+	errs := make([]error, 0, n)
+	for range n {
+		errs = append(errs, <-errCh)
 	}
 
-	if err = o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
-		ActorType:       o.activityActorType,
-		ActorID:         o.actorID + "::",
-		MatchIDAsPrefix: true,
-	}); err != nil {
+	if err = errors.Join(errs...); err != nil {
 		return err
 	}
 
@@ -190,7 +206,11 @@ func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState,
 }
 
 // This method purges all the completed activity data from a workflow associated with the given actorID
-func (o *orchestrator) purgeWorkflowState(ctx context.Context) error {
+func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*internalsv1pb.ListStringValue) error {
+	defer o.factory.deactivate(o)
+
+	log.Debugf("Workflow actor '%s': purging workflow state", o.actorID)
+
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
 		return err
@@ -198,7 +218,17 @@ func (o *orchestrator) purgeWorkflowState(ctx context.Context) error {
 	if state == nil {
 		return api.ErrInstanceNotFound
 	}
-	return o.cleanupWorkflowStateInternal(ctx, state, !runtimestate.IsCompleted(o.rstate))
+
+	// If the workflow is required to complete but it's not yet completed then
+	// return [ErrNotCompleted] This check is used by purging workflow
+	if !runtimestate.IsCompleted(o.rstate) {
+		return api.ErrNotCompleted
+	}
+
+	s, ok := meta[todo.MetadataPurgeRetentionCall]
+	retentionCall := ok && len(s.GetValues()) > 0 && s.GetValues()[0] == "true"
+
+	return o.cleanupWorkflowStateInternal(ctx, state, !retentionCall)
 }
 
 func (o *orchestrator) getExecutionStartedEvent(state *wfenginestate.State) *protos.ExecutionStartedEvent {

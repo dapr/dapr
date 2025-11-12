@@ -32,6 +32,7 @@ const (
 	RerunWorkflowInstance        = "RerunWorkflowInstance"
 
 	MetadataActivityRemidnerDueTime = "dueTime"
+	MetadataPurgeRetentionCall      = "PurgeRetentionCall"
 )
 
 var (

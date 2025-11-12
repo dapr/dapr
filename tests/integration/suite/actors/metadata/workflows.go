@@ -113,6 +113,10 @@ func (w *workflows) Run(t *testing.T, ctx context.Context) {
 			Count: 4,
 		},
 		{
+			Type:  "dapr.internal.default." + w.workflow.Dapr().AppID() + ".retentioner",
+			Count: 0,
+		},
+		{
 			Type:  "myactortype",
 			Count: 2,
 		},

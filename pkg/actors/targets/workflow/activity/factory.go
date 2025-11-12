@@ -24,7 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 )
 
