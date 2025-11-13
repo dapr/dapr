@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -677,4 +678,12 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 	// https://github.com/dapr/dapr/pull/9171
 
 	return nil
+}
+
+func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstanceHistoryRequest) (*protos.GetInstanceHistoryResponse, error) {
+	return nil, grpc.Errorf(codes.Unimplemented, "GetInstanceHistory is not implemented in the Actors backend")
+}
+
+func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
+	return nil, grpc.Errorf(codes.Unimplemented, "ListInstanceIDs is not implemented in the Actors backend")
 }
