@@ -484,7 +484,7 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 }
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
-func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
+func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID, force bool) error {
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
 		WithActor(abe.workflowActorType, string(id))

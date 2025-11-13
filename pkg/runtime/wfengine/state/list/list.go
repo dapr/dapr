@@ -51,9 +51,9 @@ func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsRes
 	like := opts.AppID + "||dapr.internal." + opts.Namespace + "." + opts.AppID + ".workflow||%||metadata"
 
 	resp, err := ks.KeysLike(ctx, &state.KeysLikeRequest{
-		Pattern:       like,
-		ContinueToken: opts.ContinuationToken,
-		PageSize:      opts.PageSize,
+		Pattern:           like,
+		ContinuationToken: opts.ContinuationToken,
+		PageSize:          opts.PageSize,
 	})
 	if err != nil {
 		return nil, err
@@ -71,6 +71,6 @@ func ListInstanceIDs(ctx context.Context, opts ListOptions) (*ListInstanceIDsRes
 
 	return &ListInstanceIDsResult{
 		Keys:              keys,
-		ContinuationToken: resp.ContinueToken,
+		ContinuationToken: resp.ContinuationToken,
 	}, nil
 }
