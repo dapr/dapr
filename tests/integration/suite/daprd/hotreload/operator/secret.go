@@ -403,7 +403,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 					{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 					{
 						Name: "bar", Type: "state.in-memory", Version: "v1",
-						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 					},
 				}, resp)
 		}, time.Second*5, time.Millisecond*10)
@@ -438,7 +438,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 			assert.ElementsMatch(c, resp, []*rtpbv1.RegisteredComponents{
 				{
 					Name: "bar", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			})
 		}, time.Second*5, time.Millisecond*10)
