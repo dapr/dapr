@@ -80,7 +80,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		NewInternalInvokeRequest("Execute").
 		WithActor(activityActorType, targetActorID).
 		WithMetadata(map[string][]string{
-			todo.MetadataActivityRemidnerDueTime: {strconv.FormatInt(dueTime.UnixMilli(), 10)},
+			todo.MetadataActivityReminderDueTime: {strconv.FormatInt(dueTime.UnixMilli(), 10)},
 		}).
 		WithData(eventData).
 		WithContentType(invokev1.ProtobufContentType),

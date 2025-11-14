@@ -31,7 +31,7 @@ const (
 	ForkWorkflowHistory          = "ForkWorkflowHistory"
 	RerunWorkflowInstance        = "RerunWorkflowInstance"
 
-	MetadataActivityRemidnerDueTime = "dueTime"
+	MetadataActivityReminderDueTime = "dueTime"
 )
 
 var (

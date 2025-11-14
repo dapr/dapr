@@ -38,7 +38,7 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	method := req.GetMessage().GetMethod()
 
 	dueTime := time.Now()
-	if s, ok := req.GetMetadata()[todo.MetadataActivityRemidnerDueTime]; ok && len(s.GetValues()) > 0 {
+	if s, ok := req.GetMetadata()[todo.MetadataActivityReminderDueTime]; ok && len(s.GetValues()) > 0 {
 		unix, err := strconv.ParseInt(s.GetValues()[0], 10, 64)
 		if err != nil {
 			return nil, err
