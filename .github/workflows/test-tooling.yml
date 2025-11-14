@@ -37,8 +37,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup
-        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@461004e4c97225a313a997efabc35fde47d587bb
+        uses: actions/setup-go@v5
         with:
           go-version-file: './.build-tools/go.mod'
 
