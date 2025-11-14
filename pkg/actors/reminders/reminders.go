@@ -37,6 +37,9 @@ type Interface interface {
 
 	// Delete deletes an actor reminder.
 	Delete(ctx context.Context, req *api.DeleteReminderRequest) error
+
+	// DeleteByActorID deletes all reminders for a given actor ID.
+	DeleteByActorID(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error
 }
 
 type Options struct {
@@ -90,4 +93,16 @@ func (r *reminders) Delete(ctx context.Context, req *api.DeleteReminderRequest) 
 	}
 
 	return r.scheduler.Delete(ctx, req)
+}
+
+func (r *reminders) DeleteByActorID(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error {
+	if r.scheduler == nil {
+		return ErrReminderStorageNotSet
+	}
+
+	if !r.table.IsActorTypeHosted(req.ActorType) {
+		return ErrReminderOpActorNotHosted
+	}
+
+	return r.scheduler.DeleteByActorID(ctx, req)
 }
