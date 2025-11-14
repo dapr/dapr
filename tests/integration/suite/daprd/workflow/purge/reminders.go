@@ -47,7 +47,7 @@ func (r *reminders) Setup(t *testing.T) []framework.Option {
 func (r *reminders) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	var here atomic.Bool
+	var inActivity atomic.Bool
 	releaseCh := make(chan struct{})
 	r.workflow.Registry().AddOrchestratorN("purge", func(ctx *task.OrchestrationContext) (any, error) {
 		timer := ctx.CreateTimer(time.Second * 1000)
@@ -58,7 +58,7 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 	r.workflow.Registry().AddActivityN("foo", func(ctx task.ActivityContext) (any, error) {
-		here.Store(true)
+		inActivity.Store(true)
 		<-releaseCh
 		return nil, nil
 	})
@@ -68,7 +68,7 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 	id, err := client.ScheduleNewOrchestration(ctx, "purge")
 	require.NoError(t, err)
 
-	assert.Eventually(t, here.Load, time.Second*30, time.Millisecond*10)
+	assert.Eventually(t, inActivity.Load, time.Second*30, time.Millisecond*10)
 	assert.Len(t, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), 3)
 
 	require.NoError(t, client.TerminateOrchestration(ctx, id))
