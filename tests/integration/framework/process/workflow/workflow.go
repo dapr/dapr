@@ -175,7 +175,7 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c,
-			len(w.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
+			len(w.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
 	}, time.Second*10, time.Millisecond*10)
 
 	return backendClient
@@ -208,4 +208,8 @@ func (w *Workflow) Metrics(t *testing.T, ctx context.Context) map[string]float64
 
 func (w *Workflow) DB() *sqlite.SQLite {
 	return w.db
+}
+
+func (w *Workflow) Scheduler() *scheduler.Scheduler {
+	return w.sched
 }

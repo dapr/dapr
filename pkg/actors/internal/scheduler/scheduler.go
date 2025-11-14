@@ -43,6 +43,7 @@ type Interface interface {
 	Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error)
 	Create(ctx context.Context, req *api.CreateReminderRequest) error
 	Delete(ctx context.Context, req *api.DeleteReminderRequest) error
+	DeleteByActorID(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error
 	List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error)
 }
 
@@ -223,6 +224,30 @@ func (s *scheduler) Delete(ctx context.Context, req *api.DeleteReminderRequest) 
 	_, err := s.client.DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
 		log.Errorf("Error deleting reminder job %s due to: %s", req.Name, err)
+		return err
+	}
+
+	return nil
+}
+
+func (s *scheduler) DeleteByActorID(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error {
+	_, err := s.client.DeleteByMetadata(ctx, &schedulerv1pb.DeleteByMetadataRequest{
+		IdPrefixMatch: ptr.Of(req.MatchIDAsPrefix),
+		Metadata: &schedulerv1pb.JobMetadata{
+			AppId:     s.appID,
+			Namespace: s.namespace,
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{
+						Id:   req.ActorID,
+						Type: req.ActorType,
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		log.Errorf("Error deleting reminders for actor %s of type %s due to: %s", req.ActorID, req.ActorType, err)
 		return err
 	}
 

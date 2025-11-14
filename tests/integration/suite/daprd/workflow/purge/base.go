@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package purge
 
 import (
 	"context"
@@ -27,39 +27,39 @@ import (
 )
 
 func init() {
-	suite.Register(new(purge))
+	suite.Register(new(base))
 }
 
-type purge struct {
+type base struct {
 	workflow *workflow.Workflow
 }
 
-func (p *purge) Setup(t *testing.T) []framework.Option {
-	p.workflow = workflow.New(t)
+func (b *base) Setup(t *testing.T) []framework.Option {
+	b.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(p.workflow),
+		framework.WithProcesses(b.workflow),
 	}
 }
 
-func (p *purge) Run(t *testing.T, ctx context.Context) {
-	p.workflow.WaitUntilRunning(t, ctx)
+func (b *base) Run(t *testing.T, ctx context.Context) {
+	b.workflow.WaitUntilRunning(t, ctx)
 
-	p.workflow.Registry().AddOrchestratorN("purge", func(ctx *task.OrchestrationContext) (any, error) {
+	b.workflow.Registry().AddOrchestratorN("purge", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("abc").Await(nil))
 		return nil, nil
 	})
-	p.workflow.Registry().AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
+	b.workflow.Registry().AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
 		return nil, nil
 	})
 
-	client := p.workflow.BackendClient(t, ctx)
+	client := b.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "purge")
 	require.NoError(t, err)
 
-	db := p.workflow.DB().GetConnection(t)
-	tableName := p.workflow.DB().TableName()
+	db := b.workflow.DB().GetConnection(t)
+	tableName := b.workflow.DB().TableName()
 
 	var count int
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))

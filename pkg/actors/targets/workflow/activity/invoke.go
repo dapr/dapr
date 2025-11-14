@@ -17,6 +17,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -24,6 +26,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -32,7 +35,18 @@ import (
 // returns immediately after creating the reminder, enabling the workflow to continue processing other events
 // in parallel.
 func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	log.Debugf("Activity actor '%s': invoking method '%s'", a.actorID, req.GetMessage().GetMethod())
+	method := req.GetMessage().GetMethod()
+
+	dueTime := time.Now()
+	if s, ok := req.GetMetadata()[todo.MetadataActivityReminderDueTime]; ok && len(s.GetValues()) > 0 {
+		unix, err := strconv.ParseInt(s.GetValues()[0], 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		dueTime = time.UnixMilli(unix)
+	}
+
+	log.Debugf("Activity actor '%s': invoking method '%s'", a.actorID, method)
 
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
 	if err != nil {
@@ -48,7 +62,7 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 	}
 
 	// The actual execution is triggered by a reminder
-	return nil, a.createReminder(ctx, &his)
+	return nil, a.createReminder(ctx, &his, dueTime)
 }
 
 func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {

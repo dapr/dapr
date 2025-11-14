@@ -78,7 +78,7 @@ func (a *startretry) Run(t *testing.T, ctx context.Context) {
 
 	// verify worker is connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
 	}, time.Second*10, time.Millisecond*10)
 
 	// scheduling a workflow with a provided start time
@@ -107,7 +107,7 @@ func (a *startretry) Run(t *testing.T, ctx context.Context) {
 
 	// verify a worker is still connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
 	}, time.Second*10, time.Millisecond*10)
 
 	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
