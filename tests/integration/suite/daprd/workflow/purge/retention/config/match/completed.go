@@ -72,6 +72,10 @@ func (e *completed) Run(t *testing.T, ctx context.Context) {
 	reg.AddActivityN("bar", func(ctx dworkflow.ActivityContext) (any, error) {
 		return nil, nil
 	})
+	reg.AddWorkflowN("foo3", func(ctx *dworkflow.WorkflowContext) (any, error) {
+		require.NoError(t, ctx.CallActivity("bar").Await(nil))
+		return nil, errors.New("this is an error")
+	})
 
 	client := dworkflow.NewClient(e.workflow.Dapr().GRPCConn(t, ctx))
 	require.NoError(t, client.StartWorker(ctx, reg))
@@ -116,6 +120,31 @@ func (e *completed) Run(t *testing.T, ctx context.Context) {
 
 		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 		assert.Equal(t, 11, count)
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
+			assert.Equal(c, 0, count)
+			assert.Empty(c, e.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
+		}, time.Second*10, time.Millisecond*10)
+	})
+
+	t.Run("failed", func(t *testing.T) {
+		_, err := client.ScheduleWorkflow(ctx, "foo3")
+		require.NoError(t, err)
+
+		db := e.workflow.DB().GetConnection(t)
+		tableName := e.workflow.DB().TableName()
+
+		var count int
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
+			assert.Equal(c, 8, count)
+		}, time.Second*10, time.Millisecond*10)
+
+		time.Sleep(time.Second * 3)
+
+		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
+		assert.Equal(t, 8, count)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))

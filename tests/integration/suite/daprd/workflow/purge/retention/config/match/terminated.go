@@ -32,6 +32,9 @@ func init() {
 	suite.Register(new(terminated))
 }
 
+// Test for workflow retention state matching. A Terminated workflow should be
+// purged immediately ("0s"), any other terminal state should be retained for 5
+// seconds.
 type terminated struct {
 	workflow *workflow.Workflow
 }
@@ -95,7 +98,7 @@ func (e *terminated) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 			assert.Equal(c, 0, count)
 			assert.Empty(c, e.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*4, time.Millisecond*10)
 	})
 
 	t.Run("completed", func(t *testing.T) {

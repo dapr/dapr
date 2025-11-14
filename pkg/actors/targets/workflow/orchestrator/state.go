@@ -15,7 +15,6 @@ package orchestrator
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -30,6 +29,7 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
+	"github.com/dapr/kit/concurrency"
 )
 
 func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.OrchestrationMetadata, error) {
@@ -120,46 +120,36 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 		return err
 	}
 
-	errCh := make(chan error)
-	go func() {
-		// This will do the purging
-		errCh <- o.actorState.TransactionalStateOperation(ctx, true, req, false)
-	}()
-
-	go func() {
-		errCh <- o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
-			ActorType:       o.actorType,
-			ActorID:         o.actorID,
-			MatchIDAsPrefix: false,
-		})
-	}()
-
-	go func() {
-		errCh <- o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
-			ActorType:       o.activityActorType,
-			ActorID:         o.actorID + "::",
-			MatchIDAsPrefix: true,
-		})
-	}()
-
-	n := 3
-	if includeRetentionReminder {
-		n++
-		go func() {
-			errCh <- o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
-				ActorType:       o.retentionActorType,
+	runners := []concurrency.Runner{
+		func(ctx context.Context) error {
+			// This will do the purging
+			return o.actorState.TransactionalStateOperation(ctx, true, req, false)
+		},
+		func(ctx context.Context) error {
+			return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+				ActorType:       o.actorType,
 				ActorID:         o.actorID,
 				MatchIDAsPrefix: false,
 			})
-		}()
+		},
+		func(ctx context.Context) error {
+			return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+				ActorType:       o.activityActorType,
+				ActorID:         o.actorID + "::",
+				MatchIDAsPrefix: true,
+			})
+		},
 	}
 
-	errs := make([]error, 0, n)
-	for range n {
-		errs = append(errs, <-errCh)
-	}
+	runners = append(runners, func(ctx context.Context) error {
+		return o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+			ActorType:       o.retentionActorType,
+			ActorID:         o.actorID,
+			MatchIDAsPrefix: false,
+		})
+	})
 
-	if err = errors.Join(errs...); err != nil {
+	if err = concurrency.Join(ctx, runners...); err != nil {
 		return err
 	}
 

@@ -212,7 +212,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	if runtimestate.IsCompleted(rs) {
 		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", o.actorID, rstatus, workflowName)
-		return todo.RunCompletedTrue, o.handleRetention(ctx, rstatus)
+		if err = o.handleRetention(ctx, rstatus); err != nil {
+			return todo.RunCompletedFalse, err
+		}
+		return todo.RunCompletedTrue, nil
 	}
 
 	return todo.RunCompletedFalse, nil
