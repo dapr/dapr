@@ -1,0 +1,84 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://wwb.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package stalled
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/task"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func init() {
+	suite.Register(new(patchmissing))
+}
+
+type patchmissing struct {
+	waitingForEvent atomic.Bool
+
+	fw *stalledFramework
+}
+
+func (r *patchmissing) oldWorkflow(ctx *task.OrchestrationContext) (any, error) {
+	if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (r *patchmissing) newWorkflow(ctx *task.OrchestrationContext) (any, error) {
+	// Just by checking a patch we should get into stalled, even if the 'body' of the patch doesn't trigger a mismatch.
+	ctx.IsPatched("patch1")
+
+	r.waitingForEvent.Store(true)
+	if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (r *patchmissing) sayHello1(ctx task.ActivityContext) (any, error) {
+	return "Hello", nil
+}
+
+func (r *patchmissing) sayHello2(ctx task.ActivityContext) (any, error) {
+	return "Hello", nil
+}
+
+func (r *patchmissing) Setup(t *testing.T) []framework.Option {
+	r.fw = newStalledFramework(r.oldWorkflow, r.newWorkflow, r.sayHello1, r.sayHello2)
+	return r.fw.Setup(t)
+}
+
+func (r *patchmissing) Run(t *testing.T, ctx context.Context) {
+	id := r.fw.ScheduleWorkflow(t, ctx)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.True(c, r.waitingForEvent.Load())
+	}, 2*time.Second, 50*time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
+
+	r.fw.KillCurrentReplica(t, ctx)
+	r.fw.RunOldReplica(t, ctx)
+
+	require.NoError(t, r.fw.currentClient.RaiseEvent(ctx, id, "Continue"))
+
+	r.fw.WaitForStatus(t, ctx, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
+}

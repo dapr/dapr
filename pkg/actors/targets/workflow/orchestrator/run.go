@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
+	"github.com/dapr/kit/ptr"
 )
 
 func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (todo.RunCompleted, error) {
@@ -140,7 +141,47 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(todo.ErrExecutionAborted)
 		}
 	}
-	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", o.actorID, runtimestate.RuntimeStatus(rs).String(), wi.InstanceID)
+	rs = wi.State
+
+	hasPatchMismatch := o.checkPatchMismatch(rs)
+	if hasPatchMismatch {
+		rs.CompletedEvent = nil
+		rs.CompletedTime = nil
+		filteredNewEvents := make([]*protos.HistoryEvent, 0, len(rs.NewEvents))
+		for _, e := range rs.NewEvents {
+			if e.GetExecutionCompleted() == nil {
+				filteredNewEvents = append(filteredNewEvents, e)
+			}
+		}
+		rs.NewEvents = filteredNewEvents
+
+		_ = runtimestate.AddEvent(rs, &protos.HistoryEvent{
+			EventId:   -1,
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionStalled{
+				ExecutionStalled: &protos.ExecutionStalledEvent{
+					Reason: protos.StalledReason_PATCH_MISMATCH,
+					// TODO: Return the actual patches that are mismatched
+					Description: ptr.Of("Patch mismatch"),
+				},
+			},
+		})
+	}
+
+	runtimeStatus := runtimestate.RuntimeStatus(rs)
+	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s', hasPatchMismatch=%v", o.actorID, runtimeStatus.String(), wi.InstanceID, hasPatchMismatch)
+
+	if hasPatchMismatch {
+		log.Warnf("Workflow actor '%s': workflow is stalled, skipping timer/activity processing", o.actorID)
+		state.ApplyRuntimeStateChanges(rs)
+		err = o.saveInternalState(ctx, state)
+		if err != nil {
+			return todo.RunCompletedFalse, err
+		}
+		log.Infof("Workflow actor '%s': workflow is stalled; holding reminder until context is canceled", o.actorID)
+		<-ctx.Done()
+		return todo.RunCompletedFalse, ctx.Err()
+	}
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
@@ -286,4 +327,47 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	}
 
 	return nil
+}
+
+func (*orchestrator) checkPatchMismatch(rs *backend.OrchestrationRuntimeState) bool {
+	seen := make(map[string]struct{})
+	var historyPatches []string
+	for _, e := range rs.OldEvents {
+		if os := e.GetOrchestratorStarted(); os != nil {
+			if version := os.GetVersion(); version != nil {
+				for _, p := range version.GetPatches() {
+					if _, ok := seen[p]; !ok {
+						seen[p] = struct{}{}
+						historyPatches = append(historyPatches, p)
+					}
+				}
+			}
+		}
+	}
+
+	if len(historyPatches) == 0 {
+		return false
+	}
+
+	var currentPatches []string
+	for _, e := range rs.NewEvents {
+		if os := e.GetOrchestratorStarted(); os != nil {
+			if version := os.GetVersion(); version != nil {
+				currentPatches = version.GetPatches()
+			}
+			break
+		}
+	}
+
+	if len(historyPatches) != len(currentPatches) {
+		return true
+	}
+
+	for i, patch := range historyPatches {
+		if currentPatches[i] != patch {
+			return true
+		}
+	}
+
+	return false
 }
