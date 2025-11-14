@@ -18,18 +18,27 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, generation uint64) error {
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) error {
+	var dueTime time.Time
+	if len(state.History) > 0 {
+		dueTime = state.History[0].GetTimestamp().AsTime()
+	} else {
+		dueTime = state.Inbox[0].GetTimestamp().AsTime()
+	}
+
 	for _, e := range es {
-		err := o.callActivity(ctx, e, generation)
+		err := o.callActivity(ctx, e, dueTime, state.Generation)
 		if err != nil {
 			if errors.Is(err, todo.ErrDuplicateInvocation) {
 				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", o.actorID, e.GetTaskScheduled().GetName(), e.GetEventId())
@@ -43,7 +52,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 	return nil
 }
 
-func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, generation uint64) error {
+func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64) error {
 	ts := e.GetTaskScheduled()
 	if ts == nil {
 		log.Warnf("Workflow actor '%s': unable to process task '%v'", o.actorID, e)
@@ -70,6 +79,9 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest("Execute").
 		WithActor(activityActorType, targetActorID).
+		WithMetadata(map[string][]string{
+			todo.MetadataActivityReminderDueTime: {strconv.FormatInt(dueTime.UnixMilli(), 10)},
+		}).
 		WithData(eventData).
 		WithContentType(invokev1.ProtobufContentType),
 	)
