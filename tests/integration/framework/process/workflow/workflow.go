@@ -221,3 +221,7 @@ func (w *Workflow) Metrics(t *testing.T, ctx context.Context) map[string]float64
 func (w *Workflow) DB() *sqlite.SQLite {
 	return w.db
 }
+
+func (w *Workflow) Scheduler() *scheduler.Scheduler {
+	return w.sched
+}
