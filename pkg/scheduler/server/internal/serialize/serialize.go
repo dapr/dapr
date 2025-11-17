@@ -73,24 +73,30 @@ func (s *Serializer) FromRequest(ctx context.Context, req Request) (*Job, error)
 	}, nil
 }
 
-func (s *Serializer) PrefixFromList(ctx context.Context, req *schedulerv1pb.JobMetadata) (string, error) {
+func (s *Serializer) KeyFromMetadata(ctx context.Context, req *schedulerv1pb.JobMetadata, asPrefix bool) (string, error) {
 	if err := s.authz.Metadata(ctx, req); err != nil {
 		return "", err
 	}
 
+	var str string
 	switch t := req.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Actor:
 		actor := t.GetActor()
-		s := joinStrings("actorreminder", req.GetNamespace(), actor.GetType())
+		str = joinStrings("actorreminder", req.GetNamespace(), actor.GetType())
 		if len(actor.GetId()) > 0 {
-			s = joinStrings(s, actor.GetId())
+			str = joinStrings(str, actor.GetId())
 		}
-		return s, nil
 	case *schedulerv1pb.JobTargetMetadata_Job:
-		return joinStrings("app", req.GetNamespace(), req.GetAppId()), nil
+		str = joinStrings("app", req.GetNamespace(), req.GetAppId())
 	default:
 		return "", fmt.Errorf("unknown job type: %v", t)
 	}
+
+	if !asPrefix {
+		str += "||"
+	}
+
+	return str, nil
 }
 
 func (s *Serializer) FromWatch(stream schedulerv1pb.Scheduler_WatchJobsServer) (*schedulerv1pb.WatchJobsRequestInitial, error) {
