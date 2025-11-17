@@ -153,7 +153,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	}
 
 	if err = errors.Join(
-		o.callActivities(ctx, activities, newState.Generation),
+		o.callActivities(ctx, activities, newState),
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
 		return err
