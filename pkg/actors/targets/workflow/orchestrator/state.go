@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -127,6 +128,22 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 	// This will do the purging
 	err = o.actorState.TransactionalStateOperation(ctx, true, req, false)
 	if err != nil {
+		return err
+	}
+
+	if err = o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+		ActorType:       o.actorType,
+		ActorID:         o.actorID,
+		MatchIDAsPrefix: false,
+	}); err != nil {
+		return err
+	}
+
+	if err = o.reminders.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+		ActorType:       o.activityActorType,
+		ActorID:         o.actorID + "::",
+		MatchIDAsPrefix: true,
+	}); err != nil {
 		return err
 	}
 
