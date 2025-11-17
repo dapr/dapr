@@ -156,7 +156,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
-	err = o.callActivities(ctx, rs.GetPendingTasks(), state.Generation)
+	err = o.callActivities(ctx, rs.GetPendingTasks(), state)
 	if err != nil {
 		executionStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, err
