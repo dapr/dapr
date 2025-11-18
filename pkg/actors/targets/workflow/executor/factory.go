@@ -20,7 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/targets"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
