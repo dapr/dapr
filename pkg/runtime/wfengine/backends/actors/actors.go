@@ -31,6 +31,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
@@ -50,6 +51,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/local"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -668,15 +670,37 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		return err
 	}
 
-	err = astate.TransactionalStateOperation(ctx, true, req, false)
+	reminders, err := abe.actors.Reminders(ctx)
 	if err != nil {
 		return err
 	}
 
-	// TODO: @joshvanl: Delete all associated reminders	using once merged
-	// https://github.com/dapr/dapr/pull/9171
+	sched, err := reminders.Scheduler()
+	if err != nil {
+		return err
+	}
 
-	return nil
+	// TODO: @joshvanl: also delete retentioner reminders when PR is merged
+	// https://github.com/dapr/dapr/pull/9185
+	return concurrency.Join(ctx,
+		func(ctx context.Context) error {
+			return astate.TransactionalStateOperation(ctx, true, req, false)
+		},
+		func(ctx context.Context) error {
+			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+				ActorType:       abe.workflowActorType,
+				ActorID:         id.String(),
+				MatchIDAsPrefix: false,
+			})
+		},
+		func(ctx context.Context) error {
+			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+				ActorType:       abe.activityActorType,
+				ActorID:         id.String() + "::",
+				MatchIDAsPrefix: true,
+			})
+		},
+	)
 }
 
 func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstanceHistoryRequest) (*protos.GetInstanceHistoryResponse, error) {
