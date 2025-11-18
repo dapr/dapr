@@ -18,6 +18,8 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/basic"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/continueasnew"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/get"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/list"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/listener"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/loadbalance"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/maxconcurrent"
