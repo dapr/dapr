@@ -15,19 +15,30 @@ package otel
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"net"
+	"sort"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"go.opentelemetry.io/otel/trace"
 	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
+	v1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
@@ -150,4 +161,60 @@ func (c *Collector) GetSpans() []*tracepb.ResourceSpans {
 // OTLPGRPCAddress returns the gRPC endpoint address for the collector
 func (c *Collector) OTLPGRPCAddress() string {
 	return c.listener.Addr().String()
+}
+
+func (c *Collector) GRPCDaprdConfiguration(t *testing.T) daprd.Option {
+	t.Helper()
+	return daprd.WithConfigManifests(t, fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: tracing
+spec:
+  tracing:
+    samplingRate: "1.0"
+    otel:
+      endpointAddress: "%s"
+      protocol: grpc
+      isSecure: false
+`, c.OTLPGRPCAddress()))
+}
+
+func (c *Collector) GRPCProvider(t *testing.T, ctx context.Context) *sdktrace.TracerProvider {
+	t.Helper()
+
+	client := otlptracegrpc.NewClient(
+		otlptracegrpc.WithEndpoint(c.OTLPGRPCAddress()),
+		otlptracegrpc.WithInsecure(),
+	)
+
+	exp, err := otlptrace.New(ctx, client)
+	require.NoError(t, err)
+
+	res, err := resource.New(ctx, resource.WithAttributes(semconv.ServiceName(t.Name())))
+	require.NoError(t, err)
+
+	return sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+		sdktrace.WithResource(res),
+	)
+}
+
+func (c *Collector) TraceSpans(traceID trace.TraceID) []*v1.Span {
+	var spans []*v1.Span
+	for _, span := range c.GetSpans() {
+		for _, scopeSpan := range span.ScopeSpans {
+			for _, span := range scopeSpan.Spans {
+
+				if hex.EncodeToString(span.GetTraceId()) == traceID.String() {
+					spans = append(spans, span)
+				}
+			}
+		}
+	}
+
+	sort.SliceStable(spans, func(i, j int) bool {
+		return spans[i].StartTimeUnixNano < spans[j].StartTimeUnixNano
+	})
+
+	return spans
 }
