@@ -70,7 +70,7 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 	assert.GreaterOrEqual(t, count, 5)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(t, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), 1)
+		assert.Len(c, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	require.NoError(t, client.PurgeWorkflowState(ctx, id, dworkflow.WithForcePurge(true)))
