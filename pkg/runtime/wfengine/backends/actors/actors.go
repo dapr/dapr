@@ -31,6 +31,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
@@ -42,7 +43,9 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
@@ -50,6 +53,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/local"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -60,15 +64,15 @@ const (
 	WorkflowNameLabelKey = "workflow"
 	ActivityNameLabelKey = "activity"
 	ExecutorNameLabelKey = "executor"
-	ActorTypePrefix      = "dapr.internal."
 )
 
 type Options struct {
-	AppID      string
-	Namespace  string
-	Actors     actors.Interface
-	Resiliency resiliency.Provider
-	EventSink  orchestrator.EventSink
+	AppID          string
+	Namespace      string
+	Actors         actors.Interface
+	Resiliency     resiliency.Provider
+	EventSink      orchestrator.EventSink
+	ComponentStore *compstore.ComponentStore
 	// experimental feature
 	// enabling this will use the cluster tasks backend for pending tasks, instead of the default local implementation
 	// the cluster tasks backend uses actors to share the state of pending tasks
@@ -88,6 +92,7 @@ type Actors struct {
 	resiliency                resiliency.Provider
 	actors                    actors.Interface
 	eventSink                 orchestrator.EventSink
+	compStore                 *compstore.ComponentStore
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -100,19 +105,20 @@ func New(opts Options) *Actors {
 	if opts.EnableClusteredDeployment {
 		pendingTasksBackend = NewClusterTasksBackend(ClusterTasksBackendOptions{
 			Actors:            opts.Actors,
-			ExecutorActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
+			ExecutorActorType: todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 		})
 	}
 	return &Actors{
 		appID:                     opts.AppID,
 		namespace:                 opts.Namespace,
-		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
-		activityActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
-		executorActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
+		workflowActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
+		activityActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
+		executorActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       pendingTasksBackend,
 		enableClusteredDeployment: opts.EnableClusteredDeployment,
+		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
@@ -479,24 +485,22 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 }
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
-func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
-	req := internalsv1pb.
-		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
-		WithActor(abe.workflowActorType, string(id))
-
-	router, err := abe.actors.Router(ctx)
-	if err != nil {
-		return err
+func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID, force bool) error {
+	start := time.Now()
+	var err error
+	if force {
+		err = abe.purgeWorkflowForce(ctx, id)
+	} else {
+		err = abe.purgeWorkflow(ctx, id)
 	}
 
-	start := time.Now()
-	_, err = router.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to PURGE WORKFLOW, record latency and count metrics.
 		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusFailed, elapsed)
 		return err
 	}
+
 	// successful request to PURGE WORKFLOW, record latency and count metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusSuccess, elapsed)
 	return nil
@@ -628,4 +632,113 @@ func (abe *Actors) WaitForActivityCompletion(ctx context.Context, request *proto
 // WaitForOrchestratorCompletion implements backend.Backend.
 func (abe *Actors) WaitForOrchestratorCompletion(ctx context.Context, request *protos.OrchestratorRequest) (*protos.OrchestratorResponse, error) {
 	return abe.pendingTasksBackend.WaitForOrchestratorCompletion(ctx, request)
+}
+
+func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
+	resp, err := list.ListInstanceIDs(ctx, list.ListOptions{
+		ComponentStore:    abe.compStore,
+		Namespace:         abe.namespace,
+		AppID:             abe.appID,
+		PageSize:          req.PageSize,          //nolint:protogetter
+		ContinuationToken: req.ContinuationToken, //nolint:protogetter
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &protos.ListInstanceIDsResponse{
+		InstanceIds:       resp.Keys,
+		ContinuationToken: resp.ContinuationToken,
+	}, nil
+}
+
+func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstanceHistoryRequest) (*protos.GetInstanceHistoryResponse, error) {
+	ss, err := abe.actors.State(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), state.Options{
+		AppID:             abe.appID,
+		WorkflowActorType: abe.workflowActorType,
+		ActivityActorType: abe.activityActorType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &protos.GetInstanceHistoryResponse{Events: resp.History}, nil
+}
+
+func (abe *Actors) purgeWorkflow(ctx context.Context, id api.InstanceID) error {
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
+		WithActor(abe.workflowActorType, string(id))
+
+	router, err := abe.actors.Router(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = router.Call(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) error {
+	log.Warnf("Force purging workflow state of '%s'. This can cause corruption if the workflow is being processed", id.String())
+
+	astate, err := abe.actors.State(ctx)
+	if err != nil {
+		return err
+	}
+
+	s, err := state.LoadWorkflowState(ctx, astate, id.String(), state.Options{
+		AppID:             abe.appID,
+		WorkflowActorType: abe.workflowActorType,
+		ActivityActorType: abe.activityActorType,
+	})
+	if err != nil {
+		return err
+	}
+
+	req, err := s.GetPurgeRequest(id.String())
+	if err != nil {
+		return err
+	}
+
+	reminders, err := abe.actors.Reminders(ctx)
+	if err != nil {
+		return err
+	}
+
+	sched, err := reminders.Scheduler()
+	if err != nil {
+		return err
+	}
+
+	// TODO: @joshvanl: also delete retentioner reminders when PR is merged
+	// https://github.com/dapr/dapr/pull/9185
+	return concurrency.Join(ctx,
+		func(ctx context.Context) error {
+			return astate.TransactionalStateOperation(ctx, true, req, false)
+		},
+		func(ctx context.Context) error {
+			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+				ActorType:       abe.workflowActorType,
+				ActorID:         id.String(),
+				MatchIDAsPrefix: false,
+			})
+		},
+		func(ctx context.Context) error {
+			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+				ActorType:       abe.activityActorType,
+				ActorID:         id.String() + "::",
+				MatchIDAsPrefix: true,
+			})
+		},
+	)
 }

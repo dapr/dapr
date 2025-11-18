@@ -11,11 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package purge
 
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,53 +24,57 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/task"
+	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
 
 func init() {
-	suite.Register(new(purge))
+	suite.Register(new(noclient))
 }
 
-type purge struct {
+type noclient struct {
 	workflow *workflow.Workflow
 }
 
-func (p *purge) Setup(t *testing.T) []framework.Option {
-	p.workflow = workflow.New(t)
+func (n *noclient) Setup(t *testing.T) []framework.Option {
+	n.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(p.workflow),
+		framework.WithProcesses(n.workflow),
 	}
 }
 
-func (p *purge) Run(t *testing.T, ctx context.Context) {
-	p.workflow.WaitUntilRunning(t, ctx)
+func (n *noclient) Run(t *testing.T, ctx context.Context) {
+	n.workflow.WaitUntilRunning(t, ctx)
 
-	p.workflow.Registry().AddOrchestratorN("purge", func(ctx *task.OrchestrationContext) (any, error) {
-		require.NoError(t, ctx.CallActivity("abc").Await(nil))
+	reg := dworkflow.NewRegistry()
+	reg.AddWorkflowN("purge", func(ctx *dworkflow.WorkflowContext) (any, error) {
+		require.NoError(t, ctx.CreateTimer(time.Minute*60).Await(nil))
 		return nil, nil
 	})
-	p.workflow.Registry().AddActivityN("abc", func(ctx task.ActivityContext) (any, error) {
-		return nil, nil
-	})
 
-	client := p.workflow.BackendClient(t, ctx)
+	client := n.workflow.WorkflowClient(t, ctx)
+	sctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	require.NoError(t, client.StartWorker(sctx, reg))
 
-	id, err := client.ScheduleNewOrchestration(ctx, "purge")
+	id, err := client.ScheduleWorkflow(ctx, "purge")
 	require.NoError(t, err)
 
-	db := p.workflow.DB().GetConnection(t)
-	tableName := p.workflow.DB().TableName()
+	db := n.workflow.DB().GetConnection(t)
+	tableName := n.workflow.DB().TableName()
 
 	var count int
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.GreaterOrEqual(t, count, 5)
+	assert.Positive(t, count)
 
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
-	require.NoError(t, err)
+	cancel()
 
-	require.NoError(t, client.PurgeOrchestrationState(ctx, id))
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Empty(c, n.workflow.Dapr().GetMetaActorRuntime(t, ctx).ActiveActors)
+	}, time.Second*10, time.Millisecond*10)
+
+	require.Error(t, client.PurgeWorkflowState(ctx, id))
 
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.Equal(t, 0, count)
+	assert.Positive(t, count)
 }
