@@ -77,6 +77,11 @@ type engine struct {
 }
 
 func New(opts Options) Interface {
+	var retPolicy *config.WorkflowStateRetentionPolicy
+	if opts.Spec != nil {
+		retPolicy = opts.Spec.StateRetentionPolicy
+	}
+
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend := backendactors.New(backendactors.Options{
 		AppID:                     opts.AppID,
@@ -86,6 +91,7 @@ func New(opts Options) Interface {
 		EventSink:                 opts.EventSink,
 		EnableClusteredDeployment: opts.EnableClusteredDeployment,
 		ComponentStore:            opts.ComponentStore,
+		RetentionPolicy:           retPolicy,
 	})
 
 	var getWorkItemsCount atomic.Int32

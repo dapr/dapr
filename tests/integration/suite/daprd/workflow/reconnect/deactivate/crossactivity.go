@@ -80,7 +80,7 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 
 	// verify worker is connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		assert.Len(col, c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+		assert.Len(col, c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
 	}, time.Second*10, time.Millisecond*10)
 
 	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
