@@ -194,12 +194,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedFalse, err
 	}
 
+	rstatus := runtimestate.RuntimeStatus(rs)
 	if executionStatus != "" {
 		// If workflow is not completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
 		if runtimestate.IsCompleted(rs) {
-			if runtimestate.RuntimeStatus(rs) == api.RUNTIME_STATUS_COMPLETED {
+			if rstatus == api.RUNTIME_STATUS_COMPLETED {
 				executionStatus = diag.StatusSuccess
 			} else {
 				// Setting executionStatus to failed if workflow has failed/terminated/cancelled
@@ -210,7 +211,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	if runtimestate.IsCompleted(rs) {
-		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", o.actorID, runtimestate.RuntimeStatus(rs).String(), workflowName)
+		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", o.actorID, rstatus, workflowName)
+		if err = o.handleRetention(ctx, rstatus); err != nil {
+			return todo.RunCompletedFalse, err
+		}
 		return todo.RunCompletedTrue, nil
 	}
 
@@ -248,4 +252,38 @@ func (*orchestrator) recordWorkflowSchedulingLatency(ctx context.Context, esHist
 		wfSchedulingLatency := float64(currentTimestamp.Sub(scheduledStartTimestamp).Milliseconds())
 		diag.DefaultWorkflowMonitoring.WorkflowSchedulingLatency(ctx, workflowName, wfSchedulingLatency)
 	}
+}
+
+func (o *orchestrator) handleRetention(ctx context.Context, status protos.OrchestrationStatus) error {
+	if o.retentionPolicy == nil {
+		return nil
+	}
+
+	var dueTime *time.Duration
+	var name string
+	switch {
+	case o.retentionPolicy.Completed != nil &&
+		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED:
+		dueTime = o.retentionPolicy.Completed
+		name = "completed"
+	case o.retentionPolicy.Terminated != nil &&
+		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED:
+		dueTime = o.retentionPolicy.Terminated
+		name = "terminated"
+	case o.retentionPolicy.Failed != nil &&
+		status == protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED:
+		dueTime = o.retentionPolicy.Failed
+		name = "failed"
+	case o.retentionPolicy.AnyTerminal != nil:
+		dueTime = o.retentionPolicy.AnyTerminal
+		name = "anyterminal"
+	}
+
+	if dueTime != nil {
+		log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
+		_, err := o.createRetentionReminder(ctx, name, time.Now().Add(*dueTime))
+		return err
+	}
+
+	return nil
 }
