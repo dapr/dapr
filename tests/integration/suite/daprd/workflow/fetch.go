@@ -33,30 +33,30 @@ import (
 )
 
 func init() {
-	suite.Register(new(get))
+	suite.Register(new(fetch))
 }
 
-type get struct {
+type fetch struct {
 	workflow *workflow.Workflow
 }
 
-func (g *get) Setup(t *testing.T) []framework.Option {
-	g.workflow = workflow.New(t)
+func (f *fetch) Setup(t *testing.T) []framework.Option {
+	f.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(g.workflow),
+		framework.WithProcesses(f.workflow),
 	}
 }
 
-func (g *get) Run(t *testing.T, ctx context.Context) {
-	g.workflow.WaitUntilRunning(t, ctx)
+func (f *fetch) Run(t *testing.T, ctx context.Context) {
+	f.workflow.WaitUntilRunning(t, ctx)
 
-	g.workflow.Registry().AddOrchestratorN("getter", func(ctx *task.OrchestrationContext) (any, error) {
+	f.workflow.Registry().AddOrchestratorN("getter", func(ctx *task.OrchestrationContext) (any, error) {
 		ctx.SetCustomStatus("my custom status")
 		return "return value", nil
 	})
 
-	client := g.workflow.BackendClient(t, ctx)
+	client := f.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "getter", api.WithInput("input value"))
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"return value"`, meta.GetOutput().GetValue())
 	assert.Equal(t, `my custom status`, meta.GetCustomStatus().GetValue())
 
-	gclient := g.workflow.GRPCClient(t, ctx)
+	gclient := f.workflow.GRPCClient(t, ctx)
 	resp, err := gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
 		InstanceId:        string(id),
 		WorkflowComponent: "dapr",
@@ -83,7 +83,7 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 
 	req, err := http.NewRequestWithContext(ctx,
 		http.MethodGet,
-		fmt.Sprintf("http://%s/v1.0-beta1/workflows/dapr/%s", g.workflow.Dapr().HTTPAddress(), id),
+		fmt.Sprintf("http://%s/v1.0-beta1/workflows/dapr/%s", f.workflow.Dapr().HTTPAddress(), id),
 		nil,
 	)
 	require.NoError(t, err)
