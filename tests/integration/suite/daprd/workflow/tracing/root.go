@@ -20,7 +20,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/otel"
@@ -64,8 +63,7 @@ func (r *root) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 	reg.AddActivityN("bar", func(ctx dworkflow.ActivityContext) (any, error) {
-		span := trace.SpanFromContext(ctx.Context())
-		_, span = tracer.Start(ctx.Context(), "this-is-my-activity")
+		_, span := tracer.Start(ctx.Context(), "this-is-my-activity")
 		span.AddEvent("Started activity")
 		span.AddEvent("Finishing activity")
 		span.End()
@@ -89,7 +87,7 @@ func (r *root) Run(t *testing.T, ctx context.Context) {
 		spans := r.collector.TraceSpans(span.SpanContext().TraceID())
 		names := make([]string, len(spans))
 		for i, span := range spans {
-			names[i] = span.Name
+			names[i] = span.GetName()
 		}
 
 		assert.Equal(c, []string{

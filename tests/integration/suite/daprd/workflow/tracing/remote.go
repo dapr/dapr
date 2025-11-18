@@ -24,7 +24,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -86,8 +85,7 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 
 	var count atomic.Int64
 	reg.AddActivityN("bar", func(ctx dworkflow.ActivityContext) (any, error) {
-		span := trace.SpanFromContext(ctx.Context())
-		_, span = tracer.Start(ctx.Context(), "this-is-my-activity-"+strconv.FormatInt(count.Add(1), 10))
+		_, span := tracer.Start(ctx.Context(), "this-is-my-activity-"+strconv.FormatInt(count.Add(1), 10))
 		span.AddEvent("Started activity")
 		span.AddEvent("Finishing activity")
 		span.End()
@@ -115,7 +113,7 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 		spans := r.collector.TraceSpans(span.SpanContext().TraceID())
 		names := make([]string, len(spans))
 		for i, span := range spans {
-			names[i] = span.Name
+			names[i] = span.GetName()
 		}
 
 		exp := []string{
