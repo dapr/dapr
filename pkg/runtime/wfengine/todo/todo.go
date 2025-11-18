@@ -32,6 +32,7 @@ const (
 	RerunWorkflowInstance        = "RerunWorkflowInstance"
 
 	MetadataActivityReminderDueTime = "dueTime"
+	MetadataPurgeRetentionCall      = "PurgeRetentionCall"
 
 	ActorTypePrefix = "dapr.internal."
 )

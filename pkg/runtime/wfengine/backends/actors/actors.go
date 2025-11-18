@@ -39,6 +39,8 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/executor"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/retentioner"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -61,9 +63,11 @@ import (
 var log = logger.NewLogger("dapr.wfengine.backend.actors")
 
 const (
-	WorkflowNameLabelKey = "workflow"
-	ActivityNameLabelKey = "activity"
-	ExecutorNameLabelKey = "executor"
+	WorkflowNameLabelKey    = "workflow"
+	ActivityNameLabelKey    = "activity"
+	ExecutorNameLabelKey    = "executor"
+	RetentionerNameLabelKey = "retentioner"
+	ActorTypePrefix         = "dapr.internal."
 )
 
 type Options struct {
@@ -78,14 +82,17 @@ type Options struct {
 	// the cluster tasks backend uses actors to share the state of pending tasks
 	// allowing to deploy multiple daprd replicas and expose them through a loadbalancer
 	EnableClusteredDeployment bool
+
+	RetentionPolicy *config.WorkflowStateRetentionPolicy
 }
 
 type Actors struct {
-	appID             string
-	namespace         string
-	workflowActorType string
-	activityActorType string
-	executorActorType string
+	appID                string
+	namespace            string
+	workflowActorType    string
+	activityActorType    string
+	retentionerActorType string
+	executorActorType    string
 
 	enableClusteredDeployment bool
 	pendingTasksBackend       PendingTasksBackend
@@ -93,6 +100,7 @@ type Actors struct {
 	actors                    actors.Interface
 	eventSink                 orchestrator.EventSink
 	compStore                 *compstore.ComponentStore
+	retentionPolicy           *config.WorkflowStateRetentionPolicy
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -114,6 +122,7 @@ func New(opts Options) *Actors {
 		workflowActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
 		executorActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
+		retentionerActorType:      todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + RetentionerNameLabelKey,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       pendingTasksBackend,
@@ -122,6 +131,7 @@ func New(opts Options) *Actors {
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
+		retentionPolicy:           opts.RetentionPolicy,
 	}
 }
 
@@ -133,11 +143,13 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 
 	actorTypeBuilder := common.NewActorTypeBuilder(abe.namespace)
 	oopts := orchestrator.Options{
-		AppID:             abe.appID,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-		Resiliency:        abe.resiliency,
-		Actors:            abe.actors,
+		AppID:              abe.appID,
+		WorkflowActorType:  abe.workflowActorType,
+		ActivityActorType:  abe.activityActorType,
+		Resiliency:         abe.resiliency,
+		Actors:             abe.actors,
+		RetentionActorType: abe.retentionerActorType,
+		RetentionPolicy:    abe.retentionPolicy,
 		Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 			select {
@@ -172,34 +184,30 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		ActorTypeBuilder: actorTypeBuilder,
 	}
 
-	workflowFactory, activityFactory, err := workflow.Factories(ctx, oopts, aopts)
-	if err != nil {
-		return err
-	}
-
-	factories := []table.ActorTypeFactory{
-		{
-			Factory: workflowFactory,
-			Type:    abe.workflowActorType,
+	opts := workflow.Options{
+		Orchestrator: oopts,
+		Activity:     aopts,
+		Retentioner: retentioner.Options{
+			Actors:            abe.actors,
+			WorkflowActorType: abe.workflowActorType,
+			ActorType:         abe.retentionerActorType,
 		},
-		{
-			Factory: activityFactory,
-			Type:    abe.activityActorType,
-		},
+		WorkflowActorType:  abe.workflowActorType,
+		ActivityActorType:  abe.activityActorType,
+		RetentionActorType: abe.retentionerActorType,
+		ExecutorActorType:  abe.executorActorType,
 	}
 
 	if abe.enableClusteredDeployment {
-		executorFactory, err := executor.New(ctx, executor.Options{
+		opts.Executor = &executor.Options{
 			ActorType: abe.executorActorType,
 			Actors:    abe.actors,
-		})
-		if err != nil {
-			return err
 		}
-		factories = append(factories, table.ActorTypeFactory{
-			Factory: executorFactory,
-			Type:    abe.executorActorType,
-		})
+	}
+
+	factories, err := workflow.Factories(ctx, opts)
+	if err != nil {
+		return err
 	}
 
 	atable.RegisterActorTypes(table.RegisterActorTypeOptions{
@@ -215,7 +223,11 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 		return err
 	}
 
-	actorTypes := []string{abe.workflowActorType, abe.activityActorType}
+	actorTypes := []string{
+		abe.workflowActorType,
+		abe.activityActorType,
+		abe.retentionerActorType,
+	}
 	if abe.enableClusteredDeployment {
 		actorTypes = append(actorTypes, abe.executorActorType)
 	}
@@ -720,8 +732,6 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		return err
 	}
 
-	// TODO: @joshvanl: also delete retentioner reminders when PR is merged
-	// https://github.com/dapr/dapr/pull/9185
 	return concurrency.Join(ctx,
 		func(ctx context.Context) error {
 			return astate.TransactionalStateOperation(ctx, true, req, false)
@@ -738,6 +748,13 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 				ActorType:       abe.activityActorType,
 				ActorID:         id.String() + "::",
 				MatchIDAsPrefix: true,
+			})
+		},
+		func(ctx context.Context) error {
+			return sched.DeleteByActorID(ctx, &actorsapi.DeleteRemindersByActorIDRequest{
+				ActorType:       abe.retentionerActorType,
+				ActorID:         id.String(),
+				MatchIDAsPrefix: false,
 			})
 		},
 	)
