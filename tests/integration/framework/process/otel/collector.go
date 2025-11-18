@@ -33,7 +33,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
-	v1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
@@ -199,12 +198,11 @@ func (c *Collector) GRPCProvider(t *testing.T, ctx context.Context) *sdktrace.Tr
 	)
 }
 
-func (c *Collector) TraceSpans(traceID trace.TraceID) []*v1.Span {
-	var spans []*v1.Span
+func (c *Collector) TraceSpans(traceID trace.TraceID) []*tracepb.Span {
+	var spans []*tracepb.Span
 	for _, span := range c.GetSpans() {
-		for _, scopeSpan := range span.ScopeSpans {
-			for _, span := range scopeSpan.Spans {
-
+		for _, scopeSpan := range span.GetScopeSpans() {
+			for _, span := range scopeSpan.GetSpans() {
 				if hex.EncodeToString(span.GetTraceId()) == traceID.String() {
 					spans = append(spans, span)
 				}
@@ -213,7 +211,7 @@ func (c *Collector) TraceSpans(traceID trace.TraceID) []*v1.Span {
 	}
 
 	sort.SliceStable(spans, func(i, j int) bool {
-		return spans[i].StartTimeUnixNano < spans[j].StartTimeUnixNano
+		return spans[i].GetStartTimeUnixNano() < spans[j].GetStartTimeUnixNano()
 	})
 
 	return spans

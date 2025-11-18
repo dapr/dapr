@@ -15,14 +15,13 @@ package tracing
 
 import (
 	"context"
-	"fmt"
+	"encoding/hex"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
 	v1 "go.opentelemetry.io/proto/otlp/trace/v1"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -67,8 +66,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 	reg.AddActivityN("bar", func(ctx dworkflow.ActivityContext) (any, error) {
-		span := trace.SpanFromContext(ctx.Context())
-		_, span = tracer.Start(ctx.Context(), "this-is-my-activity")
+		_, span := tracer.Start(ctx.Context(), "this-is-my-activity")
 		span.AddEvent("Started activity")
 		span.AddEvent("Finishing activity")
 		span.End()
@@ -87,9 +85,9 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		traces := make(map[string][]*v1.Span)
 		for _, span := range b.collector.GetSpans() {
-			for _, scopeSpan := range span.ScopeSpans {
-				for _, span := range scopeSpan.Spans {
-					traceID := fmt.Sprintf("%x", span.TraceId)
+			for _, scopeSpan := range span.GetScopeSpans() {
+				for _, span := range scopeSpan.GetSpans() {
+					traceID := hex.EncodeToString(span.GetTraceId())
 					traces[traceID] = append(traces[traceID], span)
 				}
 			}
@@ -98,14 +96,14 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 		var found bool
 		for _, spans := range traces {
 			sort.SliceStable(spans, func(i, j int) bool {
-				return spans[i].StartTimeUnixNano < spans[j].StartTimeUnixNano
+				return spans[i].GetStartTimeUnixNano() < spans[j].GetStartTimeUnixNano()
 			})
 
-			if len(spans) > 0 && spans[0].Name == "/TaskHubSidecarService/StartInstance" {
+			if len(spans) > 0 && spans[0].GetName() == "/TaskHubSidecarService/StartInstance" {
 				found = true
 				names := make([]string, len(spans))
 				for i, span := range spans {
-					names[i] = span.Name
+					names[i] = span.GetName()
 				}
 				assert.Equal(c, []string{
 					"/TaskHubSidecarService/StartInstance",
