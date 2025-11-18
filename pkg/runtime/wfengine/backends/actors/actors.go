@@ -43,7 +43,9 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
@@ -62,15 +64,15 @@ const (
 	WorkflowNameLabelKey = "workflow"
 	ActivityNameLabelKey = "activity"
 	ExecutorNameLabelKey = "executor"
-	ActorTypePrefix      = "dapr.internal."
 )
 
 type Options struct {
-	AppID      string
-	Namespace  string
-	Actors     actors.Interface
-	Resiliency resiliency.Provider
-	EventSink  orchestrator.EventSink
+	AppID          string
+	Namespace      string
+	Actors         actors.Interface
+	Resiliency     resiliency.Provider
+	EventSink      orchestrator.EventSink
+	ComponentStore *compstore.ComponentStore
 	// experimental feature
 	// enabling this will use the cluster tasks backend for pending tasks, instead of the default local implementation
 	// the cluster tasks backend uses actors to share the state of pending tasks
@@ -90,6 +92,7 @@ type Actors struct {
 	resiliency                resiliency.Provider
 	actors                    actors.Interface
 	eventSink                 orchestrator.EventSink
+	compStore                 *compstore.ComponentStore
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -102,19 +105,20 @@ func New(opts Options) *Actors {
 	if opts.EnableClusteredDeployment {
 		pendingTasksBackend = NewClusterTasksBackend(ClusterTasksBackendOptions{
 			Actors:            opts.Actors,
-			ExecutorActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
+			ExecutorActorType: todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 		})
 	}
 	return &Actors{
 		appID:                     opts.AppID,
 		namespace:                 opts.Namespace,
-		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
-		activityActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
-		executorActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
+		workflowActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
+		activityActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
+		executorActorType:         todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       pendingTasksBackend,
 		enableClusteredDeployment: opts.EnableClusteredDeployment,
+		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
@@ -630,6 +634,42 @@ func (abe *Actors) WaitForOrchestratorCompletion(ctx context.Context, request *p
 	return abe.pendingTasksBackend.WaitForOrchestratorCompletion(ctx, request)
 }
 
+func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
+	resp, err := list.ListInstanceIDs(ctx, list.ListOptions{
+		ComponentStore:    abe.compStore,
+		Namespace:         abe.namespace,
+		AppID:             abe.appID,
+		PageSize:          req.PageSize,          //nolint:protogetter
+		ContinuationToken: req.ContinuationToken, //nolint:protogetter
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &protos.ListInstanceIDsResponse{
+		InstanceIds:       resp.Keys,
+		ContinuationToken: resp.ContinuationToken,
+	}, nil
+}
+
+func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstanceHistoryRequest) (*protos.GetInstanceHistoryResponse, error) {
+	ss, err := abe.actors.State(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), state.Options{
+		AppID:             abe.appID,
+		WorkflowActorType: abe.workflowActorType,
+		ActivityActorType: abe.activityActorType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &protos.GetInstanceHistoryResponse{Events: resp.History}, nil
+}
+
 func (abe *Actors) purgeWorkflow(ctx context.Context, id api.InstanceID) error {
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
@@ -701,12 +741,4 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 			})
 		},
 	)
-}
-
-func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstanceHistoryRequest) (*protos.GetInstanceHistoryResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "GetInstanceHistory is not implemented in the Actors backend")
-}
-
-func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "ListInstanceIDs is not implemented in the Actors backend")
 }
