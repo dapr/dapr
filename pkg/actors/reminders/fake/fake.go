@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/internal/scheduler"
 )
 
 type Fake struct {
@@ -24,6 +25,7 @@ type Fake struct {
 	createFn          func(ctx context.Context, req *api.CreateReminderRequest) error
 	deleteFn          func(ctx context.Context, req *api.DeleteReminderRequest) error
 	deleteByActorIDFn func(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error
+	schedulerFn       func() (scheduler.Interface, error)
 }
 
 func New() *Fake {
@@ -39,6 +41,9 @@ func New() *Fake {
 		},
 		deleteByActorIDFn: func(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error {
 			return nil
+		},
+		schedulerFn: func() (scheduler.Interface, error) {
+			return nil, nil
 		},
 	}
 }
@@ -77,4 +82,8 @@ func (f *Fake) Delete(ctx context.Context, req *api.DeleteReminderRequest) error
 
 func (f *Fake) DeleteByActorID(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error {
 	return f.deleteByActorIDFn(ctx, req)
+}
+
+func (f *Fake) Scheduler() (scheduler.Interface, error) {
+	return f.schedulerFn()
 }
