@@ -30,6 +30,11 @@ const (
 	WaitForRuntimeStatus         = "WaitForRuntimeStatus"
 	ForkWorkflowHistory          = "ForkWorkflowHistory"
 	RerunWorkflowInstance        = "RerunWorkflowInstance"
+
+	MetadataActivityReminderDueTime = "dueTime"
+	MetadataPurgeRetentionCall      = "PurgeRetentionCall"
+
+	ActorTypePrefix = "dapr.internal."
 )
 
 var (

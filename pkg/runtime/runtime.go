@@ -307,6 +307,7 @@ func newDaprRuntime(ctx context.Context,
 		Resiliency:                resiliencyProvider,
 		EventSink:                 runtimeConfig.workflowEventSink,
 		EnableClusteredDeployment: globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
+		ComponentStore:            compStore,
 	})
 
 	jobsManager, err := scheduler.New(scheduler.Options{

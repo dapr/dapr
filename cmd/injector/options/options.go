@@ -29,6 +29,7 @@ type Options struct {
 	Kubeconfig           string
 	Port                 int
 	ListenAddress        string
+	SchedulerEnabled     bool
 	Logger               logger.Options
 	Metrics              *metrics.FlagOptions
 }
@@ -59,6 +60,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 	fs.IntVar(&opts.Port, "port", 4000, "The port used for the injector service")
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The listen address for the injector service")
+	fs.BoolVar(&opts.SchedulerEnabled, "scheduler-enabled", true, "Marks if scheduler is enabled in the cluster, and address should be patched on sidecars.")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")

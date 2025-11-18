@@ -141,7 +141,7 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 		exp := []*rtv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 		}
 		require.EventuallyWithT(t, func(ct *assert.CollectT) {
@@ -179,7 +179,7 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 			exp := []*rtv1.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "KEYS_LIKE", "ACTOR"},
 				},
 			}
 			assert.ElementsMatch(ct, exp, c.daprd1.GetMetaRegisteredComponents(ct, ctx))

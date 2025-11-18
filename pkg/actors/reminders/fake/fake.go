@@ -17,12 +17,15 @@ import (
 	"context"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/internal/scheduler"
 )
 
 type Fake struct {
-	getFn    func(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error)
-	createFn func(ctx context.Context, req *api.CreateReminderRequest) error
-	deleteFn func(ctx context.Context, req *api.DeleteReminderRequest) error
+	getFn             func(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error)
+	createFn          func(ctx context.Context, req *api.CreateReminderRequest) error
+	deleteFn          func(ctx context.Context, req *api.DeleteReminderRequest) error
+	deleteByActorIDFn func(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error
+	schedulerFn       func() (scheduler.Interface, error)
 }
 
 func New() *Fake {
@@ -35,6 +38,12 @@ func New() *Fake {
 		},
 		deleteFn: func(ctx context.Context, req *api.DeleteReminderRequest) error {
 			return nil
+		},
+		deleteByActorIDFn: func(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error {
+			return nil
+		},
+		schedulerFn: func() (scheduler.Interface, error) {
+			return nil, nil
 		},
 	}
 }
@@ -54,6 +63,11 @@ func (f *Fake) WithDelete(fn func(ctx context.Context, req *api.DeleteReminderRe
 	return f
 }
 
+func (f *Fake) WithDeleteByActorID(fn func(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error) *Fake {
+	f.deleteByActorIDFn = fn
+	return f
+}
+
 func (f *Fake) Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error) {
 	return f.getFn(ctx, req)
 }
@@ -64,4 +78,12 @@ func (f *Fake) Create(ctx context.Context, req *api.CreateReminderRequest) error
 
 func (f *Fake) Delete(ctx context.Context, req *api.DeleteReminderRequest) error {
 	return f.deleteFn(ctx, req)
+}
+
+func (f *Fake) DeleteByActorID(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error {
+	return f.deleteByActorIDFn(ctx, req)
+}
+
+func (f *Fake) Scheduler() (scheduler.Interface, error) {
+	return f.schedulerFn()
 }

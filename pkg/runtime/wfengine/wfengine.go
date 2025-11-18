@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/durabletask-go/backend"
@@ -59,6 +60,7 @@ type Options struct {
 	Resiliency                resiliency.Provider
 	EventSink                 orchestrator.EventSink
 	EnableClusteredDeployment bool
+	ComponentStore            *compstore.ComponentStore
 }
 
 type engine struct {
@@ -75,6 +77,11 @@ type engine struct {
 }
 
 func New(opts Options) Interface {
+	var retPolicy *config.WorkflowStateRetentionPolicy
+	if opts.Spec != nil {
+		retPolicy = opts.Spec.StateRetentionPolicy
+	}
+
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend := backendactors.New(backendactors.Options{
 		AppID:                     opts.AppID,
@@ -83,6 +90,8 @@ func New(opts Options) Interface {
 		Resiliency:                opts.Resiliency,
 		EventSink:                 opts.EventSink,
 		EnableClusteredDeployment: opts.EnableClusteredDeployment,
+		ComponentStore:            opts.ComponentStore,
+		RetentionPolicy:           retPolicy,
 	})
 
 	var getWorkItemsCount atomic.Int32
