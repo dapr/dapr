@@ -12,8 +12,8 @@ ADD "https://api.github.com/repos/dapr/fortio/branches/v1.38.4-dapr" skipcache
 RUN git clone https://github.com/dapr/fortio.git
 RUN cd fortio && git checkout v1.38.4-dapr && go build
 
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 WORKDIR /
 COPY --from=build_env /app/tester /
-COPY --from=fortio_build_env /fortio/fortio/fortio /usr/local/bin
+COPY --from=fortio_build_env /fortio/fortio/fortio /usr/local/bin/fortio
 CMD ["/tester"]
