@@ -218,3 +218,12 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, true)
 }
+
+// Runs test for delaying workflows: 500 VUs, 10,000 iterations
+func TestDelayWorkflowsAtScale(t *testing.T) {
+	workflowName := "delay_wf"
+	inputs := []string{"30000"}          // delay in milliseconds (30s)
+	scenarios := []string{"t_500_10000"} // t_workflowCount_iterations
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+}

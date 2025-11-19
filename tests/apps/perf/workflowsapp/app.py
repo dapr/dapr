@@ -120,6 +120,17 @@ def sum_activity(ctx:WorkflowActivityContext,input):
         sum += i
     return sum
 
+# delay_wf waits for a specified delay (milliseconds) using an activity, then completes
+def delay_wf(ctx:DaprWorkflowContext, input):
+    print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{ctx.instance_id}] Invoked delay_wf")
+    delay_ms = int(input)
+    yield ctx.call_activity(delay_activity, input=delay_ms)
+
+# delay_activity sleeps for the specified milliseconds
+def delay_activity(ctx:WorkflowActivityContext, input):
+    delay_ms = int(input)
+    sleep(delay_ms / 1000.0)
+
 # start_workflow_runtime starts the workflow runtime and registers the declared workflows and activities
 @api.route('/start-workflow-runtime', methods=['GET'])
 def start_workflow_runtime():
@@ -130,10 +141,12 @@ def start_workflow_runtime():
     workflowRuntime.register_workflow(sum_series_wf)
     workflowRuntime.register_workflow(sum_parallel_wf)
     workflowRuntime.register_workflow(state_wf)
+    workflowRuntime.register_workflow(delay_wf)
     workflowRuntime.register_activity(sum_activity)
     workflowRuntime.register_activity(state_save_act)
     workflowRuntime.register_activity(state_get_act)
     workflowRuntime.register_activity(state_delete_act)
+    workflowRuntime.register_activity(delay_activity)
     workflowRuntime.start()
     workflowClient = DaprWorkflowClient(host=host,port=port)
     print("Workflow Runtime Started")
