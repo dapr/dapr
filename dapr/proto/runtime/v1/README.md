@@ -1,10 +1,5 @@
 # Public Dapr Runtime APIs
 
-This folder is intended for user-facing APIs. 
-
-- `dapr.proto` is used by the services implemented by the Dapr runtime. Apps calling into the Dapr runtime use these services.
-- `appcallback.proto` is for services implemented by apps to receive messages from the Dapr runtime.
-
 ## Proto client generation
 
 Pre-requisites:

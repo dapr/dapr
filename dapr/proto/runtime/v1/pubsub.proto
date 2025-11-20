@@ -1,0 +1,144 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+import "dapr/proto/runtime/v1/appcallback.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+// PublishEventRequest is the message to publish event data to pubsub topic
+message PublishEventRequest {
+  // The name of the pubsub component
+  string pubsub_name = 1;
+
+  // The pubsub topic
+  string topic = 2;
+
+  // The data which will be published to topic.
+  bytes data = 3;
+
+  // The content type for the data (optional).
+  string data_content_type = 4;
+
+  // The metadata passing to pub components
+  //
+  // metadata property:
+  // - key : the key of the message.
+  map<string, string> metadata = 5;
+}
+
+// BulkPublishRequest is the message to bulk publish events to pubsub topic
+message BulkPublishRequest {
+  // The name of the pubsub component
+  string pubsub_name = 1;
+
+  // The pubsub topic
+  string topic = 2;
+
+  // The entries which contain the individual events and associated details to be published
+  repeated BulkPublishRequestEntry entries = 3;
+
+  // The request level metadata passing to to the pubsub components
+  map<string, string> metadata = 4;
+}
+
+// BulkPublishRequestEntry is the message containing the event to be bulk published
+message BulkPublishRequestEntry {
+  // The request scoped unique ID referring to this message. Used to map status in response
+  string entry_id = 1;
+
+  // The event which will be pulished to the topic
+  bytes event = 2;
+
+  // The content type for the event
+  string content_type = 3;
+
+  // The event level metadata passing to the pubsub component
+  map<string, string> metadata = 4;
+}
+
+// BulkPublishResponse is the message returned from a BulkPublishEvent call
+message BulkPublishResponse {
+  // The entries for different events that failed publish in the BulkPublishEvent call
+  repeated BulkPublishResponseFailedEntry failedEntries = 1;
+}
+
+// BulkPublishResponseFailedEntry is the message containing the entryID and error of a failed event in BulkPublishEvent call
+message BulkPublishResponseFailedEntry {
+  // The response scoped unique ID referring to this message
+  string entry_id = 1;
+
+  // The error message if any on failure
+  string error = 2;
+}
+
+// SubscribeTopicEventsRequestAlpha1 is a message containing the details for
+// subscribing to a topic via streaming.
+// The first message must always be the initial request. All subsequent
+// messages must be event processed responses.
+message SubscribeTopicEventsRequestAlpha1 {
+  oneof subscribe_topic_events_request_type {
+    SubscribeTopicEventsRequestInitialAlpha1 initial_request = 1;
+    SubscribeTopicEventsRequestProcessedAlpha1 event_processed = 2;
+  }
+}
+
+// SubscribeTopicEventsRequestInitialAlpha1 is the initial message containing
+// the details for subscribing to a topic via streaming.
+message SubscribeTopicEventsRequestInitialAlpha1 {
+  // The name of the pubsub component
+  string pubsub_name = 1;
+
+  // The pubsub topic
+  string topic = 2;
+
+  // The metadata passing to pub components
+  //
+  // metadata property:
+  // - key : the key of the message.
+  map<string, string> metadata = 3;
+
+  // dead_letter_topic is the topic to which messages that fail to be processed
+  // are sent.
+  optional string dead_letter_topic = 4;
+}
+
+// SubscribeTopicEventsRequestProcessedAlpha1 is the message containing the
+// subscription to a topic.
+message SubscribeTopicEventsRequestProcessedAlpha1 {
+  // id is the unique identifier for the subscription request.
+  string id = 1;
+
+  // status is the result of the subscription request.
+  TopicEventResponse status = 2;
+}
+
+
+// SubscribeTopicEventsResponseAlpha1 is a message returned from daprd
+// when subscribing to a topic via streaming.
+message SubscribeTopicEventsResponseAlpha1 {
+  oneof subscribe_topic_events_response_type {
+    SubscribeTopicEventsResponseInitialAlpha1 initial_response = 1;
+    TopicEventRequest event_message = 2;
+  }
+}
+
+// SubscribeTopicEventsResponseInitialAlpha1 is the initial response from daprd
+// when subscribing to a topic.
+message SubscribeTopicEventsResponseInitialAlpha1 {}
