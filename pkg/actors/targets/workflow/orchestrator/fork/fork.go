@@ -27,6 +27,7 @@ type Options struct {
 	AppID             string
 	ActorType         string
 	ActivityActorType string
+	InstanceID        string
 	TargetEventID     int32
 
 	OverwriteInput bool
@@ -36,6 +37,8 @@ type Options struct {
 }
 
 type Fork struct {
+	instanceID string
+
 	oldState      *state.State
 	targetEventID int32
 	newState      *state.State
@@ -50,6 +53,7 @@ type Fork struct {
 
 func New(opts Options) *Fork {
 	return &Fork{
+		instanceID:    opts.InstanceID,
 		oldState:      opts.OldState,
 		targetEventID: opts.TargetEventID,
 		newState: state.NewState(state.Options{
@@ -132,14 +136,21 @@ func (f *Fork) handleBefore(his *backend.HistoryEvent) {
 func (f *Fork) handleFound(i int, his *backend.HistoryEvent) error {
 	switch his.GetEventType().(type) {
 	case *protos.HistoryEvent_TaskScheduled:
+		sched := his.GetTaskScheduled()
+		sched.RerunParentInstanceInfo = &protos.RerunParentInstanceInfo{
+			InstanceID: f.instanceID,
+		}
 		if f.overwriteInput {
-			sched := his.GetTaskScheduled()
 			sched.Input = f.input
 		}
 		f.newState.AddToInbox(his)
 		return nil
 
 	case *protos.HistoryEvent_TimerCreated:
+		timer := his.GetTimerCreated()
+		timer.RerunParentInstanceInfo = &protos.RerunParentInstanceInfo{
+			InstanceID: f.instanceID,
+		}
 		if f.overwriteInput {
 			return status.Errorf(codes.InvalidArgument, "cannot write input to timer event '%d'", f.targetEventID)
 		}
