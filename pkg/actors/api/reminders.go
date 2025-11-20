@@ -224,6 +224,7 @@ type DeleteRemindersByActorIDRequest struct {
 
 type ListRemindersRequest struct {
 	ActorType string
+	ActorID   *string
 }
 
 // DeleteTimerRequest is a request object for deleting a timer.

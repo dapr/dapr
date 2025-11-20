@@ -77,5 +77,8 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 	assert.Equal(t, 0, count)
-	assert.Empty(t, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Empty(c, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
+	}, time.Second*10, time.Millisecond*10)
 }

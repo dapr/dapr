@@ -25,6 +25,7 @@ type Fake struct {
 	createFn          func(ctx context.Context, req *api.CreateReminderRequest) error
 	deleteFn          func(ctx context.Context, req *api.DeleteReminderRequest) error
 	deleteByActorIDFn func(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error
+	listFn            func(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error)
 	schedulerFn       func() (scheduler.Interface, error)
 }
 
@@ -41,6 +42,9 @@ func New() *Fake {
 		},
 		deleteByActorIDFn: func(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error {
 			return nil
+		},
+		listFn: func(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error) {
+			return nil, nil
 		},
 		schedulerFn: func() (scheduler.Interface, error) {
 			return nil, nil
@@ -68,6 +72,11 @@ func (f *Fake) WithDeleteByActorID(fn func(ctx context.Context, req *api.DeleteR
 	return f
 }
 
+func (f *Fake) WithList(fn func(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error)) *Fake {
+	f.listFn = fn
+	return f
+}
+
 func (f *Fake) Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error) {
 	return f.getFn(ctx, req)
 }
@@ -82,6 +91,10 @@ func (f *Fake) Delete(ctx context.Context, req *api.DeleteReminderRequest) error
 
 func (f *Fake) DeleteByActorID(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error {
 	return f.deleteByActorIDFn(ctx, req)
+}
+
+func (f *Fake) List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error) {
+	return f.listFn(ctx, req)
 }
 
 func (f *Fake) Scheduler() (scheduler.Interface, error) {
