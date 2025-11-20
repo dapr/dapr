@@ -66,7 +66,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			ActorType: "abc", ActorId: "123", Name: "reminder1",
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "24h", *resp.DueTime)
+		assert.Equal(t, "24h", resp.GetDueTime())
 
 		_, err = client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 			ActorType: "abc", ActorId: "123", Name: "reminder1",
@@ -78,7 +78,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			ActorType: "abc", ActorId: "123", Name: "reminder1",
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "48h", *resp.DueTime)
+		assert.Equal(t, "48h", resp.GetDueTime())
 
 		_, err = client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 			ActorType: "abc", ActorId: "123", Name: "reminder1",
@@ -91,7 +91,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			ActorType: "abc", ActorId: "123", Name: "reminder1",
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "12h", *resp.DueTime)
+		assert.Equal(t, "12h", resp.GetDueTime())
 
 		_, err = client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 			ActorType: "abc", ActorId: "123", Name: "reminder1",

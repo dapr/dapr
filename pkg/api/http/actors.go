@@ -318,21 +318,23 @@ func (a *api) onGetActorReminder() http.HandlerFunc {
 		UniversalHTTPHandlerOpts[*runtimev1pb.GetActorReminderRequest, *runtimev1pb.GetActorReminderResponse]{
 			SkipInputBody: true,
 			OutModifier: func(out *runtimev1pb.GetActorReminderResponse) (any, error) {
+				//nolint:protogetter
 				m := struct {
-					ActorId   string          `json:"actorID,omitempty"`
+					ActorID   string          `json:"actorID,omitempty"`
 					ActorType string          `json:"actorType,omitempty"`
 					Data      json.RawMessage `json:"data,omitempty"`
 					DueTime   *string         `json:"dueTime,omitempty"`
 					Period    *string         `json:"period,omitempty"`
 					TTL       *string         `json:"ttl,omitempty"`
 				}{
-					ActorId:   out.ActorId,
+					ActorID:   out.ActorId,
 					ActorType: out.ActorType,
 					DueTime:   out.DueTime,
 					Period:    out.Period,
 					TTL:       out.Ttl,
 				}
 
+				//nolint:protogetter
 				if out.Data != nil {
 					msg, err := out.Data.UnmarshalNew()
 					if err != nil {
