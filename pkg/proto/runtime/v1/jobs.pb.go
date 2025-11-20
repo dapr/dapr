@@ -447,6 +447,181 @@ func (*DeleteJobResponse) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_jobs_proto_rawDescGZIP(), []int{6}
 }
 
+// DeleteJobsByPrefixRequest is the message to delete jobs by name prefix.
+type DeleteJobsByPrefixRequestAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// name_prefix is the prefix of the job names to delete. If not provided, all
+	// jobs associated with this app ID will be deleted.
+	NamePrefix *string `protobuf:"bytes,1,opt,name=name_prefix,json=namePrefix,proto3,oneof" json:"name_prefix,omitempty"`
+}
+
+func (x *DeleteJobsByPrefixRequestAlpha1) Reset() {
+	*x = DeleteJobsByPrefixRequestAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_jobs_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DeleteJobsByPrefixRequestAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteJobsByPrefixRequestAlpha1) ProtoMessage() {}
+
+func (x *DeleteJobsByPrefixRequestAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_jobs_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteJobsByPrefixRequestAlpha1.ProtoReflect.Descriptor instead.
+func (*DeleteJobsByPrefixRequestAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_jobs_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *DeleteJobsByPrefixRequestAlpha1) GetNamePrefix() string {
+	if x != nil && x.NamePrefix != nil {
+		return *x.NamePrefix
+	}
+	return ""
+}
+
+type DeleteJobsByPrefixResponseAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *DeleteJobsByPrefixResponseAlpha1) Reset() {
+	*x = DeleteJobsByPrefixResponseAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_jobs_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DeleteJobsByPrefixResponseAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteJobsByPrefixResponseAlpha1) ProtoMessage() {}
+
+func (x *DeleteJobsByPrefixResponseAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_jobs_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteJobsByPrefixResponseAlpha1.ProtoReflect.Descriptor instead.
+func (*DeleteJobsByPrefixResponseAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_jobs_proto_rawDescGZIP(), []int{8}
+}
+
+type ListJobsRequestAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *ListJobsRequestAlpha1) Reset() {
+	*x = ListJobsRequestAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_jobs_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListJobsRequestAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListJobsRequestAlpha1) ProtoMessage() {}
+
+func (x *ListJobsRequestAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_jobs_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListJobsRequestAlpha1.ProtoReflect.Descriptor instead.
+func (*ListJobsRequestAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_jobs_proto_rawDescGZIP(), []int{9}
+}
+
+// ListJobsResponse is the message response containing the list of jobs.
+type ListJobsResponseAlpha1 struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The list of jobs.
+	Jobs []*Job `protobuf:"bytes,1,rep,name=jobs,proto3" json:"jobs,omitempty"`
+}
+
+func (x *ListJobsResponseAlpha1) Reset() {
+	*x = ListJobsResponseAlpha1{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_jobs_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListJobsResponseAlpha1) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListJobsResponseAlpha1) ProtoMessage() {}
+
+func (x *ListJobsResponseAlpha1) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_jobs_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListJobsResponseAlpha1.ProtoReflect.Descriptor instead.
+func (*ListJobsResponseAlpha1) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_jobs_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListJobsResponseAlpha1) GetJobs() []*Job {
+	if x != nil {
+		return x.Jobs
+	}
+	return nil
+}
+
 var File_dapr_proto_runtime_v1_jobs_proto protoreflect.FileDescriptor
 
 var file_dapr_proto_runtime_v1_jobs_proto_rawDesc = []byte{
@@ -496,7 +671,21 @@ var file_dapr_proto_runtime_v1_jobs_proto_rawDesc = []byte{
 	0x65, 0x4a, 0x6f, 0x62, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e,
 	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22,
 	0x13, 0x0a, 0x11, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x4a, 0x6f, 0x62, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e,
+	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x57, 0x0a, 0x1f, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x4a, 0x6f,
+	0x62, 0x73, 0x42, 0x79, 0x50, 0x72, 0x65, 0x66, 0x69, 0x78, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x12, 0x24, 0x0a, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x5f,
+	0x70, 0x72, 0x65, 0x66, 0x69, 0x78, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x0a,
+	0x6e, 0x61, 0x6d, 0x65, 0x50, 0x72, 0x65, 0x66, 0x69, 0x78, 0x88, 0x01, 0x01, 0x42, 0x0e, 0x0a,
+	0x0c, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x5f, 0x70, 0x72, 0x65, 0x66, 0x69, 0x78, 0x22, 0x22, 0x0a,
+	0x20, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x4a, 0x6f, 0x62, 0x73, 0x42, 0x79, 0x50, 0x72, 0x65,
+	0x66, 0x69, 0x78, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x41, 0x6c, 0x70, 0x68, 0x61,
+	0x31, 0x22, 0x17, 0x0a, 0x15, 0x4c, 0x69, 0x73, 0x74, 0x4a, 0x6f, 0x62, 0x73, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x41, 0x6c, 0x70, 0x68, 0x61, 0x31, 0x22, 0x48, 0x0a, 0x16, 0x4c, 0x69,
+	0x73, 0x74, 0x4a, 0x6f, 0x62, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x41, 0x6c,
+	0x70, 0x68, 0x61, 0x31, 0x12, 0x2e, 0x0a, 0x04, 0x6a, 0x6f, 0x62, 0x73, 0x18, 0x01, 0x20, 0x03,
+	0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
+	0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4a, 0x6f, 0x62, 0x52, 0x04,
+	0x6a, 0x6f, 0x62, 0x73, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e,
 	0x76, 0x31, 0x42, 0x0a, 0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x31,
 	0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f,
 	0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x72,
@@ -518,28 +707,33 @@ func file_dapr_proto_runtime_v1_jobs_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_runtime_v1_jobs_proto_rawDescData
 }
 
-var file_dapr_proto_runtime_v1_jobs_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_dapr_proto_runtime_v1_jobs_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_dapr_proto_runtime_v1_jobs_proto_goTypes = []interface{}{
-	(*Job)(nil),                 // 0: dapr.proto.runtime.v1.Job
-	(*ScheduleJobRequest)(nil),  // 1: dapr.proto.runtime.v1.ScheduleJobRequest
-	(*ScheduleJobResponse)(nil), // 2: dapr.proto.runtime.v1.ScheduleJobResponse
-	(*GetJobRequest)(nil),       // 3: dapr.proto.runtime.v1.GetJobRequest
-	(*GetJobResponse)(nil),      // 4: dapr.proto.runtime.v1.GetJobResponse
-	(*DeleteJobRequest)(nil),    // 5: dapr.proto.runtime.v1.DeleteJobRequest
-	(*DeleteJobResponse)(nil),   // 6: dapr.proto.runtime.v1.DeleteJobResponse
-	(*anypb.Any)(nil),           // 7: google.protobuf.Any
-	(*v1.JobFailurePolicy)(nil), // 8: dapr.proto.common.v1.JobFailurePolicy
+	(*Job)(nil),                              // 0: dapr.proto.runtime.v1.Job
+	(*ScheduleJobRequest)(nil),               // 1: dapr.proto.runtime.v1.ScheduleJobRequest
+	(*ScheduleJobResponse)(nil),              // 2: dapr.proto.runtime.v1.ScheduleJobResponse
+	(*GetJobRequest)(nil),                    // 3: dapr.proto.runtime.v1.GetJobRequest
+	(*GetJobResponse)(nil),                   // 4: dapr.proto.runtime.v1.GetJobResponse
+	(*DeleteJobRequest)(nil),                 // 5: dapr.proto.runtime.v1.DeleteJobRequest
+	(*DeleteJobResponse)(nil),                // 6: dapr.proto.runtime.v1.DeleteJobResponse
+	(*DeleteJobsByPrefixRequestAlpha1)(nil),  // 7: dapr.proto.runtime.v1.DeleteJobsByPrefixRequestAlpha1
+	(*DeleteJobsByPrefixResponseAlpha1)(nil), // 8: dapr.proto.runtime.v1.DeleteJobsByPrefixResponseAlpha1
+	(*ListJobsRequestAlpha1)(nil),            // 9: dapr.proto.runtime.v1.ListJobsRequestAlpha1
+	(*ListJobsResponseAlpha1)(nil),           // 10: dapr.proto.runtime.v1.ListJobsResponseAlpha1
+	(*anypb.Any)(nil),                        // 11: google.protobuf.Any
+	(*v1.JobFailurePolicy)(nil),              // 12: dapr.proto.common.v1.JobFailurePolicy
 }
 var file_dapr_proto_runtime_v1_jobs_proto_depIdxs = []int32{
-	7, // 0: dapr.proto.runtime.v1.Job.data:type_name -> google.protobuf.Any
-	8, // 1: dapr.proto.runtime.v1.Job.failure_policy:type_name -> dapr.proto.common.v1.JobFailurePolicy
-	0, // 2: dapr.proto.runtime.v1.ScheduleJobRequest.job:type_name -> dapr.proto.runtime.v1.Job
-	0, // 3: dapr.proto.runtime.v1.GetJobResponse.job:type_name -> dapr.proto.runtime.v1.Job
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	11, // 0: dapr.proto.runtime.v1.Job.data:type_name -> google.protobuf.Any
+	12, // 1: dapr.proto.runtime.v1.Job.failure_policy:type_name -> dapr.proto.common.v1.JobFailurePolicy
+	0,  // 2: dapr.proto.runtime.v1.ScheduleJobRequest.job:type_name -> dapr.proto.runtime.v1.Job
+	0,  // 3: dapr.proto.runtime.v1.GetJobResponse.job:type_name -> dapr.proto.runtime.v1.Job
+	0,  // 4: dapr.proto.runtime.v1.ListJobsResponseAlpha1.jobs:type_name -> dapr.proto.runtime.v1.Job
+	5,  // [5:5] is the sub-list for method output_type
+	5,  // [5:5] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_dapr_proto_runtime_v1_jobs_proto_init() }
@@ -632,15 +826,64 @@ func file_dapr_proto_runtime_v1_jobs_proto_init() {
 				return nil
 			}
 		}
+		file_dapr_proto_runtime_v1_jobs_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*DeleteJobsByPrefixRequestAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_jobs_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*DeleteJobsByPrefixResponseAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_jobs_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ListJobsRequestAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_jobs_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ListJobsResponseAlpha1); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	file_dapr_proto_runtime_v1_jobs_proto_msgTypes[0].OneofWrappers = []interface{}{}
+	file_dapr_proto_runtime_v1_jobs_proto_msgTypes[7].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_runtime_v1_jobs_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

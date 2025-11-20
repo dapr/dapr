@@ -750,6 +750,346 @@ func (x *InvokeActorResponse) GetData() []byte {
 	return nil
 }
 
+type ListActorRemindersRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ActorType string  `protobuf:"bytes,1,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId   *string `protobuf:"bytes,2,opt,name=actor_id,json=actorId,proto3,oneof" json:"actor_id,omitempty"`
+}
+
+func (x *ListActorRemindersRequest) Reset() {
+	*x = ListActorRemindersRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListActorRemindersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListActorRemindersRequest) ProtoMessage() {}
+
+func (x *ListActorRemindersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListActorRemindersRequest.ProtoReflect.Descriptor instead.
+func (*ListActorRemindersRequest) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListActorRemindersRequest) GetActorType() string {
+	if x != nil {
+		return x.ActorType
+	}
+	return ""
+}
+
+func (x *ListActorRemindersRequest) GetActorId() string {
+	if x != nil && x.ActorId != nil {
+		return *x.ActorId
+	}
+	return ""
+}
+
+type ListActorRemindersResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Reminders []*NamedActorReminder `protobuf:"bytes,1,rep,name=reminders,proto3" json:"reminders,omitempty"`
+}
+
+func (x *ListActorRemindersResponse) Reset() {
+	*x = ListActorRemindersResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListActorRemindersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListActorRemindersResponse) ProtoMessage() {}
+
+func (x *ListActorRemindersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListActorRemindersResponse.ProtoReflect.Descriptor instead.
+func (*ListActorRemindersResponse) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListActorRemindersResponse) GetReminders() []*NamedActorReminder {
+	if x != nil {
+		return x.Reminders
+	}
+	return nil
+}
+
+type NamedActorReminder struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Name     string         `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Reminder *ActorReminder `protobuf:"bytes,2,opt,name=reminder,proto3" json:"reminder,omitempty"`
+}
+
+func (x *NamedActorReminder) Reset() {
+	*x = NamedActorReminder{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *NamedActorReminder) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NamedActorReminder) ProtoMessage() {}
+
+func (x *NamedActorReminder) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NamedActorReminder.ProtoReflect.Descriptor instead.
+func (*NamedActorReminder) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *NamedActorReminder) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *NamedActorReminder) GetReminder() *ActorReminder {
+	if x != nil {
+		return x.Reminder
+	}
+	return nil
+}
+
+type ActorReminder struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ActorType string     `protobuf:"bytes,1,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId   string     `protobuf:"bytes,2,opt,name=actor_id,json=actorID,proto3" json:"actor_id,omitempty"`
+	DueTime   *string    `protobuf:"bytes,4,opt,name=due_time,json=dueTime,proto3,oneof" json:"due_time,omitempty"`
+	Period    *string    `protobuf:"bytes,5,opt,name=period,proto3,oneof" json:"period,omitempty"`
+	Data      *anypb.Any `protobuf:"bytes,6,opt,name=data,proto3" json:"data,omitempty"`
+	Ttl       *string    `protobuf:"bytes,7,opt,name=ttl,proto3,oneof" json:"ttl,omitempty"`
+}
+
+func (x *ActorReminder) Reset() {
+	*x = ActorReminder{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[13]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ActorReminder) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActorReminder) ProtoMessage() {}
+
+func (x *ActorReminder) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[13]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActorReminder.ProtoReflect.Descriptor instead.
+func (*ActorReminder) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ActorReminder) GetActorType() string {
+	if x != nil {
+		return x.ActorType
+	}
+	return ""
+}
+
+func (x *ActorReminder) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *ActorReminder) GetDueTime() string {
+	if x != nil && x.DueTime != nil {
+		return *x.DueTime
+	}
+	return ""
+}
+
+func (x *ActorReminder) GetPeriod() string {
+	if x != nil && x.Period != nil {
+		return *x.Period
+	}
+	return ""
+}
+
+func (x *ActorReminder) GetData() *anypb.Any {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *ActorReminder) GetTtl() string {
+	if x != nil && x.Ttl != nil {
+		return *x.Ttl
+	}
+	return ""
+}
+
+// UnregisterActorRemindersByTypeRequest is the message to unregister an actor
+// reminders by the given type. Optional actor_id can be provided to limit the
+// scope of the operation to a specific actor instance.
+type UnregisterActorRemindersByTypeRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ActorType string  `protobuf:"bytes,1,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId   *string `protobuf:"bytes,2,opt,name=actor_id,json=actorId,proto3,oneof" json:"actor_id,omitempty"`
+}
+
+func (x *UnregisterActorRemindersByTypeRequest) Reset() {
+	*x = UnregisterActorRemindersByTypeRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *UnregisterActorRemindersByTypeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnregisterActorRemindersByTypeRequest) ProtoMessage() {}
+
+func (x *UnregisterActorRemindersByTypeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnregisterActorRemindersByTypeRequest.ProtoReflect.Descriptor instead.
+func (*UnregisterActorRemindersByTypeRequest) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *UnregisterActorRemindersByTypeRequest) GetActorType() string {
+	if x != nil {
+		return x.ActorType
+	}
+	return ""
+}
+
+func (x *UnregisterActorRemindersByTypeRequest) GetActorId() string {
+	if x != nil && x.ActorId != nil {
+		return *x.ActorId
+	}
+	return ""
+}
+
+type UnregisterActorRemindersByTypeResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *UnregisterActorRemindersByTypeResponse) Reset() {
+	*x = UnregisterActorRemindersByTypeResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[15]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *UnregisterActorRemindersByTypeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnregisterActorRemindersByTypeResponse) ProtoMessage() {}
+
+func (x *UnregisterActorRemindersByTypeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_runtime_v1_actors_proto_msgTypes[15]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnregisterActorRemindersByTypeResponse.ProtoReflect.Descriptor instead.
+func (*UnregisterActorRemindersByTypeResponse) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP(), []int{15}
+}
+
 var File_dapr_proto_runtime_v1_actors_proto protoreflect.FileDescriptor
 
 var file_dapr_proto_runtime_v1_actors_proto_rawDesc = []byte{
@@ -867,14 +1207,58 @@ var file_dapr_proto_runtime_v1_actors_proto_rawDesc = []byte{
 	0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x29, 0x0a, 0x13, 0x49, 0x6e, 0x76, 0x6f, 0x6b, 0x65,
 	0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x12, 0x0a,
 	0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x64, 0x61, 0x74,
-	0x61, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42,
-	0x0a, 0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x31, 0x67, 0x69, 0x74,
-	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70,
-	0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x72, 0x75, 0x6e, 0x74,
-	0x69, 0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0xaa, 0x02,
-	0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74,
-	0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x33,
+	0x61, 0x22, 0x67, 0x0a, 0x19, 0x4c, 0x69, 0x73, 0x74, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65,
+	0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d,
+	0x0a, 0x0a, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x09, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x54, 0x79, 0x70, 0x65, 0x12, 0x1e, 0x0a,
+	0x08, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x48,
+	0x00, 0x52, 0x07, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x49, 0x64, 0x88, 0x01, 0x01, 0x42, 0x0b, 0x0a,
+	0x09, 0x5f, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x22, 0x65, 0x0a, 0x1a, 0x4c, 0x69,
+	0x73, 0x74, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x73,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x47, 0x0a, 0x09, 0x72, 0x65, 0x6d, 0x69,
+	0x6e, 0x64, 0x65, 0x72, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x29, 0x2e, 0x64, 0x61,
+	0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65,
+	0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x61, 0x6d, 0x65, 0x64, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65,
+	0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x52, 0x09, 0x72, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72,
+	0x73, 0x22, 0x6a, 0x0a, 0x12, 0x4e, 0x61, 0x6d, 0x65, 0x64, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52,
+	0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x40, 0x0a, 0x08, 0x72,
+	0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x24, 0x2e,
+	0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x75, 0x6e, 0x74, 0x69,
+	0x6d, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x6d, 0x69, 0x6e,
+	0x64, 0x65, 0x72, 0x52, 0x08, 0x72, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x22, 0xe7, 0x01,
+	0x0a, 0x0d, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x12,
+	0x1d, 0x0a, 0x0a, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x54, 0x79, 0x70, 0x65, 0x12, 0x19,
+	0x0a, 0x08, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x07, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x49, 0x44, 0x12, 0x1e, 0x0a, 0x08, 0x64, 0x75, 0x65,
+	0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x07, 0x64,
+	0x75, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x88, 0x01, 0x01, 0x12, 0x1b, 0x0a, 0x06, 0x70, 0x65, 0x72,
+	0x69, 0x6f, 0x64, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x48, 0x01, 0x52, 0x06, 0x70, 0x65, 0x72,
+	0x69, 0x6f, 0x64, 0x88, 0x01, 0x01, 0x12, 0x28, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x06,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x14, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x41, 0x6e, 0x79, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61,
+	0x12, 0x15, 0x0a, 0x03, 0x74, 0x74, 0x6c, 0x18, 0x07, 0x20, 0x01, 0x28, 0x09, 0x48, 0x02, 0x52,
+	0x03, 0x74, 0x74, 0x6c, 0x88, 0x01, 0x01, 0x42, 0x0b, 0x0a, 0x09, 0x5f, 0x64, 0x75, 0x65, 0x5f,
+	0x74, 0x69, 0x6d, 0x65, 0x42, 0x09, 0x0a, 0x07, 0x5f, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x42,
+	0x06, 0x0a, 0x04, 0x5f, 0x74, 0x74, 0x6c, 0x22, 0x73, 0x0a, 0x25, 0x55, 0x6e, 0x72, 0x65, 0x67,
+	0x69, 0x73, 0x74, 0x65, 0x72, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52, 0x65, 0x6d, 0x69, 0x6e, 0x64,
+	0x65, 0x72, 0x73, 0x42, 0x79, 0x54, 0x79, 0x70, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x12, 0x1d, 0x0a, 0x0a, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x54, 0x79, 0x70, 0x65, 0x12,
+	0x1e, 0x0a, 0x08, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x09, 0x48, 0x00, 0x52, 0x07, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x49, 0x64, 0x88, 0x01, 0x01, 0x42,
+	0x0b, 0x0a, 0x09, 0x5f, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x5f, 0x69, 0x64, 0x22, 0x28, 0x0a, 0x26,
+	0x55, 0x6e, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x41, 0x63, 0x74, 0x6f, 0x72, 0x52,
+	0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x73, 0x42, 0x79, 0x54, 0x79, 0x70, 0x65, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70,
+	0x72, 0x2e, 0x76, 0x31, 0x42, 0x0a, 0x44, 0x61, 0x70, 0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73,
+	0x5a, 0x31, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70,
+	0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2f, 0x72, 0x75, 0x6e, 0x74, 0x69, 0x6d, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x72, 0x75, 0x6e, 0x74,
+	0x69, 0x6d, 0x65, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e,
+	0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76,
+	0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -889,34 +1273,43 @@ func file_dapr_proto_runtime_v1_actors_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_runtime_v1_actors_proto_rawDescData
 }
 
-var file_dapr_proto_runtime_v1_actors_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_dapr_proto_runtime_v1_actors_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_dapr_proto_runtime_v1_actors_proto_goTypes = []interface{}{
-	(*RegisterActorTimerRequest)(nil),           // 0: dapr.proto.runtime.v1.RegisterActorTimerRequest
-	(*UnregisterActorTimerRequest)(nil),         // 1: dapr.proto.runtime.v1.UnregisterActorTimerRequest
-	(*RegisterActorReminderRequest)(nil),        // 2: dapr.proto.runtime.v1.RegisterActorReminderRequest
-	(*UnregisterActorReminderRequest)(nil),      // 3: dapr.proto.runtime.v1.UnregisterActorReminderRequest
-	(*GetActorStateRequest)(nil),                // 4: dapr.proto.runtime.v1.GetActorStateRequest
-	(*GetActorStateResponse)(nil),               // 5: dapr.proto.runtime.v1.GetActorStateResponse
-	(*ExecuteActorStateTransactionRequest)(nil), // 6: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest
-	(*TransactionalActorStateOperation)(nil),    // 7: dapr.proto.runtime.v1.TransactionalActorStateOperation
-	(*InvokeActorRequest)(nil),                  // 8: dapr.proto.runtime.v1.InvokeActorRequest
-	(*InvokeActorResponse)(nil),                 // 9: dapr.proto.runtime.v1.InvokeActorResponse
-	nil,                                         // 10: dapr.proto.runtime.v1.GetActorStateResponse.MetadataEntry
-	nil,                                         // 11: dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
-	nil,                                         // 12: dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
-	(*anypb.Any)(nil),                           // 13: google.protobuf.Any
+	(*RegisterActorTimerRequest)(nil),              // 0: dapr.proto.runtime.v1.RegisterActorTimerRequest
+	(*UnregisterActorTimerRequest)(nil),            // 1: dapr.proto.runtime.v1.UnregisterActorTimerRequest
+	(*RegisterActorReminderRequest)(nil),           // 2: dapr.proto.runtime.v1.RegisterActorReminderRequest
+	(*UnregisterActorReminderRequest)(nil),         // 3: dapr.proto.runtime.v1.UnregisterActorReminderRequest
+	(*GetActorStateRequest)(nil),                   // 4: dapr.proto.runtime.v1.GetActorStateRequest
+	(*GetActorStateResponse)(nil),                  // 5: dapr.proto.runtime.v1.GetActorStateResponse
+	(*ExecuteActorStateTransactionRequest)(nil),    // 6: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest
+	(*TransactionalActorStateOperation)(nil),       // 7: dapr.proto.runtime.v1.TransactionalActorStateOperation
+	(*InvokeActorRequest)(nil),                     // 8: dapr.proto.runtime.v1.InvokeActorRequest
+	(*InvokeActorResponse)(nil),                    // 9: dapr.proto.runtime.v1.InvokeActorResponse
+	(*ListActorRemindersRequest)(nil),              // 10: dapr.proto.runtime.v1.ListActorRemindersRequest
+	(*ListActorRemindersResponse)(nil),             // 11: dapr.proto.runtime.v1.ListActorRemindersResponse
+	(*NamedActorReminder)(nil),                     // 12: dapr.proto.runtime.v1.NamedActorReminder
+	(*ActorReminder)(nil),                          // 13: dapr.proto.runtime.v1.ActorReminder
+	(*UnregisterActorRemindersByTypeRequest)(nil),  // 14: dapr.proto.runtime.v1.UnregisterActorRemindersByTypeRequest
+	(*UnregisterActorRemindersByTypeResponse)(nil), // 15: dapr.proto.runtime.v1.UnregisterActorRemindersByTypeResponse
+	nil,               // 16: dapr.proto.runtime.v1.GetActorStateResponse.MetadataEntry
+	nil,               // 17: dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
+	nil,               // 18: dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
+	(*anypb.Any)(nil), // 19: google.protobuf.Any
 }
 var file_dapr_proto_runtime_v1_actors_proto_depIdxs = []int32{
-	10, // 0: dapr.proto.runtime.v1.GetActorStateResponse.metadata:type_name -> dapr.proto.runtime.v1.GetActorStateResponse.MetadataEntry
+	16, // 0: dapr.proto.runtime.v1.GetActorStateResponse.metadata:type_name -> dapr.proto.runtime.v1.GetActorStateResponse.MetadataEntry
 	7,  // 1: dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest.operations:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation
-	13, // 2: dapr.proto.runtime.v1.TransactionalActorStateOperation.value:type_name -> google.protobuf.Any
-	11, // 3: dapr.proto.runtime.v1.TransactionalActorStateOperation.metadata:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
-	12, // 4: dapr.proto.runtime.v1.InvokeActorRequest.metadata:type_name -> dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
-	5,  // [5:5] is the sub-list for method output_type
-	5,  // [5:5] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	19, // 2: dapr.proto.runtime.v1.TransactionalActorStateOperation.value:type_name -> google.protobuf.Any
+	17, // 3: dapr.proto.runtime.v1.TransactionalActorStateOperation.metadata:type_name -> dapr.proto.runtime.v1.TransactionalActorStateOperation.MetadataEntry
+	18, // 4: dapr.proto.runtime.v1.InvokeActorRequest.metadata:type_name -> dapr.proto.runtime.v1.InvokeActorRequest.MetadataEntry
+	12, // 5: dapr.proto.runtime.v1.ListActorRemindersResponse.reminders:type_name -> dapr.proto.runtime.v1.NamedActorReminder
+	13, // 6: dapr.proto.runtime.v1.NamedActorReminder.reminder:type_name -> dapr.proto.runtime.v1.ActorReminder
+	19, // 7: dapr.proto.runtime.v1.ActorReminder.data:type_name -> google.protobuf.Any
+	8,  // [8:8] is the sub-list for method output_type
+	8,  // [8:8] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_dapr_proto_runtime_v1_actors_proto_init() }
@@ -1045,14 +1438,89 @@ func file_dapr_proto_runtime_v1_actors_proto_init() {
 				return nil
 			}
 		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ListActorRemindersRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ListActorRemindersResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NamedActorReminder); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ActorReminder); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UnregisterActorRemindersByTypeRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_dapr_proto_runtime_v1_actors_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UnregisterActorRemindersByTypeResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
+	file_dapr_proto_runtime_v1_actors_proto_msgTypes[10].OneofWrappers = []interface{}{}
+	file_dapr_proto_runtime_v1_actors_proto_msgTypes[13].OneofWrappers = []interface{}{}
+	file_dapr_proto_runtime_v1_actors_proto_msgTypes[14].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_runtime_v1_actors_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

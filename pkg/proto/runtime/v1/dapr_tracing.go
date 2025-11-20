@@ -137,6 +137,10 @@ func (*GetWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]s
 	// TODO
 }
 
+func (*ListActorRemindersRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
 func (*InvokeActorRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
@@ -242,6 +246,10 @@ func (*UnlockRequest) AppendSpanAttributes(rpcMethod string, m map[string]string
 }
 
 func (*UnregisterActorReminderRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
+func (*UnregisterActorRemindersByTypeRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
 

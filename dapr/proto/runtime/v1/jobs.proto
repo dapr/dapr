@@ -110,3 +110,24 @@ message DeleteJobRequest {
 message DeleteJobResponse {
   // Empty
 }
+
+// DeleteJobsByPrefixRequest is the message to delete jobs by name prefix.
+message DeleteJobsByPrefixRequestAlpha1 {
+  // name_prefix is the prefix of the job names to delete. If not provided, all
+  // jobs associated with this app ID will be deleted.
+  optional string name_prefix = 1;
+}
+
+message DeleteJobsByPrefixResponseAlpha1 {
+  // Empty
+}
+
+message ListJobsRequestAlpha1 {
+  // Empty
+}
+
+// ListJobsResponse is the message response containing the list of jobs.
+message ListJobsResponseAlpha1 {
+  // The list of jobs.
+  repeated Job jobs = 1;
+}
