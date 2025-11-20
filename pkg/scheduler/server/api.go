@@ -224,6 +224,30 @@ func (s *Server) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.Delete
 	return new(schedulerv1pb.DeleteByMetadataResponse), nil
 }
 
+// DeleteByNamePrefix deletes all jobs matching the provided name prefix.
+func (s *Server) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
+	isPrefix := false
+
+	prefix, err := s.serializer.KeyFromMetadata(ctx, req.GetMetadata(), isPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	prefix += req.GetNamePrefix()
+
+	cron, err := s.cron.Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = cron.DeletePrefixes(ctx, prefix); err != nil {
+		log.Errorf("Failed to delete cron jobs for metadata: %s", err)
+		return nil, err
+	}
+
+	return new(schedulerv1pb.DeleteByNamePrefixResponse), nil
+}
+
 //nolint:protogetter
 func schedFPToCron(fp *commonv1pb.JobFailurePolicy) *api.FailurePolicy {
 	if fp == nil {

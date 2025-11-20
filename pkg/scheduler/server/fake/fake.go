@@ -29,13 +29,14 @@ import (
 type Fake struct {
 	client schedulerv1pb.SchedulerClient
 
-	scheduleJobFn      func(context.Context, *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
-	deleteJobFn        func(context.Context, *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error)
-	getJobFn           func(context.Context, *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error)
-	listJobsFn         func(context.Context, *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error)
-	watchHostsFn       func(*schedulerv1pb.WatchHostsRequest, schedulerv1pb.Scheduler_WatchHostsServer) error
-	watchJobsFn        func(schedulerv1pb.Scheduler_WatchJobsServer) error
-	deleteByMetadataFn func(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error)
+	scheduleJobFn        func(context.Context, *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
+	deleteJobFn          func(context.Context, *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error)
+	getJobFn             func(context.Context, *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error)
+	listJobsFn           func(context.Context, *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error)
+	watchHostsFn         func(*schedulerv1pb.WatchHostsRequest, schedulerv1pb.Scheduler_WatchHostsServer) error
+	watchJobsFn          func(schedulerv1pb.Scheduler_WatchJobsServer) error
+	deleteByMetadataFn   func(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error)
+	deleteByNamePrefixFn func(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error)
 }
 
 func New(t *testing.T) *Fake {
@@ -64,6 +65,9 @@ func New(t *testing.T) *Fake {
 			return nil
 		},
 		deleteByMetadataFn: func(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error) {
+			return nil, nil
+		},
+		deleteByNamePrefixFn: func(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
 			return nil, nil
 		},
 	}
@@ -134,6 +138,11 @@ func (f *Fake) WithDeleteByMetadata(fn func(ctx context.Context, req *schedulerv
 	return f
 }
 
+func (f *Fake) WithDeleteByNamePrefix(fn func(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error)) *Fake {
+	f.deleteByNamePrefixFn = fn
+	return f
+}
+
 func (f *Fake) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
 	return f.scheduleJobFn(ctx, req)
 }
@@ -160,4 +169,8 @@ func (f *Fake) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error {
 
 func (f *Fake) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error) {
 	return f.deleteByMetadataFn(ctx, req)
+}
+
+func (f *Fake) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
+	return f.deleteByNamePrefixFn(ctx, req)
 }
