@@ -28,6 +28,7 @@ global:
     namespaced: false
   ha:
     enabled: false
+    topologyKey: "topology.kubernetes.io/zone"
     replicaCount: 3
     disruption:
       minimumAvailable: ""
