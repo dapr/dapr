@@ -131,10 +131,12 @@ def delay_activity(ctx:WorkflowActivityContext, input):
     delay_ms = int(input)
     sleep(delay_ms / 1000.0)
 
-# start_workflow_runtime starts the workflow runtime and registers the declared workflows and activities
-@api.route('/start-workflow-runtime', methods=['GET'])
-def start_workflow_runtime():
-    global workflowRuntime, workflowClient
+workflow_runtime_started = False
+
+def init_workflow_runtime():
+    global workflowRuntime, workflowClient, workflow_runtime_started
+    if workflow_runtime_started:
+        return
     host = settings.DAPR_RUNTIME_HOST
     port = settings.DAPR_GRPC_PORT
     workflowRuntime = WorkflowRuntime(host, port)
@@ -149,7 +151,13 @@ def start_workflow_runtime():
     workflowRuntime.register_activity(delay_activity)
     workflowRuntime.start()
     workflowClient = DaprWorkflowClient(host=host,port=port)
+    workflow_runtime_started = True
     print("Workflow Runtime Started")
+
+# start_workflow_runtime starts the workflow runtime and registers the declared workflows and activities
+@api.route('/start-workflow-runtime', methods=['GET'])
+def start_workflow_runtime():
+    init_workflow_runtime()
     return "Workflow Runtime Started"
 
 # shutdown_workflow_runtime stops the workflow runtime
@@ -197,6 +205,9 @@ def run_workflow(run_id):
 
         print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] workflow run complete")
         return "Workflow Run completed"
+
+# Initialize workflow runtime at startup
+init_workflow_runtime()
 
 if __name__ == '__main__':
     api.run(host="0.0.0.0",port=appPort)

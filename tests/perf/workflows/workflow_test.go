@@ -60,11 +60,14 @@ func TestMain(m *testing.M) {
 			IngressEnabled:    true,
 			IngressPort:       3000,
 			MetricsEnabled:    true,
+			DaprCPULimit:      "2.0",
+			DaprCPURequest:    "0.1",
 			DaprMemoryLimit:   "800Mi",
 			DaprMemoryRequest: "800Mi",
+			AppCPULimit:       "4.0",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "800Mi",
-			AppPort:           -1,
+			AppPort:           3000,
 		},
 	}
 
@@ -134,7 +137,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 					require.NoError(t, err, "Error restarting the app")
 				}
 
-				// Get the ingress external url of test app
+				// Get the ingress external url of test app (host-side access)
 				log.Println("acquiring app external URL")
 				externalURL := tr.Platform.AcquireAppExternalURL(testAppName)
 				require.NotEmpty(t, externalURL, "external URL must not be empty")
@@ -142,15 +145,13 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				// Check if test app endpoint is available
 				require.NoError(t, utils.HealthCheckApps(externalURL))
 
-				time.Sleep(5 * time.Second)
-
 				// Initialize the workflow runtime
 				url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
 				// Calling start-workflow-runtime multiple times so that it is started in all app instances
 				_, err := utils.HTTPGet(url)
 				require.NoError(t, err, "error starting workflow runtime")
 
-				time.Sleep(5 * time.Second)
+				time.Sleep(15 * time.Second)
 
 				targetURL := fmt.Sprintf("http://%s/run-workflow", externalURL)
 
