@@ -7,7 +7,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	google.golang.org/grpc v1.73.0
 	google.golang.org/grpc/examples v0.0.0-20230224211313-3775f633ce20
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.9
 )
 
 require (

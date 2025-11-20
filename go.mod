@@ -3,6 +3,7 @@ module github.com/dapr/dapr
 go 1.24.9
 
 require (
+	connectrpc.com/connect v1.19.1
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/PuerkitoBio/purell v1.2.1
@@ -12,10 +13,10 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.14.1
-	github.com/dapr/components-contrib v1.16.1
-	github.com/dapr/durabletask-go v0.10.1
-	github.com/dapr/kit v0.16.1
-	github.com/diagridio/go-etcd-cron v0.9.1
+	github.com/dapr/components-contrib v1.16.2-0.20251113171451-b78f056c8491
+	github.com/dapr/durabletask-go v0.10.2-0.20251113171253-87ecdf8f0547
+	github.com/dapr/kit v0.16.2-0.20251117143824-2fd5d0c93524
+	github.com/diagridio/go-etcd-cron v0.10.0
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/cors v1.2.1
@@ -74,7 +75,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822
 	google.golang.org/grpc v1.73.0
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.9
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.31.0
 	k8s.io/apiextensions-apiserver v0.31.0
