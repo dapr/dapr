@@ -15,6 +15,7 @@ package activity
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -22,17 +23,9 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent) error {
+func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent, dueTime time.Time) error {
 	const reminderName = "run-activity"
-	log.Debugf("Activity actor '%s||%s': creating reminder '%s' for immediate execution", a.actorType, a.actorID, reminderName)
-
-	var period string
-	var oneshot bool
-	if a.schedulerReminders {
-		oneshot = true
-	} else {
-		period = a.reminderInterval.String()
-	}
+	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", a.actorType, a.actorID, reminderName, dueTime)
 
 	anydata, err := anypb.New(his)
 	if err != nil {
@@ -43,10 +36,9 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
-		DueTime:   "0s",
+		DueTime:   dueTime.Format(time.RFC3339),
 		Name:      reminderName,
-		Period:    period,
-		IsOneShot: oneshot,
+		IsOneShot: true,
 		Data:      anydata,
 	})
 }

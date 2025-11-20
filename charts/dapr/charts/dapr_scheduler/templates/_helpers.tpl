@@ -22,16 +22,3 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 {{- end -}}
 {{- end -}}
-
-{{/*
-Gets the number of replicas.
-- If `global.scheduler.enabled` is false, replicas = 0.
-- If `global.ha.enabled` is true, replicas = 3.
-*/}}
-{{- define "dapr_scheduler.get-replicas" -}}
-{{-   $replicas := 0 }}
-{{-   if (eq true .Values.global.scheduler.enabled) }}
-{{-         $replicas = 3 }}
-{{-    end -}}
-{{-   $replicas }}
-{{- end -}}

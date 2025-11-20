@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
@@ -26,7 +25,8 @@ import (
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/kit/concurrency/slice"
@@ -41,23 +41,24 @@ var orchestratorCache = sync.Pool{
 }
 
 type Options struct {
-	AppID             string
-	WorkflowActorType string
-	ActivityActorType string
-	ReminderInterval  *time.Duration
+	AppID              string
+	WorkflowActorType  string
+	ActivityActorType  string
+	RetentionActorType string
 
-	Resiliency         resiliency.Provider
-	Actors             actors.Interface
-	Scheduler          todo.WorkflowScheduler
-	SchedulerReminders bool
-	EventSink          EventSink
-	ActorTypeBuilder   *common.ActorTypeBuilder
+	Resiliency       resiliency.Provider
+	Actors           actors.Interface
+	Scheduler        todo.WorkflowScheduler
+	EventSink        EventSink
+	ActorTypeBuilder *common.ActorTypeBuilder
+	RetentionPolicy  *config.WorkflowStateRetentionPolicy
 }
 
 type factory struct {
-	appID             string
-	actorType         string
-	activityActorType string
+	appID              string
+	actorType          string
+	activityActorType  string
+	retentionActorType string
 
 	resiliency       resiliency.Provider
 	router           router.Interface
@@ -66,10 +67,9 @@ type factory struct {
 	placement        placement.Interface
 	eventSink        EventSink
 	actorTypeBuilder *common.ActorTypeBuilder
+	retentionPolicy  *config.WorkflowStateRetentionPolicy
 
-	reminderInterval   time.Duration
-	schedulerReminders bool
-	scheduler          todo.WorkflowScheduler
+	scheduler todo.WorkflowScheduler
 
 	deactivateCh chan *orchestrator
 
@@ -98,12 +98,6 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
-	reminderInterval := time.Minute * 1
-
-	if opts.ReminderInterval != nil {
-		reminderInterval = *opts.ReminderInterval
-	}
-
 	deactivateCh := make(chan *orchestrator, 100)
 	go func() {
 		for orchestrator := range deactivateCh {
@@ -115,15 +109,15 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		appID:              opts.AppID,
 		actorType:          opts.WorkflowActorType,
 		activityActorType:  opts.ActivityActorType,
+		retentionActorType: opts.RetentionActorType,
 		resiliency:         opts.Resiliency,
 		router:             router,
 		reminders:          reminders,
 		actorState:         astate,
-		reminderInterval:   reminderInterval,
-		schedulerReminders: opts.SchedulerReminders,
 		eventSink:          opts.EventSink,
 		actorTypeBuilder:   opts.ActorTypeBuilder,
 		placement:          placement,
+		retentionPolicy:    opts.RetentionPolicy,
 		scheduler:          opts.Scheduler,
 		deactivateCh:       deactivateCh,
 	}, nil

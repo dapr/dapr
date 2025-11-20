@@ -34,12 +34,6 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-var appCache = sync.Pool{
-	New: func() any {
-		return new(app)
-	},
-}
-
 type Options struct {
 	ActorType               string
 	AppChannel              channel.AppChannel
@@ -69,7 +63,7 @@ type factory struct {
 	idleTimeout time.Duration
 
 	table sync.Map
-	lock  sync.Mutex
+	lock  sync.RWMutex
 }
 
 func New(opts Options) targets.Factory {
@@ -99,30 +93,32 @@ func New(opts Options) targets.Factory {
 }
 
 func (f *factory) GetOrCreate(actorID string) targets.Interface {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+
 	a, ok := f.table.Load(actorID)
 	if !ok {
-		newApp := f.initApp(appCache.Get(), actorID)
-		var loaded bool
-		a, loaded = f.table.LoadOrStore(actorID, newApp)
-		if loaded {
-			appCache.Put(newApp)
-		}
+		newApp := f.initApp(actorID)
+		a, _ = f.table.LoadOrStore(actorID, newApp)
 	}
 
-	return a.(*app)
+	aa := a.(*app)
+
+	return aa
 }
 
-func (f *factory) initApp(a any, actorID string) *app {
-	app := a.(*app)
+func (f *factory) initApp(actorID string) *app {
+	app := &app{
+		actorID: actorID,
+		factory: f,
+		clock:   f.clock,
+		lock: lock.New(lock.Options{
+			ActorType:   f.actorType,
+			ConfigStore: f.reentrancy,
+		}),
+	}
 
-	app.actorID = actorID
-	app.factory = f
 	app.idleAt.Store(ptr.Of(f.clock.Now().Add(f.idleTimeout)))
-	app.lock = lock.New(lock.Options{
-		ActorType:   f.actorType,
-		ConfigStore: f.reentrancy,
-	})
-	app.clock = clock.RealClock{}
 
 	f.idlerQueue.Enqueue(app)
 

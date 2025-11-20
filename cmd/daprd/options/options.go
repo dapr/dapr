@@ -18,7 +18,6 @@ import (
 	"math"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -28,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/cors"
-	injectorconsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"
@@ -174,8 +172,14 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&placementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers (overrides actors-service)")
 	fs.StringSliceVar(&opts.SchedulerAddress, "scheduler-host-address", nil, "Addresses of the Scheduler service instance(s), as comma separated host:port pairs")
 	fs.UintVar(&opts.SchedulerJobStreams, "scheduler-job-streams", 3, "The number of active job streams to connect to the Scheduler service")
-	fs.StringVar(&opts.ActorsService, "actors-service", "", "Type and address of the actors service, in the format 'type:address'")
+
+	// DEPRECATED.
 	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")
+	fs.StringVar(&opts.ActorsService, "actors-service", "", "Type and address of the actors service, in the format 'type:address'")
+	fs.MarkHidden("reminders-service")
+	fs.MarkHidden("actors-service")
+	fs.MarkDeprecated("reminders-service", "flag no longer has any effect")
+	fs.MarkDeprecated("actors-service", "flag no longer has any effect")
 
 	// Add flags for logger and metrics
 	opts.Logger = logger.DefaultOptions()
@@ -254,19 +258,6 @@ func New(origArgs []string) (*Options, error) {
 
 	if !fs.Changed("dapr-block-shutdown-duration") {
 		opts.DaprBlockShutdownDuration = nil
-	}
-
-	if !fs.Changed("scheduler-host-address") {
-		// TODO: remove env var lookup in v1.16
-		addr, ok := os.LookupEnv(injectorconsts.SchedulerHostAddressDNSAEnvVar)
-		if ok {
-			opts.SchedulerAddress = strings.Split(addr, ",")
-		} else {
-			addr, ok := os.LookupEnv(injectorconsts.SchedulerHostAddressEnvVar)
-			if ok {
-				opts.SchedulerAddress = strings.Split(addr, ",")
-			}
-		}
 	}
 
 	return &opts, nil

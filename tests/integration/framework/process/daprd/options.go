@@ -1,4 +1,4 @@
-/*
+/*t *testing.T
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
@@ -358,5 +359,17 @@ spec:
 func WithMaxBodySize(size string) Option {
 	return func(o *options) {
 		o.maxBodySize = &size
+	}
+}
+
+func WithSkipStateStoreReminderMigration(t *testing.T) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"DAPR_SKIP_REMINDER_MIGRATION", "true",
+	))
+}
+
+func WithPlacement(placement *placement.Placement) Option {
+	return func(o *options) {
+		o.placementAddresses = append(o.placementAddresses, placement.Address())
 	}
 }

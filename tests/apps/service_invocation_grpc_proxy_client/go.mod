@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/service_invocation_grpc_proxy_client
 
-go 1.24.6
+go 1.24.9
 
 require (
 	github.com/dapr/dapr v0.0.0-00010101000000-000000000000
@@ -16,7 +16,7 @@ require (
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	google.golang.org/protobuf v1.36.9 // indirect
 )
 
 replace github.com/dapr/dapr => ../../../
