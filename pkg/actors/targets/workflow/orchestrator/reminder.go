@@ -23,8 +23,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 func (o *orchestrator) createWorkflowReminder(ctx context.Context, namePrefix string, data proto.Message, start time.Time, targetAppID string) (string, error) {
@@ -62,6 +64,14 @@ func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix st
 		Data:      adata,
 		DueTime:   dueTime,
 		Name:      reminderName,
-		IsOneShot: true,
+		// One shot, retry forever, every second.
+		FailurePolicy: &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Constant{
+				Constant: &commonv1pb.JobFailurePolicyConstant{
+					Interval:   durationpb.New(time.Second),
+					MaxRetries: nil,
+				},
+			},
+		},
 	})
 }

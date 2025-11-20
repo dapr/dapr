@@ -118,6 +118,8 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		Period:    in.GetPeriod(),
 		TTL:       in.GetTtl(),
 		Data:      data,
+		//nolint:protogetter
+		FailurePolicy: in.FailurePolicy,
 	}
 
 	err = r.Create(ctx, req)
