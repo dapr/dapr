@@ -165,6 +165,10 @@ func (*RegisterActorTimerRequest) AppendSpanAttributes(rpcMethod string, m map[s
 	// TODO
 }
 
+func (*GetActorReminderRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
 func (*ResumeWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
