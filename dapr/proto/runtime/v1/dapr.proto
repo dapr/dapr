@@ -88,6 +88,9 @@ service Dapr {
   // Gets the state for a specific actor.
   rpc GetActorState(GetActorStateRequest) returns (GetActorStateResponse) {}
 
+  // Gets an actor reminder.
+  rpc GetActorReminder(GetActorReminderRequest) returns (GetActorReminderResponse) {}
+
   // Executes state transactions for a specified actor
   rpc ExecuteActorStateTransaction(ExecuteActorStateTransactionRequest) returns (google.protobuf.Empty) {}
 
@@ -623,6 +626,10 @@ message RegisterActorReminderRequest {
   string period = 5;
   bytes data = 6;
   string ttl = 7;
+
+  // If true, allows this reminder to overwrite an existing reminder with the
+  // same name. If not set, defaults to true.
+  optional bool overwrite = 8 [json_name = "overwrite"];
 }
 
 // UnregisterActorReminderRequest is the message to unregister an actor reminder.
@@ -1283,6 +1290,7 @@ message Job {
 message ScheduleJobRequest {
   // The job details.
   Job job = 1;
+
   // If true, allows this job to overwrite an existing job with the same name.
   bool overwrite = 2  [json_name = "overwrite"];
 }
@@ -1636,4 +1644,21 @@ message ConversationToolsFunction {
   // and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.
   // Omitting `parameters` defines a function with an empty parameter list.
   google.protobuf.Struct parameters = 3;
+}
+
+// GetActorReminderRequest is the message to get an already-registered actor reminder
+message GetActorReminderRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorID"];
+  string name = 3;
+}
+
+// GetActorReminderResponse is the response conveying an actor's reminder.
+message GetActorReminderResponse {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorID"];
+  optional string due_time = 4 [json_name = "dueTime"];
+  optional string period = 5;
+  google.protobuf.Any data = 6;
+  optional string ttl = 7;
 }

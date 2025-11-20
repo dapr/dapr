@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"errors"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -26,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/kit/ptr"
 )
 
 func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
@@ -118,17 +121,23 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		Period:    in.GetPeriod(),
 		TTL:       in.GetTtl(),
 		Data:      data,
+		Overwrite: in.Overwrite,
 	}
 
 	err = r.Create(ctx, req)
 	if err != nil {
+		a.logger.Debug(err)
+
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
 			return nil, messages.ErrActorReminderOpActorNotHosted
 		}
 
+		status, ok := status.FromError(err)
+		if ok && status.Code() == codes.AlreadyExists {
+			return nil, messages.ErrActorReminderAlreadyExists.WithFormat(in.GetName())
+		}
+
 		err = messages.ErrActorReminderCreate.WithFormat(err)
-		a.logger.Debug(err)
 		return nil, err
 	}
 	return nil, err
@@ -158,4 +167,49 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 		return nil, err
 	}
 	return nil, err
+}
+
+func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetActorReminderRequest) (*runtimev1pb.GetActorReminderResponse, error) {
+	r, err := a.ActorReminders(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := r.Get(ctx, &api.GetReminderRequest{
+		Name:      in.GetName(),
+		ActorID:   in.GetActorId(),
+		ActorType: in.GetActorType(),
+	})
+	if err != nil {
+		a.logger.Debug(err)
+
+		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
+			return nil, messages.ErrActorReminderOpActorNotHosted
+		}
+
+		return nil, messages.ErrActorReminderGet.WithFormat(err)
+	}
+
+	if resp == nil {
+		return nil, messages.ErrActorReminderNotFound.WithFormat(in.GetName())
+	}
+
+	var dueTime *string
+	var period *string
+	var ttl *string
+	if resp.DueTime != "" {
+		dueTime = &resp.DueTime
+	}
+	if resp.Period.String() != "" {
+		period = ptr.Of(resp.Period.String())
+	}
+
+	return &runtimev1pb.GetActorReminderResponse{
+		ActorType: resp.ActorType,
+		ActorId:   resp.ActorID,
+		DueTime:   dueTime,
+		Period:    period,
+		Ttl:       ttl,
+		Data:      resp.Data,
+	}, nil
 }
