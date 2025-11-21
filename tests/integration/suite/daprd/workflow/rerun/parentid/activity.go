@@ -74,7 +74,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Len(t, history.Events, 6)
 	require.NotNil(t, history.Events[2].GetTaskScheduled())
-	assert.Equal(t, history.Events[2].GetTaskScheduled().GetRerunParentInstanceInfo(), &protos.RerunParentInstanceInfo{
+	assert.Equal(t, &protos.RerunParentInstanceInfo{
 		InstanceID: "abc",
-	})
+	}, history.Events[2].GetTaskScheduled().GetRerunParentInstanceInfo())
 }
