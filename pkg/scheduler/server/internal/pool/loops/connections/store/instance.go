@@ -20,11 +20,13 @@ import (
 	"github.com/dapr/kit/events/loop"
 )
 
+// TODO: sync.Pool
 type entry struct {
-	idx   uint64
-	conns []*StreamConnection
+	nextConn uint64
+	conns    []loop.Interface[loops.Event]
 }
 
+// TODO: sync.Pool
 type instance struct {
 	entries map[string]*entry
 }
@@ -35,7 +37,7 @@ func newInstance() *instance {
 	}
 }
 
-func (i *instance) add(name string, conn *StreamConnection) context.CancelFunc {
+func (i *instance) add(name string, conn loop.Interface[loops.Event]) context.CancelFunc {
 	en, ok := i.entries[name]
 	if !ok {
 		en = new(entry)
@@ -63,7 +65,8 @@ func (i *instance) get(name string) (loop.Interface[loops.Event], bool) {
 		return nil, false
 	}
 
+	l := en.conns[en.nextConn%uint64(len(en.conns))]
 	// Increase index to load balance over connections for this instance.
-	defer func() { en.idx++ }()
-	return en.conns[en.idx%uint64(len(en.conns))].Loop, true
+	en.nextConn++
+	return l, true
 }
