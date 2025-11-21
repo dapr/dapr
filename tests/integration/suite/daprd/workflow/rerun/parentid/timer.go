@@ -72,7 +72,7 @@ func (i *timer) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Len(t, history.Events, 6)
 	require.NotNil(t, history.Events[2].GetTimerCreated())
-	assert.Equal(t, history.Events[2].GetTimerCreated().GetRerunParentInstanceInfo(), &protos.RerunParentInstanceInfo{
+	assert.Equal(t, &protos.RerunParentInstanceInfo{
 		InstanceID: "abc",
-	})
+	}, history.Events[2].GetTimerCreated().GetRerunParentInstanceInfo())
 }
