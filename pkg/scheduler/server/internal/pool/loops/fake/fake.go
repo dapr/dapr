@@ -33,7 +33,7 @@ func New(t *testing.T) *Fake {
 	t.Helper()
 
 	f := &Fake{events: make(chan loops.Event, 10)}
-	f.loop = loop.New[loops.Event](f, 5)
+	f.loop = loop.New[loops.Event](5).NewLoop(f)
 
 	errCh := make(chan error)
 	go func() { errCh <- f.loop.Run(t.Context()) }()

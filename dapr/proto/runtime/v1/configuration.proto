@@ -1,0 +1,79 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+import "dapr/proto/common/v1/common.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+// GetConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.
+message GetConfigurationRequest {
+  // Required. The name of configuration store.
+  string store_name = 1;
+
+  // Optional. The key of the configuration item to fetch.
+  // If set, only query for the specified configuration items.
+  // Empty list means fetch all.
+  repeated string keys = 2;
+
+  // Optional. The metadata which will be sent to configuration store components.
+  map<string, string> metadata = 3;
+}
+
+// GetConfigurationResponse is the response conveying the list of configuration values.
+// It should be the FULL configuration of specified application which contains all of its configuration items.
+message GetConfigurationResponse {
+  map<string, common.v1.ConfigurationItem> items = 1;
+}
+
+// SubscribeConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.
+message SubscribeConfigurationRequest {
+  // The name of configuration store.
+  string store_name = 1;
+
+  // Optional. The key of the configuration item to fetch.
+  // If set, only query for the specified configuration items.
+  // Empty list means fetch all.
+  repeated string keys = 2;
+
+  // The metadata which will be sent to configuration store components.
+  map<string, string> metadata = 3;
+}
+
+// UnSubscribeConfigurationRequest is the message to stop watching the key-value configuration.
+message UnsubscribeConfigurationRequest {
+  // The name of configuration store.
+  string store_name = 1;
+
+  // The id to unsubscribe.
+  string id = 2;
+}
+
+message SubscribeConfigurationResponse {
+  // Subscribe id, used to stop subscription.
+  string id = 1;
+
+  // The list of items containing configuration values
+  map<string, common.v1.ConfigurationItem> items = 2;
+}
+
+message UnsubscribeConfigurationResponse {
+  bool ok = 1;
+  string message = 2;
+}

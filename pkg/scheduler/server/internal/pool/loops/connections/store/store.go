@@ -15,36 +15,59 @@ package store
 
 import (
 	"context"
+
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
+	"github.com/dapr/kit/events/loop"
 )
 
-type store struct {
+type Options struct {
+	Loop       loop.Interface[loops.Event]
+	AppID      *string
+	ActorTypes []string
+}
+
+// TODO: sync.Pool
+type Store struct {
 	appIDs     *instance
 	actorTypes *instance
 }
 
-func newStore() *store {
-	return &store{
+func New() *Store {
+	return &Store{
 		appIDs:     newInstance(),
 		actorTypes: newInstance(),
 	}
 }
 
-func (s *store) add(conn *StreamConnection, opts Options) context.CancelFunc {
+func (s *Store) Add(opts Options) context.CancelFunc {
 	// We don't know how many allocations we will have!
 	//nolint:prealloc
 	var fns []context.CancelFunc
 
 	if opts.AppID != nil {
-		fns = append(fns, s.appIDs.add(*opts.AppID, conn))
+		fns = append(fns, s.appIDs.add(*opts.AppID, opts.Loop))
 	}
 
 	for _, actorType := range opts.ActorTypes {
-		fns = append(fns, s.actorTypes.add(actorType, conn))
+		fns = append(fns, s.actorTypes.add(actorType, opts.Loop))
 	}
 
+	monitoring.RecordSidecarsConnectedCount(1)
 	return func() {
 		for _, fn := range fns {
 			fn()
 		}
+
+		opts.Loop.Close(new(loops.StreamShutdown))
+		monitoring.RecordSidecarsConnectedCount(-1)
 	}
+}
+
+func (s *Store) AppID(id string) (loop.Interface[loops.Event], bool) {
+	return s.appIDs.get(id)
+}
+
+func (s *Store) ActorType(actorType string) (loop.Interface[loops.Event], bool) {
+	return s.actorTypes.get(actorType)
 }

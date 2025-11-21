@@ -17,12 +17,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"sync"
 
 	"github.com/diagridio/go-etcd-cron/api"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
@@ -33,29 +30,29 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.pool.loops.stream")
 
 var (
-	StreamLoopCache = sync.Pool{New: func() any {
-		return loop.Empty[loops.Event]()
-	}}
-	streamCache = sync.Pool{New: func() any {
+	streamLoopFactory = loop.New[loops.Event](1024)
+	streamCache       = sync.Pool{New: func() any {
 		return new(stream)
 	}}
 )
 
 type Options struct {
-	IDx      uint64
-	Channel  schedulerv1pb.Scheduler_WatchJobsServer
-	Request  *schedulerv1pb.WatchJobsRequestInitial
-	ConnLoop loop.Interface[loops.Event]
+	IDx           uint64
+	Add           *loops.ConnAdd
+	Cron          api.Interface
+	NamespaceLoop loop.Interface[loops.Event]
 }
 
 // stream is a loop that handles a single stream of a connection. It handles
 // triggering and responding to triggers.
 type stream struct {
-	idx      uint64
-	channel  schedulerv1pb.Scheduler_WatchJobsServer
-	connLoop loop.Interface[loops.Event]
-	ns       string
-	appID    string
+	idx     uint64
+	channel schedulerv1pb.Scheduler_WatchJobsServer
+	nsLoop  loop.Interface[loops.Event]
+	appID   string
+	ns      string
+	loop    loop.Interface[loops.Event]
+	cancel  context.CancelCauseFunc
 
 	// triggerIDx is the uuid of a triggered job. We can use a simple counter as
 	// there are no privacy/time attack concerns as this counter is scoped to a
@@ -67,27 +64,38 @@ type stream struct {
 	wg sync.WaitGroup
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
+func New(ctx context.Context, opts Options) (loop.Interface[loops.Event], error) {
+	cancel, err := handleAdd(ctx, opts.Cron, opts.Add.Request)
+	if err != nil {
+		return nil, err
+	}
+
 	stream := streamCache.Get().(*stream)
 	stream.idx = opts.IDx
-	stream.channel = opts.Channel
-	stream.connLoop = opts.ConnLoop
-	stream.ns = opts.Request.GetNamespace()
-	stream.appID = opts.Request.GetAppId()
+	stream.nsLoop = opts.NamespaceLoop
+	stream.channel = opts.Add.Channel
+	stream.ns = opts.Add.Request.GetNamespace()
+	stream.appID = opts.Add.Request.GetAppId()
 	stream.triggerIDx = 0
+	stream.cancel = func(err error) {
+		opts.Add.Cancel(err)
+		cancel(err)
+	}
 
-	loop := StreamLoopCache.Get().(loop.Interface[loops.Event])
-	loop.Reset(stream, 1024)
+	stream.loop = streamLoopFactory.NewLoop(stream)
 
 	stream.wg.Add(1)
 	go func() {
 		stream.recvLoop()
 		log.Debugf("Closed receive stream to %s/%s", stream.ns, stream.appID)
-		stream.connLoop.Enqueue(&loops.ConnCloseStream{StreamIDx: stream.idx})
+		stream.nsLoop.Enqueue(&loops.ConnCloseStream{
+			StreamIDx: stream.idx,
+			Namespace: stream.ns,
+		})
 		stream.wg.Done()
 	}()
 
-	return loop
+	return stream.loop, nil
 }
 
 func (s *stream) Handle(ctx context.Context, event loops.Event) error {
@@ -97,7 +105,7 @@ func (s *stream) Handle(ctx context.Context, event loops.Event) error {
 	case *loops.StreamShutdown:
 		s.handleShutdown()
 	default:
-		return fmt.Errorf("unknown stream event type: %T", e)
+		panic(fmt.Sprintf("unknown stream event type: %T", e))
 	}
 
 	return nil
@@ -118,14 +126,21 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 
 	if err := s.channel.Send(job); err != nil {
 		log.Warnf("Error sending job to stream %s/%s: %s", s.ns, s.appID, err)
-		s.connLoop.Enqueue(&loops.ConnCloseStream{StreamIDx: s.idx})
+		s.nsLoop.Enqueue(&loops.ConnCloseStream{
+			StreamIDx: s.idx,
+			Namespace: s.ns,
+		})
 	}
 }
+
+var errStreamShutdown = errors.New("stream shutdown")
 
 // handleShutdown handles a shutdown request from the scheduler. It closes
 // the stream and calls all inflight result functions with an undeliverable
 // result.
 func (s *stream) handleShutdown() {
+	log.Infof("Closing connection to %s/%s", s.ns, s.appID)
+	s.cancel(errStreamShutdown)
 	s.wg.Wait()
 	s.inflight.Range(func(_, fn any) bool {
 		fn.(func(api.TriggerResponseResult))(api.TriggerResponseResult_UNDELIVERABLE)
@@ -133,54 +148,5 @@ func (s *stream) handleShutdown() {
 	})
 	s.inflight.Clear()
 	streamCache.Put(s)
-}
-
-// recvLoop is the main loop for receiving messages from the stream. It
-// handles errors and calls the recv function to receive messages.
-func (s *stream) recvLoop() {
-	for {
-		err := s.recv()
-		if err == nil {
-			continue
-		}
-
-		isEOF := errors.Is(err, io.EOF)
-		status, ok := status.FromError(err)
-		if s.channel.Context().Err() != nil || isEOF || (ok && status.Code() != codes.Canceled) {
-			return
-		}
-
-		log.Warnf("Error receiving from stream %s/%s: %s", s.ns, s.appID, err)
-		return
-	}
-}
-
-// recv receives a message from the stream. It checks the result and calls
-// the inflight result function with the appropriate result.
-func (s *stream) recv() error {
-	resp, err := s.channel.Recv()
-	if err != nil {
-		return err
-	}
-
-	result := resp.GetResult()
-	if result == nil {
-		return errors.New("received nil result from stream")
-	}
-
-	inf, ok := s.inflight.LoadAndDelete(result.GetId())
-	if !ok {
-		return errors.New("received unknown trigger response from stream")
-	}
-
-	switch result.GetStatus() {
-	case schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS:
-		inf.(func(api.TriggerResponseResult))(api.TriggerResponseResult_SUCCESS)
-	case schedulerv1pb.WatchJobsRequestResultStatus_FAILED:
-		inf.(func(api.TriggerResponseResult))(api.TriggerResponseResult_FAILED)
-	default:
-		return fmt.Errorf("unknown trigger response status: %s", result.GetStatus())
-	}
-
-	return nil
+	streamLoopFactory.CacheLoop(s.loop)
 }
