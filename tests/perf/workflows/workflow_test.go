@@ -60,13 +60,14 @@ func TestMain(m *testing.M) {
 			IngressEnabled:    true,
 			IngressPort:       3000,
 			MetricsEnabled:    true,
-			DaprCPULimit:      "2.0",
-			DaprCPURequest:    "0.1",
-			DaprMemoryLimit:   "800Mi",
-			DaprMemoryRequest: "800Mi",
-			AppCPULimit:       "4.0",
-			AppMemoryLimit:    "800Mi",
-			AppMemoryRequest:  "800Mi",
+			DaprCPULimit:      "1.0",
+			DaprCPURequest:    "0.5",
+			DaprMemoryLimit:   "2Gi",
+			DaprMemoryRequest: "1Gi",
+			AppCPULimit:       "2.0",
+			AppCPURequest:     "1.0",
+			AppMemoryLimit:    "2Gi",
+			AppMemoryRequest:  "1Gi",
 			AppPort:           3000,
 		},
 	}
@@ -223,7 +224,7 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 // Runs test for delaying workflows: 500 VUs, 10,000 iterations
 func TestDelayWorkflowsAtScale(t *testing.T) {
 	workflowName := "delay_wf"
-	inputs := []string{"30000"}          // delay in milliseconds (30s)
+	inputs := []string{"10000"}          // delay in milliseconds (10s)
 	scenarios := []string{"t_500_10000"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
