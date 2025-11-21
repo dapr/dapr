@@ -14,6 +14,7 @@ limitations under the License.
 package rerun
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/parentid"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/raise"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/timer"
 )
