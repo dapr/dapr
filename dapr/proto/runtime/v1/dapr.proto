@@ -21,6 +21,7 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "dapr/proto/common/v1/common.proto";
 import "dapr/proto/runtime/v1/appcallback.proto";
+import "dapr/proto/runtime/v1/vectordb.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -224,6 +225,27 @@ service Dapr {
 
   // Converse with a LLM service via alpha2 api
   rpc ConverseAlpha2(ConversationRequestAlpha2) returns (ConversationResponseAlpha2) {}
+
+  // CreateVectorCollectionAlpha1 creates a new vector collection (/index).
+  rpc CreateVectorCollectionAlpha1(CreateCollectionRequestAlpha1) returns (CreateCollectionResponseAlpha1);
+
+  // DeleteVectorCollectionAlpha1 deletes a vector collection (/index) and all the vectors it contains.
+  rpc DeleteVectorCollectionAlpha1(DeleteCollectionRequestAlpha1) returns (DeleteCollectionResponseAlpha1);
+
+  // ListVectorCollectionsAlpha1 lists all vector collections.
+  rpc ListVectorCollectionsAlpha1(ListVectorCollectionsRequestAlpha1) returns (ListVectorCollectionsResponseAlpha1);
+
+  // UpsertVectorsAlpha1 upserts (inserts or updates) vectors into a collection.
+  rpc UpsertVectorsAlpha1(UpsertVectorsRequestAlpha1) returns (UpsertVectorsResponseAlpha1);
+
+  // GetVectorsAlpha1 retrieves vectors from a collection by their IDs.
+  rpc GetVectorsAlpha1(GetVectorsRequestAlpha1) returns (GetVectorsResponseAlpha1);
+
+  // DeleteVectorsAlpha1 deletes vectors from a collection by their IDs.
+  rpc DeleteVectorsAlpha1(DeleteVectorsRequestAlpha1) returns (DeleteVectorsResponseAlpha1);
+
+  // QueryVectorsAlpha1 queries a collection for the most similar vectors to a given vector.
+  rpc QueryVectorsAlpha1(QueryVectorsRequestAlpha1) returns (QueryVectorsResponseAlpha1);
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.

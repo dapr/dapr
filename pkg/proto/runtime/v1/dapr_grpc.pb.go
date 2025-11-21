@@ -93,6 +93,13 @@ const (
 	Dapr_DeleteJobAlpha1_FullMethodName                = "/dapr.proto.runtime.v1.Dapr/DeleteJobAlpha1"
 	Dapr_ConverseAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
 	Dapr_ConverseAlpha2_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha2"
+	Dapr_CreateVectorCollectionAlpha1_FullMethodName   = "/dapr.proto.runtime.v1.Dapr/CreateVectorCollectionAlpha1"
+	Dapr_DeleteVectorCollectionAlpha1_FullMethodName   = "/dapr.proto.runtime.v1.Dapr/DeleteVectorCollectionAlpha1"
+	Dapr_ListVectorCollectionsAlpha1_FullMethodName    = "/dapr.proto.runtime.v1.Dapr/ListVectorCollectionsAlpha1"
+	Dapr_UpsertVectorsAlpha1_FullMethodName            = "/dapr.proto.runtime.v1.Dapr/UpsertVectorsAlpha1"
+	Dapr_GetVectorsAlpha1_FullMethodName               = "/dapr.proto.runtime.v1.Dapr/GetVectorsAlpha1"
+	Dapr_DeleteVectorsAlpha1_FullMethodName            = "/dapr.proto.runtime.v1.Dapr/DeleteVectorsAlpha1"
+	Dapr_QueryVectorsAlpha1_FullMethodName             = "/dapr.proto.runtime.v1.Dapr/QueryVectorsAlpha1"
 )
 
 // DaprClient is the client API for Dapr service.
@@ -228,6 +235,20 @@ type DaprClient interface {
 	ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error)
 	// Converse with a LLM service via alpha2 api
 	ConverseAlpha2(ctx context.Context, in *ConversationRequestAlpha2, opts ...grpc.CallOption) (*ConversationResponseAlpha2, error)
+	// CreateVectorCollectionAlpha1 creates a new vector collection (/index).
+	CreateVectorCollectionAlpha1(ctx context.Context, in *CreateCollectionRequestAlpha1, opts ...grpc.CallOption) (*CreateCollectionResponseAlpha1, error)
+	// DeleteVectorCollectionAlpha1 deletes a vector collection (/index) and all the vectors it contains.
+	DeleteVectorCollectionAlpha1(ctx context.Context, in *DeleteCollectionRequestAlpha1, opts ...grpc.CallOption) (*DeleteCollectionResponseAlpha1, error)
+	// ListVectorCollectionsAlpha1 lists all vector collections.
+	ListVectorCollectionsAlpha1(ctx context.Context, in *ListVectorCollectionsRequestAlpha1, opts ...grpc.CallOption) (*ListVectorCollectionsResponseAlpha1, error)
+	// UpsertVectorsAlpha1 upserts (inserts or updates) vectors into a collection.
+	UpsertVectorsAlpha1(ctx context.Context, in *UpsertVectorsRequestAlpha1, opts ...grpc.CallOption) (*UpsertVectorsResponseAlpha1, error)
+	// GetVectorsAlpha1 retrieves vectors from a collection by their IDs.
+	GetVectorsAlpha1(ctx context.Context, in *GetVectorsRequestAlpha1, opts ...grpc.CallOption) (*GetVectorsResponseAlpha1, error)
+	// DeleteVectorsAlpha1 deletes vectors from a collection by their IDs.
+	DeleteVectorsAlpha1(ctx context.Context, in *DeleteVectorsRequestAlpha1, opts ...grpc.CallOption) (*DeleteVectorsResponseAlpha1, error)
+	// QueryVectorsAlpha1 queries a collection for the most similar vectors to a given vector.
+	QueryVectorsAlpha1(ctx context.Context, in *QueryVectorsRequestAlpha1, opts ...grpc.CallOption) (*QueryVectorsResponseAlpha1, error)
 }
 
 type daprClient struct {
@@ -897,6 +918,69 @@ func (c *daprClient) ConverseAlpha2(ctx context.Context, in *ConversationRequest
 	return out, nil
 }
 
+func (c *daprClient) CreateVectorCollectionAlpha1(ctx context.Context, in *CreateCollectionRequestAlpha1, opts ...grpc.CallOption) (*CreateCollectionResponseAlpha1, error) {
+	out := new(CreateCollectionResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_CreateVectorCollectionAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DeleteVectorCollectionAlpha1(ctx context.Context, in *DeleteCollectionRequestAlpha1, opts ...grpc.CallOption) (*DeleteCollectionResponseAlpha1, error) {
+	out := new(DeleteCollectionResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_DeleteVectorCollectionAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ListVectorCollectionsAlpha1(ctx context.Context, in *ListVectorCollectionsRequestAlpha1, opts ...grpc.CallOption) (*ListVectorCollectionsResponseAlpha1, error) {
+	out := new(ListVectorCollectionsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_ListVectorCollectionsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) UpsertVectorsAlpha1(ctx context.Context, in *UpsertVectorsRequestAlpha1, opts ...grpc.CallOption) (*UpsertVectorsResponseAlpha1, error) {
+	out := new(UpsertVectorsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_UpsertVectorsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) GetVectorsAlpha1(ctx context.Context, in *GetVectorsRequestAlpha1, opts ...grpc.CallOption) (*GetVectorsResponseAlpha1, error) {
+	out := new(GetVectorsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_GetVectorsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DeleteVectorsAlpha1(ctx context.Context, in *DeleteVectorsRequestAlpha1, opts ...grpc.CallOption) (*DeleteVectorsResponseAlpha1, error) {
+	out := new(DeleteVectorsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_DeleteVectorsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) QueryVectorsAlpha1(ctx context.Context, in *QueryVectorsRequestAlpha1, opts ...grpc.CallOption) (*QueryVectorsResponseAlpha1, error) {
+	out := new(QueryVectorsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_QueryVectorsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaprServer is the server API for Dapr service.
 // All implementations should embed UnimplementedDaprServer
 // for forward compatibility
@@ -1030,6 +1114,20 @@ type DaprServer interface {
 	ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error)
 	// Converse with a LLM service via alpha2 api
 	ConverseAlpha2(context.Context, *ConversationRequestAlpha2) (*ConversationResponseAlpha2, error)
+	// CreateVectorCollectionAlpha1 creates a new vector collection (/index).
+	CreateVectorCollectionAlpha1(context.Context, *CreateCollectionRequestAlpha1) (*CreateCollectionResponseAlpha1, error)
+	// DeleteVectorCollectionAlpha1 deletes a vector collection (/index) and all the vectors it contains.
+	DeleteVectorCollectionAlpha1(context.Context, *DeleteCollectionRequestAlpha1) (*DeleteCollectionResponseAlpha1, error)
+	// ListVectorCollectionsAlpha1 lists all vector collections.
+	ListVectorCollectionsAlpha1(context.Context, *ListVectorCollectionsRequestAlpha1) (*ListVectorCollectionsResponseAlpha1, error)
+	// UpsertVectorsAlpha1 upserts (inserts or updates) vectors into a collection.
+	UpsertVectorsAlpha1(context.Context, *UpsertVectorsRequestAlpha1) (*UpsertVectorsResponseAlpha1, error)
+	// GetVectorsAlpha1 retrieves vectors from a collection by their IDs.
+	GetVectorsAlpha1(context.Context, *GetVectorsRequestAlpha1) (*GetVectorsResponseAlpha1, error)
+	// DeleteVectorsAlpha1 deletes vectors from a collection by their IDs.
+	DeleteVectorsAlpha1(context.Context, *DeleteVectorsRequestAlpha1) (*DeleteVectorsResponseAlpha1, error)
+	// QueryVectorsAlpha1 queries a collection for the most similar vectors to a given vector.
+	QueryVectorsAlpha1(context.Context, *QueryVectorsRequestAlpha1) (*QueryVectorsResponseAlpha1, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1215,6 +1313,27 @@ func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationRequ
 }
 func (UnimplementedDaprServer) ConverseAlpha2(context.Context, *ConversationRequestAlpha2) (*ConversationResponseAlpha2, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConverseAlpha2 not implemented")
+}
+func (UnimplementedDaprServer) CreateVectorCollectionAlpha1(context.Context, *CreateCollectionRequestAlpha1) (*CreateCollectionResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateVectorCollectionAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DeleteVectorCollectionAlpha1(context.Context, *DeleteCollectionRequestAlpha1) (*DeleteCollectionResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteVectorCollectionAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) ListVectorCollectionsAlpha1(context.Context, *ListVectorCollectionsRequestAlpha1) (*ListVectorCollectionsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListVectorCollectionsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) UpsertVectorsAlpha1(context.Context, *UpsertVectorsRequestAlpha1) (*UpsertVectorsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpsertVectorsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) GetVectorsAlpha1(context.Context, *GetVectorsRequestAlpha1) (*GetVectorsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVectorsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DeleteVectorsAlpha1(context.Context, *DeleteVectorsRequestAlpha1) (*DeleteVectorsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteVectorsAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) QueryVectorsAlpha1(context.Context, *QueryVectorsRequestAlpha1) (*QueryVectorsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryVectorsAlpha1 not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -2338,6 +2457,132 @@ func _Dapr_ConverseAlpha2_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_CreateVectorCollectionAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCollectionRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).CreateVectorCollectionAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_CreateVectorCollectionAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).CreateVectorCollectionAlpha1(ctx, req.(*CreateCollectionRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DeleteVectorCollectionAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteCollectionRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteVectorCollectionAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DeleteVectorCollectionAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteVectorCollectionAlpha1(ctx, req.(*DeleteCollectionRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_ListVectorCollectionsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListVectorCollectionsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ListVectorCollectionsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ListVectorCollectionsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ListVectorCollectionsAlpha1(ctx, req.(*ListVectorCollectionsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_UpsertVectorsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpsertVectorsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).UpsertVectorsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_UpsertVectorsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).UpsertVectorsAlpha1(ctx, req.(*UpsertVectorsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_GetVectorsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVectorsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetVectorsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_GetVectorsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetVectorsAlpha1(ctx, req.(*GetVectorsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DeleteVectorsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteVectorsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteVectorsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DeleteVectorsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteVectorsAlpha1(ctx, req.(*DeleteVectorsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_QueryVectorsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryVectorsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).QueryVectorsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_QueryVectorsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).QueryVectorsAlpha1(ctx, req.(*QueryVectorsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Dapr_ServiceDesc is the grpc.ServiceDesc for Dapr service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2564,6 +2809,34 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ConverseAlpha2",
 			Handler:    _Dapr_ConverseAlpha2_Handler,
+		},
+		{
+			MethodName: "CreateVectorCollectionAlpha1",
+			Handler:    _Dapr_CreateVectorCollectionAlpha1_Handler,
+		},
+		{
+			MethodName: "DeleteVectorCollectionAlpha1",
+			Handler:    _Dapr_DeleteVectorCollectionAlpha1_Handler,
+		},
+		{
+			MethodName: "ListVectorCollectionsAlpha1",
+			Handler:    _Dapr_ListVectorCollectionsAlpha1_Handler,
+		},
+		{
+			MethodName: "UpsertVectorsAlpha1",
+			Handler:    _Dapr_UpsertVectorsAlpha1_Handler,
+		},
+		{
+			MethodName: "GetVectorsAlpha1",
+			Handler:    _Dapr_GetVectorsAlpha1_Handler,
+		},
+		{
+			MethodName: "DeleteVectorsAlpha1",
+			Handler:    _Dapr_DeleteVectorsAlpha1_Handler,
+		},
+		{
+			MethodName: "QueryVectorsAlpha1",
+			Handler:    _Dapr_QueryVectorsAlpha1_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
