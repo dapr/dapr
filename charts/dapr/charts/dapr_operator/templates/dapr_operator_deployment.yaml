@@ -220,7 +220,7 @@ spec:
                   operator: In
                   values:
                   - dapr-operator
-              topologyKey: topology.kubernetes.io/zone
+              topologyKey: {{ .Values.global.ha.topologyKey }}
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
