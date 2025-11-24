@@ -138,7 +138,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 					require.NoError(t, err, "Error restarting the app")
 				}
 
-				// Get the ingress external url of test app (host-side access)
+				// Get the ingress external url of test app
 				log.Println("acquiring app external URL")
 				externalURL := tr.Platform.AcquireAppExternalURL(testAppName)
 				require.NotEmpty(t, externalURL, "external URL must not be empty")
@@ -152,7 +152,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				_, err := utils.HTTPGet(url)
 				require.NoError(t, err, "error starting workflow runtime")
 
-				time.Sleep(15 * time.Second)
+				time.Sleep(5 * time.Second)
 
 				targetURL := fmt.Sprintf("http://%s/run-workflow", externalURL)
 
