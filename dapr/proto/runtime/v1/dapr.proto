@@ -629,7 +629,7 @@ message RegisterActorReminderRequest {
 
   // If true, allows this reminder to overwrite an existing reminder with the
   // same name. If not set, defaults to true.
-  optional bool overwrite = 8 [json_name = "overwrite"];
+  optional bool overwrite = 8;
 }
 
 // UnregisterActorReminderRequest is the message to unregister an actor reminder.
