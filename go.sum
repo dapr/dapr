@@ -433,8 +433,8 @@ github.com/clbanning/mxj/v2 v2.5.6 h1:Jm4VaCI/+Ug5Q57IzEoZbwx4iQFA6wkXv72juUSeK+
 github.com/clbanning/mxj/v2 v2.5.6/go.mod h1:hNiWqW14h+kc+MdF9C6/YoRfjEJoR3ou6tn/Qo+ve2s=
 github.com/clbanning/x2j v0.0.0-20191024224557-825249438eec/go.mod h1:jMjuTZXRI4dUb/I5gc9Hdhagfvm9+RyrPryS/auMzxE=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
-github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.14.0 h1:dEopBSOSjB5fM9r76ufM44AVj9Dnz2IOM0Xs6FVxZRM=
-github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.14.0/go.mod h1:qDSbb0fgIfFNjZrNTPtS5MOMScAGyQtn1KlSvoOdqYw=
+github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.15.2 h1:FIvfKlS2mcuP0qYY6yzdIU9xdrRd/YMP0bNwFjXd0u8=
+github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.15.2/go.mod h1:POsdVp/08Mki0WD9QvvgRRpg9CQ6zhjfRrBoEY8JFS8=
 github.com/cloudevents/sdk-go/v2 v2.15.2 h1:54+I5xQEnI73RBhWHxbI1XJcqOFOVJN85vb41+8mHUc=
 github.com/cloudevents/sdk-go/v2 v2.15.2/go.mod h1:lL7kSWAE/V8VI4Wh0jbL2v/jvqsm6tjmaQBSvxcv4uE=
 github.com/cloudflare/golz4 v0.0.0-20150217214814-ef862a3cdc58 h1:F1EaeKL/ta07PY/k9Os/UFtwERei2/XzGemhpGnBKNg=
@@ -517,8 +517,10 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.16.2-0.20251113171451-b78f056c8491 h1:ms0IhiGK6Mow+e1DZgIxD3qo7xqOPjpxeFkhahBo+Tg=
-github.com/dapr/components-contrib v1.16.2-0.20251113171451-b78f056c8491/go.mod h1:1AufCWqZwBj//UkyS7FesOEmp5/E6Xgy1tyCn8peiR4=
+github.com/dapr/components-contrib v1.16.2-0.20251125171221-9b3a3905c4dc h1:fFl5zPvUYusM4lX/MOWddTysELVIFvS6JoDDO1ew0U0=
+github.com/dapr/components-contrib v1.16.2-0.20251125171221-9b3a3905c4dc/go.mod h1:Ec/vQPhYOBhjApVP4XsxBYKO+FYF1wtQtwX8a/fATeI=
+github.com/dapr/components-contrib/tests/certification v0.0.0-20251104160704-920ad8a7b958 h1:DSZgzdXlbF75fwvEkMQpPqn1jjxmWVoBNmI4Bc4dS40=
+github.com/dapr/components-contrib/tests/certification v0.0.0-20251104160704-920ad8a7b958/go.mod h1:IUB5RJv0Gj5qxsHjjhvEBIlxPka7cD7KAn/Coa2y27M=
 github.com/dapr/durabletask-go v0.10.2-0.20251113171253-87ecdf8f0547 h1:bD4JBlXDHURsgvhIB1HQ1q0k8kYfVo/iNSBi0guSoe0=
 github.com/dapr/durabletask-go v0.10.2-0.20251113171253-87ecdf8f0547/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
 github.com/dapr/kit v0.16.2-0.20251117143824-2fd5d0c93524 h1:SQ7VeWGnypENpGjsL94wN2IgH+oYHx9ULpYrpFoRExQ=
