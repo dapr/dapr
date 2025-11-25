@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,8 +68,7 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	// Not found returns 200.
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
 
 	gresp, err := gclient.GetActorReminder(ctx, &rtv1.GetActorReminderRequest{
@@ -83,7 +83,7 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "actor reminder not found: helloworld", status.Message())
 	assert.Nil(t, gresp)
 
-	body := `{"data":"reminderdata","dueTime":"1s","period":"1s"}`
+	body := `{"data":"reminderdata","dueTime":"1s","period":"1s","ttl":"2552-01-01T00:00:00Z"}`
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
 	require.NoError(t, err)
 	resp, err = client.Do(req)
@@ -99,7 +99,7 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.JSONEq(t, `{"period":"@every 1s","data":"reminderdata","actorID":"1234","actorType":"foo","dueTime":"1s"}`, strings.TrimSpace(string(b)))
+	assert.JSONEq(t, `{"period":"@every 1s","data":"reminderdata","actorID":"1234","actorType":"foo","dueTime":"1s","ttl":"2552-01-01T00:00:00Z" }`, strings.TrimSpace(string(b)))
 
 	gresp, err = gclient.GetActorReminder(ctx, &rtv1.GetActorReminderRequest{
 		ActorType: "foo",
@@ -115,6 +115,7 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 		Data:      data,
 		DueTime:   ptr.Of("1s"),
 		Period:    ptr.Of("@every 1s"),
+		Ttl:       ptr.Of(time.Date(2552, 1, 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)),
 	}
 	assert.True(t, proto.Equal(exp, gresp), "%v != %v", exp, gresp)
 }

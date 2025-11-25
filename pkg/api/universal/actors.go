@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -199,10 +200,13 @@ func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetAct
 	var period *string
 	var ttl *string
 	if resp.DueTime != "" {
-		dueTime = &resp.DueTime
+		dueTime = ptr.Of(resp.DueTime)
 	}
 	if resp.Period.String() != "" {
 		period = ptr.Of(resp.Period.String())
+	}
+	if !resp.ExpirationTime.IsZero() {
+		ttl = ptr.Of(resp.ExpirationTime.Format(time.RFC3339))
 	}
 
 	return &runtimev1pb.GetActorReminderResponse{

@@ -198,12 +198,18 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
+	var expirationTime time.Time
+	if job.Job.Ttl != nil {
+		expirationTime, err = time.Parse(time.RFC3339, *job.Job.Ttl)
+	}
+
 	reminder := &api.Reminder{
-		ActorID:   req.ActorID,
-		ActorType: req.ActorType,
-		Data:      job.GetJob().GetData(),
-		Period:    api.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
-		DueTime:   job.GetJob().GetDueTime(),
+		ActorID:        req.ActorID,
+		ActorType:      req.ActorType,
+		Data:           job.GetJob().GetData(),
+		Period:         api.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
+		DueTime:        job.GetJob().GetDueTime(),
+		ExpirationTime: expirationTime,
 	}
 
 	return reminder, nil
