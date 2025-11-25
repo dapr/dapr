@@ -14,7 +14,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/dapr/components-contrib v1.16.2-0.20251125171221-9b3a3905c4dc
-	github.com/dapr/durabletask-go v0.10.2-0.20251113171253-87ecdf8f0547
+	github.com/dapr/durabletask-go v0.10.2-0.20251124230813-f3afee228ca1
 	github.com/dapr/kit v0.16.2-0.20251117143824-2fd5d0c93524
 	github.com/diagridio/go-etcd-cron v0.10.0
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -527,5 +527,3 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-replace github.com/dapr/durabletask-go => github.com/joshvanl/durabletask-go v0.0.0-20251118161140-6c7b43b866b9
