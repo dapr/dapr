@@ -60,11 +60,15 @@ func TestMain(m *testing.M) {
 			IngressEnabled:    true,
 			IngressPort:       3000,
 			MetricsEnabled:    true,
-			DaprMemoryLimit:   "800Mi",
-			DaprMemoryRequest: "800Mi",
-			AppMemoryLimit:    "800Mi",
-			AppMemoryRequest:  "800Mi",
-			AppPort:           -1,
+			DaprCPULimit:      "1.0",
+			DaprCPURequest:    "0.5",
+			DaprMemoryLimit:   "2Gi",
+			DaprMemoryRequest: "1Gi",
+			AppCPULimit:       "2.0",
+			AppCPURequest:     "1.0",
+			AppMemoryLimit:    "2Gi",
+			AppMemoryRequest:  "1Gi",
+			AppPort:           3000,
 		},
 	}
 
@@ -142,8 +146,6 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				// Check if test app endpoint is available
 				require.NoError(t, utils.HealthCheckApps(externalURL))
 
-				time.Sleep(5 * time.Second)
-
 				// Initialize the workflow runtime
 				url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
 				// Calling start-workflow-runtime multiple times so that it is started in all app instances
@@ -217,4 +219,13 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	inputs := []string{"10000", "50000", "100000"}
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, true)
+}
+
+// Runs test for delaying workflows: 500 VUs, 10,000 iterations
+func TestDelayWorkflowsAtScale(t *testing.T) {
+	workflowName := "delay_wf"
+	inputs := []string{"5000"}           // delay in milliseconds (5s)
+	scenarios := []string{"t_500_10000"} // t_workflowCount_iterations
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
 }
