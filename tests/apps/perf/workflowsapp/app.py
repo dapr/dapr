@@ -78,7 +78,7 @@ def state_delete_act(ctx:WorkflowActivityContext,input):
                        key= key)
         sleep(1)
 
-# sum_series_wf calculates sum of numbers {1..input} by dividing the workload among 5 activties running in series
+# sum_series_wf calculates sum of numbers {1..input} by dividing the workload among 5 activities running in series
 def sum_series_wf(ctx:DaprWorkflowContext, input):
     print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{ctx.instance_id}] Invoked sum_series_wf")
 
@@ -94,7 +94,7 @@ def sum_series_wf(ctx:DaprWorkflowContext, input):
     expected_sum = (num*(num+1))/2
     assert expected_sum == total_sum
 
-# sum_parallel_wf calculates sum of numbers {1..input} by dividing the workload among 5 activties running in parallel
+# sum_parallel_wf calculates sum of numbers {1..input} by dividing the workload among 5 activities running in parallel
 def sum_parallel_wf(ctx:DaprWorkflowContext, input):
     print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{ctx.instance_id}] Invoked sum_parallel_wf")
 
