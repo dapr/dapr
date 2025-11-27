@@ -40,6 +40,7 @@ type CreateReminderRequest struct {
 	DueTime   string     `json:"dueTime"`
 	Period    string     `json:"period"`
 	TTL       string     `json:"ttl"`
+	Overwrite *bool      `json:"overwrite"`
 	IsOneShot bool       `json:"-"`
 }
 

@@ -98,9 +98,14 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 		}
 	}
 
+	overwrite := true
+	if reminder.Overwrite != nil {
+		overwrite = *reminder.Overwrite
+	}
+
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Name:      reminder.Name,
-		Overwrite: true,
+		Overwrite: overwrite,
 		Job: &schedulerv1pb.Job{
 			Schedule:      schedule,
 			Repeats:       repeats,
@@ -187,18 +192,27 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 		log.Debugf("Error getting reminder job %s due to: %s", req.Name, err)
 
 		if status, ok := status.FromError(err); ok && status.Code() == codes.NotFound {
-			return new(api.Reminder), nil
+			return nil, nil
 		}
 
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
+	var expirationTime time.Time
+	if job.Job.Ttl != nil {
+		expirationTime, err = time.Parse(time.RFC3339, job.GetJob().GetTtl())
+		if err != nil {
+			log.Errorf("Error parsing expiration time for reminder job %s due to: %s", req.Name, err)
+		}
+	}
+
 	reminder := &api.Reminder{
-		ActorID:   req.ActorID,
-		ActorType: req.ActorType,
-		Data:      job.GetJob().GetData(),
-		Period:    api.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
-		DueTime:   job.GetJob().GetDueTime(),
+		ActorID:        req.ActorID,
+		ActorType:      req.ActorType,
+		Data:           job.GetJob().GetData(),
+		Period:         api.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
+		DueTime:        job.GetJob().GetDueTime(),
+		ExpirationTime: expirationTime,
 	}
 
 	return reminder, nil
