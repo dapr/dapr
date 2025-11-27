@@ -527,3 +527,7 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20251121170825-ea283a9ad1d9
+
+replace github.com/diagridio/go-etcd-cron => github.com/joshvanl/go-etcd-cron v0.0.0-20251121171421-41dac3c7dbfa
