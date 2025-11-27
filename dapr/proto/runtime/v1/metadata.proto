@@ -139,8 +139,3 @@ message SetMetadataRequest {
   string key = 1;
   string value = 2;
 }
-
-// ShutdownRequest is the request for Shutdown.
-message ShutdownRequest {
-  // Empty
-}

@@ -1,5 +1,7 @@
 # Public Dapr Runtime APIs
 
+The `dapr/proto/runtime/v1` folder contains a proto file per the user-facing Dapr APIs.
+
 ## Proto client generation
 
 Pre-requisites:
