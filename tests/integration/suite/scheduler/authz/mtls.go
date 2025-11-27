@@ -172,6 +172,58 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 				return err
 			},
 		},
+		"DeleteByMetadata": {
+			funcGoodAppID: func() error {
+				_, err := client.DeleteByMetadata(ctx, &schedulerv1pb.DeleteByMetadataRequest{
+					Metadata: &schedulerv1pb.JobMetadata{
+						AppId:     "foo",
+						Namespace: "default",
+						Target: &schedulerv1pb.JobTargetMetadata{
+							Type: &schedulerv1pb.JobTargetMetadata_Job{Job: new(schedulerv1pb.TargetJob)},
+						},
+					},
+				})
+				return err
+			},
+			funcBadAppID: func() error {
+				_, err := client.DeleteByMetadata(ctx, &schedulerv1pb.DeleteByMetadataRequest{
+					Metadata: &schedulerv1pb.JobMetadata{
+						AppId:     "not-foo",
+						Namespace: "default",
+						Target: &schedulerv1pb.JobTargetMetadata{
+							Type: &schedulerv1pb.JobTargetMetadata_Job{Job: new(schedulerv1pb.TargetJob)},
+						},
+					},
+				})
+				return err
+			},
+		},
+		"DeleteByNamePrefix": {
+			funcGoodAppID: func() error {
+				_, err := client.DeleteByNamePrefix(ctx, &schedulerv1pb.DeleteByNamePrefixRequest{
+					Metadata: &schedulerv1pb.JobMetadata{
+						AppId:     "foo",
+						Namespace: "default",
+						Target: &schedulerv1pb.JobTargetMetadata{
+							Type: &schedulerv1pb.JobTargetMetadata_Job{Job: new(schedulerv1pb.TargetJob)},
+						},
+					},
+				})
+				return err
+			},
+			funcBadAppID: func() error {
+				_, err := client.DeleteByNamePrefix(ctx, &schedulerv1pb.DeleteByNamePrefixRequest{
+					Metadata: &schedulerv1pb.JobMetadata{
+						AppId:     "not-foo",
+						Namespace: "default",
+						Target: &schedulerv1pb.JobTargetMetadata{
+							Type: &schedulerv1pb.JobTargetMetadata_Job{Job: new(schedulerv1pb.TargetJob)},
+						},
+					},
+				})
+				return err
+			},
+		},
 		"ListJobs": {
 			funcGoodAppID: func() error {
 				_, err := client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
