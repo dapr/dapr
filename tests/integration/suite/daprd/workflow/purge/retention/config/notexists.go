@@ -70,6 +70,10 @@ func (n *notexists) Run(t *testing.T, ctx context.Context) {
 	client := dworkflow.NewClient(n.workflow.Dapr().GRPCConn(t, ctx))
 	require.NoError(t, client.StartWorker(ctx, reg))
 
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, n.workflow.Dapr().GetMetaActorRuntime(t, ctx).ActiveActors, 3)
+	}, time.Second*10, time.Millisecond*10)
+
 	dclient := n.workflow.Dapr().GRPCClient(t, ctx)
 	_, err := dclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "dapr.internal.default." + n.workflow.Dapr().AppID() + ".retentioner",
