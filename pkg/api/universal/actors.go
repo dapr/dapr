@@ -275,12 +275,15 @@ func (a *Universal) ListActorReminders(ctx context.Context, req *runtimev1pb.Lis
 	for i, r := range resp {
 		var dueTime *string
 		var period *string
-		var ttl *string
 		if r.DueTime != "" {
 			dueTime = &r.DueTime
 		}
 		if r.Period.String() != "" {
 			period = ptr.Of(r.Period.String())
+		}
+		var expirationTime *string
+		if !r.ExpirationTime.IsZero() {
+			expirationTime = ptr.Of(r.ExpirationTime.Format(time.RFC3339Nano))
 		}
 
 		reminders[i] = &runtimev1pb.NamedActorReminder{
@@ -290,7 +293,7 @@ func (a *Universal) ListActorReminders(ctx context.Context, req *runtimev1pb.Lis
 				ActorId:   r.ActorID,
 				DueTime:   dueTime,
 				Period:    period,
-				Ttl:       ttl,
+				Ttl:       expirationTime,
 				Data:      r.Data,
 			},
 		}

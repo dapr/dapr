@@ -241,7 +241,7 @@ func (s *Server) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.Dele
 	}
 
 	if err = cron.DeletePrefixes(ctx, prefix); err != nil {
-		log.Errorf("Failed to delete cron jobs for metadata: %s", err)
+		log.Errorf("Failed to delete scheduler job for metadata: %s", err)
 		return nil, err
 	}
 
