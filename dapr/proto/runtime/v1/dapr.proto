@@ -238,3 +238,8 @@ service Dapr {
   // Converse with a LLM service via alpha2 api
   rpc ConverseAlpha2(ConversationRequestAlpha2) returns (ConversationResponseAlpha2) {}
 }
+
+// ShutdownRequest is the request for Shutdown.
+message ShutdownRequest {
+  // Empty
+}
