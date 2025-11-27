@@ -200,7 +200,7 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 
 	var expirationTime time.Time
 	if job.Job.Ttl != nil {
-		expirationTime, err = time.Parse(time.RFC3339, *job.Job.Ttl)
+		expirationTime, err = time.Parse(time.RFC3339, job.GetJob().GetTtl())
 		if err != nil {
 			log.Errorf("Error parsing expiration time for reminder job %s due to: %s", req.Name, err)
 		}
