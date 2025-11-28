@@ -184,7 +184,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 				// no ops if trace is off
 				var span trace.Span
-				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
+				ctx, span = diag.StartPubsubConsumerSpan(ctx, "pubsub/"+psm.Topic, sc, g.tracingSpec)
 				if span != nil {
 					ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 					spans[n] = span
