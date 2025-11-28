@@ -377,7 +377,7 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 			spanName := "pubsub/" + msg.Topic
 
 			// no ops if trace is off
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
+			ctx, span = diag.StartPubsubConsumerSpan(ctx, spanName, sc, tracingSpec)
 			// span is nil if tracing is disabled (sampling rate is 0)
 			if span != nil {
 				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())

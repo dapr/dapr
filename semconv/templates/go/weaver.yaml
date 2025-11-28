@@ -1,0 +1,4 @@
+templates:
+  - pattern: workflow.go.j2
+    filter: .
+    application_mode: single

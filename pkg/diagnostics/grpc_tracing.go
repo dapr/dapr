@@ -35,11 +35,13 @@ import (
 )
 
 const (
-	daprInternalPrefix        = "/dapr.proto.internals."
-	daprRuntimePrefix         = "/dapr.proto.runtime."
-	daprInvokeServiceMethod   = "/dapr.proto.runtime.v1.Dapr/InvokeService"
-	daprCallLocalStreamMethod = "/dapr.proto.internals.v1.ServiceInvocation/CallLocalStream"
-	daprWorkflowPrefix        = "/TaskHubSidecarService"
+	daprInternalPrefix         = "/dapr.proto.internals."
+	daprRuntimePrefix          = "/dapr.proto.runtime."
+	daprInvokeServiceMethod    = "/dapr.proto.runtime.v1.Dapr/InvokeService"
+	daprCallLocalStreamMethod  = "/dapr.proto.internals.v1.ServiceInvocation/CallLocalStream"
+	daprWorkflowPrefix         = "/TaskHubSidecarService"
+	daprPublishEventMethod     = "/dapr.proto.runtime.v1.Dapr/PublishEvent"
+	daprBulkPublishEventMethod = "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1"
 )
 
 // handleBaggage extracts baggage from the incoming metadata and forwards that along as metadata,
@@ -98,11 +100,16 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		sc, _ := SpanContextFromIncomingGRPCMetadata(ctx)
 		// This middleware is shared by internal gRPC for service invocation and API
 		// so that it needs to handle separately.
-		if strings.HasPrefix(info.FullMethod, daprInternalPrefix) {
+		switch {
+		case strings.HasPrefix(info.FullMethod, daprInternalPrefix):
 			// For the dapr.proto.internals package, this generates ServerSpan.
 			// This is invoked by other Dapr runtimes during service invocation.
 			spanKind = trace.WithSpanKind(trace.SpanKindServer)
-		} else {
+		case info.FullMethod == daprPublishEventMethod || info.FullMethod == daprBulkPublishEventMethod:
+			// For pubsub publish operations, use Producer span kind per OTel semantic conventions
+			spanKind = trace.WithSpanKind(trace.SpanKindProducer)
+		default:
+			// For other dapr.proto.runtime APIs, this generates ClientSpan.
 			// For the dapr.proto.runtime package, this generates ClientSpan.
 			// This is invoked by clients (apps) while invoking Dapr APIs.
 			spanKind = trace.WithSpanKind(trace.SpanKindClient)
