@@ -27,7 +27,7 @@ This document helps you get started developing Dapr. If you find any problems wh
 
 2. Install [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Go debugging, if desired.
 
-3. Install [golangci-lint](https://golangci-lint.run/usage/install) version 1.64.6.
+3. Install [golangci-lint](https://golangci-lint.run/docs/welcome/install/) version 1.64.6.
 
 ## Setup a Kubernetes development environment
 
