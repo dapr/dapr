@@ -57,6 +57,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 	defer o.factory.deactivate(o)
 
 	fork := fork.New(fork.Options{
+		InstanceID:        o.actorID,
 		AppID:             o.appID,
 		ActorType:         o.actorType,
 		ActivityActorType: o.activityActorType,
