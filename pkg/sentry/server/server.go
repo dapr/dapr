@@ -199,9 +199,9 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		dns = []string{fmt.Sprintf("dapr-webhook.%s.svc", req.GetNamespace())}
 	case req.GetNamespace() == security.CurrentNamespace() && req.GetId() == "dapr-scheduler":
 		dns = []string{
-			fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.cluster.local", req.GetNamespace()),
-			fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.cluster.local", req.GetNamespace()),
-			fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.cluster.local", req.GetNamespace()),
+			fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.%s", req.GetNamespace(), req.GetTrustDomain()),
+			fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.%s", req.GetNamespace(), req.GetTrustDomain()),
+			fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.%s", req.GetNamespace(), req.GetTrustDomain()),
 		}
 	}
 
