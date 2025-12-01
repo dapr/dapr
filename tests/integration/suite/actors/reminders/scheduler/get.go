@@ -19,14 +19,22 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -53,16 +61,29 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 
 	client := client.HTTP(t)
 
+	gclient := g.actors.Daprd().GRPCClient(t, ctx)
+
 	url := g.actors.Daprd().ActorReminderURL("foo", "1234", "helloworld")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	// Not found returns 200.
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
 
-	body := `{"data":"reminderdata","dueTime":"1s","period":"1s"}`
+	gresp, err := gclient.GetActorReminder(ctx, &rtv1.GetActorReminderRequest{
+		ActorType: "foo",
+		ActorId:   "1234",
+		Name:      "helloworld",
+	})
+	require.Error(t, err)
+	status, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.NotFound, status.Code())
+	assert.Equal(t, "actor reminder not found: helloworld", status.Message())
+	assert.Nil(t, gresp)
+
+	body := `{"data":"reminderdata","dueTime":"1s","period":"1s","ttl":"2552-01-01T00:00:00Z"}`
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
 	require.NoError(t, err)
 	resp, err = client.Do(req)
@@ -78,5 +99,23 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.JSONEq(t, `{"period":"@every 1s","data":"reminderdata","actorID":"1234","actorType":"foo","dueTime":"1s"}`, strings.TrimSpace(string(b)))
+	assert.JSONEq(t, `{"period":"@every 1s","data":"reminderdata","actorID":"1234","actorType":"foo","dueTime":"1s","ttl":"2552-01-01T00:00:00Z" }`, strings.TrimSpace(string(b)))
+
+	gresp, err = gclient.GetActorReminder(ctx, &rtv1.GetActorReminderRequest{
+		ActorType: "foo",
+		ActorId:   "1234",
+		Name:      "helloworld",
+	})
+	require.NoError(t, err)
+	data, err := anypb.New(wrapperspb.Bytes([]byte(`"reminderdata"`)))
+	require.NoError(t, err)
+	exp := &rtv1.GetActorReminderResponse{
+		ActorType: "foo",
+		ActorId:   "1234",
+		Data:      data,
+		DueTime:   ptr.Of("1s"),
+		Period:    ptr.Of("@every 1s"),
+		Ttl:       ptr.Of(time.Date(2552, 1, 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)),
+	}
+	assert.True(t, proto.Equal(exp, gresp), "%v != %v", exp, gresp)
 }

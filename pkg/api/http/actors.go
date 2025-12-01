@@ -23,7 +23,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
@@ -161,7 +164,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Group:   endpointGroupActorV1Misc,
-			Handler: a.onGetActorReminder,
+			Handler: a.onGetActorReminder(),
 			Settings: endpoints.EndpointSettings{
 				Name: "GetActorReminder",
 			},
@@ -195,6 +198,14 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			msg := messages.ErrActorReminderOpActorNotHosted
+			respondWithError(w, msg)
+			log.Debug(msg)
+			return
+		}
+
+		status, ok := status.FromError(err)
+		if ok && status.Code() == codes.AlreadyExists {
+			msg := messages.ErrActorReminderAlreadyExists.WithFormat(req.Name)
 			respondWithError(w, msg)
 			log.Debug(msg)
 			return
@@ -301,36 +312,56 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	respondWithEmpty(w)
 }
 
-func (a *api) onGetActorReminder(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (a *api) onGetActorReminder() http.HandlerFunc {
+	return UniversalHTTPHandler(
+		a.universal.GetActorReminder,
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetActorReminderRequest, *runtimev1pb.GetActorReminderResponse]{
+			SkipInputBody: true,
+			OutModifier: func(out *runtimev1pb.GetActorReminderResponse) (any, error) {
+				//nolint:protogetter
+				m := struct {
+					ActorID   string          `json:"actorID,omitempty"`
+					ActorType string          `json:"actorType,omitempty"`
+					Data      json.RawMessage `json:"data,omitempty"`
+					DueTime   *string         `json:"dueTime,omitempty"`
+					Period    *string         `json:"period,omitempty"`
+					TTL       *string         `json:"ttl,omitempty"`
+				}{
+					ActorID:   out.ActorId,
+					ActorType: out.ActorType,
+					DueTime:   out.DueTime,
+					Period:    out.Period,
+					TTL:       out.Ttl,
+				}
 
-	rem, err := a.universal.ActorReminders(ctx)
-	if err != nil {
-		respondWithError(w, err)
-		log.Debug(err)
-		return
-	}
+				//nolint:protogetter
+				if out.Data != nil {
+					msg, err := out.Data.UnmarshalNew()
+					if err != nil {
+						return nil, err
+					}
+					switch mm := msg.(type) {
+					case *wrapperspb.BytesValue:
+						m.Data = mm.GetValue()
+					default:
+						d, err := protojson.Marshal(mm)
+						if err != nil {
+							return nil, err
+						}
+						m.Data = json.RawMessage(d)
+					}
+				}
 
-	resp, err := rem.Get(ctx, &actorapi.GetReminderRequest{
-		ActorType: chi.URLParamFromCtx(ctx, actorTypeParam),
-		ActorID:   chi.URLParamFromCtx(ctx, actorIDParam),
-		Name:      chi.URLParamFromCtx(ctx, nameParam),
-	})
-	if err != nil {
-		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
-			msg := messages.ErrActorReminderOpActorNotHosted
-			respondWithError(w, msg)
-			log.Debug(msg)
-			return
-		}
-
-		msg := messages.ErrActorReminderGet.WithFormat(err)
-		respondWithError(w, msg)
-		log.Debug(msg)
-		return
-	}
-
-	respondWithJSON(w, http.StatusOK, resp)
+				return m, nil
+			},
+			InModifier: func(r *http.Request, in *runtimev1pb.GetActorReminderRequest) (*runtimev1pb.GetActorReminderRequest, error) {
+				in.ActorType = chi.URLParam(r, actorTypeParam)
+				in.ActorId = chi.URLParam(r, actorIDParam)
+				in.Name = chi.URLParam(r, nameParam)
+				return in, nil
+			},
+		},
+	)
 }
 
 func (a *api) onDeleteActorTimer() http.HandlerFunc {
