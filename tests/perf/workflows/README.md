@@ -4,10 +4,10 @@ This project aims to test the performance of Dapr workflows under various condit
 
 ## Glossary
 
-VU (Virtual User): The number of concurrent workflows running at a time
-Iterations: Total number of workflow runs
-Req_Duration: Time taken to complete a workflow run.
-Sidecar: Dapr Sidecar
+- VU (Virtual User): The number of concurrent workflows running at a time
+- Iterations: Total number of workflow runs
+- Req_Duration: Time taken to complete a workflow run.
+- Sidecar: Dapr Sidecar
 
 ## Test plan
 
