@@ -60,6 +60,8 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/RegisterActorReminder",
 		daprRuntimePrefix + "v1.Dapr/GetActorReminder",
 		daprRuntimePrefix + "v1.Dapr/UnregisterActorReminder",
+		daprRuntimePrefix + "v1.Dapr/UnregisterActorRemindersByType",
+		daprRuntimePrefix + "v1.Dapr/ListActorReminders",
 		daprRuntimePrefix + "v1.Dapr/GetActorState",
 		daprRuntimePrefix + "v1.Dapr/ExecuteActorStateTransaction",
 		daprRuntimePrefix + "v1.Dapr/InvokeActor",
@@ -119,6 +121,8 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/ScheduleJobAlpha1",
 		daprRuntimePrefix + "v1.Dapr/DeleteJobAlpha1",
 		daprRuntimePrefix + "v1.Dapr/GetJobAlpha1",
+		daprRuntimePrefix + "v1.Dapr/DeleteJobsByPrefixAlpha1",
+		daprRuntimePrefix + "v1.Dapr/ListJobsAlpha1",
 	},
 	"shutdown.v1": {
 		daprRuntimePrefix + "v1.Dapr/Shutdown",

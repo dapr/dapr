@@ -127,3 +127,36 @@ message GetActorReminderResponse {
   google.protobuf.Any data = 6;
   optional string ttl = 7;
 }
+
+message ListActorRemindersRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  optional string actor_id = 2 [json_name = "actorId"];
+}
+
+message ListActorRemindersResponse {
+  repeated NamedActorReminder reminders = 1;
+}
+
+message NamedActorReminder {
+  string name = 1;
+  ActorReminder reminder = 2;
+}
+
+message ActorReminder {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorID"];
+  optional string due_time = 4 [json_name = "dueTime"];
+  optional string period = 5;
+  google.protobuf.Any data = 6;
+  optional string ttl = 7;
+}
+
+// UnregisterActorRemindersByTypeRequest is the message to unregister an actor
+// reminders by the given type. Optional actor_id can be provided to limit the
+// scope of the operation to a specific actor instance.
+message UnregisterActorRemindersByTypeRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  optional string actor_id = 2 [json_name = "actorId"];
+}
+
+message UnregisterActorRemindersByTypeResponse {}

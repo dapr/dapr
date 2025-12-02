@@ -95,6 +95,10 @@ service Dapr {
   // Unregister an actor reminder.
   rpc UnregisterActorReminder(UnregisterActorReminderRequest) returns (google.protobuf.Empty) {}
 
+  rpc UnregisterActorRemindersByType(UnregisterActorRemindersByTypeRequest) returns (UnregisterActorRemindersByTypeResponse) {}
+
+  rpc ListActorReminders(ListActorRemindersRequest) returns (ListActorRemindersResponse) {}
+
   // Gets the state for a specific actor.
   rpc GetActorState(GetActorStateRequest) returns (GetActorStateResponse) {}
 
@@ -231,6 +235,10 @@ service Dapr {
 
   // Delete a job
   rpc DeleteJobAlpha1(DeleteJobRequest) returns (DeleteJobResponse) {}
+
+  rpc DeleteJobsByPrefixAlpha1(DeleteJobsByPrefixRequestAlpha1) returns (DeleteJobsByPrefixResponseAlpha1) {}
+
+  rpc ListJobsAlpha1(ListJobsRequestAlpha1) returns (ListJobsResponseAlpha1) {}
 
   // Converse with a LLM service
   rpc ConverseAlpha1(ConversationRequest) returns (ConversationResponse) {}

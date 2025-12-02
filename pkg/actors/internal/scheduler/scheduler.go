@@ -269,6 +269,11 @@ func (s *scheduler) DeleteByActorID(ctx context.Context, req *api.DeleteReminder
 }
 
 func (s *scheduler) List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error) {
+	var id string
+	if req.ActorID != nil {
+		id = *req.ActorID
+	}
+
 	resp, err := s.client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,
@@ -277,6 +282,7 @@ func (s *scheduler) List(ctx context.Context, req *api.ListRemindersRequest) ([]
 				Type: &schedulerv1pb.JobTargetMetadata_Actor{
 					Actor: &schedulerv1pb.TargetActorReminder{
 						Type: req.ActorType,
+						Id:   id,
 					},
 				},
 			},
