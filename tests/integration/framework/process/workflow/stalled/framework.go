@@ -18,10 +18,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type stalledFramework struct {
+type StalledFramework struct {
+	CurrentClient *client.TaskHubGrpcClient
+
 	appID            string
 	currentDaprIndex int
-	currentClient    *client.TaskHubGrpcClient
 	oldWorkflow      task.Orchestrator
 	newWorkflow      task.Orchestrator
 
@@ -30,20 +31,20 @@ type stalledFramework struct {
 	workflows *workflow.Workflow
 }
 
-func newStalledFramework(
+func NewStalledFramework(
 	oldWorkflow, newWorkflow task.Orchestrator,
-	activities ...task.Activity) *stalledFramework {
-	return &stalledFramework{
+	activities ...task.Activity) *StalledFramework {
+	return &StalledFramework{
 		appID:            uuid.New().String(),
 		currentDaprIndex: 0,
-		currentClient:    nil,
+		CurrentClient:    nil,
 		oldWorkflow:      oldWorkflow,
 		newWorkflow:      newWorkflow,
 		activities:       activities,
 	}
 }
 
-func (f *stalledFramework) Setup(t *testing.T) []framework.Option {
+func (f *StalledFramework) Setup(t *testing.T) []framework.Option {
 	t.Helper()
 	f.workflows = workflow.New(t,
 		workflow.WithDaprds(1),
@@ -55,30 +56,30 @@ func (f *stalledFramework) Setup(t *testing.T) []framework.Option {
 	return []framework.Option{framework.WithProcesses(f.workflows)}
 }
 
-func (f *stalledFramework) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {
+func (f *StalledFramework) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {
 	t.Helper()
 	f.workflows.WaitUntilRunning(t, ctx)
-	f.currentClient = f.workflows.BackendClientN(t, ctx, f.currentDaprIndex)
+	f.CurrentClient = f.workflows.BackendClientN(t, ctx, f.currentDaprIndex)
 	f.workflows.RegistryN(0).AddOrchestratorN("Orchestrator", f.newWorkflow)
 	for _, activity := range f.activities {
 		f.workflows.RegistryN(0).AddActivityN(helpers.GetTaskFunctionName(activity), activity)
 	}
 
 	// Schedule orchestration (runs on new worker)
-	id, err := f.currentClient.ScheduleNewOrchestration(ctx, "Orchestrator")
+	id, err := f.CurrentClient.ScheduleNewOrchestration(ctx, "Orchestrator")
 	require.NoError(t, err)
-	_, err = f.currentClient.WaitForOrchestrationStart(ctx, id)
+	_, err = f.CurrentClient.WaitForOrchestrationStart(ctx, id)
 	require.NoError(t, err)
 	return id
 }
 
-func (f *stalledFramework) KillCurrentReplica(t *testing.T, ctx context.Context) {
+func (f *StalledFramework) KillCurrentReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
 	f.workflows.DaprN(f.currentDaprIndex).Kill(t)
 	time.Sleep(1 * time.Second)
 }
 
-func (f *stalledFramework) RunOldReplica(t *testing.T, ctx context.Context) {
+func (f *StalledFramework) RunOldReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
 	index := f.workflows.RunNewDaprd(t, ctx)
 	f.workflows.DaprN(index).Run(t, ctx)
@@ -89,10 +90,10 @@ func (f *stalledFramework) RunOldReplica(t *testing.T, ctx context.Context) {
 		f.workflows.RegistryN(index).AddActivityN(helpers.GetTaskFunctionName(activity), activity)
 	}
 	f.currentDaprIndex = index
-	f.currentClient = f.workflows.BackendClientN(t, ctx, index)
+	f.CurrentClient = f.workflows.BackendClientN(t, ctx, index)
 }
 
-func (f *stalledFramework) RunNewReplica(t *testing.T, ctx context.Context) {
+func (f *StalledFramework) RunNewReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
 	index := f.workflows.RunNewDaprd(t, ctx)
 	f.workflows.DaprN(index).Run(t, ctx)
@@ -103,10 +104,10 @@ func (f *stalledFramework) RunNewReplica(t *testing.T, ctx context.Context) {
 		f.workflows.RegistryN(index).AddActivityN(helpers.GetTaskFunctionName(activity), activity)
 	}
 	f.currentDaprIndex = index
-	f.currentClient = f.workflows.BackendClientN(t, ctx, index)
+	f.CurrentClient = f.workflows.BackendClientN(t, ctx, index)
 }
 
-func (f *stalledFramework) SwitchToNewReplica(t *testing.T, ctx context.Context) {
+func (f *StalledFramework) SwitchToNewReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
 	f.workflows.DaprN(1).Kill(t)
 	time.Sleep(1 * time.Second)
@@ -121,10 +122,10 @@ func (f *stalledFramework) SwitchToNewReplica(t *testing.T, ctx context.Context)
 	}
 }
 
-func (f *stalledFramework) WaitForStatus(t *testing.T, ctx context.Context, id api.InstanceID, status protos.OrchestrationStatus) {
+func (f *StalledFramework) WaitForStatus(t *testing.T, ctx context.Context, id api.InstanceID, status protos.OrchestrationStatus) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		md, err := f.currentClient.FetchOrchestrationMetadata(ctx, id)
+		md, err := f.CurrentClient.FetchOrchestrationMetadata(ctx, id)
 		require.NoError(c, err)
 		assert.Equal(c, status.String(), md.RuntimeStatus.String())
 	}, 20*time.Second, 50*time.Millisecond)

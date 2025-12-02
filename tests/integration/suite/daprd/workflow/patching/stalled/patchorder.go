@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stalled"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
@@ -34,7 +35,7 @@ func init() {
 type patchorder struct {
 	waitingForEvent atomic.Bool
 
-	fw *stalledFramework
+	fw *stalled.StalledFramework
 }
 
 func (r *patchorder) oldWorkflow(ctx *task.OrchestrationContext) (any, error) {
@@ -65,7 +66,7 @@ func (r *patchorder) sayHello2(ctx task.ActivityContext) (any, error) {
 }
 
 func (r *patchorder) Setup(t *testing.T) []framework.Option {
-	r.fw = newStalledFramework(r.oldWorkflow, r.newWorkflow, r.sayHello1, r.sayHello2)
+	r.fw = stalled.NewStalledFramework(r.oldWorkflow, r.newWorkflow, r.sayHello1, r.sayHello2)
 	return r.fw.Setup(t)
 }
 
@@ -79,7 +80,7 @@ func (r *patchorder) Run(t *testing.T, ctx context.Context) {
 	r.fw.KillCurrentReplica(t, ctx)
 	r.fw.RunOldReplica(t, ctx)
 
-	require.NoError(t, r.fw.currentClient.RaiseEvent(ctx, id, "Continue"))
+	require.NoError(t, r.fw.CurrentClient.RaiseEvent(ctx, id, "Continue"))
 
 	r.fw.WaitForStatus(t, ctx, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
 }
