@@ -1,0 +1,52 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+// InvokeBindingRequest is the message to send data to output bindings
+message InvokeBindingRequest {
+  // The name of the output binding to invoke.
+  string name = 1;
+
+  // The data which will be sent to output binding.
+  bytes data = 2;
+
+  // The metadata passing to output binding components
+  //
+  // Common metadata property:
+  // - ttlInSeconds : the time to live in seconds for the message.
+  //
+  // If set in the binding definition will cause all messages to
+  // have a default time to live. The message ttl overrides any value
+  // in the binding definition.
+  map<string, string> metadata = 3;
+
+  // The name of the operation type for the binding to invoke
+  string operation = 4;
+}
+
+// InvokeBindingResponse is the message returned from an output binding invocation
+message InvokeBindingResponse {
+  // The data which will be sent to output binding.
+  bytes data = 1;
+
+  // The metadata returned from an external system
+  map<string, string> metadata = 2;
+}
