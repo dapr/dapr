@@ -130,7 +130,7 @@ jobs:
         echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
 
     - name: Create KinD Cluster
-      uses: helm/kind-action@v1.10.0
+      uses: helm/kind-action@v1.13.0
       with:
         config: kind.yaml
         cluster_name: kind
