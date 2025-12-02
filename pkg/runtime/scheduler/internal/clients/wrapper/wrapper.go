@@ -115,6 +115,16 @@ func (w *wrapper) WatchHosts(ctx context.Context, req *v1pb.WatchHostsRequest, o
 	return resp, err
 }
 
+func (w *wrapper) DeleteByNamePrefix(ctx context.Context, req *v1pb.DeleteByNamePrefixRequest, opts ...grpc.CallOption) (*v1pb.DeleteByNamePrefixResponse, error) {
+	var resp *v1pb.DeleteByNamePrefixResponse
+	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
+		var err error
+		resp, err = client.DeleteByNamePrefix(ctx, req, opts...)
+		return err
+	})
+	return resp, err
+}
+
 type apiFn func(client v1pb.SchedulerClient) error
 
 func (w *wrapper) call(ctx context.Context, fn apiFn) error {
