@@ -20,6 +20,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 // GetReminderRequest is the request object to get an existing reminder.
@@ -41,7 +43,8 @@ type CreateReminderRequest struct {
 	Period    string     `json:"period"`
 	TTL       string     `json:"ttl"`
 	Overwrite *bool      `json:"overwrite"`
-	IsOneShot bool       `json:"-"`
+
+	FailurePolicy *commonv1.JobFailurePolicy `json:"failure_policy,omitempty"`
 }
 
 // ActorKey returns the key of the actor for this reminder.
@@ -77,7 +80,8 @@ func (req *CreateReminderRequest) UnmarshalJSON(data []byte) error {
 	*req = CreateReminderRequest{}
 
 	m := &struct {
-		Data json.RawMessage `json:"data"`
+		Data          json.RawMessage            `json:"data"`
+		FailurePolicy *commonv1.JobFailurePolicy `json:"failure_policy,omitempty"`
 		*createReminderAlias
 	}{
 		createReminderAlias: (*createReminderAlias)(req),
@@ -94,6 +98,8 @@ func (req *CreateReminderRequest) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("failed to unmarshal data: %w", err)
 		}
 	}
+
+	req.FailurePolicy = m.FailurePolicy
 
 	return nil
 }
