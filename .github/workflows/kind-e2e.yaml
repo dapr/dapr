@@ -76,15 +76,15 @@ jobs:
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.1
         include:
         - k8s-version: v1.34.1
-          kind-version: v0.34.0
+          kind-version: v0.30.0
           kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
           dapr-test-config-store: "postgres"
         - k8s-version: v1.33.5
-          kind-version: v0.34.0
+          kind-version: v0.30.0
           kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
           dapr-test-config-store: "redis"
         - k8s-version: v1.32.9
-          kind-version: v0.34.0
+          kind-version: v0.30.0
           kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
           dapr-test-config-store: "redis"
     steps:
