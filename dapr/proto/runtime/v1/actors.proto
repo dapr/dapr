@@ -16,6 +16,7 @@ syntax = "proto3";
 package dapr.proto.runtime.v1;
 
 import "google/protobuf/any.proto";
+import "dapr/proto/common/v1/common.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -54,6 +55,11 @@ message RegisterActorReminderRequest {
   // If true, allows this reminder to overwrite an existing reminder with the
   // same name. If not set, defaults to true.
   optional bool overwrite = 8;
+
+  // failure_policy is the optional policy for handling job failures. If not
+  // set, the reminder will have the failure policy of trying 3 times on a
+  // single tick before giving up.
+  optional common.v1.JobFailurePolicy failure_policy = 9 [json_name = "failure_policy"];
 }
 
 // UnregisterActorReminderRequest is the message to unregister an actor reminder.
