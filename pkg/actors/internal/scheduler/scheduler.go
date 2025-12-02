@@ -21,12 +21,10 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/table"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -86,18 +84,6 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 		return err
 	}
 
-	var failurePolicy *commonv1pb.JobFailurePolicy
-	if reminder.IsOneShot {
-		failurePolicy = &commonv1pb.JobFailurePolicy{
-			Policy: &commonv1pb.JobFailurePolicy_Constant{
-				Constant: &commonv1pb.JobFailurePolicyConstant{
-					Interval:   durationpb.New(time.Second),
-					MaxRetries: nil,
-				},
-			},
-		}
-	}
-
 	overwrite := true
 	if reminder.Overwrite != nil {
 		overwrite = *reminder.Overwrite
@@ -112,7 +98,7 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 			DueTime:       dueTime,
 			Ttl:           ttl,
 			Data:          reminder.Data,
-			FailurePolicy: failurePolicy,
+			FailurePolicy: reminder.FailurePolicy,
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,

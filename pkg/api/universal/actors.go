@@ -124,6 +124,8 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		TTL:       in.GetTtl(),
 		Data:      data,
 		Overwrite: in.Overwrite,
+		//nolint:protogetter
+		FailurePolicy: in.FailurePolicy,
 	}
 
 	err = r.Create(ctx, req)
