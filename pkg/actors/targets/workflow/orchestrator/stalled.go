@@ -50,17 +50,12 @@ func handlePatchMismatch(ctx context.Context, o *orchestrator, state *wfenginest
 }
 
 func hasPatchMismatch(rs *backend.OrchestrationRuntimeState) bool {
-	seen := make(map[string]struct{})
+	// Get the latest patches from the most recent orchestrator started event.
 	var historyPatches []string
 	for _, e := range rs.OldEvents {
 		if os := e.GetOrchestratorStarted(); os != nil {
 			if version := os.GetVersion(); version != nil {
-				for _, p := range version.GetPatches() {
-					if _, ok := seen[p]; !ok {
-						seen[p] = struct{}{}
-						historyPatches = append(historyPatches, p)
-					}
-				}
+				historyPatches = version.GetPatches()
 			}
 		}
 	}
@@ -69,6 +64,7 @@ func hasPatchMismatch(rs *backend.OrchestrationRuntimeState) bool {
 		return false
 	}
 
+	// Get the current patches from the most recent orchestrator started event in the new events (should be only one).
 	var currentPatches []string
 	for _, e := range rs.NewEvents {
 		if os := e.GetOrchestratorStarted(); os != nil {
