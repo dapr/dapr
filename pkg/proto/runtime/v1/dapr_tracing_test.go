@@ -17,6 +17,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -29,31 +30,41 @@ import (
 func TestRequestsIncludeAppendSpanAttribute(t *testing.T) {
 	fset := token.NewFileSet()
 
-	// First, get the list of all structs whose name ends in "Request" from the "dapr.pb.go" file
-	node, err := parser.ParseFile(fset, "dapr.pb.go", nil, 0)
+	var files []string
+	entries, err := os.ReadDir(".")
 	require.NoError(t, err)
+	for _, entry := range entries {
+		if entry.Name() != "appcallback.pb.go" && strings.HasSuffix(entry.Name(), ".pb.go") {
+			files = append(files, entry.Name())
+		}
+	}
 
 	allRequests := make([]string, 0)
-	for _, decl := range node.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
+	for _, file := range files {
+		node, err := parser.ParseFile(fset, file, nil, 0)
+		require.NoError(t, err)
 
-		for _, spec := range genDecl.Specs {
-			// Get structs only
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-			_, ok = typeSpec.Type.(*ast.StructType)
-			if !ok {
+		for _, decl := range node.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
 				continue
 			}
 
-			// Only get structs whose name ends in "Request"
-			if strings.HasSuffix(typeSpec.Name.Name, "Request") || strings.HasSuffix(typeSpec.Name.Name, "RequestAlpha2") {
-				allRequests = append(allRequests, typeSpec.Name.Name)
+			for _, spec := range genDecl.Specs {
+				// Get structs only
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				_, ok = typeSpec.Type.(*ast.StructType)
+				if !ok {
+					continue
+				}
+
+				// Only get structs whose name ends in "Request"
+				if strings.HasSuffix(typeSpec.Name.Name, "Request") || strings.HasSuffix(typeSpec.Name.Name, "RequestAlpha2") {
+					allRequests = append(allRequests, typeSpec.Name.Name)
+				}
 			}
 		}
 	}

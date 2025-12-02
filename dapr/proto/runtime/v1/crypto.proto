@@ -1,0 +1,251 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+import "dapr/proto/common/v1/common.proto";
+
+// SubtleGetKeyRequest is the request object for SubtleGetKeyAlpha1.
+message SubtleGetKeyRequest {
+  enum KeyFormat {
+    // PEM (PKIX) (default)
+    PEM = 0;
+    // JSON (JSON Web Key) as string
+    JSON = 1;
+  }
+
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Name (or name/version) of the key to use in the key vault
+  string name = 2;
+  // Response format
+  KeyFormat format = 3;
+}
+
+// SubtleGetKeyResponse is the response for SubtleGetKeyAlpha1.
+message SubtleGetKeyResponse {
+  // Name (or name/version) of the key.
+  // This is returned as response too in case there is a version.
+  string name = 1;
+  // Public key, encoded in the requested format
+  string public_key = 2 [json_name="publicKey"];
+}
+
+// SubtleEncryptRequest is the request for SubtleEncryptAlpha1.
+message SubtleEncryptRequest {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Message to encrypt.
+  bytes plaintext = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 6 [json_name="associatedData"];
+}
+
+// SubtleEncryptResponse is the response for SubtleEncryptAlpha1.
+message SubtleEncryptResponse {
+  // Encrypted ciphertext.
+  bytes ciphertext = 1;
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 2;
+}
+
+// SubtleDecryptRequest is the request for SubtleDecryptAlpha1.
+message SubtleDecryptRequest {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Message to decrypt.
+  bytes ciphertext = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 6;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 7 [json_name="associatedData"];
+}
+
+// SubtleDecryptResponse is the response for SubtleDecryptAlpha1.
+message SubtleDecryptResponse {
+  // Decrypted plaintext.
+  bytes plaintext = 1;
+}
+
+// SubtleWrapKeyRequest is the request for SubtleWrapKeyAlpha1.
+message SubtleWrapKeyRequest {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Key to wrap
+  bytes plaintext_key = 2 [json_name="plaintextKey"];
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 6 [json_name="associatedData"];
+}
+
+// SubtleWrapKeyResponse is the response for SubtleWrapKeyAlpha1.
+message SubtleWrapKeyResponse {
+  // Wrapped key.
+  bytes wrapped_key = 1 [json_name="wrappedKey"];
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 2;
+}
+
+// SubtleUnwrapKeyRequest is the request for SubtleUnwrapKeyAlpha1.
+message SubtleUnwrapKeyRequest {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Wrapped key.
+  bytes wrapped_key = 2 [json_name="wrappedKey"];
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+  // Nonce / initialization vector.
+  // Ignored with asymmetric ciphers.
+  bytes nonce = 5;
+  // Authentication tag.
+  // This is nil when not using an authenticated cipher.
+  bytes tag = 6;
+  // Associated Data when using AEAD ciphers (optional).
+  bytes associated_data = 7 [json_name="associatedData"];
+}
+
+// SubtleUnwrapKeyResponse is the response for SubtleUnwrapKeyAlpha1.
+message SubtleUnwrapKeyResponse {
+  // Key in plaintext
+  bytes plaintext_key = 1 [json_name="plaintextKey"];
+}
+
+// SubtleSignRequest is the request for SubtleSignAlpha1.
+message SubtleSignRequest {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Digest to sign.
+  bytes digest = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+}
+
+// SubtleSignResponse is the response for SubtleSignAlpha1.
+message SubtleSignResponse {
+  // The signature that was computed
+  bytes signature = 1;
+}
+
+// SubtleVerifyRequest is the request for SubtleVerifyAlpha1.
+message SubtleVerifyRequest {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Digest of the message.
+  bytes digest = 2;
+  // Algorithm to use, as in the JWA standard.
+  string algorithm = 3;
+  // Name (or name/version) of the key.
+  string key_name = 4 [json_name="keyName"];
+  // Signature to verify.
+  bytes signature = 5;
+}
+
+// SubtleVerifyResponse is the response for SubtleVerifyAlpha1.
+message SubtleVerifyResponse {
+  // True if the signature is valid.
+  bool valid = 1;
+}
+
+// EncryptRequest is the request for EncryptAlpha1.
+message EncryptRequest {
+  // Request details. Must be present in the first message only.
+  EncryptRequestOptions options = 1;
+  // Chunk of data of arbitrary size.
+  common.v1.StreamPayload payload = 2;
+}
+
+// EncryptRequestOptions contains options for the first message in the EncryptAlpha1 request.
+message EncryptRequestOptions {
+  // Name of the component. Required.
+  string component_name = 1 [json_name="componentName"];
+  // Name (or name/version) of the key. Required.
+  string key_name = 2 [json_name="keyName"];
+  // Key wrapping algorithm to use. Required.
+  // Supported options include: A256KW (alias: AES), A128CBC, A192CBC, A256CBC, RSA-OAEP-256 (alias: RSA).
+  string key_wrap_algorithm = 3;
+  // Cipher used to encrypt data (optional): "aes-gcm" (default) or "chacha20-poly1305"
+  string data_encryption_cipher = 10;
+  // If true, the encrypted document does not contain a key reference.
+  // In that case, calls to the Decrypt method must provide a key reference (name or name/version).
+  // Defaults to false.
+  bool omit_decryption_key_name = 11 [json_name="omitDecryptionKeyName"];
+  // Key reference to embed in the encrypted document (name or name/version).
+  // This is helpful if the reference of the key used to decrypt the document is different from the one used to encrypt it.
+  // If unset, uses the reference of the key used to encrypt the document (this is the default behavior).
+  // This option is ignored if omit_decryption_key_name is true.
+  string decryption_key_name = 12 [json_name="decryptionKeyName"];
+}
+
+// EncryptResponse is the response for EncryptAlpha1.
+message EncryptResponse {
+  // Chunk of data.
+  common.v1.StreamPayload payload = 1;
+}
+
+// DecryptRequest is the request for DecryptAlpha1.
+message DecryptRequest {
+  // Request details. Must be present in the first message only.
+  DecryptRequestOptions options = 1;
+  // Chunk of data of arbitrary size.
+  common.v1.StreamPayload payload = 2;
+}
+
+// DecryptRequestOptions contains options for the first message in the DecryptAlpha1 request.
+message DecryptRequestOptions {
+  // Name of the component
+  string component_name = 1 [json_name="componentName"];
+  // Name (or name/version) of the key to decrypt the message.
+  // Overrides any key reference included in the message if present.
+  // This is required if the message doesn't include a key reference (i.e. was created with omit_decryption_key_name set to true).
+  string key_name = 12 [json_name="keyName"];
+}
+
+// DecryptResponse is the response for DecryptAlpha1.
+message DecryptResponse {
+  // Chunk of data.
+  common.v1.StreamPayload payload = 1;
+}

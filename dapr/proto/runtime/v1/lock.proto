@@ -1,0 +1,72 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+message TryLockRequest {
+  // Required. The lock store name,e.g. `redis`.
+  string store_name = 1 [json_name = "storeName"];
+
+  // Required. resource_id is the lock key. e.g. `order_id_111`
+  // It stands for "which resource I want to protect"
+  string resource_id = 2 [json_name = "resourceId"];
+
+  // Required. lock_owner indicate the identifier of lock owner.
+  // You can generate a uuid as lock_owner.For example,in golang:
+  //
+  // req.LockOwner = uuid.New().String()
+  //
+  // This field is per request,not per process,so it is different for each request,
+  // which aims to prevent multi-thread in the same process trying the same lock concurrently.
+  //
+  // The reason why we don't make it automatically generated is:
+  // 1. If it is automatically generated,there must be a 'my_lock_owner_id' field in the response.
+  //   This name is so weird that we think it is inappropriate to put it into the api spec
+  // 2. If we change the field 'my_lock_owner_id' in the response to 'lock_owner',which means the current lock owner of this lock,
+  //   we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
+  // 3. When reentrant lock is needed,the existing lock_owner is required to identify client and check "whether this client can reenter this lock".
+  //   So this field in the request shouldn't be removed.
+  string lock_owner = 3 [json_name = "lockOwner"];
+
+  // Required. The time before expiry.The time unit is second.
+  int32 expiry_in_seconds = 4 [json_name = "expiryInSeconds"];
+}
+
+message TryLockResponse {
+  bool success = 1;
+}
+
+message UnlockRequest {
+  string store_name = 1 [json_name = "storeName"];
+  // resource_id is the lock key.
+  string resource_id = 2 [json_name = "resourceId"];
+  string lock_owner = 3 [json_name = "lockOwner"];
+}
+
+message UnlockResponse {
+  enum Status {
+    SUCCESS = 0;
+    LOCK_DOES_NOT_EXIST = 1;
+    LOCK_BELONGS_TO_OTHERS = 2;
+    INTERNAL_ERROR = 3;
+  }
+
+  Status status = 1;
+}
