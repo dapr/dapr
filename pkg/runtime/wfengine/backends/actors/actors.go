@@ -679,6 +679,10 @@ func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstan
 		return nil, err
 	}
 
+	if resp == nil {
+		return nil, status.Errorf(codes.NotFound, "workflow instance '%s' not found", req.GetInstanceId())
+	}
+
 	return &protos.GetInstanceHistoryResponse{Events: resp.History}, nil
 }
 
