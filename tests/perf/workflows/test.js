@@ -52,6 +52,12 @@ const possibleScenarios = {
         iterations: 800,
         maxDuration: '420s',
     },
+    t_500_10000: {
+        executor: 'shared-iterations',
+        vus: 500,
+        iterations: 10000,
+        maxDuration: '3600s',
+    },
 }
 
 let enabledScenarios = {}
