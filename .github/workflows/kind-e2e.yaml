@@ -65,9 +65,9 @@ jobs:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.34.1
-        - v1.33.5
-        - v1.32.9
+        - v1.34.0
+        - v1.33.4
+        - v1.32.8
         mode:
         - ha
         - non-ha
@@ -75,17 +75,17 @@ jobs:
         # This is attempting to make it a bit clearer what's being tested.
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.1
         include:
-        - k8s-version: v1.34.1
+        - k8s-version: v1.34.0
           kind-version: v0.30.0
           kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
           dapr-test-config-store: "postgres"
-        - k8s-version: v1.33.5
+        - k8s-version: v1.33.4
           kind-version: v0.30.0
-          kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
+          kind-image-sha: sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
           dapr-test-config-store: "redis"
-        - k8s-version: v1.32.9
+        - k8s-version: v1.32.8
           kind-version: v0.30.0
-          kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
+          kind-image-sha: sha256:abd489f042d2b644e2d033f5c2d900bc707798d075e8186cb65e3f1367a9d5a1
           dapr-test-config-store: "redis"
     steps:
     - name: Check out code
