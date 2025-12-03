@@ -38,7 +38,6 @@ func handlePatchMismatch(ctx context.Context, o *orchestrator, state *wfenginest
 		},
 	})
 
-	log.Warnf("Workflow actor '%s': workflow is stalled, skipping timer/activity processing", o.actorID)
 	state.ApplyRuntimeStateChanges(rs)
 	err := o.saveInternalState(ctx, state)
 	if err != nil {
