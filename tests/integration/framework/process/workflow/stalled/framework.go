@@ -122,11 +122,28 @@ func (f *StalledFramework) SwitchToNewReplica(t *testing.T, ctx context.Context)
 	}
 }
 
-func (f *StalledFramework) WaitForStatus(t *testing.T, ctx context.Context, id api.InstanceID, status protos.OrchestrationStatus) {
+func (f *StalledFramework) waitForStatus(t *testing.T, ctx context.Context, id api.InstanceID, status protos.OrchestrationStatus) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		md, err := f.CurrentClient.FetchOrchestrationMetadata(ctx, id)
 		require.NoError(c, err)
 		assert.Equal(c, status.String(), md.RuntimeStatus.String())
 	}, 20*time.Second, 50*time.Millisecond)
+}
+
+func (f *StalledFramework) WaitForStalled(t *testing.T, ctx context.Context, id api.InstanceID) {
+	t.Helper()
+	f.waitForStatus(t, ctx, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
+	hist, err := f.CurrentClient.GetInstanceHistory(ctx, id)
+	require.NoError(t, err)
+	require.NotNil(t, hist.Events[len(hist.Events)-1].GetExecutionStalled())
+}
+
+func (f *StalledFramework) WaitForCompleted(t *testing.T, ctx context.Context, id api.InstanceID) {
+	t.Helper()
+	f.waitForStatus(t, ctx, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
+	hist, err := f.CurrentClient.GetInstanceHistory(ctx, id)
+	require.NoError(t, err)
+	t.Logf("History: %+v", hist.Events[len(hist.Events)-1])
+	require.NotNil(t, hist.Events[len(hist.Events)-1].GetExecutionCompleted())
 }
