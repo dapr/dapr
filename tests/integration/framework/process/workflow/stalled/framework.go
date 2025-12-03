@@ -81,7 +81,6 @@ func (f *StalledFramework) ScheduleWorkflow(t *testing.T, ctx context.Context) a
 func (f *StalledFramework) KillCurrentReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
 	f.workflows.DaprN(f.currentDaprIndex).Kill(t)
-	time.Sleep(1 * time.Second)
 }
 
 func (f *StalledFramework) RunOldReplica(t *testing.T, ctx context.Context) {
@@ -115,7 +114,6 @@ func (f *StalledFramework) RunNewReplica(t *testing.T, ctx context.Context) {
 func (f *StalledFramework) SwitchToNewReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
 	f.workflows.DaprN(1).Kill(t)
-	time.Sleep(1 * time.Second)
 
 	oldDaprDIndex := f.workflows.RunNewDaprd(t, ctx)
 	f.workflows.DaprN(oldDaprDIndex).Run(t, ctx)
@@ -149,6 +147,20 @@ func (f *StalledFramework) WaitForCompleted(t *testing.T, ctx context.Context, i
 	f.waitForStatus(t, ctx, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
 	hist, err := f.CurrentClient.GetInstanceHistory(ctx, id)
 	require.NoError(t, err)
-	t.Logf("History: %+v", hist.Events[len(hist.Events)-1])
 	require.NotNil(t, hist.Events[len(hist.Events)-1].GetExecutionCompleted())
+}
+
+func (f *StalledFramework) WaitForNumberOfOrchestrationStartedEvents(t *testing.T, ctx context.Context, id api.InstanceID, expected int) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		hist, err := f.CurrentClient.GetInstanceHistory(ctx, id)
+		require.NoError(c, err)
+		count := 0
+		for _, event := range hist.Events {
+			if event.GetOrchestratorStarted() != nil {
+				count++
+			}
+		}
+		require.Equal(c, expected, count)
+	}, 20*time.Second, 50*time.Millisecond)
 }

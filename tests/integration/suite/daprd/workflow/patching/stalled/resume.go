@@ -15,15 +15,12 @@ package stalled
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stalled"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/task"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,8 +29,6 @@ func init() {
 }
 
 type resume struct {
-	waitingForEvent atomic.Bool
-
 	fw *stalled.StalledFramework
 }
 
@@ -63,7 +58,6 @@ func (r *resume) Run(t *testing.T, ctx context.Context) {
 				return nil, err
 			}
 		}
-		r.waitingForEvent.Store(true)
 		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 			return nil, err
 		}
@@ -77,10 +71,7 @@ func (r *resume) Run(t *testing.T, ctx context.Context) {
 	})
 
 	id := r.fw.ScheduleWorkflow(t, ctx)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, r.waitingForEvent.Load())
-	}, 2*time.Second, 50*time.Millisecond)
-	time.Sleep(500 * time.Millisecond)
+	r.fw.WaitForNumberOfOrchestrationStartedEvents(t, ctx, id, 2)
 
 	r.fw.KillCurrentReplica(t, ctx)
 	r.fw.RunOldReplica(t, ctx)
