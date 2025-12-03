@@ -37,38 +37,27 @@ type patchmissing struct {
 	fw *stalled.StalledFramework
 }
 
-func (r *patchmissing) oldWorkflow(ctx *task.OrchestrationContext) (any, error) {
-	if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-		return nil, err
-	}
-	return nil, nil
-}
-
-func (r *patchmissing) newWorkflow(ctx *task.OrchestrationContext) (any, error) {
-	// Just by checking a patch we should get into stalled, even if the 'body' of the patch doesn't trigger a mismatch.
-	ctx.IsPatched("patch1")
-
-	r.waitingForEvent.Store(true)
-	if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-		return nil, err
-	}
-	return nil, nil
-}
-
-func (r *patchmissing) sayHello1(ctx task.ActivityContext) (any, error) {
-	return "Hello", nil
-}
-
-func (r *patchmissing) sayHello2(ctx task.ActivityContext) (any, error) {
-	return "Hello", nil
-}
-
 func (r *patchmissing) Setup(t *testing.T) []framework.Option {
-	r.fw = stalled.NewStalledFramework(r.oldWorkflow, r.newWorkflow, r.sayHello1, r.sayHello2)
+	r.fw = stalled.NewStalledFramework()
 	return r.fw.Setup(t)
 }
 
 func (r *patchmissing) Run(t *testing.T, ctx context.Context) {
+	r.fw.SetOldWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
+		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+	r.fw.SetNewWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
+		ctx.IsPatched("patch1")
+		r.waitingForEvent.Store(true)
+		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+
 	id := r.fw.ScheduleWorkflow(t, ctx)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, r.waitingForEvent.Load())

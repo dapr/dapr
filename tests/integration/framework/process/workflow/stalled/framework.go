@@ -9,7 +9,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/helpers"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
@@ -26,21 +25,17 @@ type StalledFramework struct {
 	oldWorkflow      task.Orchestrator
 	newWorkflow      task.Orchestrator
 
-	activities []task.Activity
+	activities map[string]task.Activity
 
 	workflows *workflow.Workflow
 }
 
-func NewStalledFramework(
-	oldWorkflow, newWorkflow task.Orchestrator,
-	activities ...task.Activity) *StalledFramework {
+func NewStalledFramework() *StalledFramework {
 	return &StalledFramework{
 		appID:            uuid.New().String(),
 		currentDaprIndex: 0,
 		CurrentClient:    nil,
-		oldWorkflow:      oldWorkflow,
-		newWorkflow:      newWorkflow,
-		activities:       activities,
+		activities:       map[string]task.Activity{},
 	}
 }
 
@@ -56,13 +51,23 @@ func (f *StalledFramework) Setup(t *testing.T) []framework.Option {
 	return []framework.Option{framework.WithProcesses(f.workflows)}
 }
 
+func (f *StalledFramework) SetNewWorkflow(t *testing.T, ctx context.Context, orchestrator task.Orchestrator) {
+	f.newWorkflow = orchestrator
+}
+func (f *StalledFramework) SetOldWorkflow(t *testing.T, ctx context.Context, orchestrator task.Orchestrator) {
+	f.oldWorkflow = orchestrator
+}
+func (f *StalledFramework) AddActivityN(t *testing.T, ctx context.Context, name string, activity task.Activity) {
+	f.activities[name] = activity
+}
+
 func (f *StalledFramework) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {
 	t.Helper()
 	f.workflows.WaitUntilRunning(t, ctx)
 	f.CurrentClient = f.workflows.BackendClientN(t, ctx, f.currentDaprIndex)
 	f.workflows.RegistryN(0).AddOrchestratorN("Orchestrator", f.newWorkflow)
-	for _, activity := range f.activities {
-		f.workflows.RegistryN(0).AddActivityN(helpers.GetTaskFunctionName(activity), activity)
+	for name, activity := range f.activities {
+		f.workflows.RegistryN(0).AddActivityN(name, activity)
 	}
 
 	// Schedule orchestration (runs on new worker)
@@ -86,8 +91,8 @@ func (f *StalledFramework) RunOldReplica(t *testing.T, ctx context.Context) {
 	f.workflows.DaprN(index).WaitUntilRunning(t, ctx)
 
 	f.workflows.RegistryN(index).AddOrchestratorN("Orchestrator", f.oldWorkflow)
-	for _, activity := range f.activities {
-		f.workflows.RegistryN(index).AddActivityN(helpers.GetTaskFunctionName(activity), activity)
+	for name, activity := range f.activities {
+		f.workflows.RegistryN(index).AddActivityN(name, activity)
 	}
 	f.currentDaprIndex = index
 	f.CurrentClient = f.workflows.BackendClientN(t, ctx, index)
@@ -100,8 +105,8 @@ func (f *StalledFramework) RunNewReplica(t *testing.T, ctx context.Context) {
 	f.workflows.DaprN(index).WaitUntilRunning(t, ctx)
 
 	f.workflows.RegistryN(index).AddOrchestratorN("Orchestrator", f.newWorkflow)
-	for _, activity := range f.activities {
-		f.workflows.RegistryN(index).AddActivityN(helpers.GetTaskFunctionName(activity), activity)
+	for name, activity := range f.activities {
+		f.workflows.RegistryN(index).AddActivityN(name, activity)
 	}
 	f.currentDaprIndex = index
 	f.CurrentClient = f.workflows.BackendClientN(t, ctx, index)
@@ -117,8 +122,8 @@ func (f *StalledFramework) SwitchToNewReplica(t *testing.T, ctx context.Context)
 	f.workflows.DaprN(oldDaprDIndex).WaitUntilRunning(t, ctx)
 
 	f.workflows.RegistryN(oldDaprDIndex).AddOrchestratorN("Orchestrator", f.oldWorkflow)
-	for _, activity := range f.activities {
-		f.workflows.RegistryN(oldDaprDIndex).AddActivityN(helpers.GetTaskFunctionName(activity), activity)
+	for name, activity := range f.activities {
+		f.workflows.RegistryN(oldDaprDIndex).AddActivityN(name, activity)
 	}
 }
 

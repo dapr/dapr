@@ -37,47 +37,44 @@ type activitymismatch struct {
 	fw *stalled.StalledFramework
 }
 
-func (r *activitymismatch) oldWorkflow(ctx *task.OrchestrationContext) (any, error) {
-	if err := ctx.CallActivity(r.sayHello1).Await(nil); err != nil {
-		return nil, err
-	}
-	if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-		return nil, err
-	}
-	return nil, nil
-}
-
-func (r *activitymismatch) newWorkflow(ctx *task.OrchestrationContext) (any, error) {
-	if ctx.IsPatched("patch1") {
-		if err := ctx.CallActivity(r.sayHello2).Await(nil); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := ctx.CallActivity(r.sayHello1).Await(nil); err != nil {
-			return nil, err
-		}
-	}
-	r.waitingForEvent.Store(true)
-	if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-		return nil, err
-	}
-	return nil, nil
-}
-
-func (r *activitymismatch) sayHello1(ctx task.ActivityContext) (any, error) {
-	return "Hello", nil
-}
-
-func (r *activitymismatch) sayHello2(ctx task.ActivityContext) (any, error) {
-	return "Hello", nil
-}
-
 func (r *activitymismatch) Setup(t *testing.T) []framework.Option {
-	r.fw = stalled.NewStalledFramework(r.oldWorkflow, r.newWorkflow, r.sayHello1, r.sayHello2)
+	r.fw = stalled.NewStalledFramework()
 	return r.fw.Setup(t)
 }
 
 func (r *activitymismatch) Run(t *testing.T, ctx context.Context) {
+	r.fw.SetOldWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
+		if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
+			return nil, err
+		}
+		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+	r.fw.SetNewWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
+		if ctx.IsPatched("patch1") {
+			if err := ctx.CallActivity("sayHello2").Await(nil); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
+				return nil, err
+			}
+		}
+		r.waitingForEvent.Store(true)
+		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+	r.fw.AddActivityN(t, ctx, "sayHello1", func(ctx task.ActivityContext) (any, error) {
+		return "Hello", nil
+	})
+	r.fw.AddActivityN(t, ctx, "sayHello2", func(ctx task.ActivityContext) (any, error) {
+		return "Hello", nil
+	})
+
 	id := r.fw.ScheduleWorkflow(t, ctx)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, r.waitingForEvent.Load())

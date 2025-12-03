@@ -37,39 +37,30 @@ type patchorder struct {
 	fw *stalled.StalledFramework
 }
 
-func (r *patchorder) oldWorkflow(ctx *task.OrchestrationContext) (any, error) {
-	ctx.IsPatched("patch1")
-	ctx.IsPatched("patch2")
-	if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-		return nil, err
-	}
-	return nil, nil
-}
-
-func (r *patchorder) newWorkflow(ctx *task.OrchestrationContext) (any, error) {
-	ctx.IsPatched("patch2")
-	ctx.IsPatched("patch1")
-	r.waitingForEvent.Store(true)
-	if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-		return nil, err
-	}
-	return nil, nil
-}
-
-func (r *patchorder) sayHello1(ctx task.ActivityContext) (any, error) {
-	return "Hello", nil
-}
-
-func (r *patchorder) sayHello2(ctx task.ActivityContext) (any, error) {
-	return "Hello", nil
-}
-
 func (r *patchorder) Setup(t *testing.T) []framework.Option {
-	r.fw = stalled.NewStalledFramework(r.oldWorkflow, r.newWorkflow, r.sayHello1, r.sayHello2)
+	r.fw = stalled.NewStalledFramework()
 	return r.fw.Setup(t)
 }
 
 func (r *patchorder) Run(t *testing.T, ctx context.Context) {
+	r.fw.SetOldWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
+		ctx.IsPatched("patch1")
+		ctx.IsPatched("patch2")
+		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+	r.fw.SetNewWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
+		ctx.IsPatched("patch2")
+		ctx.IsPatched("patch1")
+		r.waitingForEvent.Store(true)
+		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+
 	id := r.fw.ScheduleWorkflow(t, ctx)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, r.waitingForEvent.Load())
