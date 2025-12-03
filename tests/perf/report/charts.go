@@ -542,12 +542,34 @@ func makeThroughputChart(r Runner, prefix, outDir string) {
 func makeDataVolumeChart(r Runner, prefix, outDir string) {
 	p := plot.New()
 	p.Title.Text = "Data Volume (total)"
-	p.Y.Label.Text = "MB"
 
-	const bytesPerMB = 1024 * 1024
+	const (
+		bytesPerKB = 1024.0
+		bytesPerMB = 1024.0 * 1024.0
+		bytesPerGB = 1024.0 * 1024.0 * 1024.0
+	)
+
+	receivedBytes := r.DataReceived.Values.Count
+	sentBytes := r.DataSent.Values.Count
+	maxBytes := receivedBytes
+	if sentBytes > maxBytes {
+		maxBytes = sentBytes
+	}
+
+	unit := "MB"
+	divisor := bytesPerMB
+	if maxBytes < bytesPerMB {
+		unit = "KB"
+		divisor = bytesPerKB
+	} else if maxBytes >= bytesPerGB {
+		unit = "GB"
+		divisor = bytesPerGB
+	}
+	p.Y.Label.Text = unit
+
 	values := plotter.Values{
-		r.DataReceived.Values.Count / bytesPerMB,
-		r.DataSent.Values.Count / bytesPerMB,
+		receivedBytes / divisor,
+		sentBytes / divisor,
 	}
 	// bar width
 	bar, _ := plotter.NewBarChart(values, vg.Points(55))
@@ -560,8 +582,20 @@ func makeDataVolumeChart(r Runner, prefix, outDir string) {
 
 	// labels under each bar
 	p.X.Tick.Marker = plot.ConstantTicks([]plot.Tick{
-		{Value: 0, Label: "Received (MB)"},
-		{Value: 1, Label: "Sent (MB)"},
+		{Value: 0, Label: fmt.Sprintf("Received (%s)", unit)},
+		{Value: 1, Label: fmt.Sprintf("Sent (%s)", unit)},
+	})
+
+	// Force int formatting on y-axis tick labels for consistency across charts
+	p.Y.Tick.Marker = plot.TickerFunc(func(min, max float64) []plot.Tick {
+		def := plot.DefaultTicks{}
+		defTicks := def.Ticks(min, max)
+		for i := range defTicks {
+			if defTicks[i].Label != "" {
+				defTicks[i].Label = fmt.Sprintf("%.0f", defTicks[i].Value)
+			}
+		}
+		return defTicks
 	})
 
 	p.Save(6*vg.Inch, 4*vg.Inch, filepath.Join(outDir, prefix+"_data_volume.png"))

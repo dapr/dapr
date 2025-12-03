@@ -49,9 +49,7 @@ The current charts are built from the Workflows perf suite in
 
 For a detailed description of each scenario (test names, workflows, VUs,
 iterations, payload sizes, and how the app/sidecar resources are measured),
-see the Workflows perf README:
-
-- [tests/perf/workflows/README.md](https://github.com/dapr/dapr/blob/master/tests/perf/workflows/README.md)
+see the [Workflows perf README](../../workflows/README.md).
 
 ### Chart types
 
@@ -114,9 +112,16 @@ Interpretation:
 #### 4. Data volume
 
 - File: `*_avg_data_volume.png`
+- Units auto-scale by total size per chart:
+  - < 1 MB: shown in KB
+  - ≥ 1 GB: shown in GB
+  - else: shown in MB
 - Bars:
-  - Received (MB) – `data_received.values.count / (1024*1024)`
-  - Sent (MB) – `data_sent.values.count / (1024*1024)`
+  - Received (chosen unit)
+  - Sent (chosen unit)
+- Y-axis:
+  - Labeled with the chosen unit (KB/MB/GB)
+  - Integer tick labels for readability
 
 Interpretation:
 
@@ -127,8 +132,8 @@ Interpretation:
 
 - File: `*_duration_comparison.png`
 - X-axis: Run 1, Run 2, Run 3, ...
-- Y-axis: Latency (ms) (milliseconds)
-- Lines (per run, from `http_req_duration.values`):
+- Y-axis: Latency (ms)
+- Lines per run, from `http_req_duration.values`:
   - p50 (median) – typical request latency
   - p95 – tail latency (95% of requests complete in <= this time)
 
@@ -150,11 +155,12 @@ This will be extended to other APIs in the future.
 
 Charts are produced by:
 
-- Program: `tests/perf/report/charts.go`
+- Program (from `tests/perf/report/`): `charts.go`
 - Json input: `./test_report_perf.json` (`gotestsum` JSON from perf CI)
-- Output: `tests/perf/report/charts/workflows/*.png`
+- Output: `charts/v1.16.3/workflows/*.png`
 
 ```bash
-rm -rf tests/perf/report/charts/v1.16.3/workflows/*
-go run ./tests/perf/report/charts.go
+cd tests/perf/report
+rm -rf charts/v1.16.3/workflows/*
+go run charts.go
 ```
