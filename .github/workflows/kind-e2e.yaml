@@ -163,6 +163,20 @@ jobs:
       with:
         version: v3.3.4
 
+    - name: Free disk space
+      # android, ghc, CodeQL are all preinstalled on GH runners so rm to clear up space
+      run: |
+        df -h
+        docker system prune -af || true
+        docker volume prune -f || true
+        sudo rm -rf /usr/local/lib/android || true
+        sudo rm -rf /opt/ghc || true
+        sudo rm -rf /usr/share/dotnet || true
+        sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/* || true
+        df -h
+
     - name: Build and push Dapr
       run: |
         make build-linux
@@ -206,66 +220,6 @@ jobs:
         make setup-test-components
       env:
         DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
-
-    - name: Free up some diskspace
-      run: |
-        docker image prune -a -f
-        # Clean up some more
-        echo "Listing 100 largest packages"
-        dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
-        df -h
-        echo "Removing large packages"
-        sudo apt-get update
-        
-        # check if pkgs exist before removing them
-        if dpkg -l | grep -q '^dotnet-.*'; then
-          sudo apt-get remove -y '^dotnet-.*'
-        fi
-
-        if dpkg -l | grep -q '^llvm-.*'; then
-          sudo apt-get remove -y '^llvm-.*'
-        fi
-        
-        if dpkg -l | grep -q 'php.*'; then
-          sudo apt-get remove -y 'php.*'
-        fi
-        
-        if dpkg -l | grep -q 'temurin-*'; then
-          sudo apt-get remove -y 'temurin-*'
-        fi
-        
-        if dpkg -l | grep -q 'microsoft-edge-stable'; then
-          sudo apt-get remove -y microsoft-edge-stable
-        fi
-    
-        if dpkg -l | grep -q 'azure-cli'; then
-          sudo apt-get remove -y azure-cli
-        fi
-    
-        if dpkg -l | grep -q 'google-chrome-stable'; then
-          sudo apt-get remove -y google-chrome-stable
-        fi
-    
-        if dpkg -l | grep -q 'firefox'; then
-          sudo apt-get remove -y firefox
-        fi
-        
-        if dpkg -l | grep -q '^powershell'; then
-          sudo apt-get remove -y powershell
-        fi
-    
-        if dpkg -l | grep -q 'mono-devel'; then
-          sudo apt-get remove -y mono-devel
-        fi
-        
-        sudo apt-get autoremove -y
-        sudo apt-get clean
-        df -h
-        
-        echo "Removing large directories"
-        # deleting 15GB
-        rm -rf /usr/share/dotnet/
-        df -h
 
     - name: Run tests
       run: |
