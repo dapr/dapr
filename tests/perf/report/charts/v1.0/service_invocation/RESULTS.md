@@ -78,6 +78,3 @@ In the test setup, requests went through the Dapr sidecar both on the client sid
 
 ![P90 latency vs client connections](images/perf_invocation_p90.png)
 ![P99 latency vs client connections](images/perf_invocation_p99.png)
-
-
-
