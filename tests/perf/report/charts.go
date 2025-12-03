@@ -112,7 +112,7 @@ func main() {
 
 	// TODO Cassie: parameterize the dapr version based on CI input based on the version
 	// TODO Cassie: expand beyond workflows API
-	outputDir := filepath.Join("tests", "perf", "report", "charts", "v1.16.3", filepath.Base(workflowsPerfPkg))
+	outputDir := filepath.Join("charts", "v1.16.3", "workflows")
 	if err = os.MkdirAll(outputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error creating charts directory %s: %v\n", outputDir, err)
 		os.Exit(1)
@@ -304,6 +304,18 @@ func makeCombinedCharts(runners []Runner, prefix, outDir string) {
 	p.X.Min = 0.5
 	p.X.Max = float64(len(runners)) + 0.5
 
+	// Force int formatting on y-axis tick labels for consistency across charts
+	p.Y.Tick.Marker = plot.TickerFunc(func(min, max float64) []plot.Tick {
+		def := plot.DefaultTicks{}
+		defTicks := def.Ticks(min, max)
+		for i := range defTicks {
+			if defTicks[i].Label != "" {
+				defTicks[i].Label = fmt.Sprintf("%.0f", defTicks[i].Value)
+			}
+		}
+		return defTicks
+	})
+
 	p.Save(8*vg.Inch, 4*vg.Inch, filepath.Join(outDir, prefix+"_duration_comparison.png"))
 }
 
@@ -403,6 +415,18 @@ func makeDurationBreakdownChart(r Runner, prefix, outDir string) {
 	low.Y.Min = 0
 	// Small headroom above the actual maximum so the top point is not flush with the axis
 	low.Y.Max = lowMaxSeconds * 1.1
+
+	// Force int formatting on y-axis tick labels for consistency across charts
+	low.Y.Tick.Marker = plot.TickerFunc(func(min, max float64) []plot.Tick {
+		def := plot.DefaultTicks{}
+		defTicks := def.Ticks(min, max)
+		for i := range defTicks {
+			if defTicks[i].Label != "" {
+				defTicks[i].Label = fmt.Sprintf("%.0f", defTicks[i].Value)
+			}
+		}
+		return defTicks
+	})
 
 	for _, ld := range lines {
 		pts := make(plotter.XYs, 6)
