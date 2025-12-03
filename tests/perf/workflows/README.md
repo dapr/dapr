@@ -94,11 +94,11 @@ Scenario:
 
 Workflow Description
 
-- Runs `state_wf`, which performs state operations:
-  - Activity 1 saves data of a given size in the configured state store
-  - Activity 2 reads the saved data back
-  - Activity 3 deletes the data
-  - The workflow takes the data size as input and passes a string of that size as the payload to the activity
+* Runs `state_wf`, which performs state operations:
+  * Activity 1 saves data of a given size in the configured state store
+  * Activity 2 reads the saved data back
+  * Activity 3 deletes the data
+  * The workflow takes the data size as input and passes a string of that size as the payload to the activity
 
 Scenario:
 
