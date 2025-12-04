@@ -43,7 +43,7 @@ env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.30.0"
+  KUBECTLVER: "v1.34.0"
   # Version of Helm
   HELMVER: "v3.10.0"
   # Kubernetes namespace to use

@@ -65,9 +65,9 @@ jobs:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.31.0
-        - v1.30.4
-        - v1.29.8
+        - v1.34.0
+        - v1.33.4
+        - v1.32.8
         mode:
         - ha
         - non-ha
@@ -75,17 +75,17 @@ jobs:
         # This is attempting to make it a bit clearer what's being tested.
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.1
         include:
-        - k8s-version: v1.31.0
-          kind-version: v0.24.0
-          kind-image-sha: sha256:53df588e04085fd41ae12de0c3fe4c72f7013bba32a20e7325357a1ac94ba865
+        - k8s-version: v1.34.0
+          kind-version: v0.30.0
+          kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
           dapr-test-config-store: "postgres"
-        - k8s-version: v1.30.4
-          kind-version: v0.24.0
-          kind-image-sha: sha256:976ea815844d5fa93be213437e3ff5754cd599b040946b5cca43ca45c2047114
+        - k8s-version: v1.33.4
+          kind-version: v0.30.0
+          kind-image-sha: sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
           dapr-test-config-store: "redis"
-        - k8s-version: v1.29.8
-          kind-version: v0.24.0
-          kind-image-sha: sha256:d46b7aa29567e93b27f7531d258c372e829d7224b25e3fc6ffdefed12476d3aa
+        - k8s-version: v1.32.8
+          kind-version: v0.30.0
+          kind-image-sha: sha256:abd489f042d2b644e2d033f5c2d900bc707798d075e8186cb65e3f1367a9d5a1
           dapr-test-config-store: "redis"
     steps:
     - name: Check out code
@@ -130,7 +130,7 @@ jobs:
         echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
 
     - name: Create KinD Cluster
-      uses: helm/kind-action@v1.10.0
+      uses: helm/kind-action@v1.13.0
       with:
         config: kind.yaml
         cluster_name: kind
