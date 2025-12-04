@@ -115,7 +115,7 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(t, int64(n+1), inActivity.Load())
+		assert.Equal(c, int64(n+1), inActivity.Load())
 	}, time.Second*10, time.Millisecond*10)
 
 	u.appHealth.Store(false)
