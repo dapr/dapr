@@ -18,8 +18,10 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/durabletask-go/backend"
 )
 
@@ -38,7 +40,15 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 		ActorID:   a.actorID,
 		DueTime:   dueTime.Format(time.RFC3339),
 		Name:      reminderName,
-		IsOneShot: true,
-		Data:      anydata,
+		// One shot, retry forever, every second.
+		FailurePolicy: &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Constant{
+				Constant: &commonv1pb.JobFailurePolicyConstant{
+					Interval:   durationpb.New(time.Second),
+					MaxRetries: nil,
+				},
+			},
+		},
+		Data: anydata,
 	})
 }
