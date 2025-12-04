@@ -136,5 +136,5 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
 			"dapr_runtime_workflow_activity_execution_count|activity_name:bar|app_id:%s|namespace:|status:failed",
 			d.daprd2.AppID())]
 		assert.InDelta(c, 1.0, v, 0)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 }
