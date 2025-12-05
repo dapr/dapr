@@ -522,6 +522,8 @@ replace (
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
+replace github.com/dapr/durabletask-go => github.com/acroca/dapr-durabletask-go v0.0.0-20251205100015-6e7d6d29b81f
+
 // replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
 //

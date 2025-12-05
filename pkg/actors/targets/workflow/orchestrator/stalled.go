@@ -2,9 +2,10 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
@@ -12,8 +13,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func handlePatchMismatch(ctx context.Context, o *orchestrator, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) (todo.RunCompleted, error) {
-	// We need to clear the completed event and time so that the workflow is not considered completed.
+func setStalled(ctx context.Context, o *orchestrator, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) bool {
+	historyPatches := getLastPatches(rs.OldEvents)
+	currentPatches := getLastPatches(rs.NewEvents)
+	hasMismatch, description := processPatchMismatch(historyPatches, currentPatches)
+	if !hasMismatch {
+		return false
+	}
+
 	rs.CompletedEvent = nil
 	rs.CompletedTime = nil
 
@@ -31,9 +38,8 @@ func handlePatchMismatch(ctx context.Context, o *orchestrator, state *wfenginest
 		Timestamp: timestamppb.Now(),
 		EventType: &protos.HistoryEvent_ExecutionStalled{
 			ExecutionStalled: &protos.ExecutionStalledEvent{
-				Reason: protos.StalledReason_PATCH_MISMATCH,
-				// TODO: Return the actual patches that are mismatched
-				Description: ptr.Of("Patch mismatch"),
+				Reason:      protos.StalledReason_PATCH_MISMATCH,
+				Description: ptr.Of(description),
 			},
 		},
 	})
@@ -41,48 +47,91 @@ func handlePatchMismatch(ctx context.Context, o *orchestrator, state *wfenginest
 	state.ApplyRuntimeStateChanges(rs)
 	err := o.saveInternalState(ctx, state)
 	if err != nil {
-		return todo.RunCompletedFalse, err
-	}
-	log.Infof("Workflow actor '%s': workflow is stalled; holding reminder until context is canceled", o.actorID)
-	<-ctx.Done()
-	return todo.RunCompletedFalse, ctx.Err()
-}
-
-func hasPatchMismatch(rs *backend.OrchestrationRuntimeState) bool {
-	// Get the latest patches from the most recent orchestrator started event.
-	var historyPatches []string
-	for _, e := range rs.OldEvents {
-		if os := e.GetOrchestratorStarted(); os != nil {
-			if version := os.GetVersion(); version != nil {
-				historyPatches = version.GetPatches()
-			}
-		}
-	}
-
-	if len(historyPatches) == 0 {
+		log.Errorf("Workflow actor '%s': failed to save internal state: %v", o.actorID, err)
 		return false
 	}
+	log.Infof("Workflow actor '%s': workflow is stalled; holding reminder until context is canceled", o.actorID)
+	return true
+}
 
-	// Get the current patches from the most recent orchestrator started event in the new events (should be only one).
-	var currentPatches []string
-	for _, e := range rs.NewEvents {
+func getLastPatches(events []*protos.HistoryEvent) []string {
+	for i := len(events) - 1; i >= 0; i-- {
+		e := events[i]
 		if os := e.GetOrchestratorStarted(); os != nil {
 			if version := os.GetVersion(); version != nil {
-				currentPatches = version.GetPatches()
+				return version.GetPatches()
 			}
-			break
+		}
+	}
+	return nil
+}
+
+// processPatchMismatch returns whether there is a patch mismatch and a description of the mismatch
+func processPatchMismatch(historyPatches, currentPatches []string) (bool, string) {
+	if len(historyPatches) == 0 {
+		return false, ""
+	}
+
+	// Build sets for easier comparison
+	historySet := make(map[string]struct{}, len(historyPatches))
+	for _, p := range historyPatches {
+		historySet[p] = struct{}{}
+	}
+	currentSet := make(map[string]struct{}, len(currentPatches))
+	for _, p := range currentPatches {
+		currentSet[p] = struct{}{}
+	}
+
+	// Find missing patches (in history but not in current)
+	var missingPatches []string
+	for _, p := range historyPatches {
+		if _, ok := currentSet[p]; !ok {
+			missingPatches = append(missingPatches, p)
 		}
 	}
 
-	if len(historyPatches) != len(currentPatches) {
-		return true
-	}
-
-	for i, patch := range historyPatches {
-		if currentPatches[i] != patch {
-			return true
+	// Find extra patches (in current but not in history)
+	var extraPatches []string
+	for _, p := range currentPatches {
+		if _, ok := historySet[p]; !ok {
+			extraPatches = append(extraPatches, p)
 		}
 	}
 
-	return false
+	// Check for order mismatch (same patches but different order)
+	orderMismatch := false
+	if len(missingPatches) == 0 && len(extraPatches) == 0 && len(historyPatches) == len(currentPatches) {
+		for i := range historyPatches {
+			if historyPatches[i] != currentPatches[i] {
+				orderMismatch = true
+				break
+			}
+		}
+	}
+
+	// No mismatch
+	if len(missingPatches) == 0 && len(extraPatches) == 0 && !orderMismatch {
+		return false, ""
+	}
+
+	// Build description
+	var parts []string
+	if len(missingPatches) > 0 {
+		parts = append(parts, fmt.Sprintf("missing patches: [%s]", strings.Join(missingPatches, ", ")))
+	}
+	if len(extraPatches) > 0 {
+		parts = append(parts, fmt.Sprintf("unexpected patches: [%s]", strings.Join(extraPatches, ", ")))
+	}
+	if orderMismatch {
+		parts = append(parts, fmt.Sprintf("patch order mismatch: history has [%s], current has [%s]",
+			strings.Join(historyPatches, ", "), strings.Join(currentPatches, ", ")))
+	}
+
+	description := fmt.Sprintf("Patch mismatch - %s. The workflow was previously executed with patches [%s] but the current code has patches [%s]. "+
+		"Deploy the correct code version or use workflow versioning to handle this transition.",
+		strings.Join(parts, "; "),
+		strings.Join(historyPatches, ", "),
+		strings.Join(currentPatches, ", "))
+
+	return true, description
 }
