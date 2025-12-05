@@ -36,25 +36,18 @@ func handleAdd(ctx context.Context, cron api.Interface, add *schedulerv1pb.Watch
 
 	if len(ts) == 0 || slices.Contains(ts, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER) {
 		for _, actorType := range add.GetActorTypes() {
-			log.Infof("Adding a Sidecar connection to Scheduler for actor type: %s/%s.", reqNamespace, actorType)
 			prefixes = append(prefixes, "actorreminder||"+reqNamespace+"||"+actorType+"||")
 		}
 
 		actorTypes = add.GetActorTypes()
 	}
 
-	log.Infof("Adding a Sidecar connection to Scheduler for app: %s/%s (actorTypes=%v).", reqNamespace, reqAppID, actorTypes)
-
-	log.Debugf("Marking deliverable prefixes for Sidecar connection: %s/%s: %v.",
-		add.GetNamespace(), add.GetAppId(), prefixes)
-
 	cancel, err := cron.DeliverablePrefixes(ctx, prefixes...)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Debugf("Added a Sidecar connection to Scheduler for: %s/%s.",
-		add.GetNamespace(), add.GetAppId())
+	log.Infof("Sidecar connected: %s/%s (actorTypes=%v) (prefixes=%v).", reqNamespace, reqAppID, actorTypes, prefixes)
 
 	return cancel, nil
 }
