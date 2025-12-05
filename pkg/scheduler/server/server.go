@@ -50,6 +50,8 @@ type Options struct {
 	Mode                      modes.DaprMode
 	KubeConfig                *string
 
+	Workers uint32
+
 	EtcdEmbed                      bool
 	EtcdDataDir                    string
 	EtcdName                       string
@@ -141,6 +143,7 @@ func New(opts Options) (*Server, error) {
 		Healthz: opts.Healthz,
 		Host:    &schedulerv1pb.Host{Address: broadcastAddr},
 		Etcd:    etcd,
+		Workers: opts.Workers,
 	})
 
 	var ctrl concurrency.Runner

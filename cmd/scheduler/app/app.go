@@ -124,6 +124,8 @@ func Run() {
 				EtcdClientEndpoints: opts.EtcdClientEndpoints,
 				EtcdClientUsername:  opts.EtcdClientUsername,
 				EtcdClientPassword:  opts.EtcdClientPassword,
+
+				Workers: opts.Workers,
 			})
 			if serr != nil {
 				return serr
