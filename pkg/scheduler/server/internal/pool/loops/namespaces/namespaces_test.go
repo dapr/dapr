@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package connections
+package namespaces
 
 import (
 	"context"
@@ -115,7 +115,7 @@ func newSuite(t *testing.T) *suite {
 	}
 }
 
-func Test_Connections(t *testing.T) {
+func Test_Namespaces(t *testing.T) {
 	t.Parallel()
 
 	t.Run("shutdown with no streams", func(t *testing.T) {
