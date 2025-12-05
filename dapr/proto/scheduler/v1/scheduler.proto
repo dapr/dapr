@@ -23,6 +23,12 @@ service Scheduler {
   // scheduler hosts so that it can connect to each. Receives an updated list
   // on leadership changes.
   rpc WatchHosts(WatchHostsRequest) returns (stream WatchHostsResponse) {}
+  // DeleteByMetadata is used by the daprd sidecar to delete jobs by a metadata
+  // target.
+  rpc DeleteByMetadata(DeleteByMetadataRequest) returns (DeleteByMetadataResponse) {}
+  // DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
+  // prefix. An empty prefix deletes all jobs from the target.
+  rpc DeleteByNamePrefix(DeleteByNamePrefixRequest) returns (DeleteByNamePrefixResponse) {}
 }
 
 message Job {
@@ -239,4 +245,37 @@ message WatchHostsResponse {
 message Host {
   // address is the address of the host.
   string address = 1;
+}
+
+// DeleteByMetadataRequest is the message used by the daprd sidecar to delete jobs by metadata.
+message DeleteByMetadataRequest {
+  // The metadata target to delete jobs by.
+  JobMetadata metadata = 1;
+
+  // id_prefix_match indicates whether to match by prefix for the ID field in
+  // Actor Reminders. When true, all jobs with IDs that start with the
+  // specified ID will be deleted. When false, only the ID/appID with the exact
+  // ID will be deleted.
+  // Default is false.
+  optional bool id_prefix_match = 2;
+}
+
+// DeleteByMetadataResponse is the response message used by the daprd sidecar to delete jobs by metadata.
+message DeleteByMetadataResponse {
+  // Empty
+}
+
+// DeleteByNamePrefixRequest is the message used by the daprd sidecar to delete jobs by name prefix.
+// An empty prefix deletes all jobs from the target.
+message DeleteByNamePrefixRequest {
+  // name_prefix is the name prefix to delete jobs by.
+  // An empty prefix deletes all jobs from the target.
+  string name_prefix = 1;
+
+  // The metadata associated with the job.
+  JobMetadata metadata = 2;
+}
+
+message DeleteByNamePrefixResponse {
+  // Empty
 }

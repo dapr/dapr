@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
+	"github.com/dapr/durabletask-go/workflow"
 )
 
 type Workflow struct {
@@ -159,6 +160,17 @@ func (w *Workflow) RegistryN(index int) *task.TaskRegistry {
 	return w.taskregistry[index]
 }
 
+func (w *Workflow) WorkflowClient(t *testing.T, ctx context.Context) *workflow.Client {
+	t.Helper()
+	return workflow.NewClient(w.Dapr().GRPCConn(t, ctx))
+}
+
+func (w *Workflow) WorkflowClientN(t *testing.T, ctx context.Context, index int) *workflow.Client {
+	t.Helper()
+	require.Less(t, index, len(w.daprds), "index out of range")
+	return workflow.NewClient(w.DaprN(index).GRPCConn(t, ctx))
+}
+
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {
 	t.Helper()
 
@@ -175,7 +187,7 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c,
-			len(w.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
+			len(w.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
 	}, time.Second*10, time.Millisecond*10)
 
 	return backendClient
@@ -208,4 +220,8 @@ func (w *Workflow) Metrics(t *testing.T, ctx context.Context) map[string]float64
 
 func (w *Workflow) DB() *sqlite.SQLite {
 	return w.db
+}
+
+func (w *Workflow) Scheduler() *scheduler.Scheduler {
+	return w.sched
 }

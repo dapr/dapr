@@ -15,6 +15,7 @@ package v1alpha1
 
 import (
 	"strconv"
+	"time"
 
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -71,14 +72,48 @@ type ConfigurationSpec struct {
 type WorkflowSpec struct {
 	// maxConcurrentWorkflowInvocations is the maximum number of concurrent workflow invocations that can be scheduled by a single Dapr instance.
 	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-	// If omitted, the default value of 100 will be used.
+	// If omitted, no maximum will be enforced.
 	// +optional
 	MaxConcurrentWorkflowInvocations int32 `json:"maxConcurrentWorkflowInvocations,omitempty"`
 	// maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
 	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-	// If omitted, the default value of 100 will be used.
+	// If omitted, no maximum will be enforced.
 	// +optional
 	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty"`
+
+	// StateRetentionPolicy defines the retention configuration for workflow
+	// state once a workflow reaches a terminal state. If not set, workflow
+	// instances will not be automatically purged.
+	// +optional
+	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty"`
+}
+
+// WorkflowStateRetentionPolicy defines the retention policy of workflow state
+// for workflow instances once they reaches a specific or any terminal state.
+// If not set, workflow instances will not be automatically purged. If a
+// specific and any terminal state are both set, the specific terminal state
+// takes precedence. Accepts duration strings, e.g. "72h" or "30m", including
+// immediate values "0s".
+type WorkflowStateRetentionPolicy struct {
+	// AnyTerminal is the TTL for purging workflow instances that reach any
+	// terminal state.
+	// +optional
+	AnyTerminal *time.Duration `json:"anyTerminal,omitempty"`
+
+	// Completed is the TTL for purging workflow instances that reach the
+	// Completed terminal state.
+	// +optional
+	Completed *time.Duration `json:"completed,omitempty"`
+
+	// Failed is the TTL for purging workflow instances that reach the Failed
+	// terminal state.
+	// +optional
+	Failed *time.Duration `json:"failed,omitempty"`
+
+	// Terminated is the TTL for purging workflow instances that reach the
+	// Terminated terminal state.
+	// +optional
+	Terminated *time.Duration `json:"terminated,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.

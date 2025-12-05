@@ -89,7 +89,7 @@ func (u *unset) Run(t *testing.T, ctx context.Context) {
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 		}, u.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
@@ -129,7 +129,7 @@ spec:
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 		}, u.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
@@ -158,11 +158,11 @@ spec:
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 			{
 				Name: "foo", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 			},
 		}, u.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)

@@ -19,12 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Scheduler_ScheduleJob_FullMethodName = "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob"
-	Scheduler_GetJob_FullMethodName      = "/dapr.proto.scheduler.v1.Scheduler/GetJob"
-	Scheduler_DeleteJob_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
-	Scheduler_WatchJobs_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/WatchJobs"
-	Scheduler_ListJobs_FullMethodName    = "/dapr.proto.scheduler.v1.Scheduler/ListJobs"
-	Scheduler_WatchHosts_FullMethodName  = "/dapr.proto.scheduler.v1.Scheduler/WatchHosts"
+	Scheduler_ScheduleJob_FullMethodName        = "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob"
+	Scheduler_GetJob_FullMethodName             = "/dapr.proto.scheduler.v1.Scheduler/GetJob"
+	Scheduler_DeleteJob_FullMethodName          = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
+	Scheduler_WatchJobs_FullMethodName          = "/dapr.proto.scheduler.v1.Scheduler/WatchJobs"
+	Scheduler_ListJobs_FullMethodName           = "/dapr.proto.scheduler.v1.Scheduler/ListJobs"
+	Scheduler_WatchHosts_FullMethodName         = "/dapr.proto.scheduler.v1.Scheduler/WatchHosts"
+	Scheduler_DeleteByMetadata_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/DeleteByMetadata"
+	Scheduler_DeleteByNamePrefix_FullMethodName = "/dapr.proto.scheduler.v1.Scheduler/DeleteByNamePrefix"
 )
 
 // SchedulerClient is the client API for Scheduler service.
@@ -46,6 +48,12 @@ type SchedulerClient interface {
 	// scheduler hosts so that it can connect to each. Receives an updated list
 	// on leadership changes.
 	WatchHosts(ctx context.Context, in *WatchHostsRequest, opts ...grpc.CallOption) (Scheduler_WatchHostsClient, error)
+	// DeleteByMetadata is used by the daprd sidecar to delete jobs by a metadata
+	// target.
+	DeleteByMetadata(ctx context.Context, in *DeleteByMetadataRequest, opts ...grpc.CallOption) (*DeleteByMetadataResponse, error)
+	// DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
+	// prefix. An empty prefix deletes all jobs from the target.
+	DeleteByNamePrefix(ctx context.Context, in *DeleteByNamePrefixRequest, opts ...grpc.CallOption) (*DeleteByNamePrefixResponse, error)
 }
 
 type schedulerClient struct {
@@ -155,6 +163,24 @@ func (x *schedulerWatchHostsClient) Recv() (*WatchHostsResponse, error) {
 	return m, nil
 }
 
+func (c *schedulerClient) DeleteByMetadata(ctx context.Context, in *DeleteByMetadataRequest, opts ...grpc.CallOption) (*DeleteByMetadataResponse, error) {
+	out := new(DeleteByMetadataResponse)
+	err := c.cc.Invoke(ctx, Scheduler_DeleteByMetadata_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *schedulerClient) DeleteByNamePrefix(ctx context.Context, in *DeleteByNamePrefixRequest, opts ...grpc.CallOption) (*DeleteByNamePrefixResponse, error) {
+	out := new(DeleteByNamePrefixResponse)
+	err := c.cc.Invoke(ctx, Scheduler_DeleteByNamePrefix_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SchedulerServer is the server API for Scheduler service.
 // All implementations should embed UnimplementedSchedulerServer
 // for forward compatibility
@@ -174,6 +200,12 @@ type SchedulerServer interface {
 	// scheduler hosts so that it can connect to each. Receives an updated list
 	// on leadership changes.
 	WatchHosts(*WatchHostsRequest, Scheduler_WatchHostsServer) error
+	// DeleteByMetadata is used by the daprd sidecar to delete jobs by a metadata
+	// target.
+	DeleteByMetadata(context.Context, *DeleteByMetadataRequest) (*DeleteByMetadataResponse, error)
+	// DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
+	// prefix. An empty prefix deletes all jobs from the target.
+	DeleteByNamePrefix(context.Context, *DeleteByNamePrefixRequest) (*DeleteByNamePrefixResponse, error)
 }
 
 // UnimplementedSchedulerServer should be embedded to have forward compatible implementations.
@@ -197,6 +229,12 @@ func (UnimplementedSchedulerServer) ListJobs(context.Context, *ListJobsRequest) 
 }
 func (UnimplementedSchedulerServer) WatchHosts(*WatchHostsRequest, Scheduler_WatchHostsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchHosts not implemented")
+}
+func (UnimplementedSchedulerServer) DeleteByMetadata(context.Context, *DeleteByMetadataRequest) (*DeleteByMetadataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteByMetadata not implemented")
+}
+func (UnimplementedSchedulerServer) DeleteByNamePrefix(context.Context, *DeleteByNamePrefixRequest) (*DeleteByNamePrefixResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteByNamePrefix not implemented")
 }
 
 // UnsafeSchedulerServer may be embedded to opt out of forward compatibility for this service.
@@ -329,6 +367,42 @@ func (x *schedulerWatchHostsServer) Send(m *WatchHostsResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Scheduler_DeleteByMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteByMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchedulerServer).DeleteByMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Scheduler_DeleteByMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchedulerServer).DeleteByMetadata(ctx, req.(*DeleteByMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Scheduler_DeleteByNamePrefix_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteByNamePrefixRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchedulerServer).DeleteByNamePrefix(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Scheduler_DeleteByNamePrefix_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchedulerServer).DeleteByNamePrefix(ctx, req.(*DeleteByNamePrefixRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Scheduler_ServiceDesc is the grpc.ServiceDesc for Scheduler service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -351,6 +425,14 @@ var Scheduler_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListJobs",
 			Handler:    _Scheduler_ListJobs_Handler,
+		},
+		{
+			MethodName: "DeleteByMetadata",
+			Handler:    _Scheduler_DeleteByMetadata_Handler,
+		},
+		{
+			MethodName: "DeleteByNamePrefix",
+			Handler:    _Scheduler_DeleteByNamePrefix_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

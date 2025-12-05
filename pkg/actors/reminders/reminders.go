@@ -37,6 +37,16 @@ type Interface interface {
 
 	// Delete deletes an actor reminder.
 	Delete(ctx context.Context, req *api.DeleteReminderRequest) error
+
+	// DeleteByActorID deletes all reminders for a given actor ID.
+	DeleteByActorID(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error
+
+	// List lists all reminders for a given actor type and actor ID.
+	List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error)
+
+	// Scheduler returns the underlying reminder scheduler.
+	// Used to bypass the actor hosted check.
+	Scheduler() (scheduler.Interface, error)
 }
 
 type Options struct {
@@ -90,4 +100,36 @@ func (r *reminders) Delete(ctx context.Context, req *api.DeleteReminderRequest) 
 	}
 
 	return r.scheduler.Delete(ctx, req)
+}
+
+func (r *reminders) DeleteByActorID(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error {
+	if r.scheduler == nil {
+		return ErrReminderStorageNotSet
+	}
+
+	if !r.table.IsActorTypeHosted(req.ActorType) {
+		return ErrReminderOpActorNotHosted
+	}
+
+	return r.scheduler.DeleteByActorID(ctx, req)
+}
+
+func (r *reminders) List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error) {
+	if r.scheduler == nil {
+		return nil, ErrReminderStorageNotSet
+	}
+
+	if !r.table.IsActorTypeHosted(req.ActorType) {
+		return nil, ErrReminderOpActorNotHosted
+	}
+
+	return r.scheduler.List(ctx, req)
+}
+
+func (r *reminders) Scheduler() (scheduler.Interface, error) {
+	if r.scheduler == nil {
+		return nil, ErrReminderStorageNotSet
+	}
+
+	return r.scheduler, nil
 }

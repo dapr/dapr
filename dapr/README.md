@@ -14,7 +14,7 @@
 
 1. Install protoc version: [v25.4](https://github.com/protocolbuffers/protobuf/releases/tag/v25.4)
 
-2. Install protoc-gen-go and protoc-gen-go-grpc
+2. Install protoc-gen-go, protoc-gen-go-grpc and protoc-gen-connect-go
 
 ```bash
 make init-proto
@@ -48,13 +48,14 @@ sudo rm -r protoc
 ```
 2. Navigate to your Dapr repository. For example, if you've got it in Windows at `P:/Code/Dapr` in your Ubuntu terminal
 use `cd /mnt/p/Code/Dapr`.
-3. Install proto-gen-go and protoc-gen-go-grpc, then move from their install directory to your previously created directory
+3. Install proto-gen-go, protoc-gen-go-grpc and protoc-gen-connect-go, then move from their install directory to your previously created directory
 in `/usr/bin/protoc`
 ```bash
 make init-proto
 cp ~/go/bin
 ln -s ~/go/bin/protoc-gen-go /usr/local/bin
 ln -s ~/go/bin/proto-gen-go-grpc /usr/local/bin
+ln -s ~/go/bin/proto-gen-connect-go /usr/local/bin
 ```
 4. Generate the proto clients
 ```bash

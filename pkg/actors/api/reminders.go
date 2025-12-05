@@ -20,6 +20,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 // GetReminderRequest is the request object to get an existing reminder.
@@ -40,7 +42,9 @@ type CreateReminderRequest struct {
 	DueTime   string     `json:"dueTime"`
 	Period    string     `json:"period"`
 	TTL       string     `json:"ttl"`
-	IsOneShot bool       `json:"-"`
+	Overwrite *bool      `json:"overwrite"`
+
+	FailurePolicy *commonv1.JobFailurePolicy `json:"failure_policy,omitempty"`
 }
 
 // ActorKey returns the key of the actor for this reminder.
@@ -76,7 +80,8 @@ func (req *CreateReminderRequest) UnmarshalJSON(data []byte) error {
 	*req = CreateReminderRequest{}
 
 	m := &struct {
-		Data json.RawMessage `json:"data"`
+		Data          json.RawMessage            `json:"data"`
+		FailurePolicy *commonv1.JobFailurePolicy `json:"failure_policy,omitempty"`
 		*createReminderAlias
 	}{
 		createReminderAlias: (*createReminderAlias)(req),
@@ -93,6 +98,8 @@ func (req *CreateReminderRequest) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("failed to unmarshal data: %w", err)
 		}
 	}
+
+	req.FailurePolicy = m.FailurePolicy
 
 	return nil
 }
@@ -216,8 +223,15 @@ func (req DeleteReminderRequest) Key() string {
 	return req.ActorType + DaprSeparator + req.ActorID + DaprSeparator + req.Name
 }
 
+type DeleteRemindersByActorIDRequest struct {
+	ActorType       string
+	ActorID         string
+	MatchIDAsPrefix bool
+}
+
 type ListRemindersRequest struct {
 	ActorType string
+	ActorID   *string
 }
 
 // DeleteTimerRequest is a request object for deleting a timer.

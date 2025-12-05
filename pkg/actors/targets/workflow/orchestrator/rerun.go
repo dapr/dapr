@@ -57,6 +57,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 	defer o.factory.deactivate(o)
 
 	fork := fork.New(fork.Options{
+		InstanceID:        o.actorID,
 		AppID:             o.appID,
 		ActorType:         o.actorType,
 		ActivityActorType: o.activityActorType,
@@ -153,7 +154,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	}
 
 	if err = errors.Join(
-		o.callActivities(ctx, activities, newState.Generation),
+		o.callActivities(ctx, activities, newState),
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
 		return err
