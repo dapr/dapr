@@ -54,13 +54,13 @@ type connector struct {
 }
 
 func New(opts Options) loop.Interface[loops.Event] {
-	return loop.New(&connector{
+	return loop.New[loops.Event](1024).NewLoop(&connector{
 		namespace: opts.Namespace,
 		appID:     opts.AppID,
 		actors:    opts.Actors,
 		channels:  opts.Channels,
 		wfEngine:  opts.WFEngine,
-	}, 1024)
+	})
 }
 
 func (c *connector) Handle(ctx context.Context, event loops.Event) error {
