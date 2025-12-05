@@ -114,10 +114,11 @@ func TestInitPubSub(t *testing.T) {
 		resiliency := resiliency.New(logger.NewLogger("test"))
 		ps := New(Options{
 			Subscriber: subscriber.New(subscriber.Options{
-				Channels:   channels,
-				Resiliency: resiliency,
-				CompStore:  compStore,
-				IsHTTP:     true,
+				Channels:                        channels,
+				Resiliency:                      resiliency,
+				CompStore:                       compStore,
+				IsHTTP:                          true,
+				ProgrammaticSubscriptionEnabled: true,
 			}),
 			Registry:       registry.PubSubs(),
 			Meta:           meta.New(meta.Options{}),

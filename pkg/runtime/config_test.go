@@ -71,6 +71,111 @@ func TestStandaloneWasmStrictSandbox(t *testing.T) {
 	assert.True(t, global.Spec.WasmSpec.StrictSandbox)
 }
 
+func TestDisableInitEndpointsValidation(t *testing.T) {
+	t.Run("valid single endpoint", func(t *testing.T) {
+		cfg := defaultTestConfig()
+		cfg.DisableInitEndpoints = "config"
+
+		intc, err := cfg.toInternal()
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config"}, intc.disableInitEndpoints)
+	})
+
+	t.Run("valid multiple endpoints", func(t *testing.T) {
+		cfg := defaultTestConfig()
+		cfg.DisableInitEndpoints = "config,subscribe"
+
+		intc, err := cfg.toInternal()
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config", "subscribe"}, intc.disableInitEndpoints)
+	})
+
+	t.Run("valid endpoints with spaces", func(t *testing.T) {
+		cfg := defaultTestConfig()
+		cfg.DisableInitEndpoints = " config , subscribe "
+
+		intc, err := cfg.toInternal()
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config", "subscribe"}, intc.disableInitEndpoints)
+	})
+
+	t.Run("empty string should be allowed", func(t *testing.T) {
+		cfg := defaultTestConfig()
+		cfg.DisableInitEndpoints = ""
+
+		intc, err := cfg.toInternal()
+		require.NoError(t, err)
+		assert.Empty(t, intc.disableInitEndpoints)
+	})
+
+	t.Run("empty values should be filtered out", func(t *testing.T) {
+		cfg := defaultTestConfig()
+		cfg.DisableInitEndpoints = "config,,subscribe,"
+
+		intc, err := cfg.toInternal()
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config", "subscribe"}, intc.disableInitEndpoints)
+	})
+
+	t.Run("case insensitive validation", func(t *testing.T) {
+		cfg := defaultTestConfig()
+		cfg.DisableInitEndpoints = "CONFIG,Subscribe"
+
+		intc, err := cfg.toInternal()
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config", "subscribe"}, intc.disableInitEndpoints)
+	})
+
+	t.Run("invalid endpoint should return error", func(t *testing.T) {
+		cfg := defaultTestConfig()
+		cfg.DisableInitEndpoints = "invalid"
+
+		_, err := cfg.toInternal()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid value for 'disable-init-endpoints': invalid")
+	})
+
+	t.Run("mix of valid and invalid endpoints should return error", func(t *testing.T) {
+		cfg := defaultTestConfig()
+		cfg.DisableInitEndpoints = "config,invalid,subscribe"
+
+		_, err := cfg.toInternal()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid value for 'disable-init-endpoints': invalid")
+	})
+
+	t.Run("multiple invalid endpoints should return error for first invalid", func(t *testing.T) {
+		cfg := defaultTestConfig()
+		cfg.DisableInitEndpoints = "config,invalid1,invalid2"
+
+		_, err := cfg.toInternal()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid value for 'disable-init-endpoints': invalid1")
+	})
+
+	t.Run("only whitespace should be filtered out", func(t *testing.T) {
+		cfg := defaultTestConfig()
+		cfg.DisableInitEndpoints = "   ,  ,  "
+
+		intc, err := cfg.toInternal()
+		require.NoError(t, err)
+		assert.Empty(t, intc.disableInitEndpoints)
+	})
+
+	t.Run("supported values documentation check", func(t *testing.T) {
+		// Test that all documented supported values are actually valid
+		supportedValues := []string{"config", "subscribe"}
+
+		for _, value := range supportedValues {
+			cfg := defaultTestConfig()
+			cfg.DisableInitEndpoints = value
+
+			_, err := cfg.toInternal()
+			assert.NoError(t, err, "Value '%s' should be valid but returned error: %v", value, err)
+		}
+	})
+}
+
 func defaultTestConfig() Config {
 	return Config{
 		AppID:                        "app1",
@@ -98,6 +203,7 @@ func defaultTestConfig() Config {
 		EnableAPILogging:             ptr.Of(true),
 		DisableBuiltinK8sSecretStore: true,
 		AppChannelAddress:            "1.1.1.1",
+		DisableInitEndpoints:         "",
 		Registry:                     registry.NewOptions(),
 		Metrics:                      metrics.Options{Enabled: false, Healthz: healthz.New()},
 		Healthz:                      healthz.New(),

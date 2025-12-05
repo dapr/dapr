@@ -42,16 +42,17 @@ import (
 )
 
 type Options struct {
-	AppID           string
-	Namespace       string
-	Resiliency      resiliency.Provider
-	TracingSpec     *config.TracingSpec
-	IsHTTP          bool
-	Channels        *channels.Channels
-	GRPC            *manager.Manager
-	CompStore       *compstore.ComponentStore
-	Adapter         rtpubsub.Adapter
-	AdapterStreamer rtpubsub.AdapterStreamer
+	AppID                           string
+	Namespace                       string
+	Resiliency                      resiliency.Provider
+	TracingSpec                     *config.TracingSpec
+	IsHTTP                          bool
+	Channels                        *channels.Channels
+	GRPC                            *manager.Manager
+	CompStore                       *compstore.ComponentStore
+	Adapter                         rtpubsub.Adapter
+	AdapterStreamer                 rtpubsub.AdapterStreamer
+	ProgrammaticSubscriptionEnabled bool
 }
 
 type Subscriber struct {
@@ -73,8 +74,9 @@ type Subscriber struct {
 	lock         sync.RWMutex
 	closed       atomic.Bool
 
-	retryCtx    map[string]context.Context
-	retryCancel map[string]context.CancelFunc
+	retryCtx                        map[string]context.Context
+	retryCancel                     map[string]context.CancelFunc
+	programmaticSubscriptionEnabled bool
 }
 
 type namedSubscription struct {
@@ -86,20 +88,21 @@ var log = logger.NewLogger("dapr.runtime.processor.subscription")
 
 func New(opts Options) *Subscriber {
 	return &Subscriber{
-		appID:           opts.AppID,
-		namespace:       opts.Namespace,
-		resiliency:      opts.Resiliency,
-		tracingSpec:     opts.TracingSpec,
-		isHTTP:          opts.IsHTTP,
-		channels:        opts.Channels,
-		grpc:            opts.GRPC,
-		compStore:       opts.CompStore,
-		adapter:         opts.Adapter,
-		adapterStreamer: opts.AdapterStreamer,
-		appSubs:         make(map[string][]*namedSubscription),
-		streamSubs:      make(map[string]map[rtpubsub.ConnectionID]*namedSubscription),
-		retryCtx:        make(map[string]context.Context),
-		retryCancel:     make(map[string]context.CancelFunc),
+		appID:                           opts.AppID,
+		namespace:                       opts.Namespace,
+		resiliency:                      opts.Resiliency,
+		tracingSpec:                     opts.TracingSpec,
+		isHTTP:                          opts.IsHTTP,
+		channels:                        opts.Channels,
+		grpc:                            opts.GRPC,
+		compStore:                       opts.CompStore,
+		adapter:                         opts.Adapter,
+		adapterStreamer:                 opts.AdapterStreamer,
+		appSubs:                         make(map[string][]*namedSubscription),
+		streamSubs:                      make(map[string]map[rtpubsub.ConnectionID]*namedSubscription),
+		retryCtx:                        make(map[string]context.Context),
+		retryCancel:                     make(map[string]context.CancelFunc),
+		programmaticSubscriptionEnabled: opts.ProgrammaticSubscriptionEnabled,
 	}
 }
 
@@ -524,6 +527,11 @@ func (s *Subscriber) initProgrammaticSubscriptions(ctx context.Context) error {
 	}
 
 	s.hasInitProg = true
+
+	if !s.programmaticSubscriptionEnabled {
+		log.Warn("Skipping programmatic subscription loading (see 'disable-init-endpoints' flag/annotation)")
+		return nil
+	}
 
 	var (
 		subscriptions []rtpubsub.Subscription

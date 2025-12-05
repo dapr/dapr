@@ -116,12 +116,13 @@ func TestSubscriptionLifecycle(t *testing.T) {
 	}, rtpubsub.ConnectionID(3))
 
 	subs := New(Options{
-		CompStore:  compStore,
-		IsHTTP:     true,
-		Resiliency: resiliency.New(logger.NewLogger("test")),
-		Namespace:  "ns1",
-		AppID:      TestRuntimeConfigID,
-		Channels:   new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
+		CompStore:                       compStore,
+		IsHTTP:                          true,
+		Resiliency:                      resiliency.New(logger.NewLogger("test")),
+		Namespace:                       "ns1",
+		AppID:                           TestRuntimeConfigID,
+		Channels:                        new(channels.Channels).WithAppChannel(new(channelt.MockAppChannel)),
+		ProgrammaticSubscriptionEnabled: true,
 	})
 	subs.hasInitProg = true
 
@@ -197,12 +198,13 @@ func Test_initProgrammaticSubscriptions(t *testing.T) {
 	t.Run("get topic routes but no pubsubs are registered", func(t *testing.T) {
 		compStore := compstore.New()
 		subs := New(Options{
-			CompStore:  compStore,
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Namespace:  "ns1",
-			AppID:      TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
+			CompStore:                       compStore,
+			IsHTTP:                          true,
+			Resiliency:                      resiliency.New(logger.NewLogger("test")),
+			Namespace:                       "ns1",
+			AppID:                           TestRuntimeConfigID,
+			Channels:                        new(channels.Channels),
+			ProgrammaticSubscriptionEnabled: true,
 		})
 		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
@@ -212,12 +214,13 @@ func Test_initProgrammaticSubscriptions(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddPubSub(TestPubsubName, new(rtpubsub.PubsubItem))
 		subs := New(Options{
-			CompStore:  compStore,
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Namespace:  "ns1",
-			AppID:      TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
+			CompStore:                       compStore,
+			IsHTTP:                          true,
+			Resiliency:                      resiliency.New(logger.NewLogger("test")),
+			Namespace:                       "ns1",
+			AppID:                           TestRuntimeConfigID,
+			Channels:                        new(channels.Channels),
+			ProgrammaticSubscriptionEnabled: true,
 		})
 		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
 		assert.Empty(t, compStore.ListProgramaticSubscriptions())
@@ -228,12 +231,13 @@ func Test_initProgrammaticSubscriptions(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddPubSub(TestPubsubName, new(rtpubsub.PubsubItem))
 		subs := New(Options{
-			CompStore:  compStore,
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Namespace:  "ns1",
-			AppID:      TestRuntimeConfigID,
-			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			CompStore:                       compStore,
+			IsHTTP:                          true,
+			Resiliency:                      resiliency.New(logger.NewLogger("test")),
+			Namespace:                       "ns1",
+			AppID:                           TestRuntimeConfigID,
+			Channels:                        new(channels.Channels).WithAppChannel(mockAppChannel),
+			ProgrammaticSubscriptionEnabled: true,
 		})
 
 		b, err := json.Marshal([]rtpubsub.SubscriptionJSON{
@@ -258,6 +262,33 @@ func Test_initProgrammaticSubscriptions(t *testing.T) {
 		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
 		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
 		assert.Len(t, compStore.ListProgramaticSubscriptions(), 1)
+	})
+
+	t.Run("skip programmatic subscription loading when disabled", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		compStore := compstore.New()
+		compStore.AddPubSub(TestPubsubName, new(rtpubsub.PubsubItem))
+		subs := New(Options{
+			CompStore:                       compStore,
+			IsHTTP:                          true,
+			Resiliency:                      resiliency.New(logger.NewLogger("test")),
+			Namespace:                       "ns1",
+			AppID:                           TestRuntimeConfigID,
+			Channels:                        new(channels.Channels).WithAppChannel(mockAppChannel),
+			ProgrammaticSubscriptionEnabled: false,
+		})
+
+		// Programmatic subscriptions should be skipped, so we don't expect any HTTP calls
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+
+		// Verify that no subscriptions were loaded
+		assert.Empty(t, compStore.ListProgramaticSubscriptions())
+
+		// Verify that hasInitProg is set even when programmatic subscriptions are disabled
+		assert.True(t, subs.hasInitProg)
+
+		// Verify that the mock app channel was never called
+		mockAppChannel.AssertNotCalled(t, "InvokeMethod")
 	})
 }
 
@@ -615,5 +646,195 @@ func TestSubscriptionRetryMechanisms(t *testing.T) {
 		time.Sleep(1 * time.Second)
 		verifyCallCount := callCount.Load()
 		assert.Equal(t, finalCallCount, verifyCallCount, "Retries should have stopped after subscriber closure")
+	})
+}
+
+func TestProgrammaticSubscriptionEnabled(t *testing.T) {
+	t.Run("programmatic subscription enabled - should load subscriptions", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		compStore := compstore.New()
+		compStore.AddPubSub(TestPubsubName, new(rtpubsub.PubsubItem))
+
+		subs := New(Options{
+			CompStore:                       compStore,
+			IsHTTP:                          true,
+			Resiliency:                      resiliency.New(logger.NewLogger("test")),
+			Namespace:                       "ns1",
+			AppID:                           TestRuntimeConfigID,
+			Channels:                        new(channels.Channels).WithAppChannel(mockAppChannel),
+			ProgrammaticSubscriptionEnabled: true,
+		})
+
+		// Setup mock response for subscription endpoint call
+		b, err := json.Marshal([]rtpubsub.SubscriptionJSON{
+			{
+				PubsubName: TestPubsubName,
+				Topic:      "topic1",
+				Routes: rtpubsub.RoutesJSON{
+					Default: "/",
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(b).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.cancelCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
+
+		// Call initProgrammaticSubscriptions
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+
+		// Verify that programmatic subscriptions were loaded
+		assert.Len(t, compStore.ListProgramaticSubscriptions(), 1)
+		assert.True(t, subs.hasInitProg, "hasInitProg should be set when programmatic subscriptions are enabled")
+
+		// Verify that the mock app channel was called
+		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
+	})
+
+	t.Run("programmatic subscription disabled - should skip loading", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		compStore := compstore.New()
+		compStore.AddPubSub(TestPubsubName, new(rtpubsub.PubsubItem))
+
+		subs := New(Options{
+			CompStore:                       compStore,
+			IsHTTP:                          true,
+			Resiliency:                      resiliency.New(logger.NewLogger("test")),
+			Namespace:                       "ns1",
+			AppID:                           TestRuntimeConfigID,
+			Channels:                        new(channels.Channels).WithAppChannel(mockAppChannel),
+			ProgrammaticSubscriptionEnabled: false,
+		})
+
+		// Call initProgrammaticSubscriptions - should return early without making HTTP calls
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+
+		// Verify that no subscriptions were loaded
+		assert.Empty(t, compStore.ListProgramaticSubscriptions())
+		assert.True(t, subs.hasInitProg, "hasInitProg should be set when programmatic subscriptions are disabled")
+
+		// Verify that the mock app channel was never called
+		mockAppChannel.AssertNotCalled(t, "InvokeMethod")
+	})
+
+	t.Run("default programmatic subscription behavior (false by default)", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		compStore := compstore.New()
+		compStore.AddPubSub(TestPubsubName, new(rtpubsub.PubsubItem))
+
+		// Don't set ProgrammaticSubscriptionEnabled - should default to false
+		subs := New(Options{
+			CompStore:  compStore,
+			IsHTTP:     true,
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Namespace:  "ns1",
+			AppID:      TestRuntimeConfigID,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+		})
+
+		// Call initProgrammaticSubscriptions - should return early without making HTTP calls
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+
+		// Verify that no subscriptions were loaded (default behavior)
+		assert.Empty(t, compStore.ListProgramaticSubscriptions())
+		assert.True(t, subs.hasInitProg, "hasInitProg should be set when programmatic subscriptions are disabled by default")
+
+		// Verify that the mock app channel was never called
+		mockAppChannel.AssertNotCalled(t, "InvokeMethod")
+	})
+
+	t.Run("programmatic subscription enabled - no pubsubs registered", func(t *testing.T) {
+		compStore := compstore.New()
+		// Don't add any pubsubs
+
+		subs := New(Options{
+			CompStore:                       compStore,
+			IsHTTP:                          true,
+			Resiliency:                      resiliency.New(logger.NewLogger("test")),
+			Namespace:                       "ns1",
+			AppID:                           TestRuntimeConfigID,
+			Channels:                        new(channels.Channels),
+			ProgrammaticSubscriptionEnabled: true,
+		})
+
+		// Call initProgrammaticSubscriptions - should return early because no pubsubs are registered
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+
+		// Verify that no subscriptions were loaded and hasInitProg is not set
+		assert.Empty(t, compStore.ListProgramaticSubscriptions())
+		assert.False(t, subs.hasInitProg, "hasInitProg should not be set when no pubsubs are registered")
+	})
+
+	t.Run("programmatic subscription enabled - app channel is nil", func(t *testing.T) {
+		compStore := compstore.New()
+		compStore.AddPubSub(TestPubsubName, new(rtpubsub.PubsubItem))
+
+		subs := New(Options{
+			CompStore:                       compStore,
+			IsHTTP:                          true,
+			Resiliency:                      resiliency.New(logger.NewLogger("test")),
+			Namespace:                       "ns1",
+			AppID:                           TestRuntimeConfigID,
+			Channels:                        new(channels.Channels), // No app channel set
+			ProgrammaticSubscriptionEnabled: true,
+		})
+
+		// Call initProgrammaticSubscriptions - should return early because app channel is nil
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+
+		// Verify that no subscriptions were loaded and hasInitProg is not set
+		assert.Empty(t, compStore.ListProgramaticSubscriptions())
+		assert.False(t, subs.hasInitProg, "hasInitProg should not be set when app channel is nil")
+	})
+
+	t.Run("multiple calls to initProgrammaticSubscriptions when enabled", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		compStore := compstore.New()
+		compStore.AddPubSub(TestPubsubName, new(rtpubsub.PubsubItem))
+
+		subs := New(Options{
+			CompStore:                       compStore,
+			IsHTTP:                          true,
+			Resiliency:                      resiliency.New(logger.NewLogger("test")),
+			Namespace:                       "ns1",
+			AppID:                           TestRuntimeConfigID,
+			Channels:                        new(channels.Channels).WithAppChannel(mockAppChannel),
+			ProgrammaticSubscriptionEnabled: true,
+		})
+
+		// Setup mock response
+		b, err := json.Marshal([]rtpubsub.SubscriptionJSON{
+			{
+				PubsubName: TestPubsubName,
+				Topic:      "topic1",
+				Routes: rtpubsub.RoutesJSON{
+					Default: "/",
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(b).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.cancelCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
+
+		// Call initProgrammaticSubscriptions multiple times
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+		require.NoError(t, subs.initProgrammaticSubscriptions(t.Context()))
+
+		// Verify that subscriptions were loaded only once
+		assert.Len(t, compStore.ListProgramaticSubscriptions(), 1)
+		assert.True(t, subs.hasInitProg)
+
+		// Verify that the mock app channel was called only once (due to hasInitProg flag)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 }
