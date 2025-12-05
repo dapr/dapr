@@ -20,25 +20,26 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stalled"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func init() {
-	suite.Register(new(resume))
+	suite.Register(new(purge))
 }
 
-type resume struct {
+type purge struct {
 	fw *stalled.StalledFramework
 }
 
-func (r *resume) Setup(t *testing.T) []framework.Option {
+func (r *purge) Setup(t *testing.T) []framework.Option {
 	r.fw = stalled.NewStalledFramework()
 	return r.fw.Setup(t)
 }
 
-func (r *resume) Run(t *testing.T, ctx context.Context) {
+func (r *purge) Run(t *testing.T, ctx context.Context) {
 	r.fw.SetOldWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
 		if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
 			return nil, err
@@ -81,7 +82,10 @@ func (r *resume) Run(t *testing.T, ctx context.Context) {
 	r.fw.WaitForStalled(t, ctx, id)
 
 	// Resuming a stalled workflow should do nothing
-	err := r.fw.CurrentClient.ResumeOrchestration(ctx, id, "resume")
+	err := r.fw.CurrentClient.PurgeOrchestrationState(ctx, id)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stalled")
+
+	err = r.fw.CurrentClient.PurgeOrchestrationState(ctx, id, api.WithForcePurge(true))
+	require.NoError(t, err)
 }
