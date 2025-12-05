@@ -165,6 +165,10 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		args = append(args, "--etcd-client-password="+*opts.clientPassword)
 	}
 
+	if opts.workers != nil {
+		args = append(args, fmt.Sprintf("--workers=%d", *opts.workers))
+	}
+
 	return &Scheduler{
 		exec: exec.New(t, binary.EnvValue("scheduler"), args,
 			append(opts.execOpts, exec.WithEnvVars(t,

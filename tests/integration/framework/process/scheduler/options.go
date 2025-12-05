@@ -47,6 +47,7 @@ type options struct {
 	dataDir     *string
 	kubeconfig  *string
 	mode        *string
+	workers     *uint32
 
 	overrideBroadcastHostPort *string
 }
@@ -162,6 +163,16 @@ func WithClientPassword(password string) Option {
 
 func WithLogLineStdout(ll *logline.LogLine) Option {
 	return WithExecOptions(exec.WithStdout(ll.Stdout()))
+}
+
+func WithLogLineStderr(ll *logline.LogLine) Option {
+	return WithExecOptions(exec.WithStderr(ll.Stdout()))
+}
+
+func WithWorkers(workers uint32) Option {
+	return func(o *options) {
+		o.workers = &workers
+	}
 }
 
 func WithExit1() Option {

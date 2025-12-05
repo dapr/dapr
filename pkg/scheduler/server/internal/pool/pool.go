@@ -15,7 +15,6 @@ package pool
 
 import (
 	"context"
-	"sync"
 
 	"github.com/diagridio/go-etcd-cron/api"
 
@@ -29,11 +28,6 @@ import (
 )
 
 var log = logger.NewLogger("dapr.runtime.scheduler.server.pool")
-
-// respChPool is a cache to reduce memory allocations for the ack channel.
-var respChPool = sync.Pool{New: func() any {
-	return make(chan api.TriggerResponseResult, 1)
-}}
 
 type Options struct {
 	Cron api.Interface
@@ -94,18 +88,11 @@ func (p *Pool) AddConnection(req *schedulerv1pb.WatchJobsRequestInitial, stream 
 }
 
 // Trigger triggers a job event to the pool. It returns a response result.
-func (p *Pool) Trigger(ctx context.Context, job *internalsv1pb.JobEvent) api.TriggerResponseResult {
+func (p *Pool) Trigger(job *internalsv1pb.JobEvent, fn func(api.TriggerResponseResult)) {
 	<-p.readyCh
 
-	respCh := respChPool.Get().(chan api.TriggerResponseResult)
 	p.nsLoop.Enqueue(&loops.TriggerRequest{
-		Job: job,
-		ResultFn: func(resp api.TriggerResponseResult) {
-			respCh <- resp
-		},
+		Job:      job,
+		ResultFn: fn,
 	})
-
-	resp := <-respCh
-	respChPool.Put(respCh)
-	return resp
 }
