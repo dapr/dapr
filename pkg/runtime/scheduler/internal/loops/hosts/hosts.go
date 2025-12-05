@@ -39,11 +39,11 @@ type hosts struct {
 }
 
 func New(opts Options) loop.Interface[loops.Event] {
-	return loop.New(&hosts{
+	return loop.New[loops.Event](1024).NewLoop(&hosts{
 		streamN:   opts.StreamN,
 		security:  opts.Security,
 		connector: opts.Connector,
-	}, 1024)
+	})
 }
 
 func (h *hosts) Handle(ctx context.Context, event loops.Event) error {
