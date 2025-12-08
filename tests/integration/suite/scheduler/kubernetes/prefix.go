@@ -183,7 +183,7 @@ func (p *prefix) Run(t *testing.T, ctx context.Context) {
 	resp, err = etcdClient.Get(ctx, "dapr/jobs/", clientv3.WithPrefix())
 	require.NoError(t, err)
 
-	var names []string
+	names := make([]string, 0, len(resp.Kvs))
 	for _, kv := range resp.Kvs {
 		names = append(names, string(kv.Key))
 	}
