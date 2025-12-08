@@ -292,10 +292,15 @@ func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.Sche
 
 func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) schedulerv1pb.SchedulerClient {
 	t.Helper()
+	return s.ClientMTLSNS(t, ctx, s.sentry.Namespace(), appID)
+}
+
+func (s *Scheduler) ClientMTLSNS(t *testing.T, ctx context.Context, ns, appID string) schedulerv1pb.SchedulerClient {
+	t.Helper()
 
 	require.NotNil(t, s.sentry)
 
-	sech := s.security(t, ctx, appID)
+	sech := s.security(t, ctx, ns, appID)
 
 	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
 	require.NoError(t, err)
@@ -317,18 +322,19 @@ func (s *Scheduler) ipPort(port int) string {
 	return "127.0.0.1:" + strconv.Itoa(port)
 }
 
-func (s *Scheduler) security(t *testing.T, ctx context.Context, appID string) security.Handler {
+func (s *Scheduler) security(t *testing.T, ctx context.Context, ns, appID string) security.Handler {
 	t.Helper()
 
 	sec, err := security.New(ctx, security.Options{
-		SentryAddress:           "localhost:" + strconv.Itoa(s.sentry.Port()),
-		ControlPlaneTrustDomain: s.sentry.TrustDomain(t),
-		ControlPlaneNamespace:   s.sentry.Namespace(),
-		TrustAnchorsFile:        ptr.Of(s.sentry.TrustAnchorsFile(t)),
-		AppID:                   appID,
-		Mode:                    modes.StandaloneMode,
-		MTLSEnabled:             true,
-		Healthz:                 healthz.New(),
+		SentryAddress:            "localhost:" + strconv.Itoa(s.sentry.Port()),
+		ControlPlaneTrustDomain:  s.sentry.TrustDomain(t),
+		ControlPlaneNamespace:    s.sentry.Namespace(),
+		TrustAnchorsFile:         ptr.Of(s.sentry.TrustAnchorsFile(t)),
+		AppID:                    appID,
+		Mode:                     modes.StandaloneMode,
+		MTLSEnabled:              true,
+		Healthz:                  healthz.New(),
+		OverrideRequestNamespace: ptr.Of(ns),
 	})
 	require.NoError(t, err)
 
