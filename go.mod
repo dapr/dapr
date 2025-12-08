@@ -15,7 +15,7 @@ require (
 	github.com/dapr/components-contrib v1.16.4
 	github.com/dapr/durabletask-go v0.10.2
 	github.com/dapr/kit v0.16.1
-	github.com/diagridio/go-etcd-cron v0.9.1
+	github.com/diagridio/go-etcd-cron v0.9.2
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/cors v1.2.1
@@ -526,5 +526,3 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-replace github.com/diagridio/go-etcd-cron => github.com/joshvanl/go-etcd-cron v0.0.0-20251208122303-7556b83b9b9e
