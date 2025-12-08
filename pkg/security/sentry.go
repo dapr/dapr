@@ -51,7 +51,12 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 	}
 
 	var trustDomain *string
-	ns := CurrentNamespace()
+	var ns string
+	if opts.OverrideRequestNamespace != nil {
+		ns = *opts.OverrideRequestNamespace
+	} else {
+		ns = CurrentNamespace()
+	}
 
 	// If the service is a control plane service, set the trust domain to the
 	// control plane trust domain.
