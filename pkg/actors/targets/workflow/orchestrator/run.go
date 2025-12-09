@@ -142,7 +142,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 	rs = wi.State
 
-	if setStalled(ctx, o, state, rs) {
+	if isStalled(ctx, o, state, rs) {
 		<-ctx.Done()
 		return todo.RunCompletedFalse, ctx.Err()
 	}
