@@ -150,3 +150,14 @@ func HealthCheckApps(urls ...string) error {
 	// Will be nil if no error
 	return errors.Join(errs...)
 }
+
+func LogPerfTestResourceUsage(appUsage, sidecarUsage *runner.AppUsage, restarts, testerRestarts int) {
+	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
+	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	t.Logf("target dapr app or sidecar restarted %v times", restarts)
+	t.Logf("tester app or sidecar restarted %v times", testerRestarts)
+}
+
+func LogPerfTestSummary(summary []byte) {
+	t.Logf("Test summary `%s`", string(summary))
+}
