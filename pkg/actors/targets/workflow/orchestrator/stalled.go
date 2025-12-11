@@ -38,31 +38,31 @@ func isStalled(ctx context.Context, o *orchestrator, state *wfenginestate.State,
 	rs.CompletedEvent = nil
 	rs.CompletedTime = nil
 
-	// Since we don't allow the workflow to be completed, we need to filter out the completed events so that the workflow is not moved to the completed state.
-	filteredNewEvents := make([]*protos.HistoryEvent, 0, len(rs.NewEvents))
-	for _, e := range rs.NewEvents {
-		if e.GetExecutionCompleted() == nil {
-			filteredNewEvents = append(filteredNewEvents, e)
-		}
-	}
-	rs.NewEvents = filteredNewEvents
+	hasFilteredNewEvents := len(rs.NewEvents) > 0
+	rs.NewEvents = []*protos.HistoryEvent{}
 
-	_ = runtimestate.AddEvent(rs, &protos.HistoryEvent{
-		EventId:   -1,
-		Timestamp: timestamppb.Now(),
-		EventType: &protos.HistoryEvent_ExecutionStalled{
-			ExecutionStalled: &protos.ExecutionStalledEvent{
-				Reason:      protos.StalledReason_PATCH_MISMATCH,
-				Description: ptr.Of(description),
+	lastEvent := rs.OldEvents[len(rs.OldEvents)-1]
+	hasStalledEvent := false
+	if execStalledEvent := lastEvent.GetExecutionStalled(); execStalledEvent == nil || *execStalledEvent.Description != description {
+		hasStalledEvent = true
+		_ = runtimestate.AddEvent(rs, &protos.HistoryEvent{
+			EventId:   -1,
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionStalled{
+				ExecutionStalled: &protos.ExecutionStalledEvent{
+					Reason:      protos.StalledReason_PATCH_MISMATCH,
+					Description: ptr.Of(description),
+				},
 			},
-		},
-	})
-
-	state.ApplyRuntimeStateChanges(rs)
-	err := o.saveInternalState(ctx, state)
-	if err != nil {
-		log.Errorf("Workflow actor '%s': failed to save internal state: %v", o.actorID, err)
-		return false
+		})
+	}
+	if hasFilteredNewEvents || hasStalledEvent {
+		state.ApplyRuntimeStateChanges(rs)
+		err := o.saveInternalState(ctx, state)
+		if err != nil {
+			log.Errorf("Workflow actor '%s': failed to save internal state: %v", o.actorID, err)
+			return false
+		}
 	}
 	log.Infof("Workflow actor '%s': workflow is stalled; holding reminder until context is canceled", o.actorID)
 	return true

@@ -164,3 +164,16 @@ func (f *StalledFramework) WaitForNumberOfOrchestrationStartedEvents(t *testing.
 		require.Equal(c, expected, count)
 	}, 20*time.Second, 50*time.Millisecond)
 }
+
+func (f *StalledFramework) CountStalledEvents(t *testing.T, ctx context.Context, id api.InstanceID) int {
+	t.Helper()
+	hist, err := f.CurrentClient.GetInstanceHistory(ctx, id)
+	require.NoError(t, err)
+	count := 0
+	for _, event := range hist.Events {
+		if event.GetExecutionStalled() != nil {
+			count++
+		}
+	}
+	return count
+}
