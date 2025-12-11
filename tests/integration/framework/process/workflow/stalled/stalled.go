@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type StalledFramework struct {
+type Stalled struct {
 	CurrentClient *client.TaskHubGrpcClient
 
 	appID            string
@@ -43,8 +43,8 @@ type StalledFramework struct {
 	workflows *workflow.Workflow
 }
 
-func NewStalledFramework() *StalledFramework {
-	return &StalledFramework{
+func NewStalled() *Stalled {
+	return &Stalled{
 		appID:            uuid.New().String(),
 		currentDaprIndex: 0,
 		CurrentClient:    nil,
@@ -52,7 +52,7 @@ func NewStalledFramework() *StalledFramework {
 	}
 }
 
-func (f *StalledFramework) Setup(t *testing.T) []framework.Option {
+func (f *Stalled) Setup(t *testing.T) []framework.Option {
 	t.Helper()
 	f.workflows = workflow.New(t,
 		workflow.WithDaprds(1),
@@ -64,17 +64,17 @@ func (f *StalledFramework) Setup(t *testing.T) []framework.Option {
 	return []framework.Option{framework.WithProcesses(f.workflows)}
 }
 
-func (f *StalledFramework) SetNewWorkflow(t *testing.T, ctx context.Context, orchestrator task.Orchestrator) {
+func (f *Stalled) SetNewWorkflow(t *testing.T, ctx context.Context, orchestrator task.Orchestrator) {
 	f.newWorkflow = orchestrator
 }
-func (f *StalledFramework) SetOldWorkflow(t *testing.T, ctx context.Context, orchestrator task.Orchestrator) {
+func (f *Stalled) SetOldWorkflow(t *testing.T, ctx context.Context, orchestrator task.Orchestrator) {
 	f.oldWorkflow = orchestrator
 }
-func (f *StalledFramework) AddActivityN(t *testing.T, ctx context.Context, name string, activity task.Activity) {
+func (f *Stalled) AddActivityN(t *testing.T, ctx context.Context, name string, activity task.Activity) {
 	f.activities[name] = activity
 }
 
-func (f *StalledFramework) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {
+func (f *Stalled) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {
 	t.Helper()
 	f.workflows.WaitUntilRunning(t, ctx)
 	f.CurrentClient = f.workflows.BackendClientN(t, ctx, f.currentDaprIndex)
@@ -91,12 +91,12 @@ func (f *StalledFramework) ScheduleWorkflow(t *testing.T, ctx context.Context) a
 	return id
 }
 
-func (f *StalledFramework) KillCurrentReplica(t *testing.T, ctx context.Context) {
+func (f *Stalled) KillCurrentReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
 	f.workflows.DaprN(f.currentDaprIndex).Kill(t)
 }
 
-func (f *StalledFramework) RunOldReplica(t *testing.T, ctx context.Context) {
+func (f *Stalled) RunOldReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
 	index := f.workflows.RunNewDaprd(t, ctx)
 	f.workflows.DaprN(index).Run(t, ctx)
@@ -110,7 +110,7 @@ func (f *StalledFramework) RunOldReplica(t *testing.T, ctx context.Context) {
 	f.CurrentClient = f.workflows.BackendClientN(t, ctx, index)
 }
 
-func (f *StalledFramework) RunNewReplica(t *testing.T, ctx context.Context) {
+func (f *Stalled) RunNewReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
 	index := f.workflows.RunNewDaprd(t, ctx)
 	f.workflows.DaprN(index).Run(t, ctx)
@@ -124,7 +124,7 @@ func (f *StalledFramework) RunNewReplica(t *testing.T, ctx context.Context) {
 	f.CurrentClient = f.workflows.BackendClientN(t, ctx, index)
 }
 
-func (f *StalledFramework) SwitchToNewReplica(t *testing.T, ctx context.Context) {
+func (f *Stalled) SwitchToNewReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
 	f.workflows.DaprN(1).Kill(t)
 
@@ -138,7 +138,7 @@ func (f *StalledFramework) SwitchToNewReplica(t *testing.T, ctx context.Context)
 	}
 }
 
-func (f *StalledFramework) waitForStatus(t *testing.T, ctx context.Context, id api.InstanceID, status protos.OrchestrationStatus) {
+func (f *Stalled) waitForStatus(t *testing.T, ctx context.Context, id api.InstanceID, status protos.OrchestrationStatus) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		md, err := f.CurrentClient.FetchOrchestrationMetadata(ctx, id)
@@ -147,7 +147,7 @@ func (f *StalledFramework) waitForStatus(t *testing.T, ctx context.Context, id a
 	}, 20*time.Second, 50*time.Millisecond)
 }
 
-func (f *StalledFramework) WaitForStalled(t *testing.T, ctx context.Context, id api.InstanceID) {
+func (f *Stalled) WaitForStalled(t *testing.T, ctx context.Context, id api.InstanceID) {
 	t.Helper()
 	f.waitForStatus(t, ctx, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
 	hist, err := f.CurrentClient.GetInstanceHistory(ctx, id)
@@ -155,7 +155,7 @@ func (f *StalledFramework) WaitForStalled(t *testing.T, ctx context.Context, id 
 	require.NotNil(t, hist.Events[len(hist.Events)-1].GetExecutionStalled())
 }
 
-func (f *StalledFramework) WaitForCompleted(t *testing.T, ctx context.Context, id api.InstanceID) {
+func (f *Stalled) WaitForCompleted(t *testing.T, ctx context.Context, id api.InstanceID) {
 	t.Helper()
 	f.waitForStatus(t, ctx, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
 	hist, err := f.CurrentClient.GetInstanceHistory(ctx, id)
@@ -163,7 +163,7 @@ func (f *StalledFramework) WaitForCompleted(t *testing.T, ctx context.Context, i
 	require.NotNil(t, hist.Events[len(hist.Events)-1].GetExecutionCompleted())
 }
 
-func (f *StalledFramework) WaitForNumberOfOrchestrationStartedEvents(t *testing.T, ctx context.Context, id api.InstanceID, expected int) {
+func (f *Stalled) WaitForNumberOfOrchestrationStartedEvents(t *testing.T, ctx context.Context, id api.InstanceID, expected int) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		hist, err := f.CurrentClient.GetInstanceHistory(ctx, id)
@@ -178,7 +178,7 @@ func (f *StalledFramework) WaitForNumberOfOrchestrationStartedEvents(t *testing.
 	}, 20*time.Second, 50*time.Millisecond)
 }
 
-func (f *StalledFramework) CountStalledEvents(t *testing.T, ctx context.Context, id api.InstanceID) int {
+func (f *Stalled) CountStalledEvents(t *testing.T, ctx context.Context, id api.InstanceID) int {
 	t.Helper()
 	hist, err := f.CurrentClient.GetInstanceHistory(ctx, id)
 	require.NoError(t, err)

@@ -29,11 +29,11 @@ func init() {
 }
 
 type patchmissing struct {
-	fw *stalled.StalledFramework
+	fw *stalled.Stalled
 }
 
 func (r *patchmissing) Setup(t *testing.T) []framework.Option {
-	r.fw = stalled.NewStalledFramework()
+	r.fw = stalled.NewStalled()
 	return r.fw.Setup(t)
 }
 

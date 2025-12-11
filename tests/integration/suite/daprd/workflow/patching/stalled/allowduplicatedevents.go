@@ -30,11 +30,11 @@ func init() {
 }
 
 type allowduplicatedevents struct {
-	fw *stalled.StalledFramework
+	fw *stalled.Stalled
 }
 
 func (r *allowduplicatedevents) Setup(t *testing.T) []framework.Option {
-	r.fw = stalled.NewStalledFramework()
+	r.fw = stalled.NewStalled()
 	return r.fw.Setup(t)
 }
 
