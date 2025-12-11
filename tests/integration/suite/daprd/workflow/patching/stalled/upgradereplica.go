@@ -33,43 +33,42 @@ type upgradereplica struct {
 }
 
 func (r *upgradereplica) Setup(t *testing.T) []framework.Option {
-	r.fw = stalled.NewStalled()
+	r.fw = stalled.New(t,
+		stalled.WithOldWorkflow(func(ctx *task.OrchestrationContext) (any, error) {
+			if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
+				return nil, err
+			}
+			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}),
+		stalled.WithNewWorkflow(func(ctx *task.OrchestrationContext) (any, error) {
+			if ctx.IsPatched("patch1") {
+				if err := ctx.CallActivity("sayHello2").Await(nil); err != nil {
+					return nil, err
+				}
+			} else {
+				if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
+					return nil, err
+				}
+			}
+			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}),
+		stalled.WithActivity("sayHello1", func(ctx task.ActivityContext) (any, error) {
+			return "Hello", nil
+		}),
+		stalled.WithActivity("sayHello2", func(ctx task.ActivityContext) (any, error) {
+			return "Hello", nil
+		}),
+	)
 	return r.fw.Setup(t)
 }
 
 func (r *upgradereplica) Run(t *testing.T, ctx context.Context) {
-
-	r.fw.SetOldWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
-		if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
-			return nil, err
-		}
-		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	})
-	r.fw.SetNewWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
-		if ctx.IsPatched("patch1") {
-			if err := ctx.CallActivity("sayHello2").Await(nil); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
-				return nil, err
-			}
-		}
-		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	})
-	r.fw.AddActivityN(t, ctx, "sayHello1", func(ctx task.ActivityContext) (any, error) {
-		return "Hello", nil
-	})
-	r.fw.AddActivityN(t, ctx, "sayHello2", func(ctx task.ActivityContext) (any, error) {
-		return "Hello", nil
-	})
-
 	id := r.fw.ScheduleWorkflow(t, ctx)
 	r.fw.WaitForNumberOfOrchestrationStartedEvents(t, ctx, id, 2)
 

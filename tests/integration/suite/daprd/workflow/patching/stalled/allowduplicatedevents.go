@@ -30,11 +30,28 @@ func init() {
 }
 
 type allowduplicatedevents struct {
-	fw *stalled.Stalled
+	fw                   *stalled.Stalled
+	oldReplicaPatchCheck string
 }
 
 func (r *allowduplicatedevents) Setup(t *testing.T) []framework.Option {
-	r.fw = stalled.NewStalled()
+	r.oldReplicaPatchCheck = "patch2"
+	r.fw = stalled.New(t,
+		stalled.WithOldWorkflow(func(ctx *task.OrchestrationContext) (any, error) {
+			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+				return nil, err
+			}
+			ctx.IsPatched(r.oldReplicaPatchCheck)
+			return nil, nil
+		}),
+		stalled.WithNewWorkflow(func(ctx *task.OrchestrationContext) (any, error) {
+			ctx.IsPatched("patch3")
+			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}),
+	)
 	return r.fw.Setup(t)
 }
 
@@ -42,22 +59,6 @@ func (r *allowduplicatedevents) Setup(t *testing.T) []framework.Option {
 // We allow duplicated stalled events if their descriptions are different, so we force the two old replicas to use
 // different patches to make the descriptions different.
 func (r *allowduplicatedevents) Run(t *testing.T, ctx context.Context) {
-	oldReplicaPatchCheck := "patch2"
-	r.fw.SetOldWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
-		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-			return nil, err
-		}
-		ctx.IsPatched(oldReplicaPatchCheck)
-		return nil, nil
-	})
-	r.fw.SetNewWorkflow(t, ctx, func(ctx *task.OrchestrationContext) (any, error) {
-		ctx.IsPatched("patch3")
-		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	})
-
 	id := r.fw.ScheduleWorkflow(t, ctx)
 	r.fw.WaitForNumberOfOrchestrationStartedEvents(t, ctx, id, 1)
 
@@ -71,7 +72,7 @@ func (r *allowduplicatedevents) Run(t *testing.T, ctx context.Context) {
 
 	r.fw.KillCurrentReplica(t, ctx)
 	// Force the old replica to use a different patch to make the descriptions different.
-	oldReplicaPatchCheck = "patch1"
+	r.oldReplicaPatchCheck = "patch1"
 	r.fw.RunOldReplica(t, ctx)
 
 	// we have to sleep as there's no way to know when the orchestrator runs

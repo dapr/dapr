@@ -32,23 +32,31 @@ import (
 
 type Stalled struct {
 	CurrentClient *client.TaskHubGrpcClient
+	options       options
 
 	appID            string
 	currentDaprIndex int
-	oldWorkflow      task.Orchestrator
-	newWorkflow      task.Orchestrator
-
-	activities map[string]task.Activity
 
 	workflows *workflow.Workflow
 }
 
-func NewStalled() *Stalled {
+func New(t *testing.T, fopts ...Option) *Stalled {
+	t.Helper()
+
+	opts := options{
+		newWorkflow: nil,
+		oldWorkflow: nil,
+		activities:  map[string]task.Activity{},
+	}
+
+	for _, opt := range fopts {
+		opt(&opts)
+	}
 	return &Stalled{
 		appID:            uuid.New().String(),
 		currentDaprIndex: 0,
 		CurrentClient:    nil,
-		activities:       map[string]task.Activity{},
+		options:          opts,
 	}
 }
 
@@ -64,22 +72,12 @@ func (f *Stalled) Setup(t *testing.T) []framework.Option {
 	return []framework.Option{framework.WithProcesses(f.workflows)}
 }
 
-func (f *Stalled) SetNewWorkflow(t *testing.T, ctx context.Context, orchestrator task.Orchestrator) {
-	f.newWorkflow = orchestrator
-}
-func (f *Stalled) SetOldWorkflow(t *testing.T, ctx context.Context, orchestrator task.Orchestrator) {
-	f.oldWorkflow = orchestrator
-}
-func (f *Stalled) AddActivityN(t *testing.T, ctx context.Context, name string, activity task.Activity) {
-	f.activities[name] = activity
-}
-
 func (f *Stalled) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {
 	t.Helper()
 	f.workflows.WaitUntilRunning(t, ctx)
 	f.CurrentClient = f.workflows.BackendClientN(t, ctx, f.currentDaprIndex)
-	f.workflows.RegistryN(0).AddOrchestratorN("Orchestrator", f.newWorkflow)
-	for name, activity := range f.activities {
+	f.workflows.RegistryN(0).AddOrchestratorN("Orchestrator", f.options.newWorkflow)
+	for name, activity := range f.options.activities {
 		f.workflows.RegistryN(0).AddActivityN(name, activity)
 	}
 
@@ -102,8 +100,8 @@ func (f *Stalled) RunOldReplica(t *testing.T, ctx context.Context) {
 	f.workflows.DaprN(index).Run(t, ctx)
 	f.workflows.DaprN(index).WaitUntilRunning(t, ctx)
 
-	f.workflows.RegistryN(index).AddOrchestratorN("Orchestrator", f.oldWorkflow)
-	for name, activity := range f.activities {
+	f.workflows.RegistryN(index).AddOrchestratorN("Orchestrator", f.options.oldWorkflow)
+	for name, activity := range f.options.activities {
 		f.workflows.RegistryN(index).AddActivityN(name, activity)
 	}
 	f.currentDaprIndex = index
@@ -116,8 +114,8 @@ func (f *Stalled) RunNewReplica(t *testing.T, ctx context.Context) {
 	f.workflows.DaprN(index).Run(t, ctx)
 	f.workflows.DaprN(index).WaitUntilRunning(t, ctx)
 
-	f.workflows.RegistryN(index).AddOrchestratorN("Orchestrator", f.newWorkflow)
-	for name, activity := range f.activities {
+	f.workflows.RegistryN(index).AddOrchestratorN("Orchestrator", f.options.newWorkflow)
+	for name, activity := range f.options.activities {
 		f.workflows.RegistryN(index).AddActivityN(name, activity)
 	}
 	f.currentDaprIndex = index
@@ -132,8 +130,8 @@ func (f *Stalled) SwitchToNewReplica(t *testing.T, ctx context.Context) {
 	f.workflows.DaprN(oldDaprDIndex).Run(t, ctx)
 	f.workflows.DaprN(oldDaprDIndex).WaitUntilRunning(t, ctx)
 
-	f.workflows.RegistryN(oldDaprDIndex).AddOrchestratorN("Orchestrator", f.oldWorkflow)
-	for name, activity := range f.activities {
+	f.workflows.RegistryN(oldDaprDIndex).AddOrchestratorN("Orchestrator", f.options.oldWorkflow)
+	for name, activity := range f.options.activities {
 		f.workflows.RegistryN(oldDaprDIndex).AddActivityN(name, activity)
 	}
 }
