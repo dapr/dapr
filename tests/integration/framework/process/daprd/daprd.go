@@ -35,6 +35,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/cmd/daprd/app"
+	cmdOpt "github.com/dapr/dapr/cmd/daprd/options"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
@@ -47,6 +49,7 @@ type Daprd struct {
 	exec       *exec.Exec
 	ports      *ports.Ports
 	httpClient *http.Client
+	args       []string
 
 	appID            string
 	namespace        string
@@ -61,6 +64,8 @@ type Daprd struct {
 
 	runOnce     sync.Once
 	cleanupOnce sync.Once
+
+	inProcess bool
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
@@ -168,6 +173,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
+		args:             args,
 		ports:            fp,
 		httpClient:       client.HTTPWithTimeout(t, 30*time.Second),
 		appID:            opts.appID,
@@ -180,13 +186,23 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       opts.publicPort,
 		metricsPort:      opts.metricsPort,
 		profilePort:      opts.profilePort,
+		inProcess:        os.Getenv("RUN_DAPRD_IN_PROCESS") != "",
 	}
 }
 
 func (d *Daprd) Run(t *testing.T, ctx context.Context) {
 	d.runOnce.Do(func() {
 		d.ports.Free(t)
-		d.exec.Run(t, ctx)
+		opts, err := cmdOpt.New(d.args)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if d.inProcess {
+			go app.RunWithOpts(ctx, opts)
+		} else {
+			d.exec.Run(t, ctx)
+		}
 	})
 }
 
@@ -195,7 +211,10 @@ func (d *Daprd) Cleanup(t *testing.T) {
 		if d.httpClient != nil {
 			d.httpClient.CloseIdleConnections()
 		}
-		d.exec.Cleanup(t)
+
+		if !d.inProcess {
+			d.exec.Cleanup(t)
+		}
 	})
 }
 

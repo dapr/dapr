@@ -60,6 +60,10 @@ func Run() {
 	if err != nil {
 		log.Fatalf("Failed to parse flags: %v", err)
 	}
+	RunWithOpts(signals.Context(), opts)
+}
+
+func RunWithOpts(ctx context.Context, opts *options.Options) {
 
 	if opts.RuntimeVersion {
 		//nolint:forbidigo
@@ -81,7 +85,7 @@ func Run() {
 	// Apply options to all loggers.
 	opts.Logger.SetAppID(opts.AppID)
 
-	err = logger.ApplyOptionsToLoggers(&opts.Logger)
+	err := logger.ApplyOptionsToLoggers(&opts.Logger)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -112,7 +116,6 @@ func Run() {
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
 		WithConversations(conversationLoader.DefaultRegistry)
 
-	ctx := signals.Context()
 	healthz := healthz.New()
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           opts.SentryAddress,
