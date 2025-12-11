@@ -28,7 +28,7 @@ import (
 )
 
 func isStalled(ctx context.Context, o *orchestrator, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) (bool, error) {
-	historyPatches := getLastPatches(rs.OldEvents)
+	historyPatches := collectAllPatches(rs.OldEvents)
 	currentPatches := getLastPatches(rs.NewEvents)
 	hasMismatch, description := processPatchMismatch(historyPatches, currentPatches)
 	if !hasMismatch {
@@ -65,18 +65,6 @@ func isStalled(ctx context.Context, o *orchestrator, state *wfenginestate.State,
 	}
 	log.Infof("Workflow actor '%s': workflow is stalled; holding reminder until context is canceled", o.actorID)
 	return true, nil
-}
-
-func getLastPatches(events []*protos.HistoryEvent) []string {
-	for i := len(events) - 1; i >= 0; i-- {
-		e := events[i]
-		if os := e.GetOrchestratorStarted(); os != nil {
-			if version := os.GetVersion(); version != nil {
-				return version.GetPatches()
-			}
-		}
-	}
-	return nil
 }
 
 // processPatchMismatch returns whether there is a patch mismatch and a description of the mismatch
