@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	appName = "perfstategrpc"
+	appName = "perfstatehttp"
 	// Number of times to check for endpoint health per app.
 	numHealthChecks = 60
 	testLabel       = "state_get_http"
@@ -68,7 +68,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestStateGetGrpcPerformance(t *testing.T) {
+func TestStateGetHTTPPerformance(t *testing.T) {
 	p := perf.Params(
 		perf.WithQPS(1000),
 		perf.WithConnections(16),
