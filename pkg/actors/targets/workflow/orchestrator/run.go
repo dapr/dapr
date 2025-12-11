@@ -142,7 +142,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 	rs = wi.State
 
-	if isStalled(ctx, o, state, rs) {
+	stalled, err := isStalled(ctx, o, state, rs)
+	if err != nil {
+		return todo.RunCompletedFalse, err
+	}
+	if stalled {
 		<-ctx.Done()
 		return todo.RunCompletedFalse, ctx.Err()
 	}

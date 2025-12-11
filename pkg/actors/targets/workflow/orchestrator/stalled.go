@@ -27,12 +27,12 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-func isStalled(ctx context.Context, o *orchestrator, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) bool {
+func isStalled(ctx context.Context, o *orchestrator, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) (bool, error) {
 	historyPatches := getLastPatches(rs.OldEvents)
 	currentPatches := getLastPatches(rs.NewEvents)
 	hasMismatch, description := processPatchMismatch(historyPatches, currentPatches)
 	if !hasMismatch {
-		return false
+		return false, nil
 	}
 
 	rs.CompletedEvent = nil
@@ -60,12 +60,11 @@ func isStalled(ctx context.Context, o *orchestrator, state *wfenginestate.State,
 		state.ApplyRuntimeStateChanges(rs)
 		err := o.saveInternalState(ctx, state)
 		if err != nil {
-			log.Errorf("Workflow actor '%s': failed to save internal state: %v", o.actorID, err)
-			return false
+			return false, err
 		}
 	}
 	log.Infof("Workflow actor '%s': workflow is stalled; holding reminder until context is canceled", o.actorID)
-	return true
+	return true, nil
 }
 
 func getLastPatches(events []*protos.HistoryEvent) []string {
