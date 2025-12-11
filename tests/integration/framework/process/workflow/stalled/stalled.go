@@ -45,19 +45,20 @@ func New(t *testing.T, fopts ...Option) *Stalled {
 		newWorkflow: nil,
 		oldWorkflow: nil,
 		activities:  map[string]task.Activity{},
+		totalDaprds: 3, // Most tests only need 3 daprds
 	}
 
 	for _, opt := range fopts {
 		opt(&opts)
 	}
 	appID := uuid.New().String()
-	workflows := workflow.New(t,
+	wfOpts := []workflow.Option{
 		workflow.WithDaprds(1),
-		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
-		workflow.WithDaprdOptions(1, daprd.WithAppID(appID)),
-		workflow.WithDaprdOptions(2, daprd.WithAppID(appID)),
-		workflow.WithDaprdOptions(3, daprd.WithAppID(appID)),
-	)
+	}
+	for i := 0; i < opts.totalDaprds; i++ {
+		wfOpts = append(wfOpts, workflow.WithDaprdOptions(i, daprd.WithAppID(appID)))
+	}
+	workflows := workflow.New(t, wfOpts...)
 	return &Stalled{
 		currentDaprIndex: 0,
 		CurrentClient:    nil,

@@ -21,6 +21,13 @@ type options struct {
 	newWorkflow task.Orchestrator
 	oldWorkflow task.Orchestrator
 	activities  map[string]task.Activity
+	totalDaprds int
+}
+
+func WithTotalDaprds(totalDaprds int) Option {
+	return func(o *options) {
+		o.totalDaprds = totalDaprds
+	}
 }
 
 func WithNewWorkflow(workflow task.Orchestrator) Option {
