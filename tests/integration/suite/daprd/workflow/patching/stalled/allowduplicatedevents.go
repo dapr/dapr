@@ -52,7 +52,9 @@ func (r *allowduplicatedevents) Setup(t *testing.T) []framework.Option {
 			return nil, nil
 		}),
 	)
-	return r.fw.Setup(t)
+	return []framework.Option{
+		framework.WithProcesses(r.fw),
+	}
 }
 
 // This test simulates two different old workflows and a new workflow, so a total of 3 different replicas.

@@ -66,7 +66,9 @@ func (r *suspend) Setup(t *testing.T) []framework.Option {
 			return "Hello", nil
 		}),
 	)
-	return r.fw.Setup(t)
+	return []framework.Option{
+		framework.WithProcesses(r.fw),
+	}
 }
 
 func (r *suspend) Run(t *testing.T, ctx context.Context) {

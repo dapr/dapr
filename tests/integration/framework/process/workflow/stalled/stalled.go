@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/durabletask-go/api"
@@ -34,7 +33,6 @@ type Stalled struct {
 	CurrentClient *client.TaskHubGrpcClient
 	options       options
 
-	appID            string
 	currentDaprIndex int
 
 	workflows *workflow.Workflow
@@ -52,24 +50,30 @@ func New(t *testing.T, fopts ...Option) *Stalled {
 	for _, opt := range fopts {
 		opt(&opts)
 	}
+	appID := uuid.New().String()
+	workflows := workflow.New(t,
+		workflow.WithDaprds(1),
+		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
+		workflow.WithDaprdOptions(1, daprd.WithAppID(appID)),
+		workflow.WithDaprdOptions(2, daprd.WithAppID(appID)),
+		workflow.WithDaprdOptions(3, daprd.WithAppID(appID)),
+	)
 	return &Stalled{
-		appID:            uuid.New().String(),
 		currentDaprIndex: 0,
 		CurrentClient:    nil,
 		options:          opts,
+		workflows:        workflows,
 	}
 }
 
-func (f *Stalled) Setup(t *testing.T) []framework.Option {
+func (f *Stalled) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
-	f.workflows = workflow.New(t,
-		workflow.WithDaprds(1),
-		workflow.WithDaprdOptions(0, daprd.WithAppID(f.appID)),
-		workflow.WithDaprdOptions(1, daprd.WithAppID(f.appID)),
-		workflow.WithDaprdOptions(2, daprd.WithAppID(f.appID)),
-	)
+	f.workflows.Run(t, ctx)
+}
 
-	return []framework.Option{framework.WithProcesses(f.workflows)}
+func (f *Stalled) Cleanup(t *testing.T) {
+	t.Helper()
+	f.workflows.Cleanup(t)
 }
 
 func (f *Stalled) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {

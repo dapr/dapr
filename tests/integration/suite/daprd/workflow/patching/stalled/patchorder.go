@@ -51,7 +51,9 @@ func (r *patchorder) Setup(t *testing.T) []framework.Option {
 			return nil, nil
 		}),
 	)
-	return r.fw.Setup(t)
+	return []framework.Option{
+		framework.WithProcesses(r.fw),
+	}
 }
 func (r *patchorder) Run(t *testing.T, ctx context.Context) {
 	id := r.fw.ScheduleWorkflow(t, ctx)
