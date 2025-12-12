@@ -244,7 +244,7 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
 		assert.NoError(c, err)
 		assert.GreaterOrEqual(c, gotCount, reminderCount*5)
-	}, 100*time.Second, time.Second/10)
+	}, 100*time.Second, 100*time.Millisecond)
 	done = time.Since(start)
 	qps := float64(reminderCount*5) / done.Seconds()
 	t.Logf("Triggered %d reminders in %s (%.1fqps)", reminderCount*5, done, qps)
