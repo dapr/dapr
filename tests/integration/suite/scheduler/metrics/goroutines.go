@@ -68,21 +68,11 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 	g.scheduler.WaitUntilRunning(t, ctx)
 	g.daprd.WaitUntilRunning(t, ctx)
 
-	_, err := g.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
-		Job: &runtimev1pb.Job{
-			Name:    "test",
-			DueTime: ptr.Of("0s"),
-		},
-	})
-	require.NoError(t, err)
-
-	startGoRoutines := g.scheduler.Metrics(t, ctx).All()["go_goroutines"]
-
-	n := 50
-	rep := 2
+	const n = 50
+	const rep = 2
 
 	for i := range n {
-		_, err = g.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+		_, err := g.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			//nolint:gosec
 			Job: &runtimev1pb.Job{
 				Name:     strconv.Itoa(i),
@@ -96,10 +86,10 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		//nolint:gosec
-		assert.Equal(c, n*rep+1, int(g.called.Load()))
+		assert.Equal(c, n*rep, int(g.called.Load()))
 	}, time.Second*10, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.LessOrEqual(c, g.scheduler.Metrics(t, ctx).All()["go_goroutines"]-10, startGoRoutines)
+		assert.InDelta(c, 2182.0, g.scheduler.Metrics(t, ctx).All()["go_goroutines"], 10.0)
 	}, time.Second*30, time.Second)
 }

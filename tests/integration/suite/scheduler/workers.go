@@ -47,7 +47,7 @@ func (w *workers) Setup(t *testing.T) []framework.Option {
 	require.NoError(t, err)
 
 	w.deflogline = logline.New(t, logline.WithStdoutLineContains(
-		fmt.Sprintf(`Starting queue with workers","id":"%s","count":128}`, uuid1.String()),
+		fmt.Sprintf(`Starting queue with workers","id":"%s","count":2048}`, uuid1.String()),
 	))
 	w.customlogline = logline.New(t, logline.WithStdoutLineContains(
 		fmt.Sprintf(`Starting queue with workers","id":"%s","count":256}`, uuid2.String()),
