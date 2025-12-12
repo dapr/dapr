@@ -54,13 +54,19 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 		return status.Errorf(codes.InvalidArgument, "'%s' is not in a terminal state", o.actorID)
 	}
 
+	if len(ometa.ParentInstanceId) > 0 {
+		return status.Errorf(codes.InvalidArgument, "'%s': cannot rerun from child-workflows", o.actorID)
+	}
+
 	defer o.factory.deactivate(o)
 
 	fork := fork.New(fork.Options{
-		InstanceID:        o.actorID,
-		AppID:             o.appID,
-		ActorType:         o.actorType,
-		ActivityActorType: o.activityActorType,
+		InstanceID:                 o.actorID,
+		NewInstanceID:              rerunReq.GetNewInstanceID(),
+		NewChildWorkflowInstanceID: rerunReq.NewChildWorkflowInstanceID,
+		AppID:                      o.appID,
+		ActorType:                  o.actorType,
+		ActivityActorType:          o.activityActorType,
 		//nolint:gosec
 		TargetEventID: int32(rerunReq.GetEventID()),
 
@@ -111,6 +117,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 
 	var activities []*protos.HistoryEvent
 	var timers []*protos.HistoryEvent
+	var childWFs []*protos.HistoryEvent
 
 	for i := 0; i < len(workflowState.Inbox); i++ {
 		his := workflowState.Inbox[i]
@@ -131,6 +138,9 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 					},
 				},
 			})
+
+		case *protos.HistoryEvent_SubOrchestrationInstanceCreated:
+			childWFs = append(childWFs, his)
 
 		default:
 			return status.Errorf(codes.InvalidArgument, "unexpected event type '%T' in inbox", his.GetEventType())
@@ -153,7 +163,9 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		return fmt.Errorf("failed to save workflow state: %w", err)
 	}
 
+	startedEvent := o.getExecutionStartedEvent(newState)
 	if err = errors.Join(
+		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs),
 		o.callActivities(ctx, activities, newState),
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {

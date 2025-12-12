@@ -11,11 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rerun
+package child
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/child"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/parentid"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/raise"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/timer"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/child/input"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun/child/newinstanceid"
 )
