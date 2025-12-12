@@ -73,7 +73,6 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	for i := range n {
 		_, err := g.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
-			//nolint:gosec
 			Job: &runtimev1pb.Job{
 				Name:     strconv.Itoa(i),
 				DueTime:  ptr.Of("0s"),
