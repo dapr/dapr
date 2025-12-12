@@ -132,6 +132,7 @@ func (e *Exec) Run(t *testing.T, ctx context.Context) {
 }
 
 func (e *Exec) Cleanup(t *testing.T) {
+	t.Helper()
 	defer func() { e.wg.Wait() }()
 
 	if !e.once.CompareAndSwap(false, true) {
@@ -143,6 +144,7 @@ func (e *Exec) Cleanup(t *testing.T) {
 }
 
 func (e *Exec) Kill(t *testing.T) {
+	t.Helper()
 	defer e.wg.Wait()
 
 	if !e.once.CompareAndSwap(false, true) {
@@ -150,6 +152,14 @@ func (e *Exec) Kill(t *testing.T) {
 	}
 
 	kill.Kill(t, e.cmd)
+}
+
+func (e *Exec) Restart(t *testing.T, ctx context.Context) {
+	t.Helper()
+
+	kill.Kill(t, e.cmd)
+	e.wg.Wait()
+	e.Run(t, ctx)
 }
 
 func (e *Exec) checkExit(t *testing.T) {

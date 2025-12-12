@@ -39,8 +39,6 @@ type Workflow struct {
 	place        *placement.Placement
 	sched        *scheduler.Scheduler
 	daprds       []*daprd.Daprd
-	baseDopts    []daprd.Option
-	opts         options
 }
 
 func New(t *testing.T, fopts ...Option) *Workflow {
@@ -73,52 +71,52 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	sched := scheduler.New(t)
 	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
 
+	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
+
+	for i := range daprds {
+		dopts := make([]daprd.Option, 0, len(baseDopts))
+		dopts = append(dopts, baseDopts...)
+
+		// Add specific opts for this daprd
+		for _, daprdOpt := range opts.daprdOptions {
+			if daprdOpt.index == i {
+				dopts = append(dopts, daprdOpt.opts...)
+			}
+		}
+
+		daprds[i] = daprd.New(t, dopts...)
+	}
+
+	registries := make(map[int]*task.TaskRegistry)
+	for i := range daprds {
+		registries[i] = task.NewTaskRegistry()
+	}
+
+	// Apply orchestrators & activities to the registry
+	for _, orch := range opts.orchestrators {
+		if orch.index < len(daprds) {
+			require.NoError(t, registries[orch.index].AddOrchestratorN(orch.name, orch.fn))
+		}
+	}
+	for _, act := range opts.activities {
+		if act.index < len(daprds) {
+			require.NoError(t, registries[act.index].AddActivityN(act.name, act.fn))
+		}
+	}
+
 	workflow := &Workflow{
-		taskregistry: make([]*task.TaskRegistry, 0),
+		taskregistry: make([]*task.TaskRegistry, len(daprds)),
 		db:           db,
 		place:        place,
 		sched:        sched,
-		daprds:       make([]*daprd.Daprd, 0),
-		baseDopts:    baseDopts,
-		opts:         opts,
+		daprds:       daprds,
 	}
 
-	// Create initial daprd instances
-	for range opts.daprds {
-		workflow.addDaprd(t)
+	for i := range workflow.taskregistry {
+		workflow.taskregistry[i] = registries[i]
 	}
 
 	return workflow
-}
-
-func (w *Workflow) addDaprd(t *testing.T) int {
-	index := len(w.daprds)
-
-	dopts := make([]daprd.Option, 0, len(w.baseDopts))
-	dopts = append(dopts, w.baseDopts...)
-
-	for _, daprdOpt := range w.opts.daprdOptions {
-		if daprdOpt.index == index {
-			dopts = append(dopts, daprdOpt.opts...)
-		}
-	}
-
-	d := daprd.New(t, dopts...)
-
-	w.daprds = append(w.daprds, d)
-	w.taskregistry = append(w.taskregistry, task.NewTaskRegistry())
-
-	for _, orch := range w.opts.orchestrators {
-		if orch.index == index {
-			require.NoError(t, w.taskregistry[index].AddOrchestratorN(orch.name, orch.fn))
-		}
-	}
-	for _, act := range w.opts.activities {
-		if act.index == index {
-			require.NoError(t, w.taskregistry[index].AddActivityN(act.name, act.fn))
-		}
-	}
-	return index
 }
 
 func (w *Workflow) Run(t *testing.T, ctx context.Context) {
@@ -130,13 +128,6 @@ func (w *Workflow) Run(t *testing.T, ctx context.Context) {
 	for _, daprd := range w.daprds {
 		daprd.Run(t, ctx)
 	}
-}
-
-func (w *Workflow) RunNewDaprd(t *testing.T, ctx context.Context) int {
-	t.Helper()
-	index := w.addDaprd(t)
-	w.daprds[index].Run(t, ctx)
-	return index
 }
 
 func (w *Workflow) Cleanup(t *testing.T) {
@@ -196,7 +187,7 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c,
-			len(w.DaprN(index).GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+			len(w.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
 	}, time.Second*10, time.Millisecond*10)
 
 	return backendClient

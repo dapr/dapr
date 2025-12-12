@@ -75,8 +75,7 @@ func (r *suspend) Run(t *testing.T, ctx context.Context) {
 	id := r.fw.ScheduleWorkflow(t, ctx)
 	r.fw.WaitForNumberOfOrchestrationStartedEvents(t, ctx, id, 2)
 
-	r.fw.KillCurrentReplica(t, ctx)
-	r.fw.RunOldReplica(t, ctx)
+	r.fw.RestartAsOldReplica(t, ctx)
 
 	require.NoError(t, r.fw.CurrentClient.RaiseEvent(ctx, id, "Continue"))
 

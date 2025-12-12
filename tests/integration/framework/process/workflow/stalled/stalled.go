@@ -33,7 +33,7 @@ type Stalled struct {
 	CurrentClient *client.TaskHubGrpcClient
 	options       options
 
-	currentDaprIndex int
+	runNewWorkflow bool
 
 	workflows *workflow.Workflow
 }
@@ -45,26 +45,27 @@ func New(t *testing.T, fopts ...Option) *Stalled {
 		newWorkflow: nil,
 		oldWorkflow: nil,
 		activities:  map[string]task.Activity{},
-		totalDaprds: 3, // Most tests only need 3 daprds
 	}
 
 	for _, opt := range fopts {
 		opt(&opts)
 	}
+
+	fw := &Stalled{
+		options:        opts,
+		runNewWorkflow: true,
+	}
+
 	appID := uuid.New().String()
 	wfOpts := []workflow.Option{
-		workflow.WithDaprds(1),
+		workflow.WithAddOrchestrator(t, "Orchestrator", fw.workflowWrapper),
+		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
 	}
-	for i := 0; i < opts.totalDaprds; i++ {
-		wfOpts = append(wfOpts, workflow.WithDaprdOptions(i, daprd.WithAppID(appID)))
+	for name, activity := range opts.activities {
+		wfOpts = append(wfOpts, workflow.WithAddActivity(t, name, activity))
 	}
-	workflows := workflow.New(t, wfOpts...)
-	return &Stalled{
-		currentDaprIndex: 0,
-		CurrentClient:    nil,
-		options:          opts,
-		workflows:        workflows,
-	}
+	fw.workflows = workflow.New(t, wfOpts...)
+	return fw
 }
 
 func (f *Stalled) Run(t *testing.T, ctx context.Context) {
@@ -77,16 +78,17 @@ func (f *Stalled) Cleanup(t *testing.T) {
 	f.workflows.Cleanup(t)
 }
 
+func (f *Stalled) workflowWrapper(ctx *task.OrchestrationContext) (any, error) {
+	if f.runNewWorkflow {
+		return f.options.newWorkflow(ctx)
+	}
+	return f.options.oldWorkflow(ctx)
+}
+
 func (f *Stalled) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {
 	t.Helper()
 	f.workflows.WaitUntilRunning(t, ctx)
-	f.CurrentClient = f.workflows.BackendClientN(t, ctx, f.currentDaprIndex)
-	f.workflows.RegistryN(0).AddOrchestratorN("Orchestrator", f.options.newWorkflow)
-	for name, activity := range f.options.activities {
-		f.workflows.RegistryN(0).AddActivityN(name, activity)
-	}
-
-	// Schedule orchestration (runs on new worker)
+	f.CurrentClient = f.workflows.BackendClient(t, ctx)
 	id, err := f.CurrentClient.ScheduleNewOrchestration(ctx, "Orchestrator")
 	require.NoError(t, err)
 	_, err = f.CurrentClient.WaitForOrchestrationStart(ctx, id)
@@ -94,51 +96,23 @@ func (f *Stalled) ScheduleWorkflow(t *testing.T, ctx context.Context) api.Instan
 	return id
 }
 
-func (f *Stalled) KillCurrentReplica(t *testing.T, ctx context.Context) {
+func (f *Stalled) RestartAsOldReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
-	f.workflows.DaprN(f.currentDaprIndex).Kill(t)
+	f.runNewWorkflow = false
+	f.restart(t, ctx)
 }
 
-func (f *Stalled) RunOldReplica(t *testing.T, ctx context.Context) {
+func (f *Stalled) RestartAsNewReplica(t *testing.T, ctx context.Context) {
 	t.Helper()
-	index := f.workflows.RunNewDaprd(t, ctx)
-	f.workflows.DaprN(index).Run(t, ctx)
-	f.workflows.DaprN(index).WaitUntilRunning(t, ctx)
-
-	f.workflows.RegistryN(index).AddOrchestratorN("Orchestrator", f.options.oldWorkflow)
-	for name, activity := range f.options.activities {
-		f.workflows.RegistryN(index).AddActivityN(name, activity)
-	}
-	f.currentDaprIndex = index
-	f.CurrentClient = f.workflows.BackendClientN(t, ctx, index)
+	f.runNewWorkflow = true
+	f.restart(t, ctx)
 }
 
-func (f *Stalled) RunNewReplica(t *testing.T, ctx context.Context) {
+func (f *Stalled) restart(t *testing.T, ctx context.Context) {
 	t.Helper()
-	index := f.workflows.RunNewDaprd(t, ctx)
-	f.workflows.DaprN(index).Run(t, ctx)
-	f.workflows.DaprN(index).WaitUntilRunning(t, ctx)
-
-	f.workflows.RegistryN(index).AddOrchestratorN("Orchestrator", f.options.newWorkflow)
-	for name, activity := range f.options.activities {
-		f.workflows.RegistryN(index).AddActivityN(name, activity)
-	}
-	f.currentDaprIndex = index
-	f.CurrentClient = f.workflows.BackendClientN(t, ctx, index)
-}
-
-func (f *Stalled) SwitchToNewReplica(t *testing.T, ctx context.Context) {
-	t.Helper()
-	f.workflows.DaprN(1).Kill(t)
-
-	oldDaprDIndex := f.workflows.RunNewDaprd(t, ctx)
-	f.workflows.DaprN(oldDaprDIndex).Run(t, ctx)
-	f.workflows.DaprN(oldDaprDIndex).WaitUntilRunning(t, ctx)
-
-	f.workflows.RegistryN(oldDaprDIndex).AddOrchestratorN("Orchestrator", f.options.oldWorkflow)
-	for name, activity := range f.options.activities {
-		f.workflows.RegistryN(oldDaprDIndex).AddActivityN(name, activity)
-	}
+	f.workflows.Dapr().Restart(t, ctx)
+	f.workflows.WaitUntilRunning(t, ctx)
+	f.CurrentClient = f.workflows.BackendClient(t, ctx)
 }
 
 func (f *Stalled) waitForStatus(t *testing.T, ctx context.Context, id api.InstanceID, status protos.OrchestrationStatus) {

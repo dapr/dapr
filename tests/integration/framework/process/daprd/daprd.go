@@ -496,5 +496,11 @@ func (d *Daprd) ActorReminderURL(actorType, actorID, method string) string {
 }
 
 func (d *Daprd) Kill(t *testing.T) {
+	t.Helper()
 	d.exec.Kill(t)
+}
+
+func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
+	t.Helper()
+	d.exec.Restart(t, ctx)
 }
