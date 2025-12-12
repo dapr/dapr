@@ -83,7 +83,7 @@ func (a *async) Run(t *testing.T, ctx context.Context) {
 
 	history, err := client.GetInstanceHistory(ctx, "hello")
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, history.Events, 8)
+	require.GreaterOrEqual(t, len(history.Events), 8)
 
 	assert.True(t, proto.Equal(
 		history.Events[2].GetSubOrchestrationInstanceCreated(),
