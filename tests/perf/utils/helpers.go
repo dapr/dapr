@@ -151,13 +151,15 @@ func HealthCheckApps(urls ...string) error {
 	return errors.Join(errs...)
 }
 
+// Do NOT change the below log lines as the charts/ use this to generate charts based on resource usage for perf tests
 func LogPerfTestResourceUsage(appUsage, sidecarUsage *runner.AppUsage, restarts, testerRestarts int) {
-	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
-	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	t.Logf("%s %vm CPU and %vMb of Memory", TargetDaprAppConsumed, appUsage.CPUm, appUsage.MemoryMb)
+	t.Logf("%s %vm CPU and %vMb of Memory", TargetDaprConsumed, sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 	t.Logf("target dapr app or sidecar restarted %v times", restarts)
 	t.Logf("tester app or sidecar restarted %v times", testerRestarts)
 }
 
+// Do NOT change the below log lines as the charts/ use this to generate charts for perf tests
 func LogPerfTestSummary(summary []byte) {
 	t.Logf("Test summary `%s`", string(summary))
 }
