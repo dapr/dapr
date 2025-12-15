@@ -107,9 +107,6 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		}
 		*request.Message = append(*request.Message, c)
 	}
-
-	request.Parameters = req.GetParameters()
-	request.ConversationContext = req.GetContextID()
 	request.Temperature = req.GetTemperature()
 
 	// do call
@@ -121,11 +118,9 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	// transform v1 proto -> v2 component request
 	toolsv2 := []llms.Tool{}
 	requestv2 := &conversation.Request{
-		Message:             request.Message,
-		Tools:               &toolsv2,
-		Parameters:          request.Parameters,
-		ConversationContext: request.ConversationContext,
-		Temperature:         request.Temperature,
+		Message:     request.Message,
+		Tools:       &toolsv2,
+		Temperature: request.Temperature,
 	}
 
 	resp, err := policyRunner(func(ctx context.Context) (*conversation.Response, error) {
@@ -171,7 +166,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResult{ //nolint:staticcheck
 				Result:     res,
-				Parameters: request.Parameters,
+				Parameters: req.GetParameters(),
 			})
 		}
 	}
@@ -180,6 +175,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 }
 
 func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.ConversationRequestAlpha2) (*runtimev1pb.ConversationResponseAlpha2, error) {
+	a.logger.Infof("hello sam in dapr/dapr")
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
 		err := messages.ErrConversationNotFound.WithFormat(req.GetName())
@@ -195,10 +191,12 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	// prepare request
 	request := &conversation.Request{}
 	var err error
-	err = kmeta.DecodeMetadata(req.GetMetadata(), request)
+	var conversationMetadata map[string]string
+	err = kmeta.DecodeMetadata(req.GetMetadata(), conversationMetadata)
 	if err != nil {
 		return nil, err
 	}
+	request.Metadata = conversationMetadata
 
 	if request.Message == nil {
 		request.Message = &[]llms.MessageContent{}
@@ -208,6 +206,12 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
 		return nil, err
+	}
+
+	if req.GetResponseFormat() != nil {
+		if respFormat := req.GetResponseFormat(); respFormat != nil {
+			request.ResponseFormatAsJsonSchema = respFormat.AsMap()
+		}
 	}
 
 	var scrubber piiscrubber.Scrubber
@@ -419,11 +423,11 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		request.Message = &requestMessages
 	}
 
-	request.Parameters = req.GetParameters()
-	request.ConversationContext = req.GetContextId()
 	request.Temperature = req.GetTemperature()
 	toolChoice := req.GetToolChoice()
 	tools := req.GetTools()
+	request.EnablePromptCache = req.GetEnablePromptCache()
+	request.Model = req.GetModel()
 
 	// set default tool choice to auto if not specified and tools are available
 	if toolChoice == "" && len(tools) > 0 {
@@ -507,8 +511,9 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	response := &runtimev1pb.ConversationResponseAlpha2{}
 	a.logger.Debug(response)
 	if resp != nil {
-		if resp.ConversationContext != "" {
-			response.ContextId = &resp.ConversationContext
+		if req.GetContextId() != "" {
+			contextID := req.GetContextId()
+			response.ContextId = &contextID
 		}
 
 		for _, o := range resp.Outputs {
