@@ -36,4 +36,5 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/starttime"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/taskexecutionid"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/timer"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/tracing"
 )

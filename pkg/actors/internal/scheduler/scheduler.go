@@ -21,12 +21,10 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/table"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -86,28 +84,21 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 		return err
 	}
 
-	var failurePolicy *commonv1pb.JobFailurePolicy
-	if reminder.IsOneShot {
-		failurePolicy = &commonv1pb.JobFailurePolicy{
-			Policy: &commonv1pb.JobFailurePolicy_Constant{
-				Constant: &commonv1pb.JobFailurePolicyConstant{
-					Interval:   durationpb.New(time.Second),
-					MaxRetries: nil,
-				},
-			},
-		}
+	overwrite := true
+	if reminder.Overwrite != nil {
+		overwrite = *reminder.Overwrite
 	}
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Name:      reminder.Name,
-		Overwrite: true,
+		Overwrite: overwrite,
 		Job: &schedulerv1pb.Job{
 			Schedule:      schedule,
 			Repeats:       repeats,
 			DueTime:       dueTime,
 			Ttl:           ttl,
 			Data:          reminder.Data,
-			FailurePolicy: failurePolicy,
+			FailurePolicy: reminder.FailurePolicy,
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,
@@ -187,18 +178,27 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 		log.Debugf("Error getting reminder job %s due to: %s", req.Name, err)
 
 		if status, ok := status.FromError(err); ok && status.Code() == codes.NotFound {
-			return new(api.Reminder), nil
+			return nil, nil
 		}
 
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
+	var expirationTime time.Time
+	if job.Job.Ttl != nil {
+		expirationTime, err = time.Parse(time.RFC3339, job.GetJob().GetTtl())
+		if err != nil {
+			log.Errorf("Error parsing expiration time for reminder job %s due to: %s", req.Name, err)
+		}
+	}
+
 	reminder := &api.Reminder{
-		ActorID:   req.ActorID,
-		ActorType: req.ActorType,
-		Data:      job.GetJob().GetData(),
-		Period:    api.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
-		DueTime:   job.GetJob().GetDueTime(),
+		ActorID:        req.ActorID,
+		ActorType:      req.ActorType,
+		Data:           job.GetJob().GetData(),
+		Period:         api.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
+		DueTime:        job.GetJob().GetDueTime(),
+		ExpirationTime: expirationTime,
 	}
 
 	return reminder, nil
@@ -255,6 +255,11 @@ func (s *scheduler) DeleteByActorID(ctx context.Context, req *api.DeleteReminder
 }
 
 func (s *scheduler) List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error) {
+	var id string
+	if req.ActorID != nil {
+		id = *req.ActorID
+	}
+
 	resp, err := s.client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,
@@ -263,6 +268,7 @@ func (s *scheduler) List(ctx context.Context, req *api.ListRemindersRequest) ([]
 				Type: &schedulerv1pb.JobTargetMetadata_Actor{
 					Actor: &schedulerv1pb.TargetActorReminder{
 						Type: req.ActorType,
+						Id:   id,
 					},
 				},
 			},

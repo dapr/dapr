@@ -109,13 +109,16 @@ type Actors struct {
 }
 
 func New(opts Options) *Actors {
-	var pendingTasksBackend PendingTasksBackend = local.NewTasksBackend()
+	var pendingTasksBackend PendingTasksBackend
 	if opts.EnableClusteredDeployment {
 		pendingTasksBackend = NewClusterTasksBackend(ClusterTasksBackendOptions{
 			Actors:            opts.Actors,
 			ExecutorActorType: todo.ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ExecutorNameLabelKey,
 		})
+	} else {
+		pendingTasksBackend = local.NewTasksBackend()
 	}
+
 	return &Actors{
 		appID:                     opts.AppID,
 		namespace:                 opts.Namespace,
@@ -622,12 +625,22 @@ func (abe *Actors) CompleteOrchestratorTask(ctx context.Context, response *proto
 func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 	return backoff.Retry(func() error {
 		err := fn()
-		if err != nil && ctx.Err() == nil {
+
+		switch {
+		case err == nil:
+			return nil
+
+		case api.IsUnknownTaskIDError(err), api.IsUnknownInstanceIDError(err):
+			log.Warnf("Ignoring complete task which no longer exists: %s", err)
+			return nil
+
+		case abe.stopped.Load():
+			return backoff.Permanent(err)
+
+		case ctx.Err() == nil:
 			log.Warnf("error completing activity task: %v, retrying...", err)
 		}
-		if abe.stopped.Load() {
-			return backoff.Permanent(err)
-		}
+
 		return err
 	}, backoff.WithContext(
 		backoff.NewExponentialBackOff(
@@ -677,6 +690,10 @@ func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstan
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if resp == nil {
+		return nil, status.Errorf(codes.NotFound, "workflow instance '%s' not found", req.GetInstanceId())
 	}
 
 	return &protos.GetInstanceHistoryResponse{Events: resp.History}, nil
