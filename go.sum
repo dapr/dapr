@@ -174,8 +174,8 @@ github.com/Workiva/go-datastructures v1.0.53 h1:J6Y/52yX10Xc5JjXmGtWoSSxs3mZnGSa
 github.com/Workiva/go-datastructures v1.0.53/go.mod h1:1yZL+zfsztete+ePzZz/Zb1/t5BnDuE2Ya2MMGhzP6A=
 github.com/aavaz-ai/pii-scrubber v0.0.0-20220812094047-3fa450ab6973 h1:oMQQEYwu9V0O+IcRs7ButCPjsbOS0eEtMOImkvaeWLA=
 github.com/aavaz-ai/pii-scrubber v0.0.0-20220812094047-3fa450ab6973/go.mod h1:Y5HcXSyXAlR6rvJ5kqvPEtQlRLhekJFI/w/9CRZkpHs=
-github.com/acroca/dapr-durabletask-go v0.0.0-20251205100015-6e7d6d29b81f h1:SFdaQM2MjBqKv3LzV5aehz92oAEdsGyv8R4YEa3jitw=
-github.com/acroca/dapr-durabletask-go v0.0.0-20251205100015-6e7d6d29b81f/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
+github.com/acroca/dapr-durabletask-go v0.0.0-20251215102304-5dc38ffc6d0c h1:3EtVtfLvsF7sEornsFgLkcSp/sU9Xh4HktTthxDqN+w=
+github.com/acroca/dapr-durabletask-go v0.0.0-20251215102304-5dc38ffc6d0c/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
 github.com/aerospike/aerospike-client-go/v6 v6.12.0 h1:4RKpcUlfINyIsjyOK8DBKn6NaBUl5UaHrWVY07/R99Q=
 github.com/aerospike/aerospike-client-go/v6 v6.12.0/go.mod h1:sBqeA3mli2vT5JInbp+XGFbajxEFg4kANUHsOl3meUk=
 github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5 h1:rFw4nCn9iMW+Vajsk51NtYIcwSTkXr+JGrMd36kTDJw=
