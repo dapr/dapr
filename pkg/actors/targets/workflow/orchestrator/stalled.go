@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -73,66 +74,13 @@ func processPatchMismatch(historyPatches, currentPatches []string) (bool, string
 		return false, ""
 	}
 
-	// Build sets for easier comparison
-	historySet := make(map[string]struct{}, len(historyPatches))
-	for _, p := range historyPatches {
-		historySet[p] = struct{}{}
-	}
-	currentSet := make(map[string]struct{}, len(currentPatches))
-	for _, p := range currentPatches {
-		currentSet[p] = struct{}{}
-	}
-
-	// Find missing patches (in history but not in current)
-	var missingPatches []string
-	for _, p := range historyPatches {
-		if _, ok := currentSet[p]; !ok {
-			missingPatches = append(missingPatches, p)
-		}
-	}
-
-	// Find extra patches (in current but not in history)
-	var extraPatches []string
-	for _, p := range currentPatches {
-		if _, ok := historySet[p]; !ok {
-			extraPatches = append(extraPatches, p)
-		}
-	}
-
-	// Check for order mismatch (same patches but different order)
-	orderMismatch := false
-	if len(missingPatches) == 0 && len(extraPatches) == 0 && len(historyPatches) == len(currentPatches) {
-		for i := range historyPatches {
-			if historyPatches[i] != currentPatches[i] {
-				orderMismatch = true
-				break
-			}
-		}
-	}
-
-	// No mismatch
-	if len(missingPatches) == 0 && len(extraPatches) == 0 && !orderMismatch {
+	// History patches must be an exact prefix of current patches
+	if len(currentPatches) >= len(historyPatches) &&
+		slices.Equal(historyPatches, currentPatches[:len(historyPatches)]) {
 		return false, ""
 	}
 
-	// Build description
-	var parts []string
-	if len(missingPatches) > 0 {
-		parts = append(parts, fmt.Sprintf("missing patches: [%s]", strings.Join(missingPatches, ", ")))
-	}
-	if len(extraPatches) > 0 {
-		parts = append(parts, fmt.Sprintf("unexpected patches: [%s]", strings.Join(extraPatches, ", ")))
-	}
-	if orderMismatch {
-		parts = append(parts, fmt.Sprintf("patch order mismatch: history has [%s], current has [%s]",
-			strings.Join(historyPatches, ", "), strings.Join(currentPatches, ", ")))
-	}
-
-	description := fmt.Sprintf("Patch mismatch - %s. The workflow was previously executed with patches [%s] but the current code has patches [%s]. "+
-		"Deploy the correct code version or use workflow versioning to handle this transition.",
-		strings.Join(parts, "; "),
+	return true, fmt.Sprintf("Patch mismatch. History patches: [%s], current patches: [%s]. ",
 		strings.Join(historyPatches, ", "),
 		strings.Join(currentPatches, ", "))
-
-	return true, description
 }
