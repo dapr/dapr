@@ -18,23 +18,22 @@ import "github.com/dapr/durabletask-go/task"
 type Option func(*options)
 
 type options struct {
-	newWorkflow task.Orchestrator
-	oldWorkflow task.Orchestrator
-	activities  map[string]task.Activity
+	initialReplica string
+	workflows      map[string]task.Orchestrator
+	activities     map[string]task.Activity
 }
 
-func WithNewWorkflow(workflow task.Orchestrator) Option {
+func WithNamedWorkflowReplica(name string, workflow task.Orchestrator) Option {
 	return func(o *options) {
-		o.newWorkflow = workflow
+		o.workflows[name] = workflow
 	}
 }
 
-func WithOldWorkflow(workflow task.Orchestrator) Option {
+func WithInitialReplica(name string) Option {
 	return func(o *options) {
-		o.oldWorkflow = workflow
+		o.initialReplica = name
 	}
 }
-
 func WithActivity(name string, activity task.Activity) Option {
 	return func(o *options) {
 		o.activities[name] = activity

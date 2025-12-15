@@ -15,6 +15,7 @@ package stalled
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ type Stalled struct {
 	CurrentClient *client.TaskHubGrpcClient
 	options       options
 
-	runNewWorkflow bool
+	runWorkflowReplica string
 
 	workflows *workflow.Workflow
 }
@@ -42,9 +43,8 @@ func New(t *testing.T, fopts ...Option) *Stalled {
 	t.Helper()
 
 	opts := options{
-		newWorkflow: nil,
-		oldWorkflow: nil,
-		activities:  map[string]task.Activity{},
+		workflows:  map[string]task.Orchestrator{},
+		activities: map[string]task.Activity{},
 	}
 
 	for _, opt := range fopts {
@@ -52,8 +52,8 @@ func New(t *testing.T, fopts ...Option) *Stalled {
 	}
 
 	fw := &Stalled{
-		options:        opts,
-		runNewWorkflow: true,
+		options:            opts,
+		runWorkflowReplica: opts.initialReplica,
 	}
 
 	appID := uuid.New().String()
@@ -79,10 +79,11 @@ func (f *Stalled) Cleanup(t *testing.T) {
 }
 
 func (f *Stalled) workflowWrapper(ctx *task.OrchestrationContext) (any, error) {
-	if f.runNewWorkflow {
-		return f.options.newWorkflow(ctx)
+	if wf, ok := f.options.workflows[f.runWorkflowReplica]; !ok {
+		return nil, fmt.Errorf("workflow replica %s not found", f.runWorkflowReplica)
+	} else {
+		return wf(ctx)
 	}
-	return f.options.oldWorkflow(ctx)
 }
 
 func (f *Stalled) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {
@@ -96,15 +97,9 @@ func (f *Stalled) ScheduleWorkflow(t *testing.T, ctx context.Context) api.Instan
 	return id
 }
 
-func (f *Stalled) RestartAsOldReplica(t *testing.T, ctx context.Context) {
+func (f *Stalled) RestartAsReplica(t *testing.T, ctx context.Context, name string) {
 	t.Helper()
-	f.runNewWorkflow = false
-	f.restart(t, ctx)
-}
-
-func (f *Stalled) RestartAsNewReplica(t *testing.T, ctx context.Context) {
-	t.Helper()
-	f.runNewWorkflow = true
+	f.runWorkflowReplica = name
 	f.restart(t, ctx)
 }
 

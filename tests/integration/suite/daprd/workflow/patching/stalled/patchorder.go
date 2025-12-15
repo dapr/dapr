@@ -34,17 +34,18 @@ type patchorder struct {
 
 func (r *patchorder) Setup(t *testing.T) []framework.Option {
 	r.fw = stalled.New(t,
-		stalled.WithOldWorkflow(func(ctx *task.OrchestrationContext) (any, error) {
-			ctx.IsPatched("patch1")
+		stalled.WithInitialReplica("new"),
+		stalled.WithNamedWorkflowReplica("new", func(ctx *task.OrchestrationContext) (any, error) {
 			ctx.IsPatched("patch2")
+			ctx.IsPatched("patch1")
 			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 				return nil, err
 			}
 			return nil, nil
 		}),
-		stalled.WithNewWorkflow(func(ctx *task.OrchestrationContext) (any, error) {
-			ctx.IsPatched("patch2")
+		stalled.WithNamedWorkflowReplica("old", func(ctx *task.OrchestrationContext) (any, error) {
 			ctx.IsPatched("patch1")
+			ctx.IsPatched("patch2")
 			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 				return nil, err
 			}
@@ -59,7 +60,7 @@ func (r *patchorder) Run(t *testing.T, ctx context.Context) {
 	id := r.fw.ScheduleWorkflow(t, ctx)
 	r.fw.WaitForNumberOfOrchestrationStartedEvents(t, ctx, id, 1)
 
-	r.fw.RestartAsOldReplica(t, ctx)
+	r.fw.RestartAsReplica(t, ctx, "old")
 
 	require.NoError(t, r.fw.CurrentClient.RaiseEvent(ctx, id, "Continue"))
 

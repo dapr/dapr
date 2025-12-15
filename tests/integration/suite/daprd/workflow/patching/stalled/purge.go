@@ -36,16 +36,8 @@ type purge struct {
 
 func (r *purge) Setup(t *testing.T) []framework.Option {
 	r.fw = stalled.New(t,
-		stalled.WithOldWorkflow(func(ctx *task.OrchestrationContext) (any, error) {
-			if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
-				return nil, err
-			}
-			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
-				return nil, err
-			}
-			return nil, nil
-		}),
-		stalled.WithNewWorkflow(func(ctx *task.OrchestrationContext) (any, error) {
+		stalled.WithInitialReplica("new"),
+		stalled.WithNamedWorkflowReplica("new", func(ctx *task.OrchestrationContext) (any, error) {
 			if ctx.IsPatched("patch1") {
 				if err := ctx.CallActivity("sayHello2").Await(nil); err != nil {
 					return nil, err
@@ -54,6 +46,15 @@ func (r *purge) Setup(t *testing.T) []framework.Option {
 				if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
 					return nil, err
 				}
+			}
+			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}),
+		stalled.WithNamedWorkflowReplica("old", func(ctx *task.OrchestrationContext) (any, error) {
+			if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
+				return nil, err
 			}
 			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 				return nil, err
@@ -76,7 +77,7 @@ func (r *purge) Run(t *testing.T, ctx context.Context) {
 	id := r.fw.ScheduleWorkflow(t, ctx)
 	r.fw.WaitForNumberOfOrchestrationStartedEvents(t, ctx, id, 2)
 
-	r.fw.RestartAsOldReplica(t, ctx)
+	r.fw.RestartAsReplica(t, ctx, "old")
 
 	require.NoError(t, r.fw.CurrentClient.RaiseEvent(ctx, id, "Continue"))
 

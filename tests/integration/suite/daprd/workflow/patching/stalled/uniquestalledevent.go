@@ -35,14 +35,15 @@ type uniquestalledevent struct {
 
 func (r *uniquestalledevent) Setup(t *testing.T) []framework.Option {
 	r.fw = stalled.New(t,
-		stalled.WithOldWorkflow(func(ctx *task.OrchestrationContext) (any, error) {
+		stalled.WithInitialReplica("new"),
+		stalled.WithNamedWorkflowReplica("new", func(ctx *task.OrchestrationContext) (any, error) {
+			ctx.IsPatched("patch1")
 			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 				return nil, err
 			}
 			return nil, nil
 		}),
-		stalled.WithNewWorkflow(func(ctx *task.OrchestrationContext) (any, error) {
-			ctx.IsPatched("patch1")
+		stalled.WithNamedWorkflowReplica("old", func(ctx *task.OrchestrationContext) (any, error) {
 			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 				return nil, err
 			}
@@ -59,14 +60,14 @@ func (r *uniquestalledevent) Run(t *testing.T, ctx context.Context) {
 	id := r.fw.ScheduleWorkflow(t, ctx)
 	r.fw.WaitForNumberOfOrchestrationStartedEvents(t, ctx, id, 1)
 
-	r.fw.RestartAsOldReplica(t, ctx)
+	r.fw.RestartAsReplica(t, ctx, "old")
 
 	require.NoError(t, r.fw.CurrentClient.RaiseEvent(ctx, id, "Continue"))
 
 	r.fw.WaitForStalled(t, ctx, id)
 	require.Equal(t, 1, r.fw.CountStalledEvents(t, ctx, id))
 
-	r.fw.RestartAsOldReplica(t, ctx)
+	r.fw.RestartAsReplica(t, ctx, "old")
 
 	// we have to sleep as there's no way to know when the orchestrator runs
 	time.Sleep(3 * time.Second)
