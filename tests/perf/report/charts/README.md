@@ -162,5 +162,5 @@ Charts are produced by:
 ```bash
 cd tests/perf/report
 rm -rf charts/v1.16.3/workflows/*
-go run charts.go
+go run .
 ```
