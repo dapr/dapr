@@ -141,7 +141,8 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := etcdClient.Get(ctx, "dapr/jobs/", clientv3.WithPrefix())
-		assert.NoError(c, err)
-		assert.Empty(c, resp.Kvs)
+		if assert.NoError(c, err) {
+			assert.Empty(c, resp.Kvs)
+		}
 	}, time.Second*10, 10*time.Millisecond)
 }
