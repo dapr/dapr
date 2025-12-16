@@ -32,7 +32,7 @@ func sanitizeName(s string) string {
 // sanitizePerfJSON removes problematic fields and line-breaks, specifically it:
 // Drops the "Payload": "..." field and base64-only continuation lines from the
 // following test: tests/perf/service_invocation_http/service_invocation_http_test.go
-// - Fixes common trailing comma issues
+// & fixes trailing comma issues
 func sanitizePerfJSON(s string) string {
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))

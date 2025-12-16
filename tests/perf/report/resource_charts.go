@@ -15,7 +15,6 @@ package main
 
 import (
 	"fmt"
-	"image/color"
 	"path/filepath"
 
 	"gonum.org/v1/plot"
@@ -33,7 +32,7 @@ func makeResourceCPUChart(ru ResourceUsage, prefix, outDir string) {
 	p.Y.Label.Text = "mCPU"
 	values := plotter.Values{ru.AppCPUm, ru.SidecarCPUm}
 	bar, _ := plotter.NewBarChart(values, vg.Points(55))
-	bar.Color = color.RGBA{255, 205, 86, 255} // yellow
+	bar.Color = colorRGBA(255, 205, 86, 255) // yellow
 	p.Add(bar)
 	p.X.Min = -0.5
 	p.X.Max = 1.5
@@ -54,7 +53,7 @@ func makeResourceMemChart(ru ResourceUsage, prefix, outDir string) {
 	p.Y.Label.Text = "MB"
 	values := plotter.Values{ru.AppMemMB, ru.SidecarMemMB}
 	bar, _ := plotter.NewBarChart(values, vg.Points(55))
-	bar.Color = color.RGBA{255, 99, 132, 255} // pinkish-red
+	bar.Color = colorRGBA(255, 99, 132, 255) // pinkish-red
 	p.Add(bar)
 	p.X.Min = -0.5
 	p.X.Max = 1.5

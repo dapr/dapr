@@ -16,7 +16,9 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -54,11 +56,11 @@ func makeCombinedCharts(runners []Runner, prefix, outDir string) {
 	}
 
 	medLine, _ := plotter.NewLine(medPts)
-	medLine.Color = color.RGBA{100, 200, 100, 255} // green
+	medLine.Color = colorRGBA(100, 200, 100, 255) // green
 	medLine.Width = vg.Points(2)
 
 	p95Line, _ := plotter.NewLine(p95Pts)
-	p95Line.Color = color.RGBA{255, 100, 100, 255} // red
+	p95Line.Color = colorRGBA(255, 100, 100, 255) // red
 	p95Line.Width = vg.Points(2)
 
 	p.Add(medLine, p95Line)
@@ -132,15 +134,15 @@ func makeDurationBreakdownChart(r Runner, prefix, outDir string) {
 		color  color.RGBA
 	}
 	lines := []lineDef{
-		{"Connecting", r.HTTPReqConnecting, color.RGBA{255, 99, 132, 255}},          // pinkish-red
-		{"TLS", r.HTTPReqTLS, color.RGBA{54, 162, 235, 255}},                        // lighter blue
-		{"Sending", r.HTTPReqSending, color.RGBA{255, 206, 86, 255}},                // yellow
-		{"Receiving", r.HTTPReqReceiving, color.RGBA{153, 102, 255, 255}},           // purple
-		{"Blocked", r.HTTPReqBlocked, color.RGBA{255, 159, 64, 255}},                // orange
-		{"Waiting", r.HTTPReqWaiting, color.RGBA{75, 192, 192, 255}},                // green blue
-		{"Duration", r.HTTPReqDuration, color.RGBA{0, 114, 178, 255}},               // darker blue
-		{"Iteration Duration", r.IterationDuration, color.RGBA{102, 194, 165, 255}}, // greener blue
-		{"Failed Requests", r.HTTPReqFailed, color.RGBA{220, 53, 69, 255}},          // red
+		{"Connecting", r.HTTPReqConnecting, colorRGBA(255, 99, 132, 255)},          // pinkish-red
+		{"TLS", r.HTTPReqTLS, colorRGBA(54, 162, 235, 255)},                        // lighter blue
+		{"Sending", r.HTTPReqSending, colorRGBA(255, 206, 86, 255)},                // yellow
+		{"Receiving", r.HTTPReqReceiving, colorRGBA(153, 102, 255, 255)},           // purple
+		{"Blocked", r.HTTPReqBlocked, colorRGBA(255, 159, 64, 255)},                // orange
+		{"Waiting", r.HTTPReqWaiting, colorRGBA(75, 192, 192, 255)},                // green blue
+		{"Duration", r.HTTPReqDuration, colorRGBA(0, 114, 178, 255)},               // darker blue
+		{"Iteration Duration", r.IterationDuration, colorRGBA(102, 194, 165, 255)}, // greener blue
+		{"Failed Requests", r.HTTPReqFailed, colorRGBA(220, 53, 69, 255)},          // red
 	}
 
 	// Build the low latency charts -> exclude the large metrics
@@ -313,7 +315,7 @@ func makeTailLatencyChart(r Runner, prefix, outDir string) {
 		{5, r.HTTPReqDuration.Values.Max * 1000},
 	}
 	line, _ := plotter.NewLine(pts)
-	line.Color = color.RGBA{220, 53, 69, 255} // red
+	line.Color = colorRGBA(220, 53, 69, 255) // red
 	line.Width = vg.Points(4)
 	p.Add(line)
 
@@ -338,7 +340,7 @@ func makeSummaryChart(r Runner, prefix, outDir string) {
 
 	// bar width
 	bar, _ := plotter.NewBarChart(values, vg.Points(55))
-	bar.Color = color.RGBA{54, 162, 235, 255} // blue
+	bar.Color = colorRGBA(54, 162, 235, 255) // blue
 
 	p.Add(bar)
 
@@ -361,7 +363,7 @@ func makeThroughputChart(r Runner, prefix, outDir string) {
 	if iterRate < 0 {
 		iterRate = 0
 	}
-	p.Title.Text = fmt.Sprintf("Data Throughput (KB/s) – %.2f iterations/sec", iterRate)
+	p.Title.Text = fmt.Sprintf("Data (Payload+Headers) Throughput (KB/s) – %.2f iterations/sec", iterRate)
 	p.Y.Label.Text = "KB/s"
 
 	recvKBs := r.DataReceived.Values.Rate / 1024 // KB/s
@@ -371,7 +373,7 @@ func makeThroughputChart(r Runner, prefix, outDir string) {
 	}
 	values := plotter.Values{recvKBs, sentKBs}
 	bar, _ := plotter.NewBarChart(values, vg.Points(55))
-	bar.Color = color.RGBA{51, 153, 255, 255} // blue
+	bar.Color = colorRGBA(51, 153, 255, 255) // blue
 	p.Add(bar)
 
 	// set below vals to have a set x-axis otherwise the spacing is weird (makes them centered)
@@ -430,22 +432,22 @@ func makeVariantComparisonCharts(labels []string, runners []Runner, basePrefix, 
 	}
 	// Decide which series to plot
 	seriesList := []series{
-		{"p50 (median)", color.RGBA{100, 200, 100, 255}, medVals}, // green
+		{"p50 (median)", colorRGBA(100, 200, 100, 255), medVals}, // green
 	}
 	if hasP75 {
-		seriesList = append(seriesList, series{"p75", color.RGBA{153, 102, 255, 255}, p75Vals}) // purple
+		seriesList = append(seriesList, series{"p75", colorRGBA(153, 102, 255, 255), p75Vals}) // purple
 	}
 	if hasP90 {
-		seriesList = append(seriesList, series{"p90", color.RGBA{75, 192, 192, 255}, p90Vals}) // light blueish-greenish
+		seriesList = append(seriesList, series{"p90", colorRGBA(75, 192, 192, 255), p90Vals}) // light blueish-greenish
 	}
 	if hasP95 {
-		seriesList = append(seriesList, series{"p95", color.RGBA{54, 162, 235, 255}, p95Vals}) // darker blue
+		seriesList = append(seriesList, series{"p95", colorRGBA(54, 162, 235, 255), p95Vals}) // darker blue
 	}
 	if hasP99 {
-		seriesList = append(seriesList, series{"p99", color.RGBA{255, 159, 64, 255}, p99Vals}) // orange
+		seriesList = append(seriesList, series{"p99", colorRGBA(255, 159, 64, 255), p99Vals}) // orange
 	}
 	if hasP999 {
-		seriesList = append(seriesList, series{"p99.9", color.RGBA{255, 99, 132, 255}, p999Vals}) // pinkish-red
+		seriesList = append(seriesList, series{"p99.9", colorRGBA(255, 99, 132, 255), p999Vals}) // pinkish-red
 	}
 
 	p := plot.New()
@@ -480,4 +482,137 @@ func makeVariantComparisonCharts(labels []string, runners []Runner, basePrefix, 
 		return defTicks
 	})
 	p.Save(16*vg.Inch, 5*vg.Inch, filepath.Join(outDir, basePrefix+"_variants_duration.png"))
+}
+
+type outputInfo struct {
+	apiName   string
+	transport string
+	outDir    string
+	groupKey  string
+	isPubsub  bool
+
+	// pubsub comparison fields
+	compKey  string
+	baseFunc string
+	label    string
+}
+
+// Resolve api/transport, output dir, grouping key, and the comparison aggregation keys for pubsub
+func prepareOutputInfo(pkg, testName, baseOutputDir string) (outputInfo, bool) {
+	apiName, transport, ok := classifyAPIAndTransport(pkg, testName)
+	if !ok {
+		return outputInfo{}, false
+	}
+	// put pubsub "bulk" into pubsub/bulk subfolder
+	if strings.HasPrefix(apiName, "pubsub") && strings.Contains(strings.ToLower(testName), "bulk") {
+		apiName = "pubsub/bulk"
+	}
+	outDir := filepath.Join(baseOutputDir, apiName)
+	if transport != "" {
+		outDir = filepath.Join(outDir, transport)
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "error creating charts directory %s: %v\n", outDir, err)
+		return outputInfo{}, false
+	}
+
+	var groupKey string
+	isPubsub := strings.HasPrefix(apiName, "pubsub")
+	// Each parameterized variant aggregates across its own runs
+	// ex: TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)
+	// vs  TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal
+	// vs  TestConfigurationSubscribeGRPCPerformance for non pubsub API
+	// vs  TestWorkflowWithDifferentPayloads for wf API
+	if isPubsub {
+		groupKey = sanitizeName(stripRunOrdinalSuffix(testName))
+	} else {
+		base := testName
+		if i := strings.Index(base, "/"); i != -1 {
+			base = base[:i]
+		}
+		base = stripRunOrdinalSuffix(base)
+		groupKey = sanitizeName(base)
+	}
+
+	output := outputInfo{
+		apiName:   apiName,
+		transport: transport,
+		outDir:    outDir,
+		groupKey:  groupKey,
+		isPubsub:  isPubsub,
+	}
+
+	// comparison aggregation keys
+	if isPubsub {
+		baseFunc := testName
+		if idx := strings.Index(baseFunc, "/"); idx != -1 {
+			baseFunc = baseFunc[:idx]
+		}
+		if i := strings.Index(baseFunc, ":_"); i != -1 {
+			baseFunc = baseFunc[:i]
+		}
+		var label string
+		if idx := strings.Index(testName, "/"); idx != -1 {
+			label = sanitizeName(testName[idx+1:])
+		} else {
+			label = sanitizeName(testName)
+		}
+		compKey := apiName + "/"
+		if transport != "" {
+			compKey += transport + "/"
+		}
+		compKey += sanitizeName(baseFunc)
+		output.baseFunc = baseFunc
+		output.label = label
+		output.compKey = compKey
+	}
+	return output, true
+}
+
+// storeRunner aggregates the runner into combinedResults & for pubsub the comparison sets
+func storeRunner(r Runner, output outputInfo) {
+	// combine results per API/transport/groupKey
+	mapKey := output.apiName + "/"
+	if output.transport != "" {
+		mapKey += output.transport + "/"
+	}
+	mapKey += output.groupKey
+	result, exists := combinedResults[mapKey]
+	if !exists {
+		result = combinedTestResult{
+			name:    output.groupKey,
+			outDir:  output.outDir,
+			runners: []Runner{},
+		}
+	}
+	result.runners = append(result.runners, r)
+	combinedResults[mapKey] = result
+	if debugEnabled {
+		debugf("storeRunner result: %+v", result)
+	}
+
+	// Pubsub comparison chart accumulation across parameterized variants
+	// ex: TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_duration_breakdown.png
+	// vs  TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_duration_breakdown.png
+	// used for the *_variants_duration.png charts
+	if output.isPubsub {
+		cmp := pubsubComparisons[output.compKey]
+		if cmp.baseName == "" {
+			cmp.baseName = output.baseFunc
+			cmp.outDir = output.outDir
+		}
+		cmp.labels = append(cmp.labels, output.label)
+		cmp.runners = append(cmp.runners, r)
+		pubsubComparisons[output.compKey] = cmp
+		if debugEnabled {
+			debugf("pubsubComparisons: %+v", pubsubComparisons)
+		}
+	}
+	if debugEnabled {
+		debugf("outputInfo: %+v", output)
+	}
+}
+
+func colorRGBA(r, g, b, a uint8) color.RGBA {
+	return color.RGBA{R: r, G: g, B: b, A: a}
 }
