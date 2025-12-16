@@ -23,8 +23,6 @@ import (
 )
 
 func init() {
-	stateLoader.DefaultRegistry.RegisterComponent(sqlserver.New, "sqlserver")
-
 	stateLoader.DefaultRegistry.RegisterComponentWithVersions("sqlserver", components.Versioning{
 		Preferred: components.VersionConstructor{
 			Version: "v2", Constructor: sqlserverv2.New,
