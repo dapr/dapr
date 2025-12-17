@@ -16,6 +16,8 @@ package main
 import (
 	"strconv"
 	"strings"
+
+	"github.com/dapr/dapr/tests/perf/markers"
 )
 
 type ResourceUsage struct {
@@ -37,10 +39,10 @@ type parsedUsage struct {
 func parseResourceUsageLine(line string) (parsedUsage, bool) {
 	l := strings.ToLower(strings.TrimSpace(line))
 	var resource, marker string
-	if idx := strings.Index(l, TargetDaprAppConsumed); idx != -1 || strings.HasPrefix(l, TargetDaprAppConsumed) {
-		resource, marker = "app", TargetDaprAppConsumed
-	} else if idx := strings.Index(l, TargetDaprConsumed); idx != -1 || strings.HasPrefix(l, TargetDaprConsumed) {
-		resource, marker = "sidecar", TargetDaprConsumed
+	if idx := strings.Index(l, markers.TargetDaprAppConsumed); idx != -1 || strings.HasPrefix(l, markers.TargetDaprAppConsumed) {
+		resource, marker = "app", markers.TargetDaprAppConsumed
+	} else if idx := strings.Index(l, markers.TargetDaprConsumed); idx != -1 || strings.HasPrefix(l, markers.TargetDaprConsumed) {
+		resource, marker = "sidecar", markers.TargetDaprConsumed
 	} else {
 		return parsedUsage{}, false
 	}
@@ -92,9 +94,9 @@ func parseRestartLine(line string) (parsedRestarts, bool) {
 	}
 
 	resource := ""
-	if strings.Index(l, TargetDaprAppRestarted) != -1 || strings.HasPrefix(l, TargetDaprAppRestarted) {
+	if strings.Index(l, markers.TargetDaprAppRestarted) != -1 || strings.HasPrefix(l, markers.TargetDaprAppRestarted) {
 		resource = "target"
-	} else if strings.Index(l, TargetTesterAppRestarted) != -1 || strings.HasPrefix(l, TargetDaprAppRestarted) {
+	} else if strings.Index(l, markers.TargetTesterAppRestarted) != -1 || strings.HasPrefix(l, markers.TargetDaprAppRestarted) {
 		resource = "tester"
 	} else {
 		return parsedRestarts{}, false

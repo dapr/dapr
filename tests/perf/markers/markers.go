@@ -11,8 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package markers
 
+// Log markers shared btw perf tests & report/ for chart generation
 const (
 	TargetDaprAppConsumed    = "target dapr app consumed"
 	TargetDaprConsumed       = "target dapr sidecar consumed"
