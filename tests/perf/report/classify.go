@@ -70,7 +70,7 @@ func buildTestModes(root string) map[string]string {
 			mode = "k6"
 		} else if strings.Contains(src, "Params(") || strings.Contains(src, "WithQPS(") {
 			mode = "fortio"
-			
+
 		}
 		if mode == "" {
 			return nil
