@@ -23,7 +23,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -49,7 +48,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
 	msg := imReq.Message()
 	return policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
-		resData, err := o.executeMethod(ctx, msg.GetMethod(), msg.GetData().GetValue())
+		resData, err := o.executeMethod(ctx, msg.GetMethod(), req.GetMetadata(), msg.GetData().GetValue())
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +66,7 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 	})
 }
 
-func (o *orchestrator) executeMethod(ctx context.Context, methodName string, request []byte) ([]byte, error) {
+func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte) ([]byte, error) {
 	log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
 
 	if o.actorState == nil {
@@ -82,7 +81,7 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, req
 		return nil, o.addWorkflowEvent(ctx, request)
 
 	case todo.PurgeWorkflowStateMethod:
-		return nil, o.purgeWorkflowState(ctx)
+		return nil, o.purgeWorkflowState(ctx, meta)
 
 	case todo.ForkWorkflowHistory:
 		return nil, backoff.Permanent(o.forkWorkflowHistory(ctx, request))
@@ -107,30 +106,18 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	// Returning nil signals that we want the execution to be retried in the next period interval
 	switch {
 	case err == nil:
-		if o.schedulerReminders {
-			return nil
-		}
-		return actorerrors.ErrReminderCanceled
+		return nil
 	case errors.Is(err, context.DeadlineExceeded):
 		log.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", o.actorID, err)
 		return err
 	case errors.Is(err, context.Canceled):
 		log.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", o.actorID, err)
-		if o.schedulerReminders {
-			return err
-		}
-		return nil
+		return err
 	case wferrors.IsRecoverable(err):
 		log.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", o.actorID, err)
-		if o.schedulerReminders {
-			return err
-		}
-		return nil
+		return err
 	default: // Other error
 		log.Errorf("Workflow actor '%s': execution failed with an error: %v", o.actorID, err)
-		if o.schedulerReminders {
-			return err
-		}
-		return actorerrors.ErrReminderCanceled
+		return err
 	}
 }

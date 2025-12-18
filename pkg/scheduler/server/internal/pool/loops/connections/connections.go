@@ -24,41 +24,49 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/connections/store"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/stream"
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/store"
 	"github.com/dapr/kit/events/loop"
-	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
-var log = logger.NewLogger("dapr.scheduler.server.pool.loops.connections")
+var (
+	loopFactory = loop.New[loops.Event](1024)
+	connsCache  = sync.Pool{New: func() any {
+		return &connections{
+			streams:    make(map[uint64]context.CancelFunc),
+			streamPool: store.New(),
+		}
+	}}
+)
 
 type Options struct {
-	Cron       api.Interface
-	CancelPool context.CancelCauseFunc
+	Cron          api.Interface
+	NamespaceLoop loop.Interface[loops.Event]
 }
 
 // connections is a control loop that creates and manages stream connections,
 // piping trigger requests.
+// TODO: @joshvanl: use a sync.Pool cache
 type connections struct {
-	cron       api.Interface
-	cancelPool context.CancelCauseFunc
-	loop       loop.Interface[loops.Event]
+	cron   api.Interface
+	nsLoop loop.Interface[loops.Event]
+	loop   loop.Interface[loops.Event]
 
-	streams    map[uint64]context.CancelCauseFunc
+	streams    map[uint64]context.CancelFunc
 	streamIDx  uint64
-	streamPool *store.Namespace
+	streamPool *store.Store
 	wg         sync.WaitGroup
 }
 
 func New(opts Options) loop.Interface[loops.Event] {
-	conns := &connections{
-		streams:    make(map[uint64]context.CancelCauseFunc),
-		cancelPool: opts.CancelPool,
-		cron:       opts.Cron,
-		streamPool: store.New(),
-	}
+	conns := connsCache.Get().(*connections)
 
-	conns.loop = loop.New(conns, 1024)
+	conns.cron = opts.Cron
+	conns.nsLoop = opts.NamespaceLoop
+	conns.streamIDx = 0
+
+	conns.loop = loopFactory.NewLoop(conns)
 	return conns.loop
 }
 
@@ -81,71 +89,35 @@ func (c *connections) Handle(ctx context.Context, event loops.Event) error {
 
 // handleAdd adds a connection to the pool for a given namespace/appID.
 func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
-	var prefixes []string
-	var appID *string
+	streamIDx := c.streamIDx
+	c.streamIDx++
 
-	reqNamespace := add.Request.GetNamespace()
-	reqAppID := add.Request.GetAppId()
-
-	// To account for backwards compatibility where older clients did not use
-	// this field, we assume a connected client and implement both app jobs, as
-	// well as actor job types. We can remove this in v1.16
-	ts := add.Request.GetAcceptJobTypes()
-	if len(ts) == 0 || slices.Contains(ts, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_JOB) {
-		log.Infof("Adding a Sidecar connection to Scheduler for appID: %s/%s.", reqNamespace, reqAppID)
-		appID = &add.Request.AppId
-		prefixes = append(prefixes, "app||"+reqNamespace+"||"+reqAppID+"||")
-	}
-
-	if len(ts) == 0 || slices.Contains(ts, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER) {
-		for _, actorType := range add.Request.GetActorTypes() {
-			log.Infof("Adding a Sidecar connection to Scheduler for actor type: %s/%s.", reqNamespace, actorType)
-			prefixes = append(prefixes, "actorreminder||"+reqNamespace+"||"+actorType+"||")
-		}
-	}
-
-	log.Debugf("Marking deliverable prefixes for Sidecar connection: %s/%s: %v.",
-		add.Request.GetNamespace(), add.Request.GetAppId(), prefixes)
-
-	pcancel, err := c.cron.DeliverablePrefixes(ctx, prefixes...)
+	streamLoop, err := stream.New(ctx, stream.Options{
+		IDx:           streamIDx,
+		Add:           add,
+		Cron:          c.cron,
+		NamespaceLoop: c.nsLoop,
+	})
 	if err != nil {
 		return err
 	}
 
-	log.Debugf("Added a Sidecar connection to Scheduler for: %s/%s.",
-		add.Request.GetNamespace(), add.Request.GetAppId())
-
-	streamIDx := c.streamIDx
-	c.streamIDx++
-
-	streamLoop := stream.New(stream.Options{
-		IDx:      streamIDx,
-		Channel:  add.Channel,
-		Request:  add.Request,
-		ConnLoop: c.loop,
-	})
-
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
-		err := streamLoop.Run(ctx)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			log.Errorf("Error running stream loop: %v", err)
-			c.cancelPool(err)
-		}
+		_ = streamLoop.Run(ctx)
 	}()
 
+	var appID *string
+	ts := add.Request.GetAcceptJobTypes()
+	if len(ts) == 0 || slices.Contains(add.Request.GetAcceptJobTypes(), schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_JOB) {
+		appID = ptr.Of(add.Request.GetAppId())
+	}
+
 	c.streams[streamIDx] = c.streamPool.Add(store.Options{
-		Namespace:  add.Request.GetNamespace(),
+		Loop:       streamLoop,
 		AppID:      appID,
 		ActorTypes: add.Request.GetActorTypes(),
-		Connection: &store.StreamConnection{
-			Cancel: func(err error) {
-				pcancel(err)
-				add.Cancel(err)
-			},
-			Loop: streamLoop,
-		},
 	})
 
 	return nil
@@ -169,8 +141,9 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) erro
 		return errors.New("catastrophic state machine error: lost connection stream reference")
 	}
 
-	cancel(errors.New("stream closed by scheduler"))
 	delete(c.streams, closeStream.StreamIDx)
+	cancel()
+
 	return nil
 }
 
@@ -179,19 +152,21 @@ func (c *connections) handleShutdown() {
 	defer c.wg.Wait()
 
 	for _, cancel := range c.streams {
-		cancel(errors.New("connections loop shutdown"))
+		cancel()
 	}
 
-	c.streams = make(map[uint64]context.CancelCauseFunc)
+	clear(c.streams)
+
+	loopFactory.CacheLoop(c.loop)
 }
 
 // getStreamLoop returns a stream loop from the pool based on the metadata.
 func (c *connections) getStreamLoop(meta *schedulerv1pb.JobMetadata) (loop.Interface[loops.Event], bool) {
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
-		return c.streamPool.AppID(meta.GetNamespace(), meta.GetAppId())
+		return c.streamPool.AppID(meta.GetAppId())
 	case *schedulerv1pb.JobTargetMetadata_Actor:
-		return c.streamPool.ActorType(meta.GetNamespace(), t.GetActor().GetType())
+		return c.streamPool.ActorType(t.GetActor().GetType())
 	default:
 		return nil, false
 	}

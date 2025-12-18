@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
 
@@ -107,11 +106,8 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	}, 10*time.Second, 10*time.Millisecond)
 
 	// Start reading from stream2
-	var wg sync.WaitGroup
-	wg.Add(1)
 	updateCh2 := make(chan *v1pb.PlacementTables, 5)
 	go func() {
-		defer wg.Done()
 		defer close(updateCh2)
 		for {
 			select {
@@ -177,10 +173,8 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err, "Failed to send host2")
 
 	// Start reading from stream3
-	wg.Add(1)
 	updateCh3 := make(chan *v1pb.PlacementTables)
 	go func() {
-		defer wg.Done()
 		defer close(updateCh3)
 		for {
 			select {
@@ -217,7 +211,6 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	streamCancel1()
 	streamCancel2()
 	streamCancel3()
-	wg.Wait()
 }
 
 func (n *streamHang) getStream(t assert.TestingT, ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, func()) {

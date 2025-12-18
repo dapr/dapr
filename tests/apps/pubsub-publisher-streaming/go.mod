@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/pubsub-publisher-streaming
 
-go 1.24.6
+go 1.24.11
 
 require (
 	github.com/dapr/dapr v1.15.4

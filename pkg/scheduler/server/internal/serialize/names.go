@@ -25,8 +25,8 @@ import (
 // namespace.
 func PrefixesFromNamespace(namespace string) []string {
 	return []string{
-		"actorreminder||" + namespace,
-		"app||" + namespace,
+		"actorreminder||" + namespace + "||",
+		"app||" + namespace + "||",
 	}
 }
 

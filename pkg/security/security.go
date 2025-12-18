@@ -108,6 +108,10 @@ type Options struct {
 	// from. Default to an implementation requesting from Sentry.
 	OverrideCertRequestFn spiffe.RequestSVIDFn
 
+	// OverrideRequestNamespace is used to override the namespace used when
+	// requesting certificates.
+	OverrideRequestNamespace *string
+
 	// OverrideTrustAnchors is used to override where trust anchors are requested
 	// from.
 	OverrideTrustAnchors trustanchors.Interface

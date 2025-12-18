@@ -217,7 +217,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 				{Name: "crypto3", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{
 					Name: "crypto2", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
 		}, time.Second*10, time.Millisecond*10)
@@ -255,7 +255,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{
 					Name: "crypto3", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "KEYS_LIKE", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
 		}, time.Second*10, time.Millisecond*10)

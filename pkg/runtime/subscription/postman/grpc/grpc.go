@@ -70,6 +70,7 @@ func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	}
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
+	ctx = g.channel.AddAppTokenToContext(ctx)
 
 	conn, err := g.channel.GetAppClient()
 	if err != nil {
@@ -197,6 +198,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	spans = spans[:n]
 	defer todo.EndSpans(spans)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.Metadata)
+	ctx = g.channel.AddAppTokenToContext(ctx)
 
 	conn, err := g.channel.GetAppClient()
 	if err != nil {

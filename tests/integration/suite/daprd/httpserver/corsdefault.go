@@ -72,10 +72,10 @@ func (h *corsdefault) Run(t *testing.T, ctx context.Context) {
 		res, err := h1Client.Do(req)
 		require.NoError(t, err)
 		defer closeBody(res.Body)
-		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Equal(t, http.StatusNotFound, res.StatusCode)
 
-		require.Equal(t, "*", res.Header.Get("Access-Control-Allow-Origin"))
-		require.NotEmpty(t, res.Header.Get("Vary"))
+		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
+		require.Empty(t, res.Header.Get("Vary"))
 	})
 
 	t.Run("OPTIONS, unnecessary token", func(t *testing.T) {
@@ -90,10 +90,10 @@ func (h *corsdefault) Run(t *testing.T, ctx context.Context) {
 		res, err := h1Client.Do(req)
 		require.NoError(t, err)
 		defer closeBody(res.Body)
-		require.Equal(t, http.StatusOK, res.StatusCode)
+		require.Equal(t, http.StatusNotFound, res.StatusCode)
 
-		require.Equal(t, "*", res.Header.Get("Access-Control-Allow-Origin"))
-		require.NotEmpty(t, res.Header.Get("Vary"))
+		require.Empty(t, res.Header.Get("Access-Control-Allow-Origin"))
+		require.Empty(t, res.Header.Get("Vary"))
 	})
 
 	t.Run("GET", func(t *testing.T) {

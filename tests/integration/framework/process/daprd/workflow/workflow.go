@@ -35,8 +35,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	t.Helper()
 
 	opts := options{
-		registry:        task.NewTaskRegistry(),
-		enableScheduler: true,
+		registry: task.NewTaskRegistry(),
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
@@ -44,7 +43,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 	return &Workflow{
 		registry: opts.registry,
-		actors:   actors.New(t, actors.WithFeatureSchedulerReminders(opts.enableScheduler)),
+		actors:   actors.New(t),
 	}
 }
 

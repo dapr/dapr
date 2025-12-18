@@ -16,8 +16,6 @@ package scheduler
 import (
 	"context"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -52,17 +50,6 @@ type reminder struct {
 }
 
 func (r *reminder) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600))
-
 	r.loglineSchedulerReminders = logline.New(t, logline.WithStdoutLineContains(
 		"Using Scheduler service for reminders.",
 	))
@@ -88,7 +75,6 @@ spec:
 	r.place = placement.New(t)
 
 	r.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),

@@ -17,8 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -58,17 +56,6 @@ type remote struct {
 }
 
 func (r *remote) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600))
-
 	r.actorIDsNum = 100
 	r.methodcalled.Store(make([]string, 0, r.actorIDsNum))
 	r.actorIDs = make([]string, r.actorIDsNum)
@@ -108,14 +95,12 @@ spec:
 	srv1 := newHTTP(&r.daprd1called)
 	srv2 := newHTTP(&r.daprd2called)
 	r.daprd1 = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
 		daprd.WithAppPort(srv1.Port()),
 	)
 	r.daprd2 = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),

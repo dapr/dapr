@@ -16,11 +16,13 @@ package client
 import (
 	"context"
 	"math"
+	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -46,6 +48,10 @@ func New(ctx context.Context, address string, sec security.Handler) (schedulerv1
 	opts := []grpc.DialOption{
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:    time.Second * 3,
+			Timeout: time.Second * 5,
+		}),
 		sec.GRPCDialOptionMTLS(schedulerID),
 	}
 

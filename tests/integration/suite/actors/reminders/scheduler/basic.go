@@ -16,8 +16,6 @@ package scheduler
 import (
 	"context"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -49,17 +47,6 @@ type basic struct {
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
- name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600))
-
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
@@ -78,7 +65,6 @@ spec:
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	b.place = placement.New(t)
 	b.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(b.place.Address()),
 		daprd.WithSchedulerAddresses(b.scheduler.Address()),

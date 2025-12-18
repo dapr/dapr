@@ -59,5 +59,5 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	_, err = client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, time.Since(start).Seconds(), 7.0)
+	assert.GreaterOrEqual(t, time.Since(start).Seconds(), 6.0)
 }

@@ -49,7 +49,6 @@ func (p *period) Setup(t *testing.T) []framework.Option {
 			}
 			p.count.Add(1)
 		}),
-		actors.WithFeatureSchedulerReminders(false),
 	)
 	actors2 := actors.New(t,
 		actors.WithActorTypes("foo"),
@@ -59,7 +58,6 @@ func (p *period) Setup(t *testing.T) []framework.Option {
 			}
 			p.count.Add(1)
 		}),
-		actors.WithFeatureSchedulerReminders(false),
 		actors.WithPeerActor(p.actors),
 	)
 

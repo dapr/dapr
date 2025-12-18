@@ -48,9 +48,9 @@ func config(opts Options) (*embed.Config, error) {
 			InsecureSkipVerify:  false,
 			SkipClientSANVerify: false,
 			AllowedHostnames: []string{
-				fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.cluster.local", opts.Security.ControlPlaneNamespace()),
-				fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.cluster.local", opts.Security.ControlPlaneNamespace()),
-				fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.cluster.local", opts.Security.ControlPlaneNamespace()),
+				fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), opts.Security.ControlPlaneTrustDomain()),
+				fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), opts.Security.ControlPlaneTrustDomain()),
+				fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), opts.Security.ControlPlaneTrustDomain()),
 			},
 			EmptyCN:        true,
 			CertFile:       filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
@@ -58,7 +58,7 @@ func config(opts Options) (*embed.Config, error) {
 			ClientCertFile: filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
 			ClientKeyFile:  filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
 			TrustedCAFile:  filepath.Join(*opts.Security.IdentityDir(), "ca.pem"),
-			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc.cluster.local", opts.Name, opts.Security.ControlPlaneNamespace()),
+			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc.%s", opts.Name, opts.Security.ControlPlaneNamespace(), opts.Security.ControlPlaneTrustDomain()),
 		}
 
 		b, err := os.ReadFile(filepath.Join(*opts.Security.IdentityDir(), "cert.pem"))
@@ -93,7 +93,7 @@ func config(opts Options) (*embed.Config, error) {
 	config.AdvertisePeerUrls = []url.URL{etcdURL}
 	config.ListenClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   "127.0.0.1:" + strconv.FormatUint(opts.ClientPort, 10),
+		Host:   opts.ClientListenAddress + ":" + strconv.FormatUint(opts.ClientPort, 10),
 	}}
 
 	switch opts.Mode {

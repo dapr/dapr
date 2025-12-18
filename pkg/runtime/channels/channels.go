@@ -67,7 +67,8 @@ type Options struct {
 	// ReadBufferSize is the read buffer size, in bytes
 	ReadBufferSize int
 
-	GRPC *manager.Manager
+	GRPC        *manager.Manager
+	AppAPIToken string
 }
 
 type Channels struct {
@@ -81,6 +82,7 @@ type Channels struct {
 	httpClient          *http.Client
 	grpc                *manager.Manager
 
+	appAPIToken     string
 	appChannel      channel.AppChannel
 	endpChannels    map[string]channel.HTTPEndpointAppChannel
 	httpEndpChannel channel.AppChannel
@@ -97,6 +99,7 @@ func New(opts Options) *Channels {
 		maxRequestBodySize:  opts.MaxRequestBodySize,
 		appMiddlware:        opts.AppMiddleware,
 		grpc:                opts.GRPC,
+		appAPIToken:         opts.AppAPIToken,
 		httpClient:          appHTTPClient(opts.AppConnectionConfig, opts.GlobalConfig, opts.ReadBufferSize),
 		endpChannels:        make(map[string]channel.HTTPEndpointAppChannel),
 	}
@@ -195,6 +198,7 @@ func (c *Channels) appHTTPChannelConfig() channelhttp.ChannelConfiguration {
 
 	conf.Endpoint = c.AppHTTPEndpoint()
 	conf.Client = c.httpClient
+	conf.AppAPIToken = c.appAPIToken
 
 	return conf
 }

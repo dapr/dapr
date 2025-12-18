@@ -58,16 +58,6 @@ func (a *actors) Setup(t *testing.T) []framework.Option {
 
 	a.place = placement.New(t)
 	a.daprd = daprd.New(t,
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
- name: schedulerreminders
-spec:
- features:
- - name: SchedulerReminders
-   enabled: true
-`),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(a.place.Address()),
 		daprd.WithSchedulerAddresses(a.scheduler.Address()),

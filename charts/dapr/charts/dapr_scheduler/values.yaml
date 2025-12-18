@@ -48,6 +48,14 @@ etcdClientEndpoints: []
 etcdClientUsername: ""
 etcdClientPassword: ""
 
+# Workers is the number of workers that handle job events. The higher the number
+# the more go routines will be spawned, each working over a partition of the
+# total job space. The higher the number, the higher the number of jobs which
+# can be concurrently delivered to runtimes. Increasing this number increases
+# the number of go routines for this instance. This number should be tuned to
+# the bottleneck of job execution, i.e., CPU, I/O, memory, etc.
+workers: 128
+
 livenessProbe:
   initialDelaySeconds: 10
   periodSeconds: 3

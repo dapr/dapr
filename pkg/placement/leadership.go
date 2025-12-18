@@ -176,7 +176,6 @@ func (p *Service) revokeLeadership() {
 
 	p.streamConnPool.streamIndex.Store(0)
 	p.disseminateLocks.Clear()
-	p.disseminateNextTime.Clear()
 	p.memberUpdateCount.Clear()
 	p.cleanupHeartbeats()
 }

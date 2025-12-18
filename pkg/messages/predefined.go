@@ -101,6 +101,8 @@ var (
 	ErrActorReminderCreate           = APIError{"error creating actor reminder: %s", errorcodes.ActorReminderCreate, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderGet              = APIError{"error getting actor reminder: %s", errorcodes.ActorReminderGet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderDelete           = APIError{"error deleting actor reminder: %s", errorcodes.ActorReminderDelete, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorReminderNotFound         = APIError{"actor reminder not found: %s", errorcodes.ActorReminderNotFound, http.StatusNotFound, grpcCodes.NotFound}
+	ErrActorReminderAlreadyExists    = APIError{"actor reminder already exists: %s", errorcodes.ActorReminderAlreadyExists, http.StatusConflict, grpcCodes.AlreadyExists}
 	ErrActorTimerCreate              = APIError{"error creating actor timer: %s", errorcodes.ActorTimerCreate, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorMaxStackDepthExceeded    = APIError{"maximum stack depth exceeded", errorcodes.ErrActorMaxStackDepthExceeded, http.StatusInternalServerError, grpcCodes.ResourceExhausted}
 	ErrActorNoPlacement              = APIError{"placement service is not configured", errorcodes.ErrActorNoPlacement, http.StatusBadRequest, grpcCodes.Unavailable}

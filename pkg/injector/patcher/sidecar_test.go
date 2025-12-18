@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
@@ -107,7 +108,8 @@ func TestSidecarConfigSetFromAnnotations(t *testing.T) {
 					annotations.KeyPlacementHostAddresses: tc.value,
 				})
 				assert.Equal(t, "", c.PlacementAddress, "PlacementAddress should be empty for input: %q", tc.value)
-				assert.Equal(t, "", c.SchedulerAddress, "SchedulerAddress should be empty for input: %q", tc.value)
+				require.NotNil(t, c.SchedulerAddress)
+				assert.Equal(t, "", *c.SchedulerAddress, "SchedulerAddress should be empty for input: %q", tc.value)
 			})
 		}
 	})

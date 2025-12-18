@@ -124,6 +124,7 @@ func Run() {
 		ControlPlaneNamespace:   security.CurrentNamespace(),
 		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
 		Healthz:                 healthz,
+		SchedulerEnabled:        opts.SchedulerEnabled,
 	})
 	if err != nil {
 		log.Fatalf("Error creating injector: %v", err)

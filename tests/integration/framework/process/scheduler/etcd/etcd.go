@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,9 +30,9 @@ import (
 )
 
 type Etcd struct {
-	fp        *ports.Ports
-	config    *embed.Config
-	etcd      *embed.Etcd
+	fp        []*ports.Ports
+	configs   []*embed.Config
+	etcds     []*embed.Etcd
 	endpoints []string
 	username  *string
 	password  *string
@@ -40,63 +41,91 @@ type Etcd struct {
 func New(t *testing.T, fopts ...Option) *Etcd {
 	t.Helper()
 
-	var opts options
+	opts := options{
+		nodes: 1,
+	}
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
 
 	require.Equal(t, opts.username != nil, opts.password != nil, "username and password must be set together")
+	require.Positive(t, opts.nodes, "nodes must be greater than 0")
 
-	fp := ports.Reserve(t, 2)
+	configs := make([]*embed.Config, opts.nodes)
+	endpoints := make([]string, opts.nodes)
+	clusterEntries := make([]string, opts.nodes)
+	fp := make([]*ports.Ports, opts.nodes)
 
-	config := embed.NewConfig()
-	config.LogLevel = "error"
-	config.Dir = t.TempDir()
+	for i := range opts.nodes {
+		config := embed.NewConfig()
+		config.LogLevel = "error"
+		config.Dir = t.TempDir()
 
-	clientEndpoint := "http://127.0.0.1:" + strconv.Itoa(fp.Port(t))
-	lurl, err := url.Parse(clientEndpoint)
-	require.NoError(t, err)
-	config.ListenClientUrls = []url.URL{*lurl}
-	config.AdvertiseClientUrls = []url.URL{*lurl}
+		fp[i] = ports.Reserve(t, 2)
 
-	lurl, err = url.Parse("http://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
-	require.NoError(t, err)
-	config.ListenPeerUrls = []url.URL{*lurl}
+		clientEndpoint := "http://127.0.0.1:" + strconv.Itoa(fp[i].Port(t))
+		lurl, err := url.Parse(clientEndpoint)
+		require.NoError(t, err)
+		config.ListenClientUrls = []url.URL{*lurl}
+		config.AdvertiseClientUrls = []url.URL{*lurl}
 
-	config.ListenMetricsUrls = nil
+		peerEndpoint := "http://127.0.0.1:" + strconv.Itoa(fp[i].Port(t))
+		lurl, err = url.Parse(peerEndpoint)
+		require.NoError(t, err)
+		config.ListenPeerUrls = []url.URL{*lurl}
+		config.AdvertisePeerUrls = []url.URL{*lurl}
+
+		config.ListenMetricsUrls = nil
+
+		config.Name = "etcd" + strconv.Itoa(i)
+
+		configs[i] = config
+		endpoints[i] = clientEndpoint
+		clusterEntries[i] = config.Name + "=" + peerEndpoint
+	}
+
+	initialCluster := strings.Join(clusterEntries, ",")
+	for _, config := range configs {
+		config.InitialCluster = initialCluster
+	}
 
 	return &Etcd{
 		fp:        fp,
-		config:    config,
-		endpoints: []string{clientEndpoint},
+		configs:   configs,
+		endpoints: endpoints,
 	}
 }
 
 func (e *Etcd) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
 
-	e.fp.Free(t)
-	etcd, err := embed.StartEtcd(e.config)
-	require.NoError(t, err)
+	for i, config := range e.configs {
+		e.fp[i].Free(t)
 
-	select {
-	case <-etcd.Server.ReadyNotify():
-	case <-ctx.Done():
-		assert.Fail(t, "server took too long to start")
+		etcd, err := embed.StartEtcd(config)
+		require.NoError(t, err)
+
+		e.etcds = append(e.etcds, etcd)
+	}
+
+	for _, etcd := range e.etcds {
+		select {
+		case <-etcd.Server.ReadyNotify():
+		case <-ctx.Done():
+			assert.Fail(t, "server took too long to start")
+		}
 	}
 
 	e.setupUserPass(t, ctx)
-
-	e.etcd = etcd
 }
 
 func (e *Etcd) Cleanup(t *testing.T) {
 	t.Helper()
 
-	if e.etcd != nil {
-		e.etcd.Close()
+	for i, et := range e.etcds {
+		et.Close()
+		e.fp[i].Cleanup(t)
 	}
-	e.fp.Cleanup(t)
 }
 
 func (e *Etcd) Endpoints() []string {

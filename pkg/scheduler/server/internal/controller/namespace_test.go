@@ -48,16 +48,16 @@ func Test_Reconcile(t *testing.T) {
 			ns: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-ns"}},
 		},
 		"namespace doesn't exist, should delete prefixes": {
-			expDeletePrefixes: []string{"actorreminder||test-ns", "app||test-ns"},
+			expDeletePrefixes: []string{"actorreminder||test-ns||", "app||test-ns||"},
 		},
 		"error on deleting prefix should error": {
 			deletePError:      assert.AnError,
-			expDeletePrefixes: []string{"actorreminder||test-ns", "app||test-ns"},
+			expDeletePrefixes: []string{"actorreminder||test-ns||", "app||test-ns||"},
 			expErr:            assert.AnError,
 		},
 		"different namespace, should still delete prefixes": {
 			ns:                &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "different-ns"}},
-			expDeletePrefixes: []string{"actorreminder||test-ns", "app||test-ns"},
+			expDeletePrefixes: []string{"actorreminder||test-ns||", "app||test-ns||"},
 		},
 	}
 

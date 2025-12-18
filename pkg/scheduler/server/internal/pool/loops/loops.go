@@ -45,6 +45,7 @@ type ConnAdd struct {
 // the stream.
 type ConnCloseStream struct {
 	StreamIDx uint64
+	Namespace string
 }
 
 // Shutdown is the event for shutting down the scheduler loops.

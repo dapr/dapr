@@ -23,31 +23,30 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
-func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, data proto.Message, start *time.Time, targetAppID string) (string, error) {
+func (o *orchestrator) createWorkflowReminder(ctx context.Context, namePrefix string, data proto.Message, start time.Time, targetAppID string) (string, error) {
+	actorType := o.actorTypeBuilder.Workflow(targetAppID)
+	return o.createReminderWithType(ctx, namePrefix, data, start, actorType)
+}
+
+func (o *orchestrator) createRetentionReminder(ctx context.Context, namePrefix string, start time.Time) (string, error) {
+	return o.createReminderWithType(ctx, namePrefix, nil, start, o.retentionActorType)
+}
+
+func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix string, data proto.Message, start time.Time, actorType string) (string, error) {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 
-	dueTime := "0s"
-	if start != nil {
-		dueTime = start.UTC().Format(time.RFC3339)
-	}
-
+	dueTime := start.UTC().Format(time.RFC3339)
 	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
-
-	var period string
-	var oneshot bool
-	if o.schedulerReminders {
-		oneshot = true
-	} else {
-		period = o.reminderInterval.String()
-	}
 
 	var adata *anypb.Any
 	if data != nil {
@@ -57,7 +56,6 @@ func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, da
 		}
 	}
 
-	actorType := o.actorTypeBuilder.Workflow(targetAppID)
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
 
 	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
@@ -66,7 +64,14 @@ func (o *orchestrator) createReminder(ctx context.Context, namePrefix string, da
 		Data:      adata,
 		DueTime:   dueTime,
 		Name:      reminderName,
-		Period:    period,
-		IsOneShot: oneshot,
+		// One shot, retry forever, every second.
+		FailurePolicy: &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Constant{
+				Constant: &commonv1pb.JobFailurePolicyConstant{
+					Interval:   durationpb.New(time.Second),
+					MaxRetries: nil,
+				},
+			},
+		},
 	})
 }

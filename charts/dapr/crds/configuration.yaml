@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.2
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: configurations.dapr.io
   labels:
     app.kubernetes.io/part-of: "dapr"
@@ -515,7 +515,7 @@ spec:
                     description: |-
                       maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
                       Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-                      If If omitted, no maximum will be enforced.
+                      If omitted, no maximum will be enforced.
                     format: int32
                     type: integer
                   maxConcurrentWorkflowInvocations:
@@ -525,6 +525,37 @@ spec:
                       If omitted, no maximum will be enforced.
                     format: int32
                     type: integer
+                  stateRetentionPolicy:
+                    description: |-
+                      StateRetentionPolicy defines the retention configuration for workflow
+                      state once a workflow reaches a terminal state. If not set, workflow
+                      instances will not be automatically purged.
+                    properties:
+                      anyTerminal:
+                        description: |-
+                          AnyTerminal is the TTL for purging workflow instances that reach any
+                          terminal state.
+                        format: int64
+                        type: integer
+                      completed:
+                        description: |-
+                          Completed is the TTL for purging workflow instances that reach the
+                          Completed terminal state.
+                        format: int64
+                        type: integer
+                      failed:
+                        description: |-
+                          Failed is the TTL for purging workflow instances that reach the Failed
+                          terminal state.
+                        format: int64
+                        type: integer
+                      terminated:
+                        description: |-
+                          Terminated is the TTL for purging workflow instances that reach the
+                          Terminated terminal state.
+                        format: int64
+                        type: integer
+                    type: object
                 type: object
             type: object
         type: object

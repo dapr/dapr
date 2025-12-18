@@ -16,7 +16,6 @@ package activity
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
@@ -25,7 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/lock"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 )
 
@@ -38,14 +37,12 @@ var activityCache = &sync.Pool{
 }
 
 type Options struct {
-	AppID              string
-	ActivityActorType  string
-	WorkflowActorType  string
-	ReminderInterval   *time.Duration
-	Scheduler          todo.ActivityScheduler
-	Actors             actors.Interface
-	SchedulerReminders bool
-	ActorTypeBuilder   *common.ActorTypeBuilder
+	AppID             string
+	ActivityActorType string
+	WorkflowActorType string
+	Scheduler         todo.ActivityScheduler
+	Actors            actors.Interface
+	ActorTypeBuilder  *common.ActorTypeBuilder
 }
 
 type factory struct {
@@ -59,9 +56,7 @@ type factory struct {
 	placement        placement.Interface
 	actorTypeBuilder *common.ActorTypeBuilder
 
-	scheduler          todo.ActivityScheduler
-	reminderInterval   time.Duration
-	schedulerReminders bool
+	scheduler todo.ActivityScheduler
 
 	table sync.Map
 	lock  sync.Mutex
@@ -88,24 +83,16 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
-	reminderInterval := time.Minute * 1
-
-	if opts.ReminderInterval != nil {
-		reminderInterval = *opts.ReminderInterval
-	}
-
 	return &factory{
-		appID:              opts.AppID,
-		actorType:          opts.ActivityActorType,
-		router:             router,
-		reminders:          reminders,
-		reminderInterval:   reminderInterval,
-		schedulerReminders: opts.SchedulerReminders,
-		scheduler:          opts.Scheduler,
-		placement:          placement,
-		workflowActorType:  opts.WorkflowActorType,
-		actorTypeBuilder:   opts.ActorTypeBuilder,
-		state:              state,
+		appID:             opts.AppID,
+		actorType:         opts.ActivityActorType,
+		router:            router,
+		reminders:         reminders,
+		scheduler:         opts.Scheduler,
+		placement:         placement,
+		workflowActorType: opts.WorkflowActorType,
+		actorTypeBuilder:  opts.ActorTypeBuilder,
+		state:             state,
 	}, nil
 }
 

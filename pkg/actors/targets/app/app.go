@@ -54,6 +54,8 @@ type app struct {
 
 	lock  *lock.Lock
 	clock clock.Clock
+
+	closed atomic.Bool
 }
 
 func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
@@ -223,9 +225,12 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 }
 
 func (a *app) Deactivate(ctx context.Context) error {
-	defer a.table.Delete(a.actorID)
+	if !a.closed.CompareAndSwap(false, true) {
+		return nil
+	}
 
 	a.lock.Close(ctx)
+	a.table.Delete(a.actorID)
 
 	req := invokev1.NewInvokeMethodRequest("actors/"+a.actorType+"/"+a.actorID).
 		WithActor(a.actorType, a.actorID).
@@ -249,7 +254,6 @@ func (a *app) Deactivate(ctx context.Context) error {
 	a.idlerQueue.Dequeue(key.ConstructComposite(a.actorType, a.actorID))
 	diag.DefaultMonitoring.ActorDeactivated(a.actorType)
 	log.Debugf("Deactivated actor '%s'", a.Key())
-	appCache.Put(a)
 
 	return nil
 }

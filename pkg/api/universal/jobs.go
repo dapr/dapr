@@ -192,3 +192,75 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 		},
 	}, nil
 }
+
+func (a *Universal) DeleteJobsByPrefixAlpha1(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequestAlpha1) (*runtimev1pb.DeleteJobsByPrefixResponseAlpha1, error) {
+	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	_, err := a.scheduler.DeleteByNamePrefix(ctx, &schedulerv1pb.DeleteByNamePrefixRequest{
+		NamePrefix: req.GetNamePrefix(),
+		Metadata: &schedulerv1pb.JobMetadata{
+			AppId:     a.appID,
+			Namespace: a.Namespace(),
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Job{
+					Job: new(schedulerv1pb.TargetJob),
+				},
+			},
+		},
+	})
+	if err != nil {
+		a.logger.Errorf("Error listing jobs due to: %s", err)
+		return nil, apierrors.SchedulerDeleteJob(map[string]string{
+			"appID":     a.AppID(),
+			"namespace": a.Namespace(),
+		}, err)
+	}
+
+	return nil, nil
+}
+
+func (a *Universal) ListJobsAlpha1(ctx context.Context, req *runtimev1pb.ListJobsRequestAlpha1) (*runtimev1pb.ListJobsResponseAlpha1, error) {
+	errMetadata := map[string]string{
+		"appID":     a.AppID(),
+		"namespace": a.Namespace(),
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := a.scheduler.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+		Metadata: &schedulerv1pb.JobMetadata{
+			AppId:     a.appID,
+			Namespace: a.Namespace(),
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Job{
+					Job: new(schedulerv1pb.TargetJob),
+				},
+			},
+		},
+	})
+	if err != nil {
+		a.logger.Errorf("Error listing jobs due to: %s", err)
+		return nil, apierrors.SchedulerListJobs(errMetadata, err)
+	}
+
+	jobs := make([]*runtimev1pb.Job, 0, len(resp.GetJobs()))
+	for _, namedJob := range resp.GetJobs() {
+		job := namedJob.GetJob()
+		//nolint:protogetter
+		jobs = append(jobs, &runtimev1pb.Job{
+			Name:          namedJob.GetName(),
+			Schedule:      job.Schedule,
+			Repeats:       job.Repeats,
+			DueTime:       job.DueTime,
+			Ttl:           job.Ttl,
+			Data:          job.Data,
+			FailurePolicy: job.FailurePolicy,
+		})
+	}
+
+	return &runtimev1pb.ListJobsResponseAlpha1{
+		Jobs: jobs,
+	}, nil
+}

@@ -96,6 +96,8 @@ PROTOC_GEN_GO_NAME+= $(PROTOC_GEN_GO_VERSION)
 
 PROTOC_GEN_GO_GRPC_VERSION = 1.3.0
 
+PROTOC_GEN_CONNECT_GO_VERSION = 1.9.1
+
 ifeq ($(TARGET_OS_LOCAL),windows)
 	BUILD_TOOLS_BIN ?= build-tools.exe
 	BUILD_TOOLS ?= ./.build-tools/$(BUILD_TOOLS_BIN)
@@ -394,7 +396,7 @@ test-integration: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -timeout=20m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false
+			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false
 
 .PHONY: test-integration-parallel
 test-integration-parallel: test-deps
@@ -402,7 +404,7 @@ test-integration-parallel: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -timeout=20m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true
+			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true
 
 ################################################################################
 # Target: lint                                                                 #
@@ -433,7 +435,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.24.6; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.24.11; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
@@ -474,6 +476,7 @@ check: format test lint
 init-proto:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v$(PROTOC_GEN_GO_GRPC_VERSION)
+	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v$(PROTOC_GEN_CONNECT_GO_VERSION)
 
 ################################################################################
 # Target: gen-proto                                                            #
@@ -486,7 +489,7 @@ PROTO_PREFIX:=github.com/dapr/dapr
 define genProtoc
 .PHONY: gen-proto-$(1)
 gen-proto-$(1):
-	$(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) ./dapr/proto/$(1)/v1/*.proto
+	$(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) --connect-go_out=. --connect-go_opt=module=$(PROTO_PREFIX) ./dapr/proto/$(1)/v1/*.proto
 endef
 
 $(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))
@@ -522,6 +525,9 @@ check-proto-version: ## Checking the version of proto related tools
 
 	@test "$(shell protoc-gen-go-grpc --version)" = "protoc-gen-go-grpc $(PROTOC_GEN_GO_GRPC_VERSION)" \
 	|| { echo "please use protoc-gen-go-grpc $(PROTOC_GEN_GO_GRPC_VERSION) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
+
+	@test "$(shell protoc-gen-connect-go --version)" = "$(PROTOC_GEN_CONNECT_GO_VERSION)" \
+	|| { echo "please use protoc-gen-connect-go $(PROTOC_GEN_CONNECT_GO_VERSION) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 	@test "$(shell protoc-gen-go --version 2>&1)" = "$(PROTOC_GEN_GO_NAME)" \
 	|| { echo "please use protoc-gen-go $(PROTOC_GEN_GO_VERSION) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }

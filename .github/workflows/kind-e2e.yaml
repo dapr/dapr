@@ -56,8 +56,8 @@ jobs:
       DAPR_NAMESPACE: dapr-tests
       # Useful for upgrade/downgrade/compatibility tests
       # TODO: Make this auto-populated based on GitHub's releases.
-      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.14.5"
-      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.13.6"
+      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.15.9"
+      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.14.5"
       # Container registry where to cache e2e test images
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent
@@ -65,27 +65,27 @@ jobs:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.31.0
-        - v1.30.4
-        - v1.29.8
+        - v1.34.0
+        - v1.33.4
+        - v1.32.8
         mode:
         - ha
         - non-ha
         # Map between K8s and KinD versions.
         # This is attempting to make it a bit clearer what's being tested.
-        # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.1
+        # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.30.0
         include:
-        - k8s-version: v1.31.0
-          kind-version: v0.24.0
-          kind-image-sha: sha256:53df588e04085fd41ae12de0c3fe4c72f7013bba32a20e7325357a1ac94ba865
+        - k8s-version: v1.34.0
+          kind-version: v0.30.0
+          kind-image-sha: sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
           dapr-test-config-store: "postgres"
-        - k8s-version: v1.30.4
-          kind-version: v0.24.0
-          kind-image-sha: sha256:976ea815844d5fa93be213437e3ff5754cd599b040946b5cca43ca45c2047114
+        - k8s-version: v1.33.4
+          kind-version: v0.30.0
+          kind-image-sha: sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
           dapr-test-config-store: "redis"
-        - k8s-version: v1.29.8
-          kind-version: v0.24.0
-          kind-image-sha: sha256:d46b7aa29567e93b27f7531d258c372e829d7224b25e3fc6ffdefed12476d3aa
+        - k8s-version: v1.32.8
+          kind-version: v0.30.0
+          kind-image-sha: sha256:abd489f042d2b644e2d033f5c2d900bc707798d075e8186cb65e3f1367a9d5a1
           dapr-test-config-store: "redis"
     steps:
     - name: Check out code
@@ -130,7 +130,7 @@ jobs:
         echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
 
     - name: Create KinD Cluster
-      uses: helm/kind-action@v1.10.0
+      uses: helm/kind-action@v1.13.0
       with:
         config: kind.yaml
         cluster_name: kind
@@ -162,6 +162,20 @@ jobs:
       uses: azure/setup-helm@v1
       with:
         version: v3.3.4
+
+    - name: Free disk space
+      # android, ghc, CodeQL are all preinstalled on GH runners so rm to clear up space
+      run: |
+        df -h
+        docker system prune -af || true
+        docker volume prune -f || true
+        sudo rm -rf /usr/local/lib/android || true
+        sudo rm -rf /opt/ghc || true
+        sudo rm -rf /usr/share/dotnet || true
+        sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/* || true
+        df -h
 
     - name: Build and push Dapr
       run: |
@@ -206,66 +220,6 @@ jobs:
         make setup-test-components
       env:
         DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
-
-    - name: Free up some diskspace
-      run: |
-        docker image prune -a -f
-        # Clean up some more
-        echo "Listing 100 largest packages"
-        dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
-        df -h
-        echo "Removing large packages"
-        sudo apt-get update
-        
-        # check if pkgs exist before removing them
-        if dpkg -l | grep -q '^dotnet-.*'; then
-          sudo apt-get remove -y '^dotnet-.*'
-        fi
-
-        if dpkg -l | grep -q '^llvm-.*'; then
-          sudo apt-get remove -y '^llvm-.*'
-        fi
-        
-        if dpkg -l | grep -q 'php.*'; then
-          sudo apt-get remove -y 'php.*'
-        fi
-        
-        if dpkg -l | grep -q 'temurin-*'; then
-          sudo apt-get remove -y 'temurin-*'
-        fi
-        
-        if dpkg -l | grep -q 'microsoft-edge-stable'; then
-          sudo apt-get remove -y microsoft-edge-stable
-        fi
-    
-        if dpkg -l | grep -q 'azure-cli'; then
-          sudo apt-get remove -y azure-cli
-        fi
-    
-        if dpkg -l | grep -q 'google-chrome-stable'; then
-          sudo apt-get remove -y google-chrome-stable
-        fi
-    
-        if dpkg -l | grep -q 'firefox'; then
-          sudo apt-get remove -y firefox
-        fi
-        
-        if dpkg -l | grep -q '^powershell'; then
-          sudo apt-get remove -y powershell
-        fi
-    
-        if dpkg -l | grep -q 'mono-devel'; then
-          sudo apt-get remove -y mono-devel
-        fi
-        
-        sudo apt-get autoremove -y
-        sudo apt-get clean
-        df -h
-        
-        echo "Removing large directories"
-        # deleting 15GB
-        rm -rf /usr/share/dotnet/
-        df -h
 
     - name: Run tests
       run: |

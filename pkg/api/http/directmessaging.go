@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/sse"
 )
 
 // directMessagingSpanData is the data passed by the onDirectMessage endpoint to the tracing middleware
@@ -231,10 +232,23 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 
 		w.WriteHeader(int(rResp.Status().GetCode()))
 
-		_, rErr = io.Copy(w, rResp.RawData())
-		if rErr != nil {
-			// Do not return rResp here, we already have a deferred `Close` call on it
-			return nil, backoff.Permanent(rErr)
+		reader := rResp.RawData()
+		isSSE := sse.IsSSEHttpRequest(r)
+
+		if !isSSE {
+			// Use regular io.Copy for non-streaming responses
+			_, rErr = io.Copy(w, reader)
+			if rErr != nil {
+				// Do not return rResp here, we already have a deferred `Close` call on it
+				return nil, backoff.Permanent(rErr)
+			}
+
+			return nil, nil
+		}
+
+		err := sse.FlushSSEResponse(r.Context(), w, reader)
+		if err != nil {
+			return nil, backoff.Permanent(err)
 		}
 
 		// Do not return rResp here, we already have a deferred `Close` call on it

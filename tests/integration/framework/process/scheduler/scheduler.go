@@ -155,7 +155,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		args = append(args, "--etcd-embed="+strconv.FormatBool(*opts.embed))
 	}
 	if opts.clientEndpoints != nil {
-		args = append(args, "--etcd-client-endpoints="+strings.Join(*opts.clientEndpoints, ","))
+		args = append(args, `--etcd-client-endpoints=`+strings.Join(*opts.clientEndpoints, ","))
 	}
 
 	if opts.clientUsername != nil {
@@ -163,6 +163,10 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 	if opts.clientPassword != nil {
 		args = append(args, "--etcd-client-password="+*opts.clientPassword)
+	}
+
+	if opts.workers != nil {
+		args = append(args, fmt.Sprintf("--workers=%d", *opts.workers))
 	}
 
 	return &Scheduler{
@@ -292,10 +296,20 @@ func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.Sche
 
 func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) schedulerv1pb.SchedulerClient {
 	t.Helper()
+	return s.clientMTLS(t, ctx, nil, appID)
+}
+
+func (s *Scheduler) ClientMTLSNS(t *testing.T, ctx context.Context, ns, appID string) schedulerv1pb.SchedulerClient {
+	t.Helper()
+	return s.clientMTLS(t, ctx, &ns, appID)
+}
+
+func (s *Scheduler) clientMTLS(t *testing.T, ctx context.Context, ns *string, appID string) schedulerv1pb.SchedulerClient {
+	t.Helper()
 
 	require.NotNil(t, s.sentry)
 
-	sech := s.security(t, ctx, appID)
+	sech := s.security(t, ctx, ns, appID)
 
 	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
 	require.NoError(t, err)
@@ -317,18 +331,19 @@ func (s *Scheduler) ipPort(port int) string {
 	return "127.0.0.1:" + strconv.Itoa(port)
 }
 
-func (s *Scheduler) security(t *testing.T, ctx context.Context, appID string) security.Handler {
+func (s *Scheduler) security(t *testing.T, ctx context.Context, ns *string, appID string) security.Handler {
 	t.Helper()
 
 	sec, err := security.New(ctx, security.Options{
-		SentryAddress:           "localhost:" + strconv.Itoa(s.sentry.Port()),
-		ControlPlaneTrustDomain: s.sentry.TrustDomain(t),
-		ControlPlaneNamespace:   s.sentry.Namespace(),
-		TrustAnchorsFile:        ptr.Of(s.sentry.TrustAnchorsFile(t)),
-		AppID:                   appID,
-		Mode:                    modes.StandaloneMode,
-		MTLSEnabled:             true,
-		Healthz:                 healthz.New(),
+		SentryAddress:            "localhost:" + strconv.Itoa(s.sentry.Port()),
+		ControlPlaneTrustDomain:  s.sentry.TrustDomain(t),
+		ControlPlaneNamespace:    s.sentry.Namespace(),
+		TrustAnchorsFile:         ptr.Of(s.sentry.TrustAnchorsFile(t)),
+		AppID:                    appID,
+		Mode:                     modes.StandaloneMode,
+		MTLSEnabled:              true,
+		Healthz:                  healthz.New(),
+		OverrideRequestNamespace: ns,
 	})
 	require.NoError(t, err)
 

@@ -135,7 +135,7 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 		return nil, err
 	}
 
-	prefix, err := s.serializer.PrefixFromList(ctx, req.GetMetadata())
+	prefix, err := s.serializer.KeyFromMetadata(ctx, req.GetMetadata(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +197,55 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 // updates the sidecars upon changes.
 func (s *Server) WatchHosts(_ *schedulerv1pb.WatchHostsRequest, stream schedulerv1pb.Scheduler_WatchHostsServer) error {
 	return s.cron.HostsWatch(stream)
+}
+
+// DeleteByMetadata deletes all jobs matching the provided metadata.
+func (s *Server) DeleteByMetadata(ctx context.Context, req *schedulerv1pb.DeleteByMetadataRequest) (*schedulerv1pb.DeleteByMetadataResponse, error) {
+	var isPrefix bool
+	if req.IdPrefixMatch != nil {
+		isPrefix = req.GetIdPrefixMatch()
+	}
+
+	prefix, err := s.serializer.KeyFromMetadata(ctx, req.GetMetadata(), isPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	cron, err := s.cron.Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = cron.DeletePrefixes(ctx, prefix); err != nil {
+		log.Errorf("Failed to delete cron jobs for metadata: %s", err)
+		return nil, err
+	}
+
+	return new(schedulerv1pb.DeleteByMetadataResponse), nil
+}
+
+// DeleteByNamePrefix deletes all jobs matching the provided name prefix.
+func (s *Server) DeleteByNamePrefix(ctx context.Context, req *schedulerv1pb.DeleteByNamePrefixRequest) (*schedulerv1pb.DeleteByNamePrefixResponse, error) {
+	isPrefix := false
+
+	prefix, err := s.serializer.KeyFromMetadata(ctx, req.GetMetadata(), isPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	prefix += req.GetNamePrefix()
+
+	cron, err := s.cron.Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = cron.DeletePrefixes(ctx, prefix); err != nil {
+		log.Errorf("Failed to delete scheduler job for metadata: %s", err)
+		return nil, err
+	}
+
+	return new(schedulerv1pb.DeleteByNamePrefixResponse), nil
 }
 
 //nolint:protogetter

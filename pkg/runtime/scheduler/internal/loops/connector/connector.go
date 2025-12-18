@@ -34,19 +34,17 @@ type Options struct {
 	Namespace string
 	AppID     string
 
-	Actors             actors.Interface
-	Channels           *channels.Channels
-	WFEngine           wfengine.Interface
-	SchedulerReminders bool
+	Actors   actors.Interface
+	Channels *channels.Channels
+	WFEngine wfengine.Interface
 }
 
 type connector struct {
-	namespace          string
-	appID              string
-	actors             actors.Interface
-	channels           *channels.Channels
-	wfEngine           wfengine.Interface
-	schedulerReminders bool
+	namespace string
+	appID     string
+	actors    actors.Interface
+	channels  *channels.Channels
+	wfEngine  wfengine.Interface
 
 	currentAppRunning bool
 	currentActorTypes []string
@@ -56,14 +54,13 @@ type connector struct {
 }
 
 func New(opts Options) loop.Interface[loops.Event] {
-	return loop.New(&connector{
-		namespace:          opts.Namespace,
-		appID:              opts.AppID,
-		actors:             opts.Actors,
-		channels:           opts.Channels,
-		wfEngine:           opts.WFEngine,
-		schedulerReminders: opts.SchedulerReminders,
-	}, 1024)
+	return loop.New[loops.Event](1024).NewLoop(&connector{
+		namespace: opts.Namespace,
+		appID:     opts.AppID,
+		actors:    opts.Actors,
+		channels:  opts.Channels,
+		wfEngine:  opts.WFEngine,
+	})
 }
 
 func (c *connector) Handle(ctx context.Context, event loops.Event) error {
@@ -102,7 +99,7 @@ func (c *connector) handleReconnect(ctx context.Context, e *loops.Reconnect) {
 		c.currentAppRunning = *e.AppTarget
 	}
 
-	if c.schedulerReminders && e.ActorTypes != nil {
+	if e.ActorTypes != nil {
 		c.currentActorTypes = *e.ActorTypes
 	}
 

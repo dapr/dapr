@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -31,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -40,26 +37,12 @@ func init() {
 }
 
 type nostore struct {
-	place     *placement.Placement
-	scheduler *scheduler.Scheduler
+	place *placement.Placement
 
 	daprd *daprd.Daprd
 }
 
 func (n *nostore) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600))
-
-	n.scheduler = scheduler.New(t)
-
 	app := app.New(t,
 		app.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"entities": ["foo"]}`))
@@ -70,19 +53,16 @@ spec:
 	n.place = placement.New(t)
 
 	n.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
 		daprd.WithPlacementAddresses(n.place.Address()),
-		daprd.WithSchedulerAddresses(n.scheduler.Address()),
 		daprd.WithAppPort(app.Port()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, n.scheduler, n.place, n.daprd),
+		framework.WithProcesses(app, n.place, n.daprd),
 	}
 }
 
 func (n *nostore) Run(t *testing.T, ctx context.Context) {
-	n.scheduler.WaitUntilRunning(t, ctx)
 	n.place.WaitUntilRunning(t, ctx)
 	n.daprd.WaitUntilRunning(t, ctx)
 
@@ -94,15 +74,15 @@ func (n *nostore) Run(t *testing.T, ctx context.Context) {
 	}{
 		http.MethodPost: {
 			body: `{"dueTime": "100s"}`,
-			err:  `{"errorCode":"ERR_ACTOR_REMINDER_CREATE","message":"error creating actor reminder: reminder storage is not configured"}`,
+			err:  `{"errorCode":"ERR_ACTOR_REMINDER_CREATE","message":"error creating actor reminder: scheduler clients are disabled"}`,
 		},
 		http.MethodGet: {
 			body: `{"dueTime": "100s"}`,
-			err:  `{"errorCode":"ERR_ACTOR_REMINDER_GET","message":"error getting actor reminder: reminder storage is not configured"}`,
+			err:  `{"errorCode":"ERR_ACTOR_REMINDER_GET","message":"error getting actor reminder: api error: code = Internal desc = failed to get job due to: scheduler clients are disabled"}`,
 		},
 		http.MethodDelete: {
 			body: `{"dueTime": "100s"}`,
-			err:  `{"errorCode":"ERR_ACTOR_REMINDER_DELETE","message":"error deleting actor reminder: reminder storage is not configured"}`,
+			err:  `{"errorCode":"ERR_ACTOR_REMINDER_DELETE","message":"error deleting actor reminder: scheduler clients are disabled"}`,
 		},
 	} {
 		var bodyReader io.Reader

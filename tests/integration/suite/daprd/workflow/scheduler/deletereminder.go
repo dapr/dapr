@@ -16,8 +16,6 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -48,17 +46,6 @@ type deletereminder struct {
 }
 
 func (d *deletereminder) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600))
-
 	app := app.New(t)
 	d.place = placement.New(t)
 	d.scheduler = procscheduler.New(t)
@@ -67,7 +54,6 @@ spec:
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
-		daprd.WithConfigs(configFile),
 	)
 
 	return []framework.Option{

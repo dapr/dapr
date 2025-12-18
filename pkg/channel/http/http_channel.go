@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -42,8 +43,8 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/dapr/pkg/sse"
 	streamutils "github.com/dapr/kit/streams"
 )
 
@@ -92,6 +93,7 @@ type ChannelConfiguration struct {
 	TLSClientKey       string
 	TLSRootCA          string
 	TLSRenegotiation   string
+	AppAPIToken        string
 }
 
 // CreateHTTPChannel creates an HTTP AppChannel.
@@ -102,7 +104,7 @@ func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) 
 		compStore:           config.CompStore,
 		baseAddress:         config.Endpoint,
 		tracingSpec:         config.TracingSpec,
-		appHeaderToken:      security.GetAppToken(),
+		appHeaderToken:      config.AppAPIToken,
 		maxResponseBodySize: config.MaxRequestBodySize,
 	}
 
@@ -375,11 +377,11 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		W: &bytes.Buffer{},
 	}
 
-	var sse bool
+	var isSse bool
 
 	execPipeline := h.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sse = isSSE(r)
-		if sse {
+		isSse = sse.IsSSEHttpRequest(r)
+		if isSse {
 			r.Header.Set(headerAccept, mimeEventStream)
 		}
 
@@ -387,44 +389,24 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		// (Body is closed below, but linter isn't detecting that)
 		//nolint:bodyclose
 		clientResp, clientErr := h.client.Do(r)
+		if clientErr != nil {
+			err = clientErr
+			return
+		}
 		if clientResp != nil {
-			if sse && req.HTTPResponseWriter() != nil {
+			statusOK := clientResp.StatusCode >= 200 && clientResp.StatusCode < 300
+			if isSse && req.HTTPResponseWriter() != nil && statusOK {
 				callerResponseWriter := req.HTTPResponseWriter()
-
-				callerResponseWriter.Header().Set(headerContentType, mimeEventStream)
-				callerResponseWriter.Header().Set(headerCacheControl, cacheNoCache)
-				callerResponseWriter.Header().Set(headerConnection, connectionKeepAlive)
-
-				flusher, ok := callerResponseWriter.(http.Flusher)
-				if !ok {
-					http.Error(callerResponseWriter, "Streaming not supported", http.StatusInternalServerError)
+				reader := bufio.NewReader(clientResp.Body)
+				err = sse.FlushSSEResponse(ctx, callerResponseWriter, reader)
+				if err != nil {
 					return
-				}
-
-				buf := make([]byte, 1024)
-				for {
-					n, cErr := clientResp.Body.Read(buf)
-					if n > 0 {
-						if _, writeErr := callerResponseWriter.Write(buf[:n]); writeErr != nil {
-							return
-						}
-						flusher.Flush()
-					}
-					if cErr != nil {
-						if cErr != io.EOF {
-							clientErr = cErr
-						}
-						break
-					}
 				}
 			} else {
 				copyHeader(w.Header(), clientResp.Header)
 				w.WriteHeader(clientResp.StatusCode)
 				_, _ = io.Copy(w, clientResp.Body)
 			}
-		}
-		if clientErr != nil {
-			err = clientErr
 		}
 	}))
 	execPipeline.ServeHTTP(rw, channelReq)
@@ -439,32 +421,28 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		return nil, err
 	}
 
-	if sse {
+	statusOK := rw.StatusCode() >= 200 && rw.StatusCode() < 300
+	if isSse && statusOK {
 		return nil, nil
-	} else {
-		resp := rw.Result() //nolint:bodyclose
-
-		if resp != nil {
-			if resp.Header != nil {
-				contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
-			}
-		}
-
-		rsp, err := h.parseChannelResponse(resp)
-		if err != nil {
-			diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
-			return nil, err
-		}
-
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
-
-		return rsp, nil
 	}
-}
 
-func isSSE(r *http.Request) bool {
-	accept := r.Header.Get("Accept")
-	return strings.HasPrefix(accept, "text/event-stream")
+	resp := rw.Result() //nolint:bodyclose
+
+	if resp != nil {
+		if resp.Header != nil {
+			contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+		}
+	}
+
+	rsp, err := h.parseChannelResponse(resp)
+	if err != nil {
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		return nil, err
+	}
+
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
+
+	return rsp, nil
 }
 
 func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*http.Request, error) {

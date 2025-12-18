@@ -187,7 +187,8 @@ func newDaprRuntime(ctx context.Context,
 		return nil, err
 	}
 
-	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
+	appAPIToken := security.GetAppToken()
+	grpc := createGRPCManager(sec, runtimeConfig, globalConfig, appAPIToken)
 
 	authz := authorizer.New(authorizer.Options{
 		ID:           runtimeConfig.id,
@@ -207,6 +208,7 @@ func newDaprRuntime(ctx context.Context,
 		ReadBufferSize:      runtimeConfig.readBufferSize,
 		GRPC:                grpc,
 		AppMiddleware:       httpMiddlewareApp,
+		AppAPIToken:         appAPIToken,
 	})
 
 	pubsubAdapter := publisher.New(publisher.Options{
@@ -232,7 +234,6 @@ func newDaprRuntime(ctx context.Context,
 		Port:      runtimeConfig.internalGRPCPort,
 		// TODO: @joshvanl
 		PlacementAddresses: strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ","),
-		SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 		HealthEndpoint:     channels.AppHTTPEndpoint(),
 		Resiliency:         resiliencyProvider,
 		Security:           sec,
@@ -305,22 +306,21 @@ func newDaprRuntime(ctx context.Context,
 		Spec:                      globalConfig.Spec.WorkflowSpec,
 		BackendManager:            processor.WorkflowBackend(),
 		Resiliency:                resiliencyProvider,
-		SchedulerReminders:        globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 		EventSink:                 runtimeConfig.workflowEventSink,
 		EnableClusteredDeployment: globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
+		ComponentStore:            compStore,
 	})
 
 	jobsManager, err := scheduler.New(scheduler.Options{
-		Namespace:          namespace,
-		AppID:              runtimeConfig.id,
-		Channels:           channels,
-		Actors:             actors,
-		Addresses:          runtimeConfig.schedulerAddress,
-		Security:           sec,
-		WFEngine:           wfe,
-		Healthz:            runtimeConfig.healthz,
-		SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
-		SchedulerStreams:   runtimeConfig.schedulerStreams,
+		Namespace:        namespace,
+		AppID:            runtimeConfig.id,
+		Channels:         channels,
+		Actors:           actors,
+		Addresses:        runtimeConfig.schedulerAddress,
+		Security:         sec,
+		WFEngine:         wfe,
+		Healthz:          runtimeConfig.healthz,
+		SchedulerStreams: runtimeConfig.schedulerStreams,
 	})
 	if err != nil {
 		return nil, err
@@ -559,12 +559,7 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 		tpStore.RegisterExporter(diagUtils.NewNullExporter())
 	}
 
-	// Register a resource
-	r := resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceNameKey.String(getOtelServiceName(a.runtimeConfig.id)),
-	)
-
+	r := createOtelResource(ctx, a.runtimeConfig.id)
 	tpStore.RegisterResource(r)
 
 	// Register a trace sampler based on Sampling settings
@@ -577,11 +572,29 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 	return nil
 }
 
-func getOtelServiceName(fallback string) string {
-	if value := os.Getenv("OTEL_SERVICE_NAME"); value != "" {
-		return value
+// createOtelResource creates an OpenTelemetry resource for tracing.
+// It uses the Dapr app ID as the default service name, which can be overridden
+// by the OTEL_SERVICE_NAME environment variable. Additional resource attributes
+// can be set via OTEL_RESOURCE_ATTRIBUTES.
+func createOtelResource(ctx context.Context, defaultServiceName string) *resource.Resource {
+	r, err := resource.New(ctx,
+		// Default service name from Dapr app ID
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(defaultServiceName),
+		),
+		// Read OTEL_RESOURCE_ATTRIBUTES and OTEL_SERVICE_NAME from environment
+		resource.WithFromEnv(),
+		resource.WithSchemaURL(semconv.SchemaURL),
+	)
+	if err != nil {
+		log.Warnf("failed to create OpenTelemetry resource, using default: %v", err)
+		// Fallback without environment detection
+		r = resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(defaultServiceName),
+		)
 	}
-	return fallback
+	return r
 }
 
 func (a *DaprRuntime) initRuntime(ctx context.Context) error {
@@ -807,14 +820,13 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status *apphealth.St
 		}
 
 		if err := a.actors.RegisterHosted(hostconfig.Config{
-			EntityConfigs:              a.appConfig.EntityConfigs,
-			DrainRebalancedActors:      a.appConfig.DrainRebalancedActors,
-			DrainOngoingCallTimeout:    a.appConfig.DrainOngoingCallTimeout,
-			RemindersStoragePartitions: a.appConfig.RemindersStoragePartitions,
-			HostedActorTypes:           a.appConfig.Entities,
-			DefaultIdleTimeout:         a.appConfig.ActorIdleTimeout,
-			Reentrancy:                 a.appConfig.Reentrancy,
-			AppChannel:                 a.channels.AppChannel(),
+			EntityConfigs:           a.appConfig.EntityConfigs,
+			DrainRebalancedActors:   a.appConfig.DrainRebalancedActors,
+			DrainOngoingCallTimeout: a.appConfig.DrainOngoingCallTimeout,
+			HostedActorTypes:        a.appConfig.Entities,
+			DefaultIdleTimeout:      a.appConfig.ActorIdleTimeout,
+			Reentrancy:              a.appConfig.Reentrancy,
+			AppChannel:              a.channels.AppChannel(),
 		}); err != nil {
 			log.Warnf("Failed to register hosted actors: %s", err)
 		}
@@ -874,6 +886,7 @@ func (a *DaprRuntime) initProxy() {
 		ACL:                a.accessControlList,
 		Resiliency:         a.resiliency,
 		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
+		AppendAppTokenFn:   a.grpc.AddAppTokenToContext,
 	})
 }
 
@@ -1323,6 +1336,16 @@ func (a *DaprRuntime) loadAppConfiguration(ctx context.Context) {
 	if appConfig != nil {
 		a.appConfig = *appConfig
 		log.Info("Application configuration loaded")
+
+		if appConfig.RemindersStoragePartitions > 0 {
+			log.Warn("remindersStoragePartitions is deprecated and will be removed in future versions")
+		}
+
+		for _, e := range appConfig.EntityConfigs {
+			if e.RemindersStoragePartitions > 0 {
+				log.Warnf("remindersStoragePartitions is deprecated and will be removed in future versions (entity: %v)", e.Entities)
+			}
+		}
 	}
 }
 
@@ -1390,7 +1413,7 @@ func featureTypeToString(features interface{}) []string {
 	return featureStr
 }
 
-func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, globalConfig *config.Configuration) *manager.Manager {
+func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, globalConfig *config.Configuration, appAPIToken string) *manager.Manager {
 	grpcAppChannelConfig := &manager.AppChannelConfig{}
 	if globalConfig != nil {
 		grpcAppChannelConfig.TracingSpec = globalConfig.GetTracingSpec()
@@ -1404,6 +1427,7 @@ func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, glob
 		grpcAppChannelConfig.BaseAddress = runtimeConfig.appConnectionConfig.ChannelAddress
 	}
 
+	grpcAppChannelConfig.AppAPIToken = appAPIToken
 	m := manager.NewManager(sec, runtimeConfig.mode, grpcAppChannelConfig)
 	m.StartCollector()
 	return m

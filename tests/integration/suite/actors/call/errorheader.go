@@ -19,6 +19,7 @@ import (
 	"io"
 	nethttp "net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,6 +27,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -62,6 +64,15 @@ func (e *errorheader) Setup(t *testing.T) []framework.Option {
 func (e *errorheader) Run(t *testing.T, ctx context.Context) {
 	e.app1.WaitUntilRunning(t, ctx)
 	e.app2.WaitUntilRunning(t, ctx)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.ElementsMatch(t, []*daprd.MetadataActorRuntimeActiveActor{
+			{
+				Type:  "abc",
+				Count: 0,
+			},
+		}, e.app2.Daprd().GetMetaActorRuntime(t, ctx).ActiveActors)
+	}, time.Second*10, time.Millisecond*10)
 
 	url := fmt.Sprintf("http://%s/v1.0/actors/abc/ii/method/foo", e.app1.Daprd().HTTPAddress())
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)

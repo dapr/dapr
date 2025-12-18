@@ -51,7 +51,10 @@ const (
 	Dapr_UnregisterActorTimer_FullMethodName           = "/dapr.proto.runtime.v1.Dapr/UnregisterActorTimer"
 	Dapr_RegisterActorReminder_FullMethodName          = "/dapr.proto.runtime.v1.Dapr/RegisterActorReminder"
 	Dapr_UnregisterActorReminder_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/UnregisterActorReminder"
+	Dapr_UnregisterActorRemindersByType_FullMethodName = "/dapr.proto.runtime.v1.Dapr/UnregisterActorRemindersByType"
+	Dapr_ListActorReminders_FullMethodName             = "/dapr.proto.runtime.v1.Dapr/ListActorReminders"
 	Dapr_GetActorState_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/GetActorState"
+	Dapr_GetActorReminder_FullMethodName               = "/dapr.proto.runtime.v1.Dapr/GetActorReminder"
 	Dapr_ExecuteActorStateTransaction_FullMethodName   = "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction"
 	Dapr_InvokeActor_FullMethodName                    = "/dapr.proto.runtime.v1.Dapr/InvokeActor"
 	Dapr_GetConfigurationAlpha1_FullMethodName         = "/dapr.proto.runtime.v1.Dapr/GetConfigurationAlpha1"
@@ -91,6 +94,8 @@ const (
 	Dapr_ScheduleJobAlpha1_FullMethodName              = "/dapr.proto.runtime.v1.Dapr/ScheduleJobAlpha1"
 	Dapr_GetJobAlpha1_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/GetJobAlpha1"
 	Dapr_DeleteJobAlpha1_FullMethodName                = "/dapr.proto.runtime.v1.Dapr/DeleteJobAlpha1"
+	Dapr_DeleteJobsByPrefixAlpha1_FullMethodName       = "/dapr.proto.runtime.v1.Dapr/DeleteJobsByPrefixAlpha1"
+	Dapr_ListJobsAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ListJobsAlpha1"
 	Dapr_ConverseAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
 	Dapr_ConverseAlpha2_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha2"
 )
@@ -137,8 +142,12 @@ type DaprClient interface {
 	RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Unregister an actor reminder.
 	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	UnregisterActorRemindersByType(ctx context.Context, in *UnregisterActorRemindersByTypeRequest, opts ...grpc.CallOption) (*UnregisterActorRemindersByTypeResponse, error)
+	ListActorReminders(ctx context.Context, in *ListActorRemindersRequest, opts ...grpc.CallOption) (*ListActorRemindersResponse, error)
 	// Gets the state for a specific actor.
 	GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error)
+	// Gets an actor reminder.
+	GetActorReminder(ctx context.Context, in *GetActorReminderRequest, opts ...grpc.CallOption) (*GetActorReminderResponse, error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// InvokeActor calls a method on an actor.
@@ -224,6 +233,8 @@ type DaprClient interface {
 	GetJobAlpha1(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
 	// Delete a job
 	DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
+	DeleteJobsByPrefixAlpha1(ctx context.Context, in *DeleteJobsByPrefixRequestAlpha1, opts ...grpc.CallOption) (*DeleteJobsByPrefixResponseAlpha1, error)
+	ListJobsAlpha1(ctx context.Context, in *ListJobsRequestAlpha1, opts ...grpc.CallOption) (*ListJobsResponseAlpha1, error)
 	// Converse with a LLM service
 	ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error)
 	// Converse with a LLM service via alpha2 api
@@ -422,9 +433,36 @@ func (c *daprClient) UnregisterActorReminder(ctx context.Context, in *Unregister
 	return out, nil
 }
 
+func (c *daprClient) UnregisterActorRemindersByType(ctx context.Context, in *UnregisterActorRemindersByTypeRequest, opts ...grpc.CallOption) (*UnregisterActorRemindersByTypeResponse, error) {
+	out := new(UnregisterActorRemindersByTypeResponse)
+	err := c.cc.Invoke(ctx, Dapr_UnregisterActorRemindersByType_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ListActorReminders(ctx context.Context, in *ListActorRemindersRequest, opts ...grpc.CallOption) (*ListActorRemindersResponse, error) {
+	out := new(ListActorRemindersResponse)
+	err := c.cc.Invoke(ctx, Dapr_ListActorReminders_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error) {
 	out := new(GetActorStateResponse)
 	err := c.cc.Invoke(ctx, Dapr_GetActorState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) GetActorReminder(ctx context.Context, in *GetActorReminderRequest, opts ...grpc.CallOption) (*GetActorReminderResponse, error) {
+	out := new(GetActorReminderResponse)
+	err := c.cc.Invoke(ctx, Dapr_GetActorReminder_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -879,6 +917,24 @@ func (c *daprClient) DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, 
 	return out, nil
 }
 
+func (c *daprClient) DeleteJobsByPrefixAlpha1(ctx context.Context, in *DeleteJobsByPrefixRequestAlpha1, opts ...grpc.CallOption) (*DeleteJobsByPrefixResponseAlpha1, error) {
+	out := new(DeleteJobsByPrefixResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_DeleteJobsByPrefixAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ListJobsAlpha1(ctx context.Context, in *ListJobsRequestAlpha1, opts ...grpc.CallOption) (*ListJobsResponseAlpha1, error) {
+	out := new(ListJobsResponseAlpha1)
+	err := c.cc.Invoke(ctx, Dapr_ListJobsAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error) {
 	out := new(ConversationResponse)
 	err := c.cc.Invoke(ctx, Dapr_ConverseAlpha1_FullMethodName, in, out, opts...)
@@ -939,8 +995,12 @@ type DaprServer interface {
 	RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*emptypb.Empty, error)
 	// Unregister an actor reminder.
 	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error)
+	UnregisterActorRemindersByType(context.Context, *UnregisterActorRemindersByTypeRequest) (*UnregisterActorRemindersByTypeResponse, error)
+	ListActorReminders(context.Context, *ListActorRemindersRequest) (*ListActorRemindersResponse, error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error)
+	// Gets an actor reminder.
+	GetActorReminder(context.Context, *GetActorReminderRequest) (*GetActorReminderResponse, error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	// InvokeActor calls a method on an actor.
@@ -1026,6 +1086,8 @@ type DaprServer interface {
 	GetJobAlpha1(context.Context, *GetJobRequest) (*GetJobResponse, error)
 	// Delete a job
 	DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
+	DeleteJobsByPrefixAlpha1(context.Context, *DeleteJobsByPrefixRequestAlpha1) (*DeleteJobsByPrefixResponseAlpha1, error)
+	ListJobsAlpha1(context.Context, *ListJobsRequestAlpha1) (*ListJobsResponseAlpha1, error)
 	// Converse with a LLM service
 	ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error)
 	// Converse with a LLM service via alpha2 api
@@ -1090,8 +1152,17 @@ func (UnimplementedDaprServer) RegisterActorReminder(context.Context, *RegisterA
 func (UnimplementedDaprServer) UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorReminder not implemented")
 }
+func (UnimplementedDaprServer) UnregisterActorRemindersByType(context.Context, *UnregisterActorRemindersByTypeRequest) (*UnregisterActorRemindersByTypeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorRemindersByType not implemented")
+}
+func (UnimplementedDaprServer) ListActorReminders(context.Context, *ListActorRemindersRequest) (*ListActorRemindersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListActorReminders not implemented")
+}
 func (UnimplementedDaprServer) GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActorState not implemented")
+}
+func (UnimplementedDaprServer) GetActorReminder(context.Context, *GetActorReminderRequest) (*GetActorReminderResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetActorReminder not implemented")
 }
 func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteActorStateTransaction not implemented")
@@ -1209,6 +1280,12 @@ func (UnimplementedDaprServer) GetJobAlpha1(context.Context, *GetJobRequest) (*G
 }
 func (UnimplementedDaprServer) DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteJobAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DeleteJobsByPrefixAlpha1(context.Context, *DeleteJobsByPrefixRequestAlpha1) (*DeleteJobsByPrefixResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteJobsByPrefixAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) ListJobsAlpha1(context.Context, *ListJobsRequestAlpha1) (*ListJobsResponseAlpha1, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListJobsAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConverseAlpha1 not implemented")
@@ -1560,6 +1637,42 @@ func _Dapr_UnregisterActorReminder_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_UnregisterActorRemindersByType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnregisterActorRemindersByTypeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).UnregisterActorRemindersByType(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_UnregisterActorRemindersByType_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).UnregisterActorRemindersByType(ctx, req.(*UnregisterActorRemindersByTypeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_ListActorReminders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListActorRemindersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ListActorReminders(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ListActorReminders_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ListActorReminders(ctx, req.(*ListActorRemindersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_GetActorState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetActorStateRequest)
 	if err := dec(in); err != nil {
@@ -1574,6 +1687,24 @@ func _Dapr_GetActorState_Handler(srv interface{}, ctx context.Context, dec func(
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).GetActorState(ctx, req.(*GetActorStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_GetActorReminder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetActorReminderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetActorReminder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_GetActorReminder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetActorReminder(ctx, req.(*GetActorReminderRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2302,6 +2433,42 @@ func _Dapr_DeleteJobAlpha1_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_DeleteJobsByPrefixAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteJobsByPrefixRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteJobsByPrefixAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DeleteJobsByPrefixAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteJobsByPrefixAlpha1(ctx, req.(*DeleteJobsByPrefixRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_ListJobsAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListJobsRequestAlpha1)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ListJobsAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ListJobsAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ListJobsAlpha1(ctx, req.(*ListJobsRequestAlpha1))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_ConverseAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ConversationRequest)
 	if err := dec(in); err != nil {
@@ -2414,8 +2581,20 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_UnregisterActorReminder_Handler,
 		},
 		{
+			MethodName: "UnregisterActorRemindersByType",
+			Handler:    _Dapr_UnregisterActorRemindersByType_Handler,
+		},
+		{
+			MethodName: "ListActorReminders",
+			Handler:    _Dapr_ListActorReminders_Handler,
+		},
+		{
 			MethodName: "GetActorState",
 			Handler:    _Dapr_GetActorState_Handler,
+		},
+		{
+			MethodName: "GetActorReminder",
+			Handler:    _Dapr_GetActorReminder_Handler,
 		},
 		{
 			MethodName: "ExecuteActorStateTransaction",
@@ -2556,6 +2735,14 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteJobAlpha1",
 			Handler:    _Dapr_DeleteJobAlpha1_Handler,
+		},
+		{
+			MethodName: "DeleteJobsByPrefixAlpha1",
+			Handler:    _Dapr_DeleteJobsByPrefixAlpha1_Handler,
+		},
+		{
+			MethodName: "ListJobsAlpha1",
+			Handler:    _Dapr_ListJobsAlpha1_Handler,
 		},
 		{
 			MethodName: "ConverseAlpha1",

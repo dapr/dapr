@@ -52,10 +52,6 @@ const (
 	// Enables support for hot reloading of Daprd Components.
 	HotReload Feature = "HotReload"
 
-	// Enables support for using the Scheduler control plane service
-	// for Actor Reminders.
-	SchedulerReminders Feature = "SchedulerReminders"
-
 	// Enables feature to support workflows in a clustered deployment.
 	WorkflowsClusteredDeployment Feature = "WorkflowsClusteredDeployment"
 )
@@ -73,9 +69,7 @@ const (
 	ActionPolicyGlobal  = "global"
 )
 
-var defaultFeatures = map[Feature]bool{
-	SchedulerReminders: true,
-}
+var defaultFeatures = make(map[Feature]bool)
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 //
@@ -142,6 +136,35 @@ type WorkflowSpec struct {
 	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
 	// If omitted, no maximum will be enforced.
 	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty" yaml:"maxConcurrentActivityInvocations,omitempty"`
+
+	// StateRetentionPolicy defines the retention configuration for workflow
+	// state once a workflow reaches a terminal state. If not set, workflow
+	// instances will not be automatically purged.
+	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty" yaml:"stateRetentionPolicy,omitempty"`
+}
+
+// WorkflowStateRetentionPolicy defines the retention policy of workflow state
+// for workflow instances once they reaches a specific or any terminal state.
+// If not set, workflow instances will not be automatically purged. If a
+// specific and any terminal state are both set, the specific terminal state
+// takes precedence. Accepts duration strings, e.g. "72h" or "30m", including
+// immediate values "0s".
+type WorkflowStateRetentionPolicy struct {
+	// AnyTerminal is the TTL for purging workflow instances that reach any
+	// terminal state.
+	AnyTerminal *time.Duration `json:"anyTerminal,omitempty" yaml:"anyTerminal,omitempty"`
+
+	// Completed is the TTL for purging workflow instances that reach the
+	// Completed terminal state.
+	Completed *time.Duration `json:"completed,omitempty" yaml:"completed,omitempty"`
+
+	// Failed is the TTL for purging workflow instances that reach the Failed
+	// terminal state.
+	Failed *time.Duration `json:"failed,omitempty" yaml:"failed,omitempty"`
+
+	// Terminated is the TTL for purging workflow instances that reach the
+	// Terminated terminal state.
+	Terminated *time.Duration `json:"terminated,omitempty" yaml:"terminated,omitempty"`
 }
 
 func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() *int32 {

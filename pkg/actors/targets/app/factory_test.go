@@ -15,7 +15,10 @@ package app
 
 import (
 	"context"
+	"math/rand"
 	"net/http"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/channel/fake"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 func Test_GetOrCreate(t *testing.T) {
@@ -169,4 +173,29 @@ func mapLen(ff *factory) int {
 		return true
 	})
 	return i
+}
+
+func Test_DeleteCacheRace(t *testing.T) {
+	fact := New(Options{
+		Reentrancy:  reentrancystore.New(),
+		IdleTimeout: time.Millisecond * 10,
+		Placement:   placementfake.New(),
+		AppChannel: fake.New().WithInvokeMethod(func(context.Context, *invokev1.InvokeMethodRequest, string) (*invokev1.InvokeMethodResponse, error) {
+			return invokev1.NewInvokeMethodResponse(http.StatusOK, "", nil), nil
+		}),
+	})
+
+	const n = 10000
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := range n {
+		go func(i int) {
+			target := fact.GetOrCreate(strconv.Itoa(i))
+			//nolint:gosec
+			time.Sleep(time.Duration(rand.Intn(5)) * time.Millisecond)
+			target.InvokeMethod(t.Context(), &internalv1pb.InternalInvokeRequest{})
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
 }

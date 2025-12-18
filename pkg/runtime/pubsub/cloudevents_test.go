@@ -33,6 +33,7 @@ func TestNewCloudEvent(t *testing.T) {
 			DataContentType: "",
 			TraceID:         "d",
 			Type:            "custom-type",
+			Subject:         "custom-subject",
 		}, map[string]string{})
 		require.NoError(t, err)
 		assert.NotEmpty(t, ce["id"])                 // validates that the ID is generated
@@ -43,6 +44,7 @@ func TestNewCloudEvent(t *testing.T) {
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
 		assert.Equal(t, "d", ce["traceid"].(string))
 		assert.Equal(t, "custom-type", ce["type"].(string))
+		assert.Equal(t, "custom-subject", ce["subject"].(string))
 	})
 
 	t.Run("raw payload no data", func(t *testing.T) {
@@ -54,6 +56,7 @@ func TestNewCloudEvent(t *testing.T) {
 			DataContentType: "", // defaults to "text/plain"
 			TraceID:         "d",
 			Type:            "", // defaults to "com.dapr.event.sent"
+			Subject:         "e",
 		}, map[string]string{})
 		require.NoError(t, err)
 		assert.Equal(t, "testid", ce["id"].(string))
@@ -63,6 +66,7 @@ func TestNewCloudEvent(t *testing.T) {
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
 		assert.Equal(t, "d", ce["traceid"].(string))
 		assert.Equal(t, "com.dapr.event.sent", ce["type"].(string))
+		assert.Equal(t, "e", ce["subject"].(string))
 	})
 
 	t.Run("cloud event metadata override", func(t *testing.T) {
@@ -71,6 +75,7 @@ func TestNewCloudEvent(t *testing.T) {
 			Pubsub:          "originalpubsub",
 			DataContentType: "originaldatacontenttype",
 			Data:            []byte("originaldata"),
+			Subject:         "originalsubject",
 		}, map[string]string{
 			// these properties should not actually override anything
 			"cloudevent.topic":           "overridetopic",
@@ -83,6 +88,7 @@ func TestNewCloudEvent(t *testing.T) {
 			"cloudevent.type":        "overridetype",
 			"cloudevent.traceparent": "overridetraceparent",
 			"cloudevent.tracestate":  "overridetracestate",
+			"cloudevent.subject":     "overridesubject",
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "originalpubsub", ce["pubsubname"].(string))
@@ -96,6 +102,7 @@ func TestNewCloudEvent(t *testing.T) {
 		assert.Equal(t, "overrideid", ce["id"].(string))
 		assert.Equal(t, "overridetraceparent", ce["traceparent"].(string))
 		assert.Equal(t, "overridetracestate", ce["tracestate"].(string))
+		assert.Equal(t, "overridesubject", ce["subject"].(string))
 	})
 
 	t.Run("custom cloudevent", func(t *testing.T) {
@@ -104,6 +111,7 @@ func TestNewCloudEvent(t *testing.T) {
 			"id":              "event",
 			"datacontenttype": "text/plain",
 			"data":            "world",
+			"subject":         "subject1",
 		}
 		b, _ := json.Marshal(m)
 
@@ -113,6 +121,7 @@ func TestNewCloudEvent(t *testing.T) {
 			Topic:           "topic1",
 			TraceID:         "trace1",
 			Pubsub:          "pubsub",
+			Subject:         "subject1",
 		}, map[string]string{})
 		require.NoError(t, err)
 		assert.Equal(t, "event", ce["id"].(string))
@@ -121,6 +130,7 @@ func TestNewCloudEvent(t *testing.T) {
 		assert.Equal(t, "topic1", ce["topic"].(string))
 		assert.Equal(t, "trace1", ce["traceid"].(string))
 		assert.Equal(t, "pubsub", ce["pubsubname"].(string))
+		assert.Equal(t, "subject1", ce["subject"].(string))
 	})
 }
 

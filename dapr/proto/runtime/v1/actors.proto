@@ -1,0 +1,168 @@
+/*
+Copyright 2025 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+import "google/protobuf/any.proto";
+import "dapr/proto/common/v1/common.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+// RegisterActorTimerRequest is the message to register a timer for an actor of a given type and id.
+message RegisterActorTimerRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
+  string name = 3;
+  string due_time = 4 [json_name = "dueTime"];
+  string period = 5;
+  string callback = 6;
+  bytes data = 7;
+  string ttl = 8;
+}
+
+// UnregisterActorTimerRequest is the message to unregister an actor timer
+message UnregisterActorTimerRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
+  string name = 3;
+}
+
+// RegisterActorReminderRequest is the message to register a reminder for an actor of a given type and id.
+message RegisterActorReminderRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
+  string name = 3;
+  string due_time = 4 [json_name = "dueTime"];
+  string period = 5;
+  bytes data = 6;
+  string ttl = 7;
+
+  // If true, allows this reminder to overwrite an existing reminder with the
+  // same name. If not set, defaults to true.
+  optional bool overwrite = 8;
+
+  // failure_policy is the optional policy for handling job failures. If not
+  // set, the reminder will have the failure policy of trying 3 times on a
+  // single tick before giving up.
+  optional common.v1.JobFailurePolicy failure_policy = 9 [json_name = "failure_policy"];
+}
+
+// UnregisterActorReminderRequest is the message to unregister an actor reminder.
+message UnregisterActorReminderRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
+  string name = 3;
+}
+
+// GetActorStateRequest is the message to get key-value states from specific actor.
+message GetActorStateRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
+  string key = 3;
+}
+
+// GetActorStateResponse is the response conveying the actor's state value.
+message GetActorStateResponse {
+  bytes data = 1;
+
+  // The metadata which will be sent to app.
+  map<string, string> metadata = 2;
+}
+
+// ExecuteActorStateTransactionRequest is the message to execute multiple operations on a specified actor.
+message ExecuteActorStateTransactionRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
+  repeated TransactionalActorStateOperation operations = 3;
+}
+
+// TransactionalActorStateOperation is the message to execute a specified operation with a key-value pair.
+message TransactionalActorStateOperation {
+  string operationType = 1;
+  string key = 2;
+  google.protobuf.Any value = 3;
+  // The metadata used for transactional operations.
+  //
+  // Common metadata property:
+  // - ttlInSeconds : the time to live in seconds for the stored value.
+  map<string, string> metadata = 4;
+}
+
+// InvokeActorRequest is the message to call an actor.
+message InvokeActorRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
+  string method = 3;
+  bytes  data = 4;
+  map<string, string> metadata = 5;
+}
+
+// InvokeActorResponse is the method that returns an actor invocation response.
+message InvokeActorResponse {
+  bytes data = 1;
+}
+
+// GetActorReminderRequest is the message to get an already-registered actor reminder
+message GetActorReminderRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorID"];
+  string name = 3;
+}
+
+// GetActorReminderResponse is the response conveying an actor's reminder.
+message GetActorReminderResponse {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorID"];
+  optional string due_time = 4 [json_name = "dueTime"];
+  optional string period = 5;
+  google.protobuf.Any data = 6;
+  optional string ttl = 7;
+}
+
+message ListActorRemindersRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  optional string actor_id = 2 [json_name = "actorId"];
+}
+
+message ListActorRemindersResponse {
+  repeated NamedActorReminder reminders = 1;
+}
+
+message NamedActorReminder {
+  string name = 1;
+  ActorReminder reminder = 2;
+}
+
+message ActorReminder {
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorID"];
+  optional string due_time = 4 [json_name = "dueTime"];
+  optional string period = 5;
+  google.protobuf.Any data = 6;
+  optional string ttl = 7;
+}
+
+// UnregisterActorRemindersByTypeRequest is the message to unregister an actor
+// reminders by the given type. Optional actor_id can be provided to limit the
+// scope of the operation to a specific actor instance.
+message UnregisterActorRemindersByTypeRequest {
+  string actor_type = 1 [json_name = "actorType"];
+  optional string actor_id = 2 [json_name = "actorId"];
+}
+
+message UnregisterActorRemindersByTypeResponse {}

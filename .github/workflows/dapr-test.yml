@@ -40,7 +40,7 @@ env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.30.0"
+  KUBECTLVER: "v1.34.0"
   # If not empty, uses cloud resources for testing
   TEST_CLOUD_ENV: "azure"
   # Version of Helm
@@ -67,8 +67,8 @@ env:
   DAPR_GO_BUILD_TAGS: "subtlecrypto"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
-  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.14.5"
-  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.13.6"
+  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.15.9"
+  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.14.5"
 
 jobs:
   deploy-infrastructure:
@@ -285,8 +285,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@461004e4c97225a313a997efabc35fde47d587bb
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
       - name: Login to Azure
@@ -459,8 +458,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
-        uses: antontroshin/setup-go@461004e4c97225a313a997efabc35fde47d587bb
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
       - uses: azure/setup-kubectl@v3

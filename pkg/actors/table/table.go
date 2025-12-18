@@ -166,6 +166,10 @@ func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, error
 }
 
 func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
+	if len(opts.Factories) == 0 {
+		return
+	}
+
 	if opts := opts.HostOptions; opts != nil {
 		t.drainRebalancedActors = opts.DrainRebalancedActors
 		t.entityConfigs = opts.EntityConfigs
@@ -180,6 +184,10 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 }
 
 func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
+	if len(actorTypes) == 0 {
+		return nil
+	}
+
 	errs := slice.New[error]()
 	var wg sync.WaitGroup
 	for _, actorType := range actorTypes {

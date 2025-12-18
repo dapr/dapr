@@ -196,7 +196,7 @@ func (h *AppHealth) doProbe(parentCtx context.Context) {
 		log.Debug("App health probe detected status change - health probe successful: " + strconv.FormatBool(status.IsHealthy))
 		h.setResult(parentCtx, status)
 	} else {
-		log.Debug("App health probe status is unchanged - health probe successful: %v", strconv.FormatBool(status.IsHealthy))
+		log.Debug("App health probe status is unchanged - health probe successful: " + strconv.FormatBool(status.IsHealthy))
 	}
 }
 

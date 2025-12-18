@@ -108,6 +108,7 @@ func Run() {
 				EtcdName:                       opts.ID,
 				EtcdInitialCluster:             opts.EtcdInitialCluster,
 				EtcdClientPort:                 opts.EtcdClientPort,
+				EtcdClientListenAddress:        opts.EtcdClientListenAddress,
 				EtcdSpaceQuota:                 opts.EtcdSpaceQuota,
 				EtcdCompactionMode:             opts.EtcdCompactionMode,
 				EtcdCompactionRetention:        opts.EtcdCompactionRetention,
@@ -123,6 +124,8 @@ func Run() {
 				EtcdClientEndpoints: opts.EtcdClientEndpoints,
 				EtcdClientUsername:  opts.EtcdClientUsername,
 				EtcdClientPassword:  opts.EtcdClientPassword,
+
+				Workers: opts.Workers,
 			})
 			if serr != nil {
 				return serr

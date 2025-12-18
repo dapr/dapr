@@ -294,6 +294,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			}
 		}
 
+		ctx = b.grpc.AddAppTokenToContext(ctx)
 		conn, err := b.grpc.GetAppClient()
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)

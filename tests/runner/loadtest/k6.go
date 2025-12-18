@@ -46,7 +46,7 @@ const (
 	defaultK6ServiceAccount = "k6-sa"
 	// pollInterval is how frequently will poll for updates.
 	pollInterval = 5 * time.Second
-	// pollTimeout is how long the test should took.
+	// pollTimeout is how long the test should take.
 	pollTimeout = 20 * time.Minute
 )
 

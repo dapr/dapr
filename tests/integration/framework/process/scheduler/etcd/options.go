@@ -18,6 +18,8 @@ type Option func(*options)
 type options struct {
 	username *string
 	password *string
+
+	nodes int
 }
 
 func WithUsername(username string) Option {
@@ -29,5 +31,11 @@ func WithUsername(username string) Option {
 func WithPassword(password string) Option {
 	return func(o *options) {
 		o.password = &password
+	}
+}
+
+func WithNodes(nodes int) Option {
+	return func(o *options) {
+		o.nodes = nodes
 	}
 }

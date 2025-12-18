@@ -48,10 +48,7 @@ var log = logger.NewLogger("dapr.placement")
 const (
 	// membershipChangeChSize is the channel size of membership change request from Dapr runtime.
 	// MembershipChangeWorker will process actor host member change request.
-	membershipChangeChSize = 100
-
-	// disseminateTimerInterval is the interval to disseminate the latest consistent hashing table.
-	disseminateTimerInterval = 500 * time.Millisecond
+	membershipChangeChSize = 10000
 
 	// faultyHostDetectDuration is the maximum duration after which a host is considered faulty.
 	// Dapr runtime sends a heartbeat (stored in lastHeartBeat) every second.
@@ -113,9 +110,6 @@ type Service struct {
 
 	// disseminateLocks is a map of lock per namespace for disseminating the hashing tables
 	disseminateLocks cmap.Mutex[string]
-
-	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
-	disseminateNextTime haxmap.Map[string, *atomic.Int64]
 
 	// keepaliveTime sets the interval at which the placement service sends keepalive pings to daprd
 	// on the gRPC stream to check if the connection is still alive. Default is 2 seconds.
@@ -200,23 +194,22 @@ func New(opts ServiceOpts) (*Service, error) {
 	}
 
 	return &Service{
-		streamConnPool:      newStreamConnPool(),
-		membershipCh:        make(chan hostMemberChange, membershipChangeChSize),
-		raftNode:            raftServer,
-		maxAPILevel:         opts.MaxAPILevel,
-		minAPILevel:         opts.MinAPILevel,
-		clock:               &clock.RealClock{},
-		closedCh:            make(chan struct{}),
-		sec:                 opts.SecProvider,
-		disseminateLocks:    cmap.NewMutex[string](),
-		memberUpdateCount:   *haxmap.New[string, *atomic.Uint32](),
-		disseminateNextTime: *haxmap.New[string, *atomic.Int64](),
-		keepAliveTime:       opts.KeepAliveTime,
-		keepAliveTimeout:    opts.KeepAliveTimeout,
-		disseminateTimeout:  opts.DisseminateTimeout,
-		port:                opts.Port,
-		listenAddress:       opts.ListenAddress,
-		htarget:             opts.Healthz.AddTarget("placement-service"),
+		streamConnPool:     newStreamConnPool(),
+		membershipCh:       make(chan hostMemberChange, membershipChangeChSize),
+		raftNode:           raftServer,
+		maxAPILevel:        opts.MaxAPILevel,
+		minAPILevel:        opts.MinAPILevel,
+		clock:              &clock.RealClock{},
+		closedCh:           make(chan struct{}),
+		sec:                opts.SecProvider,
+		disseminateLocks:   cmap.NewMutex[string](),
+		memberUpdateCount:  *haxmap.New[string, *atomic.Uint32](),
+		keepAliveTime:      opts.KeepAliveTime,
+		keepAliveTimeout:   opts.KeepAliveTimeout,
+		disseminateTimeout: opts.DisseminateTimeout,
+		port:               opts.Port,
+		listenAddress:      opts.ListenAddress,
+		htarget:            opts.Healthz.AddTarget("placement-service"),
 	}, nil
 }
 
@@ -233,6 +226,7 @@ func (p *Service) Run(ctx context.Context) error {
 		p.MonitorLeadership,
 		func(ctx context.Context) error {
 			<-ctx.Done()
+			log.Info("Placement service is stopping...")
 			close(p.closedCh)
 			return nil
 		},
@@ -377,12 +371,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	for p.hasLeadership.Load() {
 		select {
 		case <-ctx.Done():
-			return p.handleErrorOnStream(ctx.Err(), hostName, &isActorHost, namespace)
+			return p.handleErrorOnStream(ctx.Err(), firstMessage, &isActorHost)
 		case <-p.closedCh:
 			return errors.New("placement service is closed")
 		case in := <-daprStream.recvCh:
 			if in.err != nil {
-				return p.handleErrorOnStream(in.err, hostName, &isActorHost, namespace)
+				return p.handleErrorOnStream(in.err, firstMessage, &isActorHost)
 			}
 
 			host := in.host
@@ -404,6 +398,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// Upsert incoming member only if the existing member info
 			// doesn't match with the incoming member info.
 			if p.raftNode.FSM().State().UpsertRequired(namespace, host) {
+				log.Debugf("Sending member change command; upserting appid %s in namespace %s with entities %v", appID, namespace, host.GetEntities())
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberUpsert,
 					host: raft.DaprHostMember{
@@ -503,7 +498,7 @@ func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
 	return nil
 }
 
-func (p *Service) handleErrorOnStream(err error, hostName string, isActorHost *atomic.Bool, namespace string) error {
+func (p *Service) handleErrorOnStream(err error, firstMessage *placementv1pb.Host, isActorHost *atomic.Bool) error {
 	// Unwrap and check if it's a gRPC status error
 	if st, ok := status.FromError(err); ok {
 		if st.Code() == codes.Canceled {
@@ -512,16 +507,20 @@ func (p *Service) handleErrorOnStream(err error, hostName string, isActorHost *a
 	}
 
 	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
-		log.Infof("Stream connection for app %s is disconnected gracefully: %s", hostName, err)
+		log.Infof("Stream connection for app %s is disconnected gracefully: %s", firstMessage.GetName(), err)
 	} else {
-		log.Errorf("Stream connection for app %s is disconnected with the error: %v.", hostName, err)
+		log.Errorf("Stream connection for app %s is disconnected with the error: %v.", firstMessage.GetName(), err)
 	}
 
 	if isActorHost.Load() {
 		select {
 		case p.membershipCh <- hostMemberChange{
 			cmdType: raft.MemberRemove,
-			host:    raft.DaprHostMember{Name: hostName, Namespace: namespace},
+			host: raft.DaprHostMember{
+				Name:      firstMessage.GetName(),
+				Namespace: firstMessage.GetNamespace(),
+				AppID:     firstMessage.GetId(),
+			},
 		}:
 		case <-p.closedCh:
 			return errors.New("placement service is closed")
@@ -539,7 +538,7 @@ func requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *atomi
 
 	reportsActors := len(req.GetEntities()) > 0
 	existsInPlacementTables := isActorHost.Load() // if the member had previously reported actors
-	isActorHost.Store(reportsActors)
+	isActorHost.Store(reportsActors || existsInPlacementTables)
 
 	return reportsActors || existsInPlacementTables
 }

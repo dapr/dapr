@@ -73,7 +73,7 @@ func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 
 	// verify worker is connected by checking the expected registered actors
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, r.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+		assert.Len(c, r.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
 	}, time.Second*10, time.Millisecond*10)
 
 	// scheduling a workflow with a provided start time

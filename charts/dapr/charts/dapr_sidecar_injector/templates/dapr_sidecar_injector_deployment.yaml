@@ -125,6 +125,7 @@ spec:
 {{- end }}
         - "--healthz-port"
         - {{ .Values.healthzPort | toString | toYaml }}
+        - "--scheduler-enabled={{ .Values.global.scheduler.enabled | toString }}"
         env:
         - name: DAPR_TRUST_ANCHORS_FILE
           value: /var/run/secrets/dapr.io/tls/ca.crt
@@ -274,7 +275,7 @@ spec:
                   operator: In
                   values:
                   - dapr-sidecar-injector
-              topologyKey: topology.kubernetes.io/zone
+              topologyKey: {{ .Values.global.ha.topologyKey }}
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:

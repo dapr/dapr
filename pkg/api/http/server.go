@@ -363,11 +363,15 @@ func (s *server) useComponents(r chi.Router) {
 
 func (s *server) useCors(r chi.Router) {
 	if s.config.AllowedOrigins == corsDapr.DefaultAllowedOrigins {
+		return
+	}
+	log.Info("Enabled CORS HTTP middleware")
+
+	if s.config.AllowedOrigins == corsDapr.AllowAllOrigins {
 		r.Use(cors.AllowAll().Handler)
 		return
 	}
 
-	log.Info("Enabled CORS HTTP middleware")
 	r.Use(cors.New(cors.Options{
 		AllowedOrigins: strings.Split(s.config.AllowedOrigins, ","),
 		AllowedMethods: []string{

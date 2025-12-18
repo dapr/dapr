@@ -75,7 +75,6 @@ func getTestApp(backend string) kube.AppDescription {
 		AppMemoryLimit:      "200Mi",
 		AppMemoryRequest:    "100Mi",
 		AppPort:             -1,
-		Config:              "featureactorreminderscheduler",
 		DebugLoggingEnabled: true,
 	}
 

@@ -21,8 +21,10 @@ import (
 	"net"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
@@ -48,11 +50,14 @@ type Options struct {
 	Mode                      modes.DaprMode
 	KubeConfig                *string
 
+	Workers uint32
+
 	EtcdEmbed                      bool
 	EtcdDataDir                    string
 	EtcdName                       string
 	EtcdInitialCluster             []string
 	EtcdClientPort                 uint64
+	EtcdClientListenAddress        string
 	EtcdSpaceQuota                 int64
 	EtcdCompactionMode             string
 	EtcdCompactionRetention        string
@@ -108,6 +113,7 @@ func New(opts Options) (*Server, error) {
 		Embed:                      opts.EtcdEmbed,
 		InitialCluster:             opts.EtcdInitialCluster,
 		ClientPort:                 opts.EtcdClientPort,
+		ClientListenAddress:        opts.EtcdClientListenAddress,
 		SpaceQuota:                 opts.EtcdSpaceQuota,
 		CompactionMode:             opts.EtcdCompactionMode,
 		CompactionRetention:        opts.EtcdCompactionRetention,
@@ -137,6 +143,7 @@ func New(opts Options) (*Server, error) {
 		Healthz: opts.Healthz,
 		Host:    &schedulerv1pb.Host{Address: broadcastAddr},
 		Etcd:    etcd,
+		Workers: opts.Workers,
 	})
 
 	var ctrl concurrency.Runner
@@ -219,6 +226,10 @@ func (s *Server) runServer(ctx context.Context) error {
 		s.sec.GRPCServerOptionMTLS(),
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc.MaxRecvMsgSize(math.MaxInt32),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    time.Second * 3,
+			Timeout: time.Second * 5,
+		}),
 	)
 	schedulerv1pb.RegisterSchedulerServer(srv, s)
 

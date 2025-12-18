@@ -164,18 +164,6 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 				featureName:    Feature("Test.Missing"),
 				featureEnabled: false,
 			},
-			{
-				name:           "default feature is disabled",
-				confFile:       "./testdata/default_features_disabled_config.yaml",
-				featureName:    SchedulerReminders,
-				featureEnabled: false,
-			},
-			{
-				name:           "default feature is enabled with config that doesn't have default feature disabled or enabled explicitly",
-				confFile:       "./testdata/feature_config.yaml",
-				featureName:    SchedulerReminders,
-				featureEnabled: true,
-			},
 		}
 
 		for _, tc := range testCases {
