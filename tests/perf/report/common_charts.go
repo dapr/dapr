@@ -146,7 +146,7 @@ func makeDurationBreakdownChart(r Runner, prefix, outDir string) {
 	}
 
 	// Build the low latency charts -> exclude the large metrics
-	var lowLines []lineDef
+	lowLines := make([]lineDef, len(lines))
 	for _, ld := range lines {
 		// skip these bc they are generally higher and make the lower end of the chart harder to see clearly
 		if ld.name == "Waiting" || ld.name == "Duration" || ld.name == "Iteration Duration" {
@@ -159,7 +159,7 @@ func makeDurationBreakdownChart(r Runner, prefix, outDir string) {
 	maxFullSeconds := 0.0
 	for _, ld := range lines {
 		v := ld.metric.Values
-		for i := 0; i < len(fields); i++ {
+		for i := range fields {
 			val := fields[i].get(v)
 			if val > maxFullSeconds {
 				maxFullSeconds = val
@@ -182,7 +182,7 @@ func makeDurationBreakdownChart(r Runner, prefix, outDir string) {
 	lowMaxSeconds := 0.0
 	for _, ld := range lowLines {
 		v := ld.metric.Values
-		for i := 0; i < len(fields)-1; i++ {
+		for i := range fields[:len(fields)-1] {
 			val := fields[i].get(v)
 			if val > lowMaxSeconds {
 				lowMaxSeconds = val
@@ -192,7 +192,7 @@ func makeDurationBreakdownChart(r Runner, prefix, outDir string) {
 
 	// Low-latency chart
 	low := plot.New()
-	low.Title.Text = fmt.Sprintf("HTTP Request Duration – Low Latency (zoom)")
+	low.Title.Text = "HTTP Request Duration – Low Latency (zoom)"
 	low.X.Label.Text = "Percentile"
 	low.Y.Label.Text = fmt.Sprintf("Time (%s)", unit)
 	low.Y.Min = 0
@@ -308,11 +308,11 @@ func makeTailLatencyChart(r Runner, prefix, outDir string) {
 	p.X.Label.Text = "Percentile"
 
 	pts := plotter.XYs{
-		{1, r.HTTPReqDuration.Values.P90 * 1000},
-		{2, r.HTTPReqDuration.Values.P95 * 1000},
-		{3, r.HTTPReqDuration.Values.P99 * 1000},
-		{4, r.HTTPReqDuration.Values.P999 * 1000},
-		{5, r.HTTPReqDuration.Values.Max * 1000},
+		{X: 1, Y: r.HTTPReqDuration.Values.P90 * 1000},
+		{X: 2, Y: r.HTTPReqDuration.Values.P95 * 1000},
+		{X: 3, Y: r.HTTPReqDuration.Values.P99 * 1000},
+		{X: 4, Y: r.HTTPReqDuration.Values.P999 * 1000},
+		{X: 5, Y: r.HTTPReqDuration.Values.Max * 1000},
 	}
 	line, _ := plotter.NewLine(pts)
 	line.Color = colorRGBA(220, 53, 69, 255) // red
@@ -320,7 +320,11 @@ func makeTailLatencyChart(r Runner, prefix, outDir string) {
 	p.Add(line)
 
 	p.X.Tick.Marker = plot.ConstantTicks([]plot.Tick{
-		{1, "p90"}, {2, "p95"}, {3, "p99"}, {4, "p99.9"}, {5, "max"},
+		{Value: 1, Label: "p90"},
+		{Value: 2, Label: "p95"},
+		{Value: 3, Label: "p99"},
+		{Value: 4, Label: "p99.9"},
+		{Value: 5, Label: "max"},
 	})
 	p.Save(8*vg.Inch, 4*vg.Inch, filepath.Join(outDir, prefix+"_tail_latency.png"))
 }

@@ -39,9 +39,9 @@ func buildTestModes(root string) map[string]string {
 		}
 		return false
 	}
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	if walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return err
 		}
 		if skipDir(path, d) {
 			return fs.SkipDir
@@ -59,9 +59,10 @@ func buildTestModes(root string) map[string]string {
 			strings.HasPrefix(strings.ToLower(base), "test_result") {
 			return nil
 		}
-		b, err := os.ReadFile(path)
+		var b []byte
+		b, err = os.ReadFile(path)
 		if err != nil {
-			return nil
+			return err
 		}
 		src := string(b)
 		var mode string
@@ -69,8 +70,8 @@ func buildTestModes(root string) map[string]string {
 			mode = "k6"
 		} else {
 			if strings.Contains(src, "Params(") || strings.Contains(src, "WithQPS(") {
+				mode = "fortio"
 			}
-			mode = "fortio"
 		}
 		if mode == "" {
 			return nil
@@ -90,7 +91,13 @@ func buildTestModes(root string) map[string]string {
 			}
 		}
 		return nil
-	})
+	}); walkErr != nil {
+		// even if there is an err return what we got
+		if debugEnabled {
+			debugf("Error walking %s: %s\n", root, walkErr)
+		}
+		return result
+	}
 	return result
 }
 

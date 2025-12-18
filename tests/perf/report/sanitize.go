@@ -75,10 +75,10 @@ func repairJSONClosers(s string) string {
 	var b strings.Builder
 	b.WriteString(s)
 	// Close arrays first, then objects since most blocks are objects containing arrays
-	for i := 0; i < openSquare-closeSquare; i++ {
+	for range make([]struct{}, openSquare-closeSquare) {
 		b.WriteString("]")
 	}
-	for i := 0; i < openCurly-closeCurly; i++ {
+	for range make([]struct{}, openCurly-closeCurly) {
 		b.WriteString("}")
 	}
 	return b.String()

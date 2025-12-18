@@ -94,9 +94,9 @@ func parseRestartLine(line string) (parsedRestarts, bool) {
 	}
 
 	resource := ""
-	if strings.Index(l, markers.TargetDaprAppRestarted) != -1 || strings.HasPrefix(l, markers.TargetDaprAppRestarted) {
+	if strings.Contains(l, markers.TargetDaprAppRestarted) || strings.HasPrefix(l, markers.TargetDaprAppRestarted) {
 		resource = "target"
-	} else if strings.Index(l, markers.TargetTesterAppRestarted) != -1 || strings.HasPrefix(l, markers.TargetDaprAppRestarted) {
+	} else if strings.Contains(l, markers.TargetTesterAppRestarted) || strings.HasPrefix(l, markers.TargetDaprAppRestarted) {
 		resource = "tester"
 	} else {
 		return parsedRestarts{}, false

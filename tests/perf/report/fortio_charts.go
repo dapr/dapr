@@ -76,7 +76,7 @@ func processFortioSummary(objJSON, testName, pkg, baseOutputDir string) {
 		return
 	}
 
-	var candidate = raw
+	candidate := raw
 	if !json.Valid([]byte(candidate)) {
 		if debugEnabled {
 			debugf("invalid JSON: %s", candidate)
@@ -204,7 +204,7 @@ func convertFortioPerfToRunner(res FortioResult, runType string) Runner {
 			return 0
 		}
 		for k, v := range m {
-			if strings.ToLower(k) != strings.ToLower(key) {
+			if !strings.EqualFold(key, k) {
 				continue
 			}
 			if f, ok := v.(float64); ok {
@@ -401,7 +401,7 @@ func makeConnectionStatsChart(res FortioResult, prefix, outDir string) {
 	get := func(name string) float64 {
 		name = strings.ToLower(name)
 		for k, v := range res.ConnectionStats {
-			if strings.ToLower(k) != name {
+			if !strings.EqualFold(k, name) {
 				continue
 			}
 			if f, ok := v.(float64); ok {
@@ -487,7 +487,7 @@ func makeSizesCharts(res FortioResult, prefix, outDir string) {
 		lowerNum := func(key string) float64 {
 			key = strings.ToLower(key)
 			for kk, vv := range m {
-				if strings.ToLower(kk) == key {
+				if strings.EqualFold(key, kk) {
 					if f, ok := vv.(float64); ok {
 						return f
 					}

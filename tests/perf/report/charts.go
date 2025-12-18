@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,7 +49,7 @@ var testModes map[string]string
 // used for local debugging when tweaking and adding charts
 func debugf(format string, args ...interface{}) {
 	if debugEnabled {
-		fmt.Fprintf(os.Stderr, "[charts] "+format+"\n", args...)
+		log.Printf("[charts] "+format+"\n", args...)
 	}
 }
 
@@ -155,7 +156,7 @@ func main() {
 
 	for scanner.Scan() {
 		var ev goTestEvent
-		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
+		if err = json.Unmarshal(scanner.Bytes(), &ev); err != nil {
 			// bad line in the json — just skip it...
 			continue
 		}
@@ -204,8 +205,7 @@ func main() {
 					err = os.MkdirAll(outDir, 0o755)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "error creating output directory %s: %v\n", outDir, err)
-					}
-					if debugEnabled {
+					} else if debugEnabled {
 						debugf("classified: pkg=%s test=%s outDir=%s", currentPkg, currentTest, outDir)
 					}
 				} else {
@@ -406,7 +406,7 @@ func main() {
 		makeVariantComparisonCharts(cmp.labels, cmp.runners, sanitizeName(cmp.baseName), cmp.outDir)
 	}
 
-	fmt.Printf("Generated charts for performance tests in %s\n", baseOutputDir)
+	log.Printf("Generated charts for performance tests in %s\n", baseOutputDir)
 }
 
 // aggregateRunners builds a runner whose metrics are the per-field
