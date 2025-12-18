@@ -179,5 +179,7 @@ func TestActorActivate(t *testing.T) {
 	require.True(t, daprResult.DurationHistogram.Percentiles[2].Value*1000 < 15)
 	require.True(t, daprResult.DurationHistogram.Percentiles[3].Value*1000 < 35)
 
-	utils.LogPerfTestSummary(daprResult)
+	summaryBytes, err := json.Marshal(daprResult)
+	require.NoError(t, err)
+	utils.LogPerfTestSummary(summaryBytes)
 }

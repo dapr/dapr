@@ -213,7 +213,9 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 			require.Equal(t, 0, restarts)
 			require.True(t, bulkResult.ActualQPS > float64(p.QPS)*0.99)
 			require.Greater(t, tp90Latency, 0.0)
-			utils.LogPerfTestSummary(bulkResult)
+			summaryBytes, err := json.Marshal(bulkResult)
+			require.NoError(t, err)
+			utils.LogPerfTestSummary(summaryBytes)
 		})
 	}
 }
