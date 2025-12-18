@@ -146,7 +146,7 @@ func makeDurationBreakdownChart(r Runner, prefix, outDir string) {
 	}
 
 	// Build the low latency charts -> exclude the large metrics
-	lowLines := make([]lineDef, len(lines))
+	lowLines := make([]lineDef, 0, len(lines))
 	for _, ld := range lines {
 		// skip these bc they are generally higher and make the lower end of the chart harder to see clearly
 		if ld.name == "Waiting" || ld.name == "Duration" || ld.name == "Iteration Duration" {

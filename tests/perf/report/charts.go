@@ -208,10 +208,8 @@ func main() {
 					} else if debugEnabled {
 						debugf("classified: pkg=%s test=%s outDir=%s", currentPkg, currentTest, outDir)
 					}
-				} else {
-					if debugEnabled {
-						debugf("unclassified: pkg=%s test=%s (untracked api)", currentPkg, currentTest)
-					}
+				} else if debugEnabled {
+					debugf("unclassified: pkg=%s test=%s (untracked api)", currentPkg, currentTest)
 				}
 			}
 
