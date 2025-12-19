@@ -61,6 +61,8 @@ cloud.google.com/go/storage v1.50.0 h1:3TbVkzTooBvnZsk7WaAQfOsNrdoM8QHusXA1cpk6Q
 cloud.google.com/go/storage v1.50.0/go.mod h1:l7XeiD//vx5lfqE3RavfmU9yvk5Pp0Zhcv482poyafY=
 cloud.google.com/go/trace v1.11.6 h1:2O2zjPzqPYAHrn3OKl029qlqG6W8ZdYaOWRyr8NgMT4=
 cloud.google.com/go/trace v1.11.6/go.mod h1:GA855OeDEBiBMzcckLPE2kDunIpC72N+Pq8WFieFjnI=
+connectrpc.com/connect v1.19.1 h1:R5M57z05+90EfEvCY1b7hBxDVOUl45PrtXtAV2fOC14=
+connectrpc.com/connect v1.19.1/go.mod h1:tN20fjdGlewnSFeZxLKb0xwIZ6ozc3OQs2hTXy4du9w=
 contrib.go.opencensus.io/exporter/prometheus v0.4.1/go.mod h1:t9wvfitlUjGXG2IXAZsuFq26mDGid/JwCEXp+gTG/9U=
 contrib.go.opencensus.io/exporter/prometheus v0.4.2 h1:sqfsYl5GIY/L570iT+l93ehxaWJs2/OwXtiWwew3oAg=
 contrib.go.opencensus.io/exporter/prometheus v0.4.2/go.mod h1:dvEHbiKmgvbr5pjaF9fpw1KeYcjrnC1J8B+JKjsZyRQ=
@@ -509,10 +511,10 @@ github.com/dapr/components-contrib v1.16.5 h1:UMq48FLIidUDukwHCt1CNjQu0q/37KmNd4
 github.com/dapr/components-contrib v1.16.5/go.mod h1:9kKhxIcefVJtxGMKtnkgJuJzGBvAEcyvgtKRQzL/KpY=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20251104160704-920ad8a7b958 h1:DSZgzdXlbF75fwvEkMQpPqn1jjxmWVoBNmI4Bc4dS40=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20251104160704-920ad8a7b958/go.mod h1:IUB5RJv0Gj5qxsHjjhvEBIlxPka7cD7KAn/Coa2y27M=
-github.com/dapr/durabletask-go v0.10.2 h1:LrPcfyvVC30uqfsQgV1m6NHPXlYTwFxnpuVWxt4Q8/E=
-github.com/dapr/durabletask-go v0.10.2/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
-github.com/dapr/kit v0.16.1 h1:MqLAhHVg8trPy2WJChMZFU7ToeondvxcNHYVvMDiVf4=
-github.com/dapr/kit v0.16.1/go.mod h1:40ZWs5P6xfYf7O59XgwqZkIyDldTIXlhTQhGop8QoSM=
+github.com/dapr/durabletask-go v0.10.2-0.20251203182905-2c611fb434fd h1:2BWSiHoytO5FXK2WCE02AfGNbC51iNewdFoC8j0FiVE=
+github.com/dapr/durabletask-go v0.10.2-0.20251203182905-2c611fb434fd/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
+github.com/dapr/kit v0.16.2-0.20251124175541-3ac186dff64d h1:csljij9d1IO6u9nqbg+TuSRmTZ+OXT8G49yh6zie1yI=
+github.com/dapr/kit v0.16.2-0.20251124175541-3ac186dff64d/go.mod h1:40ZWs5P6xfYf7O59XgwqZkIyDldTIXlhTQhGop8QoSM=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -535,8 +537,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cu
 github.com/dgryski/go-sip13 v0.0.0-20181026042036-e10d5fee7954/go.mod h1:vAd38F8PWV+bWy6jNmig1y/TA+kYO4g3RSRF0IAv0no=
 github.com/dgryski/trifles v0.0.0-20230903005119-f50d829f2e54 h1:SG7nF6SRlWhcT7cNTs5R6Hk4V2lcmLz2NsG2VnInyNo=
 github.com/dgryski/trifles v0.0.0-20230903005119-f50d829f2e54/go.mod h1:if7Fbed8SFyPtHLHbg49SI7NAdJiC5WIA09pe59rfAA=
-github.com/diagridio/go-etcd-cron v0.9.2 h1:XXJ+hkMIicqkWu8TXuBtBSdLpW3jy50SJbutZEbAfOw=
-github.com/diagridio/go-etcd-cron v0.9.2/go.mod h1:CSzuxoCDFu+Gbds0RO73GE8CnmL5t85axiPLptsej3I=
+github.com/diagridio/go-etcd-cron v0.10.1-0.20251204161759-90f918747eab h1:d3toh5rleKVngoGlktTyAnUB8zvczS6CN6a9I2co08A=
+github.com/diagridio/go-etcd-cron v0.10.1-0.20251204161759-90f918747eab/go.mod h1:XpjpGLT4WzS/eE+20h4aUl2yFtudShbrKK7cPQMtMJ0=
 github.com/didip/tollbooth/v7 v7.0.1 h1:TkT4sBKoQoHQFPf7blQ54iHrZiTDnr8TceU+MulVAog=
 github.com/didip/tollbooth/v7 v7.0.1/go.mod h1:VZhDSGl5bDSPj4wPsih3PFa4Uh9Ghv8hgacaTm5PRT4=
 github.com/dimfeld/httptreemux v5.0.1+incompatible h1:Qj3gVcDNoOthBAqftuD596rm4wg/adLLz5xh5CmpiCA=
@@ -2500,8 +2502,8 @@ google.golang.org/protobuf v1.26.0/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQ
 google.golang.org/protobuf v1.27.1/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
 google.golang.org/protobuf v1.28.0/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
 google.golang.org/protobuf v1.28.1/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
-google.golang.org/protobuf v1.36.6 h1:z1NpPI8ku2WgiWnf+t9wTPsn6eP1L7ksHUlkfLvd9xY=
-google.golang.org/protobuf v1.36.6/go.mod h1:jduwjTPXsFjZGTmRluh+L6NjiWu7pchiJ2/5YcXBHnY=
+google.golang.org/protobuf v1.36.9 h1:w2gp2mA27hUeUzj9Ex9FBjsBm40zfaDtEWow293U7Iw=
+google.golang.org/protobuf v1.36.9/go.mod h1:fuxRtAxBytpl4zzqUh6/eyUujkJdNiuEkXntxiD/uRU=
 gopkg.in/alecthomas/kingpin.v2 v2.2.6/go.mod h1:FMv+mEhP44yOT+4EoQTLFTRgOQ1FBLkstjWtayDeSgw=
 gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc h1:2gGKlE2+asNV9m7xrywl36YYNnBG5ZQ0r/BOOxqPpmk=
 gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc/go.mod h1:m7x9LTH6d71AHyAX77c9yqWCCa3UKHcVEj9y7hAtKDk=
