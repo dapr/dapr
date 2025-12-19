@@ -115,6 +115,18 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			},
 			"scrubPii": true,
 			"temperature": 0.7,
+			"responseFormat": {
+				"type": "object",
+				"properties": {
+					"result": {
+						"type": "string"
+					}
+				},
+				"required": ["result"]
+			},
+			"promptCacheRetention": "24h",
+			"model": "test-model-override",
+			"llmTimeout": "30s",
 			"tools": [
 				{
 					"function": {

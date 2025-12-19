@@ -140,9 +140,8 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	response := &runtimev1pb.ConversationResponse{} //nolint:staticcheck
 	a.logger.Debug(response)
 	if resp != nil {
-		if resp.ConversationContext != "" {
-			response.ContextID = &resp.ConversationContext
-		}
+		contextID := req.GetContextID()
+		response.ContextID = &contextID
 
 		for _, o := range resp.Outputs {
 			// extract content from the first choice since this api version only responded with a single string result
@@ -426,8 +425,23 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	request.Temperature = req.GetTemperature()
 	toolChoice := req.GetToolChoice()
 	tools := req.GetTools()
-	request.EnablePromptCache = req.GetEnablePromptCache()
-	request.Model = req.GetModel()
+	if req.GetPromptCacheRetention() != "" {
+		retentionDuration, err := time.ParseDuration(req.GetPromptCacheRetention())
+		if err != nil {
+			return nil, err
+		}
+		request.PromptCacheRetention = retentionDuration
+	}
+	modelOverrideFromRequest := req.GetModel()
+	request.Model = &modelOverrideFromRequest
+	if req.GetLlmTimeout() != "" {
+		llmTimeoutOverrideFromRequest := req.GetLlmTimeout()
+		d, err := time.ParseDuration(llmTimeoutOverrideFromRequest)
+		if err != nil {
+			return nil, err
+		}
+		request.LlmTimeout = d
+	}
 
 	// set default tool choice to auto if not specified and tools are available
 	if toolChoice == "" && len(tools) > 0 {
@@ -516,6 +530,12 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			response.ContextId = &contextID
 		}
 
+		protoUsage := convertUsageForResponse(resp.Usage)
+		var modelStr *string
+		if resp.Model != "" {
+			modelStr = &resp.Model
+		}
+
 		for _, o := range resp.Outputs {
 			var resultingChoices []*runtimev1pb.ConversationResultChoices
 
@@ -567,9 +587,41 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResultAlpha2{
 				Choices: resultingChoices,
+				Usage:   protoUsage,
+				Model:   modelStr,
 			})
 		}
 	}
 
 	return response, nil
+}
+
+func convertUsageForResponse(usage *conversation.Usage) *runtimev1pb.ConversationResultAlpha2CompletionUsage {
+	if usage == nil {
+		return nil
+	}
+
+	protoUsage := &runtimev1pb.ConversationResultAlpha2CompletionUsage{
+		CompletionTokens: usage.CompletionTokens,
+		PromptTokens:     usage.PromptTokens,
+		TotalTokens:      usage.TotalTokens,
+	}
+
+	if usage.CompletionTokensDetails != nil {
+		protoUsage.CompletionTokensDetails = &runtimev1pb.ConversationResultAlpha2CompletionUsageCompletionTokensDetails{
+			AcceptedPredictionTokens: usage.CompletionTokensDetails.AcceptedPredictionTokens,
+			AudioTokens:              usage.CompletionTokensDetails.AudioTokens,
+			ReasoningTokens:          usage.CompletionTokensDetails.ReasoningTokens,
+			RejectedPredictionTokens: usage.CompletionTokensDetails.RejectedPredictionTokens,
+		}
+	}
+
+	if usage.PromptTokensDetails != nil {
+		protoUsage.PromptTokensDetails = &runtimev1pb.ConversationResultAlpha2CompletionUsagePromptTokensDetails{
+			AudioTokens:  usage.PromptTokensDetails.AudioTokens,
+			CachedTokens: usage.PromptTokensDetails.CachedTokens,
+		}
+	}
+
+	return protoUsage
 }

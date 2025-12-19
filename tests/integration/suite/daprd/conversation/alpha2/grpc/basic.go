@@ -130,6 +130,49 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}
 
 		contextID := "test-conversation-123"
+		responseFormat := &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"type": {
+					Kind: &structpb.Value_StringValue{
+						StringValue: "object",
+					},
+				},
+				"properties": {
+					Kind: &structpb.Value_StructValue{
+						StructValue: &structpb.Struct{
+							Fields: map[string]*structpb.Value{
+								"result": {
+									Kind: &structpb.Value_StructValue{
+										StructValue: &structpb.Struct{
+											Fields: map[string]*structpb.Value{
+												"type": {
+													Kind: &structpb.Value_StringValue{
+														StringValue: "string",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				"required": {
+					Kind: &structpb.Value_ListValue{
+						ListValue: &structpb.ListValue{
+							Values: []*structpb.Value{
+								{
+									Kind: &structpb.Value_StringValue{
+										StringValue: "result",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
 		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name:      "test-alpha2-echo",
 			ContextId: ptr.Of(contextID),
@@ -170,12 +213,16 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					ScrubPii: ptr.Of(true),
 				},
 			},
-			Parameters:  parameters,
-			Metadata:    metadata,
-			ScrubPii:    ptr.Of(true),
-			Temperature: ptr.Of(0.7),
-			Tools:       []*rtv1.ConversationTools{tool},
-			ToolChoice:  ptr.Of("auto"),
+			Parameters:           parameters,
+			Metadata:             metadata,
+			ScrubPii:             ptr.Of(true),
+			Temperature:          ptr.Of(0.7),
+			Tools:                []*rtv1.ConversationTools{tool},
+			ToolChoice:           ptr.Of("auto"),
+			ResponseFormat:       responseFormat,
+			PromptCacheRetention: ptr.Of("24h"),
+			Model:                ptr.Of("test-model-override"),
+			LlmTimeout:           ptr.Of("30s"),
 		})
 		require.NoError(t, err)
 		// Echo component returns one output combining all input messages
