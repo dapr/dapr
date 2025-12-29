@@ -68,12 +68,13 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("success count", func(t *testing.T) {
 		body := strings.NewReader(`{"dueTime":"0s","data":"test"}`)
+		// TODO: add job name as path param
 		m.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/success", body)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := m.daprd.Metrics(t, ctx)
-			assert.Equal(t, 1, int(metrics.All()["dapr_component_job_success_count|app_id:my_app|component:|namespace:|operation:job_trigger_op|success:"]))
-			assert.NotNil(t, metrics.All()["dapr_component_job_latencies_sum|app_id:my_app|component:|namespace:|operation:job_trigger_op|success:"])
+			metrics := m.daprd.Metrics(t, ctx).All()
+			assert.Equal(t, 1, int(metrics["dapr_component_job_success_count|app_id:my_app|component:|namespace:|operation:job_trigger_op|success:"]))
+			assert.NotNil(t, metrics["dapr_component_job_latencies_sum|app_id:my_app|component:|namespace:|operation:job_trigger_op|success:"])
 		}, time.Second*3, time.Millisecond*10)
 	})
 
@@ -82,9 +83,9 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 		m.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/failure", body)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := m.daprd.Metrics(t, ctx)
-			assert.Equal(t, 1, int(metrics.All()["dapr_component_job_failure_count|app_id:my_app|component:|namespace:|operation:job_trigger_op"]))
-			assert.NotNil(t, metrics.All()["dapr_component_job_latencies_sum|app_id:my_app|component:|namespace:|operation:job_trigger_op"])
+			metrics := m.daprd.Metrics(t, ctx).All()
+			assert.Equal(t, 1, int(metrics["dapr_component_job_failure_count|app_id:my_app|component:|namespace:|operation:job_trigger_op"]))
+			assert.NotNil(t, metrics["dapr_component_job_latencies_sum|app_id:my_app|component:|namespace:|operation:job_trigger_op"])
 		}, time.Second*3, time.Millisecond*10)
 	})
 }
