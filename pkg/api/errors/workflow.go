@@ -187,7 +187,7 @@ func WorkflowInstanceIDMissing() error {
 
 // WorkflowInstanceIDInvalid returns an error when the workflow instance ID contains invalid characters.
 func WorkflowInstanceIDInvalid(instanceID string) error {
-	message := fmt.Sprintf("workflow instance ID '%s' is invalid: only alphanumeric and underscore characters are allowed", instanceID)
+	message := fmt.Sprintf("workflow instance ID '%s' is invalid: only alphanumeric, underscore, and dash characters are allowed", instanceID)
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusBadRequest,
