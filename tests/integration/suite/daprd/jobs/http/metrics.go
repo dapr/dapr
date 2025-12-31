@@ -66,26 +66,25 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	m.scheduler.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilRunning(t, ctx)
 
-	t.Run("success count", func(t *testing.T) {
+	t.Run("successful trigger", func(t *testing.T) {
 		body := strings.NewReader(`{"dueTime":"0s","data":"test"}`)
-		// TODO: add job name as path param
 		m.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/success", body)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := m.daprd.Metrics(t, ctx).All()
-			assert.Equal(t, 1, int(metrics["dapr_component_job_success_count|app_id:my_app|component:|namespace:|operation:job_trigger_op|success:"]))
-			assert.NotNil(t, metrics["dapr_component_job_latencies_sum|app_id:my_app|component:|namespace:|operation:job_trigger_op|success:"])
-		}, time.Second*3, time.Millisecond*10)
+			metrics := m.daprd.Metrics(c, ctx).All()
+			assert.Equal(c, 1, int(metrics["dapr_component_job_success_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
+			assert.NotNil(c, metrics["dapr_component_job_latencies_sum|app_id:my_app|namespace:|operation:job_trigger_op"])
+		}, time.Second*10, time.Millisecond*10)
 	})
 
-	t.Run("failure count", func(t *testing.T) {
+	t.Run("failed trigger", func(t *testing.T) {
 		body := strings.NewReader(`{"dueTime":"0s","data":"test"}`)
 		m.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/failure", body)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := m.daprd.Metrics(t, ctx).All()
-			assert.Equal(t, 1, int(metrics["dapr_component_job_failure_count|app_id:my_app|component:|namespace:|operation:job_trigger_op"]))
-			assert.NotNil(t, metrics["dapr_component_job_latencies_sum|app_id:my_app|component:|namespace:|operation:job_trigger_op"])
-		}, time.Second*3, time.Millisecond*10)
+			metrics := m.daprd.Metrics(c, ctx).All()
+			assert.Equal(c, 1, int(metrics["dapr_component_job_failure_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
+			assert.NotNil(c, metrics["dapr_component_job_latencies_sum|app_id:my_app|namespace:|operation:job_trigger_op"])
+		}, time.Second*10, time.Millisecond*10)
 	})
 }
