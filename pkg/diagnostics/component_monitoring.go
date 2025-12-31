@@ -176,17 +176,17 @@ func newComponentMetrics() *componentMetrics {
 			stats.UnitMilliseconds),
 		jobSuccessCount: stats.Int64(
 			"component/job/success_count",
-			"The number of job triggers that returned success response.",
+			"The number of successful job triggers.",
 			stats.UnitDimensionless,
 		),
 		jobFailureCount: stats.Int64(
 			"component/job/failure_count",
-			"The number of job triggers that returned failure response.",
+			"The number of failed job triggers.",
 			stats.UnitDimensionless,
 		),
 		jobLatency: stats.Float64(
 			"component/job/latencies",
-			"The latency of the job trigger.",
+			"The latency of the response from the app that processed the triggered job.",
 			stats.UnitMilliseconds,
 		),
 	}
@@ -224,8 +224,8 @@ func (c *componentMetrics) Init(meter view.Meter, appID, namespace string, laten
 		diagUtils.NewMeasureView(c.cryptoLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.cryptoCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.jobLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
-		diagUtils.NewMeasureView(c.jobSuccessCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
-		diagUtils.NewMeasureView(c.jobFailureCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey}, view.Count()),
+		diagUtils.NewMeasureView(c.jobSuccessCount, []tag.Key{appIDKey, namespaceKey, operationKey}, view.Count()),
+		diagUtils.NewMeasureView(c.jobFailureCount, []tag.Key{appIDKey, namespaceKey, operationKey}, view.Count()),
 	)
 }
 
@@ -462,26 +462,28 @@ func (c *componentMetrics) CryptoInvoked(ctx context.Context, component, operati
 
 // JobTriggeredSuccess records the metrics for a job execution success event.
 func (c *componentMetrics) JobTriggeredSuccess(ctx context.Context, operation string, elapsed float64) {
-	c.jobTriggered(ctx, operation, elapsed, c.jobSuccessCount)
+	c.jobTriggered(ctx, operation, true, elapsed, c.jobSuccessCount)
 }
 
 // JobTriggeredFailure records the metrics for a job execution failure event.
 func (c *componentMetrics) JobTriggeredFailure(ctx context.Context, operation string, elapsed float64) {
-	c.jobTriggered(ctx, operation, elapsed, c.jobFailureCount)
+	c.jobTriggered(ctx, operation, false, elapsed, c.jobFailureCount)
 }
 
-func (c *componentMetrics) jobTriggered(ctx context.Context, operation string, elapsed float64, countMeasure *stats.Int64Measure) {
+func (c *componentMetrics) jobTriggered(ctx context.Context, operation string, success bool, elapsed float64, countMeasure *stats.Int64Measure) {
 	if c.enabled {
-		stats.RecordWithTags(
+		stats.RecordWithOptions(
 			ctx,
-			diagUtils.WithTags(countMeasure.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation),
-			countMeasure.M(1))
+			stats.WithRecorder(c.meter),
+			stats.WithTags(diagUtils.WithTags(countMeasure.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation)...),
+			stats.WithMeasurements(countMeasure.M(1)))
 
 		if elapsed > 0 {
-			stats.RecordWithTags(
+			stats.RecordWithOptions(
 				ctx,
-				diagUtils.WithTags(c.jobLatency.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation),
-				c.jobLatency.M(elapsed))
+				stats.WithRecorder(c.meter),
+				stats.WithTags(diagUtils.WithTags(c.jobLatency.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
+				stats.WithMeasurements(c.jobLatency.M(elapsed)))
 		}
 	}
 }
