@@ -210,6 +210,6 @@ We support only server side metrics.
 
 ### Job metrics
 
-* dapr_component_job_success_count: The number of job triggers that returned success response
-* dapr_component_job_failure_count: The number of job triggers that returned failure response
-* dapr_component_job_latencies: The latency of the job trigger
+* dapr_component_job_success_count: The number of successful job triggers
+* dapr_component_job_failure_count: The number of failed job triggers
+* dapr_component_job_latencies: The latency of the response from the app that processed the triggered job
