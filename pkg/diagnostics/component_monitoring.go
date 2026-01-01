@@ -223,7 +223,7 @@ func (c *componentMetrics) Init(meter view.Meter, appID, namespace string, laten
 		diagUtils.NewMeasureView(c.conversationCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.cryptoLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.cryptoCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
-		diagUtils.NewMeasureView(c.jobLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
+		diagUtils.NewMeasureView(c.jobLatency, []tag.Key{appIDKey, namespaceKey, operationKey, successKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.jobSuccessCount, []tag.Key{appIDKey, namespaceKey, operationKey}, view.Count()),
 		diagUtils.NewMeasureView(c.jobFailureCount, []tag.Key{appIDKey, namespaceKey, operationKey}, view.Count()),
 	)
