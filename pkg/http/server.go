@@ -7,6 +7,7 @@ package http
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -69,7 +70,12 @@ func (s *server) StartNonBlocking() {
 	}
 
 	go func() {
-		log.Fatal(customServer.ListenAndServe(fmt.Sprintf(":%v", s.config.Port)))
+		// Use net.Listen to bind to IPv6 on dual-stack systems (consistent with gRPC servers)
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%v", s.config.Port))
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Fatal(customServer.Serve(lis))
 	}()
 
 	if s.config.EnableProfiling {
