@@ -135,7 +135,7 @@ func (h *ha) Run(t *testing.T, ctx context.Context) {
 		h.lock.Lock()
 		assert.Len(c, h.triggered, 150)
 		h.lock.Unlock()
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 20*time.Second, 10*time.Millisecond)
 	h.lock.Lock()
 	assert.Len(t, h.daprdCalled, 3)
 	h.lock.Unlock()

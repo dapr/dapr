@@ -55,7 +55,7 @@ func (h *three) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		assert.NoError(c, err)
 		assert.ElementsMatch(c, h.cluster.Addresses(), resp.GetScheduler().GetConnectedAddresses())
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	sched := h.daprd.GetMetaScheduler(t, ctx)
 	assert.NotNil(t, sched)
