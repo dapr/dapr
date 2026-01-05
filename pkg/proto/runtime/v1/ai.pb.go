@@ -187,6 +187,7 @@ type ConversationRequestAlpha2 struct {
 	//
 	// The schema must be provided as a parsed JSON object.
 	// Note: This is currently only supported by OpenAI components.
+	// TODO: SAM TO PUT WHAT COMPONENTS ACTUALLY USE Openai in contrib to support this.
 	// inspired by openai.ResponseFormat
 	// ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L3111
 	ResponseFormat *structpb.Struct `protobuf:"bytes,10,opt,name=response_format,json=responseFormat,proto3,oneof" json:"response_format,omitempty"`
@@ -201,6 +202,7 @@ type ConversationRequestAlpha2 struct {
 	// If this is set, then it overrides the conversation component model.
 	Model *string `protobuf:"bytes,12,opt,name=model,proto3,oneof" json:"model,omitempty"`
 	// Timeout for the LLM to complete the request.
+	// If unset, the default timeout behavior of the underlying LLM provider will be used.
 	LlmTimeout *string `protobuf:"bytes,13,opt,name=llm_timeout,json=llmTimeout,proto3,oneof" json:"llm_timeout,omitempty"`
 }
 
@@ -1155,7 +1157,6 @@ func (x *ConversationResult) GetParameters() map[string]*anypb.Any {
 	return nil
 }
 
-// Usage statistics for the completion request.
 // inspired by openai.ChatCompletion
 // ConversationResultAlpha2 is the result for one input.
 // https://github.com/openai/openai-go/blob/main/chatcompletion.go#L167
@@ -1168,7 +1169,7 @@ type ConversationResultAlpha2 struct {
 	Choices []*ConversationResultChoices `protobuf:"bytes,1,rep,name=choices,proto3" json:"choices,omitempty"`
 	// Usage statistics for the completion request.
 	Usage *ConversationResultAlpha2CompletionUsage `protobuf:"bytes,2,opt,name=usage,proto3,oneof" json:"usage,omitempty"`
-	// The model used for the conversation
+	// The model used for the conversation.
 	Model *string `protobuf:"bytes,3,opt,name=model,proto3,oneof" json:"model,omitempty"`
 }
 

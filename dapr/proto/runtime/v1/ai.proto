@@ -112,6 +112,7 @@ message ConversationRequestAlpha2 {
   //
   // The schema must be provided as a parsed JSON object.
   // Note: This is currently only supported by OpenAI components.
+  // TODO: SAM TO PUT WHAT COMPONENTS ACTUALLY USE Openai in contrib to support this.
   // inspired by openai.ResponseFormat
   // ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L3111
   optional google.protobuf.Struct response_format = 10;
@@ -129,6 +130,7 @@ message ConversationRequestAlpha2 {
   optional string model = 12;
 
   // Timeout for the LLM to complete the request.
+  // If unset, the default timeout behavior of the underlying LLM provider will be used.
   optional string llm_timeout = 13;
   
   /* TODO: the rest of the fields to bring in from openai.ChatCompletionNewParams are optional, so we can add later.

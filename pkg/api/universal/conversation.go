@@ -23,7 +23,9 @@ import (
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
 
 	"github.com/dapr/components-contrib/conversation"
+	"github.com/dapr/components-contrib/conversation/langchaingokit"
 	"github.com/dapr/components-contrib/conversation/mistral"
+	"github.com/dapr/components-contrib/conversation/ollama"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -355,10 +357,12 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						},
 					}
 
-					// handle mistral edge case on handling tool call message
+					// handle mistral and ollama edge case on handling tool call message
 					// where it expects a text message instead of a tool call message
 					if _, ok := component.(*mistral.Mistral); ok {
-						langchainMsg.Parts = append(langchainMsg.Parts, mistral.CreateToolCallPart(&toolCall))
+						langchainMsg.Parts = append(langchainMsg.Parts, langchaingokit.CreateToolCallPart(&toolCall))
+					} else if _, ok := component.(*ollama.Ollama); ok {
+						langchainMsg.Parts = append(langchainMsg.Parts, langchaingokit.CreateToolCallPart(&toolCall))
 					} else {
 						langchainMsg.Parts = append(langchainMsg.Parts, toolCall)
 					}
@@ -397,7 +401,9 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				// handle mistral edge case on handling tool call response message
 				// where it expects a text message instead of a tool call response message
 				if _, ok := component.(*mistral.Mistral); ok {
-					langchainMsg = mistral.CreateToolResponseMessage(parts...)
+					langchainMsg = langchaingokit.CreateToolResponseMessage(parts...)
+				} else if _, ok := component.(*ollama.Ollama); ok {
+					langchainMsg = langchaingokit.CreateToolResponseMessage(parts...)
 				} else {
 					langchainMsg = llms.MessageContent{
 						Role:  llms.ChatMessageTypeTool,
