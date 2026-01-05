@@ -142,8 +142,10 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	response := &runtimev1pb.ConversationResponse{} //nolint:staticcheck
 	a.logger.Debug(response)
 	if resp != nil {
-		contextID := req.GetContextID()
-		response.ContextID = &contextID
+		if req.GetContextID() != "" {
+			contextID := req.GetContextID()
+			response.ContextID = &contextID
+		}
 
 		for _, o := range resp.Outputs {
 			// extract content from the first choice since this api version only responded with a single string result
@@ -192,12 +194,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	// prepare request
 	request := &conversation.Request{}
 	var err error
-	var conversationMetadata map[string]string
-	err = kmeta.DecodeMetadata(req.GetMetadata(), conversationMetadata)
-	if err != nil {
-		return nil, err
-	}
-	request.Metadata = conversationMetadata
+	request.Metadata = req.GetMetadata()
 
 	if request.Message == nil {
 		request.Message = &[]llms.MessageContent{}
@@ -211,7 +208,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 	if req.GetResponseFormat() != nil {
 		if respFormat := req.GetResponseFormat(); respFormat != nil {
-			request.ResponseFormatAsJsonSchema = respFormat.AsMap()
+			request.ResponseFormatAsJSONSchema = respFormat.AsMap()
 		}
 	}
 

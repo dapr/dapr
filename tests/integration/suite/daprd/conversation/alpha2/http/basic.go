@@ -178,7 +178,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 								]
 							}
 						}
-					]
+					],
+					"model": "test-model-override",
+					"usage": {
+						"completionTokens": "8",
+						"promptTokens": "8",
+						"totalTokens": "16"
+					}
 				}
 			]
 		}`
@@ -257,7 +263,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 								]
 							}
 						}
-					]
+					],
+					"usage": {
+						"completionTokens": "2",
+						"promptTokens": "2",
+						"totalTokens": "4"
+					}
 				}
 			]
 		}`
