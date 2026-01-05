@@ -44,7 +44,9 @@ type goroutines struct {
 }
 
 func (g *goroutines) Setup(t *testing.T) []framework.Option {
-	g.scheduler = scheduler.New(t)
+	g.scheduler = scheduler.New(t,
+		scheduler.WithWorkers(nil),
+	)
 
 	app := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
