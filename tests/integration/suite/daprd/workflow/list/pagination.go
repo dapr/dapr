@@ -40,6 +40,7 @@ func (p *pagination) Setup(t *testing.T) []framework.Option {
 
 	return []framework.Option{
 		framework.WithProcesses(p.workflow),
+		framework.WithIOIntensive(),
 	}
 }
 

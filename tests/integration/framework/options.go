@@ -18,6 +18,14 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/once"
 )
 
+type options struct {
+	procs       []process.Interface
+	ioIntensive bool
+}
+
+// Option is a function that configures the Framework's options.
+type Option func(*options)
+
 func WithProcesses(procs ...process.Interface) Option {
 	// TODO: if procs string contains `logline` we should move it to the start
 	// of the list here otherwise daprd doesn't start up and it just hangs
@@ -35,5 +43,11 @@ func WithProcesses(procs ...process.Interface) Option {
 				o.procs = append(o.procs, once.Wrap(proc))
 			}
 		}
+	}
+}
+
+func WithIOIntensive() Option {
+	return func(o *options) {
+		o.ioIntensive = true
 	}
 }
