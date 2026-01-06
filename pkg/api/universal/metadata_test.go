@@ -20,8 +20,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/expr"
@@ -45,9 +48,79 @@ func TestGetMetadata(t *testing.T) {
 			},
 		}
 	})
+
+	conversationCompName := "llm-provider"
+	conversationCompModel := "model-one"
+	conversationComp := componentsV1alpha.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: conversationCompName,
+		},
+		Spec: componentsV1alpha.ComponentSpec{
+			Type:    "conversation.openai",
+			Version: "v1",
+			Metadata: []commonapi.NameValuePair{
+				{
+					Name: "key",
+					Value: commonapi.DynamicValue{
+						JSON: apiextensionsV1.JSON{
+							Raw: []byte(`"blah"`),
+						},
+					},
+				},
+				{
+					Name: "model",
+					Value: commonapi.DynamicValue{
+						JSON: apiextensionsV1.JSON{
+							Raw: []byte(`"` + conversationCompModel + `"`),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	conversationComp2Name := "another-llm"
+	conversationComp2Model := "model-two"
+	conversationComp2 := componentsV1alpha.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: conversationComp2Name,
+		},
+		Spec: componentsV1alpha.ComponentSpec{
+			Type:    "conversation.anthropic",
+			Version: "v1",
+			Metadata: []commonapi.NameValuePair{
+				{
+					Name: "key",
+					Value: commonapi.DynamicValue{
+						JSON: apiextensionsV1.JSON{
+							Raw: []byte(`"blahtwo"`),
+						},
+					},
+				},
+				{
+					Name: "model",
+					Value: commonapi.DynamicValue{
+						JSON: apiextensionsV1.JSON{
+							Raw: []byte(`"` + conversationComp2Model + `"`),
+						},
+					},
+				},
+			},
+		},
+	}
+
 	compStore := compstore.New()
 	require.NoError(t, compStore.AddPendingComponentForCommit(fakeComponent))
 	require.NoError(t, compStore.CommitPendingComponent())
+
+	require.NoError(t, compStore.AddPendingComponentForCommit(conversationComp))
+	require.NoError(t, compStore.CommitPendingComponent())
+	require.NoError(t, compStore.AddPendingComponentForCommit(conversationComp2))
+	require.NoError(t, compStore.CommitPendingComponent())
+
+	compStore.AddConversation(conversationCompName, nil)
+	compStore.AddConversation(conversationComp2Name, nil)
+
 	compStore.SetProgramaticSubscriptions(runtimePubsub.Subscription{
 		PubsubName:      "test",
 		Topic:           "topic",
@@ -118,6 +191,13 @@ func TestGetMetadata(t *testing.T) {
 			response, err := fakeAPI.GetMetadata(t.Context(), &runtimev1pb.GetMetadataRequest{})
 			require.NoError(t, err, "Expected no error")
 
+			assert.NotNil(t, response.Conversations)
+			assert.Len(t, response.Conversations, 2)
+			assert.Equal(t, response.Conversations[0].Name, conversationCompName)
+			assert.Equal(t, response.Conversations[0].Model, conversationCompModel)
+			assert.Equal(t, response.Conversations[1].Name, conversationComp2Name)
+			assert.Equal(t, response.Conversations[1].Model, conversationComp2Model)
+
 			bytes, err := json.Marshal(response)
 			require.NoError(t, err)
 
@@ -128,12 +208,12 @@ func TestGetMetadata(t *testing.T) {
 
 			expectedResponse := `{"id":"fakeAPI",` +
 				`"active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],` +
-				`"registered_components":[{"name":"testComponent","capabilities":["mock.feat.testComponent"]}],` +
+				`"registered_components":[{"name":"testComponent","capabilities":["mock.feat.testComponent"]},{"name":"llm-provider","type":"conversation.openai","version":"v1"},{"name":"another-llm","type":"conversation.anthropic","version":"v1"}],` +
 				`"extended_metadata":{"daprRuntimeVersion":"edge","testKey":"testValue"},` +
 				`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead","type":2}],` +
 				`"app_connection_properties":{"port":1234,"protocol":"http","channel_address":"1.2.3.4","max_concurrency":10` +
 				healthCheckJSON +
-				`"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true},"workflows":{"connected_workers":1}}`
+				`"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true},"workflows":{"connected_workers":1},"conversations":[{"name":"llm-provider","model":"model-one"},{"name":"another-llm","model":"model-two"}]}`
 			assert.Equal(t, expectedResponse, string(bytes))
 		})
 	}
