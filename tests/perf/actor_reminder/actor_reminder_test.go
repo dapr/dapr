@@ -45,14 +45,14 @@ const (
 	targetQPS float64 = 600
 
 	// Target for the QPS to trigger reminders.
-	targetTriggerQPS float64 = 9000
+	targetTriggerQPS float64 = 13000
 
 	// reminderCount is the number of reminders to register.
-	reminderCount = 10000
+	reminderCount = 20000
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
-	dueTime = 220
+	dueTime = 450
 )
 
 var tr *runner.TestRunner
@@ -192,8 +192,8 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 	t.Logf("registering actor reminders")
 	reminder := &actorReminderRequest{
 		DueTime: ptr.Of(time.Now().Add(time.Second * dueTime).Format(time.RFC3339)),
-		Period:  ptr.Of("1s"),
-		Ttl:     ptr.Of("5s"),
+		Period:  ptr.Of("1ms"),
+		Ttl:     ptr.Of("5ms"),
 	}
 	reminderB, err := json.Marshal(reminder)
 	require.NoError(t, err)
@@ -242,7 +242,7 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
 		assert.NoError(c, err)
 		assert.GreaterOrEqual(c, gotCount, reminderCount*5)
-	}, 100*time.Second, time.Second)
+	}, 100*time.Second, 100*time.Millisecond)
 	done = time.Since(start)
 	qps := float64(reminderCount*5) / done.Seconds()
 	t.Logf("Triggered %d reminders in %s (%.1fqps)", reminderCount*5, done, qps)
