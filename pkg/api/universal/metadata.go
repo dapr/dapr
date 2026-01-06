@@ -124,7 +124,6 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 			Name:  name,
 			Model: model,
 		})
-
 	}
 
 	var sched *runtimev1pb.MetadataScheduler
