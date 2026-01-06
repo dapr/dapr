@@ -145,15 +145,12 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts(serviceApplicationName)
 	require.NoError(t, err)
 
-	t.Logf("dapr test results: %s", string(daprResp))
-	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
-	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
-	t.Logf("target dapr app or sidecar restarted %v times", restarts)
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
 	require.NoError(t, err)
-
+	utils.LogPerfTestSummary(daprResp)
 	percentiles := map[int]string{2: "90th", 3: "99th"}
 
 	for k, v := range percentiles {
