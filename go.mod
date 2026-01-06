@@ -16,7 +16,7 @@ require (
 	github.com/dapr/components-contrib v1.16.2-0.20260105164851-3e22d45d5cae
 	github.com/dapr/durabletask-go v0.10.2-0.20251203182905-2c611fb434fd
 	github.com/dapr/kit v0.16.2-0.20251124175541-3ac186dff64d
-	github.com/diagridio/go-etcd-cron v0.10.1-0.20251204161759-90f918747eab
+	github.com/diagridio/go-etcd-cron v0.10.1-0.20260105221246-ee8c118dd834
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/cors v1.2.1
