@@ -40,6 +40,7 @@ message GetMetadataResponse {
   ActorRuntime actor_runtime = 10 [json_name = "actorRuntime"];
   optional MetadataScheduler scheduler = 11 [json_name = "scheduler"];
   optional MetadataWorkflows workflows = 12 [json_name = "workflows"];
+  repeated MetadataConversations conversations = 13 [json_name = "conversations"];
 }
 
 message MetadataWorkflows {
@@ -88,6 +89,12 @@ message RegisteredComponents {
 
 message MetadataHTTPEndpoint {
   string name = 1 [json_name = "name"];
+}
+
+// MetadataConversations is a message that contains the conversation components and its model.
+message MetadataConversations {
+  string name = 1 [json_name = "name"];
+  string model = 2 [json_name = "model"];
 }
 
 message AppConnectionProperties {

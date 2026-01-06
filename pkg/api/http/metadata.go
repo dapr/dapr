@@ -135,6 +135,8 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 					}
 				}
 
+				res.Conversations = out.GetConversations()
+
 				return res, nil
 			},
 		},
@@ -174,6 +176,7 @@ type metadataResponse struct {
 	Extended                map[string]string                       `json:"extended,omitempty"`
 	Subscriptions           []metadataResponsePubsubSubscription    `json:"subscriptions,omitempty"`
 	HTTPEndpoints           []*runtimev1pb.MetadataHTTPEndpoint     `json:"httpEndpoints,omitempty"`
+	Conversations           []*runtimev1pb.MetadataConversations    `json:"conversations,omitempty"`
 	AppConnectionProperties metadataResponseAppConnectionProperties `json:"appConnectionProperties,omitempty"`
 	ActorRuntime            metadataActorRuntime                    `json:"actorRuntime,omitempty"`
 	Scheduler               *runtimev1pb.MetadataScheduler          `json:"scheduler,omitempty"`

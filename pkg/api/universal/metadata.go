@@ -15,6 +15,7 @@ package universal
 
 import (
 	"context"
+	"strings"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -101,6 +102,31 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		}
 	}
 
+	// Conversation components
+	conversationComponents := a.compStore.ListConversations()
+	registeredConversationComponents := make([]*runtimev1pb.MetadataConversations, 0, len(conversationComponents))
+	for name := range conversationComponents {
+		c, ok := a.compStore.GetComponent(name)
+		if !ok {
+			continue
+		}
+
+		// get model from metadata
+		var model string
+		for _, meta := range c.Spec.Metadata {
+			if strings.EqualFold(meta.Name, "model") {
+				model = meta.Value.String()
+				break
+			}
+		}
+
+		registeredConversationComponents = append(registeredConversationComponents, &runtimev1pb.MetadataConversations{
+			Name:  name,
+			Model: model,
+		})
+
+	}
+
 	var sched *runtimev1pb.MetadataScheduler
 	if a.scheduler != nil {
 		if addr := a.scheduler.Addresses(); len(addr) > 0 {
@@ -117,6 +143,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		ActiveActorsCount:       actorRuntime.GetActiveActors(), // Alias for backwards-compatibility
 		Subscriptions:           ps,
 		HttpEndpoints:           registeredHTTPEndpoints,
+		Conversations:           registeredConversationComponents,
 		AppConnectionProperties: appConnectionProperties,
 		RuntimeVersion:          buildinfo.Version(),
 		EnabledFeatures:         a.globalConfig.EnabledFeatures(),
