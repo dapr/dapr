@@ -21,10 +21,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/task"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
+	"github.com/dapr/kit/concurrency/slice"
 )
 
 func init() {
@@ -36,7 +38,12 @@ type pagination struct {
 }
 
 func (p *pagination) Setup(t *testing.T) []framework.Option {
-	p.workflow = workflow.New(t)
+	p.workflow = workflow.New(t,
+		workflow.WithNoDB(),
+		workflow.WithDaprdOptions(0,
+			daprd.WithInMemoryActorStateStore("foo"),
+		),
+	)
 
 	return []framework.Option{
 		framework.WithProcesses(p.workflow),
@@ -53,22 +60,31 @@ func (p *pagination) Run(t *testing.T, ctx context.Context) {
 
 	client := p.workflow.BackendClient(t, ctx)
 
-	ids := make([]string, 0, 1030)
-	for range 1030 {
-		id, err := client.ScheduleNewOrchestration(ctx, "foo")
-		require.NoError(t, err)
-		ids = append(ids, id.String())
+	const n = 1030
+
+	ids := slice.String()
+	errCh := make(chan error, 100)
+	for range n {
+		go func() {
+			id, err := client.ScheduleNewOrchestration(ctx, "foo")
+			errCh <- err
+			ids.Append(id.String())
+		}()
 	}
 
-	resp, err := p.workflow.WorkflowClient(t, ctx).ListInstanceIDs(ctx)
-	require.NoError(t, err)
-	require.Len(t, resp.InstanceIds, 1024)
-	assert.Equal(t, ids[:1024], resp.InstanceIds)
-	require.NotNil(t, resp.ContinuationToken)
+	for range n {
+		require.NoError(t, <-errCh)
+	}
 
-	resp, err = p.workflow.WorkflowClient(t, ctx).ListInstanceIDs(ctx, dworkflow.WithListInstanceIDsContinuationToken(*resp.ContinuationToken))
+	resp1, err := p.workflow.WorkflowClient(t, ctx).ListInstanceIDs(ctx)
 	require.NoError(t, err)
-	require.Len(t, resp.InstanceIds, 6)
-	assert.Equal(t, ids[1024:], resp.InstanceIds)
-	require.Nil(t, resp.ContinuationToken)
+	require.Len(t, resp1.InstanceIds, 1024)
+	require.NotNil(t, resp1.ContinuationToken)
+
+	resp2, err := p.workflow.WorkflowClient(t, ctx).ListInstanceIDs(ctx, dworkflow.WithListInstanceIDsContinuationToken(*resp1.ContinuationToken))
+	require.NoError(t, err)
+	require.Len(t, resp2.InstanceIds, 6)
+	require.Nil(t, resp2.ContinuationToken)
+
+	assert.ElementsMatch(t, ids.Slice(), append(resp1.InstanceIds, resp2.InstanceIds...))
 }

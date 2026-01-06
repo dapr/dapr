@@ -308,8 +308,9 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		return fmt.Errorf("failed to marshal CreateWorkflowInstanceRequest: %w", err)
 	}
 
-	// Invoke the well-known workflow actor directly, which will be created by this invocation request.
-	// Note that this request goes directly to the actor runtime, bypassing the API layer.
+	// Invoke the well-known workflow actor directly, which will be created by
+	// this invocation request. Note that this request goes directly to the actor
+	// runtime.
 	req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
 		WithActor(abe.workflowActorType, workflowInstanceID).
 		WithData(requestBytes).
