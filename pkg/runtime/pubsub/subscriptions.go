@@ -319,7 +319,7 @@ func CreateRoutingRule(match, path string) (*Rule, error) {
 	}, nil
 }
 
-func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMessage, log logger.Logger, tracingSpec *config.TracingSpec) (*runtimev1pb.TopicEventRequest, trace.Span, error) {
+func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMessage, log logger.Logger, tracingSpec *config.TracingSpec) (context.Context, *runtimev1pb.TopicEventRequest, trace.Span, error) {
 	cloudEvent := msg.CloudEvent
 
 	envelope := &runtimev1pb.TopicEventRequest{
@@ -340,13 +340,13 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 				log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
 
-				return nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(decodeErr))
+				return ctx, nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(decodeErr))
 			}
 
 			envelope.Data = decoded
 		} else {
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
-			return nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(errUnexpectedEnvelopeData))
+			return ctx, nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(errUnexpectedEnvelopeData))
 		}
 	} else if data, ok := cloudEvent[contribpubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
@@ -359,7 +359,7 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 				envelope.Data = v
 			default:
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
-				return nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(errUnexpectedEnvelopeData))
+				return ctx, nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(errUnexpectedEnvelopeData))
 			}
 		} else if contenttype.IsJSONContentType(envelope.GetDataContentType()) || contenttype.IsCloudEventContentType(envelope.GetDataContentType()) {
 			envelope.Data, _ = json.Marshal(data)
@@ -371,6 +371,7 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 	if iTraceID == nil {
 		iTraceID = cloudEvent[contribpubsub.TraceIDField]
 	}
+
 	if iTraceID != nil {
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
@@ -390,11 +391,11 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 	extensions, extensionsErr := ExtractCloudEventExtensions(cloudEvent)
 	if extensionsErr != nil {
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
-		return nil, nil, extensionsErr
+		return ctx, nil, nil, extensionsErr
 	}
 	envelope.Extensions = extensions
 
-	return envelope, span, nil
+	return ctx, envelope, span, nil
 }
 
 func ExtractCloudEventProperty(cloudEvent map[string]any, property string) string {
