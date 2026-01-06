@@ -130,10 +130,8 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts(appName)
 	require.NoError(t, err)
 
-	t.Logf("dapr test results: %s", string(daprResp))
-	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
-	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
-	t.Logf("target dapr app or sidecar restarted %v times", restarts)
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
+	utils.LogPerfTestSummary(daprResp)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
