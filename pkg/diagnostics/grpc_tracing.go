@@ -27,6 +27,7 @@ import (
 	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/config"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
@@ -328,6 +329,8 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 		return ctx
 	}
 
+	traceparent := SpanContextToW3CString(spanContext)
+	ctx = grpcMetadata.AppendToOutgoingContext(ctx, contribpubsub.TraceParentField, traceparent)
 	return grpcMetadata.AppendToOutgoingContext(ctx, diagConsts.GRPCTraceContextKey, string(traceContextBinary))
 }
 
