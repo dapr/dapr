@@ -64,7 +64,7 @@ func New(opts Options) postman.Interface {
 func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error {
 	cloudEvent := msg.CloudEvent
 
-	envelope, span, err := pubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, g.tracingSpec)
+	ctx, envelope, span, err := pubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, g.tracingSpec)
 	if err != nil {
 		return err
 	}
