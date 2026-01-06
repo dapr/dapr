@@ -112,12 +112,10 @@ func TestGetMetadata(t *testing.T) {
 	compStore := compstore.New()
 	require.NoError(t, compStore.AddPendingComponentForCommit(fakeComponent))
 	require.NoError(t, compStore.CommitPendingComponent())
-
 	require.NoError(t, compStore.AddPendingComponentForCommit(conversationComp))
 	require.NoError(t, compStore.CommitPendingComponent())
 	require.NoError(t, compStore.AddPendingComponentForCommit(conversationComp2))
 	require.NoError(t, compStore.CommitPendingComponent())
-
 	compStore.AddConversation(conversationCompName, nil)
 	compStore.AddConversation(conversationComp2Name, nil)
 
@@ -155,7 +153,6 @@ func TestGetMetadata(t *testing.T) {
 			expectHealthCheckEnabled: false,
 		},
 	}
-
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			appConnectionConfig := config.AppConnectionConfig{
@@ -191,12 +188,13 @@ func TestGetMetadata(t *testing.T) {
 			response, err := fakeAPI.GetMetadata(t.Context(), &runtimev1pb.GetMetadataRequest{})
 			require.NoError(t, err, "Expected no error")
 
-			assert.NotNil(t, response.Conversations)
-			assert.Len(t, response.Conversations, 2)
-			assert.Equal(t, response.Conversations[0].Name, conversationCompName)
-			assert.Equal(t, response.Conversations[0].Model, conversationCompModel)
-			assert.Equal(t, response.Conversations[1].Name, conversationComp2Name)
-			assert.Equal(t, response.Conversations[1].Model, conversationComp2Model)
+			conversations := response.GetConversations()
+			assert.NotNil(t, conversations)
+			assert.Len(t, conversations, 2)
+			assert.Equal(t, conversations[0].GetName(), conversationCompName)
+			assert.Equal(t, conversations[0].GetModel(), conversationCompModel)
+			assert.Equal(t, conversations[1].GetName(), conversationComp2Name)
+			assert.Equal(t, conversations[1].GetModel(), conversationComp2Model)
 
 			bytes, err := json.Marshal(response)
 			require.NoError(t, err)
