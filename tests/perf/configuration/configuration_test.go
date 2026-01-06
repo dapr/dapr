@@ -92,7 +92,7 @@ func runk6test(t *testing.T, targetURL string, payload []byte, threshold int) *l
 	bts, err := json.MarshalIndent(sm, "", " ")
 	require.NoError(t, err)
 	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
-	t.Logf("test summary `%s`", string(bts))
+	utils.LogPerfTestSummary(bts)
 	return sm.RunnersResults[0]
 }
 
@@ -148,6 +148,7 @@ func printLatency(t *testing.T, testName string, baselineResult, daprResult *loa
 	restarts, err := tr.Platform.GetTotalRestarts(testAppName)
 	require.NoError(t, err)
 
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
 	summary.ForTest(t).
 		Service(testName).
 		CPU(appUsage.CPUm).

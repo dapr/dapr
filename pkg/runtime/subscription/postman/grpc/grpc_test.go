@@ -30,6 +30,7 @@ import (
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -120,7 +121,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
 	envelope := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", topic,
-		"testpubsub2", "", []byte("Test Message"), "", "")
+		"testpubsub2", "", []byte("Test Message"), "00-c24c2deeb837b9b5e7101a1235b479c5-6784475fca41cdff-01", "")
 	// add custom attributes
 	envelope["customInt"] = 123
 	envelope["customString"] = "abc"
@@ -253,6 +254,40 @@ func TestOnNewPublishedMessage(t *testing.T) {
 				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
 			}),
 		},
+		{
+			name:           "succeeded to publish message to user app with traceparent",
+			message:        testPubSubMessage,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+				"customInt":    float64(123),
+				"customString": "abc",
+				"customBool":   true,
+				"customFloat":  float64(1.23),
+				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+				"traceparent":  "00-c24c2deeb837b9b5e7101a1235b479c5-6784475fca41cdff-01",
+			}),
+		},
+		{
+			name:             "fail to publish message to user app with different traceparent",
+			message:          testPubSubMessage,
+			noResponseStatus: true,
+			responseError:    assert.AnError,
+			expectedError: fmt.Errorf(
+				"error returned from app while processing pub/sub event %v: %w",
+				testPubSubMessage.CloudEvent[contribpubsub.IDField],
+				rterrors.NewRetriable(status.Error(codes.Unknown, "cloud event extension traceparent with value 00-c24c2deeb837b9b5e7101a1235b479c5-6784475fca41cdff-01 is not valid")),
+			),
+			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+				"customInt":    float64(123),
+				"customString": "abc",
+				"customBool":   true,
+				"customFloat":  float64(1.23),
+				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+				"traceparent":  "00-c24c2deeb837b9b5e7101a1235b479c5-6784475fca41cdff-03",
+			}),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -285,6 +320,12 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			channel := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 			g := New(Options{
 				Channel: channel,
+				Tracing: &config.TracingSpec{
+					SamplingRate: "100",
+					Stdout:       false,
+					Zipkin:       nil,
+					Otel:         nil,
+				},
 			})
 
 			err = g.Deliver(t.Context(), tc.message)

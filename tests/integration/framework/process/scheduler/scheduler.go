@@ -94,6 +94,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		etcdClientPort:           fp.Port(t),
 		namespace:                "default",
 		etcdBackendBatchInterval: "50ms",
+		workers:                  ptr.Of(uint32(128)),
 	}
 
 	for _, fopt := range fopts {
@@ -544,7 +545,7 @@ func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string
 		Endpoints:   []string{"127.0.0.1:" + strconv.Itoa(s.EtcdClientPort())},
 		DialTimeout: 40 * time.Second,
 	}).ListAllKeys(ctx, prefix)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	return resp
 }
