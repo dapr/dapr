@@ -76,6 +76,7 @@ type kubernetes struct {
 }
 
 func New(opts Options) (validator.Validator, error) {
+	opts.RestConfig.ContentType = runtime.ContentTypeJSON
 	kubeClient, err := cl.NewForConfig(opts.RestConfig)
 	if err != nil {
 		return nil, err
