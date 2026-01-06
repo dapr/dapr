@@ -15,7 +15,6 @@ package tracing
 
 import (
 	"context"
-	"slices"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -148,13 +147,11 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 					"CallActor/dapr.internal.default."+r.wf.Dapr().AppID()+".workflow/CreateWorkflowInstance",
 				)
 			}
-		}
-		if slices.Contains(names,
-			"/dapr.proto.internals.v1.ServiceInvocation/CallActorStream",
-		) {
-			exp = append(exp,
-				"/dapr.proto.internals.v1.ServiceInvocation/CallActorStream",
-			)
+			if names[i] == "/dapr.proto.internals.v1.ServiceInvocation/CallActorStream" {
+				exp = append(exp,
+					"/dapr.proto.internals.v1.ServiceInvocation/CallActorStream",
+				)
+			}
 		}
 
 		assert.ElementsMatch(c, exp, names)

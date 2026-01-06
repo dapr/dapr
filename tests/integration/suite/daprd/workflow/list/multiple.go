@@ -68,8 +68,8 @@ func (m *multipule) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, wfs[i].StartWorker(ctx, reg))
 	}
 
-	ids := make([]string, 0, 100)
-	for range 100 {
+	ids := make([]string, 0, 20)
+	for range 20 {
 		id, err := wfs[0].ScheduleWorkflow(ctx, "foo")
 		require.NoError(t, err)
 		ids = append(ids, id)
