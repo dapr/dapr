@@ -92,6 +92,10 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "user message", choices.GetMessage().GetContent())
 		// Test that toolCalls field is present but not populated for echo
 		require.Empty(t, choices.GetMessage().GetToolCalls())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(2), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(2), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(4), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("of_system", func(t *testing.T) {
@@ -126,6 +130,10 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "system message", choices.GetMessage().GetContent())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(2), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(2), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(4), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("of_developer", func(t *testing.T) {
@@ -160,6 +168,10 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "developer message", choices.GetMessage().GetContent())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(2), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(2), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(4), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("of_assistant", func(t *testing.T) {
@@ -211,6 +223,10 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "call_123", choices0.GetMessage().GetToolCalls()[0].GetId())
 		require.Equal(t, "test_function", choices0.GetMessage().GetToolCalls()[0].GetFunction().GetName())
 		require.Equal(t, "test-string", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetToolCalls()[0].GetFunction().GetArguments())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(2), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(2), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(4), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
@@ -246,6 +262,10 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, choices.GetMessage())
 		require.Equal(t, "Tool Response for tool ID 'tool-123' with name 'tool name': tool message", choices.GetMessage().GetContent())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(12), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(12), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(24), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("multiple messages in conversation", func(t *testing.T) {
@@ -320,5 +340,9 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, choices0.GetMessage())
 		require.Equal(t, "first user message\nfirst assistant response\nsecond user message\nsystem instruction", choices0.GetMessage().GetContent())
 		require.Empty(t, choices0.GetMessage().GetToolCalls())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(11), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(11), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(22), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 }
