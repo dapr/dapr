@@ -14,7 +14,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/dapr/components-contrib v1.16.2-0.20260105164851-3e22d45d5cae
-	github.com/dapr/durabletask-go v0.10.2-0.20251203182905-2c611fb434fd
+	github.com/dapr/durabletask-go v0.10.2-0.20251217145616-e5783a1330c7
 	github.com/dapr/kit v0.16.2-0.20251124175541-3ac186dff64d
 	github.com/diagridio/go-etcd-cron v0.10.1-0.20260105221246-ee8c118dd834
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -210,7 +210,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chebyrash/promise v0.0.0-20230709133807-42ec49ba1459 // indirect
-	github.com/choleraehyq/pid v0.0.20 // indirect
+	github.com/choleraehyq/pid v0.0.21 // indirect
 	github.com/cinience/go_rocketmq v0.0.2 // indirect
 	github.com/clbanning/mxj/v2 v2.5.6 // indirect
 	github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.15.2 // indirect
