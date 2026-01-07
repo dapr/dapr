@@ -355,7 +355,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	return message, err
 }
 
-func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
+func (a *api) BulkPublishEvent(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.GetPubsubName(), in.GetTopic(), in.GetMetadata())
 
 	if validationErr != nil {
@@ -399,7 +399,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 		if !rawPayload {
 			// Extract trace context from context.
-			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1/")
+			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, "/dapr.proto.runtime.v1.Dapr/BulkPublishEvent/")
 			traceID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
 
 			// For multiple events in a single bulk call traceParent is different for each event.

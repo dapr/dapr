@@ -318,7 +318,7 @@ func performBulkPublishGRPC(reqID string, pubsubToPublish, topic string, entries
 	}
 	log.Printf("Pubsub to publish to is %s", req.GetPubsubName())
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	res, err := grpcClient.BulkPublishEventAlpha1(ctx, req)
+	res, err := grpcClient.BulkPublishEvent(ctx, req)
 	cancel()
 	log.Printf("Error is there? %v", err != nil)
 	if err != nil {

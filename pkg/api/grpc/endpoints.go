@@ -43,9 +43,7 @@ var endpoints = map[string][]string{
 	},
 	"publish.v1": {
 		daprRuntimePrefix + "v1.Dapr/PublishEvent",
-	},
-	"publish.v1alpha1": {
-		daprRuntimePrefix + "v1.Dapr/BulkPublishEventAlpha1",
+		daprRuntimePrefix + "v1.Dapr/BulkPublishEvent",
 	},
 	"bindings.v1": {
 		daprRuntimePrefix + "v1.Dapr/InvokeBinding",

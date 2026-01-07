@@ -42,7 +42,7 @@ const (
 	Dapr_DeleteBulkState_FullMethodName                = "/dapr.proto.runtime.v1.Dapr/DeleteBulkState"
 	Dapr_ExecuteStateTransaction_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction"
 	Dapr_PublishEvent_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/PublishEvent"
-	Dapr_BulkPublishEventAlpha1_FullMethodName         = "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1"
+	Dapr_BulkPublishEvent_FullMethodName               = "/dapr.proto.runtime.v1.Dapr/BulkPublishEvent"
 	Dapr_SubscribeTopicEventsAlpha1_FullMethodName     = "/dapr.proto.runtime.v1.Dapr/SubscribeTopicEventsAlpha1"
 	Dapr_InvokeBinding_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/InvokeBinding"
 	Dapr_GetSecret_FullMethodName                      = "/dapr.proto.runtime.v1.Dapr/GetSecret"
@@ -124,7 +124,7 @@ type DaprClient interface {
 	// Publishes events to the specific topic.
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Bulk Publishes multiple events to the specified topic.
-	BulkPublishEventAlpha1(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error)
+	BulkPublishEvent(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error)
 	// SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
 	// events from it.
 	SubscribeTopicEventsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeTopicEventsAlpha1Client, error)
@@ -330,9 +330,9 @@ func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, 
 	return out, nil
 }
 
-func (c *daprClient) BulkPublishEventAlpha1(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error) {
+func (c *daprClient) BulkPublishEvent(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error) {
 	out := new(BulkPublishResponse)
-	err := c.cc.Invoke(ctx, Dapr_BulkPublishEventAlpha1_FullMethodName, in, out, opts...)
+	err := c.cc.Invoke(ctx, Dapr_BulkPublishEvent_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -977,7 +977,7 @@ type DaprServer interface {
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
 	// Bulk Publishes multiple events to the specified topic.
-	BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error)
+	BulkPublishEvent(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error)
 	// SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
 	// events from it.
 	SubscribeTopicEventsAlpha1(Dapr_SubscribeTopicEventsAlpha1Server) error
@@ -1125,8 +1125,8 @@ func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *Execute
 func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
 }
-func (UnimplementedDaprServer) BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method BulkPublishEventAlpha1 not implemented")
+func (UnimplementedDaprServer) BulkPublishEvent(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method BulkPublishEvent not implemented")
 }
 func (UnimplementedDaprServer) SubscribeTopicEventsAlpha1(Dapr_SubscribeTopicEventsAlpha1Server) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeTopicEventsAlpha1 not implemented")
@@ -1467,20 +1467,20 @@ func _Dapr_PublishEvent_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Dapr_BulkPublishEventAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Dapr_BulkPublishEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(BulkPublishRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaprServer).BulkPublishEventAlpha1(ctx, in)
+		return srv.(DaprServer).BulkPublishEvent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Dapr_BulkPublishEventAlpha1_FullMethodName,
+		FullMethod: Dapr_BulkPublishEvent_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).BulkPublishEventAlpha1(ctx, req.(*BulkPublishRequest))
+		return srv.(DaprServer).BulkPublishEvent(ctx, req.(*BulkPublishRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2549,8 +2549,8 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_PublishEvent_Handler,
 		},
 		{
-			MethodName: "BulkPublishEventAlpha1",
-			Handler:    _Dapr_BulkPublishEventAlpha1_Handler,
+			MethodName: "BulkPublishEvent",
+			Handler:    _Dapr_BulkPublishEvent_Handler,
 		},
 		{
 			MethodName: "InvokeBinding",
