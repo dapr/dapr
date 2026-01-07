@@ -421,12 +421,9 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	request.Temperature = req.GetTemperature()
 	toolChoice := req.GetToolChoice()
 	tools := req.GetTools()
-	if req.GetPromptCacheRetention() != "" {
-		retentionDuration, err := time.ParseDuration(req.GetPromptCacheRetention())
-		if err != nil {
-			return nil, err
-		}
-		request.PromptCacheRetention = retentionDuration
+	if req.GetPromptCacheRetention() != nil {
+		retentionDuration := req.GetPromptCacheRetention().AsDuration()
+		request.PromptCacheRetention = &retentionDuration
 	}
 
 	// set default tool choice to auto if not specified and tools are available

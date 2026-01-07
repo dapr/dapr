@@ -16,11 +16,13 @@ package grpc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -130,6 +132,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}
 
 		contextID := "test-conversation-123"
+		cacheRetention := durationpb.New(24 * time.Hour)
 		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name:      "test-alpha2-echo",
 			ContextId: ptr.Of(contextID),
@@ -176,7 +179,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Temperature:          ptr.Of(0.7),
 			Tools:                []*rtv1.ConversationTools{tool},
 			ToolChoice:           ptr.Of("auto"),
-			PromptCacheRetention: ptr.Of("24h"),
+			PromptCacheRetention: cacheRetention,
 		})
 		require.NoError(t, err)
 		// Echo component returns one output combining all input messages

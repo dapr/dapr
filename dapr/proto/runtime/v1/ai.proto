@@ -17,6 +17,7 @@ package dapr.proto.runtime.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/duration.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -106,7 +107,7 @@ message ConversationRequestAlpha2 {
 	// [Learn more](https://platform.openai.com/docs/guides/prompt-caching#prompt-cache-retention).
   // inspired by openai.ChatCompletionMessageParamUnion.PromptCacheRetention
   // ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L3030
-  optional string prompt_cache_retention = 10;
+  optional google.protobuf.Duration prompt_cache_retention = 10;
 
   /* TODO: fields to bring in from openai.ChatCompletionNewParams after Dapr 1.16.
   Note: They can be within the other messages, not necessarily top level here.

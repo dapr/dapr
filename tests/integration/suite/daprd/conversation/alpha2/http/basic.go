@@ -115,7 +115,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			},
 			"scrubPii": true,
 			"temperature": 0.7,
-			"promptCacheRetention": "24h",
+			"promptCacheRetention": "86400s",
 			"tools": [
 				{
 					"function": {
