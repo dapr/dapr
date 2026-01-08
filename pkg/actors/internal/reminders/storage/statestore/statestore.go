@@ -233,10 +233,6 @@ func (r *Statestore) Get(ctx context.Context, req *api.GetReminderRequest) (*api
 }
 
 func (r *Statestore) List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error) {
-	if !r.ready.Load() {
-		return nil, errors.New("statestore reminders is not ready")
-	}
-
 	list, _, err := r.getRemindersForActorType(ctx, req.ActorType, false)
 	if err != nil {
 		return nil, err
