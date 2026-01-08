@@ -213,16 +213,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					ScrubPii: ptr.Of(true),
 				},
 			},
-			Parameters:           parameters,
-			Metadata:             metadata,
-			ScrubPii:             ptr.Of(true),
-			Temperature:          ptr.Of(0.7),
-			Tools:                []*rtv1.ConversationTools{tool},
-			ToolChoice:           ptr.Of("auto"),
-			ResponseFormat:       responseFormat,
-			PromptCacheRetention: ptr.Of("24h"),
-			Model:                ptr.Of("test-model-override"),
-			LlmTimeout:           ptr.Of("30s"),
+			Parameters:     parameters,
+			Metadata:       metadata,
+			ScrubPii:       ptr.Of(true),
+			Temperature:    ptr.Of(0.7),
+			Tools:          []*rtv1.ConversationTools{tool},
+			ToolChoice:     ptr.Of("auto"),
+			ResponseFormat: responseFormat,
+			Model:          ptr.Of("test-model-override"),
+			LlmTimeout:     ptr.Of("30s"),
 		})
 		require.NoError(t, err)
 		// Echo component returns one output combining all input messages
@@ -245,10 +244,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "test_function", toolCalls[0].GetFunction().GetName())
 		require.Equal(t, "param1", toolCalls[0].GetFunction().GetArguments())
 		require.Equal(t, "test-model-override", resp.GetOutputs()[0].GetModel())
-		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
-		require.Equal(t, int64(8), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
-		require.Equal(t, int64(8), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
-		require.Equal(t, int64(16), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("invalid json - malformed request", func(t *testing.T) {

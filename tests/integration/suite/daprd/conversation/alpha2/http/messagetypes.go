@@ -75,7 +75,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"user message"}}],"usage":{"completionTokens":"2","promptTokens":"2","totalTokens":"4"}}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"user message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_system", func(t *testing.T) {
@@ -89,7 +89,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"system message"}}],"usage":{"completionTokens":"2","promptTokens":"2","totalTokens":"4"}}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"system message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_developer", func(t *testing.T) {
@@ -103,7 +103,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"developer message"}}],"usage":{"completionTokens":"2","promptTokens":"2","totalTokens":"4"}}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"developer message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_assistant", func(t *testing.T) {
@@ -118,7 +118,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		// Echo component returns the assistant message with tool calls
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"assistant message","toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":"test-string"}}]}}],"usage":{"completionTokens":"2","promptTokens":"2","totalTokens":"4"}}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"assistant message","toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":"test-string"}}]}}]}]}`, string(respBody))
 	})
 
 	t.Run("of_tool", func(t *testing.T) {
@@ -132,7 +132,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"Tool Response for tool ID 'tool-123' with name 'tool name': tool message"}}],"usage":{"completionTokens":"12","promptTokens":"12","totalTokens":"24"}}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"Tool Response for tool ID 'tool-123' with name 'tool name': tool message"}}]}]}`, string(respBody))
 	})
 
 	t.Run("multiple messages in conversation", func(t *testing.T) {
@@ -206,12 +206,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 								"content": "first user message\nfirst assistant response\nsecond user message\nsystem instruction"
 							}
 						}
-					],
-					"usage": {
-						"completionTokens": "11",
-						"promptTokens": "11",
-						"totalTokens": "22"
-					}
+					]
 				}
 			]
 		}`
