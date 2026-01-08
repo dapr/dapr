@@ -65,7 +65,10 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 
 	baseDopts := []daprd.Option{
 		daprd.WithPlacementAddresses(place.Address()),
-		daprd.WithResourceFiles(db.GetComponent(t)),
+	}
+
+	if !opts.skipDB {
+		baseDopts = append(baseDopts, daprd.WithResourceFiles(db.GetComponent(t)))
 	}
 
 	sched := scheduler.New(t)

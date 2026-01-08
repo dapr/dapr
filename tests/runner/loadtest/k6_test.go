@@ -22,6 +22,9 @@ import (
 	"os"
 	"testing"
 
+	"k8s.io/api/resource/v1beta1"
+	"k8s.io/apimachinery/pkg/runtime"
+
 	"github.com/dapr/dapr/tests/runner"
 
 	v1 "github.com/grafana/k6-operator/api/v1alpha1"
@@ -344,7 +347,11 @@ func TestK6(t *testing.T) {
 				StatusCode: http.StatusInternalServerError,
 			}, nil
 		})
-		pods.request = rest.NewRequestWithClient(nil, "", rest.ClientContentConfig{}, fakeClient)
+		gv := v1beta1.SchemeGroupVersion
+
+		s := runtime.NewSimpleNegotiatedSerializer(runtime.SerializerInfo{})
+		n := runtime.NewClientNegotiator(s, gv)
+		pods.request = rest.NewRequestWithClient(nil, "", rest.ClientContentConfig{Negotiator: n}, fakeClient)
 		pods.listResult = &corev1.PodList{
 			Items: []corev1.Pod{{}},
 		}

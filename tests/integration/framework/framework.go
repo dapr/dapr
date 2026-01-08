@@ -15,17 +15,17 @@ package framework
 
 import (
 	"context"
+	"os"
 	"testing"
-
-	"github.com/dapr/dapr/tests/integration/framework/process"
 )
 
-type options struct {
-	procs []process.Interface
-}
+var inGHAction = false
 
-// Option is a function that configures the Framework's options.
-type Option func(*options)
+func init() {
+	if v, ok := os.LookupEnv("GITHUB_ACTIONS"); ok && v == "true" {
+		inGHAction = true
+	}
+}
 
 func Run(t *testing.T, ctx context.Context, opts ...Option) {
 	t.Helper()
@@ -33,6 +33,10 @@ func Run(t *testing.T, ctx context.Context, opts ...Option) {
 	o := options{}
 	for _, opt := range opts {
 		opt(&o)
+	}
+
+	if o.ioIntensive && inGHAction {
+		t.Skip("skipping io-intensive test in GH Action environment")
 	}
 
 	t.Logf("starting %d processes", len(o.procs))

@@ -41,6 +41,7 @@ type daprdOptionConfig struct {
 
 type options struct {
 	daprds int
+	skipDB bool
 
 	orchestrators []orchestratorConfig
 	activities    []activityConfig
@@ -93,5 +94,11 @@ func WithDaprdOptions(index int, opts ...daprd.Option) Option {
 			index: index,
 			opts:  opts,
 		})
+	}
+}
+
+func WithNoDB() Option {
+	return func(o *options) {
+		o.skipDB = true
 	}
 }
