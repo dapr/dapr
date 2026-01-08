@@ -29,14 +29,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(errors))
+	suite.Register(new(workflowErrors))
 }
 
-type errors struct {
+type workflowErrors struct {
 	workflow *workflow.Workflow
 }
 
-func (e *errors) Setup(t *testing.T) []framework.Option {
+func (e *workflowErrors) Setup(t *testing.T) []framework.Option {
 	e.workflow = workflow.New(t)
 
 	return []framework.Option{
@@ -44,7 +44,7 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (e *errors) Run(t *testing.T, ctx context.Context) {
+func (e *workflowErrors) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
 	client := e.workflow.GRPCClient(t, ctx)
