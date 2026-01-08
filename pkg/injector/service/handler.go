@@ -127,8 +127,11 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if patchedSuccessfully {
-		log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
-		RecordSuccessfulSidecarInjectionCount(diagAppID)
+		// Only log and record metrics if we applied patches
+		if len(patchOps) > 0 {
+			log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
+			RecordSuccessfulSidecarInjectionCount(diagAppID)
+		}
 	} else {
 		log.Errorf("Admission succeeded, but pod was not patched. No sidecar injected for '%s'", diagAppID)
 		RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
