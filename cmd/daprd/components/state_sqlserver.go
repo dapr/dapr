@@ -17,9 +17,19 @@ package components
 
 import (
 	"github.com/dapr/components-contrib/state/sqlserver"
+	sqlserverv2 "github.com/dapr/components-contrib/state/sqlserver/v2"
+	"github.com/dapr/dapr/pkg/components"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
 func init() {
-	stateLoader.DefaultRegistry.RegisterComponent(sqlserver.New, "sqlserver")
+	stateLoader.DefaultRegistry.RegisterComponentWithVersions("sqlserver", components.Versioning{
+		Preferred: components.VersionConstructor{
+			Version: "v2", Constructor: sqlserverv2.New,
+		},
+		Others: []components.VersionConstructor{
+			{Version: "v1", Constructor: sqlserver.New},
+		},
+		Default: "v1",
+	})
 }
