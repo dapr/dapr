@@ -119,12 +119,14 @@ func (f *Stalled) waitForStatus(t *testing.T, ctx context.Context, id api.Instan
 	}, 20*time.Second, 50*time.Millisecond)
 }
 
-func (f *Stalled) WaitForStalled(t *testing.T, ctx context.Context, id api.InstanceID) {
+func (f *Stalled) WaitForStalled(t *testing.T, ctx context.Context, id api.InstanceID) *protos.ExecutionStalledEvent {
 	t.Helper()
 	f.waitForStatus(t, ctx, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
 	hist, err := f.CurrentClient.GetInstanceHistory(ctx, id)
 	require.NoError(t, err)
-	require.NotNil(t, hist.Events[len(hist.Events)-1].GetExecutionStalled())
+	executionStalled := hist.Events[len(hist.Events)-1].GetExecutionStalled()
+	require.NotNil(t, executionStalled)
+	return executionStalled
 }
 
 func (f *Stalled) WaitForCompleted(t *testing.T, ctx context.Context, id api.InstanceID) {

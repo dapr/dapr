@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -58,4 +59,17 @@ func (d *defaultToPatched) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []bool{true}, patchesFound)
+
+	hist, err := client.GetInstanceHistory(ctx, id)
+	require.NoError(t, err)
+	var orchestratorStarted *protos.OrchestratorStartedEvent
+	for _, event := range hist.Events {
+		if event.GetOrchestratorStarted() != nil {
+			orchestratorStarted = event.GetOrchestratorStarted()
+			break
+		}
+	}
+	require.NotNil(t, orchestratorStarted)
+	require.NotNil(t, orchestratorStarted.GetVersion())
+	require.Equal(t, []string{"patch1"}, orchestratorStarted.GetVersion().GetPatches())
 }

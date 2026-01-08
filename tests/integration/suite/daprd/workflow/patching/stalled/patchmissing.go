@@ -20,6 +20,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stalled"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 	"github.com/stretchr/testify/require"
 )
@@ -62,5 +63,7 @@ func (r *patchmissing) Run(t *testing.T, ctx context.Context) {
 
 	require.NoError(t, r.fw.CurrentClient.RaiseEvent(ctx, id, "Continue"))
 
-	r.fw.WaitForStalled(t, ctx, id)
+	executionStalled := r.fw.WaitForStalled(t, ctx, id)
+	require.Equal(t, protos.StalledReason_PATCH_MISMATCH, executionStalled.GetReason())
+	require.Equal(t, "Patch mismatch. History patches: [patch1], current patches: []. ", executionStalled.GetDescription())
 }
