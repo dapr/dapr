@@ -72,7 +72,7 @@ require (
 	golang.org/x/net v0.47.0
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.18.0
-	gonum.org/v1/plot v0.10.1
+	gonum.org/v1/plot v0.16.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822
 	google.golang.org/grpc v1.73.0
@@ -104,8 +104,11 @@ require (
 	cloud.google.com/go/pubsub v1.49.0 // indirect
 	cloud.google.com/go/secretmanager v1.14.7 // indirect
 	cloud.google.com/go/storage v1.50.0 // indirect
+	codeberg.org/go-fonts/liberation v0.5.0 // indirect
+	codeberg.org/go-latex/latex v0.1.0 // indirect
+	codeberg.org/go-pdf/fpdf v0.10.0 // indirect
 	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20230118042253-4f159a2b38f3 // indirect
-	git.sr.ht/~sbinet/gg v0.3.1 // indirect
+	git.sr.ht/~sbinet/gg v0.6.0 // indirect
 	github.com/AthenZ/athenz v1.12.13 // indirect
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai v0.6.0 // indirect
@@ -202,6 +205,7 @@ require (
 	github.com/bradfitz/gomemcache v0.0.0-20230905024940-24af94b03874 // indirect
 	github.com/bufbuild/protocompile v0.6.0 // indirect
 	github.com/bytedance/gopkg v0.0.0-20240711085056-a03554c296f8 // indirect
+	github.com/campoy/embedmd v1.0.0 // indirect
 	github.com/camunda/zeebe/clients/go/v8 v8.2.12 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -248,12 +252,10 @@ require (
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/gage-technologies/mistral-go v1.1.0 // indirect
 	github.com/go-errors/errors v1.4.2 // indirect
-	github.com/go-fonts/liberation v0.2.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.0.5 // indirect
 	github.com/go-kit/kit v0.10.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
-	github.com/go-latex/latex v0.0.0-20210823091927-c0d11ff05a81 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
@@ -262,7 +264,6 @@ require (
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0 // indirect
-	github.com/go-pdf/fpdf v0.6.0 // indirect
 	github.com/go-pkgz/expirable-cache v0.1.0 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect
@@ -464,7 +465,7 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/arch v0.10.0 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
-	golang.org/x/image v0.0.0-20220302094943-723b81ca9867 // indirect
+	golang.org/x/image v0.25.0 // indirect
 	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/term v0.37.0 // indirect
