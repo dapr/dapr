@@ -147,8 +147,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedFalse, err
 	}
 	if stalled {
+		unlock := o.lock.Stall()
+		defer unlock()
 		<-ctx.Done()
-		return todo.RunCompletedFalse, ctx.Err()
+		return todo.RunCompletedFalse, errors.New("workflow is stalled")
 	}
 
 	compactPatches(rs)

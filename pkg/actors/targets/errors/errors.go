@@ -23,8 +23,15 @@ type closed struct {
 	method string
 }
 
+type stalled struct {
+}
+
 func NewClosed(method string) error {
 	return &closed{method: method}
+}
+
+func NewStalled() error {
+	return &stalled{}
 }
 
 var cl = ptr.Of(new(closed))
@@ -35,4 +42,8 @@ func IsClosed(err error) bool {
 
 func (c *closed) Error() string {
 	return "actor is closed, cannot handle " + c.method
+}
+
+func (s *stalled) Error() string {
+	return "actor is stalled"
 }
