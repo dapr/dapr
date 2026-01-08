@@ -209,11 +209,6 @@ func (m *mockGRPCAPI) BulkPublishEvent(ctx context.Context, in *runtimev1pb.Bulk
 	return &runtimev1pb.BulkPublishResponse{}, nil
 }
 
-// Deprecated
-func (m *mockGRPCAPI) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
-	return &runtimev1pb.BulkPublishResponse{}, nil
-}
-
 func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	return &commonv1pb.InvokeResponse{}, nil
 }
