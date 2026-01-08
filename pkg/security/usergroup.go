@@ -14,7 +14,7 @@ limitations under the License.
 package security
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"runtime"
 	"syscall"
@@ -35,10 +35,9 @@ func checkUserIDGroupID(mode modes.DaprMode) error {
 	uid := syscall.Geteuid()
 
 	if uid == 0 {
-		return fmt.Errorf("current user UID(0) is root. "+
-			"Dapr must be run as a non-root user in Kubernetes environments. "+
+		return errors.New("current user UID(0) is root. " +
+			"Dapr must be run as a non-root user in Kubernetes environments. " +
 			"To override this check, set the environment variable 'DAPR_UNSAFE_SKIP_CONTAINER_UID_GID_CHECK=true'",
-			uid,
 		)
 	}
 
