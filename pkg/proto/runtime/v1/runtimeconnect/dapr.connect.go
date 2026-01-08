@@ -66,6 +66,9 @@ const (
 	DaprExecuteStateTransactionProcedure = "/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction"
 	// DaprPublishEventProcedure is the fully-qualified name of the Dapr's PublishEvent RPC.
 	DaprPublishEventProcedure = "/dapr.proto.runtime.v1.Dapr/PublishEvent"
+	// DaprBulkPublishEventAlpha1Procedure is the fully-qualified name of the Dapr's
+	// BulkPublishEventAlpha1 RPC.
+	DaprBulkPublishEventAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1"
 	// DaprBulkPublishEventProcedure is the fully-qualified name of the Dapr's BulkPublishEvent RPC.
 	DaprBulkPublishEventProcedure = "/dapr.proto.runtime.v1.Dapr/BulkPublishEvent"
 	// DaprSubscribeTopicEventsAlpha1Procedure is the fully-qualified name of the Dapr's
@@ -226,6 +229,10 @@ type DaprClient interface {
 	ExecuteStateTransaction(context.Context, *connect.Request[v1.ExecuteStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *connect.Request[v1.PublishEventRequest]) (*connect.Response[emptypb.Empty], error)
+	// Bulk Publishes multiple events to the specified topic.
+	//
+	// Deprecated: do not use.
+	BulkPublishEventAlpha1(context.Context, *connect.Request[v1.BulkPublishRequest]) (*connect.Response[v1.BulkPublishResponse], error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEvent(context.Context, *connect.Request[v1.BulkPublishRequest]) (*connect.Response[v1.BulkPublishResponse], error)
 	// SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
@@ -404,6 +411,11 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		publishEvent: connect.NewClient[v1.PublishEventRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprPublishEventProcedure,
+			opts...,
+		),
+		bulkPublishEventAlpha1: connect.NewClient[v1.BulkPublishRequest, v1.BulkPublishResponse](
+			httpClient,
+			baseURL+DaprBulkPublishEventAlpha1Procedure,
 			opts...,
 		),
 		bulkPublishEvent: connect.NewClient[v1.BulkPublishRequest, v1.BulkPublishResponse](
@@ -700,6 +712,7 @@ type daprClient struct {
 	deleteBulkState                *connect.Client[v1.DeleteBulkStateRequest, emptypb.Empty]
 	executeStateTransaction        *connect.Client[v1.ExecuteStateTransactionRequest, emptypb.Empty]
 	publishEvent                   *connect.Client[v1.PublishEventRequest, emptypb.Empty]
+	bulkPublishEventAlpha1         *connect.Client[v1.BulkPublishRequest, v1.BulkPublishResponse]
 	bulkPublishEvent               *connect.Client[v1.BulkPublishRequest, v1.BulkPublishResponse]
 	subscribeTopicEventsAlpha1     *connect.Client[v1.SubscribeTopicEventsRequestAlpha1, v1.SubscribeTopicEventsResponseAlpha1]
 	invokeBinding                  *connect.Client[v1.InvokeBindingRequest, v1.InvokeBindingResponse]
@@ -801,6 +814,13 @@ func (c *daprClient) ExecuteStateTransaction(ctx context.Context, req *connect.R
 // PublishEvent calls dapr.proto.runtime.v1.Dapr.PublishEvent.
 func (c *daprClient) PublishEvent(ctx context.Context, req *connect.Request[v1.PublishEventRequest]) (*connect.Response[emptypb.Empty], error) {
 	return c.publishEvent.CallUnary(ctx, req)
+}
+
+// BulkPublishEventAlpha1 calls dapr.proto.runtime.v1.Dapr.BulkPublishEventAlpha1.
+//
+// Deprecated: do not use.
+func (c *daprClient) BulkPublishEventAlpha1(ctx context.Context, req *connect.Request[v1.BulkPublishRequest]) (*connect.Response[v1.BulkPublishResponse], error) {
+	return c.bulkPublishEventAlpha1.CallUnary(ctx, req)
 }
 
 // BulkPublishEvent calls dapr.proto.runtime.v1.Dapr.BulkPublishEvent.
@@ -1119,6 +1139,10 @@ type DaprHandler interface {
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *connect.Request[v1.PublishEventRequest]) (*connect.Response[emptypb.Empty], error)
 	// Bulk Publishes multiple events to the specified topic.
+	//
+	// Deprecated: do not use.
+	BulkPublishEventAlpha1(context.Context, *connect.Request[v1.BulkPublishRequest]) (*connect.Response[v1.BulkPublishResponse], error)
+	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEvent(context.Context, *connect.Request[v1.BulkPublishRequest]) (*connect.Response[v1.BulkPublishResponse], error)
 	// SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
 	// events from it.
@@ -1292,6 +1316,11 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprPublishEventHandler := connect.NewUnaryHandler(
 		DaprPublishEventProcedure,
 		svc.PublishEvent,
+		opts...,
+	)
+	daprBulkPublishEventAlpha1Handler := connect.NewUnaryHandler(
+		DaprBulkPublishEventAlpha1Procedure,
+		svc.BulkPublishEventAlpha1,
 		opts...,
 	)
 	daprBulkPublishEventHandler := connect.NewUnaryHandler(
@@ -1594,6 +1623,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprExecuteStateTransactionHandler.ServeHTTP(w, r)
 		case DaprPublishEventProcedure:
 			daprPublishEventHandler.ServeHTTP(w, r)
+		case DaprBulkPublishEventAlpha1Procedure:
+			daprBulkPublishEventAlpha1Handler.ServeHTTP(w, r)
 		case DaprBulkPublishEventProcedure:
 			daprBulkPublishEventHandler.ServeHTTP(w, r)
 		case DaprSubscribeTopicEventsAlpha1Procedure:
@@ -1749,6 +1780,10 @@ func (UnimplementedDaprHandler) ExecuteStateTransaction(context.Context, *connec
 
 func (UnimplementedDaprHandler) PublishEvent(context.Context, *connect.Request[v1.PublishEventRequest]) (*connect.Response[emptypb.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.PublishEvent is not implemented"))
+}
+
+func (UnimplementedDaprHandler) BulkPublishEventAlpha1(context.Context, *connect.Request[v1.BulkPublishRequest]) (*connect.Response[v1.BulkPublishResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.BulkPublishEventAlpha1 is not implemented"))
 }
 
 func (UnimplementedDaprHandler) BulkPublishEvent(context.Context, *connect.Request[v1.BulkPublishRequest]) (*connect.Response[v1.BulkPublishResponse], error) {

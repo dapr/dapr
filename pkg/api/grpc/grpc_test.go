@@ -209,6 +209,11 @@ func (m *mockGRPCAPI) BulkPublishEvent(ctx context.Context, in *runtimev1pb.Bulk
 	return &runtimev1pb.BulkPublishResponse{}, nil
 }
 
+// Deprecated
+func (m *mockGRPCAPI) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
+	return &runtimev1pb.BulkPublishResponse{}, nil
+}
+
 func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	return &commonv1pb.InvokeResponse{}, nil
 }
@@ -2460,12 +2465,12 @@ func TestPublishTopic(t *testing.T) {
 	})
 
 	t.Run("err: empty bulk publish event request", func(t *testing.T) {
-		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{})
+		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{})
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("err: bulk publish event request with duplicate entry Ids", func(t *testing.T) {
-		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "topic",
 			Entries: []*runtimev1pb.BulkPublishRequestEntry{
@@ -2489,7 +2494,7 @@ func TestPublishTopic(t *testing.T) {
 	})
 
 	t.Run("err: bulk publish event request with missing entry Ids", func(t *testing.T) {
-		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "topic",
 			Entries: []*runtimev1pb.BulkPublishRequestEntry{
@@ -2511,14 +2516,14 @@ func TestPublishTopic(t *testing.T) {
 		assert.Contains(t, err.Error(), "not present for entry")
 	})
 	t.Run("err: bulk publish event request with pubsub and empty topic", func(t *testing.T) {
-		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 		})
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("no err: bulk publish event request with pubsub, topic and empty entries", func(t *testing.T) {
-		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "topic",
 		})
@@ -2526,7 +2531,7 @@ func TestPublishTopic(t *testing.T) {
 	})
 
 	t.Run("err: bulk publish event request with error-topic and pubsub", func(t *testing.T) {
-		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "error-topic",
 		})
@@ -2534,7 +2539,7 @@ func TestPublishTopic(t *testing.T) {
 	})
 
 	t.Run("err: bulk publish event request with err-not-found topic and pubsub", func(t *testing.T) {
-		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "err-not-found",
 		})
@@ -2542,7 +2547,7 @@ func TestPublishTopic(t *testing.T) {
 	})
 
 	t.Run("err: bulk publish event request with err-not-allowed topic and pubsub", func(t *testing.T) {
-		_, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		_, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "err-not-allowed",
 		})
@@ -2605,7 +2610,7 @@ func TestBulkPublish(t *testing.T) {
 	}
 
 	t.Run("no failures", func(t *testing.T) {
-		res, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		res, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "topic",
 			Entries:    sampleEntries,
@@ -2615,7 +2620,7 @@ func TestBulkPublish(t *testing.T) {
 	})
 
 	t.Run("no failures with ce metadata override", func(t *testing.T) {
-		res, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		res, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "topic",
 			Entries:    sampleEntries,
@@ -2630,7 +2635,7 @@ func TestBulkPublish(t *testing.T) {
 	})
 
 	t.Run("all failures from component", func(t *testing.T) {
-		res, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		res, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "error-topic",
 			Entries:    sampleEntries,
@@ -2643,7 +2648,7 @@ func TestBulkPublish(t *testing.T) {
 	})
 
 	t.Run("partial failures from component", func(t *testing.T) {
-		res, err := client.BulkPublishEvent(t.Context(), &runtimev1pb.BulkPublishRequest{
+		res, err := client.BulkPublishEventAlpha1(t.Context(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 			Topic:      "even-error-topic",
 			Entries:    sampleEntries,

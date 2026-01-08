@@ -330,7 +330,7 @@ func performBulkPublishGRPC(reqID string, pubsubToPublish, topic string, entries
 }
 
 func performBulkPublishHTTP(reqID string, pubsubToPublish, topic string, jsonValue []byte, reqMeta map[string]string) (daprhttp.BulkPublishResponse, int, error) {
-	url := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/%s", daprPortHTTP, pubsubToPublish, topic)
+	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/bulk/%s/%s", daprPortHTTP, pubsubToPublish, topic)
 	if len(reqMeta) > 0 {
 		params := netUrl.Values{}
 		for k, v := range reqMeta {
