@@ -229,7 +229,7 @@ type DaprClient interface {
 	ExecuteStateTransaction(context.Context, *connect.Request[v1.ExecuteStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *connect.Request[v1.PublishEventRequest]) (*connect.Response[emptypb.Empty], error)
-	// Bulk Publishes multiple events to the specified topic.
+	// Deprecated: Bulk Publishes multiple events to the specified topic.
 	//
 	// Deprecated: do not use.
 	BulkPublishEventAlpha1(context.Context, *connect.Request[v1.BulkPublishRequest]) (*connect.Response[v1.BulkPublishResponse], error)
@@ -1138,7 +1138,7 @@ type DaprHandler interface {
 	ExecuteStateTransaction(context.Context, *connect.Request[v1.ExecuteStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *connect.Request[v1.PublishEventRequest]) (*connect.Response[emptypb.Empty], error)
-	// Bulk Publishes multiple events to the specified topic.
+	// Deprecated: Bulk Publishes multiple events to the specified topic.
 	//
 	// Deprecated: do not use.
 	BulkPublishEventAlpha1(context.Context, *connect.Request[v1.BulkPublishRequest]) (*connect.Response[v1.BulkPublishResponse], error)

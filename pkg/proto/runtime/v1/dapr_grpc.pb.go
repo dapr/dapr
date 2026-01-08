@@ -125,7 +125,7 @@ type DaprClient interface {
 	// Publishes events to the specific topic.
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Deprecated: Do not use.
-	// Bulk Publishes multiple events to the specified topic.
+	// Deprecated: Bulk Publishes multiple events to the specified topic.
 	BulkPublishEventAlpha1(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEvent(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error)
@@ -991,7 +991,7 @@ type DaprServer interface {
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
 	// Deprecated: Do not use.
-	// Bulk Publishes multiple events to the specified topic.
+	// Deprecated: Bulk Publishes multiple events to the specified topic.
 	BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEvent(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error)
