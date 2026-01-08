@@ -71,6 +71,7 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *Exec {
 			}
 		},
 		exitCode: defaultExitCode,
+		envs:     make(map[string]string),
 	}
 
 	if hostIPOverride := os.Getenv(utils.HostIPEnvVar); hostIPOverride != "" {
