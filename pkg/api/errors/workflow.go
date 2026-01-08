@@ -32,6 +32,13 @@ type WorkflowError struct {
 	instanceID string
 }
 
+func workflowErrorReason(code errorcodes.ErrorCode) string {
+	if code.GrpcCode != "" {
+		return code.GrpcCode
+	}
+	return code.Code
+}
+
 func Workflow(instanceID string) *WorkflowError {
 	return &WorkflowError{
 		instanceID: instanceID,
@@ -59,7 +66,7 @@ func (w *WorkflowError) Start(workflowName string, err error) error {
 		string(errorcodes.WorkflowStart.Category),
 	).
 		WithResourceInfo(workflowResourceType, workflowName, "", "").
-		WithErrorInfo(errorcodes.WorkflowStart.GrpcCode, map[string]string{
+		WithErrorInfo(workflowErrorReason(errorcodes.WorkflowStart), map[string]string{
 			"instanceId":   w.instanceID,
 			"workflowName": workflowName,
 			"error":        err.Error(),
@@ -123,7 +130,7 @@ func (w *WorkflowError) RaiseEvent(err error) error {
 }
 
 func (w *WorkflowError) InstanceNotFound() error {
-	message := fmt.Sprintf("workflow instance '%s' not found", w.instanceID)
+	message := fmt.Sprintf("unable to find workflow with the provided instance ID: %s", w.instanceID)
 	return w.build(
 		codes.NotFound,
 		http.StatusNotFound,
@@ -142,7 +149,7 @@ func (w *WorkflowError) build(grpcCode codes.Code, httpCode int, msg string, err
 		string(errCode.Category),
 	).
 		WithResourceInfo(workflowResourceType, w.instanceID, "", "").
-		WithErrorInfo(errCode.GrpcCode, metadata).
+		WithErrorInfo(workflowErrorReason(errCode), metadata).
 		Build()
 }
 
@@ -155,7 +162,7 @@ func WorkflowNameMissing() error {
 		errorcodes.WorkflowNameMissing.Code,
 		string(errorcodes.WorkflowNameMissing.Category),
 	).
-		WithErrorInfo(errorcodes.WorkflowNameMissing.GrpcCode, nil).
+		WithErrorInfo(workflowErrorReason(errorcodes.WorkflowNameMissing), nil).
 		Build()
 }
 
@@ -168,7 +175,7 @@ func WorkflowEventNameMissing() error {
 		errorcodes.WorkflowEventNameMissing.Code,
 		string(errorcodes.WorkflowEventNameMissing.Category),
 	).
-		WithErrorInfo(errorcodes.WorkflowEventNameMissing.GrpcCode, nil).
+		WithErrorInfo(workflowErrorReason(errorcodes.WorkflowEventNameMissing), nil).
 		Build()
 }
 
@@ -181,13 +188,13 @@ func WorkflowInstanceIDMissing() error {
 		errorcodes.WorkflowInstanceIDProvidedMissing.Code,
 		string(errorcodes.WorkflowInstanceIDProvidedMissing.Category),
 	).
-		WithErrorInfo(errorcodes.WorkflowInstanceIDProvidedMissing.GrpcCode, nil).
+		WithErrorInfo(workflowErrorReason(errorcodes.WorkflowInstanceIDProvidedMissing), nil).
 		Build()
 }
 
 // WorkflowInstanceIDInvalid returns an error when the workflow instance ID contains invalid characters.
 func WorkflowInstanceIDInvalid(instanceID string) error {
-	message := fmt.Sprintf("workflow instance ID '%s' is invalid: only alphanumeric, underscore, and dash characters are allowed", instanceID)
+	message := fmt.Sprintf("workflow instance ID '%s' is invalid: only alphanumeric and underscore characters are allowed", instanceID)
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusBadRequest,
@@ -195,7 +202,7 @@ func WorkflowInstanceIDInvalid(instanceID string) error {
 		errorcodes.WorkflowInstanceIDInvalid.Code,
 		string(errorcodes.WorkflowInstanceIDInvalid.Category),
 	).
-		WithErrorInfo(errorcodes.WorkflowInstanceIDInvalid.GrpcCode, map[string]string{
+		WithErrorInfo(workflowErrorReason(errorcodes.WorkflowInstanceIDInvalid), map[string]string{
 			"instanceId": instanceID,
 		}).
 		Build()
@@ -211,7 +218,7 @@ func WorkflowInstanceIDTooLong(maxLength int) error {
 		errorcodes.WorkflowInstanceIDTooLong.Code,
 		string(errorcodes.WorkflowInstanceIDTooLong.Category),
 	).
-		WithErrorInfo(errorcodes.WorkflowInstanceIDTooLong.GrpcCode, map[string]string{
+		WithErrorInfo(workflowErrorReason(errorcodes.WorkflowInstanceIDTooLong), map[string]string{
 			"maxLength": strconv.Itoa(maxLength),
 		}).
 		Build()

@@ -2476,7 +2476,7 @@ func TestV1Workflow(t *testing.T) {
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_INSTANCE_ID_INVALID", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrInvalidInstanceID.WithFormat("invalid$ID").Message(), resp.ErrorBody["message"])
+		assert.Equal(t, fmt.Sprintf("workflow instance ID '%s' is invalid: only alphanumeric and underscore characters are allowed", "invalid$ID"), resp.ErrorBody["message"])
 	})
 
 	t.Run("Start with too long instance ID", func(t *testing.T) {
@@ -2488,7 +2488,7 @@ func TestV1Workflow(t *testing.T) {
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_INSTANCE_ID_TOO_LONG", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIDLength).Message(), resp.ErrorBody["message"])
+		assert.Equal(t, fmt.Sprintf("workflow instance ID exceeds the max length of %d characters", maxInstanceIDLength), resp.ErrorBody["message"])
 	})
 
 	/////////////////////
