@@ -108,9 +108,9 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		return a.workflowEngine.Client().Start(ctx, &req)
 	})
 	if err != nil {
-		err := apierrors.Workflow(in.GetInstanceId()).Start(in.GetWorkflowName(), err)
-		a.logger.Debug(err)
-		return &runtimev1pb.StartWorkflowResponse{}, err
+		startErr := apierrors.Workflow(in.GetInstanceId()).Start(in.GetWorkflowName(), err)
+		a.logger.Debug(startErr)
+		return &runtimev1pb.StartWorkflowResponse{}, startErr
 	}
 
 	return &runtimev1pb.StartWorkflowResponse{

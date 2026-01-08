@@ -130,7 +130,7 @@ func (w *WorkflowError) RaiseEvent(err error) error {
 }
 
 func (w *WorkflowError) InstanceNotFound() error {
-	message := fmt.Sprintf("unable to find workflow with the provided instance ID: %s", w.instanceID)
+	message := "unable to find workflow with the provided instance ID: " + w.instanceID
 	return w.build(
 		codes.NotFound,
 		http.StatusNotFound,
