@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -43,6 +44,8 @@ type stateready struct {
 }
 
 func (s *stateready) Setup(t *testing.T) []framework.Option {
+	os.SkipWindows(t)
+
 	stdoutPipeR, stdoutPipeW := io.Pipe()
 
 	s.stdout = tee.Buffer(t, stdoutPipeR).Add(t)
