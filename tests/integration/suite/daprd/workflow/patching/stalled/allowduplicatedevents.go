@@ -16,7 +16,6 @@ package stalled
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stalled"
@@ -80,8 +79,6 @@ func (r *allowduplicatedevents) Run(t *testing.T, ctx context.Context) {
 	// Force the old replica to use a different patch to make the descriptions different.
 	r.fw.RestartAsReplica(t, ctx, "old2")
 
-	// we have to sleep as there's no way to know when the orchestrator runs
-	time.Sleep(3 * time.Second)
 	r.fw.WaitForStalled(t, ctx, id)
 	require.Equal(t, 2, r.fw.CountStalledEvents(t, ctx, id))
 }

@@ -502,5 +502,8 @@ func (d *Daprd) Kill(t *testing.T) {
 
 func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
 	t.Helper()
-	d.exec.Restart(t, ctx)
+	clone := d.exec.Clone(t)
+	d.exec.Kill(t)
+	d.exec = clone
+	d.exec.Run(t, ctx)
 }

@@ -16,7 +16,6 @@ package stalled
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow/stalled"
@@ -69,8 +68,6 @@ func (r *uniquestalledevent) Run(t *testing.T, ctx context.Context) {
 
 	r.fw.RestartAsReplica(t, ctx, "old")
 
-	// we have to sleep as there's no way to know when the orchestrator runs
-	time.Sleep(3 * time.Second)
 	r.fw.WaitForStalled(t, ctx, id)
 	require.Equal(t, 1, r.fw.CountStalledEvents(t, ctx, id))
 }
