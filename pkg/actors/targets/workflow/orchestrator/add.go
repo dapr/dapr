@@ -33,6 +33,10 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 		return api.ErrInstanceNotFound
 	}
 
+	if o.rstate.Stalled != nil {
+		return api.ErrStalled
+	}
+
 	var e backend.HistoryEvent
 	err = proto.Unmarshal(historyEventBytes, &e)
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
