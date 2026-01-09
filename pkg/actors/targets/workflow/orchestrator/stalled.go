@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-func isStalled(ctx context.Context, o *orchestrator, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) (bool, error) {
+func (o *orchestrator) isStalled(ctx context.Context, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) (bool, error) {
 	historyPatches := collectAllPatches(rs.OldEvents)
 	currentPatches := getLastPatches(rs.NewEvents)
 	hasMismatch, description := processPatchMismatch(historyPatches, currentPatches)

@@ -117,7 +117,7 @@ func (f *Stalled) waitForStatus(t *testing.T, ctx context.Context, id api.Instan
 		md, err := f.CurrentClient.FetchOrchestrationMetadata(ctx, id)
 		require.NoError(c, err)
 		assert.Equal(c, status.String(), md.RuntimeStatus.String())
-	}, 20*time.Second, 50*time.Millisecond)
+	}, 20*time.Second, 10*time.Millisecond)
 }
 
 func (f *Stalled) WaitForStalled(t *testing.T, ctx context.Context, id api.InstanceID) *protos.ExecutionStalledEvent {
@@ -150,7 +150,7 @@ func (f *Stalled) WaitForNumberOfOrchestrationStartedEvents(t *testing.T, ctx co
 			}
 		}
 		require.Equal(c, expected, count)
-	}, 20*time.Second, 50*time.Millisecond)
+	}, 20*time.Second, 10*time.Millisecond)
 }
 
 func (f *Stalled) CountStalledEvents(t *testing.T, ctx context.Context, id api.InstanceID) int {

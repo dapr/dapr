@@ -60,9 +60,7 @@ func (l *Stallable) Stall() context.CancelFunc {
 	default:
 		close(*stalledCh)
 	}
-	return func() {
-		l.resetStalledChannel()
-	}
+	return l.resetStalledChannel
 }
 
 func (l *Stallable) resetStalledChannel() {
