@@ -211,6 +211,10 @@ func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*
 		return api.ErrInstanceNotFound
 	}
 
+	if o.rstate.Stalled != nil {
+		return api.ErrStalled
+	}
+
 	// If the workflow is required to complete but it's not yet completed then
 	// return [ErrNotCompleted] This check is used by purging workflow
 	if !runtimestate.IsCompleted(o.rstate) {
