@@ -197,7 +197,6 @@ func TestCreateDaprServiceWithCustomAnnotations(t *testing.T) {
 		_, exists := service.ObjectMeta.Annotations["badstring"]
 		assert.False(t, exists, "Malformed annotation should be ignored")
 	})
-
 }
 
 func TestPatchDaprService(t *testing.T) {
