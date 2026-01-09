@@ -39,11 +39,11 @@ func (r *terminate) Setup(t *testing.T) []framework.Option {
 		stalled.WithInitialReplica("new"),
 		stalled.WithNamedWorkflowReplica("new", func(ctx *task.OrchestrationContext) (any, error) {
 			if ctx.IsPatched("patch1") {
-				if err := ctx.CallActivity("sayHello2").Await(nil); err != nil {
+				if err := ctx.CallActivity("activity2").Await(nil); err != nil {
 					return nil, err
 				}
 			} else {
-				if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
+				if err := ctx.CallActivity("activity1").Await(nil); err != nil {
 					return nil, err
 				}
 			}
@@ -53,7 +53,7 @@ func (r *terminate) Setup(t *testing.T) []framework.Option {
 			return nil, nil
 		}),
 		stalled.WithNamedWorkflowReplica("old", func(ctx *task.OrchestrationContext) (any, error) {
-			if err := ctx.CallActivity("sayHello1").Await(nil); err != nil {
+			if err := ctx.CallActivity("activity1").Await(nil); err != nil {
 				return nil, err
 			}
 			if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
@@ -61,11 +61,11 @@ func (r *terminate) Setup(t *testing.T) []framework.Option {
 			}
 			return nil, nil
 		}),
-		stalled.WithActivity("sayHello1", func(ctx task.ActivityContext) (any, error) {
-			return "Hello", nil
+		stalled.WithActivity("activity1", func(ctx task.ActivityContext) (any, error) {
+			return "", nil
 		}),
-		stalled.WithActivity("sayHello2", func(ctx task.ActivityContext) (any, error) {
-			return "Hello", nil
+		stalled.WithActivity("activity2", func(ctx task.ActivityContext) (any, error) {
+			return "", nil
 		}),
 	)
 	return []framework.Option{
