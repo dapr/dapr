@@ -49,6 +49,9 @@ type Exec struct {
 
 	wg   sync.WaitGroup
 	once atomic.Bool
+
+	// Used to clone the exec process
+	fopts []Option
 }
 
 func New(t *testing.T, binPath string, args []string, fopts ...Option) *Exec {
@@ -90,7 +93,12 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *Exec {
 		stderrpipe: opts.stderr,
 		runErrorFn: opts.runErrorFn,
 		exitCode:   opts.exitCode,
+		fopts:      fopts,
 	}
+}
+
+func (e *Exec) Clone(t *testing.T) *Exec {
+	return New(t, e.binPath, e.args, e.fopts...)
 }
 
 func (e *Exec) Run(t *testing.T, ctx context.Context) {
@@ -130,6 +138,7 @@ func (e *Exec) Run(t *testing.T, ctx context.Context) {
 }
 
 func (e *Exec) Cleanup(t *testing.T) {
+	t.Helper()
 	defer func() { e.wg.Wait() }()
 
 	if !e.once.CompareAndSwap(false, true) {
@@ -141,6 +150,7 @@ func (e *Exec) Cleanup(t *testing.T) {
 }
 
 func (e *Exec) Kill(t *testing.T) {
+	t.Helper()
 	defer e.wg.Wait()
 
 	if !e.once.CompareAndSwap(false, true) {
