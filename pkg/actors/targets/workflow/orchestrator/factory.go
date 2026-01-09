@@ -35,7 +35,7 @@ import (
 var orchestratorCache = sync.Pool{
 	New: func() any {
 		return &orchestrator{
-			lock: lock.New(),
+			lock: lock.NewStallable(),
 		}
 	},
 }

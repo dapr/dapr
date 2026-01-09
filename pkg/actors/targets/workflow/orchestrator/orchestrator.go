@@ -43,7 +43,7 @@ type orchestrator struct {
 	ometa  *backend.OrchestrationMetadata
 
 	activityResultAwaited atomic.Bool
-	lock                  *lock.Lock
+	lock                  *lock.Stallable
 	closed                atomic.Bool
 	wg                    sync.WaitGroup
 
