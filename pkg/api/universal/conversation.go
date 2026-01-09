@@ -429,14 +429,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	tools := req.GetTools()
 	modelOverrideFromRequest := req.GetModel()
 	request.Model = &modelOverrideFromRequest
-	if req.GetLlmTimeout() != "" {
-		llmTimeoutOverrideFromRequest := req.GetLlmTimeout()
-		d, err := time.ParseDuration(llmTimeoutOverrideFromRequest)
-		if err != nil {
-			return nil, err
-		}
-		request.LlmTimeout = d
-	}
 
 	// set default tool choice to auto if not specified and tools are available
 	if toolChoice == "" && len(tools) > 0 {
