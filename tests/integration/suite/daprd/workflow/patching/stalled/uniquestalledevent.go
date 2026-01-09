@@ -56,7 +56,6 @@ func (r *uniquestalledevent) Setup(t *testing.T) []framework.Option {
 }
 
 func (r *uniquestalledevent) Run(t *testing.T, ctx context.Context) {
-
 	id := r.fw.ScheduleWorkflow(t, ctx)
 	r.fw.WaitForNumberOfOrchestrationStartedEvents(t, ctx, id, 1)
 

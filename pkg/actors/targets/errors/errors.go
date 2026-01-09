@@ -23,8 +23,7 @@ type closed struct {
 	method string
 }
 
-type stalled struct {
-}
+type stalled struct{}
 
 func NewClosed(method string) error {
 	return &closed{method: method}

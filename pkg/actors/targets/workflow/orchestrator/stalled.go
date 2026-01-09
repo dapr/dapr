@@ -44,7 +44,7 @@ func (o *orchestrator) isStalled(ctx context.Context, state *wfenginestate.State
 
 	lastEvent := rs.OldEvents[len(rs.OldEvents)-1]
 	hasStalledEvent := false
-	if execStalledEvent := lastEvent.GetExecutionStalled(); execStalledEvent == nil || *execStalledEvent.Description != description {
+	if execStalledEvent := lastEvent.GetExecutionStalled(); execStalledEvent == nil || execStalledEvent.GetDescription() != description {
 		hasStalledEvent = true
 		_ = runtimestate.AddEvent(rs, &protos.HistoryEvent{
 			EventId:   -1,

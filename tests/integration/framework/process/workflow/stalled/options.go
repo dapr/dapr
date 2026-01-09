@@ -34,6 +34,7 @@ func WithInitialReplica(name string) Option {
 		o.initialReplica = name
 	}
 }
+
 func WithActivity(name string, activity task.Activity) Option {
 	return func(o *options) {
 		o.activities[name] = activity
