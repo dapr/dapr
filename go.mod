@@ -14,7 +14,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/dapr/components-contrib v1.16.2-0.20251125171221-9b3a3905c4dc
-	github.com/dapr/durabletask-go v0.10.2-0.20251203182905-2c611fb434fd
+	github.com/dapr/durabletask-go v0.10.2-0.20260109105925-0094a750e8b7
 	github.com/dapr/kit v0.16.2-0.20251124175541-3ac186dff64d
 	github.com/diagridio/go-etcd-cron v0.10.1-0.20251204161759-90f918747eab
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -522,8 +522,6 @@ replace (
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/durabletask-go => github.com/acroca/dapr-durabletask-go v0.0.0-20251215102304-5dc38ffc6d0c
-
 // replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
 //
