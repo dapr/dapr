@@ -16,6 +16,7 @@ package http
 import (
 	"context"
 	"net/http"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -42,11 +43,15 @@ func (m *metrics) Setup(t *testing.T) []framework.Option {
 	m.scheduler = scheduler.New(t)
 
 	app := app.New(t,
-		app.WithHandlerFunc("/job/success", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}),
-		app.WithHandlerFunc("/job/failure", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
+		app.WithHandlerFunc("/job/", func(w http.ResponseWriter, r *http.Request) {
+			switch path.Base(r.URL.Path) {
+			case "success":
+				w.WriteHeader(http.StatusOK)
+			case "nonretriablefailure":
+				w.WriteHeader(http.StatusNotFound)
+			default:
+				w.WriteHeader(http.StatusInternalServerError)
+			}
 		}),
 	)
 
@@ -67,23 +72,34 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	m.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("successful trigger", func(t *testing.T) {
-		body := strings.NewReader(`{"dueTime":"0s","data":"test"}`)
+		body := strings.NewReader(`{"dueTime":"0s","data":"test","repeats":3,"schedule":"@every 0s"}`)
 		m.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/success", body)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := m.daprd.Metrics(c, ctx).All()
-			assert.Equal(c, 1, int(metrics["dapr_component_job_success_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
+			assert.Equal(c, 3, int(metrics["dapr_component_job_success_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
 			assert.NotNil(c, metrics["dapr_component_job_latencies_sum|app_id:my_app|namespace:|operation:job_trigger_op"])
 		}, time.Second*10, time.Millisecond*10)
 	})
 
-	t.Run("failed trigger", func(t *testing.T) {
-		body := strings.NewReader(`{"dueTime":"0s","data":"test"}`)
-		m.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/failure", body)
+	t.Run("non-retriable failed trigger", func(t *testing.T) {
+		body := strings.NewReader(`{"dueTime":"0s","data":"test","failure_policy":{"constant":{"interval":"1s","max_retries":3}}}`)
+		m.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/nonretriablefailure", body)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := m.daprd.Metrics(c, ctx).All()
 			assert.Equal(c, 1, int(metrics["dapr_component_job_failure_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
+			assert.NotNil(c, metrics["dapr_component_job_latencies_sum|app_id:my_app|namespace:|operation:job_trigger_op"])
+		}, time.Second*10, time.Millisecond*10)
+	})
+
+	t.Run("retriable failed trigger", func(t *testing.T) {
+		body := strings.NewReader(`{"dueTime":"0s","data":"test","failure_policy":{"constant":{"interval":"1s","max_retries":3}}}`)
+		m.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/retriablefailure", body)
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := m.daprd.Metrics(c, ctx).All()
+			assert.Equal(c, 4, int(metrics["dapr_component_job_failure_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
 			assert.NotNil(c, metrics["dapr_component_job_latencies_sum|app_id:my_app|namespace:|operation:job_trigger_op"])
 		}, time.Second*10, time.Millisecond*10)
 	})

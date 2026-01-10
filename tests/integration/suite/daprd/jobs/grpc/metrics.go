@@ -15,19 +15,22 @@ package grpc
 
 import (
 	"context"
-	"errors"
+	nethttp "net/http"
+	"path"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	corev1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
@@ -46,18 +49,22 @@ func (m *metrics) Setup(t *testing.T) []framework.Option {
 	m.scheduler = scheduler.New(t)
 
 	app := app.New(t,
-		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
-			if in.GetName() == "success" {
-				return new(runtimev1pb.JobEventResponse), nil
+		app.WithHandlerFunc("/job/", func(w nethttp.ResponseWriter, r *nethttp.Request) {
+			switch path.Base(r.URL.Path) {
+			case "success":
+				w.WriteHeader(nethttp.StatusOK)
+			case "nonretriablefailure":
+				w.WriteHeader(nethttp.StatusNotFound)
+			default:
+				w.WriteHeader(nethttp.StatusInternalServerError)
 			}
-			return nil, errors.New("job failed")
 		}),
 	)
 
 	m.daprd = daprd.New(t,
 		daprd.WithSchedulerAddresses(m.scheduler.Address()),
-		daprd.WithAppPort(app.Port(t)),
-		daprd.WithAppProtocol("grpc"),
+		daprd.WithAppPort(app.Port()),
+		daprd.WithAppProtocol("http"),
 		daprd.WithAppID("my_app"),
 	)
 
@@ -77,26 +84,36 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	t.Run("successful trigger", func(t *testing.T) {
 		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
-				Name:    "success",
-				DueTime: ptr.Of("0s"),
-				Data:    data,
+				Name:     "success",
+				DueTime:  ptr.Of("0s"),
+				Data:     data,
+				Repeats:  ptr.Of(uint32(3)),
+				Schedule: ptr.Of("@every 0s"),
 			},
 		})
 		require.NoError(t, err)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := m.daprd.Metrics(c, ctx).All()
-			assert.Equal(c, 1, int(metrics["dapr_component_job_success_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
+			assert.Equal(c, 3, int(metrics["dapr_component_job_success_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
 			assert.NotNil(c, metrics["dapr_component_job_latencies_sum|app_id:my_app|namespace:|operation:job_trigger_op"])
 		}, time.Second*10, time.Millisecond*10)
 	})
 
-	t.Run("failed trigger", func(t *testing.T) {
+	t.Run("non-retriable failed trigger", func(t *testing.T) {
 		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
-				Name:    "failure",
+				Name:    "nonretriablefailure",
 				DueTime: ptr.Of("0s"),
 				Data:    data,
+				FailurePolicy: &corev1pb.JobFailurePolicy{
+					Policy: &corev1pb.JobFailurePolicy_Constant{
+						Constant: &corev1pb.JobFailurePolicyConstant{
+							Interval:   durationpb.New(time.Second),
+							MaxRetries: ptr.Of(uint32(3)),
+						},
+					},
+				},
 			},
 		})
 		require.NoError(t, err)
@@ -104,6 +121,31 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := m.daprd.Metrics(c, ctx).All()
 			assert.Equal(c, 1, int(metrics["dapr_component_job_failure_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
+			assert.NotNil(c, metrics["dapr_component_job_latencies_sum|app_id:my_app|namespace:|operation:job_trigger_op"])
+		}, time.Second*10, time.Millisecond*10)
+	})
+
+	t.Run("retriable failed trigger", func(t *testing.T) {
+		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+			Job: &runtimev1pb.Job{
+				Name:    "retriablefailure",
+				DueTime: ptr.Of("0s"),
+				Data:    data,
+				FailurePolicy: &corev1pb.JobFailurePolicy{
+					Policy: &corev1pb.JobFailurePolicy_Constant{
+						Constant: &corev1pb.JobFailurePolicyConstant{
+							Interval:   durationpb.New(time.Second),
+							MaxRetries: ptr.Of(uint32(3)),
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := m.daprd.Metrics(c, ctx).All()
+			assert.Equal(c, 4, int(metrics["dapr_component_job_failure_count|app_id:my_app|namespace:|operation:job_trigger_op"]))
 			assert.NotNil(c, metrics["dapr_component_job_latencies_sum|app_id:my_app|namespace:|operation:job_trigger_op"])
 		}, time.Second*10, time.Millisecond*10)
 	})

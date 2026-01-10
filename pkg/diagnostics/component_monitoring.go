@@ -488,6 +488,7 @@ func (c *componentMetrics) jobTriggered(ctx context.Context, operation string, s
 	}
 }
 
+// ElapsedSince returns the given time in milliseconds.
 func ElapsedSince(start time.Time) float64 {
 	return float64(time.Since(start) / time.Millisecond)
 }
