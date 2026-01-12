@@ -125,7 +125,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				"required": ["result"]
 			},
 			"model": "test-model-override",
-			"llmTimeout": "30s",
 			"tools": [
 				{
 					"function": {

@@ -221,7 +221,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			ToolChoice:     ptr.Of("auto"),
 			ResponseFormat: responseFormat,
 			Model:          ptr.Of("test-model-override"),
-			LlmTimeout:     ptr.Of("30s"),
 		})
 		require.NoError(t, err)
 		// Echo component returns one output combining all input messages
