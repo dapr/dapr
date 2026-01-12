@@ -517,7 +517,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 		for _, o := range resp.Outputs {
 			var resultingChoices []*runtimev1pb.ConversationResultChoices
-
 			for _, choice := range o.Choices {
 				resultMessage := &runtimev1pb.ConversationResultMessage{}
 
@@ -566,6 +565,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResultAlpha2{
 				Choices: resultingChoices,
+				Model:   &resp.Model,
 			})
 		}
 	}
