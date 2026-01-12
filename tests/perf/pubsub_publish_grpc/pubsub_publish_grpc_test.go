@@ -125,11 +125,11 @@ func TestPubsubPublishGrpcPerformance(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts(appName)
 	require.NoError(t, err)
 
-	t.Logf("dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
-
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
 	require.NoError(t, err)
+	utils.LogPerfTestSummary(daprResp)
 
 	var baselineResult perf.TestResult
 	err = json.Unmarshal(baselineResp, &baselineResult)

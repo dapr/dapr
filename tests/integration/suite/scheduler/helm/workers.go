@@ -64,7 +64,7 @@ func (w *workers) Run(t *testing.T, ctx context.Context) {
 	bs, err := io.ReadAll(w.helmDefault.Stdout(t))
 	require.NoError(t, err)
 	require.NoError(t, yaml.Unmarshal(bs, &sts))
-	assert.Contains(t, sts.Spec.Template.Spec.Containers[0].Args, "--workers=128")
+	assert.Contains(t, sts.Spec.Template.Spec.Containers[0].Args, "--workers=2048")
 
 	bs, err = io.ReadAll(w.workersLess.Stdout(t))
 	require.NoError(t, err)

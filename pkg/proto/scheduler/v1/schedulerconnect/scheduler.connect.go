@@ -45,6 +45,12 @@ const (
 	SchedulerListJobsProcedure = "/dapr.proto.scheduler.v1.Scheduler/ListJobs"
 	// SchedulerWatchHostsProcedure is the fully-qualified name of the Scheduler's WatchHosts RPC.
 	SchedulerWatchHostsProcedure = "/dapr.proto.scheduler.v1.Scheduler/WatchHosts"
+	// SchedulerDeleteByMetadataProcedure is the fully-qualified name of the Scheduler's
+	// DeleteByMetadata RPC.
+	SchedulerDeleteByMetadataProcedure = "/dapr.proto.scheduler.v1.Scheduler/DeleteByMetadata"
+	// SchedulerDeleteByNamePrefixProcedure is the fully-qualified name of the Scheduler's
+	// DeleteByNamePrefix RPC.
+	SchedulerDeleteByNamePrefixProcedure = "/dapr.proto.scheduler.v1.Scheduler/DeleteByNamePrefix"
 )
 
 // SchedulerClient is a client for the dapr.proto.scheduler.v1.Scheduler service.
@@ -64,6 +70,12 @@ type SchedulerClient interface {
 	// scheduler hosts so that it can connect to each. Receives an updated list
 	// on leadership changes.
 	WatchHosts(context.Context, *connect.Request[v1.WatchHostsRequest]) (*connect.ServerStreamForClient[v1.WatchHostsResponse], error)
+	// DeleteByMetadata is used by the daprd sidecar to delete jobs by a metadata
+	// target.
+	DeleteByMetadata(context.Context, *connect.Request[v1.DeleteByMetadataRequest]) (*connect.Response[v1.DeleteByMetadataResponse], error)
+	// DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
+	// prefix. An empty prefix deletes all jobs from the target.
+	DeleteByNamePrefix(context.Context, *connect.Request[v1.DeleteByNamePrefixRequest]) (*connect.Response[v1.DeleteByNamePrefixResponse], error)
 }
 
 // NewSchedulerClient constructs a client for the dapr.proto.scheduler.v1.Scheduler service. By
@@ -106,17 +118,29 @@ func NewSchedulerClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			baseURL+SchedulerWatchHostsProcedure,
 			opts...,
 		),
+		deleteByMetadata: connect.NewClient[v1.DeleteByMetadataRequest, v1.DeleteByMetadataResponse](
+			httpClient,
+			baseURL+SchedulerDeleteByMetadataProcedure,
+			opts...,
+		),
+		deleteByNamePrefix: connect.NewClient[v1.DeleteByNamePrefixRequest, v1.DeleteByNamePrefixResponse](
+			httpClient,
+			baseURL+SchedulerDeleteByNamePrefixProcedure,
+			opts...,
+		),
 	}
 }
 
 // schedulerClient implements SchedulerClient.
 type schedulerClient struct {
-	scheduleJob *connect.Client[v1.ScheduleJobRequest, v1.ScheduleJobResponse]
-	getJob      *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
-	deleteJob   *connect.Client[v1.DeleteJobRequest, v1.DeleteJobResponse]
-	watchJobs   *connect.Client[v1.WatchJobsRequest, v1.WatchJobsResponse]
-	listJobs    *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
-	watchHosts  *connect.Client[v1.WatchHostsRequest, v1.WatchHostsResponse]
+	scheduleJob        *connect.Client[v1.ScheduleJobRequest, v1.ScheduleJobResponse]
+	getJob             *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
+	deleteJob          *connect.Client[v1.DeleteJobRequest, v1.DeleteJobResponse]
+	watchJobs          *connect.Client[v1.WatchJobsRequest, v1.WatchJobsResponse]
+	listJobs           *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
+	watchHosts         *connect.Client[v1.WatchHostsRequest, v1.WatchHostsResponse]
+	deleteByMetadata   *connect.Client[v1.DeleteByMetadataRequest, v1.DeleteByMetadataResponse]
+	deleteByNamePrefix *connect.Client[v1.DeleteByNamePrefixRequest, v1.DeleteByNamePrefixResponse]
 }
 
 // ScheduleJob calls dapr.proto.scheduler.v1.Scheduler.ScheduleJob.
@@ -149,6 +173,16 @@ func (c *schedulerClient) WatchHosts(ctx context.Context, req *connect.Request[v
 	return c.watchHosts.CallServerStream(ctx, req)
 }
 
+// DeleteByMetadata calls dapr.proto.scheduler.v1.Scheduler.DeleteByMetadata.
+func (c *schedulerClient) DeleteByMetadata(ctx context.Context, req *connect.Request[v1.DeleteByMetadataRequest]) (*connect.Response[v1.DeleteByMetadataResponse], error) {
+	return c.deleteByMetadata.CallUnary(ctx, req)
+}
+
+// DeleteByNamePrefix calls dapr.proto.scheduler.v1.Scheduler.DeleteByNamePrefix.
+func (c *schedulerClient) DeleteByNamePrefix(ctx context.Context, req *connect.Request[v1.DeleteByNamePrefixRequest]) (*connect.Response[v1.DeleteByNamePrefixResponse], error) {
+	return c.deleteByNamePrefix.CallUnary(ctx, req)
+}
+
 // SchedulerHandler is an implementation of the dapr.proto.scheduler.v1.Scheduler service.
 type SchedulerHandler interface {
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
@@ -166,6 +200,12 @@ type SchedulerHandler interface {
 	// scheduler hosts so that it can connect to each. Receives an updated list
 	// on leadership changes.
 	WatchHosts(context.Context, *connect.Request[v1.WatchHostsRequest], *connect.ServerStream[v1.WatchHostsResponse]) error
+	// DeleteByMetadata is used by the daprd sidecar to delete jobs by a metadata
+	// target.
+	DeleteByMetadata(context.Context, *connect.Request[v1.DeleteByMetadataRequest]) (*connect.Response[v1.DeleteByMetadataResponse], error)
+	// DeleteByNamePrefix is used by the daprd sidecar to delete jobs by name
+	// prefix. An empty prefix deletes all jobs from the target.
+	DeleteByNamePrefix(context.Context, *connect.Request[v1.DeleteByNamePrefixRequest]) (*connect.Response[v1.DeleteByNamePrefixResponse], error)
 }
 
 // NewSchedulerHandler builds an HTTP handler from the service implementation. It returns the path
@@ -204,6 +244,16 @@ func NewSchedulerHandler(svc SchedulerHandler, opts ...connect.HandlerOption) (s
 		svc.WatchHosts,
 		opts...,
 	)
+	schedulerDeleteByMetadataHandler := connect.NewUnaryHandler(
+		SchedulerDeleteByMetadataProcedure,
+		svc.DeleteByMetadata,
+		opts...,
+	)
+	schedulerDeleteByNamePrefixHandler := connect.NewUnaryHandler(
+		SchedulerDeleteByNamePrefixProcedure,
+		svc.DeleteByNamePrefix,
+		opts...,
+	)
 	return "/dapr.proto.scheduler.v1.Scheduler/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SchedulerScheduleJobProcedure:
@@ -218,6 +268,10 @@ func NewSchedulerHandler(svc SchedulerHandler, opts ...connect.HandlerOption) (s
 			schedulerListJobsHandler.ServeHTTP(w, r)
 		case SchedulerWatchHostsProcedure:
 			schedulerWatchHostsHandler.ServeHTTP(w, r)
+		case SchedulerDeleteByMetadataProcedure:
+			schedulerDeleteByMetadataHandler.ServeHTTP(w, r)
+		case SchedulerDeleteByNamePrefixProcedure:
+			schedulerDeleteByNamePrefixHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -249,4 +303,12 @@ func (UnimplementedSchedulerHandler) ListJobs(context.Context, *connect.Request[
 
 func (UnimplementedSchedulerHandler) WatchHosts(context.Context, *connect.Request[v1.WatchHostsRequest], *connect.ServerStream[v1.WatchHostsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.scheduler.v1.Scheduler.WatchHosts is not implemented"))
+}
+
+func (UnimplementedSchedulerHandler) DeleteByMetadata(context.Context, *connect.Request[v1.DeleteByMetadataRequest]) (*connect.Response[v1.DeleteByMetadataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.scheduler.v1.Scheduler.DeleteByMetadata is not implemented"))
+}
+
+func (UnimplementedSchedulerHandler) DeleteByNamePrefix(context.Context, *connect.Request[v1.DeleteByNamePrefixRequest]) (*connect.Response[v1.DeleteByNamePrefixResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.scheduler.v1.Scheduler.DeleteByNamePrefix is not implemented"))
 }
