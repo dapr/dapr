@@ -183,11 +183,10 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	data := body
-
+	span := diagUtils.SpanFromContext(ctx)
+	traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+	md := in.GetMetadata()
 	if !rawPayload {
-		span := diagUtils.SpanFromContext(ctx)
-		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
-
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.Universal.AppID(),
 			Topic:           in.GetTopic(),
@@ -206,7 +205,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		}
 
 		features := thepubsub.Features()
-		pubsub.ApplyMetadata(envelope, features, in.GetMetadata())
+		pubsub.ApplyMetadata(envelope, features, md)
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
@@ -216,13 +215,16 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
+	} else {
+		md[pubsub.TraceIDField] = traceID
+		md[pubsub.TraceStateField] = traceState
 	}
 
 	req := pubsub.PublishRequest{
 		PubsubName: pubsubName,
 		Topic:      topic,
 		Data:       data,
-		Metadata:   in.GetMetadata(),
+		Metadata:   md,
 	}
 
 	start := time.Now()
