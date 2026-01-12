@@ -124,7 +124,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				},
 				"required": ["result"]
 			},
-			"model": "test-model-override",
 			"tools": [
 				{
 					"function": {
@@ -177,7 +176,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 							}
 						}
 					],
-					"model": "test-model-override",
 				}
 			]
 		}`

@@ -220,7 +220,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Tools:          []*rtv1.ConversationTools{tool},
 			ToolChoice:     ptr.Of("auto"),
 			ResponseFormat: responseFormat,
-			Model:          ptr.Of("test-model-override"),
 		})
 		require.NoError(t, err)
 		// Echo component returns one output combining all input messages
@@ -242,7 +241,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "0", toolCalls[0].GetId())
 		require.Equal(t, "test_function", toolCalls[0].GetFunction().GetName())
 		require.Equal(t, "param1", toolCalls[0].GetFunction().GetArguments())
-		require.Equal(t, "test-model-override", resp.GetOutputs()[0].GetModel())
 	})
 
 	t.Run("invalid json - malformed request", func(t *testing.T) {

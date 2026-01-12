@@ -427,8 +427,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	request.Temperature = req.GetTemperature()
 	toolChoice := req.GetToolChoice()
 	tools := req.GetTools()
-	modelOverrideFromRequest := req.GetModel()
-	request.Model = &modelOverrideFromRequest
 
 	// set default tool choice to auto if not specified and tools are available
 	if toolChoice == "" && len(tools) > 0 {
@@ -517,11 +515,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			response.ContextId = &contextID
 		}
 
-		var modelStr *string
-		if resp.Model != "" {
-			modelStr = &resp.Model
-		}
-
 		for _, o := range resp.Outputs {
 			var resultingChoices []*runtimev1pb.ConversationResultChoices
 
@@ -573,7 +566,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResultAlpha2{
 				Choices: resultingChoices,
-				Model:   modelStr,
 			})
 		}
 	}
