@@ -89,8 +89,15 @@ const (
 	// DaprUnregisterActorReminderProcedure is the fully-qualified name of the Dapr's
 	// UnregisterActorReminder RPC.
 	DaprUnregisterActorReminderProcedure = "/dapr.proto.runtime.v1.Dapr/UnregisterActorReminder"
+	// DaprUnregisterActorRemindersByTypeProcedure is the fully-qualified name of the Dapr's
+	// UnregisterActorRemindersByType RPC.
+	DaprUnregisterActorRemindersByTypeProcedure = "/dapr.proto.runtime.v1.Dapr/UnregisterActorRemindersByType"
+	// DaprListActorRemindersProcedure is the fully-qualified name of the Dapr's ListActorReminders RPC.
+	DaprListActorRemindersProcedure = "/dapr.proto.runtime.v1.Dapr/ListActorReminders"
 	// DaprGetActorStateProcedure is the fully-qualified name of the Dapr's GetActorState RPC.
 	DaprGetActorStateProcedure = "/dapr.proto.runtime.v1.Dapr/GetActorState"
+	// DaprGetActorReminderProcedure is the fully-qualified name of the Dapr's GetActorReminder RPC.
+	DaprGetActorReminderProcedure = "/dapr.proto.runtime.v1.Dapr/GetActorReminder"
 	// DaprExecuteActorStateTransactionProcedure is the fully-qualified name of the Dapr's
 	// ExecuteActorStateTransaction RPC.
 	DaprExecuteActorStateTransactionProcedure = "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction"
@@ -188,6 +195,11 @@ const (
 	DaprGetJobAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/GetJobAlpha1"
 	// DaprDeleteJobAlpha1Procedure is the fully-qualified name of the Dapr's DeleteJobAlpha1 RPC.
 	DaprDeleteJobAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/DeleteJobAlpha1"
+	// DaprDeleteJobsByPrefixAlpha1Procedure is the fully-qualified name of the Dapr's
+	// DeleteJobsByPrefixAlpha1 RPC.
+	DaprDeleteJobsByPrefixAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/DeleteJobsByPrefixAlpha1"
+	// DaprListJobsAlpha1Procedure is the fully-qualified name of the Dapr's ListJobsAlpha1 RPC.
+	DaprListJobsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/ListJobsAlpha1"
 	// DaprConverseAlpha1Procedure is the fully-qualified name of the Dapr's ConverseAlpha1 RPC.
 	DaprConverseAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
 	// DaprConverseAlpha2Procedure is the fully-qualified name of the Dapr's ConverseAlpha2 RPC.
@@ -234,8 +246,12 @@ type DaprClient interface {
 	RegisterActorReminder(context.Context, *connect.Request[v1.RegisterActorReminderRequest]) (*connect.Response[emptypb.Empty], error)
 	// Unregister an actor reminder.
 	UnregisterActorReminder(context.Context, *connect.Request[v1.UnregisterActorReminderRequest]) (*connect.Response[emptypb.Empty], error)
+	UnregisterActorRemindersByType(context.Context, *connect.Request[v1.UnregisterActorRemindersByTypeRequest]) (*connect.Response[v1.UnregisterActorRemindersByTypeResponse], error)
+	ListActorReminders(context.Context, *connect.Request[v1.ListActorRemindersRequest]) (*connect.Response[v1.ListActorRemindersResponse], error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *connect.Request[v1.GetActorStateRequest]) (*connect.Response[v1.GetActorStateResponse], error)
+	// Gets an actor reminder.
+	GetActorReminder(context.Context, *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// InvokeActor calls a method on an actor.
@@ -328,6 +344,8 @@ type DaprClient interface {
 	GetJobAlpha1(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
 	// Delete a job
 	DeleteJobAlpha1(context.Context, *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error)
+	DeleteJobsByPrefixAlpha1(context.Context, *connect.Request[v1.DeleteJobsByPrefixRequestAlpha1]) (*connect.Response[v1.DeleteJobsByPrefixResponseAlpha1], error)
+	ListJobsAlpha1(context.Context, *connect.Request[v1.ListJobsRequestAlpha1]) (*connect.Response[v1.ListJobsResponseAlpha1], error)
 	// Converse with a LLM service
 	ConverseAlpha1(context.Context, *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error)
 	// Converse with a LLM service via alpha2 api
@@ -434,9 +452,24 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			baseURL+DaprUnregisterActorReminderProcedure,
 			opts...,
 		),
+		unregisterActorRemindersByType: connect.NewClient[v1.UnregisterActorRemindersByTypeRequest, v1.UnregisterActorRemindersByTypeResponse](
+			httpClient,
+			baseURL+DaprUnregisterActorRemindersByTypeProcedure,
+			opts...,
+		),
+		listActorReminders: connect.NewClient[v1.ListActorRemindersRequest, v1.ListActorRemindersResponse](
+			httpClient,
+			baseURL+DaprListActorRemindersProcedure,
+			opts...,
+		),
 		getActorState: connect.NewClient[v1.GetActorStateRequest, v1.GetActorStateResponse](
 			httpClient,
 			baseURL+DaprGetActorStateProcedure,
+			opts...,
+		),
+		getActorReminder: connect.NewClient[v1.GetActorReminderRequest, v1.GetActorReminderResponse](
+			httpClient,
+			baseURL+DaprGetActorReminderProcedure,
 			opts...,
 		),
 		executeActorStateTransaction: connect.NewClient[v1.ExecuteActorStateTransactionRequest, emptypb.Empty](
@@ -634,6 +667,16 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			baseURL+DaprDeleteJobAlpha1Procedure,
 			opts...,
 		),
+		deleteJobsByPrefixAlpha1: connect.NewClient[v1.DeleteJobsByPrefixRequestAlpha1, v1.DeleteJobsByPrefixResponseAlpha1](
+			httpClient,
+			baseURL+DaprDeleteJobsByPrefixAlpha1Procedure,
+			opts...,
+		),
+		listJobsAlpha1: connect.NewClient[v1.ListJobsRequestAlpha1, v1.ListJobsResponseAlpha1](
+			httpClient,
+			baseURL+DaprListJobsAlpha1Procedure,
+			opts...,
+		),
 		converseAlpha1: connect.NewClient[v1.ConversationRequest, v1.ConversationResponse](
 			httpClient,
 			baseURL+DaprConverseAlpha1Procedure,
@@ -667,7 +710,10 @@ type daprClient struct {
 	unregisterActorTimer           *connect.Client[v1.UnregisterActorTimerRequest, emptypb.Empty]
 	registerActorReminder          *connect.Client[v1.RegisterActorReminderRequest, emptypb.Empty]
 	unregisterActorReminder        *connect.Client[v1.UnregisterActorReminderRequest, emptypb.Empty]
+	unregisterActorRemindersByType *connect.Client[v1.UnregisterActorRemindersByTypeRequest, v1.UnregisterActorRemindersByTypeResponse]
+	listActorReminders             *connect.Client[v1.ListActorRemindersRequest, v1.ListActorRemindersResponse]
 	getActorState                  *connect.Client[v1.GetActorStateRequest, v1.GetActorStateResponse]
+	getActorReminder               *connect.Client[v1.GetActorReminderRequest, v1.GetActorReminderResponse]
 	executeActorStateTransaction   *connect.Client[v1.ExecuteActorStateTransactionRequest, emptypb.Empty]
 	invokeActor                    *connect.Client[v1.InvokeActorRequest, v1.InvokeActorResponse]
 	getConfigurationAlpha1         *connect.Client[v1.GetConfigurationRequest, v1.GetConfigurationResponse]
@@ -707,6 +753,8 @@ type daprClient struct {
 	scheduleJobAlpha1              *connect.Client[v1.ScheduleJobRequest, v1.ScheduleJobResponse]
 	getJobAlpha1                   *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
 	deleteJobAlpha1                *connect.Client[v1.DeleteJobRequest, v1.DeleteJobResponse]
+	deleteJobsByPrefixAlpha1       *connect.Client[v1.DeleteJobsByPrefixRequestAlpha1, v1.DeleteJobsByPrefixResponseAlpha1]
+	listJobsAlpha1                 *connect.Client[v1.ListJobsRequestAlpha1, v1.ListJobsResponseAlpha1]
 	converseAlpha1                 *connect.Client[v1.ConversationRequest, v1.ConversationResponse]
 	converseAlpha2                 *connect.Client[v1.ConversationRequestAlpha2, v1.ConversationResponseAlpha2]
 }
@@ -801,9 +849,24 @@ func (c *daprClient) UnregisterActorReminder(ctx context.Context, req *connect.R
 	return c.unregisterActorReminder.CallUnary(ctx, req)
 }
 
+// UnregisterActorRemindersByType calls dapr.proto.runtime.v1.Dapr.UnregisterActorRemindersByType.
+func (c *daprClient) UnregisterActorRemindersByType(ctx context.Context, req *connect.Request[v1.UnregisterActorRemindersByTypeRequest]) (*connect.Response[v1.UnregisterActorRemindersByTypeResponse], error) {
+	return c.unregisterActorRemindersByType.CallUnary(ctx, req)
+}
+
+// ListActorReminders calls dapr.proto.runtime.v1.Dapr.ListActorReminders.
+func (c *daprClient) ListActorReminders(ctx context.Context, req *connect.Request[v1.ListActorRemindersRequest]) (*connect.Response[v1.ListActorRemindersResponse], error) {
+	return c.listActorReminders.CallUnary(ctx, req)
+}
+
 // GetActorState calls dapr.proto.runtime.v1.Dapr.GetActorState.
 func (c *daprClient) GetActorState(ctx context.Context, req *connect.Request[v1.GetActorStateRequest]) (*connect.Response[v1.GetActorStateResponse], error) {
 	return c.getActorState.CallUnary(ctx, req)
+}
+
+// GetActorReminder calls dapr.proto.runtime.v1.Dapr.GetActorReminder.
+func (c *daprClient) GetActorReminder(ctx context.Context, req *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error) {
+	return c.getActorReminder.CallUnary(ctx, req)
 }
 
 // ExecuteActorStateTransaction calls dapr.proto.runtime.v1.Dapr.ExecuteActorStateTransaction.
@@ -1015,6 +1078,16 @@ func (c *daprClient) DeleteJobAlpha1(ctx context.Context, req *connect.Request[v
 	return c.deleteJobAlpha1.CallUnary(ctx, req)
 }
 
+// DeleteJobsByPrefixAlpha1 calls dapr.proto.runtime.v1.Dapr.DeleteJobsByPrefixAlpha1.
+func (c *daprClient) DeleteJobsByPrefixAlpha1(ctx context.Context, req *connect.Request[v1.DeleteJobsByPrefixRequestAlpha1]) (*connect.Response[v1.DeleteJobsByPrefixResponseAlpha1], error) {
+	return c.deleteJobsByPrefixAlpha1.CallUnary(ctx, req)
+}
+
+// ListJobsAlpha1 calls dapr.proto.runtime.v1.Dapr.ListJobsAlpha1.
+func (c *daprClient) ListJobsAlpha1(ctx context.Context, req *connect.Request[v1.ListJobsRequestAlpha1]) (*connect.Response[v1.ListJobsResponseAlpha1], error) {
+	return c.listJobsAlpha1.CallUnary(ctx, req)
+}
+
 // ConverseAlpha1 calls dapr.proto.runtime.v1.Dapr.ConverseAlpha1.
 func (c *daprClient) ConverseAlpha1(ctx context.Context, req *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error) {
 	return c.converseAlpha1.CallUnary(ctx, req)
@@ -1065,8 +1138,12 @@ type DaprHandler interface {
 	RegisterActorReminder(context.Context, *connect.Request[v1.RegisterActorReminderRequest]) (*connect.Response[emptypb.Empty], error)
 	// Unregister an actor reminder.
 	UnregisterActorReminder(context.Context, *connect.Request[v1.UnregisterActorReminderRequest]) (*connect.Response[emptypb.Empty], error)
+	UnregisterActorRemindersByType(context.Context, *connect.Request[v1.UnregisterActorRemindersByTypeRequest]) (*connect.Response[v1.UnregisterActorRemindersByTypeResponse], error)
+	ListActorReminders(context.Context, *connect.Request[v1.ListActorRemindersRequest]) (*connect.Response[v1.ListActorRemindersResponse], error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *connect.Request[v1.GetActorStateRequest]) (*connect.Response[v1.GetActorStateResponse], error)
+	// Gets an actor reminder.
+	GetActorReminder(context.Context, *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error)
 	// InvokeActor calls a method on an actor.
@@ -1159,6 +1236,8 @@ type DaprHandler interface {
 	GetJobAlpha1(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
 	// Delete a job
 	DeleteJobAlpha1(context.Context, *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error)
+	DeleteJobsByPrefixAlpha1(context.Context, *connect.Request[v1.DeleteJobsByPrefixRequestAlpha1]) (*connect.Response[v1.DeleteJobsByPrefixResponseAlpha1], error)
+	ListJobsAlpha1(context.Context, *connect.Request[v1.ListJobsRequestAlpha1]) (*connect.Response[v1.ListJobsResponseAlpha1], error)
 	// Converse with a LLM service
 	ConverseAlpha1(context.Context, *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error)
 	// Converse with a LLM service via alpha2 api
@@ -1261,9 +1340,24 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		svc.UnregisterActorReminder,
 		opts...,
 	)
+	daprUnregisterActorRemindersByTypeHandler := connect.NewUnaryHandler(
+		DaprUnregisterActorRemindersByTypeProcedure,
+		svc.UnregisterActorRemindersByType,
+		opts...,
+	)
+	daprListActorRemindersHandler := connect.NewUnaryHandler(
+		DaprListActorRemindersProcedure,
+		svc.ListActorReminders,
+		opts...,
+	)
 	daprGetActorStateHandler := connect.NewUnaryHandler(
 		DaprGetActorStateProcedure,
 		svc.GetActorState,
+		opts...,
+	)
+	daprGetActorReminderHandler := connect.NewUnaryHandler(
+		DaprGetActorReminderProcedure,
+		svc.GetActorReminder,
 		opts...,
 	)
 	daprExecuteActorStateTransactionHandler := connect.NewUnaryHandler(
@@ -1461,6 +1555,16 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		svc.DeleteJobAlpha1,
 		opts...,
 	)
+	daprDeleteJobsByPrefixAlpha1Handler := connect.NewUnaryHandler(
+		DaprDeleteJobsByPrefixAlpha1Procedure,
+		svc.DeleteJobsByPrefixAlpha1,
+		opts...,
+	)
+	daprListJobsAlpha1Handler := connect.NewUnaryHandler(
+		DaprListJobsAlpha1Procedure,
+		svc.ListJobsAlpha1,
+		opts...,
+	)
 	daprConverseAlpha1Handler := connect.NewUnaryHandler(
 		DaprConverseAlpha1Procedure,
 		svc.ConverseAlpha1,
@@ -1509,8 +1613,14 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprRegisterActorReminderHandler.ServeHTTP(w, r)
 		case DaprUnregisterActorReminderProcedure:
 			daprUnregisterActorReminderHandler.ServeHTTP(w, r)
+		case DaprUnregisterActorRemindersByTypeProcedure:
+			daprUnregisterActorRemindersByTypeHandler.ServeHTTP(w, r)
+		case DaprListActorRemindersProcedure:
+			daprListActorRemindersHandler.ServeHTTP(w, r)
 		case DaprGetActorStateProcedure:
 			daprGetActorStateHandler.ServeHTTP(w, r)
+		case DaprGetActorReminderProcedure:
+			daprGetActorReminderHandler.ServeHTTP(w, r)
 		case DaprExecuteActorStateTransactionProcedure:
 			daprExecuteActorStateTransactionHandler.ServeHTTP(w, r)
 		case DaprInvokeActorProcedure:
@@ -1589,6 +1699,10 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprGetJobAlpha1Handler.ServeHTTP(w, r)
 		case DaprDeleteJobAlpha1Procedure:
 			daprDeleteJobAlpha1Handler.ServeHTTP(w, r)
+		case DaprDeleteJobsByPrefixAlpha1Procedure:
+			daprDeleteJobsByPrefixAlpha1Handler.ServeHTTP(w, r)
+		case DaprListJobsAlpha1Procedure:
+			daprListJobsAlpha1Handler.ServeHTTP(w, r)
 		case DaprConverseAlpha1Procedure:
 			daprConverseAlpha1Handler.ServeHTTP(w, r)
 		case DaprConverseAlpha2Procedure:
@@ -1674,8 +1788,20 @@ func (UnimplementedDaprHandler) UnregisterActorReminder(context.Context, *connec
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.UnregisterActorReminder is not implemented"))
 }
 
+func (UnimplementedDaprHandler) UnregisterActorRemindersByType(context.Context, *connect.Request[v1.UnregisterActorRemindersByTypeRequest]) (*connect.Response[v1.UnregisterActorRemindersByTypeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.UnregisterActorRemindersByType is not implemented"))
+}
+
+func (UnimplementedDaprHandler) ListActorReminders(context.Context, *connect.Request[v1.ListActorRemindersRequest]) (*connect.Response[v1.ListActorRemindersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ListActorReminders is not implemented"))
+}
+
 func (UnimplementedDaprHandler) GetActorState(context.Context, *connect.Request[v1.GetActorStateRequest]) (*connect.Response[v1.GetActorStateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetActorState is not implemented"))
+}
+
+func (UnimplementedDaprHandler) GetActorReminder(context.Context, *connect.Request[v1.GetActorReminderRequest]) (*connect.Response[v1.GetActorReminderResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetActorReminder is not implemented"))
 }
 
 func (UnimplementedDaprHandler) ExecuteActorStateTransaction(context.Context, *connect.Request[v1.ExecuteActorStateTransactionRequest]) (*connect.Response[emptypb.Empty], error) {
@@ -1832,6 +1958,14 @@ func (UnimplementedDaprHandler) GetJobAlpha1(context.Context, *connect.Request[v
 
 func (UnimplementedDaprHandler) DeleteJobAlpha1(context.Context, *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteJobAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) DeleteJobsByPrefixAlpha1(context.Context, *connect.Request[v1.DeleteJobsByPrefixRequestAlpha1]) (*connect.Response[v1.DeleteJobsByPrefixResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteJobsByPrefixAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) ListJobsAlpha1(context.Context, *connect.Request[v1.ListJobsRequestAlpha1]) (*connect.Response[v1.ListJobsResponseAlpha1], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ListJobsAlpha1 is not implemented"))
 }
 
 func (UnimplementedDaprHandler) ConverseAlpha1(context.Context, *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error) {

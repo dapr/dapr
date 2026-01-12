@@ -169,9 +169,9 @@ func WithLogLineStderr(ll *logline.LogLine) Option {
 	return WithExecOptions(exec.WithStderr(ll.Stdout()))
 }
 
-func WithWorkers(workers uint32) Option {
+func WithWorkers(workers *uint32) Option {
 	return func(o *options) {
-		o.workers = &workers
+		o.workers = workers
 	}
 }
 

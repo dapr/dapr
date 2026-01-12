@@ -144,5 +144,5 @@ func runTest(t *testing.T, tc testCase) {
 	bts, err := json.MarshalIndent(sm, "", " ")
 	require.NoError(t, err)
 	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
-	t.Logf("test summary `%s`", string(bts))
+	utils.LogPerfTestSummary(bts)
 }
