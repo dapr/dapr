@@ -133,7 +133,7 @@ func New(origArgs []string) (*Options, error) {
 
 	fs.StringVar(&opts.IdentityDirectoryWrite, "identity-directory-write", filepath.Join(os.TempDir(), "secrets/dapr.io/tls"), "Directory to write identity certificate certificate, private key and trust anchors")
 
-	fs.Uint32Var(&opts.Workers, "workers", 128, "Workers is the number of workers that handle job events. The higher the number the more go routines will be spawned, each working over a partition of the total job space. The higher the number, the higher the number of jobs which can be concurrently delivered to runtimes. Increasing this number increases the number of go routines for this instance. This number should be tuned to the bottleneck of job execution, i.e., CPU, I/O, memory, etc.")
+	fs.Uint32Var(&opts.Workers, "workers", 2048, "Workers is the number of workers that handle job events. The higher the number the more go routines will be spawned, each working over a partition of the total job space. The higher the number, the higher the number of jobs which can be concurrently delivered to runtimes. Increasing this number increases the number of go routines for this instance. This number should be tuned to the bottleneck of job execution, i.e., CPU, I/O, memory, etc.")
 
 	if err := fs.MarkHidden("identity-directory-write"); err != nil {
 		log.Fatal(err)

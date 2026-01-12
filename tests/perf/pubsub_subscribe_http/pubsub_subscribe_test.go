@@ -166,16 +166,13 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 		Output("HTTP_REQ_DURATION_THRESHOLD", httpReqDurationThresholdMs).
 		Flush()
 
-	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
-	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
-	t.Logf("target dapr app or sidecar restarted %v times", restarts)
-
 	bts, err := json.MarshalIndent(sm, "", " ")
 	require.NoError(t, err)
 	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
-	t.Logf("test summary `%s`", string(bts))
-
 	require.Equal(t, 0, restarts)
+
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, 0)
+	utils.LogPerfTestSummary(bts)
 }
 
 func TestPubsubBulkPublishSubscribeHttpPerformance(t *testing.T) {

@@ -145,11 +145,7 @@ func TestActorActivate(t *testing.T) {
 	testerRestarts, err := tr.Platform.GetTotalRestarts(clientApplicationName)
 	require.NoError(t, err)
 
-	t.Logf("dapr test results: %s", string(daprResp))
-	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
-	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
-	t.Logf("target dapr app or sidecar restarted %v times", restarts)
-	t.Logf("tester app or sidecar restarted %v times", testerRestarts)
+	utils.LogPerfTestResourceUsage(appUsage, sidecarUsage, restarts, testerRestarts)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
@@ -182,4 +178,8 @@ func TestActorActivate(t *testing.T) {
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
 	require.True(t, daprResult.DurationHistogram.Percentiles[2].Value*1000 < 15)
 	require.True(t, daprResult.DurationHistogram.Percentiles[3].Value*1000 < 35)
+
+	summaryBytes, err := json.Marshal(daprResult)
+	require.NoError(t, err)
+	utils.LogPerfTestSummary(summaryBytes)
 }
