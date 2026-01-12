@@ -68,7 +68,6 @@ type Manager struct {
 	channelConfig *AppChannelConfig
 	localConn     *ConnectionPool
 	localConnLock sync.RWMutex
-	appClientConn grpc.ClientConnInterface
 	sec           security.Handler
 	wg            sync.WaitGroup
 	closed        atomic.Bool
@@ -93,7 +92,10 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 	g.localConnLock.RLock()
 	defer g.localConnLock.RUnlock()
 
-	conn, err := g.GetAppClient()
+	// TODO: using the connection pooling here creates a connection that is never released
+	// This methods is only used by the HTTP and gRPC channels which are singletons, so this behavior is acceptable for now
+	// Ideally, we should refactor the channels to be request scoped or able to handle multiple connections
+	conn, _, err := g.GetAppClient()
 	if err != nil {
 		return nil, err
 	}
@@ -113,22 +115,24 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 
 // GetAppClient returns the gRPC connection to the local app.
 // If there's no active connection to the app, it creates one.
-func (g *Manager) GetAppClient() (grpc.ClientConnInterface, error) {
-	if g.appClientConn == nil {
-		c, err := g.defaultLocalConnCreateFn()
-		if err != nil {
-			return nil, err
-		}
-
-		g.appClientConn = c
+func (g *Manager) GetAppClient() (grpc.ClientConnInterface, func(bool), error) {
+	conn, err := g.localConn.Get(g.defaultLocalConnCreateFn)
+	if err != nil {
+		return nil, nopTeardown, err
 	}
 
-	return g.appClientConn, nil
+	return conn, func(destroy bool) {
+		if destroy {
+			g.localConn.Destroy(conn)
+		} else {
+			g.localConn.Release(conn)
+		}
+	}, nil
 }
 
 // SetAppClientConn is used by tests to override the default connection
 func (g *Manager) SetAppClientConn(conn grpc.ClientConnInterface) {
-	g.appClientConn = conn
+	g.localConn.doRegister(conn)
 }
 
 func (g *Manager) defaultLocalConnCreateFn() (grpc.ClientConnInterface, error) {
