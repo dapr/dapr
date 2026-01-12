@@ -63,59 +63,24 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	client := b.daprd.GRPCClient(t, ctx)
 
 	t.Run("all fields", func(t *testing.T) {
+		toolParameters, err := structpb.NewStruct(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"param1": map[string]any{
+					"type":        "string",
+					"description": "A test parameter",
+				},
+			},
+			"required": []any{"param1"},
+		})
+		require.NoError(t, err)
+
 		tool := &rtv1.ConversationTools{
 			ToolTypes: &rtv1.ConversationTools_Function{
 				Function: &rtv1.ConversationToolsFunction{
 					Name:        "test_function",
 					Description: ptr.Of("A test function"),
-					Parameters: &structpb.Struct{
-						Fields: map[string]*structpb.Value{
-							"type": {
-								Kind: &structpb.Value_StringValue{
-									StringValue: "object",
-								},
-							},
-							"properties": {
-								Kind: &structpb.Value_StructValue{
-									StructValue: &structpb.Struct{
-										Fields: map[string]*structpb.Value{
-											"param1": {
-												Kind: &structpb.Value_StructValue{
-													StructValue: &structpb.Struct{
-														Fields: map[string]*structpb.Value{
-															"type": {
-																Kind: &structpb.Value_StringValue{
-																	StringValue: "string",
-																},
-															},
-															"description": {
-																Kind: &structpb.Value_StringValue{
-																	StringValue: "A test parameter",
-																},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-							"required": {
-								Kind: &structpb.Value_ListValue{
-									ListValue: &structpb.ListValue{
-										Values: []*structpb.Value{
-											{
-												Kind: &structpb.Value_StringValue{
-													StringValue: "param1",
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
+					Parameters:  toolParameters,
 				},
 			},
 		}
@@ -130,49 +95,16 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}
 
 		contextID := "test-conversation-123"
-		responseFormat := &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				"type": {
-					Kind: &structpb.Value_StringValue{
-						StringValue: "object",
-					},
-				},
-				"properties": {
-					Kind: &structpb.Value_StructValue{
-						StructValue: &structpb.Struct{
-							Fields: map[string]*structpb.Value{
-								"result": {
-									Kind: &structpb.Value_StructValue{
-										StructValue: &structpb.Struct{
-											Fields: map[string]*structpb.Value{
-												"type": {
-													Kind: &structpb.Value_StringValue{
-														StringValue: "string",
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				"required": {
-					Kind: &structpb.Value_ListValue{
-						ListValue: &structpb.ListValue{
-							Values: []*structpb.Value{
-								{
-									Kind: &structpb.Value_StringValue{
-										StringValue: "result",
-									},
-								},
-							},
-						},
-					},
+		responseFormat, err := structpb.NewStruct(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"result": map[string]any{
+					"type": "string",
 				},
 			},
-		}
+			"required": []any{"result"},
+		})
+		require.NoError(t, err)
 		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name:      "test-alpha2-echo",
 			ContextId: ptr.Of(contextID),

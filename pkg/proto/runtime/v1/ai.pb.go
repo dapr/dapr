@@ -185,7 +185,7 @@ type ConversationRequestAlpha2 struct {
 	//
 	// The schema must be provided as a parsed JSON object.
 	// Note: This is currently only supported by OpenAI components.
-	// TODO: SAM TO PUT WHAT COMPONENTS ACTUALLY USE Openai in contrib to support this.
+	// This is only supported by Deepseek, GoogleAI, HuggingFace, OpenAI, and Anthropic.
 	// inspired by openai.ResponseFormat
 	// ref: https://github.com/openai/openai-go/blob/main/chatcompletion.go#L3111
 	ResponseFormat *structpb.Struct `protobuf:"bytes,10,opt,name=response_format,json=responseFormat,proto3,oneof" json:"response_format,omitempty"`
