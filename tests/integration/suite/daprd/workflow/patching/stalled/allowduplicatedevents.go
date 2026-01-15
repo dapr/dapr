@@ -16,7 +16,9 @@ package stalled
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -81,5 +83,7 @@ func (r *allowduplicatedevents) Run(t *testing.T, ctx context.Context) {
 	r.fw.RestartAsReplica(t, ctx, "old2")
 
 	r.fw.WaitForStalled(t, ctx, id)
-	require.Equal(t, 2, r.fw.CountStalledEvents(t, ctx, id))
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		require.Equal(c, 2, r.fw.CountStalledEvents(t, ctx, id))
+	}, time.Second*10, time.Millisecond*10)
 }
