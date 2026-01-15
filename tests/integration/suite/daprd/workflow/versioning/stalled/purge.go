@@ -91,6 +91,5 @@ func (d *purge) Run(t *testing.T, ctx context.Context) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "stalled")
 
-	err = client.PurgeOrchestrationState(ctx, id, api.WithForcePurge(true))
-	require.NoError(t, err)
+	require.NoError(t, client.PurgeOrchestrationState(ctx, id, api.WithForcePurge(true)))
 }
