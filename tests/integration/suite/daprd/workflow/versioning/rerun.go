@@ -69,7 +69,7 @@ func (d *rerun) Run(t *testing.T, ctx context.Context) {
 	require.False(t, calledV2.Load())
 
 	require.NoError(t, d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v2", true, func(ctx *task.OrchestrationContext) (any, error) {
-		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+		if err = ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 			return nil, err
 		}
 		calledV2.Store(true)
