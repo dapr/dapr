@@ -279,7 +279,7 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 		annotationsMap[annotationPrometheusPath] = "/"
 	}
 
-	if val, ok := wrapper.GetTemplateAnnotations()[annotations.KeyDaprServiceAnnotations]; ok && val != "" {
+	if val, ok := wrapper.GetTemplateAnnotations()[annotations.KeySidecarSvcAnnotations]; ok && val != "" {
 		pairs := stdstrings.Split(val, ",")
 		for _, pair := range pairs {
 			pair = stdstrings.TrimSpace(pair)
