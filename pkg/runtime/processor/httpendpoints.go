@@ -70,12 +70,13 @@ func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *ht
 
 	if endpoint.HasTLSRootCA() {
 		ca.Value = *endpoint.Spec.ClientTLS.RootCA.Value
+		tlsResource.Pairs = append(tlsResource.Pairs, ca)
 	}
 
 	if endpoint.HasTLSRootCASecret() {
 		ca.SecretKeyRef = *endpoint.Spec.ClientTLS.RootCA.SecretKeyRef
+		tlsResource.Pairs = append(tlsResource.Pairs, ca)
 	}
-	tlsResource.Pairs = append(tlsResource.Pairs, ca)
 
 	cCert := commonapi.NameValuePair{
 		Name: clientCert,
@@ -83,12 +84,13 @@ func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *ht
 
 	if endpoint.HasTLSClientCert() {
 		cCert.Value = *endpoint.Spec.ClientTLS.Certificate.Value
+		tlsResource.Pairs = append(tlsResource.Pairs, cCert)
 	}
 
 	if endpoint.HasTLSClientCertSecret() {
 		cCert.SecretKeyRef = *endpoint.Spec.ClientTLS.Certificate.SecretKeyRef
+		tlsResource.Pairs = append(tlsResource.Pairs, cCert)
 	}
-	tlsResource.Pairs = append(tlsResource.Pairs, cCert)
 
 	cKey := commonapi.NameValuePair{
 		Name: clientKey,
@@ -96,13 +98,13 @@ func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *ht
 
 	if endpoint.HasTLSPrivateKey() {
 		cKey.Value = *endpoint.Spec.ClientTLS.PrivateKey.Value
+		tlsResource.Pairs = append(tlsResource.Pairs, cKey)
 	}
 
 	if endpoint.HasTLSPrivateKeySecret() {
 		cKey.SecretKeyRef = *endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef
+		tlsResource.Pairs = append(tlsResource.Pairs, cKey)
 	}
-
-	tlsResource.Pairs = append(tlsResource.Pairs, cKey)
 
 	updated, _ := p.secret.ProcessResource(ctx, tlsResource)
 	if updated {
