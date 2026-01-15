@@ -32,19 +32,13 @@ import (
 func (o *orchestrator) handleStalled(ctx context.Context, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) error {
 	for _, msg := range rs.GetPendingMessages() {
 		if executionStalledEvent := msg.GetHistoryEvent().GetExecutionStalled(); executionStalledEvent != nil {
-			if err := o.stallWorkflow(ctx, state, rs, executionStalledEvent.GetReason(), executionStalledEvent.GetDescription()); err != nil {
-				return err
-			}
-			return errors.New("workflow is stalled")
+			return o.stallWorkflow(ctx, state, rs, executionStalledEvent.GetReason(), executionStalledEvent.GetDescription())
 		}
 	}
 
 	patchMismatch, patchMismatchDescription := o.hasPatchMismatch(rs)
 	if patchMismatch {
-		if err := o.stallWorkflow(ctx, state, rs, protos.StalledReason_PATCH_MISMATCH, patchMismatchDescription); err != nil {
-			return err
-		}
-		return errors.New("workflow is stalled")
+		return o.stallWorkflow(ctx, state, rs, protos.StalledReason_PATCH_MISMATCH, patchMismatchDescription)
 	}
 	return nil
 }
@@ -102,7 +96,7 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 	defer unlock()
 	<-ctx.Done()
 
-	return nil
+	return errors.New("workflow is stalled")
 }
 
 func collectAllPatches(events []*protos.HistoryEvent) []string {
