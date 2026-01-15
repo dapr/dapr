@@ -74,6 +74,10 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 
 	require.NoError(t, client.RaiseEvent(ctx, id, "Continue"))
 	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
+	lastEvent := wf.GetLastHistoryEventOfType[protos.HistoryEvent_ExecutionStalled](t, ctx, client, id)
+	require.NotNil(t, lastEvent)
+	require.Equal(t, protos.StalledReason_VERSION_NOT_AVAILABLE, lastEvent.GetExecutionStalled().GetReason())
+	require.Equal(t, "Version not available: v1", lastEvent.GetExecutionStalled().GetDescription())
 
 	cancelClient()
 	d.workflow.ResetRegistry(t)
