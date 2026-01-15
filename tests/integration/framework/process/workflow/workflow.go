@@ -154,6 +154,11 @@ func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}
 }
 
+func (w *Workflow) ResetRegistry(t *testing.T) {
+	t.Helper()
+	w.taskregistry[0] = task.NewTaskRegistry()
+}
+
 func (w *Workflow) Registry() *task.TaskRegistry {
 	return w.taskregistry[0]
 }
