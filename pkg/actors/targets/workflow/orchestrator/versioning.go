@@ -14,9 +14,96 @@ limitations under the License.
 package orchestrator
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
+	"github.com/dapr/kit/ptr"
 )
+
+func (o *orchestrator) handleStalled(ctx context.Context, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) error {
+	for _, msg := range rs.GetPendingMessages() {
+		if executionStalledEvent := msg.GetHistoryEvent().GetExecutionStalled(); executionStalledEvent != nil {
+			return o.stallWorkflow(ctx, state, rs, executionStalledEvent.GetReason(), executionStalledEvent.GetDescription())
+		}
+	}
+
+	patchMismatch, patchMismatchDescription := o.hasPatchMismatch(rs)
+	if patchMismatch {
+		return o.stallWorkflow(ctx, state, rs, protos.StalledReason_PATCH_MISMATCH, patchMismatchDescription)
+	}
+	return nil
+}
+
+func (o *orchestrator) hasPatchMismatch(rs *backend.OrchestrationRuntimeState) (bool, string) {
+	historyPatches := collectAllPatches(rs.OldEvents)
+	currentPatches := getLastPatches(rs.NewEvents)
+	if len(historyPatches) == 0 {
+		return false, ""
+	}
+
+	// History patches must be an exact prefix of current patches
+	if len(currentPatches) >= len(historyPatches) &&
+		slices.Equal(historyPatches, currentPatches[:len(historyPatches)]) {
+		return false, ""
+	}
+
+	return true, fmt.Sprintf("Patch mismatch. History patches: [%s], current patches: [%s]. ",
+		strings.Join(historyPatches, ", "),
+		strings.Join(currentPatches, ", "))
+}
+
+func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState, reason protos.StalledReason, description string) error {
+	rs.CompletedEvent = nil
+	rs.CompletedTime = nil
+
+	hasFilteredNewEvents := len(rs.NewEvents) > 0
+	rs.NewEvents = []*protos.HistoryEvent{}
+
+	lastEvent := rs.OldEvents[len(rs.OldEvents)-1]
+	hasStalledEvent := false
+	if execStalledEvent := lastEvent.GetExecutionStalled(); execStalledEvent == nil || execStalledEvent.GetDescription() != description {
+		hasStalledEvent = true
+		_ = runtimestate.AddEvent(rs, &protos.HistoryEvent{
+			EventId:   -1,
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_ExecutionStalled{
+				ExecutionStalled: &protos.ExecutionStalledEvent{
+					Reason:      reason,
+					Description: ptr.Of(description),
+				},
+			},
+		})
+	}
+	if hasFilteredNewEvents || hasStalledEvent {
+		state.ApplyRuntimeStateChanges(rs)
+		err := o.saveInternalState(ctx, state)
+		if err != nil {
+			return err
+		}
+	}
+	log.Infof("Workflow actor '%s': workflow is stalled; holding execution until context is canceled", o.actorID)
+
+	unlock := o.lock.Stall()
+	defer unlock()
+
+	// Clear in-memory state to save resources as stalling is indefinite.
+	o.state = nil
+	o.rstate = nil
+	o.ometa = nil
+
+	<-ctx.Done()
+
+	return errors.New("workflow is stalled")
+}
 
 func collectAllPatches(events []*protos.HistoryEvent) []string {
 	var allPatches []string
