@@ -19,9 +19,13 @@ import (
 	"fmt"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"go.opentelemetry.io/otel/trace"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
@@ -72,6 +76,20 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 
+	// Capture trace context from incoming request for trace propagation
+	if spanCtx := trace.SpanFromContext(ctx).SpanContext(); spanCtx.IsValid() {
+		// Set ParentTraceContext on ExecutionStarted event for durabletask-go
+		startEvent.GetExecutionStarted().ParentTraceContext = spanContextToProtoTraceContext(spanCtx)
+
+		// Store in state for activity trace context propagation
+		state.TraceContext = &wfenginestate.TraceContext{
+			TraceID:    spanCtx.TraceID().String(),
+			SpanID:     spanCtx.SpanID().String(),
+			TraceFlags: spanCtx.TraceFlags().String(),
+			TraceState: spanCtx.TraceState().String(),
+		}
+	}
+
 	// orchestration already existed: apply reuse id policy
 	rs := o.rstate
 	runtimeStatus := runtimestate.RuntimeStatus(rs)
@@ -92,7 +110,19 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 		}
 
 		// created a new instance
+
 		state.Reset()
+		// Capture trace context for the new workflow instance
+		if spanCtx := trace.SpanFromContext(ctx).SpanContext(); spanCtx.IsValid() {
+			startEvent.GetExecutionStarted().ParentTraceContext = spanContextToProtoTraceContext(spanCtx)
+			state.TraceContext = &wfenginestate.TraceContext{
+				TraceID:    spanCtx.TraceID().String(),
+				SpanID:     spanCtx.SpanID().String(),
+				TraceFlags: spanCtx.TraceFlags().String(),
+				TraceState: spanCtx.TraceState().String(),
+			}
+		}
+
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 	// default Action ERROR, fall back to original logic
@@ -110,6 +140,18 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Orches
 	}
 	log.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", o.actorID)
 	state.Reset()
+
+	// Capture trace context for the new workflow instance
+	if spanCtx := trace.SpanFromContext(ctx).SpanContext(); spanCtx.IsValid() {
+		startEvent.GetExecutionStarted().ParentTraceContext = spanContextToProtoTraceContext(spanCtx)
+		state.TraceContext = &wfenginestate.TraceContext{
+			TraceID:    spanCtx.TraceID().String(),
+			SpanID:     spanCtx.SpanID().String(),
+			TraceFlags: spanCtx.TraceFlags().String(),
+			TraceState: spanCtx.TraceState().String(),
+		}
+	}
+
 	return o.scheduleWorkflowStart(ctx, startEvent, state)
 }
 
@@ -141,4 +183,21 @@ func isStatusMatch(statuses []api.OrchestrationStatus, runtimeStatus api.Orchest
 		}
 	}
 	return false
+}
+
+// spanContextToProtoTraceContext converts an OTel SpanContext to a durabletask-go TraceContext protobuf.
+// The TraceParent field uses W3C Trace Context format: "version-traceId-spanId-traceFlags"
+func spanContextToProtoTraceContext(spanCtx trace.SpanContext) *protos.TraceContext {
+	tc := &protos.TraceContext{
+		TraceParent: fmt.Sprintf("00-%s-%s-%s",
+			spanCtx.TraceID().String(),
+			spanCtx.SpanID().String(),
+			spanCtx.TraceFlags().String()),
+	}
+
+	if stateStr := spanCtx.TraceState().String(); stateStr != "" {
+		tc.TraceState = wrapperspb.String(stateStr)
+	}
+
+	return tc
 }
