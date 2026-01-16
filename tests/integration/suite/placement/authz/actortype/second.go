@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -64,6 +65,10 @@ func (f *second) Setup(t *testing.T) []framework.Option {
 func (f *second) Run(t *testing.T, ctx context.Context) {
 	f.sentry.WaitUntilRunning(t, ctx)
 	f.place.WaitUntilRunning(t, ctx)
+
+	assert.Eventually(t, func() bool {
+		return f.place.HasLeader(t, ctx)
+	}, time.Second*10, time.Millisecond*10)
 
 	secProv, err := security.New(ctx, security.Options{
 		SentryAddress:           f.sentry.Address(),
