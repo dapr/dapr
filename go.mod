@@ -523,7 +523,7 @@ replace (
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 
-// Uncomment for local development for testing with changes in the components-contrib && kit repositories.
+// Uncomment for local development for testing with changes in the components-contrib, kit, and durabletask repositories.
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib

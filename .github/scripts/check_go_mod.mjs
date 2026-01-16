@@ -2,7 +2,7 @@
 
 import { readFile } from 'node:fs/promises'
 
-const match = `// Uncomment for local development for testing with changes in the components-contrib && kit repositories.
+const match = `// Uncomment for local development for testing with changes in the components-contrib, kit, and durabletask repositories.
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
