@@ -174,7 +174,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("pubsub unmarshal events", func(t *testing.T) {
 		name := "mypubsub"
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/topic", e.daprd.HTTPPort(), name)
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/bulk/%s/topic", e.daprd.HTTPPort(), name)
 		payload := `{"entryID": "}`
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)
@@ -392,7 +392,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	// Covers apierrors.PubSubMarshalEvents()
 	t.Run("pubsub marshal events issue", func(t *testing.T) {
 		name := "mypubsub"
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/topic", e.daprd.HTTPPort(), name)
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/bulk/%s/topic", e.daprd.HTTPPort(), name)
 		payload := `{"entryID": ""}`
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)

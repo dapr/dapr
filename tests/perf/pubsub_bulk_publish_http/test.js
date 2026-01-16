@@ -95,7 +95,7 @@ const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}`
 
 function bulkPublishRawMsgs(broker, topic, payload) {
     const result = http.post(
-        `${DAPR_ADDRESS}/v1.0-alpha1/publish/bulk/${broker}/${topic}?metadata.rawPayload=true`,
+        `${DAPR_ADDRESS}/v1.0/publish/bulk/${broker}/${topic}?metadata.rawPayload=true`,
         payload
     )
     return result.status

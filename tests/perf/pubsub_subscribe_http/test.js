@@ -74,7 +74,7 @@ function publishMessages(pubsub, topic, message, count) {
     }
 
     return http.post(
-        `${DAPR_ADDRESS}/v1.0-alpha1/publish/bulk/${pubsub}/${topic}`,
+        `${DAPR_ADDRESS}/v1.0/publish/bulk/${pubsub}/${topic}`,
         JSON.stringify(bulkPublishBody),
         { headers: { 'Content-Type': 'application/json' } }
     )

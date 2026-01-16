@@ -67,8 +67,13 @@ service Dapr {
   // Publishes events to the specific topic.
   rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty) {}
 
+  // Deprecated: Bulk Publishes multiple events to the specified topic.
+  rpc BulkPublishEventAlpha1(BulkPublishRequest) returns (BulkPublishResponse) {
+    option deprecated = true;
+  }
+
   // Bulk Publishes multiple events to the specified topic.
-  rpc BulkPublishEventAlpha1(BulkPublishRequest) returns (BulkPublishResponse) {}
+  rpc BulkPublishEvent(BulkPublishRequest) returns (BulkPublishResponse) {}
 
   // SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
   // events from it.
