@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"strconv"
+	stdstrings "strings"
 
 	"github.com/argoproj/argo-rollouts/pkg/apis/rollouts"
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
@@ -42,6 +43,23 @@ const (
 	annotationPrometheusPort           = "prometheus.io/port"
 	annotationPrometheusPath           = "prometheus.io/path"
 )
+
+// Reserved annotation keys that the operator manages and must not be overridden
+var reservedAnnotationKeys = map[string]struct{}{
+	annotations.KeyAppID:       {},
+	annotationPrometheusProbe:  {},
+	annotationPrometheusScrape: {},
+	annotationPrometheusPort:   {},
+	annotationPrometheusPath:   {},
+}
+
+// isReservedAnnotation checks if an annotation key is reserved (exact key)
+func isReservedAnnotation(key string) bool {
+	if _, ok := reservedAnnotationKeys[key]; ok {
+		return true
+	}
+	return false
+}
 
 var log = logger.NewLogger("dapr.operator.handlers")
 
@@ -276,6 +294,26 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 		annotationsMap[annotationPrometheusScrape] = "true" // WARN: deprecated as of v1.7 please use prometheus.io/probe instead.
 		annotationsMap[annotationPrometheusPort] = strconv.FormatInt(int64(metricsPort), 10)
 		annotationsMap[annotationPrometheusPath] = "/"
+	}
+
+	if val, ok := wrapper.GetTemplateAnnotations()[annotations.KeySidecarSvcAnnotations]; ok && val != "" {
+		pairs := stdstrings.Split(val, ",")
+		for _, pair := range pairs {
+			pair = stdstrings.TrimSpace(pair)
+			if pair == "" {
+				continue
+			}
+			key, value, found := stdstrings.Cut(pair, "=")
+			if found && key != "" {
+				key = stdstrings.TrimSpace(key)
+
+				if isReservedAnnotation(key) {
+					log.Warnf("Ignoring reserved annotation %q in %s: reserved keys (%v) are operator-managed", key, annotations.KeySidecarSvcAnnotations, reservedAnnotationKeys)
+					continue
+				}
+				annotationsMap[key] = stdstrings.TrimSpace(value)
+			}
+		}
 	}
 
 	grpcPort := h.getGRPCPort(wrapper)
