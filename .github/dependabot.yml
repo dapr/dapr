@@ -1,0 +1,59 @@
+version: 2
+updates:
+  # Git
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
+  # gomod root pkg
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
+  # gomod build tools
+  - package-ecosystem: "gomod"
+    directory: ".build-tools"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
+  # gomod tests
+  - package-ecosystem: "gomod"
+    directories:
+      - "tests/integration/framework/binary/helpers/helmtemplate"
+      - "tests/apps/service_invocation_grpc_proxy_server"
+      - "tests/apps/crypto"
+      - "tests/apps/actorload"
+      - "tests/apps/pluggable_kafka-bindings"
+      - "tests/apps/pluggable_redis-statestore"
+      - "tests/apps/service_invocation_grpc_proxy_client"
+      - "tests/apps/resiliencyapp"
+      - "tests/apps/resiliencyapp_grpc"
+      - "tests/apps/pluggable_redis-pubsub"
+      - "tests/apps/perf/service_invocation_http"
+      - "tests/apps/perf/actor-activation-locker"
+      - "tests/apps/perf/service_invocation_grpc"
+      - "tests/apps/perf/tester"
+      - "tests/apps/perf/actorfeatures"
+      - "tests/apps/pubsub-subscriber-streaming"
+      - "tests/apps/pubsub-publisher-streaming"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
