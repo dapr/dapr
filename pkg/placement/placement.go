@@ -20,6 +20,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -385,6 +386,10 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				continue
 			}
 
+			if err := p.authorizeMessage(host, spiffeClientID); err != nil {
+				return err
+			}
+
 			now := p.clock.Now()
 
 			for _, entity := range host.GetEntities() {
@@ -455,6 +460,23 @@ func (p *Service) validateFirstMessage(firstMessage *placementv1pb.Host, clientI
 	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
 		log.Errorf("Client ID mismatch: %s != %s", firstMessage.GetId(), clientID.AppID())
 		return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", firstMessage.GetId())
+	}
+
+	if err := p.authorizeMessage(firstMessage, clientID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Service) authorizeMessage(msg *placementv1pb.Host, clientID *spiffe.Parsed) error {
+	for _, entity := range msg.GetEntities() {
+		split := strings.Split(entity, ".")
+		if len(split) >= 2 && split[0] == "dapr" && split[1] == "internal" {
+			if len(split) < 4 || split[2] != msg.GetNamespace() || split[3] != msg.GetId() {
+				return status.Errorf(codes.PermissionDenied, "entity %s is not allowed for app ID %s in namespace %s", entity, msg.GetId(), msg.GetNamespace())
+			}
+		}
 	}
 
 	return nil
