@@ -74,7 +74,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there, my phone number is <PHONE_NUMBER>"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there, my phone number is <PHONE_NUMBER>"}}],"usage":{"completionTokens":"8","promptTokens":"8","totalTokens":"16"}}]}`, string(respBody))
 	})
 
 	t.Run("scrub input email", func(t *testing.T) {
@@ -88,7 +88,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there, my email is <EMAIL_ADDRESS>"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there, my email is <EMAIL_ADDRESS>"}}],"usage":{"completionTokens":"7","promptTokens":"7","totalTokens":"14"}}]}`, string(respBody))
 	})
 
 	t.Run("scrub input ip address", func(t *testing.T) {
@@ -102,7 +102,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there from <IP>"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there from <IP>"}}],"usage":{"completionTokens":"5","promptTokens":"5","totalTokens":"10"}}]}`, string(respBody))
 	})
 
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
@@ -116,7 +116,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there from <IP>\nwell hello there, my email is <EMAIL_ADDRESS>"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there from <IP>\nwell hello there, my email is <EMAIL_ADDRESS>"}}],"usage":{"completionTokens":"12","promptTokens":"12","totalTokens":"24"}}]}`, string(respBody))
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {
@@ -130,6 +130,6 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there"}}]}]}`, string(respBody))
+		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there"}}],"usage":{"completionTokens":"3","promptTokens":"3","totalTokens":"6"}}]}`, string(respBody))
 	})
 }
