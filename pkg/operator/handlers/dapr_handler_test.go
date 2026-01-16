@@ -197,6 +197,23 @@ func TestCreateDaprServiceWithCustomAnnotations(t *testing.T) {
 		_, exists := service.ObjectMeta.Annotations["badstring"]
 		assert.False(t, exists, "Malformed annotation should be ignored")
 	})
+
+	t.Run("Reserved operator-managed annotation keys are rejected; others allowed", func(t *testing.T) {
+		deployment := getDeployment("test", "true")
+
+		deployment.GetTemplateAnnotations()[annotations.KeySidecarSvcAnnotations] = "valid=true,dapr.io/sneaky=attack,dapr.io/app-id=overridden,prometheus.io/scrape=false,prometheus.io/custom-extra=ok,custom.io/allowed=yes"
+
+		service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
+		require.NotNil(t, service)
+
+		assert.Equal(t, "true", service.ObjectMeta.Annotations["valid"])
+		assert.Equal(t, "yes", service.ObjectMeta.Annotations["custom.io/allowed"])
+		assert.Equal(t, "attack", service.ObjectMeta.Annotations["dapr.io/sneaky"])
+		assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
+		assert.Equal(t, "true", service.ObjectMeta.Annotations["prometheus.io/scrape"], "prometheus.io/scrape should be operator-managed")
+		assert.Equal(t, "ok", service.ObjectMeta.Annotations["prometheus.io/custom-extra"])
+	})
+
 }
 
 func TestPatchDaprService(t *testing.T) {
