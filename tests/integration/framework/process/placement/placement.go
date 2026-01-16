@@ -333,3 +333,8 @@ func (p *Placement) CheckAPILevelInState(t require.TestingT, client *http.Client
 
 	return stateRes.TableVersion
 }
+
+func (p *Placement) HasLeader(t *testing.T, ctx context.Context) bool {
+	t.Helper()
+	return len(p.Metrics(t, ctx).MatchMetric("dapr_placement_leader_status")) == 1
+}
