@@ -131,7 +131,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "system message", choices.GetMessage().GetContent())
 		require.Empty(t, choices.GetMessage().GetToolCalls())
 		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
-		
+
 		require.Equal(t, uint64(2), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
 		require.Equal(t, uint64(2), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
 		require.Equal(t, uint64(4), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
