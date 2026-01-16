@@ -427,6 +427,10 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	request.Temperature = req.GetTemperature()
 	toolChoice := req.GetToolChoice()
 	tools := req.GetTools()
+	if req.GetPromptCacheRetention() != nil {
+		retentionDuration := req.GetPromptCacheRetention().AsDuration()
+		request.PromptCacheRetention = &retentionDuration
+	}
 
 	// set default tool choice to auto if not specified and tools are available
 	if toolChoice == "" && len(tools) > 0 {
@@ -563,12 +567,46 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				resultingChoices = append(resultingChoices, resultingChoice)
 			}
 
-			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResultAlpha2{
+			result := &runtimev1pb.ConversationResultAlpha2{
 				Choices: resultingChoices,
-				Model:   &resp.Model,
-			})
+				Usage:   convertUsageForResponse(resp.Usage),
+			}
+			if resp.Model != "" {
+				result.Model = &resp.Model
+			}
+			response.Outputs = append(response.GetOutputs(), result)
 		}
 	}
 
 	return response, nil
+}
+
+func convertUsageForResponse(usage *conversation.Usage) *runtimev1pb.ConversationResultAlpha2CompletionUsage {
+	if usage == nil {
+		return nil
+	}
+
+	protoUsage := &runtimev1pb.ConversationResultAlpha2CompletionUsage{
+		CompletionTokens: usage.CompletionTokens,
+		PromptTokens:     usage.PromptTokens,
+		TotalTokens:      usage.TotalTokens,
+	}
+
+	if usage.CompletionTokensDetails != nil {
+		protoUsage.CompletionTokensDetails = &runtimev1pb.ConversationResultAlpha2CompletionUsageCompletionTokensDetails{
+			AcceptedPredictionTokens: usage.CompletionTokensDetails.AcceptedPredictionTokens,
+			AudioTokens:              usage.CompletionTokensDetails.AudioTokens,
+			ReasoningTokens:          usage.CompletionTokensDetails.ReasoningTokens,
+			RejectedPredictionTokens: usage.CompletionTokensDetails.RejectedPredictionTokens,
+		}
+	}
+
+	if usage.PromptTokensDetails != nil {
+		protoUsage.PromptTokensDetails = &runtimev1pb.ConversationResultAlpha2CompletionUsagePromptTokensDetails{
+			AudioTokens:  usage.PromptTokensDetails.AudioTokens,
+			CachedTokens: usage.PromptTokensDetails.CachedTokens,
+		}
+	}
+
+	return protoUsage
 }

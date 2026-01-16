@@ -86,6 +86,10 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetContent())
 		require.Equal(t, "", resp.GetOutputs()[0].GetModel())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(8), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(8), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(16), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("scrub input great phone number", func(t *testing.T) {
@@ -115,6 +119,10 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, resp.GetOutputs(), 1)
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetContent())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(8), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(8), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(16), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("scrub input email", func(t *testing.T) {
@@ -145,6 +153,10 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, resp.GetOutputs(), 1)
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		require.Equal(t, "well hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetContent())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(7), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(7), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(14), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("scrub input ip address", func(t *testing.T) {
@@ -175,6 +187,10 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, resp.GetOutputs(), 1)
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		require.Equal(t, "well hello there from <IP>", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetContent())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(5), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(5), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(10), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
@@ -221,6 +237,10 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, resp.GetOutputs(), 1)
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		require.Equal(t, "well hello there from <IP>\nwell hello there, my email is <EMAIL_ADDRESS>", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetContent())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(12), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(12), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(24), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {
@@ -252,5 +272,9 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, resp.GetOutputs(), 1)
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetContent())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, int64(3), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, int64(3), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, int64(6), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 }
