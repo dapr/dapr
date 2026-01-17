@@ -44,7 +44,7 @@ type TryEncryptValueOpts struct {
 	KeyName string // The key that the value is mapped to in the store
 
 	// TODO: remove when feature flag is removed
-	StateStoreV2EncryptionEnabled bool
+	StateV2EncryptionEnabled bool
 }
 
 type TryDecryptValueOpts struct {
@@ -52,7 +52,7 @@ type TryDecryptValueOpts struct {
 	KeyName string // The key that the value is mapped to in the store
 
 	// TODO: remove when feature flag is removed
-	StateStoreV2EncryptionEnabled bool
+	StateV2EncryptionEnabled bool
 }
 
 // AddEncryptedStateStore adds an encrypted state store and an associated encryption key to a list.
@@ -77,10 +77,10 @@ func EncryptedStateStore(storeName string) bool {
 func TryEncryptValue(storeName string, value []byte, opts TryEncryptValueOpts) ([]byte, error) {
 	keys := encryptedStateStores[storeName]
 
-	if opts.StateStoreV2EncryptionEnabled {
+	if opts.StateV2EncryptionEnabled {
 		// Encrypted value is nonce || ciphertext || tag
 		enc, err := encrypt(value, keys.Primary, []byte(opts.KeyName), EncryptOpts{
-			StateStoreV2EncryptionEnabled: opts.StateStoreV2EncryptionEnabled,
+			StateV2EncryptionEnabled: opts.StateV2EncryptionEnabled,
 		})
 		if err != nil {
 			return value, err
@@ -123,7 +123,7 @@ func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOpts) (
 	keys := encryptedStateStores[storeName]
 
 	// TODO: once feature flag is removed the old scheme needs to be detected and handled
-	if opts.StateStoreV2EncryptionEnabled {
+	if opts.StateV2EncryptionEnabled {
 		// value is serialized json
 		encValue := &EncryptedValue{}
 		err := json.Unmarshal(value, encValue)
@@ -142,8 +142,8 @@ func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOpts) (
 		}
 
 		return decrypt(encValue.Ciphertext, key, []byte(opts.KeyName), DecryptOpts{
-			Tag:                           encValue.Tag,
-			StateStoreV2EncryptionEnabled: opts.StateStoreV2EncryptionEnabled,
+			Tag:                      encValue.Tag,
+			StateV2EncryptionEnabled: opts.StateV2EncryptionEnabled,
 		})
 	}
 

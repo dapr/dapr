@@ -663,18 +663,18 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
-		Universal:                     a.daprUniversal,
-		Logger:                        logger.NewLogger("dapr.grpc.api"),
-		Channels:                      a.channels,
-		PubSubAdapter:                 a.pubsubAdapter,
-		PubSubAdapterStreamer:         a.pubsubAdapterStreamer,
-		Outbox:                        a.outbox,
-		DirectMessaging:               a.directMessaging,
-		SendToOutputBindingFn:         a.processor.Binding().SendToOutputBinding,
-		TracingSpec:                   a.globalConfig.GetTracingSpec(),
-		AccessControlList:             a.accessControlList,
-		Processor:                     a.processor,
-		StateStoreV2EncryptionEnabled: a.globalConfig.IsFeatureEnabled(config.StateStoreV2Encryption),
+		Universal:                a.daprUniversal,
+		Logger:                   logger.NewLogger("dapr.grpc.api"),
+		Channels:                 a.channels,
+		PubSubAdapter:            a.pubsubAdapter,
+		PubSubAdapterStreamer:    a.pubsubAdapterStreamer,
+		Outbox:                   a.outbox,
+		DirectMessaging:          a.directMessaging,
+		SendToOutputBindingFn:    a.processor.Binding().SendToOutputBinding,
+		TracingSpec:              a.globalConfig.GetTracingSpec(),
+		AccessControlList:        a.accessControlList,
+		Processor:                a.processor,
+		StateV2EncryptionEnabled: a.globalConfig.IsFeatureEnabled(config.StateV2Encryption),
 	})
 
 	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
@@ -893,18 +893,18 @@ func (a *DaprRuntime) initProxy() {
 func (a *DaprRuntime) startHTTPServer() error {
 	getMetricSpec := a.globalConfig.GetMetricsSpec()
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
-		Universal:                     a.daprUniversal,
-		Channels:                      a.channels,
-		DirectMessaging:               a.directMessaging,
-		PubSubAdapter:                 a.pubsubAdapter,
-		Outbox:                        a.outbox,
-		SendToOutputBindingFn:         a.processor.Binding().SendToOutputBinding,
-		TracingSpec:                   a.globalConfig.GetTracingSpec(),
-		MetricSpec:                    &getMetricSpec,
-		MaxRequestBodySize:            int64(a.runtimeConfig.maxRequestBodySize),
-		Healthz:                       a.runtimeConfig.healthz,
-		OutboundHealthz:               a.runtimeConfig.outboundHealthz,
-		StateStoreV2EncryptionEnabled: a.globalConfig.IsFeatureEnabled(config.StateStoreV2Encryption),
+		Universal:                a.daprUniversal,
+		Channels:                 a.channels,
+		DirectMessaging:          a.directMessaging,
+		PubSubAdapter:            a.pubsubAdapter,
+		Outbox:                   a.outbox,
+		SendToOutputBindingFn:    a.processor.Binding().SendToOutputBinding,
+		TracingSpec:              a.globalConfig.GetTracingSpec(),
+		MetricSpec:               &getMetricSpec,
+		MaxRequestBodySize:       int64(a.runtimeConfig.maxRequestBodySize),
+		Healthz:                  a.runtimeConfig.healthz,
+		OutboundHealthz:          a.runtimeConfig.outboundHealthz,
+		StateV2EncryptionEnabled: a.globalConfig.IsFeatureEnabled(config.StateV2Encryption),
 	})
 
 	serverConf := http.ServerConfig{

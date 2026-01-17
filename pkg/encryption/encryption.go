@@ -56,14 +56,14 @@ type Key struct {
 
 type EncryptOpts struct {
 	// TODO: remove when feature flag is removed
-	StateStoreV2EncryptionEnabled bool
+	StateV2EncryptionEnabled bool
 }
 
 type DecryptOpts struct {
 	Tag []byte // Authentication tag
 
 	// TODO: remove when feature flag is removed
-	StateStoreV2EncryptionEnabled bool
+	StateV2EncryptionEnabled bool
 }
 
 // ComponentEncryptionKey checks if a component definition contains an encryption key and extracts it using the supplied secret store.
@@ -188,7 +188,7 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item commonapi.NameVa
 
 // Encrypt takes a byte array and encrypts it using a supplied encryption key.
 func encrypt(value []byte, key Key, additionalData []byte, opts EncryptOpts) ([]byte, error) {
-	if opts.StateStoreV2EncryptionEnabled {
+	if opts.StateV2EncryptionEnabled {
 
 		nsize := make([]byte, key.cipherObjV2.NonceSize())
 		if _, err := io.ReadFull(rand.Reader, nsize); err != nil {
@@ -217,7 +217,7 @@ func decrypt(value []byte, key Key, additionalData []byte, opts DecryptOpts) ([]
 	}
 
 	// TODO: once feature flag is removed the old scheme needs to be detected and handled
-	if opts.StateStoreV2EncryptionEnabled {
+	if opts.StateV2EncryptionEnabled {
 		nsize := key.cipherObjV2.NonceSize()
 		nonce, ciphertext := enc[:nsize], enc[nsize:]
 

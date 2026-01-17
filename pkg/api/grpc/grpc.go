@@ -87,18 +87,18 @@ type API interface {
 
 type api struct {
 	*universal.Universal
-	logger                        logger.Logger
-	directMessaging               invokev1.DirectMessaging
-	channels                      *channels.Channels
-	pubsubAdapter                 runtimePubsub.Adapter
-	pubsubAdapterStreamer         runtimePubsub.AdapterStreamer
-	outbox                        outbox.Outbox
-	sendToOutputBindingFn         func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec                   config.TracingSpec
-	accessControlList             *config.AccessControlList
-	processor                     *processor.Processor
-	wg                            sync.WaitGroup
-	stateStoreV2EncryptionEnabled bool
+	logger                   logger.Logger
+	directMessaging          invokev1.DirectMessaging
+	channels                 *channels.Channels
+	pubsubAdapter            runtimePubsub.Adapter
+	pubsubAdapterStreamer    runtimePubsub.AdapterStreamer
+	outbox                   outbox.Outbox
+	sendToOutputBindingFn    func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec              config.TracingSpec
+	accessControlList        *config.AccessControlList
+	processor                *processor.Processor
+	wg                       sync.WaitGroup
+	stateV2EncryptionEnabled bool
 
 	closeCh chan struct{}
 	closed  atomic.Bool
@@ -106,36 +106,36 @@ type api struct {
 
 // APIOpts contains options for NewAPI.
 type APIOpts struct {
-	Universal                     *universal.Universal
-	Logger                        logger.Logger
-	Channels                      *channels.Channels
-	PubSubAdapter                 runtimePubsub.Adapter
-	PubSubAdapterStreamer         runtimePubsub.AdapterStreamer
-	Outbox                        outbox.Outbox
-	DirectMessaging               invokev1.DirectMessaging
-	SendToOutputBindingFn         func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	TracingSpec                   config.TracingSpec
-	AccessControlList             *config.AccessControlList
-	Processor                     *processor.Processor
-	StateStoreV2EncryptionEnabled bool
+	Universal                *universal.Universal
+	Logger                   logger.Logger
+	Channels                 *channels.Channels
+	PubSubAdapter            runtimePubsub.Adapter
+	PubSubAdapterStreamer    runtimePubsub.AdapterStreamer
+	Outbox                   outbox.Outbox
+	DirectMessaging          invokev1.DirectMessaging
+	SendToOutputBindingFn    func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec              config.TracingSpec
+	AccessControlList        *config.AccessControlList
+	Processor                *processor.Processor
+	StateV2EncryptionEnabled bool
 }
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
 	return &api{
-		Universal:                     opts.Universal,
-		logger:                        opts.Logger,
-		directMessaging:               opts.DirectMessaging,
-		channels:                      opts.Channels,
-		pubsubAdapter:                 opts.PubSubAdapter,
-		pubsubAdapterStreamer:         opts.PubSubAdapterStreamer,
-		outbox:                        opts.Outbox,
-		sendToOutputBindingFn:         opts.SendToOutputBindingFn,
-		tracingSpec:                   opts.TracingSpec,
-		accessControlList:             opts.AccessControlList,
-		processor:                     opts.Processor,
-		closeCh:                       make(chan struct{}),
-		stateStoreV2EncryptionEnabled: opts.StateStoreV2EncryptionEnabled,
+		Universal:                opts.Universal,
+		logger:                   opts.Logger,
+		directMessaging:          opts.DirectMessaging,
+		channels:                 opts.Channels,
+		pubsubAdapter:            opts.PubSubAdapter,
+		pubsubAdapterStreamer:    opts.PubSubAdapterStreamer,
+		outbox:                   opts.Outbox,
+		sendToOutputBindingFn:    opts.SendToOutputBindingFn,
+		tracingSpec:              opts.TracingSpec,
+		accessControlList:        opts.AccessControlList,
+		processor:                opts.Processor,
+		closeCh:                  make(chan struct{}),
+		stateV2EncryptionEnabled: opts.StateV2EncryptionEnabled,
 	}
 }
 
@@ -633,7 +633,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			}
 
 			val, err := encryption.TryDecryptValue(in.GetStoreName(), bulkResp.GetItems()[i].GetData(), encryption.TryDecryptValueOpts{
-				StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+				StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 			})
 			if err != nil {
 				apiServerLogger.Debugf("Bulk get error: %v", err)
@@ -695,7 +695,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	}
 	if encryption.EncryptedStateStore(in.GetStoreName()) {
 		val, err := encryption.TryDecryptValue(in.GetStoreName(), getResponse.Data, encryption.TryDecryptValueOpts{
-			StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+			StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 		})
 		if err != nil {
 			err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error()))
@@ -765,8 +765,8 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		}
 		if encryption.EncryptedStateStore(in.GetStoreName()) {
 			val, encErr := encryption.TryEncryptValue(in.GetStoreName(), s.GetValue(), encryption.TryEncryptValueOpts{
-				KeyName:                       s.Key,
-				StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+				KeyName:                  s.Key,
+				StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 			})
 			if encErr != nil {
 				a.logger.Debug(encErr)
@@ -1015,8 +1015,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
 				val, err := encryption.TryEncryptValue(in.GetStoreName(), data, encryption.TryEncryptValueOpts{
-					KeyName:                       req.Key,
-					StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+					KeyName:                  req.Key,
+					StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 				})
 				if err != nil {
 					err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateTransaction, fmt.Sprintf(messages.ErrStateTransaction, err.Error()))

@@ -53,7 +53,7 @@ const (
 	HotReload Feature = "HotReload"
 
 	// Enables AES-CBC-AEAD automatic encryption for state stores.
-	StateStoreV2Encryption Feature = "StateStoreV2Encryption"
+	StateV2Encryption Feature = "StateV2Encryption"
 
 	// Enables feature to support workflows in a clustered deployment.
 	WorkflowsClusteredDeployment Feature = "WorkflowsClusteredDeployment"
