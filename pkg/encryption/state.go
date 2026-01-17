@@ -25,6 +25,30 @@ const (
 	separator = "||"
 )
 
+type EncryptedValue struct {
+	// Version of the encryption scheme
+	Version int `json:"v"`
+	// ID of the encryption key as the SHA-224 hash of the key's bytes
+	KeyID string `json:"kid"`
+	// Ciphertext (IV is prepended)
+	Ciphertext []byte `json:"cpt"`
+	// Authentication tag
+	Tag []byte `json:"tag"`
+}
+
+type TryEncryptValueOpts struct {
+	// Additional data used to compute authentication tags
+	KeyName string // The key that the value is mapped to in the store
+
+	// TODO: remove when feature flag is removed
+	StateStoreV2EncryptionEnabled bool
+}
+
+type TryDecryptValueOpts struct {
+	// TODO: remove when feature flag is removed
+	StateStoreV2EncryptionEnabled bool
+}
+
 // AddEncryptedStateStore adds an encrypted state store and an associated encryption key to a list.
 func AddEncryptedStateStore(storeName string, keys ComponentEncryptionKeys) bool {
 	if _, ok := encryptedStateStores[storeName]; ok {
@@ -44,11 +68,15 @@ func EncryptedStateStore(storeName string) bool {
 // TryEncryptValue will try to encrypt a byte array if the state store has associated encryption keys.
 // The function will append the name of the key to the value for later extraction.
 // If no encryption keys exist, the function will return the bytes unmodified.
-func TryEncryptValue(storeName string, value []byte) ([]byte, error) {
+func TryEncryptValue(storeName string, value []byte, opts TryEncryptValueOpts) ([]byte, error) {
 	keys := encryptedStateStores[storeName]
 	enc, err := encrypt(value, keys.Primary)
 	if err != nil {
 		return value, err
+	}
+
+	if opts.StateStoreV2EncryptionEnabled {
+		// do v2 encryption
 	}
 
 	sEnc := b64.StdEncoding.EncodeToString(enc) + separator + keys.Primary.Name
@@ -57,9 +85,13 @@ func TryEncryptValue(storeName string, value []byte) ([]byte, error) {
 
 // TryDecryptValue will try to decrypt a byte array if the state store has associated encryption keys.
 // If no encryption keys exist, the function will return the bytes unmodified.
-func TryDecryptValue(storeName string, value []byte) ([]byte, error) {
+func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOpts) ([]byte, error) {
 	if len(value) == 0 {
 		return []byte(""), nil
+	}
+
+	if opts.StateStoreV2EncryptionEnabled {
+		// do v2 decryption
 	}
 
 	keys := encryptedStateStores[storeName]

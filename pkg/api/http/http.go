@@ -578,7 +578,9 @@ func (a *api) onBulkGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 				continue
 			}
 
-			val, err := encryption.TryDecryptValue(storeName, bulkResp[i].Data)
+			val, err := encryption.TryDecryptValue(storeName, bulkResp[i].Data, encryption.TryDecryptValueOpts{
+				StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+			})
 			if err != nil {
 				log.Debugf("Bulk get error: %v", err)
 				bulkResp[i].Data = nil
@@ -671,7 +673,9 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	if encryption.EncryptedStateStore(storeName) {
-		val, err := encryption.TryDecryptValue(storeName, resp.Data)
+		val, err := encryption.TryDecryptValue(storeName, resp.Data, encryption.TryDecryptValueOpts{
+			StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+		})
 		if err != nil {
 			resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()), errorcodes.StateGet, nethttp.StatusInternalServerError)
 			respondWithError(w, resp)
@@ -1033,7 +1037,10 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 		if encryption.EncryptedStateStore(storeName) {
 			data := []byte(fmt.Sprintf("%v", r.Value))
-			val, encErr := encryption.TryEncryptValue(storeName, data)
+			val, encErr := encryption.TryEncryptValue(storeName, data, encryption.TryEncryptValueOpts{
+				KeyName:                       r.Key,
+				StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+			})
 			if encErr != nil {
 				statusCode, errMsg := a.stateErrorResponse(encErr)
 				apiResp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, errMsg), errorcodes.StateSave, statusCode)
@@ -1603,7 +1610,10 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 			switch req := op.(type) {
 			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
-				val, err := encryption.TryEncryptValue(storeName, data)
+				val, err := encryption.TryEncryptValue(storeName, data, encryption.TryEncryptValueOpts{
+					KeyName:                       req.Key,
+					StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+				})
 				if err != nil {
 					resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()), errorcodes.StateSave, nethttp.StatusBadRequest)
 					respondWithError(w, resp)

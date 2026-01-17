@@ -632,7 +632,9 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				continue
 			}
 
-			val, err := encryption.TryDecryptValue(in.GetStoreName(), bulkResp.GetItems()[i].GetData())
+			val, err := encryption.TryDecryptValue(in.GetStoreName(), bulkResp.GetItems()[i].GetData(), encryption.TryDecryptValueOpts{
+				StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+			})
 			if err != nil {
 				apiServerLogger.Debugf("Bulk get error: %v", err)
 				bulkResp.Items[i].Data = nil
@@ -692,7 +694,9 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		getResponse = &state.GetResponse{}
 	}
 	if encryption.EncryptedStateStore(in.GetStoreName()) {
-		val, err := encryption.TryDecryptValue(in.GetStoreName(), getResponse.Data)
+		val, err := encryption.TryDecryptValue(in.GetStoreName(), getResponse.Data, encryption.TryDecryptValueOpts{
+			StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+		})
 		if err != nil {
 			err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error()))
 			a.logger.Debug(err)
@@ -760,7 +764,10 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			}
 		}
 		if encryption.EncryptedStateStore(in.GetStoreName()) {
-			val, encErr := encryption.TryEncryptValue(in.GetStoreName(), s.GetValue())
+			val, encErr := encryption.TryEncryptValue(in.GetStoreName(), s.GetValue(), encryption.TryEncryptValueOpts{
+				KeyName:                       s.Key,
+				StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+			})
 			if encErr != nil {
 				a.logger.Debug(encErr)
 				return empty, encErr
@@ -1007,7 +1014,10 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			switch req := op.(type) {
 			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
-				val, err := encryption.TryEncryptValue(in.GetStoreName(), data)
+				val, err := encryption.TryEncryptValue(in.GetStoreName(), data, encryption.TryEncryptValueOpts{
+					KeyName:                       req.Key,
+					StateStoreV2EncryptionEnabled: a.stateStoreV2EncryptionEnabled,
+				})
 				if err != nil {
 					err = apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.StateTransaction, fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
 					apiServerLogger.Debug(err)

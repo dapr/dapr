@@ -88,12 +88,12 @@ func TestTryEncryptValue(t *testing.T) {
 		})
 
 		v := []byte("hello")
-		r, err := TryEncryptValue("test", v)
+		r, err := TryEncryptValue("test", v, TryEncryptValueOpts{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
-		dr, err := TryDecryptValue("test", r)
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOpts{})
 		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
@@ -120,7 +120,7 @@ func TestTryEncryptValue(t *testing.T) {
 		})
 
 		v := []byte("hello")
-		r, err := TryEncryptValue("test", v)
+		r, err := TryEncryptValue("test", v, TryEncryptValueOpts{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
@@ -130,7 +130,7 @@ func TestTryEncryptValue(t *testing.T) {
 			Secondary: pr,
 		})
 
-		dr, err := TryDecryptValue("test", r)
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOpts{})
 		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
@@ -158,12 +158,12 @@ func TestTryEncryptValue(t *testing.T) {
 
 		v := []byte("hello")
 		s := base64.StdEncoding.EncodeToString(v)
-		r, err := TryEncryptValue("test", []byte(s))
+		r, err := TryEncryptValue("test", []byte(s), TryEncryptValueOpts{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
-		dr, err := TryDecryptValue("test", r)
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOpts{})
 		require.NoError(t, err)
 		assert.Equal(t, []byte(s), dr)
 	})
@@ -190,12 +190,12 @@ func TestTryEncryptValue(t *testing.T) {
 		})
 
 		v := []byte("hello world")
-		r, err := TryEncryptValue("test", v)
+		r, err := TryEncryptValue("test", v, TryEncryptValueOpts{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
-		dr, err := TryDecryptValue("test", r)
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOpts{})
 		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
@@ -223,7 +223,7 @@ func TestTryDecryptValue(t *testing.T) {
 			Primary: pr,
 		})
 
-		dr, err := TryDecryptValue("test", nil)
+		dr, err := TryDecryptValue("test", nil, TryDecryptValueOpts{})
 		require.NoError(t, err)
 		assert.Empty(t, dr)
 	})
