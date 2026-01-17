@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/kit/crypto/aescbcaead"
 )
 
 type Algorithm string
@@ -35,6 +36,7 @@ const (
 	primaryEncryptionKey   = "primaryEncryptionKey"
 	secondaryEncryptionKey = "secondaryEncryptionKey"
 	errPrefix              = "failed to extract encryption key"
+	AESCBCAEADAlgorithm    = "AES-CBC-AEAD"
 	AESGCMAlgorithm        = "AES-GCM"
 )
 
@@ -46,9 +48,10 @@ type ComponentEncryptionKeys struct {
 
 // Key holds the key to encrypt an arbitrary object.
 type Key struct {
-	Key       string
-	Name      string
-	cipherObj cipher.AEAD
+	Key         string
+	Name        string
+	cipherObj   cipher.AEAD // v1 AES-GCM encryption scheme
+	cipherObjV2 cipher.AEAD // v2 AES-CBC-AEAD encryption scheme
 }
 
 // ComponentEncryptionKey checks if a component definition contains an encryption key and extracts it using the supplied secret store.
@@ -110,7 +113,13 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 			return ComponentEncryptionKeys{}, err
 		}
 
+		cipherObjV2, err := createCipher(cek.Primary, AESCBCAEADAlgorithm)
+		if err != nil {
+			return ComponentEncryptionKeys{}, err
+		}
+
 		cek.Primary.cipherObj = cipherObj
+		cek.Primary.cipherObjV2 = cipherObjV2
 	}
 	if cek.Secondary.Key != "" {
 		cipherObj, err := createCipher(cek.Secondary, AESGCMAlgorithm)
@@ -118,7 +127,13 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 			return ComponentEncryptionKeys{}, err
 		}
 
+		cipherObjV2, err := createCipher(cek.Secondary, AESCBCAEADAlgorithm)
+		if err != nil {
+			return ComponentEncryptionKeys{}, err
+		}
+
 		cek.Secondary.cipherObj = cipherObj
+		cek.Secondary.cipherObjV2 = cipherObjV2
 	}
 
 	return cek, nil
@@ -190,6 +205,8 @@ func createCipher(key Key, algorithm Algorithm) (cipher.AEAD, error) {
 
 	switch algorithm {
 	// Other authenticated ciphers can be added if needed, e.g. golang.org/x/crypto/chacha20poly1305
+	case AESCBCAEADAlgorithm:
+		return newAESCBCAEAD(keyBytes)
 	case AESGCMAlgorithm:
 		block, err := aes.NewCipher(keyBytes)
 		if err != nil {
@@ -199,4 +216,21 @@ func createCipher(key Key, algorithm Algorithm) (cipher.AEAD, error) {
 	}
 
 	return nil, errors.New("unsupported algorithm")
+}
+
+// newAESCBCAEAD returns an AEAD cipher based on AES-CBC, or an error if the key size is not supported.
+// Keys can be 32, 48, or 64 bytes, corresponding to AES-128 with HMAC-SHA-256-128, AES-192 with HMAC-SHA-384-192,
+// or AES-256 with HMAC-SHA-512-256 respectively.
+func newAESCBCAEAD(key []byte) (cipher.AEAD, error) {
+	l := len(key)
+	switch l {
+	case 32:
+		return aescbcaead.NewAESCBC128SHA256(key)
+	case 48:
+		return aescbcaead.NewAESCBC192SHA384(key)
+	case 64:
+		return aescbcaead.NewAESCBC256SHA512(key)
+	default:
+		return nil, errors.New("unsupported key size")
+	}
 }

@@ -222,6 +222,48 @@ func TestCreateCipher(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("valid 256-bit key v2", func(t *testing.T) {
+		bytes := make([]byte, 32)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		cipherObj, err := createCipher(Key{
+			Key: key,
+		}, AESCBCAEADAlgorithm)
+
+		assert.NotNil(t, cipherObj)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid 192-bit key v2", func(t *testing.T) {
+		bytes := make([]byte, 24)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		cipherObj, err := createCipher(Key{
+			Key: key,
+		}, AESCBCAEADAlgorithm)
+
+		assert.NotNil(t, cipherObj)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid 128-bit key v2", func(t *testing.T) {
+		bytes := make([]byte, 16)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		cipherObj, err := createCipher(Key{
+			Key: key,
+		}, AESCBCAEADAlgorithm)
+
+		assert.NotNil(t, cipherObj)
+		require.NoError(t, err)
+	})
+
 	t.Run("invalid key size", func(t *testing.T) {
 		bytes := make([]byte, 18)
 		rand.Read(bytes)
@@ -245,6 +287,48 @@ func TestCreateCipher(t *testing.T) {
 		cipherObj, err := createCipher(Key{
 			Key: key,
 		}, "3DES")
+
+		assert.Nil(t, cipherObj)
+		require.Error(t, err)
+	})
+}
+
+func TestNewAESCBCAEAD(t *testing.T) {
+	t.Run("valid 256-bit key", func(t *testing.T) {
+		bytes := make([]byte, 32)
+		rand.Read(bytes)
+
+		cipherObj, err := newAESCBCAEAD(bytes)
+
+		assert.NotNil(t, cipherObj)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid 192-bit key", func(t *testing.T) {
+		bytes := make([]byte, 24)
+		rand.Read(bytes)
+
+		cipherObj, err := newAESCBCAEAD(bytes)
+
+		assert.NotNil(t, cipherObj)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid 128-bit key", func(t *testing.T) {
+		bytes := make([]byte, 16)
+		rand.Read(bytes)
+
+		cipherObj, err := newAESCBCAEAD(bytes)
+
+		assert.NotNil(t, cipherObj)
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid key size", func(t *testing.T) {
+		bytes := make([]byte, 18)
+		rand.Read(bytes)
+
+		cipherObj, err := newAESCBCAEAD(bytes)
 
 		assert.Nil(t, cipherObj)
 		require.Error(t, err)
