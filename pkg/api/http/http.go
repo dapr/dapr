@@ -65,19 +65,20 @@ type API interface {
 }
 
 type api struct {
-	universal             *universal.Universal
-	endpoints             []endpoints.Endpoint
-	publicEndpoints       []endpoints.Endpoint
-	directMessaging       invokev1.DirectMessaging
-	channels              *channels.Channels
-	pubsubAdapter         runtimePubsub.Adapter
-	outbox                outbox.Outbox
-	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	metricSpec            *config.MetricSpec
-	tracingSpec           config.TracingSpec
-	maxRequestBodySize    int64 // In bytes
-	healthz               healthz.Healthz
-	outboundHealthz       healthz.Healthz
+	universal                     *universal.Universal
+	endpoints                     []endpoints.Endpoint
+	publicEndpoints               []endpoints.Endpoint
+	directMessaging               invokev1.DirectMessaging
+	channels                      *channels.Channels
+	pubsubAdapter                 runtimePubsub.Adapter
+	outbox                        outbox.Outbox
+	sendToOutputBindingFn         func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	metricSpec                    *config.MetricSpec
+	tracingSpec                   config.TracingSpec
+	maxRequestBodySize            int64 // In bytes
+	healthz                       healthz.Healthz
+	outboundHealthz               healthz.Healthz
+	stateStoreV2EncryptionEnabled bool
 }
 
 const (
@@ -111,33 +112,35 @@ const (
 
 // APIOpts contains the options for NewAPI.
 type APIOpts struct {
-	Universal             *universal.Universal
-	Channels              *channels.Channels
-	DirectMessaging       invokev1.DirectMessaging
-	PubSubAdapter         runtimePubsub.Adapter
-	Outbox                outbox.Outbox
-	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	TracingSpec           config.TracingSpec
-	MetricSpec            *config.MetricSpec
-	MaxRequestBodySize    int64 // In bytes
-	Healthz               healthz.Healthz
-	OutboundHealthz       healthz.Healthz
+	Universal                     *universal.Universal
+	Channels                      *channels.Channels
+	DirectMessaging               invokev1.DirectMessaging
+	PubSubAdapter                 runtimePubsub.Adapter
+	Outbox                        outbox.Outbox
+	SendToOutputBindingFn         func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec                   config.TracingSpec
+	MetricSpec                    *config.MetricSpec
+	MaxRequestBodySize            int64 // In bytes
+	Healthz                       healthz.Healthz
+	OutboundHealthz               healthz.Healthz
+	StateStoreV2EncryptionEnabled bool
 }
 
 // NewAPI returns a new API.
 func NewAPI(opts APIOpts) API {
 	api := &api{
-		universal:             opts.Universal,
-		channels:              opts.Channels,
-		directMessaging:       opts.DirectMessaging,
-		pubsubAdapter:         opts.PubSubAdapter,
-		outbox:                opts.Outbox,
-		sendToOutputBindingFn: opts.SendToOutputBindingFn,
-		tracingSpec:           opts.TracingSpec,
-		metricSpec:            opts.MetricSpec,
-		maxRequestBodySize:    opts.MaxRequestBodySize,
-		healthz:               opts.Healthz,
-		outboundHealthz:       opts.OutboundHealthz,
+		universal:                     opts.Universal,
+		channels:                      opts.Channels,
+		directMessaging:               opts.DirectMessaging,
+		pubsubAdapter:                 opts.PubSubAdapter,
+		outbox:                        opts.Outbox,
+		sendToOutputBindingFn:         opts.SendToOutputBindingFn,
+		tracingSpec:                   opts.TracingSpec,
+		metricSpec:                    opts.MetricSpec,
+		maxRequestBodySize:            opts.MaxRequestBodySize,
+		healthz:                       opts.Healthz,
+		outboundHealthz:               opts.OutboundHealthz,
+		stateStoreV2EncryptionEnabled: opts.StateStoreV2EncryptionEnabled,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()

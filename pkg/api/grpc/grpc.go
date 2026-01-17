@@ -87,17 +87,18 @@ type API interface {
 
 type api struct {
 	*universal.Universal
-	logger                logger.Logger
-	directMessaging       invokev1.DirectMessaging
-	channels              *channels.Channels
-	pubsubAdapter         runtimePubsub.Adapter
-	pubsubAdapterStreamer runtimePubsub.AdapterStreamer
-	outbox                outbox.Outbox
-	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec           config.TracingSpec
-	accessControlList     *config.AccessControlList
-	processor             *processor.Processor
-	wg                    sync.WaitGroup
+	logger                        logger.Logger
+	directMessaging               invokev1.DirectMessaging
+	channels                      *channels.Channels
+	pubsubAdapter                 runtimePubsub.Adapter
+	pubsubAdapterStreamer         runtimePubsub.AdapterStreamer
+	outbox                        outbox.Outbox
+	sendToOutputBindingFn         func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec                   config.TracingSpec
+	accessControlList             *config.AccessControlList
+	processor                     *processor.Processor
+	wg                            sync.WaitGroup
+	stateStoreV2EncryptionEnabled bool
 
 	closeCh chan struct{}
 	closed  atomic.Bool
@@ -105,34 +106,36 @@ type api struct {
 
 // APIOpts contains options for NewAPI.
 type APIOpts struct {
-	Universal             *universal.Universal
-	Logger                logger.Logger
-	Channels              *channels.Channels
-	PubSubAdapter         runtimePubsub.Adapter
-	PubSubAdapterStreamer runtimePubsub.AdapterStreamer
-	Outbox                outbox.Outbox
-	DirectMessaging       invokev1.DirectMessaging
-	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	TracingSpec           config.TracingSpec
-	AccessControlList     *config.AccessControlList
-	Processor             *processor.Processor
+	Universal                     *universal.Universal
+	Logger                        logger.Logger
+	Channels                      *channels.Channels
+	PubSubAdapter                 runtimePubsub.Adapter
+	PubSubAdapterStreamer         runtimePubsub.AdapterStreamer
+	Outbox                        outbox.Outbox
+	DirectMessaging               invokev1.DirectMessaging
+	SendToOutputBindingFn         func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec                   config.TracingSpec
+	AccessControlList             *config.AccessControlList
+	Processor                     *processor.Processor
+	StateStoreV2EncryptionEnabled bool
 }
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
 	return &api{
-		Universal:             opts.Universal,
-		logger:                opts.Logger,
-		directMessaging:       opts.DirectMessaging,
-		channels:              opts.Channels,
-		pubsubAdapter:         opts.PubSubAdapter,
-		pubsubAdapterStreamer: opts.PubSubAdapterStreamer,
-		outbox:                opts.Outbox,
-		sendToOutputBindingFn: opts.SendToOutputBindingFn,
-		tracingSpec:           opts.TracingSpec,
-		accessControlList:     opts.AccessControlList,
-		processor:             opts.Processor,
-		closeCh:               make(chan struct{}),
+		Universal:                     opts.Universal,
+		logger:                        opts.Logger,
+		directMessaging:               opts.DirectMessaging,
+		channels:                      opts.Channels,
+		pubsubAdapter:                 opts.PubSubAdapter,
+		pubsubAdapterStreamer:         opts.PubSubAdapterStreamer,
+		outbox:                        opts.Outbox,
+		sendToOutputBindingFn:         opts.SendToOutputBindingFn,
+		tracingSpec:                   opts.TracingSpec,
+		accessControlList:             opts.AccessControlList,
+		processor:                     opts.Processor,
+		closeCh:                       make(chan struct{}),
+		stateStoreV2EncryptionEnabled: opts.StateStoreV2EncryptionEnabled,
 	}
 }
 
