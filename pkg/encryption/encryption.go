@@ -54,6 +54,18 @@ type Key struct {
 	cipherObjV2 cipher.AEAD // v2 AES-CBC-AEAD encryption scheme
 }
 
+type EncryptOpts struct {
+	// TODO: remove when feature flag is removed
+	StateStoreV2EncryptionEnabled bool
+}
+
+type DecryptOpts struct {
+	Tag []byte // Authentication tag
+
+	// TODO: remove when feature flag is removed
+	StateStoreV2EncryptionEnabled bool
+}
+
 // ComponentEncryptionKey checks if a component definition contains an encryption key and extracts it using the supplied secret store.
 func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstores.SecretStore) (ComponentEncryptionKeys, error) {
 	if secretStore == nil {
@@ -175,7 +187,20 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item commonapi.NameVa
 }
 
 // Encrypt takes a byte array and encrypts it using a supplied encryption key.
-func encrypt(value []byte, key Key) ([]byte, error) {
+func encrypt(value []byte, key Key, additionalData []byte, opts EncryptOpts) ([]byte, error) {
+	if opts.StateStoreV2EncryptionEnabled {
+
+		nsize := make([]byte, key.cipherObjV2.NonceSize())
+		if _, err := io.ReadFull(rand.Reader, nsize); err != nil {
+			return value, err
+		}
+
+		enc := key.cipherObjV2.Seal(nil, nsize, value, additionalData)
+
+		// With v2 AES-CBC-AEAD the authentication tag is appended to the end, nonce is prepended manually
+		return append(nsize, enc...), nil
+	}
+
 	nsize := make([]byte, key.cipherObj.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nsize); err != nil {
 		return value, err
@@ -185,10 +210,21 @@ func encrypt(value []byte, key Key) ([]byte, error) {
 }
 
 // Decrypt takes a byte array and decrypts it using a supplied encryption key.
-func decrypt(value []byte, key Key) ([]byte, error) {
+func decrypt(value []byte, key Key, additionalData []byte, opts DecryptOpts) ([]byte, error) {
 	enc, err := b64.StdEncoding.DecodeString(string(value))
 	if err != nil {
 		return value, err
+	}
+
+	// TODO: once feature flag is removed the old scheme needs to be detected and handled
+	if opts.StateStoreV2EncryptionEnabled {
+		nsize := key.cipherObjV2.NonceSize()
+		nonce, ciphertext := enc[:nsize], enc[nsize:]
+
+		ciphertextWithTag := append(ciphertext, opts.Tag...)
+
+		// NOTE: with v2 AES-CBC-AEAD the authentication tag must be appended to the end of the ciphertext
+		return key.cipherObjV2.Open(nil, nonce, ciphertextWithTag, additionalData)
 	}
 
 	nsize := key.cipherObj.NonceSize()

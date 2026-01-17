@@ -15,7 +15,10 @@ package encryption
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"crypto/subtle"
 	b64 "encoding/base64"
+	"encoding/json"
 	"fmt"
 )
 
@@ -28,7 +31,7 @@ const (
 type EncryptedValue struct {
 	// Version of the encryption scheme
 	Version int `json:"v"`
-	// ID of the encryption key as the SHA-224 hash of the key's bytes
+	// Base64 ID of the encryption key as the SHA-224 hash of the key's bytes
 	KeyID string `json:"kid"`
 	// Ciphertext (IV is prepended)
 	Ciphertext []byte `json:"cpt"`
@@ -45,6 +48,9 @@ type TryEncryptValueOpts struct {
 }
 
 type TryDecryptValueOpts struct {
+	// Additional data used to compute authentication tags
+	KeyName string // The key that the value is mapped to in the store
+
 	// TODO: remove when feature flag is removed
 	StateStoreV2EncryptionEnabled bool
 }
@@ -70,13 +76,37 @@ func EncryptedStateStore(storeName string) bool {
 // If no encryption keys exist, the function will return the bytes unmodified.
 func TryEncryptValue(storeName string, value []byte, opts TryEncryptValueOpts) ([]byte, error) {
 	keys := encryptedStateStores[storeName]
-	enc, err := encrypt(value, keys.Primary)
-	if err != nil {
-		return value, err
-	}
 
 	if opts.StateStoreV2EncryptionEnabled {
-		// do v2 encryption
+		// Encrypted value is nonce || ciphertext || tag
+		enc, err := encrypt(value, keys.Primary, []byte(opts.KeyName), EncryptOpts{
+			StateStoreV2EncryptionEnabled: opts.StateStoreV2EncryptionEnabled,
+		})
+		if err != nil {
+			return value, err
+		}
+
+		keyID := sha256.Sum224([]byte(keys.Primary.Key))
+		tagSize := keys.Primary.cipherObj.Overhead()
+		ciphertext, tag := enc[:len(enc)-tagSize], enc[len(enc)-tagSize:]
+		encValue := EncryptedValue{
+			Version:    2,
+			KeyID:      b64.StdEncoding.EncodeToString(keyID[:]),
+			Ciphertext: ciphertext,
+			Tag:        tag,
+		}
+
+		serializedEnc, err := json.Marshal(encValue)
+		if err != nil {
+			return value, err
+		}
+
+		return serializedEnc, nil
+	}
+
+	enc, err := encrypt(value, keys.Primary, nil, EncryptOpts{})
+	if err != nil {
+		return value, err
 	}
 
 	sEnc := b64.StdEncoding.EncodeToString(enc) + separator + keys.Primary.Name
@@ -90,11 +120,33 @@ func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOpts) (
 		return []byte(""), nil
 	}
 
+	keys := encryptedStateStores[storeName]
+
+	// TODO: once feature flag is removed the old scheme needs to be detected and handled
 	if opts.StateStoreV2EncryptionEnabled {
-		// do v2 decryption
+		// value is serialized json
+		encValue := &EncryptedValue{}
+		err := json.Unmarshal(value, encValue)
+
+		if err != nil {
+			return value, fmt.Errorf("could not decrypt data for state store %s: invalid value", storeName)
+		}
+
+		// determine which encryption key to use by comparing hashes
+		var key Key
+
+		if keyMatchesKeyID(keys.Primary, encValue.KeyID) {
+			key = keys.Primary
+		} else if keyMatchesKeyID(keys.Secondary, encValue.KeyID) {
+			key = keys.Secondary
+		}
+
+		return decrypt(encValue.Ciphertext, key, []byte(opts.KeyName), DecryptOpts{
+			Tag:                           encValue.Tag,
+			StateStoreV2EncryptionEnabled: opts.StateStoreV2EncryptionEnabled,
+		})
 	}
 
-	keys := encryptedStateStores[storeName]
 	// extract the decryption key that should be appended to the value
 	ind := bytes.LastIndex(value, []byte(separator))
 	keyName := string(value[ind+len(separator):])
@@ -111,5 +163,16 @@ func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOpts) (
 		key = keys.Secondary
 	}
 
-	return decrypt(value[:ind], key)
+	return decrypt(value[:ind], key, nil, DecryptOpts{})
+}
+
+// Returns a boolean indicating whether or not the key's SHA224 hash is equivalent to the key id.
+func keyMatchesKeyID(key Key, keyID string) bool {
+	hash := sha256.Sum224([]byte(key.Key))
+
+	if subtle.ConstantTimeCompare(hash[:], []byte(keyID)) == 1 {
+		return true
+	}
+
+	return false
 }
