@@ -213,7 +213,6 @@ func TestCreateDaprServiceWithCustomAnnotations(t *testing.T) {
 		assert.Equal(t, "true", service.ObjectMeta.Annotations["prometheus.io/scrape"], "prometheus.io/scrape should be operator-managed")
 		assert.Equal(t, "ok", service.ObjectMeta.Annotations["prometheus.io/custom-extra"])
 	})
-
 }
 
 func TestPatchDaprService(t *testing.T) {
