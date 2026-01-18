@@ -248,7 +248,7 @@ func newDaprRuntime(ctx context.Context,
 		ID:                              runtimeConfig.id,
 		Namespace:                       namespace,
 		IsHTTP:                          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ProgrammaticSubscriptionEnabled: !utils.Contains(runtimeConfig.disableInitEndpoints, "subscribe"),
+		ProgrammaticSubscriptionEnabled: !utils.Contains(runtimeConfig.disableInitEndpoints, DisableSubscribeInitEndpoint),
 		ActorsEnabled:                   len(runtimeConfig.actorsService) > 0,
 		Actors:                          actors,
 		Registry:                        runtimeConfig.registry,
@@ -1323,7 +1323,7 @@ func (a *DaprRuntime) loadAppConfiguration(ctx context.Context) {
 		return
 	}
 
-	if utils.Contains(a.runtimeConfig.disableInitEndpoints, "config") {
+	if utils.Contains(a.runtimeConfig.disableInitEndpoints, DisableConfigInitEndpoint) {
 		log.Warn("Skipping programmatic dapr configuration loading (see 'disable-init-endpoints' flag/annotation)")
 		return
 	}
