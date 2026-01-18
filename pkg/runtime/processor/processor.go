@@ -152,11 +152,12 @@ func New(opts Options) *Processor {
 	})
 
 	state := state.New(state.Options{
-		ActorsEnabled:  opts.ActorsEnabled,
-		Registry:       opts.Registry.StateStores(),
-		ComponentStore: opts.ComponentStore,
-		Meta:           opts.Meta,
-		Outbox:         opts.Outbox,
+		ActorsEnabled:            opts.ActorsEnabled,
+		Registry:                 opts.Registry.StateStores(),
+		ComponentStore:           opts.ComponentStore,
+		Meta:                     opts.Meta,
+		Outbox:                   opts.Outbox,
+		StateV2EncryptionEnabled: opts.GlobalConfig.IsFeatureEnabled(config.StateV2Encryption),
 	})
 
 	secret := secret.New(secret.Options{

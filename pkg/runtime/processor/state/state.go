@@ -39,11 +39,12 @@ const (
 var log = logger.NewLogger("dapr.runtime.processor.state")
 
 type Options struct {
-	Registry       *compstate.Registry
-	ComponentStore *compstore.ComponentStore
-	Meta           *meta.Meta
-	ActorsEnabled  bool
-	Outbox         outbox.Outbox
+	Registry                 *compstate.Registry
+	ComponentStore           *compstore.ComponentStore
+	Meta                     *meta.Meta
+	ActorsEnabled            bool
+	Outbox                   outbox.Outbox
+	StateV2EncryptionEnabled bool
 }
 
 type state struct {
@@ -55,15 +56,18 @@ type state struct {
 	actorStateStoreName *string
 	actorsEnabled       bool
 	outbox              outbox.Outbox
+
+	stateV2EncryptionEnabled bool
 }
 
 func New(opts Options) *state {
 	return &state{
-		registry:      opts.Registry,
-		compStore:     opts.ComponentStore,
-		meta:          opts.Meta,
-		actorsEnabled: opts.ActorsEnabled,
-		outbox:        opts.Outbox,
+		registry:                 opts.Registry,
+		compStore:                opts.ComponentStore,
+		meta:                     opts.Meta,
+		actorsEnabled:            opts.ActorsEnabled,
+		outbox:                   opts.Outbox,
+		stateV2EncryptionEnabled: opts.StateV2EncryptionEnabled,
 	}
 }
 
@@ -95,7 +99,9 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 		ok := encryption.AddEncryptedStateStore(comp.ObjectMeta.Name, encKeys)
 		if ok {
 			log.Infof("Automatic encryption enabled for state store %s", comp.ObjectMeta.Name)
-			log.Info("WARNING: Automatic state store encryption should never be used to store more than 4 billion items in the state store (including updates). Storing more items than that can cause the private key to be exposed.")
+			if !s.stateV2EncryptionEnabled {
+				log.Info("WARNING: Automatic state store encryption should never be used to store more than 4 billion items in the state store (including updates). Storing more items than that can cause the private key to be exposed.")
+			}
 		}
 	}
 
