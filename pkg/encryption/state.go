@@ -18,6 +18,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	b64 "encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 )
@@ -172,11 +173,22 @@ func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOptions
 	return nil, nil
 }
 
-// Returns a boolean indicating whether or not the key's SHA224 hash is equivalent to the key ID.
+// Returns a boolean indicating whether or not the key's SHA-224 hash is equivalent to the key ID.
+// The key ID must be a Base-64 encoded string.
 func keyMatchesKeyID(key Key, keyID string) bool {
-	hash := sha256.Sum224([]byte(key.Key))
+	keyIDBytes, err := b64.StdEncoding.DecodeString(keyID)
+	if err != nil {
+		return false
+	}
 
-	if subtle.ConstantTimeCompare(hash[:], []byte(keyID)) == 1 {
+	keyBytes, err := hex.DecodeString(key.Key)
+	if err != nil {
+		return false
+	}
+
+	keyHashBytes := sha256.Sum224(keyBytes)
+
+	if subtle.ConstantTimeCompare(keyHashBytes[:], keyIDBytes) == 1 {
 		return true
 	}
 

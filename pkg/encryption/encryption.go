@@ -54,6 +54,11 @@ type Key struct {
 	cipherObjV2 cipher.AEAD // v2 AES-CBC-AEAD encryption scheme
 }
 
+type ComponentEncryptionKeyOptions struct {
+	// TODO: remove when feature flag is removed
+	StateV2EncryptionEnabled bool
+}
+
 type EncryptOptions struct {
 	// TODO: remove when feature flag is removed
 	StateV2EncryptionEnabled bool
@@ -65,7 +70,7 @@ type DecryptOptions struct {
 }
 
 // ComponentEncryptionKey checks if a component definition contains an encryption key and extracts it using the supplied secret store.
-func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstores.SecretStore) (ComponentEncryptionKeys, error) {
+func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstores.SecretStore, opts ComponentEncryptionKeyOptions) (ComponentEncryptionKeys, error) {
 	if secretStore == nil {
 		return ComponentEncryptionKeys{}, nil
 	}
@@ -123,13 +128,16 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 			return ComponentEncryptionKeys{}, err
 		}
 
-		cipherObjV2, err := createCipher(cek.Primary, AESCBCAEADAlgorithm)
-		if err != nil {
-			return ComponentEncryptionKeys{}, err
-		}
-
 		cek.Primary.cipherObj = cipherObj
-		cek.Primary.cipherObjV2 = cipherObjV2
+
+		if opts.StateV2EncryptionEnabled {
+			cipherObjV2, err := createCipher(cek.Primary, AESCBCAEADAlgorithm)
+			if err != nil {
+				return ComponentEncryptionKeys{}, err
+			}
+
+			cek.Primary.cipherObjV2 = cipherObjV2
+		}
 	}
 	if cek.Secondary.Key != "" {
 		cipherObj, err := createCipher(cek.Secondary, AESGCMAlgorithm)
@@ -137,13 +145,16 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 			return ComponentEncryptionKeys{}, err
 		}
 
-		cipherObjV2, err := createCipher(cek.Secondary, AESCBCAEADAlgorithm)
-		if err != nil {
-			return ComponentEncryptionKeys{}, err
-		}
-
 		cek.Secondary.cipherObj = cipherObj
-		cek.Secondary.cipherObjV2 = cipherObjV2
+
+		if opts.StateV2EncryptionEnabled {
+			cipherObjV2, err := createCipher(cek.Secondary, AESCBCAEADAlgorithm)
+			if err != nil {
+				return ComponentEncryptionKeys{}, err
+			}
+
+			cek.Secondary.cipherObjV2 = cipherObjV2
+		}
 	}
 
 	return cek, nil

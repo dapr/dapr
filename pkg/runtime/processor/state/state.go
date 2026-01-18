@@ -89,7 +89,9 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 	secretStoreName := s.meta.AuthSecretStoreOrDefault(&comp)
 
 	secretStore, _ := s.compStore.GetSecretStore(secretStoreName)
-	encKeys, err := encryption.ComponentEncryptionKey(comp, secretStore)
+	encKeys, err := encryption.ComponentEncryptionKey(comp, secretStore, encryption.ComponentEncryptionKeyOptions{
+		StateV2EncryptionEnabled: s.stateV2EncryptionEnabled,
+	})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)

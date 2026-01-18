@@ -101,7 +101,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 			},
 		}})
 
-		keys, err := ComponentEncryptionKey(component, secretStore)
+		keys, err := ComponentEncryptionKey(component, secretStore, ComponentEncryptionKeyOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, primaryKey, keys.Primary.Key)
 		assert.Equal(t, secondaryKey, keys.Secondary.Key)
@@ -130,7 +130,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 			},
 		}
 
-		keys, err := ComponentEncryptionKey(component, nil)
+		keys, err := ComponentEncryptionKey(component, nil, ComponentEncryptionKeyOptions{})
 		assert.Empty(t, keys.Primary.Key)
 		assert.Empty(t, keys.Secondary.Key)
 		require.NoError(t, err)
@@ -150,7 +150,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 			},
 		}
 
-		_, err := ComponentEncryptionKey(component, nil)
+		_, err := ComponentEncryptionKey(component, nil, ComponentEncryptionKeyOptions{})
 		require.NoError(t, err)
 	})
 }
@@ -222,36 +222,36 @@ func TestCreateCipher(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("valid 256-bit key v2", func(t *testing.T) {
+	t.Run("valid 512-bit key for v2 encryption", func(t *testing.T) {
+		bytes := make([]byte, 64)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		cipherObj, err := createCipher(Key{
+			Key: key,
+		}, AESCBCAEADAlgorithm)
+
+		assert.NotNil(t, cipherObj)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid 384-bit key for v2 encryption", func(t *testing.T) {
+		bytes := make([]byte, 48)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		cipherObj, err := createCipher(Key{
+			Key: key,
+		}, AESCBCAEADAlgorithm)
+
+		assert.NotNil(t, cipherObj)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid 256-bit key for v2 encryption", func(t *testing.T) {
 		bytes := make([]byte, 32)
-		rand.Read(bytes)
-
-		key := hex.EncodeToString(bytes)
-
-		cipherObj, err := createCipher(Key{
-			Key: key,
-		}, AESCBCAEADAlgorithm)
-
-		assert.NotNil(t, cipherObj)
-		require.NoError(t, err)
-	})
-
-	t.Run("valid 192-bit key v2", func(t *testing.T) {
-		bytes := make([]byte, 24)
-		rand.Read(bytes)
-
-		key := hex.EncodeToString(bytes)
-
-		cipherObj, err := createCipher(Key{
-			Key: key,
-		}, AESCBCAEADAlgorithm)
-
-		assert.NotNil(t, cipherObj)
-		require.NoError(t, err)
-	})
-
-	t.Run("valid 128-bit key v2", func(t *testing.T) {
-		bytes := make([]byte, 16)
 		rand.Read(bytes)
 
 		key := hex.EncodeToString(bytes)
@@ -294,28 +294,28 @@ func TestCreateCipher(t *testing.T) {
 }
 
 func TestNewAESCBCAEAD(t *testing.T) {
+	t.Run("valid 512-bit key", func(t *testing.T) {
+		bytes := make([]byte, 64)
+		rand.Read(bytes)
+
+		cipherObj, err := newAESCBCAEAD(bytes)
+
+		assert.NotNil(t, cipherObj)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid 384-bit key", func(t *testing.T) {
+		bytes := make([]byte, 48)
+		rand.Read(bytes)
+
+		cipherObj, err := newAESCBCAEAD(bytes)
+
+		assert.NotNil(t, cipherObj)
+		require.NoError(t, err)
+	})
+
 	t.Run("valid 256-bit key", func(t *testing.T) {
 		bytes := make([]byte, 32)
-		rand.Read(bytes)
-
-		cipherObj, err := newAESCBCAEAD(bytes)
-
-		assert.NotNil(t, cipherObj)
-		require.NoError(t, err)
-	})
-
-	t.Run("valid 192-bit key", func(t *testing.T) {
-		bytes := make([]byte, 24)
-		rand.Read(bytes)
-
-		cipherObj, err := newAESCBCAEAD(bytes)
-
-		assert.NotNil(t, cipherObj)
-		require.NoError(t, err)
-	})
-
-	t.Run("valid 128-bit key", func(t *testing.T) {
-		bytes := make([]byte, 16)
 		rand.Read(bytes)
 
 		cipherObj, err := newAESCBCAEAD(bytes)
