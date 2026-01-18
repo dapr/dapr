@@ -92,7 +92,7 @@ func TryEncryptValue(storeName string, value []byte, opts TryEncryptValueOptions
 		tagSize := keys.Primary.cipherObj.Overhead()
 		ciphertext, tag := enc[:len(enc)-tagSize], enc[len(enc)-tagSize:]
 		encValue := EncryptedValue{
-			Version:    2,
+			Version:    2, // hardcoded version
 			KeyID:      b64.StdEncoding.EncodeToString(keyID[:]),
 			Ciphertext: ciphertext,
 			Tag:        tag,
@@ -159,9 +159,11 @@ func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOptions
 			key = keys.Secondary
 		}
 
+		// with v2 AES-CBC-AEAD the authentication tag must be appended to the end of the ciphertext
+		ciphertextWithTag := append(encValue.Ciphertext, encValue.Tag...)
 		additionalData := []byte(opts.KeyName)
-		return decrypt(encValue.Ciphertext, key, additionalData, DecryptOptions{
-			Tag:                      encValue.Tag,
+
+		return decrypt(ciphertextWithTag, key, additionalData, DecryptOptions{
 			StateV2EncryptionEnabled: opts.StateV2EncryptionEnabled,
 		})
 	}

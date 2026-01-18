@@ -60,8 +60,6 @@ type EncryptOptions struct {
 }
 
 type DecryptOptions struct {
-	Tag []byte // Authentication tag
-
 	// TODO: remove when feature flag is removed
 	StateV2EncryptionEnabled bool
 }
@@ -195,10 +193,7 @@ func encrypt(value []byte, key Key, additionalData []byte, opts EncryptOptions) 
 			return value, err
 		}
 
-		enc := key.cipherObjV2.Seal(nil, nsize, value, additionalData)
-
-		// With v2 AES-CBC-AEAD the authentication tag is appended to the end, nonce is prepended manually
-		return append(nsize, enc...), nil
+		return key.cipherObjV2.Seal(nsize, nsize, value, additionalData), nil
 	}
 
 	nsize := make([]byte, key.cipherObj.NonceSize())
@@ -229,10 +224,7 @@ func decrypt(value []byte, key Key, additionalData []byte, opts DecryptOptions) 
 		nsize := key.cipherObjV2.NonceSize()
 		nonce, ciphertext := enc[:nsize], enc[nsize:]
 
-		ciphertextWithTag := append(ciphertext, opts.Tag...)
-
-		// with v2 AES-CBC-AEAD the authentication tag must be appended to the end of the ciphertext
-		return key.cipherObjV2.Open(nil, nonce, ciphertextWithTag, additionalData)
+		return key.cipherObjV2.Open(nil, nonce, ciphertext, additionalData)
 	}
 
 	// should never get here
