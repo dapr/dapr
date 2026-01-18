@@ -362,7 +362,7 @@ func TestDisableInitEndpoints(t *testing.T) {
 			"--disable-init-endpoints", "config",
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "config", opts.DisableInitEndpoints)
+		assert.Equal(t, []string{"config"}, opts.DisableInitEndpoints)
 	})
 
 	t.Run("disable multiple endpoints with comma separation", func(t *testing.T) {
@@ -370,14 +370,14 @@ func TestDisableInitEndpoints(t *testing.T) {
 			"--disable-init-endpoints", "config,subscribe",
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "config,subscribe", opts.DisableInitEndpoints)
+		assert.Equal(t, []string{"config", "subscribe"}, opts.DisableInitEndpoints)
 	})
 	t.Run("single dash flag support", func(t *testing.T) {
 		opts, err := New([]string{
 			"-disable-init-endpoints", "config", // Single dash
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "config", opts.DisableInitEndpoints)
+		assert.Equal(t, []string{"config"}, opts.DisableInitEndpoints)
 	})
 	t.Run("empty value should be allowed", func(t *testing.T) {
 		opts, err := New([]string{
