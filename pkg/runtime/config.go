@@ -465,7 +465,8 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		return nil, fmt.Errorf("invalid value for 'app-protocol': %v", c.AppProtocol)
 	}
 
-	var filtered []string
+	filtered := make([]string, 0, len(c.DisableInitEndpoints))
+
 	for _, e := range c.DisableInitEndpoints {
 		e = strings.ToLower(strings.TrimSpace(e))
 		if e == "" {
@@ -476,6 +477,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		}
 		filtered = append(filtered, e)
 	}
+
 	intc.disableInitEndpoints = filtered
 
 	intc.apiListenAddresses = strings.Split(c.DaprAPIListenAddresses, ",")
