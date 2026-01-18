@@ -54,12 +54,12 @@ type Key struct {
 	cipherObjV2 cipher.AEAD // v2 AES-CBC-AEAD encryption scheme
 }
 
-type EncryptOpts struct {
+type EncryptOptions struct {
 	// TODO: remove when feature flag is removed
 	StateV2EncryptionEnabled bool
 }
 
-type DecryptOpts struct {
+type DecryptOptions struct {
 	Tag []byte // Authentication tag
 
 	// TODO: remove when feature flag is removed
@@ -187,9 +187,9 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item commonapi.NameVa
 }
 
 // Encrypt takes a byte array and encrypts it using a supplied encryption key.
-func encrypt(value []byte, key Key, additionalData []byte, opts EncryptOpts) ([]byte, error) {
+func encrypt(value []byte, key Key, additionalData []byte, opts EncryptOptions) ([]byte, error) {
 	if opts.StateV2EncryptionEnabled {
-
+		// TODO: when feature flag is removed, replace old encryption logic with this
 		nsize := make([]byte, key.cipherObjV2.NonceSize())
 		if _, err := io.ReadFull(rand.Reader, nsize); err != nil {
 			return value, err
@@ -210,27 +210,33 @@ func encrypt(value []byte, key Key, additionalData []byte, opts EncryptOpts) ([]
 }
 
 // Decrypt takes a byte array and decrypts it using a supplied encryption key.
-func decrypt(value []byte, key Key, additionalData []byte, opts DecryptOpts) ([]byte, error) {
+func decrypt(value []byte, key Key, additionalData []byte, opts DecryptOptions) ([]byte, error) {
 	enc, err := b64.StdEncoding.DecodeString(string(value))
 	if err != nil {
 		return value, err
 	}
 
-	// TODO: once feature flag is removed the old scheme needs to be detected and handled
+	if additionalData == nil {
+		// fallback to old encryption scheme
+		nsize := key.cipherObj.NonceSize()
+		nonce, ciphertext := enc[:nsize], enc[nsize:]
+
+		return key.cipherObj.Open(nil, nonce, ciphertext, nil)
+	}
+
 	if opts.StateV2EncryptionEnabled {
+		// TODO: move to outer scope when feature flag is removed
 		nsize := key.cipherObjV2.NonceSize()
 		nonce, ciphertext := enc[:nsize], enc[nsize:]
 
 		ciphertextWithTag := append(ciphertext, opts.Tag...)
 
-		// NOTE: with v2 AES-CBC-AEAD the authentication tag must be appended to the end of the ciphertext
+		// with v2 AES-CBC-AEAD the authentication tag must be appended to the end of the ciphertext
 		return key.cipherObjV2.Open(nil, nonce, ciphertextWithTag, additionalData)
 	}
 
-	nsize := key.cipherObj.NonceSize()
-	nonce, ciphertext := enc[:nsize], enc[nsize:]
-
-	return key.cipherObj.Open(nil, nonce, ciphertext, nil)
+	// should never get here
+	return nil, nil
 }
 
 func createCipher(key Key, algorithm Algorithm) (cipher.AEAD, error) {

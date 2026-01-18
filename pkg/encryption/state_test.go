@@ -15,6 +15,7 @@ package encryption
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"testing"
@@ -88,12 +89,12 @@ func TestTryEncryptValue(t *testing.T) {
 		})
 
 		v := []byte("hello")
-		r, err := TryEncryptValue("test", v, TryEncryptValueOpts{})
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
-		dr, err := TryDecryptValue("test", r, TryDecryptValueOpts{})
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
@@ -120,7 +121,7 @@ func TestTryEncryptValue(t *testing.T) {
 		})
 
 		v := []byte("hello")
-		r, err := TryEncryptValue("test", v, TryEncryptValueOpts{})
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
@@ -130,7 +131,7 @@ func TestTryEncryptValue(t *testing.T) {
 			Secondary: pr,
 		})
 
-		dr, err := TryDecryptValue("test", r, TryDecryptValueOpts{})
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
@@ -158,12 +159,12 @@ func TestTryEncryptValue(t *testing.T) {
 
 		v := []byte("hello")
 		s := base64.StdEncoding.EncodeToString(v)
-		r, err := TryEncryptValue("test", []byte(s), TryEncryptValueOpts{})
+		r, err := TryEncryptValue("test", []byte(s), TryEncryptValueOptions{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
-		dr, err := TryDecryptValue("test", r, TryDecryptValueOpts{})
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, []byte(s), dr)
 	})
@@ -190,12 +191,12 @@ func TestTryEncryptValue(t *testing.T) {
 		})
 
 		v := []byte("hello world")
-		r, err := TryEncryptValue("test", v, TryEncryptValueOpts{})
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
-		dr, err := TryDecryptValue("test", r, TryDecryptValueOpts{})
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
@@ -223,7 +224,7 @@ func TestTryDecryptValue(t *testing.T) {
 			Primary: pr,
 		})
 
-		dr, err := TryDecryptValue("test", nil, TryDecryptValueOpts{})
+		dr, err := TryDecryptValue("test", nil, TryDecryptValueOptions{})
 		require.NoError(t, err)
 		assert.Empty(t, dr)
 	})
@@ -243,5 +244,41 @@ func TestEncryptedStateStore(t *testing.T) {
 		ok := EncryptedStateStore("test")
 
 		assert.False(t, ok)
+	})
+}
+
+func TestKeyMatchesKeyID(t *testing.T) {
+	t.Run("key matches", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 16)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		hash := sha256.Sum224(bytes)
+		keyID := base64.StdEncoding.EncodeToString(hash[:])
+		assert.True(t, keyMatchesKeyID(pr, keyID))
+	})
+
+	t.Run("key doesn't match", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 16)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		assert.False(t, keyMatchesKeyID(pr, "test"))
 	})
 }

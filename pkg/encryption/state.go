@@ -39,7 +39,7 @@ type EncryptedValue struct {
 	Tag []byte `json:"tag"`
 }
 
-type TryEncryptValueOpts struct {
+type TryEncryptValueOptions struct {
 	// Additional data used to compute authentication tags
 	KeyName string // The key that the value is mapped to in the store
 
@@ -47,7 +47,7 @@ type TryEncryptValueOpts struct {
 	StateV2EncryptionEnabled bool
 }
 
-type TryDecryptValueOpts struct {
+type TryDecryptValueOptions struct {
 	// Additional data used to compute authentication tags
 	KeyName string // The key that the value is mapped to in the store
 
@@ -74,12 +74,14 @@ func EncryptedStateStore(storeName string) bool {
 // TryEncryptValue will try to encrypt a byte array if the state store has associated encryption keys.
 // The function will append the name of the key to the value for later extraction.
 // If no encryption keys exist, the function will return the bytes unmodified.
-func TryEncryptValue(storeName string, value []byte, opts TryEncryptValueOpts) ([]byte, error) {
+func TryEncryptValue(storeName string, value []byte, opts TryEncryptValueOptions) ([]byte, error) {
 	keys := encryptedStateStores[storeName]
 
 	if opts.StateV2EncryptionEnabled {
-		// Encrypted value is nonce || ciphertext || tag
-		enc, err := encrypt(value, keys.Primary, []byte(opts.KeyName), EncryptOpts{
+		// TODO: when feature flag is removed, replace old encryption logic with this
+		// encrypted value is nonce || ciphertext || tag
+		additionalData := []byte(opts.KeyName)
+		enc, err := encrypt(value, keys.Primary, additionalData, EncryptOptions{
 			StateV2EncryptionEnabled: opts.StateV2EncryptionEnabled,
 		})
 		if err != nil {
@@ -104,7 +106,7 @@ func TryEncryptValue(storeName string, value []byte, opts TryEncryptValueOpts) (
 		return serializedEnc, nil
 	}
 
-	enc, err := encrypt(value, keys.Primary, nil, EncryptOpts{})
+	enc, err := encrypt(value, keys.Primary, nil, EncryptOptions{})
 	if err != nil {
 		return value, err
 	}
@@ -115,23 +117,39 @@ func TryEncryptValue(storeName string, value []byte, opts TryEncryptValueOpts) (
 
 // TryDecryptValue will try to decrypt a byte array if the state store has associated encryption keys.
 // If no encryption keys exist, the function will return the bytes unmodified.
-func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOpts) ([]byte, error) {
+func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOptions) ([]byte, error) {
 	if len(value) == 0 {
 		return []byte(""), nil
 	}
 
 	keys := encryptedStateStores[storeName]
 
-	// TODO: once feature flag is removed the old scheme needs to be detected and handled
-	if opts.StateV2EncryptionEnabled {
-		// value is serialized json
-		encValue := &EncryptedValue{}
-		err := json.Unmarshal(value, encValue)
+	// determine the encryption scheme
+	encValue := &EncryptedValue{}
+	err := json.Unmarshal(value, encValue)
+	if err != nil {
+		// fallback to old encryption scheme
+		// extract the decryption key that should be appended to the value
+		ind := bytes.LastIndex(value, []byte(separator))
+		keyName := string(value[ind+len(separator):])
 
-		if err != nil {
-			return value, fmt.Errorf("could not decrypt data for state store %s: invalid value", storeName)
+		if len(keyName) == 0 {
+			return value, fmt.Errorf("could not decrypt data for state store %s: encryption key name not found on record", storeName)
 		}
 
+		var key Key
+
+		if keys.Primary.Name == keyName {
+			key = keys.Primary
+		} else if keys.Secondary.Name == keyName {
+			key = keys.Secondary
+		}
+
+		return decrypt(value[:ind], key, nil, DecryptOptions{})
+	}
+
+	if opts.StateV2EncryptionEnabled {
+		// TODO: move to outer scope when feature flag is removed
 		// determine which encryption key to use by comparing hashes
 		var key Key
 
@@ -141,32 +159,18 @@ func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOpts) (
 			key = keys.Secondary
 		}
 
-		return decrypt(encValue.Ciphertext, key, []byte(opts.KeyName), DecryptOpts{
+		additionalData := []byte(opts.KeyName)
+		return decrypt(encValue.Ciphertext, key, additionalData, DecryptOptions{
 			Tag:                      encValue.Tag,
 			StateV2EncryptionEnabled: opts.StateV2EncryptionEnabled,
 		})
 	}
 
-	// extract the decryption key that should be appended to the value
-	ind := bytes.LastIndex(value, []byte(separator))
-	keyName := string(value[ind+len(separator):])
-
-	if len(keyName) == 0 {
-		return value, fmt.Errorf("could not decrypt data for state store %s: encryption key name not found on record", storeName)
-	}
-
-	var key Key
-
-	if keys.Primary.Name == keyName {
-		key = keys.Primary
-	} else if keys.Secondary.Name == keyName {
-		key = keys.Secondary
-	}
-
-	return decrypt(value[:ind], key, nil, DecryptOpts{})
+	// should never get here
+	return nil, nil
 }
 
-// Returns a boolean indicating whether or not the key's SHA224 hash is equivalent to the key id.
+// Returns a boolean indicating whether or not the key's SHA224 hash is equivalent to the key ID.
 func keyMatchesKeyID(key Key, keyID string) bool {
 	hash := sha256.Sum224([]byte(key.Key))
 

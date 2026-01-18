@@ -578,7 +578,8 @@ func (a *api) onBulkGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 				continue
 			}
 
-			val, err := encryption.TryDecryptValue(storeName, bulkResp[i].Data, encryption.TryDecryptValueOpts{
+			val, err := encryption.TryDecryptValue(storeName, bulkResp[i].Data, encryption.TryDecryptValueOptions{
+				KeyName:                  bulkResp[i].Key,
 				StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 			})
 			if err != nil {
@@ -673,7 +674,8 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	if encryption.EncryptedStateStore(storeName) {
-		val, err := encryption.TryDecryptValue(storeName, resp.Data, encryption.TryDecryptValueOpts{
+		val, err := encryption.TryDecryptValue(storeName, resp.Data, encryption.TryDecryptValueOptions{
+			KeyName:                  k,
 			StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 		})
 		if err != nil {
@@ -1037,7 +1039,7 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 		if encryption.EncryptedStateStore(storeName) {
 			data := []byte(fmt.Sprintf("%v", r.Value))
-			val, encErr := encryption.TryEncryptValue(storeName, data, encryption.TryEncryptValueOpts{
+			val, encErr := encryption.TryEncryptValue(storeName, data, encryption.TryEncryptValueOptions{
 				KeyName:                  r.Key,
 				StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 			})
@@ -1610,7 +1612,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 			switch req := op.(type) {
 			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
-				val, err := encryption.TryEncryptValue(storeName, data, encryption.TryEncryptValueOpts{
+				val, err := encryption.TryEncryptValue(storeName, data, encryption.TryEncryptValueOptions{
 					KeyName:                  req.Key,
 					StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 				})

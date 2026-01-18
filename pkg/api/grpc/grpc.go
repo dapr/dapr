@@ -632,7 +632,8 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				continue
 			}
 
-			val, err := encryption.TryDecryptValue(in.GetStoreName(), bulkResp.GetItems()[i].GetData(), encryption.TryDecryptValueOpts{
+			val, err := encryption.TryDecryptValue(in.GetStoreName(), bulkResp.GetItems()[i].GetData(), encryption.TryDecryptValueOptions{
+				KeyName:                  bulkResp.GetItems()[i].GetKey(),
 				StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 			})
 			if err != nil {
@@ -694,7 +695,8 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		getResponse = &state.GetResponse{}
 	}
 	if encryption.EncryptedStateStore(in.GetStoreName()) {
-		val, err := encryption.TryDecryptValue(in.GetStoreName(), getResponse.Data, encryption.TryDecryptValueOpts{
+		val, err := encryption.TryDecryptValue(in.GetStoreName(), getResponse.Data, encryption.TryDecryptValueOptions{
+			KeyName:                  key,
 			StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 		})
 		if err != nil {
@@ -764,7 +766,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			}
 		}
 		if encryption.EncryptedStateStore(in.GetStoreName()) {
-			val, encErr := encryption.TryEncryptValue(in.GetStoreName(), s.GetValue(), encryption.TryEncryptValueOpts{
+			val, encErr := encryption.TryEncryptValue(in.GetStoreName(), s.GetValue(), encryption.TryEncryptValueOptions{
 				KeyName:                  s.Key,
 				StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 			})
@@ -1014,7 +1016,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			switch req := op.(type) {
 			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
-				val, err := encryption.TryEncryptValue(in.GetStoreName(), data, encryption.TryEncryptValueOpts{
+				val, err := encryption.TryEncryptValue(in.GetStoreName(), data, encryption.TryEncryptValueOptions{
 					KeyName:                  req.Key,
 					StateV2EncryptionEnabled: a.stateV2EncryptionEnabled,
 				})
