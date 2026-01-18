@@ -201,6 +201,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		)
 	}
 
+	if c.DisableInitEndpoint != nil {
+		args = append(args, "--disable-init-endpoint", *c.DisableInitEndpoint)
+	}
+
 	// When debugging is enabled, we need to override the command and the flags
 	if c.EnableDebug {
 		ports = append(ports, corev1.ContainerPort{
