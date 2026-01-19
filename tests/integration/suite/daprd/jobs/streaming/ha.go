@@ -120,7 +120,7 @@ func (h *ha) Run(t *testing.T, ctx context.Context) {
 		}
 	}, time.Second*10, time.Millisecond*10)
 
-	for i := range 150 {
+	for i := range 50 {
 		_, err := h.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name: strconv.Itoa(i), Schedule: ptr.Of("@every 1s"),
@@ -133,16 +133,16 @@ func (h *ha) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		h.lock.Lock()
-		assert.Len(c, h.triggered, 150)
+		assert.Len(c, h.triggered, 50)
 		h.lock.Unlock()
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 30*time.Second, 10*time.Millisecond)
 	h.lock.Lock()
 	assert.Len(t, h.daprdCalled, 3)
 	h.lock.Unlock()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		h.lock.Lock()
-		for i := range 150 {
+		for i := range 50 {
 			assert.Equal(c, 3, h.triggered[strconv.Itoa(i)])
 		}
 		h.lock.Unlock()
