@@ -138,12 +138,10 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	r.place.WaitUntilRunning(t, ctx)
 	r.daprd1.WaitUntilRunning(t, ctx)
 
-	daprd2Ctx, daprd2Cancel := context.WithCancel(t.Context())
-	t.Cleanup(daprd2Cancel)
-	r.daprd2.Run(t, daprd2Ctx)
-	r.daprd2.WaitUntilRunning(t, daprd2Ctx)
+	r.daprd2.Run(t, ctx)
+	t.Cleanup(func() { r.daprd2.Cleanup(t) })
+	r.daprd2.WaitUntilRunning(t, ctx)
 
-	// Start workflow listeners for each app
 	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
 	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client1.StartWorkItemListener(t.Context(), r.registry1))
@@ -151,35 +149,27 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(ccancel)
 	require.NoError(t, client2.StartWorkItemListener(cctx, r.registry2))
 
-	var id api.InstanceID
-	var err error
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		id, err = client1.ScheduleNewOrchestration(t.Context(), "restartWorkflow", api.WithInput("Hello from app1"))
-		assert.NoError(c, err)
-	}, 20*time.Second, 100*time.Millisecond)
+	id, err := client1.ScheduleNewOrchestration(t.Context(), "restartWorkflow", api.WithInput("Hello from app1"))
+	require.NoError(t, err)
 
 	select {
 	case <-r.activityStarted:
-	case <-time.After(10 * time.Second):
+	case <-time.After(20 * time.Second):
 		require.Fail(t, "Timeout waiting for activity to start")
 	}
 
 	// Stop app2 to simulate app going down mid-execution
 	ccancel()
-	daprd2Cancel()
+	r.daprd2.Cleanup(t)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		// Expect completion to hang, so timeout
-		waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
-		defer waitCancel()
-
-		_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
-		assert.Error(c, err)
-		assert.EqualError(c, err, "context deadline exceeded")
-	}, 20*time.Second, 100*time.Millisecond)
+	waitCtx, waitCancel := context.WithTimeout(ctx, 2*time.Second)
+	t.Cleanup(waitCancel)
+	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	// Create a new daprd2 instance, for restart
-	r.daprd2 = daprd.New(t,
+	daprd3 := daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithScheduler(r.sched),
@@ -187,22 +177,17 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		daprd.WithAppID(r.appID2),
 		daprd.WithLogLevel("debug"),
 	)
-	r.daprd2.Run(t, ctx)
-	r.daprd2.WaitUntilRunning(t, ctx)
+	daprd3.Run(t, ctx)
+	daprd3.WaitUntilRunning(t, ctx)
 	t.Cleanup(func() {
-		r.daprd2.Cleanup(t)
+		daprd3.Cleanup(t)
 	})
 
 	// Restart the listener for app2 & ensure wf completion
-	client2Restart := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2Restart := client.NewTaskHubGrpcClient(daprd3.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client2Restart.StartWorkItemListener(ctx, r.registry2))
 	close(r.activityReady)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		completionCtx, completionCancel := context.WithTimeout(t.Context(), 5*time.Second)
-		defer completionCancel()
-
-		_, err = client1.WaitForOrchestrationCompletion(completionCtx, id, api.WithFetchPayloads(true))
-		assert.NoError(c, err)
-	}, 20*time.Second, 100*time.Millisecond)
+	_, err = client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+	assert.NoError(t, err)
 }

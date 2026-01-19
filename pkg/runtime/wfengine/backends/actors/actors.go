@@ -564,7 +564,6 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 // NextOrchestrationWorkItem implements backend.Backend
 func (abe *Actors) NextOrchestrationWorkItem(ctx context.Context) (*backend.OrchestrationWorkItem, error) {
 	// Wait for the workflow actor to signal us with some work to do
-	log.Debug("Actor backend is waiting for a workflow actor to schedule an invocation.")
 	select {
 	case wi := <-abe.orchestrationWorkItemChan:
 		log.Debugf("Actor backend received a workflow task for workflow '%s'.", wi.InstanceID)
@@ -577,7 +576,6 @@ func (abe *Actors) NextOrchestrationWorkItem(ctx context.Context) (*backend.Orch
 // NextActivityWorkItem implements backend.Backend
 func (abe *Actors) NextActivityWorkItem(ctx context.Context) (*backend.ActivityWorkItem, error) {
 	// Wait for the activity actor to signal us with some work to do
-	log.Debug("Actor backend is waiting for an activity actor to schedule an invocation.")
 	select {
 	case wi := <-abe.activityWorkItemChan:
 		log.Debugf(
