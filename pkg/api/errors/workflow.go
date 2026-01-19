@@ -138,6 +138,24 @@ func (w *WorkflowError) InstanceNotFound() error {
 		errorcodes.WorkflowInstanceIDNotFound,
 		nil,
 	)
+	return w.build(
+		codes.NotFound,
+		http.StatusNotFound,
+		message,
+		errorcodes.WorkflowInstanceIDNotFound,
+		nil,
+	)
+}
+
+func (w *WorkflowError) InstanceExists() error {
+	message := "workflow instance with ID '" + w.instanceID + "' already exists"
+	return w.build(
+		codes.AlreadyExists,
+		http.StatusConflict,
+		message,
+		errorcodes.WorkflowInstanceExists,
+		nil,
+	)
 }
 
 func (w *WorkflowError) build(grpcCode codes.Code, httpCode int, msg string, errCode errorcodes.ErrorCode, metadata map[string]string) error {
