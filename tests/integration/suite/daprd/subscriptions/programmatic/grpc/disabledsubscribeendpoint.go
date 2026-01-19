@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/subscriber"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -81,4 +82,13 @@ spec:
 func (b *disablesubscribeendpoint) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
 	b.logLineAppWaiting.EventuallyFoundAll(t)
+
+	client := b.daprd.GRPCClient(t, ctx)
+
+	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "mypub", Topic: "a", Data: []byte(`{"status": "completed"}`),
+		Metadata: map[string]string{"foo": "bar"}, DataContentType: "application/json",
+	})
+	require.NoError(t, err)
+	b.sub.AssertEventChanLen(t, 0)
 }
