@@ -226,7 +226,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		if errStatus, hasErrStatus := status.FromError(err); hasErrStatus && errStatus.Code() == codes.Unimplemented {
 			// fallback: to alpha if unimplemented
 			log.Warnf("falling back to OnBulkTopicEventAlpha1 due to unimplemented error: %s", err)
-			res, err = call(clientAlpha.OnBulkTopicEventAlpha1)
+			res, err = call(clientAlpha.OnBulkTopicEventAlpha1) //nolint:staticcheck
 		}
 	}
 
