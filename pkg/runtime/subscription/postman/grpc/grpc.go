@@ -215,7 +215,8 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 
 	call := func(fn func(context.Context, *rtv1.TopicEventBulkRequest, ...grpclib.CallOption) (*rtv1.TopicEventBulkResponse, error)) (*rtv1.TopicEventBulkResponse, error) {
 		start := time.Now()
-		resp, err := fn(ctx, envelope)
+		var resp *rtv1.TopicEventBulkResponse
+		resp, err = fn(ctx, envelope)
 		elapsed = diag.ElapsedSince(start)
 		return resp, err
 	}
