@@ -44,23 +44,6 @@ const (
 	annotationPrometheusPath           = "prometheus.io/path"
 )
 
-// Reserved annotation keys that the operator manages and must not be overridden
-var reservedAnnotationKeys = map[string]struct{}{
-	annotations.KeyAppID:       {},
-	annotationPrometheusProbe:  {},
-	annotationPrometheusScrape: {},
-	annotationPrometheusPort:   {},
-	annotationPrometheusPath:   {},
-}
-
-// isReservedAnnotation checks if an annotation key is reserved (exact key)
-func isReservedAnnotation(key string) bool {
-	if _, ok := reservedAnnotationKeys[key]; ok {
-		return true
-	}
-	return false
-}
-
 var log = logger.NewLogger("dapr.operator.handlers")
 
 var defaultOptions = &Options{
@@ -304,7 +287,7 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 			if found && key != "" {
 				key = stdstrings.TrimSpace(key)
 
-				if _, ok := annotationsMap[key]; ok  {
+				if _, ok := annotationsMap[key]; ok {
 					log.Warnf("Ignoring reserved annotation %q as it operator-managed", key)
 					continue
 				}
