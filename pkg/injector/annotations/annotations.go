@@ -77,4 +77,5 @@ const (
 	KeyPluggableComponentsInjection     = "dapr.io/inject-pluggable-components"
 	KeyAppChannel                       = "dapr.io/app-channel-address"
 	KeySentryRequestJwtAudiences        = "dapr.io/sentry-request-jwt-audiences"
+	KeySidecarSvcAnnotations            = "dapr.io/sidecar-svc-annotations"
 )
