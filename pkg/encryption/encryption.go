@@ -18,7 +18,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	b64 "encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -33,11 +32,12 @@ import (
 type Algorithm string
 
 const (
-	primaryEncryptionKey   = "primaryEncryptionKey"
-	secondaryEncryptionKey = "secondaryEncryptionKey"
-	errPrefix              = "failed to extract encryption key"
-	AESCBCAEADAlgorithm    = "AES-CBC-AEAD"
-	AESGCMAlgorithm        = "AES-GCM"
+	primaryEncryptionKey       = "primaryEncryptionKey"
+	secondaryEncryptionKey     = "secondaryEncryptionKey"
+	errPrefix                  = "failed to extract encryption key"
+	AESGCMAlgorithm            = "AES-GCM"
+	AESCBCAEADAlgorithm        = "AES-CBC-AEAD"
+	AESCBCAEADAlgorithmVersion = 2
 )
 
 // ComponentEncryptionKeys holds the encryption keys set for a component.
@@ -55,16 +55,6 @@ type Key struct {
 }
 
 type ComponentEncryptionKeyOptions struct {
-	// TODO: remove when feature flag is removed
-	StateV2EncryptionEnabled bool
-}
-
-type EncryptOptions struct {
-	// TODO: remove when feature flag is removed
-	StateV2EncryptionEnabled bool
-}
-
-type DecryptOptions struct {
 	// TODO: remove when feature flag is removed
 	StateV2EncryptionEnabled bool
 }
@@ -195,51 +185,23 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item commonapi.NameVa
 	return Key{}, nil
 }
 
-// Encrypt takes a byte array and encrypts it using a supplied encryption key.
-func encrypt(value []byte, key Key, additionalData []byte, opts EncryptOptions) ([]byte, error) {
-	if opts.StateV2EncryptionEnabled {
-		// TODO: when feature flag is removed, replace old encryption logic with this
-		nsize := make([]byte, key.cipherObjV2.NonceSize())
-		if _, err := io.ReadFull(rand.Reader, nsize); err != nil {
-			return value, err
-		}
-
-		return key.cipherObjV2.Seal(nsize, nsize, value, additionalData), nil
-	}
-
-	nsize := make([]byte, key.cipherObj.NonceSize())
+// Encrypt takes a byte array and encrypts it using a supplied cipher.
+func encrypt(value []byte, additionalData []byte, cipher cipher.AEAD) ([]byte, error) {
+	nsize := make([]byte, cipher.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nsize); err != nil {
 		return value, err
 	}
 
-	return key.cipherObj.Seal(nsize, nsize, value, nil), nil
+	return cipher.Seal(nsize, nsize, value, additionalData), nil
 }
 
-// Decrypt takes a byte array and decrypts it using a supplied encryption key.
-func decrypt(value []byte, key Key, additionalData []byte, opts DecryptOptions) ([]byte, error) {
-	enc, err := b64.StdEncoding.DecodeString(string(value))
-	if err != nil {
-		return value, err
-	}
+// Decrypt takes a byte array and decrypts it using a supplied cipher.
+// The byte array should be Base64-encoded.
+func decrypt(value []byte, additionalData []byte, cipher cipher.AEAD) ([]byte, error) {
+	nsize := cipher.NonceSize()
+	nonce, ciphertext := value[:nsize], value[nsize:]
 
-	if additionalData == nil {
-		// fallback to old encryption scheme
-		nsize := key.cipherObj.NonceSize()
-		nonce, ciphertext := enc[:nsize], enc[nsize:]
-
-		return key.cipherObj.Open(nil, nonce, ciphertext, nil)
-	}
-
-	if opts.StateV2EncryptionEnabled {
-		// TODO: move to outer scope when feature flag is removed
-		nsize := key.cipherObjV2.NonceSize()
-		nonce, ciphertext := enc[:nsize], enc[nsize:]
-
-		return key.cipherObjV2.Open(nil, nonce, ciphertext, additionalData)
-	}
-
-	// should never get here
-	return nil, nil
+	return cipher.Open(nil, nonce, ciphertext, additionalData)
 }
 
 func createCipher(key Key, algorithm Algorithm) (cipher.AEAD, error) {

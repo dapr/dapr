@@ -32,7 +32,7 @@ const (
 type EncryptedValue struct {
 	// Version of the encryption scheme
 	Version int `json:"v"`
-	// Base64 ID of the encryption key as the SHA-224 hash of the key's bytes
+	// ID of the encryption key as the Base64-encoded SHA-224 hash of the key's bytes
 	KeyID string `json:"kid"`
 	// Ciphertext (IV is prepended)
 	Ciphertext []byte `json:"cpt"`
@@ -82,32 +82,36 @@ func TryEncryptValue(storeName string, value []byte, opts TryEncryptValueOptions
 		// TODO: when feature flag is removed, replace old encryption logic with this
 		// encrypted value is nonce || ciphertext || tag
 		additionalData := []byte(opts.KeyName)
-		enc, err := encrypt(value, keys.Primary, additionalData, EncryptOptions{
-			StateV2EncryptionEnabled: opts.StateV2EncryptionEnabled,
-		})
+		enc, err := encrypt(value, additionalData, keys.Primary.cipherObjV2)
 		if err != nil {
 			return value, err
 		}
 
-		keyID := sha256.Sum224([]byte(keys.Primary.Key))
-		tagSize := keys.Primary.cipherObj.Overhead()
+		keyHashBytes, keyHashBytesErr := hex.DecodeString(keys.Primary.Key)
+		if keyHashBytesErr != nil {
+			return value, keyHashBytesErr
+		}
+
+		keyHash := sha256.Sum224(keyHashBytes)
+		tagSize := keys.Primary.cipherObjV2.Overhead()
 		ciphertext, tag := enc[:len(enc)-tagSize], enc[len(enc)-tagSize:]
 		encValue := EncryptedValue{
-			Version:    2, // hardcoded version
-			KeyID:      b64.StdEncoding.EncodeToString(keyID[:]),
+			Version:    AESCBCAEADAlgorithmVersion,
+			KeyID:      b64.StdEncoding.EncodeToString(keyHash[:]),
 			Ciphertext: ciphertext,
 			Tag:        tag,
 		}
 
-		serializedEnc, err := json.Marshal(encValue)
-		if err != nil {
-			return value, err
+		jsonEnc, jsonEncErr := json.Marshal(encValue)
+		if jsonEncErr != nil {
+			return value, jsonEncErr
 		}
 
-		return serializedEnc, nil
+		sEnc := b64.StdEncoding.EncodeToString(jsonEnc)
+		return []byte(sEnc), nil
 	}
 
-	enc, err := encrypt(value, keys.Primary, nil, EncryptOptions{})
+	enc, err := encrypt(value, nil, keys.Primary.cipherObj)
 	if err != nil {
 		return value, err
 	}
@@ -125,33 +129,19 @@ func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOptions
 
 	keys := encryptedStateStores[storeName]
 
-	// determine the encryption scheme
-	encValue := &EncryptedValue{}
-	err := json.Unmarshal(value, encValue)
-	if err != nil {
-		// fallback to old encryption scheme
-		// extract the decryption key that should be appended to the value
-		ind := bytes.LastIndex(value, []byte(separator))
-		keyName := string(value[ind+len(separator):])
-
-		if len(keyName) == 0 {
-			return value, fmt.Errorf("could not decrypt data for state store %s: encryption key name not found on record", storeName)
-		}
-
-		var key Key
-
-		if keys.Primary.Name == keyName {
-			key = keys.Primary
-		} else if keys.Secondary.Name == keyName {
-			key = keys.Secondary
-		}
-
-		return decrypt(value[:ind], key, nil, DecryptOptions{})
-	}
-
 	if opts.StateV2EncryptionEnabled {
 		// TODO: move to outer scope when feature flag is removed
-		// determine which encryption key to use by comparing hashes
+		// match on version to determine the cipher, if needed
+		encBytes, err := b64.StdEncoding.DecodeString(string(value))
+		if err != nil {
+			return value, err
+		}
+
+		encValue := EncryptedValue{}
+		if err := json.Unmarshal(encBytes, &encValue); err != nil {
+			return value, err
+		}
+
 		var key Key
 
 		if keyMatchesKeyID(keys.Primary, encValue.KeyID) {
@@ -164,13 +154,32 @@ func TryDecryptValue(storeName string, value []byte, opts TryDecryptValueOptions
 		ciphertextWithTag := append(encValue.Ciphertext, encValue.Tag...)
 		additionalData := []byte(opts.KeyName)
 
-		return decrypt(ciphertextWithTag, key, additionalData, DecryptOptions{
-			StateV2EncryptionEnabled: opts.StateV2EncryptionEnabled,
-		})
+		return decrypt(ciphertextWithTag, additionalData, key.cipherObjV2)
 	}
 
-	// should never get here
-	return nil, nil
+	// fallback to old encryption scheme
+	// extract the decryption key that should be appended to the value
+	ind := bytes.LastIndex(value, []byte(separator))
+	keyName := string(value[ind+len(separator):])
+
+	if len(keyName) == 0 {
+		return value, fmt.Errorf("could not decrypt data for state store %s: encryption key name not found on record", storeName)
+	}
+
+	var key Key
+
+	if keys.Primary.Name == keyName {
+		key = keys.Primary
+	} else if keys.Secondary.Name == keyName {
+		key = keys.Secondary
+	}
+
+	ciphertext, err := b64.StdEncoding.DecodeString(string(value[:ind]))
+	if err != nil {
+		return value, err
+	}
+
+	return decrypt(ciphertext, nil, key.cipherObj)
 }
 
 // Returns a boolean indicating whether or not the key's SHA-224 hash is equivalent to the key ID.
