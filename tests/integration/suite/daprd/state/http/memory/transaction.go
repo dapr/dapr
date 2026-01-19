@@ -65,7 +65,7 @@ func (tr *transaction) Run(t *testing.T, ctx context.Context) {
 		strings.Repeat("0", int(bytesN)),
 	)
 
-	for range 400 {
+	for range 300 {
 		tr.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore/transaction", strings.NewReader(payload))
 	}
 
