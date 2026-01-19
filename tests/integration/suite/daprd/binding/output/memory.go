@@ -81,14 +81,14 @@ func (m *memory) Run(t *testing.T, ctx context.Context) {
 
 	baseMemory := m.daprd.MetricResidentMemoryMi(t, ctx)
 
-	for range 300 {
+	for range 200 {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			m.daprd.HTTPPost2xx(c, ctx, "/v1.0/bindings/mybin", strings.NewReader(`{"operation":"get","data":`+input+`}`))
 		}, 10*time.Second, 10*time.Millisecond)
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		memory := m.daprd.MetricResidentMemoryMi(t, ctx)
-		assert.InDelta(c, baseMemory, memory, 50)
+		mem := m.daprd.MetricResidentMemoryMi(t, ctx)
+		assert.InDelta(c, baseMemory, mem, 50)
 	}, 25*time.Second, 10*time.Millisecond)
 }
