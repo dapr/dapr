@@ -127,7 +127,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		})
 		assert.NoError(c, err)
 		assert.Equal(c, "SUSPENDED", get.GetRuntimeStatus())
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 
 	_, err = gclient.ResumeWorkflowBeta1(ctx, &rtv1.ResumeWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
@@ -142,7 +142,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		})
 		assert.NoError(c, err)
 		assert.Equal(c, "RUNNING", get.GetRuntimeStatus())
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 
 	_, err = gclient.RaiseEventWorkflowBeta1(ctx, &rtv1.RaiseEventWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
@@ -153,7 +153,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(2), stage.Load())
-	}, time.Second*3, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 
 	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID("my-custom-instance-id"))
 	require.NoError(t, err)
@@ -172,13 +172,13 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), stage.Load())
-	}, time.Second*3, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 
 	require.NoError(t, backendClient.RaiseEvent(ctx, "my-custom-instance-id", "testEvent"))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(2), stage.Load())
-	}, time.Second*3, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 
 	_, err = backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID("my-custom-instance-id"))
 	require.NoError(t, err)

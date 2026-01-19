@@ -35,7 +35,7 @@ import (
 var orchestratorCache = sync.Pool{
 	New: func() any {
 		return &orchestrator{
-			lock: lock.New(),
+			lock: lock.NewStallable(),
 		}
 	},
 }
@@ -145,9 +145,6 @@ func (f *factory) initOrchestrator(o any, actorID string) *orchestrator {
 	or.closed.Store(false)
 	or.lock.Init()
 
-	or.state = nil
-	or.rstate = nil
-	or.ometa = nil
 	if or.streamFns == nil {
 		or.streamFns = make(map[int64]*streamFn)
 	}

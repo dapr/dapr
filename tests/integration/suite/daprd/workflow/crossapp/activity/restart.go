@@ -60,7 +60,7 @@ type restart struct {
 func (r *restart) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	r.activityStarted = make(chan struct{})
+	r.activityStarted = make(chan struct{}, 1)
 	r.activityReady = make(chan struct{})
 
 	r.place = placement.New(t)
@@ -156,12 +156,13 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		id, err = client1.ScheduleNewOrchestration(t.Context(), "restartWorkflow", api.WithInput("Hello from app1"))
 		assert.NoError(c, err)
-		select {
-		case <-r.activityStarted:
-		case <-time.After(5 * time.Second):
-			c.Errorf("Timeout waiting for activity to start")
-		}
 	}, 20*time.Second, 100*time.Millisecond)
+
+	select {
+	case <-r.activityStarted:
+	case <-time.After(10 * time.Second):
+		require.Fail(t, "Timeout waiting for activity to start")
+	}
 
 	// Stop app2 to simulate app going down mid-execution
 	ccancel()

@@ -140,7 +140,15 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(todo.ErrExecutionAborted)
 		}
 	}
-	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", o.actorID, runtimestate.RuntimeStatus(rs).String(), wi.InstanceID)
+	rs = wi.State
+
+	if err = o.handleStalled(ctx, state, rs); err != nil {
+		return todo.RunCompletedFalse, err
+	}
+	compactPatches(rs)
+
+	runtimeStatus := runtimestate.RuntimeStatus(rs)
+	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", o.actorID, runtimeStatus.String(), wi.InstanceID)
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
