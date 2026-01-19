@@ -187,6 +187,44 @@ func TestTryEncryptValue(t *testing.T) {
 		assert.Equal(t, []byte(s), dr)
 	})
 
+	t.Run("state store with AES384 primary key with v2 encryption, value encrypted and decrypted successfully", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 48)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		cipherObj, _ := createCipher(pr, AESCBCAEADAlgorithm)
+		pr.cipherObjV2 = cipherObj
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Primary: pr,
+		})
+
+		v := []byte("hello")
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+
+		require.NoError(t, err)
+		assert.NotEqual(t, v, r)
+
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, v, dr)
+	})
+
 	t.Run("state store with AES256 primary key, value encrypted and decrypted successfully", func(t *testing.T) {
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 
