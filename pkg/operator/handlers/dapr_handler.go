@@ -307,8 +307,8 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 			if found && key != "" {
 				key = stdstrings.TrimSpace(key)
 
-				if isReservedAnnotation(key) {
-					log.Warnf("Ignoring reserved annotation %q in %s: reserved keys (%v) are operator-managed", key, annotations.KeySidecarSvcAnnotations, reservedAnnotationKeys)
+				if _, ok := annotationsMap[key]; ok  {
+					log.Warnf("Ignoring reserved annotation %q as it operator-managed", key)
 					continue
 				}
 				annotationsMap[key] = stdstrings.TrimSpace(value)
