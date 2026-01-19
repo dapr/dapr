@@ -121,7 +121,7 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, b.daprd.GetMetaSubscriptions(t, ctx), 2)
 	}, time.Second*10, time.Millisecond*10)
 
-	_, err := client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+	_, err := client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
 		PubsubName: "foo",
 		Topic:      "abc",
 		Entries: []*rtv1.BulkPublishRequestEntry{
@@ -151,7 +151,7 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 
 LOOP:
 	for {
-		_, err := client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+		_, err := client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
 			PubsubName: "foo",
 			Topic:      "def",
 			Entries: []*rtv1.BulkPublishRequestEntry{
