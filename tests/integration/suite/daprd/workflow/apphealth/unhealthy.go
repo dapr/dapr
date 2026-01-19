@@ -32,7 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	durabletask_client "github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -88,15 +88,13 @@ func (a *unhealthy) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	// app starts unhealthy
 	a.healthy.Store(false)
-	// we have no way of knowing when the sidecar detected if the app is unhealthy
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 2)
 
 	require.Empty(t, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
 
 	// connect the worker
-	client := durabletask_client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
+	client := client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client.StartWorkItemListener(ctx, a.workflow.Registry()))
 	// app is unhealthy but still workflow actors get registered
 	// this check makes sure you get the placement tables update before the application becomes healthy
@@ -104,17 +102,10 @@ func (a *unhealthy) Run(t *testing.T, ctx context.Context) {
 		require.GreaterOrEqual(c,
 			len(a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 2)
 	}, time.Second*10, time.Millisecond*10)
-	// this sleep is the key, it makes sure the sidecar is watching for actor reminder jobs
-	// if we could inspect the watched job types from the scheduler we could avoid this sleep
-	time.Sleep(time.Second * 10)
 
-	scheduleCtx, scheduleCancel := context.WithTimeout(ctx, time.Second*10)
-	t.Cleanup(scheduleCancel)
-	id, err := client.ScheduleNewOrchestration(scheduleCtx, "foo")
+	id, err := client.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err, "failed to schedule workflow")
-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
-	t.Cleanup(waitCompletionCancel)
-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
 }
