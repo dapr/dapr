@@ -300,9 +300,6 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 		pairs := stdstrings.Split(val, ",")
 		for _, pair := range pairs {
 			pair = stdstrings.TrimSpace(pair)
-			if pair == "" {
-				continue
-			}
 			key, value, found := stdstrings.Cut(pair, "=")
 			if found && key != "" {
 				key = stdstrings.TrimSpace(key)
