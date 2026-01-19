@@ -338,7 +338,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 			},
 			Metadata: nil,
 		}
-		_, err := client.BulkPublishEventAlpha1(ctx, req)
+		_, err := client.BulkPublishEvent(ctx, req)
 
 		require.Error(t, err)
 

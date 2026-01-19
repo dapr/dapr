@@ -136,7 +136,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE, subs[1].GetType())
 
 	// TODO: @joshvanl: add support for bulk publish to in-memory pubsub.
-	resp, err := client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+	resp, err := client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
 		PubsubName: "mypub",
 		Topic:      "a",
 		Entries: []*rtv1.BulkPublishRequestEntry{
@@ -154,7 +154,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	g.sub.ReceiveBulk(t, ctx)
 	g.sub.AssertBulkEventChanLen(t, 0)
 
-	resp, err = client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+	resp, err = client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
 		PubsubName: "mypub",
 		Topic:      "b",
 		Entries: []*rtv1.BulkPublishRequestEntry{
