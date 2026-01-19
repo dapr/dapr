@@ -84,12 +84,15 @@ func newClientServer(t *testing.T) *serverclient {
 func newSuite(t *testing.T) *suite {
 	t.Helper()
 
+	var mu sync.Mutex
 	var cancelCalled atomic.Pointer[error]
 	var prefixes atomic.Pointer[[]string]
 	prefixes.Store(ptr.Of(make([]string, 0)))
 	connLoop := New(Options{
 		Cron: frameworkfake.New().WithDeliverablePrefixes(func(_ context.Context, ps ...string) (context.CancelCauseFunc, error) {
+			mu.Lock()
 			prefixes.Store(ptr.Of(append(*prefixes.Load(), ps...)))
+			mu.Unlock()
 			return func(error) {}, nil
 		}),
 		CancelPool: func(err error) {
