@@ -470,11 +470,14 @@ func (p *Service) validateFirstMessage(firstMessage *placementv1pb.Host, clientI
 }
 
 func (p *Service) authorizeMessage(msg *placementv1pb.Host, clientID *spiffe.Parsed) error {
+	const partDapr = "dapr"
+	const partInternal = "internal"
+
 	for _, entity := range msg.GetEntities() {
 		split := strings.Split(entity, ".")
-		if len(split) >= 2 && split[0] == "dapr" && split[1] == "internal" {
-			if len(split) < 4 || split[2] != msg.GetNamespace() || split[3] != msg.GetId() {
-				return status.Errorf(codes.PermissionDenied, "entity %s is not allowed for app ID %s in namespace %s", entity, msg.GetId(), msg.GetNamespace())
+		if len(split) >= 2 && split[0] == partDapr && split[1] == partInternal {
+			if len(split) < 4 || split[2] != clientID.Namespace() || split[3] != clientID.AppID() {
+				return status.Errorf(codes.PermissionDenied, "entity %s is not allowed for app ID %s in namespace %s", entity, clientID.AppID(), clientID.Namespace())
 			}
 		}
 	}
