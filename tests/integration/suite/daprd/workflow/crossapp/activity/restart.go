@@ -165,8 +165,8 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	waitCtx, waitCancel := context.WithTimeout(ctx, 2*time.Second)
 	t.Cleanup(waitCancel)
 	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	// Create a new daprd2 instance, for restart
 	daprd3 := daprd.New(t,
