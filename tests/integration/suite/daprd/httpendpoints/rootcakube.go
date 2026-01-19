@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -44,14 +44,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(pki))
+	suite.Register(new(rootcakube))
 }
 
-type pki struct {
+type rootcakube struct {
 	daprd *daprd.Daprd
 }
 
-func (p *pki) Setup(t *testing.T) []framework.Option {
+func (r *rootcakube) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
 	certs := cryptotest.GenPKI(t, cryptotest.PKIOptions{LeafDNS: "localhost"})
@@ -79,8 +79,7 @@ func (p *pki) Setup(t *testing.T) []framework.Option {
 						Namespace: "default",
 					},
 					Data: map[string][]byte{
-						"tls.crt": certs.LeafCertPEM,
-						"tls.key": certs.LeafPKPEM,
+						"tls.ca": certs.RootCertPEM,
 					},
 				},
 			},
@@ -95,16 +94,10 @@ func (p *pki) Setup(t *testing.T) []framework.Option {
 					Spec: httpendpointapi.HTTPEndpointSpec{
 						BaseURL: "https://localhost:" + strconv.Itoa(srv.Port()),
 						ClientTLS: &common.TLS{
-							Certificate: &common.TLSDocument{
+							RootCA: &common.TLSDocument{
 								SecretKeyRef: &common.SecretKeyRef{
 									Name: "dapr-tls-certificates",
-									Key:  "tls.crt",
-								},
-							},
-							PrivateKey: &common.TLSDocument{
-								SecretKeyRef: &common.SecretKeyRef{
-									Name: "dapr-tls-certificates",
-									Key:  "tls.key",
+									Key:  "tls.ca",
 								},
 							},
 						},
@@ -120,7 +113,7 @@ func (p *pki) Setup(t *testing.T) []framework.Option {
 		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
 	)
 
-	p.daprd = daprd.New(t,
+	r.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(operator.Address()),
@@ -135,31 +128,31 @@ func (p *pki) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(srv, app, sentry, kubeapi, operator, p.daprd),
+		framework.WithProcesses(srv, app, sentry, kubeapi, operator, r.daprd),
 	}
 }
 
-func (p *pki) Run(t *testing.T, ctx context.Context) {
-	p.daprd.WaitUntilRunning(t, ctx)
+func (r *rootcakube) Run(t *testing.T, ctx context.Context) {
+	r.daprd.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, p.daprd.GetMetaHTTPEndpoints(t, ctx), 1)
+		assert.Len(c, r.daprd.GetMetaHTTPEndpoints(t, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 
 	client := client.HTTP(t)
 
 	req, err := http.NewRequestWithContext(ctx,
 		http.MethodGet,
-		fmt.Sprintf("http://%s/v1.0/invoke/foobar/method/hello", p.daprd.HTTPAddress()),
+		fmt.Sprintf("http://%s/v1.0/invoke/foobar/method/hello", r.daprd.HTTPAddress()),
 		nil,
 	)
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Contains(t, string(body), "tls: failed to verify certificate")
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "Hello, World!", string(body))
 }
