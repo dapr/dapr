@@ -178,9 +178,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "test_function", toolCalls[0].GetFunction().GetName())
 		require.Equal(t, "param1", toolCalls[0].GetFunction().GetArguments())
 		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
-		require.Equal(t, int64(8), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
-		require.Equal(t, int64(8), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
-		require.Equal(t, int64(16), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
+		require.Equal(t, uint64(8), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, uint64(8), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, uint64(16), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("invalid json - malformed request", func(t *testing.T) {
