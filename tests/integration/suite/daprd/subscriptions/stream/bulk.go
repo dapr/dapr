@@ -104,7 +104,7 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 		}
 	}()
 
-	resp, err := client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+	resp, err := client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
 		PubsubName: "mypub",
 		Topic:      "a",
 		Entries: []*rtv1.BulkPublishRequestEntry{
