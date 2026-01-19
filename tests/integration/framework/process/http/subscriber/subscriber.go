@@ -247,7 +247,7 @@ func (s *Subscriber) publishBulk(t *testing.T, ctx context.Context, req PublishB
 
 	payload, err := json.Marshal(req.Entries)
 	require.NoError(t, err)
-	reqURL := fmt.Sprintf("http://%s/v1.0-alpha1/publish/bulk/%s/%s", req.Daprd.HTTPAddress(), req.PubSubName, req.Topic)
+	reqURL := fmt.Sprintf("http://%s/v1.0/publish/bulk/%s/%s", req.Daprd.HTTPAddress(), req.PubSubName, req.Topic)
 	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(payload))
 	require.NoError(t, err)
 	hreq.Header.Add("Content-Type", "application/json")

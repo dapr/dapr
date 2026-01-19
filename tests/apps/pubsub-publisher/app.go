@@ -318,7 +318,7 @@ func performBulkPublishGRPC(reqID string, pubsubToPublish, topic string, entries
 	}
 	log.Printf("Pubsub to publish to is %s", req.GetPubsubName())
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	res, err := grpcClient.BulkPublishEventAlpha1(ctx, req)
+	res, err := grpcClient.BulkPublishEvent(ctx, req)
 	cancel()
 	log.Printf("Error is there? %v", err != nil)
 	if err != nil {
@@ -330,7 +330,7 @@ func performBulkPublishGRPC(reqID string, pubsubToPublish, topic string, entries
 }
 
 func performBulkPublishHTTP(reqID string, pubsubToPublish, topic string, jsonValue []byte, reqMeta map[string]string) (daprhttp.BulkPublishResponse, int, error) {
-	url := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/%s", daprPortHTTP, pubsubToPublish, topic)
+	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/bulk/%s/%s", daprPortHTTP, pubsubToPublish, topic)
 	if len(reqMeta) > 0 {
 		params := netUrl.Values{}
 		for k, v := range reqMeta {
