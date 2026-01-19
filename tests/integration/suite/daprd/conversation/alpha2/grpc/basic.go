@@ -16,11 +16,13 @@ package grpc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -63,59 +65,24 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	client := b.daprd.GRPCClient(t, ctx)
 
 	t.Run("all fields", func(t *testing.T) {
+		toolParameters, err := structpb.NewStruct(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"param1": map[string]any{
+					"type":        "string",
+					"description": "A test parameter",
+				},
+			},
+			"required": []any{"param1"},
+		})
+		require.NoError(t, err)
+
 		tool := &rtv1.ConversationTools{
 			ToolTypes: &rtv1.ConversationTools_Function{
 				Function: &rtv1.ConversationToolsFunction{
 					Name:        "test_function",
 					Description: ptr.Of("A test function"),
-					Parameters: &structpb.Struct{
-						Fields: map[string]*structpb.Value{
-							"type": {
-								Kind: &structpb.Value_StringValue{
-									StringValue: "object",
-								},
-							},
-							"properties": {
-								Kind: &structpb.Value_StructValue{
-									StructValue: &structpb.Struct{
-										Fields: map[string]*structpb.Value{
-											"param1": {
-												Kind: &structpb.Value_StructValue{
-													StructValue: &structpb.Struct{
-														Fields: map[string]*structpb.Value{
-															"type": {
-																Kind: &structpb.Value_StringValue{
-																	StringValue: "string",
-																},
-															},
-															"description": {
-																Kind: &structpb.Value_StringValue{
-																	StringValue: "A test parameter",
-																},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-							"required": {
-								Kind: &structpb.Value_ListValue{
-									ListValue: &structpb.ListValue{
-										Values: []*structpb.Value{
-											{
-												Kind: &structpb.Value_StringValue{
-													StringValue: "param1",
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
+					Parameters:  toolParameters,
 				},
 			},
 		}
@@ -130,6 +97,17 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}
 
 		contextID := "test-conversation-123"
+		responseFormat, err := structpb.NewStruct(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"result": map[string]any{
+					"type": "string",
+				},
+			},
+			"required": []any{"result"},
+		})
+		require.NoError(t, err)
+		cacheRetention := durationpb.New(24 * time.Hour)
 		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name:      "test-alpha2-echo",
 			ContextId: ptr.Of(contextID),
@@ -170,12 +148,14 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					ScrubPii: ptr.Of(true),
 				},
 			},
-			Parameters:  parameters,
-			Metadata:    metadata,
-			ScrubPii:    ptr.Of(true),
-			Temperature: ptr.Of(0.7),
-			Tools:       []*rtv1.ConversationTools{tool},
-			ToolChoice:  ptr.Of("auto"),
+			Parameters:           parameters,
+			Metadata:             metadata,
+			ScrubPii:             ptr.Of(true),
+			Temperature:          ptr.Of(0.7),
+			Tools:                []*rtv1.ConversationTools{tool},
+			ToolChoice:           ptr.Of("auto"),
+			ResponseFormat:       responseFormat,
+			PromptCacheRetention: cacheRetention,
 		})
 		require.NoError(t, err)
 		// Echo component returns one output combining all input messages
@@ -197,6 +177,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "0", toolCalls[0].GetId())
 		require.Equal(t, "test_function", toolCalls[0].GetFunction().GetName())
 		require.Equal(t, "param1", toolCalls[0].GetFunction().GetArguments())
+		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
+		require.Equal(t, uint64(8), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
+		require.Equal(t, uint64(8), resp.GetOutputs()[0].GetUsage().GetPromptTokens())
+		require.Equal(t, uint64(16), resp.GetOutputs()[0].GetUsage().GetTotalTokens())
 	})
 
 	t.Run("invalid json - malformed request", func(t *testing.T) {
