@@ -293,6 +293,20 @@ func (a *api) constructPubSubEndpoints() []endpoints.Endpoint {
 				Name: "BulkPublishEvent",
 			},
 		},
+		{
+			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:   "publish/bulk/{pubsubname}/*",
+			Version: apiVersionV1,
+			Group: &endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupPubsub,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendPubSubSpanAttributes,
+			},
+			Handler: a.onBulkPublish,
+			Settings: endpoints.EndpointSettings{
+				Name: "BulkPublishEvent",
+			},
+		},
 	}
 }
 
