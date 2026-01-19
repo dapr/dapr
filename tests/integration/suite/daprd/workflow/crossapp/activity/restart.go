@@ -60,7 +60,7 @@ type restart struct {
 func (r *restart) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	r.activityStarted = make(chan struct{})
+	r.activityStarted = make(chan struct{}, 1)
 	r.activityReady = make(chan struct{})
 
 	r.place = placement.New(t)
