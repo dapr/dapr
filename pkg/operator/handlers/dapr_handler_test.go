@@ -153,6 +153,68 @@ func TestCreateDaprServiceAppIDAndPortsOverride(t *testing.T) {
 	assert.Equal(t, intstr.FromInt(12346), service.Spec.Ports[2].TargetPort)
 }
 
+func TestCreateDaprServiceWithCustomAnnotations(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
+	ctx := t.Context()
+	myDaprService := types.NamespacedName{
+		Namespace: "test",
+		Name:      "test",
+	}
+
+	t.Run("service annotations parsed from comma-separated format", func(t *testing.T) {
+		deployment := getDeployment("test", "true")
+		deployment.GetTemplateAnnotations()[annotations.KeySidecarSvcAnnotations] = "com.example.policy.app=example-app,com.example.policy.env=production,com.example.policy.team=platform"
+
+		service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
+
+		require.NotNil(t, service)
+		assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
+		assert.Equal(t, "example-app", service.ObjectMeta.Annotations["com.example.policy.app"])
+		assert.Equal(t, "production", service.ObjectMeta.Annotations["com.example.policy.env"])
+		assert.Equal(t, "platform", service.ObjectMeta.Annotations["com.example.policy.team"])
+	})
+
+	t.Run("empty annotation value ignored", func(t *testing.T) {
+		deployment := getDeployment("test", "true")
+		deployment.GetTemplateAnnotations()[annotations.KeySidecarSvcAnnotations] = ""
+
+		service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
+
+		require.NotNil(t, service)
+		assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
+	})
+
+	t.Run("Malformed custom annotations", func(t *testing.T) {
+		deployment := getDeployment("test", "true")
+
+		deployment.GetTemplateAnnotations()[annotations.KeySidecarSvcAnnotations] = "badstring,valid=true,  spaces = trimmed  "
+
+		service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
+		require.NotNil(t, service)
+
+		assert.Equal(t, "true", service.ObjectMeta.Annotations["valid"])
+		assert.Equal(t, "trimmed", service.ObjectMeta.Annotations["spaces"])
+		_, exists := service.ObjectMeta.Annotations["badstring"]
+		assert.False(t, exists, "Malformed annotation should be ignored")
+	})
+
+	t.Run("Reserved operator-managed annotation keys are rejected; others allowed", func(t *testing.T) {
+		deployment := getDeployment("test", "true")
+
+		deployment.GetTemplateAnnotations()[annotations.KeySidecarSvcAnnotations] = "valid=true,dapr.io/sneaky=attack,dapr.io/app-id=overridden,prometheus.io/scrape=false,prometheus.io/custom-extra=ok,custom.io/allowed=yes"
+
+		service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
+		require.NotNil(t, service)
+
+		assert.Equal(t, "true", service.ObjectMeta.Annotations["valid"])
+		assert.Equal(t, "yes", service.ObjectMeta.Annotations["custom.io/allowed"])
+		assert.Equal(t, "attack", service.ObjectMeta.Annotations["dapr.io/sneaky"])
+		assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
+		assert.Equal(t, "true", service.ObjectMeta.Annotations["prometheus.io/scrape"], "prometheus.io/scrape should be operator-managed")
+		assert.Equal(t, "ok", service.ObjectMeta.Annotations["prometheus.io/custom-extra"])
+	})
+}
+
 func TestPatchDaprService(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 
