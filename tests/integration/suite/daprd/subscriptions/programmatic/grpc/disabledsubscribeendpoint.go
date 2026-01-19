@@ -17,15 +17,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
-	"google.golang.org/protobuf/types/known/emptypb"
-
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/subscriber"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func init() {
