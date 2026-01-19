@@ -150,7 +150,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client2.StartWorkItemListener(cctx, r.registry2))
 
 	id, err := client1.ScheduleNewOrchestration(t.Context(), "restartWorkflow", api.WithInput("Hello from app1"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	select {
 	case <-r.activityStarted:
@@ -169,7 +169,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 
 	// Create a new daprd2 instance, for restart
-	r.daprd2 = daprd.New(t,
+	daprd3 := daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithScheduler(r.sched),
@@ -177,14 +177,14 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		daprd.WithAppID(r.appID2),
 		daprd.WithLogLevel("debug"),
 	)
-	r.daprd2.Run(t, ctx)
-	r.daprd2.WaitUntilRunning(t, ctx)
+	daprd3.Run(t, ctx)
+	daprd3.WaitUntilRunning(t, ctx)
 	t.Cleanup(func() {
-		r.daprd2.Cleanup(t)
+		daprd3.Cleanup(t)
 	})
 
 	// Restart the listener for app2 & ensure wf completion
-	client2Restart := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
+	client2Restart := client.NewTaskHubGrpcClient(daprd3.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client2Restart.StartWorkItemListener(ctx, r.registry2))
 	close(r.activityReady)
 
