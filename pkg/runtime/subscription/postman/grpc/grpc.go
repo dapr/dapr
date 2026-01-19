@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
+	grpclib "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -204,11 +205,29 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
-	clientV1 := rtv1.NewAppCallbackAlphaClient(conn)
+	clientV1 := rtv1.NewAppCallbackClient(conn)
+	clientAlpha := rtv1.NewAppCallbackAlphaClient(conn)
 
-	start := time.Now()
-	res, err := clientV1.OnBulkTopicEventAlpha1(ctx, envelope)
-	elapsed := diag.ElapsedSince(start)
+	var (
+		res     *rtv1.TopicEventBulkResponse
+		elapsed float64
+	)
+
+	call := func(fn func(context.Context, *rtv1.TopicEventBulkRequest, ...grpclib.CallOption) (*rtv1.TopicEventBulkResponse, error)) (*rtv1.TopicEventBulkResponse, error) {
+		start := time.Now()
+		resp, err := fn(ctx, envelope)
+		elapsed = diag.ElapsedSince(start)
+		return resp, err
+	}
+
+	res, err = call(clientV1.OnBulkTopicEvent)
+	if err != nil {
+		if errStatus, hasErrStatus := status.FromError(err); hasErrStatus && errStatus.Code() == codes.Unimplemented {
+			// fallback: to alpha if unimplemented
+			log.Warnf("falling back to OnBulkTopicEventAlpha1 due to unimplemented error: %s", err)
+			res, err = call(clientAlpha.OnBulkTopicEventAlpha1)
+		}
+	}
 
 	for _, span := range spans {
 		m := diag.ConstructSubscriptionSpanAttributes(envelope.GetTopic())
