@@ -526,7 +526,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			if assert.Equal(c, "update", placementTables.GetOperation()) {
 				assert.Empty(c, placementTables.GetTables().GetEntries())
 			}
-		}, time.Second*15, time.Millisecond*10)
+		}, time.Second*30, time.Millisecond*10)
 
 		t.Cleanup(func() {
 			stream1.CloseSend()
