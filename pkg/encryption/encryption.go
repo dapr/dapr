@@ -196,7 +196,6 @@ func encrypt(value []byte, additionalData []byte, cipher cipher.AEAD) ([]byte, e
 }
 
 // Decrypt takes a byte array and decrypts it using a supplied cipher.
-// The byte array should be Base64-encoded.
 func decrypt(value []byte, additionalData []byte, cipher cipher.AEAD) ([]byte, error) {
 	nsize := cipher.NonceSize()
 	nonce, ciphertext := value[:nsize], value[nsize:]
