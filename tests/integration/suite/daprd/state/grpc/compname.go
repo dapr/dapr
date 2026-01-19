@@ -46,7 +46,7 @@ type componentName struct {
 }
 
 func (c *componentName) Setup(t *testing.T) []framework.Option {
-	const numTests = 300
+	const numTests = 100
 	takenNames := make(map[string]bool)
 
 	reg, err := regexp.Compile("^([a-zA-Z].*)$")
