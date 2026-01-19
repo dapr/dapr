@@ -2214,26 +2214,6 @@ index 4a0955eff..33a90331e 100644
  
  	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
  	require.True(t, ok)
-diff --git a/tests/integration/suite/daprd/pubsub/grpc/traceparent/raw.go b/tests/integration/suite/daprd/pubsub/grpc/traceparent/raw.go
-index 58c9f18c8..435d41f61 100644
---- a/tests/integration/suite/daprd/pubsub/grpc/traceparent/raw.go
-+++ b/tests/integration/suite/daprd/pubsub/grpc/traceparent/raw.go
-@@ -15,6 +15,7 @@ package traceparent
- 
- import (
- 	"context"
-+	"fmt"
- 	"testing"
- 	"time"
- 
-@@ -115,6 +116,7 @@ func (a *raw) Run(t *testing.T, ctx context.Context) {
- 
- 		select {
- 		case md := <-a.ch:
-+			fmt.Printf(">>%s\n", md)
- 			traceparentValue := md.Get("traceparent")
- 			tracebin := md.Get("grpc-trace-bin")
- 			require.NotNil(t, traceparentValue)
 diff --git a/tests/integration/suite/daprd/resources/namespace/set/name.go b/tests/integration/suite/daprd/resources/namespace/set/name.go
 index 6502b232b..78ecd2729 100644
 --- a/tests/integration/suite/daprd/resources/namespace/set/name.go
