@@ -33,7 +33,7 @@ var (
 	resvP    []*reservedPort
 )
 
-const blockSize = 500
+const blockSize = 1000
 
 // Ports reserves network ports, and then frees them when the test is ready to
 // run so a  process can bind to them at runtime.
