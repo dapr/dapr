@@ -125,9 +125,11 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 
 	tld := opts.Config.TrustDomain
 	if opts.Config.Mode == modes.KubernetesMode {
-		tld, err = utils.GetKubeClusterDomain()
+		tldd, err := utils.GetKubeClusterDomain()
 		if err != nil {
-			return nil, fmt.Errorf("error getting Kubernetes cluster domain: %w", err)
+			log.Errorf("Error getting Kubernetes cluster domain, falling back to %q: %w", tld, err)
+		} else {
+			tld = tldd
 		}
 	}
 
