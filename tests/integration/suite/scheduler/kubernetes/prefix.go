@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -44,8 +45,11 @@ type prefix struct {
 }
 
 func (p *prefix) Setup(t *testing.T) []framework.Option {
+	tld, err := utils.GetKubeClusterDomain()
+	require.NoError(t, err)
+
 	p.sentry = sentry.New(t,
-		sentry.WithTrustDomain("cluster.local"),
+		sentry.WithTrustDomain(tld),
 	)
 
 	p.kubeapi = kubernetes.New(t,

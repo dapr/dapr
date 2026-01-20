@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -54,8 +55,11 @@ type namespace struct {
 }
 
 func (n *namespace) Setup(t *testing.T) []framework.Option {
+	tld, err := utils.GetKubeClusterDomain()
+	require.NoError(t, err)
+
 	sentry := sentry.New(t,
-		sentry.WithTrustDomain("cluster.local"),
+		sentry.WithTrustDomain(tld),
 	)
 
 	app := app.New(t,
@@ -64,7 +68,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 	)
 
 	n.kubeapi = kubernetes.New(t,
-		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString("cluster.local"), "default", sentry.Port()),
+		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString(tld), "default", sentry.Port()),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{},
 		}),
@@ -103,7 +107,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithControlPlaneAddress(operator.Address()),
 		daprd.WithPlacementAddresses(n.placement.Address()),
-		daprd.WithControlPlaneTrustDomain("cluster.local"),
+		daprd.WithControlPlaneTrustDomain(tld),
 	)
 
 	return []framework.Option{
