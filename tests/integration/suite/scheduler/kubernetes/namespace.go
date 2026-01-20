@@ -46,6 +46,7 @@ type namespace struct {
 }
 
 func (n *namespace) Setup(t *testing.T) []framework.Option {
+	// Skip windows as test requires a resolvconf lookup.
 	os.SkipWindows(t)
 
 	tld, err := utils.GetKubeClusterDomain()
