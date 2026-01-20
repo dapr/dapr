@@ -105,6 +105,8 @@ func (e *Etcd) Run(t *testing.T, ctx context.Context) {
 		etcd, err := embed.StartEtcd(config)
 		require.NoError(t, err)
 
+		t.Logf("Running etcd with config: %+v", etcd.Config())
+
 		e.etcds = append(e.etcds, etcd)
 	}
 
