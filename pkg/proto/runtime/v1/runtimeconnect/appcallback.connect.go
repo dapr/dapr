@@ -65,6 +65,9 @@ const (
 	// AppCallbackOnBindingEventProcedure is the fully-qualified name of the AppCallback's
 	// OnBindingEvent RPC.
 	AppCallbackOnBindingEventProcedure = "/dapr.proto.runtime.v1.AppCallback/OnBindingEvent"
+	// AppCallbackOnBulkTopicEventProcedure is the fully-qualified name of the AppCallback's
+	// OnBulkTopicEvent RPC.
+	AppCallbackOnBulkTopicEventProcedure = "/dapr.proto.runtime.v1.AppCallback/OnBulkTopicEvent"
 	// AppCallbackHealthCheckHealthCheckProcedure is the fully-qualified name of the
 	// AppCallbackHealthCheck's HealthCheck RPC.
 	AppCallbackHealthCheckHealthCheckProcedure = "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck"
@@ -91,6 +94,8 @@ type AppCallbackClient interface {
 	// User application can save the states or send the events to the output
 	// bindings optionally by returning BindingEventResponse.
 	OnBindingEvent(context.Context, *connect.Request[v11.BindingEventRequest]) (*connect.Response[v11.BindingEventResponse], error)
+	// Subscribes bulk events from Pubsub
+	OnBulkTopicEvent(context.Context, *connect.Request[v11.TopicEventBulkRequest]) (*connect.Response[v11.TopicEventBulkResponse], error)
 }
 
 // NewAppCallbackClient constructs a client for the dapr.proto.runtime.v1.AppCallback service. By
@@ -128,6 +133,11 @@ func NewAppCallbackClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			baseURL+AppCallbackOnBindingEventProcedure,
 			opts...,
 		),
+		onBulkTopicEvent: connect.NewClient[v11.TopicEventBulkRequest, v11.TopicEventBulkResponse](
+			httpClient,
+			baseURL+AppCallbackOnBulkTopicEventProcedure,
+			opts...,
+		),
 	}
 }
 
@@ -138,6 +148,7 @@ type appCallbackClient struct {
 	onTopicEvent           *connect.Client[v11.TopicEventRequest, v11.TopicEventResponse]
 	listInputBindings      *connect.Client[emptypb.Empty, v11.ListInputBindingsResponse]
 	onBindingEvent         *connect.Client[v11.BindingEventRequest, v11.BindingEventResponse]
+	onBulkTopicEvent       *connect.Client[v11.TopicEventBulkRequest, v11.TopicEventBulkResponse]
 }
 
 // OnInvoke calls dapr.proto.runtime.v1.AppCallback.OnInvoke.
@@ -165,6 +176,11 @@ func (c *appCallbackClient) OnBindingEvent(ctx context.Context, req *connect.Req
 	return c.onBindingEvent.CallUnary(ctx, req)
 }
 
+// OnBulkTopicEvent calls dapr.proto.runtime.v1.AppCallback.OnBulkTopicEvent.
+func (c *appCallbackClient) OnBulkTopicEvent(ctx context.Context, req *connect.Request[v11.TopicEventBulkRequest]) (*connect.Response[v11.TopicEventBulkResponse], error) {
+	return c.onBulkTopicEvent.CallUnary(ctx, req)
+}
+
 // AppCallbackHandler is an implementation of the dapr.proto.runtime.v1.AppCallback service.
 type AppCallbackHandler interface {
 	// Invokes service method with InvokeRequest.
@@ -180,6 +196,8 @@ type AppCallbackHandler interface {
 	// User application can save the states or send the events to the output
 	// bindings optionally by returning BindingEventResponse.
 	OnBindingEvent(context.Context, *connect.Request[v11.BindingEventRequest]) (*connect.Response[v11.BindingEventResponse], error)
+	// Subscribes bulk events from Pubsub
+	OnBulkTopicEvent(context.Context, *connect.Request[v11.TopicEventBulkRequest]) (*connect.Response[v11.TopicEventBulkResponse], error)
 }
 
 // NewAppCallbackHandler builds an HTTP handler from the service implementation. It returns the path
@@ -213,6 +231,11 @@ func NewAppCallbackHandler(svc AppCallbackHandler, opts ...connect.HandlerOption
 		svc.OnBindingEvent,
 		opts...,
 	)
+	appCallbackOnBulkTopicEventHandler := connect.NewUnaryHandler(
+		AppCallbackOnBulkTopicEventProcedure,
+		svc.OnBulkTopicEvent,
+		opts...,
+	)
 	return "/dapr.proto.runtime.v1.AppCallback/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AppCallbackOnInvokeProcedure:
@@ -225,6 +248,8 @@ func NewAppCallbackHandler(svc AppCallbackHandler, opts ...connect.HandlerOption
 			appCallbackListInputBindingsHandler.ServeHTTP(w, r)
 		case AppCallbackOnBindingEventProcedure:
 			appCallbackOnBindingEventHandler.ServeHTTP(w, r)
+		case AppCallbackOnBulkTopicEventProcedure:
+			appCallbackOnBulkTopicEventHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -252,6 +277,10 @@ func (UnimplementedAppCallbackHandler) ListInputBindings(context.Context, *conne
 
 func (UnimplementedAppCallbackHandler) OnBindingEvent(context.Context, *connect.Request[v11.BindingEventRequest]) (*connect.Response[v11.BindingEventResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.AppCallback.OnBindingEvent is not implemented"))
+}
+
+func (UnimplementedAppCallbackHandler) OnBulkTopicEvent(context.Context, *connect.Request[v11.TopicEventBulkRequest]) (*connect.Response[v11.TopicEventBulkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.AppCallback.OnBulkTopicEvent is not implemented"))
 }
 
 // AppCallbackHealthCheckClient is a client for the dapr.proto.runtime.v1.AppCallbackHealthCheck
@@ -328,6 +357,8 @@ func (UnimplementedAppCallbackHealthCheckHandler) HealthCheck(context.Context, *
 // AppCallbackAlphaClient is a client for the dapr.proto.runtime.v1.AppCallbackAlpha service.
 type AppCallbackAlphaClient interface {
 	// Subscribes bulk events from Pubsub
+	//
+	// Deprecated: do not use.
 	OnBulkTopicEventAlpha1(context.Context, *connect.Request[v11.TopicEventBulkRequest]) (*connect.Response[v11.TopicEventBulkResponse], error)
 	// Sends job back to the app's endpoint at trigger time.
 	OnJobEventAlpha1(context.Context, *connect.Request[v11.JobEventRequest]) (*connect.Response[v11.JobEventResponse], error)
@@ -363,6 +394,8 @@ type appCallbackAlphaClient struct {
 }
 
 // OnBulkTopicEventAlpha1 calls dapr.proto.runtime.v1.AppCallbackAlpha.OnBulkTopicEventAlpha1.
+//
+// Deprecated: do not use.
 func (c *appCallbackAlphaClient) OnBulkTopicEventAlpha1(ctx context.Context, req *connect.Request[v11.TopicEventBulkRequest]) (*connect.Response[v11.TopicEventBulkResponse], error) {
 	return c.onBulkTopicEventAlpha1.CallUnary(ctx, req)
 }
@@ -376,6 +409,8 @@ func (c *appCallbackAlphaClient) OnJobEventAlpha1(ctx context.Context, req *conn
 // service.
 type AppCallbackAlphaHandler interface {
 	// Subscribes bulk events from Pubsub
+	//
+	// Deprecated: do not use.
 	OnBulkTopicEventAlpha1(context.Context, *connect.Request[v11.TopicEventBulkRequest]) (*connect.Response[v11.TopicEventBulkResponse], error)
 	// Sends job back to the app's endpoint at trigger time.
 	OnJobEventAlpha1(context.Context, *connect.Request[v11.JobEventRequest]) (*connect.Response[v11.JobEventResponse], error)
