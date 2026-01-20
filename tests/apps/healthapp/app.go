@@ -445,6 +445,10 @@ func (s *grpcServer) OnTopicEvent(_ context.Context, in *runtimev1pb.TopicEventR
 	return nil, errors.New("unexpected topic event: " + in.GetTopic())
 }
 
+func (s *grpcServer) OnBulkTopicEvent(_ context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	return &runtimev1pb.TopicEventBulkResponse{}, nil
+}
+
 func (s *grpcServer) ListInputBindings(_ context.Context, in *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
 	return &runtimev1pb.ListInputBindingsResponse{
 		Bindings: []string{"schedule"},
