@@ -44,7 +44,9 @@ type prefix struct {
 }
 
 func (p *prefix) Setup(t *testing.T) []framework.Option {
-	p.sentry = sentry.New(t)
+	p.sentry = sentry.New(t,
+		sentry.WithTrustDomain("cluster.local"),
+	)
 
 	p.kubeapi = kubernetes.New(t,
 		kubernetes.WithClusterNamespaceList(t, &corev1.NamespaceList{
