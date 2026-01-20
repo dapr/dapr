@@ -63,7 +63,7 @@ func (s *save) Run(t *testing.T, ctx context.Context) {
 	require.True(t, ok)
 	input := []byte(`[{"key":"123","value":"` + strings.Repeat("0", int(bytesN)) + `"}]`)
 
-	for range 100 {
+	for range 200 {
 		s.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore", bytes.NewReader(input))
 	}
 
