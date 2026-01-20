@@ -299,7 +299,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		return status.Errorf(codes.Internal, "failed to receive the first message: %v", err)
 	}
 
-	err = p.validateFirstMessage(firstMessage, spiffeClientID)
+	err = p.validateFirstMessage(stream.Context(), firstMessage, spiffeClientID)
 	if err != nil {
 		log.Errorf("First message validation failed: %v", err)
 		return err
@@ -386,7 +386,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				continue
 			}
 
-			if err := p.authorizeMessage(host, spiffeClientID); err != nil {
+			if err := p.authorizeMessage(stream.Context(), host, spiffeClientID); err != nil {
 				return err
 			}
 
@@ -442,7 +442,7 @@ func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatus
 	return clientID, nil
 }
 
-func (p *Service) validateFirstMessage(firstMessage *placementv1pb.Host, clientID *spiffe.Parsed) error {
+func (p *Service) validateFirstMessage(ctx context.Context, firstMessage *placementv1pb.Host, clientID *spiffe.Parsed) error {
 	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
 		return status.Errorf(codes.PermissionDenied, "provided app ID %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetId(), clientID.AppID())
 	}
@@ -462,14 +462,23 @@ func (p *Service) validateFirstMessage(firstMessage *placementv1pb.Host, clientI
 		return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", firstMessage.GetId())
 	}
 
-	if err := p.authorizeMessage(firstMessage, clientID); err != nil {
+	if err := p.authorizeMessage(ctx, firstMessage, clientID); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (p *Service) authorizeMessage(msg *placementv1pb.Host, clientID *spiffe.Parsed) error {
+func (p *Service) authorizeMessage(ctx context.Context, msg *placementv1pb.Host, clientID *spiffe.Parsed) error {
+	sec, err := p.sec.Handler(ctx)
+	if err != nil {
+		return status.Errorf(codes.Internal, "")
+	}
+
+	if !sec.MTLSEnabled() {
+		return nil
+	}
+
 	const partDapr = "dapr"
 	const partInternal = "internal"
 
