@@ -532,8 +532,8 @@ github.com/cyphar/filepath-securejoin v0.2.4 h1:Ugdm7cg7i6ZK6x3xDF1oEu1nfkyfH53E
 github.com/cyphar/filepath-securejoin v0.2.4/go.mod h1:aPGpWjXOXUn2NCNjFvBE6aRxGGx79pTxQpKOJNYHHl4=
 github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjmUv0qGF43aKCIKVE9A=
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
-github.com/dapr/components-contrib v1.16.2-0.20260116170921-40eb650b65de h1:792uUhmSXdYoAHMUeKQQhvgojCmJNcP4dalGuKWlxns=
-github.com/dapr/components-contrib v1.16.2-0.20260116170921-40eb650b65de/go.mod h1:8QF6l4FPCPxsvkI+vAINP4+mFCHaN+1xlZGJdVoNydI=
+github.com/dapr/components-contrib v1.16.2-0.20260119210102-64fd69899ddf h1:dZyA2NFFZIej0Nra+qTaTFPYmWIPVxsGnmZRa0td+c8=
+github.com/dapr/components-contrib v1.16.2-0.20260119210102-64fd69899ddf/go.mod h1:8QF6l4FPCPxsvkI+vAINP4+mFCHaN+1xlZGJdVoNydI=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20251104160704-920ad8a7b958 h1:DSZgzdXlbF75fwvEkMQpPqn1jjxmWVoBNmI4Bc4dS40=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20251104160704-920ad8a7b958/go.mod h1:IUB5RJv0Gj5qxsHjjhvEBIlxPka7cD7KAn/Coa2y27M=
 github.com/dapr/durabletask-go v0.10.2-0.20260119163530-cade81f308db h1:z6HVxqyxdS5QkaRGr0yLwtMwdqnrJ5a+veXL0rPpahQ=
