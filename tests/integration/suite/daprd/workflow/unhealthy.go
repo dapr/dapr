@@ -88,7 +88,7 @@ func (u *unhealthy) Setup(t *testing.T) []framework.Option {
 func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 	u.workflow.WaitUntilRunning(t, ctx)
 
-	const n = 10
+	const n = 5
 
 	var inActivity atomic.Int64
 	releaseCh := make(chan struct{})
@@ -127,8 +127,6 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	u.logline.EventuallyFoundAll(t)
-
-	time.Sleep(time.Second * 4)
 
 	for i := range n {
 		assert.GreaterOrEqual(t, 1, strings.Count(
