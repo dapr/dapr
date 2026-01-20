@@ -72,6 +72,13 @@ func (s *server) OnTopicEvent(ctx context.Context, in *rtv1.TopicEventRequest) (
 	return s.onTopicEventFn(ctx, in)
 }
 
+func (s *server) OnBulkTopicEvent(ctx context.Context, in *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error) {
+	if s.onBulkTopicEventFn == nil {
+		return new(rtv1.TopicEventBulkResponse), nil
+	}
+	return s.onBulkTopicEventFn(ctx, in)
+}
+
 func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error) {
 	if s.onBulkTopicEventFn == nil {
 		return new(rtv1.TopicEventBulkResponse), nil

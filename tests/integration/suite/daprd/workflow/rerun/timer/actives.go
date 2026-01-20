@@ -47,9 +47,9 @@ func (a *actives) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
 	a.workflow.Registry().AddOrchestratorN("active-timers", func(ctx *task.OrchestrationContext) (any, error) {
-		as1 := ctx.CreateTimer(time.Second * 5)
-		as2 := ctx.CreateTimer(time.Second * 5)
-		as3 := ctx.CreateTimer(time.Second * 5)
+		as1 := ctx.CreateTimer(time.Second * 2)
+		as2 := ctx.CreateTimer(time.Second * 2)
+		as3 := ctx.CreateTimer(time.Second * 2)
 		as4 := ctx.CallActivity("bar")
 		require.NoError(t, as4.Await(nil))
 		require.NoError(t, as3.Await(nil))

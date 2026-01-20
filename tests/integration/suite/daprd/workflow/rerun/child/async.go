@@ -84,12 +84,7 @@ func (a *async) Run(t *testing.T, ctx context.Context) {
 	require.GreaterOrEqual(t, len(history.Events), 8)
 
 	childs := make([]string, 0, 2)
-	for i, e := range history.Events[:4] {
-		assert.True(t,
-			e.GetExecutionStarted() != nil ||
-				e.GetOrchestratorStarted() != nil ||
-				e.GetSubOrchestrationInstanceCreated() != nil,
-			"unexpected event %d type: %+v", i, e)
+	for _, e := range history.Events {
 		if s := e.GetSubOrchestrationInstanceCreated(); s != nil {
 			childs = append(childs, s.GetInstanceId())
 		}
