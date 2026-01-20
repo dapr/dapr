@@ -46,7 +46,7 @@ type prefix struct {
 }
 
 func (p *prefix) Setup(t *testing.T) []framework.Option {
-	/ Skip windows as test requires a resolvconf lookup.
+	// Skip windows as test requires a resolvconf lookup.
 	os.SkipWindows(t)
 
 	tld, err := utils.GetKubeClusterDomain()
