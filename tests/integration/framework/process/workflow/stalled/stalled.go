@@ -109,9 +109,9 @@ func (f *Stalled) RestartAsReplica(t *testing.T, ctx context.Context, name strin
 
 func (f *Stalled) restart(t *testing.T, ctx context.Context) {
 	t.Helper()
+	f.currentClientCancel()
 	f.workflows.Dapr().Restart(t, ctx)
 	f.workflows.WaitUntilRunning(t, ctx)
-	f.currentClientCancel()
 	f.CurrentClient = f.workflows.BackendClient(t, ctx)
 }
 
