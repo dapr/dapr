@@ -31,6 +31,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/crypto/pem"
 )
 
@@ -43,14 +44,23 @@ func config(opts Options) (*embed.Config, error) {
 	config.ExperimentalWarningApplyDuration = time.Second * 5
 
 	if opts.Security.MTLSEnabled() {
+		tld := opts.Security.ControlPlaneTrustDomain().String()
+		if opts.Mode == modes.KubernetesMode {
+			var err error
+			tld, err = utils.GetKubeClusterDomain()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get cluster domain: %w", err)
+			}
+		}
+
 		info := transport.TLSInfo{
 			ClientCertAuth:      true,
 			InsecureSkipVerify:  false,
 			SkipClientSANVerify: false,
 			AllowedHostnames: []string{
-				fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), opts.Security.ControlPlaneTrustDomain()),
-				fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), opts.Security.ControlPlaneTrustDomain()),
-				fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), opts.Security.ControlPlaneTrustDomain()),
+				fmt.Sprintf("dapr-scheduler-server-0.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), tld),
+				fmt.Sprintf("dapr-scheduler-server-1.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), tld),
+				fmt.Sprintf("dapr-scheduler-server-2.dapr-scheduler-server.%s.svc.%s", opts.Security.ControlPlaneNamespace(), tld),
 			},
 			EmptyCN:        true,
 			CertFile:       filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
@@ -58,7 +68,7 @@ func config(opts Options) (*embed.Config, error) {
 			ClientCertFile: filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
 			ClientKeyFile:  filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
 			TrustedCAFile:  filepath.Join(*opts.Security.IdentityDir(), "ca.pem"),
-			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc.%s", opts.Name, opts.Security.ControlPlaneNamespace(), opts.Security.ControlPlaneTrustDomain()),
+			ServerName:     fmt.Sprintf("%s.dapr-scheduler-server.%s.svc.%s", opts.Name, opts.Security.ControlPlaneNamespace(), tld),
 		}
 
 		b, err := os.ReadFile(filepath.Join(*opts.Security.IdentityDir(), "cert.pem"))

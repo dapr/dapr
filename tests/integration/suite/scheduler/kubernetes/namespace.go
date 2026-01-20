@@ -44,7 +44,9 @@ type namespace struct {
 }
 
 func (n *namespace) Setup(t *testing.T) []framework.Option {
-	n.sentry = sentry.New(t)
+	n.sentry = sentry.New(t,
+		sentry.WithTrustDomain("cluster.local"),
+	)
 
 	n.kubeapi = kubernetes.New(t,
 		kubernetes.WithClusterNamespaceList(t, &corev1.NamespaceList{

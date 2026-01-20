@@ -54,7 +54,9 @@ type namespace struct {
 }
 
 func (n *namespace) Setup(t *testing.T) []framework.Option {
-	sentry := sentry.New(t)
+	sentry := sentry.New(t,
+		sentry.WithTrustDomain("cluster.local"),
+	)
 
 	app := app.New(t,
 		app.WithConfig(`{"entities": ["myactortype"]}`),
@@ -62,7 +64,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 	)
 
 	n.kubeapi = kubernetes.New(t,
-		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString("localhost"), "default", sentry.Port()),
+		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString("cluster.local"), "default", sentry.Port()),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{},
 		}),
@@ -101,6 +103,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithControlPlaneAddress(operator.Address()),
 		daprd.WithPlacementAddresses(n.placement.Address()),
+		daprd.WithControlPlaneTrustDomain("cluster.local"),
 	)
 
 	return []framework.Option{
