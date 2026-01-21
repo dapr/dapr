@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/conversation/langchaingokit"
 	"github.com/dapr/components-contrib/conversation/mistral"
+	"github.com/dapr/components-contrib/conversation/ollama"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -108,9 +109,6 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		}
 		*request.Message = append(*request.Message, c)
 	}
-
-	request.Parameters = req.GetParameters()
-	request.ConversationContext = req.GetContextID()
 	request.Temperature = req.GetTemperature()
 
 	// do call
@@ -122,11 +120,9 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	// transform v1 proto -> v2 component request
 	toolsv2 := []llms.Tool{}
 	requestv2 := &conversation.Request{
-		Message:             request.Message,
-		Tools:               &toolsv2,
-		Parameters:          request.Parameters,
-		ConversationContext: request.ConversationContext,
-		Temperature:         request.Temperature,
+		Message:     request.Message,
+		Tools:       &toolsv2,
+		Temperature: request.Temperature,
 	}
 
 	resp, err := policyRunner(func(ctx context.Context) (*conversation.Response, error) {
@@ -146,8 +142,9 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	response := &runtimev1pb.ConversationResponse{} //nolint:staticcheck
 	a.logger.Debug(response)
 	if resp != nil {
-		if resp.ConversationContext != "" {
-			response.ContextID = &resp.ConversationContext
+		if req.GetContextID() != "" {
+			contextID := req.GetContextID()
+			response.ContextID = &contextID
 		}
 
 		for _, o := range resp.Outputs {
@@ -172,7 +169,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResult{ //nolint:staticcheck
 				Result:     res,
-				Parameters: request.Parameters,
+				Parameters: req.GetParameters(),
 			})
 		}
 	}
@@ -196,10 +193,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	// prepare request
 	request := &conversation.Request{}
 	var err error
-	err = kmeta.DecodeMetadata(req.GetMetadata(), request)
-	if err != nil {
-		return nil, err
-	}
+	request.Metadata = req.GetMetadata()
 
 	if request.Message == nil {
 		request.Message = &[]llms.MessageContent{}
@@ -209,6 +203,12 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		err = messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
 		return nil, err
+	}
+
+	if req.GetResponseFormat() != nil {
+		if respFormat := req.GetResponseFormat(); respFormat != nil {
+			request.ResponseFormatAsJSONSchema = respFormat.AsMap()
+		}
 	}
 
 	var scrubber piiscrubber.Scrubber
@@ -353,7 +353,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 						},
 					}
 
-					// handle mistral edge case on handling tool call message
+					// handle mistral and ollama edge case on handling tool call message
 					// where it expects a text message instead of a tool call message
 					if _, ok := component.(*mistral.Mistral); ok {
 						langchainMsg.Parts = append(langchainMsg.Parts, langchaingokit.CreateToolCallPart(&toolCall))
@@ -395,7 +395,9 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				// handle mistral edge case on handling tool call response message
 				// where it expects a text message instead of a tool call response message
 				if _, ok := component.(*mistral.Mistral); ok {
-					langchainMsg = mistral.CreateToolResponseMessage(parts...)
+					langchainMsg = langchaingokit.CreateToolResponseMessage(parts...)
+				} else if _, ok := component.(*ollama.Ollama); ok {
+					langchainMsg = langchaingokit.CreateToolResponseMessage(parts...)
 				} else {
 					langchainMsg = llms.MessageContent{
 						Role:  llms.ChatMessageTypeTool,
@@ -420,11 +422,13 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		request.Message = &requestMessages
 	}
 
-	request.Parameters = req.GetParameters()
-	request.ConversationContext = req.GetContextId()
 	request.Temperature = req.GetTemperature()
 	toolChoice := req.GetToolChoice()
 	tools := req.GetTools()
+	if req.GetPromptCacheRetention() != nil {
+		retentionDuration := req.GetPromptCacheRetention().AsDuration()
+		request.PromptCacheRetention = &retentionDuration
+	}
 
 	// set default tool choice to auto if not specified and tools are available
 	if toolChoice == "" && len(tools) > 0 {
@@ -508,13 +512,13 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	response := &runtimev1pb.ConversationResponseAlpha2{}
 	a.logger.Debug(response)
 	if resp != nil {
-		if resp.ConversationContext != "" {
-			response.ContextId = &resp.ConversationContext
+		if req.GetContextId() != "" {
+			contextID := req.GetContextId()
+			response.ContextId = &contextID
 		}
 
 		for _, o := range resp.Outputs {
 			var resultingChoices []*runtimev1pb.ConversationResultChoices
-
 			for _, choice := range o.Choices {
 				resultMessage := &runtimev1pb.ConversationResultMessage{}
 
@@ -561,11 +565,46 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				resultingChoices = append(resultingChoices, resultingChoice)
 			}
 
-			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResultAlpha2{
+			result := &runtimev1pb.ConversationResultAlpha2{
 				Choices: resultingChoices,
-			})
+				Usage:   convertUsageForResponse(resp.Usage),
+			}
+			if resp.Model != "" {
+				result.Model = &resp.Model
+			}
+			response.Outputs = append(response.GetOutputs(), result)
 		}
 	}
 
 	return response, nil
+}
+
+func convertUsageForResponse(usage *conversation.Usage) *runtimev1pb.ConversationResultAlpha2CompletionUsage {
+	if usage == nil {
+		return nil
+	}
+
+	protoUsage := &runtimev1pb.ConversationResultAlpha2CompletionUsage{
+		CompletionTokens: usage.CompletionTokens,
+		PromptTokens:     usage.PromptTokens,
+		TotalTokens:      usage.TotalTokens,
+	}
+
+	if usage.CompletionTokensDetails != nil {
+		protoUsage.CompletionTokensDetails = &runtimev1pb.ConversationResultAlpha2CompletionUsageCompletionTokensDetails{
+			AcceptedPredictionTokens: usage.CompletionTokensDetails.AcceptedPredictionTokens,
+			AudioTokens:              usage.CompletionTokensDetails.AudioTokens,
+			ReasoningTokens:          usage.CompletionTokensDetails.ReasoningTokens,
+			RejectedPredictionTokens: usage.CompletionTokensDetails.RejectedPredictionTokens,
+		}
+	}
+
+	if usage.PromptTokensDetails != nil {
+		protoUsage.PromptTokensDetails = &runtimev1pb.ConversationResultAlpha2CompletionUsagePromptTokensDetails{
+			AudioTokens:  usage.PromptTokensDetails.AudioTokens,
+			CachedTokens: usage.PromptTokensDetails.CachedTokens,
+		}
+	}
+
+	return protoUsage
 }

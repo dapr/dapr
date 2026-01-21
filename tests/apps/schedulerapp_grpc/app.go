@@ -122,6 +122,10 @@ func (s *server) OnBindingEvent(ctx context.Context, request *runtimev1pb.Bindin
 	return nil, nil
 }
 
+func (s *server) OnBulkTopicEvent(ctx context.Context, request *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	return nil, nil
+}
+
 func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, request *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
 	return nil, nil
 }

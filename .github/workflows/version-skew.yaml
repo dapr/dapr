@@ -18,6 +18,8 @@ on:
   push:
     branches:
       - master
+      - release-*
+  workflow_dispatch:
   # Dispatch on external events
   repository_dispatch:
     types:
