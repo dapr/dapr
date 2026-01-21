@@ -15,82 +15,49 @@ package diagnostics
 
 import (
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 )
 
-var (
-	pathMatchHandlerFunc = func(pattern string) http.HandlerFunc {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rw, ok := w.(*pathMatchingRW)
-			if !ok {
-				log.Errorf("Failed to cast to PathMatchingRW")
-				return
-			}
-			rw.matchedPath = pattern
-		})
-	}
-
-	emptyHandlerFunc = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
-)
-
 type pathMatching struct {
-	mux *http.ServeMux
+	mux           *http.ServeMux
+	returnRawPath bool
 }
 
-// newPathMatching creates a new pathMatching instance.
-// The root path ("/") must always be registered:
-// - If the user explicitly registers the root path, we match it accordingly.
-// - If the root path is not explicitly registered:
-//   - If legacy is true, we fall back to using an empty handler function.
-//   - If legacy is false, we match the root path to an empty string.
-//
-// All other paths in the 'paths' slice are cleaned, sorted, and registered.
+// newPathMatching creates a new pathMatching instance using ServeMux
+// Paths are normalized (double slashes merged, leading slash ensured) and registered.
+// Behavior for unmatched paths depends on legacy mode:
+// - Legacy (increasedCardinality=true): Register "/" fallback and return raw path to preserve cardinality
+// - Strict (increasedCardinality=false): Do NOT register "/" so unmatched paths return empty string (low cardinality)
 func newPathMatching(paths []string, legacy bool) *pathMatching {
-	if paths == nil {
-		return nil
-	}
-
 	if len(paths) == 0 {
 		return nil
 	}
 
 	mux := http.NewServeMux()
+	pm := &pathMatching{mux: mux}
 
-	cleanPaths, foundRootPath := cleanAndSortPaths(paths)
-
-	if !foundRootPath {
-		if legacy {
-			mux.Handle("/", emptyHandlerFunc)
-		} else {
-			mux.Handle("/", pathMatchHandlerFunc(""))
-		}
-	}
-
-	for _, pattern := range cleanPaths {
-		mux.Handle(pattern, pathMatchHandlerFunc(pattern))
-	}
-
-	return &pathMatching{
-		mux: mux,
-	}
-}
-
-// cleanAndSortPaths processes the given slice of paths by sorting and compacting it,
-// and checks if the root path ("/") is included.
-func cleanAndSortPaths(paths []string) ([]string, bool) {
-	foundRootPath := false
 	slices.Sort(paths)
 	paths = slices.Compact(paths)
-	cleanPaths := make([]string, 0, len(paths))
-	for _, path := range paths {
-		if path == "/" {
-			foundRootPath = true
+
+	hasRoot := false
+	for _, p := range paths {
+		pattern := normalizePath(p)
+		if pattern == "/" {
+			hasRoot = true
 		}
-		cleanPaths = append(cleanPaths, path)
+		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {})
 	}
-	return cleanPaths, foundRootPath
+
+	// Handle behavior for unmatched paths
+	if !hasRoot {
+		if legacy {
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
+			pm.returnRawPath = true
+		}
+	}
+
+	return pm
 }
 
 func (pm *pathMatching) enabled() bool {
@@ -98,48 +65,33 @@ func (pm *pathMatching) enabled() bool {
 }
 
 func (pm *pathMatching) match(path string) (string, bool) {
-	if !pm.enabled() {
+	if !pm.enabled() || path == "" {
 		return "", false
 	}
 
-	if path == "" {
-		return "", false
+	cleanPath := normalizePath(path)
+	req, _ := http.NewRequest(http.MethodGet, cleanPath, nil)
+
+	_, pattern := pm.mux.Handler(req)
+
+	if pattern == "/" && pm.returnRawPath {
+		return cleanPath, true
 	}
 
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+	if pattern == "" {
+		return "", true
 	}
 
-	req := &http.Request{
-		Method: http.MethodGet,
-		URL: &url.URL{
-			Path: path,
-		},
+	return pattern, true
+}
+
+// normalizePath merges double slashes and ensures leading slash.
+func normalizePath(p string) string {
+	for strings.Contains(p, "//") {
+		p = strings.ReplaceAll(p, "//", "/")
 	}
-
-	crw := &pathMatchingRW{matchedPath: path}
-	pm.mux.ServeHTTP(crw, req)
-
-	return crw.matchedPath, true
-}
-
-type pathMatchingRW struct {
-	matchedPath string
-	header      http.Header
-}
-
-// Header returns a non-nil header map
-func (rw *pathMatchingRW) Header() http.Header {
-	if rw.header == nil {
-		rw.header = make(http.Header)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
 	}
-	return rw.header
-}
-
-func (rw *pathMatchingRW) Write(b []byte) (int, error) {
-	return len(b), nil
-}
-
-func (rw *pathMatchingRW) WriteHeader(statusCode int) {
-	// no-op
+	return p
 }
