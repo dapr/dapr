@@ -23,6 +23,7 @@ import (
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
 
 	"github.com/dapr/components-contrib/conversation"
+	"github.com/dapr/components-contrib/conversation/langchaingokit"
 	"github.com/dapr/components-contrib/conversation/mistral"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
@@ -262,6 +263,8 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					Parts: parts,
 				}
 
+				a.logger.Infof("sam case is an developer message for %v", langchainMsg)
+
 			case *runtimev1pb.ConversationMessage_OfSystem:
 				var parts []llms.ContentPart
 
@@ -286,6 +289,8 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					Role:  llms.ChatMessageTypeSystem,
 					Parts: parts,
 				}
+
+				a.logger.Infof("sam case is an system message for %v", langchainMsg)
 
 			case *runtimev1pb.ConversationMessage_OfUser:
 				var parts []llms.ContentPart
@@ -312,6 +317,8 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					Parts: parts,
 				}
 
+				a.logger.Infof("sam case is an user message for %v", langchainMsg)
+
 			case *runtimev1pb.ConversationMessage_OfAssistant:
 				var parts []llms.ContentPart
 				for _, content := range msg.OfAssistant.GetContent() {
@@ -336,6 +343,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					Role:  llms.ChatMessageTypeAI,
 					Parts: parts,
 				}
+				a.logger.Infof("sam case is an assistant message for %v", langchainMsg)
 
 				for _, tool := range msg.OfAssistant.GetToolCalls() {
 					if tool.ToolTypes == nil {
@@ -355,7 +363,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					// handle mistral edge case on handling tool call message
 					// where it expects a text message instead of a tool call message
 					if _, ok := component.(*mistral.Mistral); ok {
-						langchainMsg.Parts = append(langchainMsg.Parts, mistral.CreateToolCallPart(&toolCall))
+						langchainMsg.Parts = append(langchainMsg.Parts, langchaingokit.CreateToolCallPart(&toolCall))
 					} else {
 						langchainMsg.Parts = append(langchainMsg.Parts, toolCall)
 					}
@@ -408,6 +416,8 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 				return nil, err
 			}
 			llmMessages = append(llmMessages, &langchainMsg)
+
+			a.logger.Infof("sam case is an tool message for %v", langchainMsg)
 		}
 	}
 
@@ -464,6 +474,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 	if toolChoice != "" {
 		request.ToolChoice = &toolChoice
 	}
+	a.logger.Infof("sam the tool choice set is %s with tools: %v", toolChoice, req.GetTools())
 
 	if tools := req.GetTools(); tools != nil {
 		availableTools := make([]llms.Tool, 0, len(tools))
@@ -482,6 +493,7 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 			}
 		}
 		request.Tools = &availableTools
+		a.logger.Infof("sam set the available tools to %v", request.Tools)
 	}
 
 	start := time.Now()
