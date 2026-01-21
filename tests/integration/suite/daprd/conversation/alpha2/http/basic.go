@@ -115,6 +115,16 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			},
 			"scrubPii": true,
 			"temperature": 0.7,
+			"responseFormat": {
+				"type": "object",
+				"properties": {
+					"result": {
+						"type": "string"
+					}
+				},
+				"required": ["result"]
+			},
+			"promptCacheRetention": "86400s",
 			"tools": [
 				{
 					"function": {
@@ -166,7 +176,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 								]
 							}
 						}
-					]
+					],
+					"usage": {
+						"completionTokens": "8",
+						"promptTokens": "8",
+						"totalTokens": "16"
+					}
 				}
 			]
 		}`
@@ -245,7 +260,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 								]
 							}
 						}
-					]
+					],
+					"usage": {
+						"completionTokens": "2",
+						"promptTokens": "2",
+						"totalTokens": "4"
+					}
 				}
 			]
 		}`
