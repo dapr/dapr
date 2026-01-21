@@ -98,7 +98,6 @@ func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
 }
 
 func TestHTTPMetricsPathMatchingUnmatchedPathWithSubtreeStrictMode(t *testing.T) {
-
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
 
