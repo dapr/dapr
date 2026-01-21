@@ -36,7 +36,6 @@ type streaming struct {
 }
 
 func (s *streaming) Setup(t *testing.T) []framework.Option {
-
 	s.daprd = daprd.New(t,
 		daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1

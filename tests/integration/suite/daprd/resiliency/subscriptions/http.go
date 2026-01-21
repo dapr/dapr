@@ -37,7 +37,6 @@ func init() {
 
 type http struct {
 	daprd *daprd.Daprd
-	app   *app.App
 
 	called atomic.Int32
 }

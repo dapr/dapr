@@ -36,7 +36,6 @@ func init() {
 
 type grpc struct {
 	daprd *daprd.Daprd
-	app   *app.App
 
 	called atomic.Int32
 }
