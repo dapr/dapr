@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"strconv"
+	stdstrings "strings"
 
 	"github.com/argoproj/argo-rollouts/pkg/apis/rollouts"
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
@@ -276,6 +277,23 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 		annotationsMap[annotationPrometheusScrape] = "true" // WARN: deprecated as of v1.7 please use prometheus.io/probe instead.
 		annotationsMap[annotationPrometheusPort] = strconv.FormatInt(int64(metricsPort), 10)
 		annotationsMap[annotationPrometheusPath] = "/"
+	}
+
+	if val, ok := wrapper.GetTemplateAnnotations()[annotations.KeySidecarSvcAnnotations]; ok {
+		pairs := stdstrings.Split(val, ",")
+		for _, pair := range pairs {
+			pair = stdstrings.TrimSpace(pair)
+			key, value, found := stdstrings.Cut(pair, "=")
+			if found && key != "" {
+				key = stdstrings.TrimSpace(key)
+
+				if _, ok := annotationsMap[key]; ok {
+					log.Warnf("Ignoring reserved annotation %q as it operator-managed", key)
+					continue
+				}
+				annotationsMap[key] = stdstrings.TrimSpace(value)
+			}
+		}
 	}
 
 	grpcPort := h.getGRPCPort(wrapper)
