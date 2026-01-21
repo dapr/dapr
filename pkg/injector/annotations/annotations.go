@@ -78,4 +78,5 @@ const (
 	KeyAppChannel                       = "dapr.io/app-channel-address"
 	KeySentryRequestJwtAudiences        = "dapr.io/sentry-request-jwt-audiences"
 	KeySidecarSvcAnnotations            = "dapr.io/sidecar-svc-annotations"
+	KeyDisableInitEndpoints             = "dapr.io/disable-init-endpoints"
 )

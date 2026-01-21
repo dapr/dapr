@@ -56,6 +56,7 @@ type Client struct {
 
 	table table.Interface
 	lock  *lock.OuterCancel
+	conn  *grpc.ClientConn
 
 	connector connector.Interface
 	client    v1pb.Placement_ReportDaprStatusClient
@@ -126,9 +127,16 @@ func New(opts Options) (*Client, error) {
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	conctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	if err := c.connectRoundRobin(conctx); err != nil {
+	defer func() {
+		if c.client != nil {
+			c.client.CloseSend()
+		}
+		if c.conn != nil {
+			c.conn.Close()
+		}
+	}()
+
+	if err := c.connectRoundRobin(ctx); err != nil {
 		return err
 	}
 
@@ -176,7 +184,9 @@ func (c *Client) Run(ctx context.Context) error {
 			return c.table.HaltAll(ctx)
 		}
 
-		cancel()
+		if c.conn != nil {
+			c.conn.Close()
+		}
 		c.ready.Store(false)
 		c.retryCount++
 		// Re-enable once healthz of daprd is not tired to liveness.
@@ -199,8 +209,7 @@ func (c *Client) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 
-		cancel, err = c.handleReconnect(ctx)
-		if err != nil {
+		if err = c.handleReconnect(ctx); err != nil {
 			log.Errorf("Failed to reconnect to placement: %s", err)
 			return nil
 		}
@@ -211,33 +220,35 @@ func (c *Client) Ready() bool {
 	return c.ready.Load()
 }
 
-func (c *Client) handleReconnect(ctx context.Context) (context.CancelFunc, error) {
+func (c *Client) handleReconnect(ctx context.Context) error {
 	unlock := c.lock.Lock()
 	defer unlock()
+
+	if c.conn != nil {
+		c.conn.Close()
+	}
 
 	log.Info("Placement stream disconnected")
 
 	if err := c.table.HaltAll(context.Background()); err != nil {
-		return nil, fmt.Errorf("error whilst deactivating all actors when shutting down client: %s", err)
+		return fmt.Errorf("error whilst deactivating all actors when shutting down client: %s", err)
 	}
 
 	log.Info("Halted all actors on this host")
 
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		return ctx.Err()
 	}
 
 	log.Infof("Reconnecting to placement...")
 
-	ctx, cancel := context.WithCancel(ctx)
 	if err := c.connectRoundRobin(ctx); err != nil {
-		cancel()
-		return nil, err
+		return err
 	}
 
 	log.Infof("Reconnected to placement")
 
-	return cancel, nil
+	return nil
 }
 
 func (c *Client) connectRoundRobin(ctx context.Context) error {
@@ -262,8 +273,9 @@ func (c *Client) connect(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	c.conn = conn
 
-	client, err := v1pb.NewPlacementClient(conn).ReportDaprStatus(ctx)
+	client, err := v1pb.NewPlacementClient(c.conn).ReportDaprStatus(ctx)
 	if err != nil {
 		err = fmt.Errorf("failed to create placement client: %w", err)
 		return err

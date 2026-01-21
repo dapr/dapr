@@ -272,6 +272,42 @@ func TestConversation(t *testing.T) {
 	})
 }
 
+func TestJob(t *testing.T) {
+	t.Run("record job success count", func(t *testing.T) {
+		c, meter := componentsMetrics()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		c.JobTriggeredSuccess(t.Context(), "job_trigger_op", 0)
+		viewData, _ := meter.RetrieveData("component/job/success_count")
+		v := meter.Find("component/job/success_count")
+		allTagsPresent(t, v, viewData[0].Tags)
+	})
+
+	t.Run("record job failure count", func(t *testing.T) {
+		c, meter := componentsMetrics()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		c.JobTriggeredFailure(t.Context(), "job_trigger_op", 0)
+		viewData, _ := meter.RetrieveData("component/job/failure_count")
+		v := meter.Find("component/job/failure_count")
+		allTagsPresent(t, v, viewData[0].Tags)
+	})
+
+	t.Run("record job latency", func(t *testing.T) {
+		c, meter := componentsMetrics()
+		t.Cleanup(func() {
+			meter.Stop()
+		})
+		c.JobTriggeredSuccess(t.Context(), "job_trigger_op", 1)
+		viewData, _ := meter.RetrieveData("component/job/latencies")
+		v := meter.Find("component/job/latencies")
+		allTagsPresent(t, v, viewData[0].Tags)
+		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
+	})
+}
+
 func TestComponentMetricsInit(t *testing.T) {
 	c, meter := componentsMetrics()
 	t.Cleanup(func() {

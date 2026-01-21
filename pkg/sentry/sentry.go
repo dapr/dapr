@@ -26,6 +26,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/modes"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/sentry/config"
@@ -122,6 +123,16 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 		return nil, fmt.Errorf("error creating security: %s", err)
 	}
 
+	tld := opts.Config.TrustDomain
+	if opts.Config.Mode == modes.KubernetesMode {
+		tldd, err := utils.GetKubeClusterDomain()
+		if err != nil {
+			log.Errorf("Error getting Kubernetes cluster domain, falling back to %q: %w", tld, err)
+		} else {
+			tld = tldd
+		}
+	}
+
 	// Start all background processes
 	runners := concurrency.NewRunnerManager(
 		sec.Run,
@@ -135,6 +146,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 			ListenAddress:    opts.Config.ListenAddress,
 			JWTEnabled:       opts.Config.JWT.Enabled,
 			JWTTTL:           opts.Config.JWT.TTL,
+			TLD:              tld,
 		}).Start,
 	)
 

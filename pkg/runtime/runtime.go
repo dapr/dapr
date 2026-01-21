@@ -245,27 +245,28 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:              runtimeConfig.id,
-		Namespace:       namespace,
-		IsHTTP:          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:   len(runtimeConfig.actorsService) > 0,
-		Actors:          actors,
-		Registry:        runtimeConfig.registry,
-		ComponentStore:  compStore,
-		Meta:            meta,
-		GlobalConfig:    globalConfig,
-		Resiliency:      resiliencyProvider,
-		Mode:            runtimeConfig.mode,
-		PodName:         podName,
-		OperatorClient:  operatorClient,
-		GRPC:            grpc,
-		Channels:        channels,
-		MiddlewareHTTP:  httpMiddleware,
-		Security:        sec,
-		Outbox:          outbox,
-		Adapter:         pubsubAdapter,
-		AdapterStreamer: pubsubAdapterStreamer,
-		Reporter:        runtimeConfig.registry.Reporter(),
+		ID:                              runtimeConfig.id,
+		Namespace:                       namespace,
+		IsHTTP:                          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ProgrammaticSubscriptionEnabled: !utils.Contains(runtimeConfig.disableInitEndpoints, DisableSubscribeInitEndpoint),
+		ActorsEnabled:                   len(runtimeConfig.actorsService) > 0,
+		Actors:                          actors,
+		Registry:                        runtimeConfig.registry,
+		ComponentStore:                  compStore,
+		Meta:                            meta,
+		GlobalConfig:                    globalConfig,
+		Resiliency:                      resiliencyProvider,
+		Mode:                            runtimeConfig.mode,
+		PodName:                         podName,
+		OperatorClient:                  operatorClient,
+		GRPC:                            grpc,
+		Channels:                        channels,
+		MiddlewareHTTP:                  httpMiddleware,
+		Security:                        sec,
+		Outbox:                          outbox,
+		Adapter:                         pubsubAdapter,
+		AdapterStreamer:                 pubsubAdapterStreamer,
+		Reporter:                        runtimeConfig.registry.Reporter(),
 	})
 
 	var reloader *hotreload.Reloader
@@ -1319,6 +1320,11 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 
 func (a *DaprRuntime) loadAppConfiguration(ctx context.Context) {
 	if a.channels.AppChannel() == nil {
+		return
+	}
+
+	if utils.Contains(a.runtimeConfig.disableInitEndpoints, DisableConfigInitEndpoint) {
+		log.Warn("Skipping programmatic dapr configuration loading (see 'disable-init-endpoints' flag/annotation)")
 		return
 	}
 

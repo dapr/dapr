@@ -159,6 +159,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.allowedOrigins != nil {
 		args = append(args, "--allowed-origins="+*opts.allowedOrigins)
 	}
+	if len(opts.disableInitEndpoints) > 0 {
+		args = append(args, "--disable-init-endpoints="+strings.Join(opts.disableInitEndpoints, ","))
+	}
 
 	ns := "default"
 	if opts.namespace != nil {

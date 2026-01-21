@@ -246,6 +246,11 @@ func (s *scheduler) DeleteByActorID(ctx context.Context, req *api.DeleteReminder
 			},
 		},
 	})
+	if s, ok := status.FromError(err); ok && s.Code() == codes.Unimplemented {
+		log.Warnf("DeleteByMetadata is not implemented in the scheduler service used. Falling back to table scan for deleting reminders for actor %s of type %s", req.ActorID, req.ActorType)
+		return nil
+	}
+
 	if err != nil {
 		log.Errorf("Error deleting reminders for actor %s of type %s due to: %s", req.ActorID, req.ActorType, err)
 		return err

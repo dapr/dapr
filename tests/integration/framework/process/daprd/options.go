@@ -65,6 +65,7 @@ type options struct {
 	blockShutdownDuration   *string
 	controlPlaneTrustDomain *string
 	schedulerAddresses      []string
+	disableInitEndpoints    []string
 	maxBodySize             *string
 	allowedOrigins          *string
 }
@@ -238,6 +239,12 @@ func WithPlacementAddresses(addresses ...string) Option {
 func WithSchedulerAddresses(addresses ...string) Option {
 	return func(o *options) {
 		o.schedulerAddresses = append(o.schedulerAddresses, addresses...)
+	}
+}
+
+func WithDisableInitEndpoints(endpoints ...string) Option {
+	return func(o *options) {
+		o.disableInitEndpoints = append(o.disableInitEndpoints, endpoints...)
 	}
 }
 

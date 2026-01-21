@@ -29,6 +29,7 @@ const (
 	BulkGet                  = "bulk_get"
 	BulkDelete               = "bulk_delete"
 	CryptoOp                 = "crypto_op"
+	JobTriggerOp             = "job_trigger_op"
 )
 
 // componentMetrics holds dapr runtime metrics for components.
@@ -63,6 +64,10 @@ type componentMetrics struct {
 
 	cryptoCount   *stats.Int64Measure
 	cryptoLatency *stats.Float64Measure
+
+	jobSuccessCount *stats.Int64Measure
+	jobFailureCount *stats.Int64Measure
+	jobLatency      *stats.Float64Measure
 
 	appID     string
 	enabled   bool
@@ -169,6 +174,21 @@ func newComponentMetrics() *componentMetrics {
 			"component/crypto/latencies",
 			"The latency of the response from the crypto component.",
 			stats.UnitMilliseconds),
+		jobSuccessCount: stats.Int64(
+			"component/job/success_count",
+			"The number of successful job triggers.",
+			stats.UnitDimensionless,
+		),
+		jobFailureCount: stats.Int64(
+			"component/job/failure_count",
+			"The number of failed job triggers.",
+			stats.UnitDimensionless,
+		),
+		jobLatency: stats.Float64(
+			"component/job/latencies",
+			"The latency of the response from the app that processed the triggered job.",
+			stats.UnitMilliseconds,
+		),
 	}
 }
 
@@ -203,6 +223,9 @@ func (c *componentMetrics) Init(meter view.Meter, appID, namespace string, laten
 		diagUtils.NewMeasureView(c.conversationCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.cryptoLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, latencyDistribution),
 		diagUtils.NewMeasureView(c.cryptoCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, view.Count()),
+		diagUtils.NewMeasureView(c.jobLatency, []tag.Key{appIDKey, namespaceKey, operationKey, successKey}, latencyDistribution),
+		diagUtils.NewMeasureView(c.jobSuccessCount, []tag.Key{appIDKey, namespaceKey, operationKey}, view.Count()),
+		diagUtils.NewMeasureView(c.jobFailureCount, []tag.Key{appIDKey, namespaceKey, operationKey}, view.Count()),
 	)
 }
 
@@ -437,6 +460,35 @@ func (c *componentMetrics) CryptoInvoked(ctx context.Context, component, operati
 	}
 }
 
+// JobTriggeredSuccess records the metrics for a job execution success event.
+func (c *componentMetrics) JobTriggeredSuccess(ctx context.Context, operation string, elapsed float64) {
+	c.jobTriggered(ctx, operation, true, elapsed, c.jobSuccessCount)
+}
+
+// JobTriggeredFailure records the metrics for a job execution failure event.
+func (c *componentMetrics) JobTriggeredFailure(ctx context.Context, operation string, elapsed float64) {
+	c.jobTriggered(ctx, operation, false, elapsed, c.jobFailureCount)
+}
+
+func (c *componentMetrics) jobTriggered(ctx context.Context, operation string, success bool, elapsed float64, countMeasure *stats.Int64Measure) {
+	if c.enabled {
+		stats.RecordWithOptions(
+			ctx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(diagUtils.WithTags(countMeasure.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation)...),
+			stats.WithMeasurements(countMeasure.M(1)))
+
+		if elapsed > 0 {
+			stats.RecordWithOptions(
+				ctx,
+				stats.WithRecorder(c.meter),
+				stats.WithTags(diagUtils.WithTags(c.jobLatency.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
+				stats.WithMeasurements(c.jobLatency.M(elapsed)))
+		}
+	}
+}
+
+// ElapsedSince returns the given time in milliseconds.
 func ElapsedSince(start time.Time) float64 {
 	return float64(time.Since(start) / time.Millisecond)
 }

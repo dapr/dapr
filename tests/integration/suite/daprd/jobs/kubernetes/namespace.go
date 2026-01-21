@@ -31,6 +31,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/manifest"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
@@ -39,6 +40,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -54,7 +56,15 @@ type namespace struct {
 }
 
 func (n *namespace) Setup(t *testing.T) []framework.Option {
-	sentry := sentry.New(t)
+	// Skip windows as test requires a resolvconf lookup.
+	os.SkipWindows(t)
+
+	tld, err := utils.GetKubeClusterDomain()
+	require.NoError(t, err)
+
+	sentry := sentry.New(t,
+		sentry.WithTrustDomain(tld),
+	)
 
 	app := app.New(t,
 		app.WithConfig(`{"entities": ["myactortype"]}`),
@@ -62,7 +72,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 	)
 
 	n.kubeapi = kubernetes.New(t,
-		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString("localhost"), "default", sentry.Port()),
+		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString(tld), "default", sentry.Port()),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{},
 		}),
@@ -101,6 +111,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithControlPlaneAddress(operator.Address()),
 		daprd.WithPlacementAddresses(n.placement.Address()),
+		daprd.WithControlPlaneTrustDomain(tld),
 	)
 
 	return []framework.Option{

@@ -26,10 +26,12 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -44,7 +46,15 @@ type namespace struct {
 }
 
 func (n *namespace) Setup(t *testing.T) []framework.Option {
-	n.sentry = sentry.New(t)
+	// Skip windows as test requires a resolvconf lookup.
+	os.SkipWindows(t)
+
+	tld, err := utils.GetKubeClusterDomain()
+	require.NoError(t, err)
+
+	n.sentry = sentry.New(t,
+		sentry.WithTrustDomain(tld),
+	)
 
 	n.kubeapi = kubernetes.New(t,
 		kubernetes.WithClusterNamespaceList(t, &corev1.NamespaceList{

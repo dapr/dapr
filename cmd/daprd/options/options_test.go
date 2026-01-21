@@ -349,3 +349,41 @@ func TestControlPlaneEnvVar(t *testing.T) {
 		assert.EqualValues(t, "flag-namespace", opts.ControlPlaneNamespace)
 	})
 }
+
+func TestDisableInitEndpoints(t *testing.T) {
+	t.Run("flag is unset", func(t *testing.T) {
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Empty(t, opts.DisableInitEndpoints)
+	})
+
+	t.Run("disable single endpoint", func(t *testing.T) {
+		opts, err := New([]string{
+			"--disable-init-endpoints", "config",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config"}, opts.DisableInitEndpoints)
+	})
+
+	t.Run("disable multiple endpoints with comma separation", func(t *testing.T) {
+		opts, err := New([]string{
+			"--disable-init-endpoints", "config,subscribe",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config", "subscribe"}, opts.DisableInitEndpoints)
+	})
+	t.Run("single dash flag support", func(t *testing.T) {
+		opts, err := New([]string{
+			"-disable-init-endpoints", "config", // Single dash
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"config"}, opts.DisableInitEndpoints)
+	})
+	t.Run("empty value should be allowed", func(t *testing.T) {
+		opts, err := New([]string{
+			"--disable-init-endpoints", "",
+		})
+		require.NoError(t, err)
+		assert.Empty(t, opts.DisableInitEndpoints)
+	})
+}
