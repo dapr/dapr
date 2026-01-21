@@ -16,6 +16,7 @@ package activity
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -53,15 +54,14 @@ type restart struct {
 	registry1 *task.TaskRegistry
 	registry2 *task.TaskRegistry
 
-	activityStarted chan struct{}
-	activityReady   chan struct{}
+	inActivity        atomic.Int32
+	blockActivityChan chan struct{}
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	r.activityStarted = make(chan struct{}, 1)
-	r.activityReady = make(chan struct{})
+	r.blockActivityChan = make(chan struct{})
 
 	r.place = placement.New(t)
 	r.sched = scheduler.New(t,
@@ -83,13 +83,14 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 			return nil, fmt.Errorf("failed to get input in app2: %w", err)
 		}
 
-		select {
-		case r.activityStarted <- struct{}{}:
-		default:
-		}
+		r.inActivity.Add(1)
 
+		select {
 		// This ensures the workflow hangs when app2 goes down
-		<-r.activityReady
+		case <-ctx.Context().Done():
+			return nil, ctx.Context().Err()
+		case <-r.blockActivityChan:
+		}
 
 		return "Processed by app2: " + input, nil
 	})
@@ -145,6 +146,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	client1 := client.NewTaskHubGrpcClient(r.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
 	client2 := client.NewTaskHubGrpcClient(r.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client1.StartWorkItemListener(t.Context(), r.registry1))
+
 	cctx, ccancel := context.WithCancel(t.Context())
 	t.Cleanup(ccancel)
 	require.NoError(t, client2.StartWorkItemListener(cctx, r.registry2))
@@ -152,17 +154,15 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	id, err := client1.ScheduleNewOrchestration(t.Context(), "restartWorkflow", api.WithInput("Hello from app1"))
 	require.NoError(t, err)
 
-	select {
-	case <-r.activityStarted:
-	case <-time.After(20 * time.Second):
-		require.Fail(t, "Timeout waiting for activity to start")
-	}
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int32(1), r.inActivity.Load())
+	}, time.Second*30, time.Millisecond*10)
 
 	// Stop app2 to simulate app going down mid-execution
 	ccancel()
 	r.daprd2.Cleanup(t)
 
-	waitCtx, waitCancel := context.WithTimeout(ctx, 2*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(ctx, time.Second*2)
 	t.Cleanup(waitCancel)
 	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
 	require.Error(t, err)
@@ -183,10 +183,13 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		daprd3.Cleanup(t)
 	})
 
-	// Restart the listener for app2 & ensure wf completion
 	client2Restart := client.NewTaskHubGrpcClient(daprd3.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client2Restart.StartWorkItemListener(ctx, r.registry2))
-	close(r.activityReady)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int32(2), r.inActivity.Load())
+	}, time.Second*30, time.Millisecond*10)
+
+	close(r.blockActivityChan)
 
 	_, err = client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 	assert.NoError(t, err)
