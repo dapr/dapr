@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -114,6 +115,15 @@ func (f *fanoutthree) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client2.StartWorkItemListener(ctx, registry))
 	client3 := client.NewTaskHubGrpcClient(f.daprd3.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, client3.StartWorkItemListener(ctx, registry))
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c,
+			len(f.daprd1.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+		assert.GreaterOrEqual(c,
+			len(f.daprd2.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+		assert.GreaterOrEqual(c,
+			len(f.daprd3.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+	}, time.Second*10, time.Millisecond*10)
 
 	id, err := client1.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
