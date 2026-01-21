@@ -40,7 +40,8 @@ import (
 type suite struct {
 	cancelCalled *atomic.Pointer[error]
 	connLoop     loop.Interface[loops.Event]
-	prefixes     *atomic.Pointer[[]string]
+	prefixes     *[]string
+	prefixesMu   *sync.Mutex
 }
 
 type serverclient struct {
@@ -84,15 +85,14 @@ func newClientServer(t *testing.T) *serverclient {
 func newSuite(t *testing.T) *suite {
 	t.Helper()
 
-	var mu sync.Mutex
 	var cancelCalled atomic.Pointer[error]
-	var prefixes atomic.Pointer[[]string]
-	prefixes.Store(ptr.Of(make([]string, 0)))
+	var prefixes []string
+	var prefixesMu sync.Mutex
 	connLoop := New(Options{
 		Cron: frameworkfake.New().WithDeliverablePrefixes(func(_ context.Context, ps ...string) (context.CancelCauseFunc, error) {
-			mu.Lock()
-			prefixes.Store(ptr.Of(append(*prefixes.Load(), ps...)))
-			mu.Unlock()
+			prefixesMu.Lock()
+			prefixes = append(prefixes, ps...)
+			prefixesMu.Unlock()
 			return func(error) {}, nil
 		}),
 		CancelPool: func(err error) {
@@ -115,6 +115,7 @@ func newSuite(t *testing.T) *suite {
 		connLoop:     connLoop,
 		cancelCalled: &cancelCalled,
 		prefixes:     &prefixes,
+		prefixesMu:   &prefixesMu,
 	}
 }
 
@@ -187,12 +188,16 @@ func Test_Namespaces(t *testing.T) {
 		})
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			suite.prefixesMu.Lock()
+			currentPrefixes := make([]string, len(*suite.prefixes))
+			copy(currentPrefixes, *suite.prefixes)
+			suite.prefixesMu.Unlock()
 			assert.ElementsMatch(c, []string{
 				"app||ns1||app1||", "actorreminder||ns1||type1||", "actorreminder||ns1||type2||",
 				"actorreminder||ns2||type3||", "actorreminder||ns2||type4||",
 				"app||ns3||app3||",
 				"app||ns4||app4||", "actorreminder||ns4||type7||", "actorreminder||ns4||type8||",
-			}, *suite.prefixes.Load())
+			}, currentPrefixes)
 		}, time.Second*5, time.Millisecond*10)
 
 		suite.connLoop.Close(new(loops.Shutdown))
