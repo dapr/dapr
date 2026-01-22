@@ -40,11 +40,10 @@ pipeline {
         }
       }
     }
-  
   }
   post {
     success {
-      finalizeBuild(sh(script: 'make show-images', returnStdout: true)
+      finalizeBuild(sh(script: 'make show-images', returnStdout: true))
     }
     cleanup {
      
