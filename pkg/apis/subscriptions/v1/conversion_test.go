@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/apis/subscriptions/v1"
+	v1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1"
 	"github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 )
 
