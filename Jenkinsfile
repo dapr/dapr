@@ -43,6 +43,9 @@ pipeline {
   
   }
   post {
+    success {
+      finalizeBuild(sh(script: 'make show-images', returnStdout: true)
+    }
     cleanup {
      
       sh "cd $DIRECTORY && make clean GOOS='linux' GOARCH='amd64'"
