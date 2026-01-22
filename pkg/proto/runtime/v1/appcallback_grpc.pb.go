@@ -38,6 +38,7 @@ const (
 	AppCallback_OnTopicEvent_FullMethodName           = "/dapr.proto.runtime.v1.AppCallback/OnTopicEvent"
 	AppCallback_ListInputBindings_FullMethodName      = "/dapr.proto.runtime.v1.AppCallback/ListInputBindings"
 	AppCallback_OnBindingEvent_FullMethodName         = "/dapr.proto.runtime.v1.AppCallback/OnBindingEvent"
+	AppCallback_OnBulkTopicEvent_FullMethodName       = "/dapr.proto.runtime.v1.AppCallback/OnBulkTopicEvent"
 )
 
 // AppCallbackClient is the client API for AppCallback service.
@@ -57,6 +58,8 @@ type AppCallbackClient interface {
 	// User application can save the states or send the events to the output
 	// bindings optionally by returning BindingEventResponse.
 	OnBindingEvent(ctx context.Context, in *BindingEventRequest, opts ...grpc.CallOption) (*BindingEventResponse, error)
+	// Subscribes bulk events from Pubsub
+	OnBulkTopicEvent(ctx context.Context, in *TopicEventBulkRequest, opts ...grpc.CallOption) (*TopicEventBulkResponse, error)
 }
 
 type appCallbackClient struct {
@@ -112,6 +115,15 @@ func (c *appCallbackClient) OnBindingEvent(ctx context.Context, in *BindingEvent
 	return out, nil
 }
 
+func (c *appCallbackClient) OnBulkTopicEvent(ctx context.Context, in *TopicEventBulkRequest, opts ...grpc.CallOption) (*TopicEventBulkResponse, error) {
+	out := new(TopicEventBulkResponse)
+	err := c.cc.Invoke(ctx, AppCallback_OnBulkTopicEvent_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AppCallbackServer is the server API for AppCallback service.
 // All implementations should embed UnimplementedAppCallbackServer
 // for forward compatibility
@@ -129,6 +141,8 @@ type AppCallbackServer interface {
 	// User application can save the states or send the events to the output
 	// bindings optionally by returning BindingEventResponse.
 	OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error)
+	// Subscribes bulk events from Pubsub
+	OnBulkTopicEvent(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error)
 }
 
 // UnimplementedAppCallbackServer should be embedded to have forward compatible implementations.
@@ -149,6 +163,9 @@ func (UnimplementedAppCallbackServer) ListInputBindings(context.Context, *emptyp
 }
 func (UnimplementedAppCallbackServer) OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBindingEvent not implemented")
+}
+func (UnimplementedAppCallbackServer) OnBulkTopicEvent(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OnBulkTopicEvent not implemented")
 }
 
 // UnsafeAppCallbackServer may be embedded to opt out of forward compatibility for this service.
@@ -252,6 +269,24 @@ func _AppCallback_OnBindingEvent_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AppCallback_OnBulkTopicEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TopicEventBulkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AppCallbackServer).OnBulkTopicEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AppCallback_OnBulkTopicEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AppCallbackServer).OnBulkTopicEvent(ctx, req.(*TopicEventBulkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AppCallback_ServiceDesc is the grpc.ServiceDesc for AppCallback service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -278,6 +313,10 @@ var AppCallback_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "OnBindingEvent",
 			Handler:    _AppCallback_OnBindingEvent_Handler,
+		},
+		{
+			MethodName: "OnBulkTopicEvent",
+			Handler:    _AppCallback_OnBulkTopicEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -383,6 +422,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AppCallbackAlphaClient interface {
+	// Deprecated: Do not use.
 	// Subscribes bulk events from Pubsub
 	OnBulkTopicEventAlpha1(ctx context.Context, in *TopicEventBulkRequest, opts ...grpc.CallOption) (*TopicEventBulkResponse, error)
 	// Sends job back to the app's endpoint at trigger time.
@@ -397,6 +437,7 @@ func NewAppCallbackAlphaClient(cc grpc.ClientConnInterface) AppCallbackAlphaClie
 	return &appCallbackAlphaClient{cc}
 }
 
+// Deprecated: Do not use.
 func (c *appCallbackAlphaClient) OnBulkTopicEventAlpha1(ctx context.Context, in *TopicEventBulkRequest, opts ...grpc.CallOption) (*TopicEventBulkResponse, error) {
 	out := new(TopicEventBulkResponse)
 	err := c.cc.Invoke(ctx, AppCallbackAlpha_OnBulkTopicEventAlpha1_FullMethodName, in, out, opts...)
@@ -419,6 +460,7 @@ func (c *appCallbackAlphaClient) OnJobEventAlpha1(ctx context.Context, in *JobEv
 // All implementations should embed UnimplementedAppCallbackAlphaServer
 // for forward compatibility
 type AppCallbackAlphaServer interface {
+	// Deprecated: Do not use.
 	// Subscribes bulk events from Pubsub
 	OnBulkTopicEventAlpha1(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error)
 	// Sends job back to the app's endpoint at trigger time.
