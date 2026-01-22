@@ -36,6 +36,7 @@ const (
 	publisherStreamingAppName  = "pubsub-publisher-streaming"
 	subscriberStreamingAppName = "pubsub-subscriber-streaming"
 	pubsubInMemoryName         = "inmemory-pubsub-streaming"
+	numHealthChecks            = 60 // Number of get calls before starting tests.
 )
 
 var tr *runner.TestRunner
@@ -107,6 +108,15 @@ func TestPubSubStreaming(t *testing.T) {
 
 func testInMemoryPubsubStreaming(t *testing.T, publisherURL, subscriberURL string, numberOfMessages int) {
 	log.Println("Test publish subscribe in-memory messaging order with count: " + strconv.Itoa(numberOfMessages))
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	t.Logf("Checking if PubSub apps are healthy ...")
+	_, err := utils.HTTPGetNTimes(publisherURL, numHealthChecks)
+	require.NoError(t, err)
+	_, err = utils.HTTPGetNTimes(subscriberURL, numHealthChecks)
+	require.NoError(t, err)
+
 	subscribeTestURL := fmt.Sprintf("http://%s/tests/streaming-order-in-memory-subscribe?count=%d", subscriberURL, numberOfMessages)
 	body, err := json.Marshal(map[string]string{})
 	require.NoError(t, err)

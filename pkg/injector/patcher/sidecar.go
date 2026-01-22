@@ -114,12 +114,14 @@ type SidecarConfig struct {
 	PlacementAddress                    string  `annotation:"dapr.io/placement-host-address"`
 	SchedulerAddress                    *string `annotation:"dapr.io/scheduler-host-address"`
 	SchedulerEnabled                    bool
-	PluggableComponents                 string `annotation:"dapr.io/pluggable-components"`
-	PluggableComponentsSocketsFolder    string `annotation:"dapr.io/pluggable-components-sockets-folder"`
-	ComponentContainer                  string `annotation:"dapr.io/component-container"`
-	InjectPluggableComponents           bool   `annotation:"dapr.io/inject-pluggable-components"`
-	AppChannelAddress                   string `annotation:"dapr.io/app-channel-address"`
-	SentryRequestJwtAudiences           string `annotation:"dapr.io/sentry-request-jwt-audiences"`
+	PluggableComponents                 string  `annotation:"dapr.io/pluggable-components"`
+	PluggableComponentsSocketsFolder    string  `annotation:"dapr.io/pluggable-components-sockets-folder"`
+	ComponentContainer                  string  `annotation:"dapr.io/component-container"`
+	InjectPluggableComponents           bool    `annotation:"dapr.io/inject-pluggable-components"`
+	AppChannelAddress                   string  `annotation:"dapr.io/app-channel-address"`
+	SentryRequestJwtAudiences           string  `annotation:"dapr.io/sentry-request-jwt-audiences"`
+	DaprServiceAnnotations              string  `annotation:"dapr.io/sidecar-svc-annotations"`
+	DisableInitEndpoint                 *string `annotation:"dapr.io/disable-init-endpoints"`
 
 	pod *corev1.Pod
 }
