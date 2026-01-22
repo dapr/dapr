@@ -42,7 +42,7 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 
 	hasRoot := false
 	for _, p := range paths {
-		pattern := normalizePath(p)
+		pattern := NormalizeHTTPPath(p)
 		if pattern == "/" {
 			hasRoot = true
 		}
@@ -69,7 +69,7 @@ func (pm *pathMatching) match(path string) (string, bool) {
 		return "", false
 	}
 
-	cleanPath := normalizePath(path)
+	cleanPath := NormalizeHTTPPath(path)
 	req, _ := http.NewRequest(http.MethodGet, cleanPath, nil)
 
 	_, pattern := pm.mux.Handler(req)
@@ -85,8 +85,8 @@ func (pm *pathMatching) match(path string) (string, bool) {
 	return pattern, true
 }
 
-// normalizePath merges double slashes and ensures leading slash.
-func normalizePath(p string) string {
+// NormalizeHTTPPath merges double slashes and ensures leading slash.
+func NormalizeHTTPPath(p string) string {
 	for strings.Contains(p, "//") {
 		p = strings.ReplaceAll(p, "//", "/")
 	}

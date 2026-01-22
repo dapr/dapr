@@ -157,3 +157,87 @@ func fakeHTTPRequest(body string) *http.Request {
 
 	return req
 }
+
+func TestHTTPMiddleware_Normalization(t *testing.T) {
+	paths := []string{"/v1.0/actors/myactortype/{id}/method"}
+
+	testCases := []struct {
+		name         string
+		requestPath  string
+		legacy       bool
+		expectedPath string
+		expectMatch  bool //
+	}{
+		// --- Legacy Mode (Increased Cardinality) ---
+		{
+			name:        "Legacy: Double Slash should be normalized and ID masked",
+			requestPath: "//v1.0/actors/myactortype/myid/method/foo",
+			legacy:      true,
+			// Note: legacy truncation removes /foo
+			expectedPath: "/v1.0/actors/myactortype/{id}/method",
+			expectMatch:  true,
+		},
+		{
+			name:         "Legacy: Normal Path",
+			requestPath:  "/v1.0/actors/myactortype/myid/method/foo",
+			legacy:       true,
+			expectedPath: "/v1.0/actors/myactortype/{id}/method",
+			expectMatch:  true,
+		},
+
+		// --- Strict Mode (Low Cardinality) ---
+		{
+			name:         "Strict: Double Slash should be normalized and matched",
+			requestPath:  "//v1.0/actors/myactortype/myid/method/foo",
+			legacy:       false,
+			expectedPath: "/v1.0/actors/myactortype/{id}/method",
+			expectMatch:  true,
+		},
+		{
+			name:         "Strict: Unmatched path (Double Slash) should be dropped",
+			requestPath:  "//v1.0/actors/unknown/myid/method/foo",
+			legacy:       false,
+			expectedPath: "", // Should not match anything
+			expectMatch:  false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testHTTP := newHTTPMetrics()
+			configHTTP := NewHTTPMonitoringConfig(paths, tc.legacy, false)
+			meter := view.NewMeter()
+			meter.Start()
+			t.Cleanup(func() { meter.Stop() })
+
+			require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
+			handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+			req, _ := http.NewRequest("PUT", "http://localhost:3500"+tc.requestPath, nil)
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+
+			rows, err := meter.RetrieveData("http/server/request_count")
+			require.NoError(t, err)
+
+			if tc.expectMatch {
+				require.Len(t, rows, 1, "Expected 1 metric row")
+				pathTag := getPathTag(rows[0])
+				assert.Equal(t, tc.expectedPath, pathTag, "Path tag mismatch")
+			} else {
+				if len(rows) > 0 {
+					pathTag := getPathTag(rows[0])
+					assert.Equal(t, "", pathTag, "Expected empty path for unmatched request")
+				}
+			}
+		})
+	}
+}
+
+func getPathTag(row *view.Row) string {
+	for _, tag := range row.Tags {
+		if tag.Key.Name() == "path" {
+			return tag.Value
+		}
+	}
+	return ""
+}
