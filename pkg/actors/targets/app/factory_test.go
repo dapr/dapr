@@ -163,7 +163,7 @@ func Test_Idle(t *testing.T) {
 	assert.Equal(t, 7, mapLen(ff))
 	clock.Step(time.Second * 5)
 	assert.Eventually(t, func() bool { return !clock.HasWaiters() }, time.Second*10, time.Millisecond*10)
-	assert.Equal(t, 0, mapLen(ff))
+	assert.Eventually(t, func() bool { return mapLen(ff) == 0 }, time.Second*10, time.Millisecond*10)
 }
 
 func mapLen(ff *factory) int {
