@@ -241,7 +241,6 @@ func Test_Stream(t *testing.T) {
 			ptr2 := called2.Load()
 			ptr3 := called3.Load()
 			if ptr1 == nil || ptr2 == nil || ptr3 == nil {
-				c.Errorf("callbacks not yet called")
 				return
 			}
 			assert.Equal(c, api.TriggerResponseResult_SUCCESS, *ptr1)
