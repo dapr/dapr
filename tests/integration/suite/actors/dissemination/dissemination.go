@@ -11,11 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package placement
+package dissemination
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/placement/cluster"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/placement/multiple"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/placement/namespace"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/placement/single"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/dissemination/call"
 )
