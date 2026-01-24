@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rerun
+package basic
 
 import (
 	"context"
@@ -29,36 +29,36 @@ import (
 )
 
 func init() {
-	suite.Register(new(basic))
+	suite.Register(new(one))
 }
 
-type basic struct {
+type one struct {
 	workflow *workflow.Workflow
 }
 
-func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.workflow = workflow.New(t)
+func (o *one) Setup(t *testing.T) []framework.Option {
+	o.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(b.workflow),
+		framework.WithProcesses(o.workflow),
 	}
 }
 
-func (b *basic) Run(t *testing.T, ctx context.Context) {
-	b.workflow.WaitUntilRunning(t, ctx)
+func (o *one) Run(t *testing.T, ctx context.Context) {
+	o.workflow.WaitUntilRunning(t, ctx)
 
 	var act atomic.Int64
-	b.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	o.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		for range 5 {
 			require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		}
 		return nil, nil
 	})
-	b.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	o.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		act.Add(1)
 		return nil, nil
 	})
-	client := b.workflow.BackendClient(t, ctx)
+	client := o.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithInstanceID("abc"))
 	require.NoError(t, err)
@@ -66,15 +66,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(5), act.Load())
 
-	for i := range uint32(5) {
-		act.Store(0)
+	act.Store(0)
 
-		newID, err := client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), i)
-		require.NoError(t, err)
-		assert.NotEqual(t, id, newID)
+	newID, err := client.RerunWorkflowFromEvent(ctx, api.InstanceID("abc"), 0)
+	require.NoError(t, err)
+	assert.NotEqual(t, id, newID)
 
-		_, err = client.WaitForOrchestrationCompletion(ctx, newID)
-		require.NoError(t, err)
-		assert.Equal(t, int64(5-i), act.Load())
-	}
+	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), act.Load())
 }

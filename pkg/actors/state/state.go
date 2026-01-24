@@ -92,13 +92,13 @@ func New(opts Options) Interface {
 
 func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*api.StateResponse, error) {
 	if lock {
-		var cancel context.CancelFunc
+		var cancel context.CancelCauseFunc
 		var err error
 		ctx, cancel, err = s.placement.Lock(ctx)
 		if err != nil {
 			return nil, err
 		}
-		defer cancel()
+		defer cancel(nil)
 	}
 
 	storeName, store, err := s.stateStore()
@@ -139,13 +139,13 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest, lock bool) (*
 
 func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock bool) (api.BulkStateResponse, error) {
 	if lock {
-		var cancel context.CancelFunc
+		var cancel context.CancelCauseFunc
 		var err error
 		ctx, cancel, err = s.placement.Lock(ctx)
 		if err != nil {
 			return nil, err
 		}
-		defer cancel()
+		defer cancel(nil)
 	}
 
 	storeName, store, err := s.stateStore()
@@ -193,13 +193,13 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest, lock 
 
 func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest, lock bool) error {
 	if lock {
-		var cancel context.CancelFunc
+		var cancel context.CancelCauseFunc
 		var err error
 		ctx, cancel, err = s.placement.Lock(ctx)
 		if err != nil {
 			return err
 		}
-		defer cancel()
+		defer cancel(nil)
 	}
 
 	if !ignoreHosted && !s.table.ActorExists(req.ActorType, req.ActorID) {
