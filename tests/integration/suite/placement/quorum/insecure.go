@@ -139,16 +139,18 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		return true
 	}, time.Second*10, time.Millisecond*10)
 
-	err = stream.Send(&v1pb.Host{
-		Name:      "app-1",
-		Namespace: "default",
-		Port:      1234,
-		Load:      1,
-		Entities:  []string{"entity-1", "entity-2"},
-		Id:        "app-1",
-		Pod:       "pod-1",
-	})
-	require.NoError(t, err)
+	for range 4 {
+		err = stream.Send(&v1pb.Host{
+			Name:      "app-1",
+			Namespace: "default",
+			Port:      1234,
+			Load:      1,
+			Entities:  []string{"entity-1", "entity-2"},
+			Id:        "app-1",
+			Pod:       "pod-1",
+		})
+		require.NoError(t, err)
+	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		o, err := stream.Recv()

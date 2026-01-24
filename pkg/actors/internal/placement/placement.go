@@ -304,12 +304,14 @@ func (p *placement) handleLockOperation(ctx context.Context) {
 }
 
 func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.PlacementTables) {
+	//nolint:staticcheck
 	p.apiLevel.Set(in.GetApiLevel())
 
 	entries := make(map[string]*hashing.Consistent)
 
 	for k, v := range in.GetEntries() {
 		loadMap := make(map[string]*hashing.Host, len(v.GetLoadMap()))
+		//nolint:staticcheck
 		for lk, lv := range v.GetLoadMap() {
 			loadMap[lk] = hashing.NewHost(lv.GetName(), lv.GetId(), lv.GetLoad(), lv.GetPort())
 		}
@@ -318,6 +320,7 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 	}
 
 	clear(p.hashTable.Entries)
+	//nolint:staticcheck
 	p.hashTable.Version = in.GetVersion()
 	p.hashTable.Entries = entries
 
@@ -325,6 +328,7 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 		log.Errorf("Error draining non-hosted actors: %s", err)
 	}
 
+	//nolint:staticcheck
 	log.Infof("Placement tables updated, version: %s", in.GetVersion())
 }
 

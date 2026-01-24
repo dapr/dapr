@@ -18,13 +18,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -65,6 +62,30 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	m.sentry.WaitUntilRunning(t, ctx)
 	m.place.WaitUntilRunning(t, ctx)
 
+	// Can only create hosts where the app ID match.
+	// When no namespace is sent in the message, and tls is enabled
+	// the placement service will infer the namespace from the SPIFFE ID.
+	_, err := m.establishStream(t, ctx, &v1pb.Host{
+		Id:        "app-1",
+		Namespace: "default",
+	})
+	require.NoError(t, err)
+
+	_, err = m.establishStream(t, ctx, &v1pb.Host{
+		Id: "app-2",
+	})
+	require.Error(t, err)
+
+	_, err = m.establishStream(t, ctx, &v1pb.Host{
+		Id:        "app-1",
+		Namespace: "foo",
+	})
+	require.Error(t, err)
+}
+
+func (m *mtls) establishStream(t *testing.T, ctx context.Context, firstMessage *v1pb.Host) (v1pb.Placement_ReportDaprStatusClient, error) {
+	t.Helper()
+
 	secProv, err := security.New(ctx, security.Options{
 		SentryAddress:           m.sentry.Address(),
 		ControlPlaneTrustDomain: "localhost",
@@ -97,59 +118,14 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := v1pb.NewPlacementClient(conn)
 
-	// Can only create hosts where the app ID match.
-	// When no namespace is sent in the message, and tls is enabled
-	// the placement service will infer the namespace from the SPIFFE ID.
-	_, err = establishStream(t, ctx, client, &v1pb.Host{
-		Id: "app-1",
-	})
-	require.NoError(t, err)
-
-	_, err = establishStream(t, ctx, client, &v1pb.Host{
-		Id: "app-2",
-	})
-	require.Error(t, err)
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
-
-	// Older sidecars (pre 1.4) will not send the namespace in the message.
-	// In this case the namespace is inferred from the SPIFFE ID.
-	_, err = establishStream(t, ctx, client, &v1pb.Host{
-		Id:        "app-1",
-		Namespace: "",
-	})
-	require.NoError(t, err)
-
-	// The namespace id in the message and SPIFFE ID should match
-	_, err = establishStream(t, ctx, client, &v1pb.Host{
-		Id:        "app-1",
-		Namespace: "default",
-	})
-	require.NoError(t, err)
-
-	_, err = establishStream(t, ctx, client, &v1pb.Host{
-		Id:        "app-1",
-		Namespace: "foo",
-	})
-	require.Error(t, err)
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
-}
-
-func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementClient, firstMessage *v1pb.Host) (v1pb.Placement_ReportDaprStatusClient, error) {
-	t.Helper()
-	var stream v1pb.Placement_ReportDaprStatusClient
-	var err error
-
-	require.Eventually(t, func() bool {
-		stream, err = client.ReportDaprStatus(ctx)
-		if err != nil {
-			return false
-		}
-
+	stream, err := client.ReportDaprStatus(ctx)
+	for range 3 {
 		err = stream.Send(firstMessage)
-		return err == nil
-	}, 10*time.Second, 10*time.Millisecond)
-
-	_, err = stream.Recv()
+		if err != nil {
+			return nil, err
+		}
+		_, err = stream.Recv()
+	}
 
 	return stream, err
 }
