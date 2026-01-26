@@ -37,7 +37,25 @@ type retry struct {
 
 func (r *retry) Setup(t *testing.T) []framework.Option {
 	r.daprd = daprd.New(t,
-		daprd.WithResourceFiles(`apiVersion: dapr.io/v1alpha1
+		daprd.WithResourceFiles(`
+apiVersion: dapr.io/v1alpha1
+kind: Resiliency
+metadata:
+  name: dapr-resiliency
+spec:
+  policies:
+    retries:
+      retryAppCall:
+        duration: 10ms
+        maxRetries: 4
+        policy: constant
+  targets:
+    components:
+      mypub:
+        inbound:
+          retry: retryAppCall
+`,
+			`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: mypub
