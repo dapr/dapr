@@ -64,6 +64,7 @@ Remaining P0s:
 ### dapr/cli
 
 - [ ] Tests are passing
+- [ ] [0 critical/high vulnerabilities](https://github.com/dapr/cli/security/dependabot)
 - [ ] Cut RC
 
 ---
@@ -95,6 +96,15 @@ Remaining P0s:
   - [ ] JS (as applicable) @approvers-js-sdk @maintainers-js-sdk
   - [ ] Rust (as applicable) @approvers-rust-sdk @maintainers-rust-sdk
   - [ ] C++ (as applicable) @approvers-cpp-sdk @maintainers-cpp-sdk
+
+- [ ] 0 critical/high vulnerabilities
+  - [ ] [.NET](https://github.com/dapr/dotnet-sdk/security/dependabot)
+  - [ ] [Java](https://github.com/dapr/java-sdk/security/dependabot)
+  - [ ] [Go](https://github.com/dapr/go-sdk/security/dependabot)
+  - [ ] [Python](https://github.com/dapr/python-sdk/security/dependabot)
+  - [ ] [JS](https://github.com/dapr/js-sdk/security/dependabot)
+  - [ ] [Rust](https://github.com/dapr/rust-sdk/security/dependabot)
+  - [ ] [C++](https://github.com/dapr/cpp-sdk/security/dependabot)
 
 ### Quickstarts
 
