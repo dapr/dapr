@@ -33,17 +33,19 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 		return api.ErrInstanceNotFound
 	}
 
-	if o.rstate.Stalled != nil {
+	var e backend.HistoryEvent
+	err = proto.Unmarshal(historyEventBytes, &e)
+	if err != nil {
+		return err
+	}
+
+	// Only reject user events when the workflow is stalled.
+	if o.rstate.Stalled != nil && e.GetEventRaised() != nil {
 		return api.ErrStalled
 	}
 
-	var e backend.HistoryEvent
-	err = proto.Unmarshal(historyEventBytes, &e)
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
 		o.activityResultAwaited.CompareAndSwap(true, false)
-	}
-	if err != nil {
-		return err
 	}
 	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
 	state.AddToInbox(&e)
