@@ -28,27 +28,17 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
-const (
-	headerContentType  = "Content-Type"
-	headerCacheControl = "Cache-Control"
-	headerConnection   = "Connection"
-
-	mimeEventStream     = "text/event-stream"
-	cacheNoCache        = "no-cache"
-	connectionKeepAlive = "keep-alive"
-)
-
 func IsSSEHttpRequest(r *http.Request) bool {
 	return isSSE(&r.Header)
 }
 
-func IsSSEGrpcRequest(r *internalv1pb.InternalInvokeRequest) (bool, http.Header) {
+func IsSSEGrpcRequest(r *internalv1pb.InternalInvokeRequest) bool {
 	header := http.Header{}
 	for k, v := range r.GetMetadata() {
 		header[k] = v.GetValues()
 	}
 
-	return isSSE(&header), header
+	return isSSE(&header)
 }
 
 func isSSE(header *http.Header) bool {
@@ -76,10 +66,6 @@ func FlushSSEResponse(ctx context.Context, writer http.ResponseWriter, reader io
 		http.Error(writer, "Streaming unsupported!", http.StatusInternalServerError)
 		return nil
 	}
-
-	writer.Header().Set(headerContentType, mimeEventStream)
-	writer.Header().Set(headerCacheControl, cacheNoCache)
-	writer.Header().Set(headerConnection, connectionKeepAlive)
 
 	// Add defer close for streaming case
 	closer, ok := reader.(io.Closer)

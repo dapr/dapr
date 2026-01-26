@@ -112,6 +112,9 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 			}
 			defer resp.Body.Close()
 
+			// Verify SSE headers
+			require.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
+
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache, no-transform")
 			w.Header().Set("Connection", "keep-alive")
@@ -169,6 +172,9 @@ func (s *sserelay) Setup(t *testing.T) []framework.Option {
 				return
 			}
 			defer resp.Body.Close()
+
+			// Verify SSE headers
+			require.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
 
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache, no-transform")
