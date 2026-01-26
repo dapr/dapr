@@ -42,11 +42,21 @@ func (d *amenderror) Setup(t *testing.T) []framework.Option {
 	}
 }
 
+func (d *amenderror) registerActivity(registry *task.TaskRegistry) {
+	registry.AddActivityN("activity", func(ctx task.ActivityContext) (any, error) {
+		return nil, nil
+	})
+}
+
 func (d *amenderror) Run(t *testing.T, ctx context.Context) {
+	d.registerActivity(d.workflow.Registry())
 	d.workflow.WaitUntilRunning(t, ctx)
 
 	d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v1", true, func(ctx *task.OrchestrationContext) (any, error) {
 		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+			return nil, err
+		}
+		if err := ctx.CallActivity("activity").Await(nil); err != nil {
 			return nil, err
 		}
 		return nil, nil
@@ -62,8 +72,12 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 
 	cancelClient()
 	d.workflow.ResetRegistry(t)
+	d.registerActivity(d.workflow.Registry())
 	d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v2", true, func(ctx *task.OrchestrationContext) (any, error) {
 		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+			return nil, err
+		}
+		if err := ctx.CallActivity("activity").Await(nil); err != nil {
 			return nil, err
 		}
 		return nil, nil
@@ -81,8 +95,12 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 
 	cancelClient()
 	d.workflow.ResetRegistry(t)
+	d.registerActivity(d.workflow.Registry())
 	d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v1", true, func(ctx *task.OrchestrationContext) (any, error) {
 		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
+			return nil, err
+		}
+		if err := ctx.CallActivity("activity").Await(nil); err != nil {
 			return nil, err
 		}
 		return nil, nil
