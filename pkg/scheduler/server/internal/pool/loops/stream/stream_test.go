@@ -240,7 +240,7 @@ func Test_Stream(t *testing.T) {
 			ptr1 := called1.Load()
 			ptr2 := called2.Load()
 			ptr3 := called3.Load()
-			if ptr1 == nil || ptr2 == nil || ptr3 == nil {
+			if !(assert.NotNil(c, ptr1) || assert.NotNil(c, ptr2) || assert.NotNil(c, ptr2)) {
 				return
 			}
 			assert.Equal(c, api.TriggerResponseResult_SUCCESS, *ptr1)
