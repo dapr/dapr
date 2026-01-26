@@ -230,12 +230,11 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("content-type", ct)
 		}
 
-		w.WriteHeader(int(rResp.Status().GetCode()))
-
 		reader := rResp.RawData()
 		isSSE := sse.IsSSEHttpRequest(r)
 
 		if !isSSE {
+			w.WriteHeader(int(rResp.Status().GetCode()))
 			// Use regular io.Copy for non-streaming responses
 			_, rErr = io.Copy(w, reader)
 			if rErr != nil {
@@ -246,6 +245,8 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			return nil, nil
 		}
 
+		sse.AddSSEHeaders(w)
+		w.WriteHeader(int(rResp.Status().GetCode()))
 		err := sse.FlushSSEResponse(r.Context(), w, reader)
 		if err != nil {
 			return nil, backoff.Permanent(err)
