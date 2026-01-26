@@ -15,6 +15,7 @@ package encryption
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"testing"
@@ -66,6 +67,164 @@ func TestTryEncryptValue(t *testing.T) {
 		assert.False(t, ok)
 	})
 
+	t.Run("state store with AES512 primary key with v2 encryption, value encrypted and decrypted successfully", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 64)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		cipherObj, _ := createCipher(pr, AESCBCAEADAlgorithm)
+		pr.cipherObjV2 = cipherObj
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Primary: pr,
+		})
+
+		v := []byte("hello")
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+
+		require.NoError(t, err)
+		assert.NotEqual(t, v, r)
+
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, v, dr)
+	})
+
+	t.Run("state store with AES512 secondary key with v2 encryption, value encrypted and decrypted successfully", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 64)
+		rand.Read(bytes)
+
+		primaryKey := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  primaryKey,
+		}
+
+		cipherObj, _ := createCipher(pr, AESCBCAEADAlgorithm)
+		pr.cipherObjV2 = cipherObj
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Primary: pr,
+		})
+
+		v := []byte("hello")
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+
+		require.NoError(t, err)
+		assert.NotEqual(t, v, r)
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Secondary: pr,
+		})
+
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, v, dr)
+	})
+
+	t.Run("state store with AES512 primary key with v2 encryption, base64 value encrypted and decrypted successfully", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 64)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		cipherObj, _ := createCipher(pr, AESCBCAEADAlgorithm)
+		pr.cipherObjV2 = cipherObj
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Primary: pr,
+		})
+
+		v := []byte("hello")
+		s := base64.StdEncoding.EncodeToString(v)
+		r, err := TryEncryptValue("test", []byte(s), TryEncryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+
+		require.NoError(t, err)
+		assert.NotEqual(t, v, r)
+
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []byte(s), dr)
+	})
+
+	t.Run("state store with AES384 primary key with v2 encryption, value encrypted and decrypted successfully", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 48)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		cipherObj, _ := createCipher(pr, AESCBCAEADAlgorithm)
+		pr.cipherObjV2 = cipherObj
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Primary: pr,
+		})
+
+		v := []byte("hello")
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+
+		require.NoError(t, err)
+		assert.NotEqual(t, v, r)
+
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, v, dr)
+	})
+
 	t.Run("state store with AES256 primary key, value encrypted and decrypted successfully", func(t *testing.T) {
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
 
@@ -88,12 +247,50 @@ func TestTryEncryptValue(t *testing.T) {
 		})
 
 		v := []byte("hello")
-		r, err := TryEncryptValue("test", v)
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
-		dr, err := TryDecryptValue("test", r)
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, v, dr)
+	})
+
+	t.Run("state store with AES256 primary key with v2 encryption, value encrypted and decrypted successfully", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 32)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		cipherObj, _ := createCipher(pr, AESCBCAEADAlgorithm)
+		pr.cipherObjV2 = cipherObj
+
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+		AddEncryptedStateStore("test", ComponentEncryptionKeys{
+			Primary: pr,
+		})
+
+		v := []byte("hello")
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
+
+		require.NoError(t, err)
+		assert.NotEqual(t, v, r)
+
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{
+			KeyName:                  "abc",
+			StateV2EncryptionEnabled: true,
+		})
 		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
@@ -120,7 +317,7 @@ func TestTryEncryptValue(t *testing.T) {
 		})
 
 		v := []byte("hello")
-		r, err := TryEncryptValue("test", v)
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
@@ -130,7 +327,7 @@ func TestTryEncryptValue(t *testing.T) {
 			Secondary: pr,
 		})
 
-		dr, err := TryDecryptValue("test", r)
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
@@ -158,12 +355,12 @@ func TestTryEncryptValue(t *testing.T) {
 
 		v := []byte("hello")
 		s := base64.StdEncoding.EncodeToString(v)
-		r, err := TryEncryptValue("test", []byte(s))
+		r, err := TryEncryptValue("test", []byte(s), TryEncryptValueOptions{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
-		dr, err := TryDecryptValue("test", r)
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, []byte(s), dr)
 	})
@@ -190,12 +387,12 @@ func TestTryEncryptValue(t *testing.T) {
 		})
 
 		v := []byte("hello world")
-		r, err := TryEncryptValue("test", v)
+		r, err := TryEncryptValue("test", v, TryEncryptValueOptions{})
 
 		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
-		dr, err := TryDecryptValue("test", r)
+		dr, err := TryDecryptValue("test", r, TryDecryptValueOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
@@ -223,7 +420,7 @@ func TestTryDecryptValue(t *testing.T) {
 			Primary: pr,
 		})
 
-		dr, err := TryDecryptValue("test", nil)
+		dr, err := TryDecryptValue("test", nil, TryDecryptValueOptions{})
 		require.NoError(t, err)
 		assert.Empty(t, dr)
 	})
@@ -243,5 +440,41 @@ func TestEncryptedStateStore(t *testing.T) {
 		ok := EncryptedStateStore("test")
 
 		assert.False(t, ok)
+	})
+}
+
+func TestKeyMatchesKeyID(t *testing.T) {
+	t.Run("key matches", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 16)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		hash := sha256.Sum224(bytes)
+		keyID := base64.StdEncoding.EncodeToString(hash[:])
+		assert.True(t, keyMatchesKeyID(pr, keyID))
+	})
+
+	t.Run("key doesn't match", func(t *testing.T) {
+		encryptedStateStores = map[string]ComponentEncryptionKeys{}
+
+		bytes := make([]byte, 16)
+		rand.Read(bytes)
+
+		key := hex.EncodeToString(bytes)
+
+		pr := Key{
+			Name: "primary",
+			Key:  key,
+		}
+
+		assert.False(t, keyMatchesKeyID(pr, "test"))
 	})
 }
