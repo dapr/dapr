@@ -34,6 +34,7 @@ const (
 	historyKeyPrefix = "history"
 	customStatusKey  = "customStatus"
 	metadataKey      = "metadata"
+	traceContextKey  = "traceContext"
 )
 
 var wfLogger = logger.NewLogger("dapr.runtime.actor.target.workflow.state")
@@ -54,11 +55,22 @@ type State struct {
 	CustomStatus *wrapperspb.StringValue
 	Generation   uint64
 
+	// Trace context for linking activity execution spans
+	TraceContext *TraceContext
+
 	// change tracking
 	inboxAddedCount     int
 	inboxRemovedCount   int
 	historyAddedCount   int
 	historyRemovedCount int
+}
+
+// TraceContext stores OpenTelemetry trace context for span propagation
+type TraceContext struct {
+	TraceID    string
+	SpanID     string
+	TraceFlags string
+	TraceState string
 }
 
 // TODO: @joshvanl: remove in v1.16
@@ -181,6 +193,18 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		Request:   api.TransactionalUpsert{Key: metadataKey, Value: metaProto},
 	})
 
+	// Save trace context if present
+	if s.TraceContext != nil {
+		tcProto, err := json.Marshal(s.TraceContext)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal trace context: %w", err)
+		}
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Upsert,
+			Request:   api.TransactionalUpsert{Key: traceContextKey, Value: tcProto},
+		})
+	}
+
 	return req, nil
 }
 
@@ -294,12 +318,12 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
-		// Initializing with size for all the inbox, history, and custom status
-		Keys: make([]string, metadata.GetInboxLength()+metadata.GetHistoryLength()+1),
+		// Initializing with size for all the inbox, history, custom status, and trace context
+		Keys: make([]string, metadata.GetInboxLength()+metadata.GetHistoryLength()+2),
 	}
 
 	var n int
-	bulkReq.Keys[n] = customStatusKey
+	bulkReq.Keys[n] = traceContextKey
 	n++
 	for i := range metadata.GetInboxLength() {
 		bulkReq.Keys[n] = getMultiEntryKeyName(inboxKeyPrefix, i)
@@ -365,6 +389,14 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 	}
 
+	// Load trace context if present
+	if len(bulkRes[traceContextKey]) > 0 {
+		wState.TraceContext = &TraceContext{}
+		if err = json.Unmarshal(bulkRes[traceContextKey], wState.TraceContext); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal trace context: %w", err)
+		}
+	}
+
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
 	return wState, nil
 }
@@ -395,6 +427,10 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 		api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: metadataKey},
+		},
+		api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: traceContextKey},
 		},
 	)
 
