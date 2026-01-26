@@ -510,6 +510,9 @@ replace (
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 )
 
+// this fixes a testify regression causing unit test failures
+replace github.com/stretchr/testify => github.com/stretchr/testify v1.10.0
+
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 
