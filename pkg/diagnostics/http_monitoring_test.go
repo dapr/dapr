@@ -505,7 +505,6 @@ func TestHTTPMetricsPathMatchingServiceInvocation(t *testing.T) {
 }
 
 func TestHTTPMetricsPathMatchingNormalizationDedup(t *testing.T) {
-
 	paths := []string{
 		"/orders",
 		"//orders",
