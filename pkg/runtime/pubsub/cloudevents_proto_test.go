@@ -238,5 +238,27 @@ func TestDeserializeInvalidData(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestIsCloudEventProtobufContentType(t *testing.T) {
+	tests := []struct {
+		contentType string
+		expected    bool
+	}{
+		{"application/cloudevents+protobuf", true},
+		{"APPLICATION/CLOUDEVENTS+PROTOBUF", true},
+		{"Application/CloudEvents+Protobuf", true},
+		{"application/cloudevents+json", false},
+		{"application/json", false},
+		{"text/plain", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.contentType, func(t *testing.T) {
+			result := IsCloudEventProtobufContentType(tt.contentType)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // Ensure the cepb import is used
 var _ *cepb.CloudEvent

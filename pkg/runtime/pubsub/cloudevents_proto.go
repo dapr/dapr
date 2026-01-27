@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 
@@ -218,4 +219,9 @@ func DeserializeCloudEventProto(data []byte) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to unmarshal protobuf CloudEvent: %w", err)
 	}
 	return ProtoToCloudEvent(protoEvent)
+}
+
+// IsCloudEventProtobufContentType checks if the content type indicates a protobuf CloudEvent.
+func IsCloudEventProtobufContentType(contentType string) bool {
+	return strings.EqualFold(contentType, ContentTypeCloudEventProtobuf)
 }
