@@ -1,0 +1,73 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// CloudEvents Protobuf Format
+// Based on: https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/cloudevents.proto
+syntax = "proto3";
+
+package io.cloudevents.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/cloudevents/v1;cloudevents";
+
+// CloudEvent represents a CloudEvents v1.0 event in protobuf format.
+message CloudEvent {
+  // Required Attributes
+  // id identifies the event. Producers MUST ensure that source + id is unique.
+  string id = 1;
+
+  // source identifies the context in which an event happened (URI-reference).
+  string source = 2;
+
+  // spec_version is the version of the CloudEvents specification (e.g., "1.0").
+  string spec_version = 3;
+
+  // type describes the type of event related to the originating occurrence.
+  string type = 4;
+
+  // Optional & Extension Attributes stored as a map.
+  // Keys include: datacontenttype, dataschema, subject, time, and any extensions.
+  map<string, CloudEventAttributeValue> attributes = 5;
+
+  // Data (oneof) - the event payload
+  oneof data {
+    // Binary data (no encoding overhead on wire)
+    bytes binary_data = 6;
+
+    // Text data (UTF-8 string)
+    string text_data = 7;
+
+    // Protobuf message data (typed)
+    google.protobuf.Any proto_data = 8;
+  }
+}
+
+// CloudEventAttributeValue represents a CloudEvent attribute value.
+message CloudEventAttributeValue {
+  oneof attr {
+    bool ce_boolean = 1;
+    int32 ce_integer = 2;
+    string ce_string = 3;
+    bytes ce_bytes = 4;
+    string ce_uri = 5;
+    string ce_uri_ref = 6;
+    google.protobuf.Timestamp ce_timestamp = 7;
+  }
+}
+
+// CloudEventBatch represents a batch of CloudEvents.
+message CloudEventBatch {
+  repeated CloudEvent events = 1;
+}
