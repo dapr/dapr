@@ -108,5 +108,74 @@ func TestCloudEventToProto(t *testing.T) {
 	})
 }
 
+func TestProtoToCloudEvent(t *testing.T) {
+	t.Run("basic event with text data", func(t *testing.T) {
+		proto := &cepb.CloudEvent{
+			Id:          "test-id",
+			Source:      "test-source",
+			SpecVersion: "1.0",
+			Type:        "com.dapr.test",
+			Attributes: map[string]*cepb.CloudEventAttributeValue{
+				"datacontenttype": {Attr: &cepb.CloudEventAttributeValue_CeString{CeString: "text/plain"}},
+			},
+			Data: &cepb.CloudEvent_TextData{TextData: "hello"},
+		}
+
+		ce, err := ProtoToCloudEvent(proto)
+		require.NoError(t, err)
+
+		assert.Equal(t, "test-id", ce["id"])
+		assert.Equal(t, "test-source", ce["source"])
+		assert.Equal(t, "1.0", ce["specversion"])
+		assert.Equal(t, "com.dapr.test", ce["type"])
+		assert.Equal(t, "text/plain", ce["datacontenttype"])
+		assert.Equal(t, "hello", ce["data"])
+	})
+
+	t.Run("event with binary data", func(t *testing.T) {
+		proto := &cepb.CloudEvent{
+			Id:          "binary-id",
+			Source:      "binary-source",
+			SpecVersion: "1.0",
+			Type:        "com.dapr.binary",
+			Attributes: map[string]*cepb.CloudEventAttributeValue{
+				"datacontenttype": {Attr: &cepb.CloudEventAttributeValue_CeString{CeString: "application/octet-stream"}},
+			},
+			Data: &cepb.CloudEvent_BinaryData{BinaryData: []byte{0x01, 0x02, 0x03}},
+		}
+
+		ce, err := ProtoToCloudEvent(proto)
+		require.NoError(t, err)
+
+		// Binary data should be base64 encoded in the map for JSON compatibility
+		assert.Equal(t, "AQID", ce["data_base64"])
+	})
+
+	t.Run("event with extensions", func(t *testing.T) {
+		proto := &cepb.CloudEvent{
+			Id:          "ext-id",
+			Source:      "ext-source",
+			SpecVersion: "1.0",
+			Type:        "com.dapr.ext",
+			Attributes: map[string]*cepb.CloudEventAttributeValue{
+				"traceid":    {Attr: &cepb.CloudEventAttributeValue_CeString{CeString: "trace-123"}},
+				"topic":      {Attr: &cepb.CloudEventAttributeValue_CeString{CeString: "my-topic"}},
+				"pubsubname": {Attr: &cepb.CloudEventAttributeValue_CeString{CeString: "my-pubsub"}},
+				"myint":      {Attr: &cepb.CloudEventAttributeValue_CeInteger{CeInteger: 42}},
+				"mybool":     {Attr: &cepb.CloudEventAttributeValue_CeBoolean{CeBoolean: true}},
+			},
+		}
+
+		ce, err := ProtoToCloudEvent(proto)
+		require.NoError(t, err)
+
+		assert.Equal(t, "trace-123", ce["traceid"])
+		assert.Equal(t, "my-topic", ce["topic"])
+		assert.Equal(t, "my-pubsub", ce["pubsubname"])
+		assert.Equal(t, int32(42), ce["myint"])
+		assert.Equal(t, true, ce["mybool"])
+	})
+}
+
 // Ensure the cepb import is used
 var _ *cepb.CloudEvent

@@ -83,6 +83,60 @@ func CloudEventToProto(ce map[string]interface{}) (*cepb.CloudEvent, error) {
 	return protoEvent, nil
 }
 
+// ProtoToCloudEvent converts a protobuf CloudEvent to internal map format.
+func ProtoToCloudEvent(protoEvent *cepb.CloudEvent) (map[string]interface{}, error) {
+	ce := map[string]interface{}{
+		"id":          protoEvent.Id,
+		"source":      protoEvent.Source,
+		"specversion": protoEvent.SpecVersion,
+		"type":        protoEvent.Type,
+	}
+
+	// Map attributes back to top-level fields
+	for k, v := range protoEvent.Attributes {
+		ce[k] = fromAttributeValue(v)
+	}
+
+	// Handle data
+	switch d := protoEvent.Data.(type) {
+	case *cepb.CloudEvent_BinaryData:
+		ce["data_base64"] = base64.StdEncoding.EncodeToString(d.BinaryData)
+	case *cepb.CloudEvent_TextData:
+		ce["data"] = d.TextData
+	case *cepb.CloudEvent_ProtoData:
+		// Store Any as-is for now (could be enhanced to handle typed messages)
+		ce["data"] = d.ProtoData
+	}
+
+	return ce, nil
+}
+
+// fromAttributeValue converts a CloudEventAttributeValue back to a Go value.
+func fromAttributeValue(v *cepb.CloudEventAttributeValue) interface{} {
+	if v == nil {
+		return nil
+	}
+
+	switch attr := v.Attr.(type) {
+	case *cepb.CloudEventAttributeValue_CeString:
+		return attr.CeString
+	case *cepb.CloudEventAttributeValue_CeBoolean:
+		return attr.CeBoolean
+	case *cepb.CloudEventAttributeValue_CeInteger:
+		return attr.CeInteger
+	case *cepb.CloudEventAttributeValue_CeBytes:
+		return attr.CeBytes
+	case *cepb.CloudEventAttributeValue_CeUri:
+		return attr.CeUri
+	case *cepb.CloudEventAttributeValue_CeUriRef:
+		return attr.CeUriRef
+	case *cepb.CloudEventAttributeValue_CeTimestamp:
+		return attr.CeTimestamp.AsTime()
+	default:
+		return nil
+	}
+}
+
 // getStringField extracts a string field from a CloudEvent map.
 func getStringField(ce map[string]interface{}, field string) string {
 	if v, ok := ce[field]; ok {
