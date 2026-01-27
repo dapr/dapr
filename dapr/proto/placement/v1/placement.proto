@@ -52,7 +52,7 @@ message PlacementTable {
   // TODO: @joshvanl: rename to hosts_map.
   map<string, Host> load_map = 3;
 
-  // total_load is deprecated and no longer used.
+  // Deprecated: total_load is no longer used.
   int64 total_load = 4 [deprecated = true];
 }
 
