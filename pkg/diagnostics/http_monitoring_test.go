@@ -213,7 +213,7 @@ func TestHTTPMiddleware_Normalization(t *testing.T) {
 			require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 			handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 
-			req, _ := http.NewRequest("PUT", "http://localhost:3500"+tc.requestPath, nil)
+			req, _ := http.NewRequest(http.MethodPut, "http://localhost:3500"+tc.requestPath, nil)
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 
 			rows, err := meter.RetrieveData("http/server/request_count")
@@ -223,11 +223,9 @@ func TestHTTPMiddleware_Normalization(t *testing.T) {
 				require.Len(t, rows, 1, "Expected 1 metric row")
 				pathTag := getPathTag(rows[0])
 				assert.Equal(t, tc.expectedPath, pathTag, "Path tag mismatch")
-			} else {
-				if len(rows) > 0 {
-					pathTag := getPathTag(rows[0])
-					assert.Equal(t, "", pathTag, "Expected empty path for unmatched request")
-				}
+			} else if len(rows) > 0 {
+				pathTag := getPathTag(rows[0])
+				assert.Equal(t, "", pathTag, "Expected empty path for unmatched request")
 			}
 		})
 	}

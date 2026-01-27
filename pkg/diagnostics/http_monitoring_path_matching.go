@@ -24,11 +24,14 @@ type pathMatching struct {
 	returnRawPath bool
 }
 
-// newPathMatching creates a new pathMatching instance using ServeMux
-// Paths are normalized (double slashes merged, leading slash ensured) and registered.
-// Behavior for unmatched paths depends on legacy mode:
-// - Legacy (increasedCardinality=true): Register "/" fallback and return raw path to preserve cardinality
-// - Strict (increasedCardinality=false): Do NOT register "/" so unmatched paths return empty string (low cardinality)
+// newPathMatching creates a new pathMatching instance.
+// The root path ("/") must always be registered:
+// - If the user explicitly registers the root path, we match it accordingly.
+// - If the root path is not explicitly registered:
+//   - If legacy is true, we fall back to using an empty handler function.
+//   - If legacy is false, we match the root path to an empty string.
+//
+// All other paths in the 'paths' slice are cleaned, sorted, and registered.
 func newPathMatching(paths []string, legacy bool) *pathMatching {
 	if len(paths) == 0 {
 		return nil
@@ -37,20 +40,14 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 	mux := http.NewServeMux()
 	pm := &pathMatching{mux: mux}
 
-	slices.Sort(paths)
-	paths = slices.Compact(paths)
+	cleanPaths, foundRootPath := cleanAndSortPaths(paths)
 
-	hasRoot := false
-	for _, p := range paths {
-		pattern := NormalizeHTTPPath(p)
-		if pattern == "/" {
-			hasRoot = true
-		}
+	for _, pattern := range cleanPaths {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {})
 	}
 
 	// Handle behavior for unmatched paths
-	if !hasRoot {
+	if !foundRootPath {
 		if legacy {
 			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
 			pm.returnRawPath = true
@@ -58,6 +55,23 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 	}
 
 	return pm
+}
+
+// cleanAndSortPaths processes the given slice of paths by sorting and compacting it,
+// and checks if the root path ("/") is included.
+func cleanAndSortPaths(paths []string) ([]string, bool) {
+	foundRootPath := false
+	slices.Sort(paths)
+	paths = slices.Compact(paths)
+	cleanPaths := make([]string, 0, len(paths))
+	for _, p := range paths {
+		pattern := NormalizeHTTPPath(p)
+		if pattern == "/" {
+			foundRootPath = true
+		}
+		cleanPaths = append(cleanPaths, pattern)
+	}
+	return cleanPaths, foundRootPath
 }
 
 func (pm *pathMatching) enabled() bool {
