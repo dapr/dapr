@@ -184,7 +184,7 @@ func (i *Inflight) IsActorHostedNoLock(req *api.LookupActorRequest) bool {
 func (i *Inflight) resolve(req *api.LookupActorRequest) (*api.LookupActorResponse, error) {
 	table, ok := i.hashTable.Entries[req.ActorType]
 	if !ok {
-		return nil, messages.ErrActorNoAddress
+		return nil, messages.ErrActorNoAddress.WithFormat(req.ActorKey())
 	}
 
 	host, err := table.GetHost(req.ActorID)
