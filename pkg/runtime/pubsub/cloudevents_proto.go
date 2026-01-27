@@ -27,6 +27,12 @@ import (
 // ContentTypeCloudEventProtobuf is the content type for protobuf-encoded CloudEvents.
 const ContentTypeCloudEventProtobuf = "application/cloudevents+protobuf"
 
+// MetadataKeyCloudEventsFormat is the metadata key to specify CloudEvents wire format.
+const MetadataKeyCloudEventsFormat = "cloudeventsFormat"
+
+// CloudEventsFormatProtobuf is the value for protobuf wire format.
+const CloudEventsFormatProtobuf = "protobuf"
+
 // standardCloudEventFields are fields that map directly to CloudEvent proto fields
 // and should not be included in the attributes map.
 var standardCloudEventFields = map[string]bool{
