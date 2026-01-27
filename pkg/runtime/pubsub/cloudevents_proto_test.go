@@ -238,6 +238,89 @@ func TestDeserializeInvalidData(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestProtobufCloudEventRoundTrip(t *testing.T) {
+	t.Run("full CloudEvent with all Dapr fields", func(t *testing.T) {
+		// Create a CloudEvent like Dapr would during publish
+		original := map[string]interface{}{
+			"id":              "event-12345",
+			"source":          "my-app",
+			"specversion":     "1.0",
+			"type":            "com.dapr.event.sent",
+			"datacontenttype": "application/json",
+			"data":            `{"message":"hello world"}`,
+			"topic":           "test-topic",
+			"pubsubname":      "my-pubsub",
+			"traceid":         "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+			"traceparent":     "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+			"tracestate":      "congo=t61rcWkgMzE",
+		}
+
+		// Serialize to protobuf (what publish does)
+		protoBytes, err := SerializeCloudEventProto(original)
+		require.NoError(t, err)
+		require.NotEmpty(t, protoBytes)
+
+		// Deserialize from protobuf (what subscribe does)
+		restored, err := DeserializeCloudEventProto(protoBytes)
+		require.NoError(t, err)
+
+		// Verify all fields are preserved
+		assert.Equal(t, original["id"], restored["id"])
+		assert.Equal(t, original["source"], restored["source"])
+		assert.Equal(t, original["specversion"], restored["specversion"])
+		assert.Equal(t, original["type"], restored["type"])
+		assert.Equal(t, original["datacontenttype"], restored["datacontenttype"])
+		assert.Equal(t, original["data"], restored["data"])
+		assert.Equal(t, original["topic"], restored["topic"])
+		assert.Equal(t, original["pubsubname"], restored["pubsubname"])
+		assert.Equal(t, original["traceid"], restored["traceid"])
+		assert.Equal(t, original["traceparent"], restored["traceparent"])
+		assert.Equal(t, original["tracestate"], restored["tracestate"])
+	})
+
+	t.Run("binary payload without base64 overhead on wire", func(t *testing.T) {
+		// Large binary data that would be expensive as base64
+		binaryData := make([]byte, 1000)
+		for i := range binaryData {
+			binaryData[i] = byte(i % 256)
+		}
+
+		original := map[string]interface{}{
+			"id":              "binary-event",
+			"source":          "sensor-device",
+			"specversion":     "1.0",
+			"type":            "com.sensor.reading",
+			"datacontenttype": "application/octet-stream",
+			"data":            binaryData,
+		}
+
+		// Serialize
+		protoBytes, err := SerializeCloudEventProto(original)
+		require.NoError(t, err)
+
+		// Wire format should be smaller than JSON with base64
+		// JSON: {"id":"binary-event",...,"data_base64":"<1336 chars>"} ≈ 1500+ bytes
+		// Proto: id + source + type + spec + binary_data ≈ 1100 bytes
+		assert.Less(t, len(protoBytes), 1150, "protobuf should be compact")
+
+		// Deserialize
+		restored, err := DeserializeCloudEventProto(protoBytes)
+		require.NoError(t, err)
+
+		// Binary data comes back as data_base64, decode to verify
+		b64, ok := restored["data_base64"].(string)
+		require.True(t, ok)
+		decoded, err := base64.StdEncoding.DecodeString(b64)
+		require.NoError(t, err)
+		assert.Equal(t, binaryData, decoded)
+	})
+}
+
+func TestMetadataConstants(t *testing.T) {
+	assert.Equal(t, "cloudeventsFormat", MetadataKeyCloudEventsFormat)
+	assert.Equal(t, "protobuf", CloudEventsFormatProtobuf)
+}
+
 func TestIsCloudEventProtobufContentType(t *testing.T) {
 	tests := []struct {
 		contentType string
