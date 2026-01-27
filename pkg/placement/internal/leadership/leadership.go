@@ -68,7 +68,7 @@ func New(opts Options) (*Leadership, error) {
 func (s *Leadership) Run(ctx context.Context) error {
 	defer s.htarget.NotReady()
 
-	addr, err := s.tryResolveRaftAdvertiseAddr(ctx, s.raftBind)
+	addr, err := s.resolveRaftAdvertiseAddr(ctx, s.raftBind)
 	if err != nil {
 		return err
 	}

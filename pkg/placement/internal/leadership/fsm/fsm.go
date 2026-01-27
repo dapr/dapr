@@ -19,23 +19,23 @@ import (
 	"github.com/hashicorp/raft"
 )
 
-type fsm struct{}
+type noop struct{}
 
 func New() raft.FSM {
-	return new(fsm)
+	return new(noop)
 }
 
-func (f *fsm) Apply(log *raft.Log) interface{} {
+func (*noop) Apply(log *raft.Log) any {
 	return true
 }
 
-func (f *fsm) Snapshot() (raft.FSMSnapshot, error) {
+func (*noop) Snapshot() (raft.FSMSnapshot, error) {
 	return new(snapshot), nil
 }
 
 // Restore streams in the snapshot and replaces the current state store with a
 // new one based on the snapshot if all goes OK during the restore.
-func (f *fsm) Restore(old io.ReadCloser) error {
+func (*noop) Restore(old io.ReadCloser) error {
 	return nil
 }
 

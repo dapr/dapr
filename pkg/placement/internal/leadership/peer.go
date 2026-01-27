@@ -24,7 +24,7 @@ const (
 	nameResolveMaxRetry      = 240
 )
 
-func (s *Leadership) tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr string) (*net.TCPAddr, error) {
+func (s *Leadership) resolveRaftAdvertiseAddr(ctx context.Context, bindAddr string) (*net.TCPAddr, error) {
 	// HACKHACK: Kubernetes POD DNS A record population takes some time
 	// to look up the address after StatefulSet POD is deployed.
 	var err error

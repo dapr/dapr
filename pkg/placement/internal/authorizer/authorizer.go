@@ -65,7 +65,7 @@ func (a *Authorizer) Host(stream v1pb.Placement_ReportDaprStatusServer, msg *v1p
 		return err
 	}
 
-	if err = a.types(msg); err != nil {
+	if err = a.actorTypes(msg); err != nil {
 		return err
 	}
 
@@ -94,19 +94,10 @@ func (a *Authorizer) matchID(host *v1pb.Host, clientID *spiffe.Parsed) error {
 		)
 	}
 
-	if host.GetId() != clientID.AppID() {
-		log.Errorf("Client ID mismatch: %s != %s", host.GetId(), clientID.AppID())
-		return status.Errorf(
-			codes.PermissionDenied,
-			"client ID %s is not allowed",
-			host.GetId(),
-		)
-	}
-
 	return nil
 }
 
-func (a *Authorizer) types(msg *v1pb.Host) error {
+func (a *Authorizer) actorTypes(msg *v1pb.Host) error {
 	const partDapr = "dapr"
 	const partInternal = "internal"
 
