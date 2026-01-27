@@ -68,7 +68,7 @@ message Host {
 
   string id = 5;
 
-  // Deprecated, not used
+  // Deprecated: not used
   string pod = 6 [deprecated = true];
   uint32 api_level = 7 [deprecated = true];
 
