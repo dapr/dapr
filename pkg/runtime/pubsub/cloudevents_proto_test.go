@@ -14,6 +14,7 @@ limitations under the License.
 package pubsub
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -175,6 +176,66 @@ func TestProtoToCloudEvent(t *testing.T) {
 		assert.Equal(t, int32(42), ce["myint"])
 		assert.Equal(t, true, ce["mybool"])
 	})
+}
+
+func TestSerializeDeserializeRoundTrip(t *testing.T) {
+	t.Run("text data round trip", func(t *testing.T) {
+		original := map[string]interface{}{
+			"id":              "roundtrip-1",
+			"source":          "test-source",
+			"specversion":     "1.0",
+			"type":            "com.dapr.test",
+			"datacontenttype": "text/plain",
+			"data":            "hello world",
+			"traceid":         "trace-abc",
+			"topic":           "my-topic",
+		}
+
+		data, err := SerializeCloudEventProto(original)
+		require.NoError(t, err)
+		require.NotEmpty(t, data)
+
+		restored, err := DeserializeCloudEventProto(data)
+		require.NoError(t, err)
+
+		assert.Equal(t, original["id"], restored["id"])
+		assert.Equal(t, original["source"], restored["source"])
+		assert.Equal(t, original["specversion"], restored["specversion"])
+		assert.Equal(t, original["type"], restored["type"])
+		assert.Equal(t, original["datacontenttype"], restored["datacontenttype"])
+		assert.Equal(t, original["data"], restored["data"])
+		assert.Equal(t, original["traceid"], restored["traceid"])
+		assert.Equal(t, original["topic"], restored["topic"])
+	})
+
+	t.Run("binary data round trip", func(t *testing.T) {
+		original := map[string]interface{}{
+			"id":              "roundtrip-2",
+			"source":          "binary-source",
+			"specversion":     "1.0",
+			"type":            "com.dapr.binary",
+			"datacontenttype": "application/octet-stream",
+			"data":            []byte{0xDE, 0xAD, 0xBE, 0xEF},
+		}
+
+		data, err := SerializeCloudEventProto(original)
+		require.NoError(t, err)
+
+		restored, err := DeserializeCloudEventProto(data)
+		require.NoError(t, err)
+
+		// Binary data comes back as data_base64
+		b64, ok := restored["data_base64"].(string)
+		require.True(t, ok)
+		decoded, err := base64.StdEncoding.DecodeString(b64)
+		require.NoError(t, err)
+		assert.Equal(t, original["data"], decoded)
+	})
+}
+
+func TestDeserializeInvalidData(t *testing.T) {
+	_, err := DeserializeCloudEventProto([]byte("not a valid protobuf"))
+	assert.Error(t, err)
 }
 
 // Ensure the cepb import is used

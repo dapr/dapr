@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"google.golang.org/protobuf/proto"
+
 	cepb "github.com/dapr/dapr/pkg/proto/cloudevents/v1"
 )
 
@@ -198,4 +200,22 @@ func toAttributeValue(v interface{}) *cepb.CloudEventAttributeValue {
 		}
 		return nil
 	}
+}
+
+// SerializeCloudEventProto marshals a CloudEvent map to protobuf bytes.
+func SerializeCloudEventProto(ce map[string]interface{}) ([]byte, error) {
+	protoEvent, err := CloudEventToProto(ce)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Marshal(protoEvent)
+}
+
+// DeserializeCloudEventProto unmarshals protobuf bytes to a CloudEvent map.
+func DeserializeCloudEventProto(data []byte) (map[string]interface{}, error) {
+	protoEvent := &cepb.CloudEvent{}
+	if err := proto.Unmarshal(data, protoEvent); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal protobuf CloudEvent: %w", err)
+	}
+	return ProtoToCloudEvent(protoEvent)
 }
