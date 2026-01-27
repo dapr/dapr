@@ -15,7 +15,7 @@ limitations under the License.
 // Based on: https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/cloudevents.proto
 syntax = "proto3";
 
-package io.cloudevents.v1;
+package dapr.proto.cloudevents.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
