@@ -4399,7 +4399,7 @@ func TestStateStoreErrors(t *testing.T) {
 
 func TestExtractEtag(t *testing.T) {
 	t.Run("no etag present", func(t *testing.T) {
-		r, err := nethttp.NewRequest("GET", "http://localhost", nil)
+		r, err := nethttp.NewRequest("GET", "http://127.0.0.1", nil)
 		require.NoError(t, err)
 		ok, etag := extractEtag(r)
 		assert.False(t, ok)
@@ -4417,7 +4417,7 @@ func TestExtractEtag(t *testing.T) {
 	})
 
 	t.Run("non-empty etag exists", func(t *testing.T) {
-		r, err := nethttp.NewRequest("GET", "http://localhost", nil)
+		r, err := nethttp.NewRequest("GET", "http://127.0.0.1", nil)
 		require.NoError(t, err)
 		r.Header.Add("If-Match", "a")
 

@@ -196,6 +196,9 @@ func (c *client) Get(ctx context.Context, req *workflows.GetRequest) (*workflows
 	if metadata.FailureDetails != nil {
 		res.Workflow.Properties["dapr.workflow.failure.error_type"] = metadata.GetFailureDetails().GetErrorType()
 		res.Workflow.Properties["dapr.workflow.failure.error_message"] = metadata.GetFailureDetails().GetErrorMessage()
+		if trace := metadata.GetFailureDetails().GetStackTrace(); trace != nil {
+			res.Workflow.Properties["dapr.workflow.failure.stack_trace"] = trace.GetValue()
+		}
 	}
 
 	return res, nil

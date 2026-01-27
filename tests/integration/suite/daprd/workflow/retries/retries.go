@@ -16,9 +16,11 @@ package retries
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -46,6 +48,7 @@ func (e *retries) Setup(t *testing.T) []framework.Option {
 func (e *retries) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
+	var activityCalled atomic.Int64
 	e.workflow.Registry().AddOrchestratorN("retries", func(ctx *task.OrchestrationContext) (any, error) {
 		err := ctx.CallActivity("failActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
 			MaxAttempts:          3,
@@ -57,9 +60,8 @@ func (e *retries) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	count := 0
 	e.workflow.Registry().AddActivityN("failActivity", func(ctx task.ActivityContext) (any, error) {
-		count++
+		activityCalled.Add(1)
 		return nil, errors.New("failActivity")
 	})
 
@@ -70,5 +72,7 @@ func (e *retries) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, cl.TerminateOrchestration(ctx, id))
 
-	require.Equal(t, 3, count)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int64(3), activityCalled.Load())
+	}, time.Second*15, time.Millisecond*10)
 }
