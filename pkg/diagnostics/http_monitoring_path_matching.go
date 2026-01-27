@@ -40,14 +40,14 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 	mux := http.NewServeMux()
 	pm := &pathMatching{mux: mux}
 
-	cleanPaths, foundRootPath := cleanAndSortPaths(paths)
+	patterns, hasRoot := processPatterns(paths)
 
-	for _, pattern := range cleanPaths {
-		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {})
+	for _, p := range patterns {
+		mux.HandleFunc(p, func(w http.ResponseWriter, r *http.Request) {})
 	}
 
-	// Handle behavior for unmatched paths
-	if !foundRootPath {
+	// Handle Legacy Root Fallback
+	if !hasRoot {
 		if legacy {
 			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
 			pm.returnRawPath = true
@@ -57,21 +57,29 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 	return pm
 }
 
-// cleanAndSortPaths processes the given slice of paths by sorting and compacting it,
-// and checks if the root path ("/") is included.
-func cleanAndSortPaths(paths []string) ([]string, bool) {
-	foundRootPath := false
-	slices.Sort(paths)
-	paths = slices.Compact(paths)
-	cleanPaths := make([]string, 0, len(paths))
-	for _, p := range paths {
-		pattern := NormalizeHTTPPath(p)
-		if pattern == "/" {
-			foundRootPath = true
+// processPatterns takes user input paths and returns a sorted, deduplicated list
+// of all patterns to be registered, including the auto-generated invoke variants.
+func processPatterns(paths []string) ([]string, bool) {
+	finalList := make([]string, 0, len(paths)*2)
+	hasRoot := false
+
+	for _, raw := range paths {
+		p := NormalizeHTTPPath(raw)
+		finalList = append(finalList, p)
+
+		if p == "/" {
+			hasRoot = true
 		}
-		cleanPaths = append(cleanPaths, pattern)
+
+		// Auto-register Service Invocation prefix
+		if !strings.HasPrefix(p, "/v1.0/invoke/") {
+			invokePath := "/v1.0/invoke/{app_id}/method" + p
+			finalList = append(finalList, invokePath)
+		}
 	}
-	return cleanPaths, foundRootPath
+
+	slices.Sort(finalList)
+	return slices.Compact(finalList), hasRoot
 }
 
 func (pm *pathMatching) enabled() bool {
