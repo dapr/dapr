@@ -29,9 +29,10 @@ import (
 )
 
 const (
-	headerContentType  = "Content-Type"
-	headerCacheControl = "Cache-Control"
-	headerConnection   = "Connection"
+	headerContentType   = "Content-Type"
+	headerCacheControl  = "Cache-Control"
+	headerConnection    = "Connection"
+	headerContentLength = "Content-Length"
 
 	mimeEventStream     = "text/event-stream"
 	cacheNoCache        = "no-cache"
@@ -42,13 +43,13 @@ func IsSSEHttpRequest(r *http.Request) bool {
 	return isSSE(&r.Header)
 }
 
-func IsSSEGrpcRequest(r *internalv1pb.InternalInvokeRequest) (bool, http.Header) {
+func IsSSEGrpcRequest(r *internalv1pb.InternalInvokeRequest) bool {
 	header := http.Header{}
 	for k, v := range r.GetMetadata() {
 		header[k] = v.GetValues()
 	}
 
-	return isSSE(&header), header
+	return isSSE(&header)
 }
 
 func isSSE(header *http.Header) bool {
@@ -76,10 +77,6 @@ func FlushSSEResponse(ctx context.Context, writer http.ResponseWriter, reader io
 		http.Error(writer, "Streaming unsupported!", http.StatusInternalServerError)
 		return nil
 	}
-
-	writer.Header().Set(headerContentType, mimeEventStream)
-	writer.Header().Set(headerCacheControl, cacheNoCache)
-	writer.Header().Set(headerConnection, connectionKeepAlive)
 
 	// Add defer close for streaming case
 	closer, ok := reader.(io.Closer)
@@ -113,4 +110,11 @@ func FlushSSEResponse(ctx context.Context, writer http.ResponseWriter, reader io
 		}
 	}
 	return nil
+}
+
+func AddSSEHeaders(w http.ResponseWriter) {
+	w.Header().Set(headerContentType, mimeEventStream)
+	w.Header().Set(headerCacheControl, cacheNoCache)
+	w.Header().Set(headerConnection, connectionKeepAlive)
+	w.Header().Del(headerContentLength)
 }

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -187,14 +188,14 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		pw.Close()
 	}()
 
-	isSSERequest, header := sse.IsSSEGrpcRequest(chunk.GetRequest())
+	isSSERequest := sse.IsSSEGrpcRequest(chunk.GetRequest())
 
 	if isSSERequest {
 		req.WithHTTPResponseWriter(&streamResponseWriter{
 			logger: a.logger,
-			header: header,
 			stream: stream,
 			appID:  a.AppID(),
+			header: http.Header{},
 		})
 	}
 
