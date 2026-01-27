@@ -28,6 +28,17 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
+const (
+	headerContentType   = "Content-Type"
+	headerCacheControl  = "Cache-Control"
+	headerConnection    = "Connection"
+	headerContentLength = "Content-Length"
+
+	mimeEventStream     = "text/event-stream"
+	cacheNoCache        = "no-cache"
+	connectionKeepAlive = "keep-alive"
+)
+
 func IsSSEHttpRequest(r *http.Request) bool {
 	return isSSE(&r.Header)
 }
@@ -99,4 +110,11 @@ func FlushSSEResponse(ctx context.Context, writer http.ResponseWriter, reader io
 		}
 	}
 	return nil
+}
+
+func AddSSEHeaders(w http.ResponseWriter) {
+	w.Header().Set(headerContentType, mimeEventStream)
+	w.Header().Set(headerCacheControl, cacheNoCache)
+	w.Header().Set(headerConnection, connectionKeepAlive)
+	w.Header().Del(headerContentLength)
 }
