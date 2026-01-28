@@ -74,7 +74,7 @@ func (c *crossworkflow) Run(t *testing.T, ctx context.Context) {
 
 	evs := resp.Events
 
-	require.Len(t, evs, 6)
+	require.Len(t, evs, 7)
 
 	assert.NotNil(t, evs[0].GetOrchestratorStarted())
 	assert.NotNil(t, evs[1].GetExecutionStarted())
@@ -90,10 +90,10 @@ func (c *crossworkflow) Run(t *testing.T, ctx context.Context) {
 
 	assert.NotNil(t, evs[3].GetOrchestratorStarted())
 
-	assert.NotNil(t, evs[4].GetSubOrchestrationInstanceCompleted())
-	assert.Equal(t, c.workflow.DaprN(1).AppID(), evs[4].GetRouter().GetSourceAppID())
-	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[4].GetRouter().GetTargetAppID())
+	assert.NotNil(t, evs[5].GetSubOrchestrationInstanceCompleted())
+	assert.Equal(t, c.workflow.DaprN(1).AppID(), evs[5].GetRouter().GetSourceAppID())
+	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[5].GetRouter().GetTargetAppID())
 
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[5].GetExecutionCompleted().GetOrchestrationStatus().String())
-	assert.Equal(t, c.workflow.Dapr().AppID(), evs[5].GetRouter().GetSourceAppID())
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[6].GetExecutionCompleted().GetOrchestrationStatus().String())
+	assert.Equal(t, c.workflow.Dapr().AppID(), evs[6].GetRouter().GetSourceAppID())
 }
