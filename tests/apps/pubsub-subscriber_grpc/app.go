@@ -440,9 +440,9 @@ func (s *server) OnJobEventAlpha1(ctx context.Context, in *runtimev1pb.JobEventR
 	return nil, nil
 }
 
-func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+func (s *server) bulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest, endpoint string) (*runtimev1pb.TopicEventBulkResponse, error) {
 	reqID := uuid.New().String()
-	log.Printf("(%s) Entered in OnBulkTopicEventAlpha1 in Bulk Subscribe - Topic: %s", reqID, in.GetTopic())
+	log.Printf("(%s) Entered in %s in Bulk Subscribe - Topic: %s", reqID, endpoint, in.GetTopic())
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -501,6 +501,14 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.Top
 	return &runtimev1pb.TopicEventBulkResponse{
 		Statuses: bulkResponses,
 	}, nil
+}
+
+func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	return s.bulkTopicEvent(ctx, in, "OnBulkTopicEventAlpha1")
+}
+
+func (s *server) OnBulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	return s.bulkTopicEvent(ctx, in, "OnBulkTopicEvent")
 }
 
 // Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr

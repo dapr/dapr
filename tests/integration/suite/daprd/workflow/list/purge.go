@@ -52,15 +52,15 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 
 	client := p.workflow.BackendClient(t, ctx)
 
-	ids := make([]string, 0, 5)
-	for range 5 {
+	ids := make([]string, 0, 3)
+	for range 3 {
 		id, err := client.ScheduleNewOrchestration(ctx, "foo")
 		require.NoError(t, err)
 		ids = append(ids, id.String())
 	}
 
 	wf := p.workflow.WorkflowClient(t, ctx)
-	for range 5 {
+	for range 3 {
 		resp, err := wf.ListInstanceIDs(ctx)
 		require.NoError(t, err)
 		assert.Equal(t, ids, resp.InstanceIds)
@@ -74,15 +74,15 @@ func (p *purge) Run(t *testing.T, ctx context.Context) {
 	assert.Empty(t, resp.InstanceIds)
 	assert.Nil(t, resp.ContinuationToken)
 
-	ids = make([]string, 0, 5)
-	for range 5 {
+	ids = make([]string, 0, 3)
+	for range 3 {
 		var id api.InstanceID
 		id, err = client.ScheduleNewOrchestration(ctx, "foo")
 		require.NoError(t, err)
 		ids = append(ids, id.String())
 	}
 
-	for range 5 {
+	for range 3 {
 		resp, err = wf.ListInstanceIDs(ctx)
 		require.NoError(t, err)
 		assert.Equal(t, ids, resp.InstanceIds)

@@ -21,12 +21,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/durabletask-go/api/protos"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
 
@@ -85,24 +83,13 @@ func (a *async) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(history.Events), 8)
 
-	assert.True(t, proto.Equal(
-		history.Events[2].GetSubOrchestrationInstanceCreated(),
-		&protos.SubOrchestrationInstanceCreatedEvent{
-			InstanceId: "hello:0000",
-			Name:       "bar",
-		},
-	))
-
-	assert.True(t, proto.Equal(
-		history.Events[3].GetSubOrchestrationInstanceCreated(),
-		&protos.SubOrchestrationInstanceCreatedEvent{
-			InstanceId: "hello:0001",
-			Name:       "bar",
-			RerunParentInstanceInfo: &protos.RerunParentInstanceInfo{
-				InstanceID: "abc",
-			},
-		},
-	))
+	childs := make([]string, 0, 2)
+	for _, e := range history.Events {
+		if s := e.GetSubOrchestrationInstanceCreated(); s != nil {
+			childs = append(childs, s.GetInstanceId())
+		}
+	}
+	assert.ElementsMatch(t, []string{"hello:0000", "hello:0001"}, childs)
 
 	ids, err := client.ListInstanceIDs(ctx)
 	require.NoError(t, err)

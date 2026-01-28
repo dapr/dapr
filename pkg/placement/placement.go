@@ -20,6 +20,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -298,7 +299,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		return status.Errorf(codes.Internal, "failed to receive the first message: %v", err)
 	}
 
-	err = p.validateFirstMessage(firstMessage, spiffeClientID)
+	err = p.validateFirstMessage(stream.Context(), firstMessage, spiffeClientID)
 	if err != nil {
 		log.Errorf("First message validation failed: %v", err)
 		return err
@@ -385,6 +386,10 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				continue
 			}
 
+			if err := p.authorizeMessage(stream.Context(), host, spiffeClientID); err != nil {
+				return err
+			}
+
 			now := p.clock.Now()
 
 			for _, entity := range host.GetEntities() {
@@ -437,7 +442,7 @@ func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatus
 	return clientID, nil
 }
 
-func (p *Service) validateFirstMessage(firstMessage *placementv1pb.Host, clientID *spiffe.Parsed) error {
+func (p *Service) validateFirstMessage(ctx context.Context, firstMessage *placementv1pb.Host, clientID *spiffe.Parsed) error {
 	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
 		return status.Errorf(codes.PermissionDenied, "provided app ID %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetId(), clientID.AppID())
 	}
@@ -455,6 +460,35 @@ func (p *Service) validateFirstMessage(firstMessage *placementv1pb.Host, clientI
 	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
 		log.Errorf("Client ID mismatch: %s != %s", firstMessage.GetId(), clientID.AppID())
 		return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", firstMessage.GetId())
+	}
+
+	if err := p.authorizeMessage(ctx, firstMessage, clientID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Service) authorizeMessage(ctx context.Context, msg *placementv1pb.Host, clientID *spiffe.Parsed) error {
+	sec, err := p.sec.Handler(ctx)
+	if err != nil {
+		return status.Errorf(codes.Internal, "")
+	}
+
+	if !sec.MTLSEnabled() {
+		return nil
+	}
+
+	const partDapr = "dapr"
+	const partInternal = "internal"
+
+	for _, entity := range msg.GetEntities() {
+		split := strings.Split(entity, ".")
+		if len(split) >= 2 && split[0] == partDapr && split[1] == partInternal {
+			if len(split) < 4 || split[2] != clientID.Namespace() || split[3] != clientID.AppID() {
+				return status.Errorf(codes.PermissionDenied, "entity %s is not allowed for app ID %s in namespace %s", entity, clientID.AppID(), clientID.Namespace())
+			}
+		}
 	}
 
 	return nil

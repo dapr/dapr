@@ -32,8 +32,9 @@ import (
 )
 
 type Stalled struct {
-	CurrentClient *client.TaskHubGrpcClient
-	options       options
+	CurrentClient       *client.TaskHubGrpcClient
+	currentClientCancel context.CancelFunc
+	options             options
 
 	runWorkflowReplica string
 
@@ -90,6 +91,8 @@ func (f *Stalled) workflowWrapper(ctx *task.OrchestrationContext) (any, error) {
 func (f *Stalled) ScheduleWorkflow(t *testing.T, ctx context.Context) api.InstanceID {
 	t.Helper()
 	f.workflows.WaitUntilRunning(t, ctx)
+	ctx, cancel := context.WithCancel(ctx)
+	f.currentClientCancel = cancel
 	f.CurrentClient = f.workflows.BackendClient(t, ctx)
 	id, err := f.CurrentClient.ScheduleNewOrchestration(ctx, "Orchestrator")
 	require.NoError(t, err)
@@ -106,6 +109,7 @@ func (f *Stalled) RestartAsReplica(t *testing.T, ctx context.Context, name strin
 
 func (f *Stalled) restart(t *testing.T, ctx context.Context) {
 	t.Helper()
+	f.currentClientCancel()
 	f.workflows.Dapr().Restart(t, ctx)
 	f.workflows.WaitUntilRunning(t, ctx)
 	f.CurrentClient = f.workflows.BackendClient(t, ctx)

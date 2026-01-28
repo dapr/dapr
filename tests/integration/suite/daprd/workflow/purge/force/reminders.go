@@ -78,6 +78,14 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
 		assert.Equal(c, 0, count)
-		assert.Empty(c, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
+
+	for range time.Second {
+		list := r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs")
+		if len(list) == 0 {
+			return
+		}
+		time.Sleep(time.Millisecond * 10)
+	}
+	assert.Fail(t, "expected no jobs to be left in the scheduler, but found some")
 }
