@@ -24,7 +24,7 @@ type pathMatching struct {
 	returnRawPath bool
 }
 
-// newPathMatching creates a new pathMatching instance.
+// newPathMatching creates a new pathMatching instance using ServeMux.
 // The root path ("/") must always be registered:
 // - If the user explicitly registers the root path, we match it accordingly.
 // - If the root path is not explicitly registered:
@@ -40,14 +40,14 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 	mux := http.NewServeMux()
 	pm := &pathMatching{mux: mux}
 
-	patterns, hasRoot := processPatterns(paths)
+	cleanPaths, foundRootPath := cleanAndSortPaths(paths)
 
-	for _, p := range patterns {
-		mux.HandleFunc(p, func(w http.ResponseWriter, r *http.Request) {})
+	for _, pattern := range cleanPaths {
+		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {})
 	}
 
 	// Handle Legacy Root Fallback
-	if !hasRoot {
+	if !foundRootPath {
 		if legacy {
 			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
 			pm.returnRawPath = true
@@ -57,29 +57,29 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 	return pm
 }
 
-// processPatterns takes user input paths and returns a sorted, deduplicated list
+// cleanAndSortPaths takes user input paths and returns a sorted, deduplicated list
 // of all patterns to be registered, including the auto-generated invoke variants.
-func processPatterns(paths []string) ([]string, bool) {
-	finalList := make([]string, 0, len(paths)*2)
-	hasRoot := false
+func cleanAndSortPaths(paths []string) ([]string, bool) {
+	cleanPaths := make([]string, 0, len(paths)*2)
+	foundRootPath := false
 
 	for _, raw := range paths {
 		p := NormalizeHTTPPath(raw)
-		finalList = append(finalList, p)
+		cleanPaths = append(cleanPaths, p)
 
 		if p == "/" {
-			hasRoot = true
+			foundRootPath = true
 		}
 
 		// Auto-register Service Invocation prefix
 		if !strings.HasPrefix(p, "/v1.0/invoke/") {
 			invokePath := "/v1.0/invoke/{app_id}/method" + p
-			finalList = append(finalList, invokePath)
+			cleanPaths = append(cleanPaths, invokePath)
 		}
 	}
 
-	slices.Sort(finalList)
-	return slices.Compact(finalList), hasRoot
+	slices.Sort(cleanPaths)
+	return slices.Compact(cleanPaths), foundRootPath
 }
 
 func (pm *pathMatching) enabled() bool {
