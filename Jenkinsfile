@@ -43,7 +43,6 @@ pipeline {
   }
   post {
     success {
-      sh "cd $DIRECTORY && make show-images"
       finalizeBuild(sh(script: 'cd $DIRECTORY && make show-images', returnStdout: true))
     }
     cleanup {
