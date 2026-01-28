@@ -24,7 +24,7 @@ func (s *stream) recvLoop() error {
 	for {
 		err := s.recv()
 		if err != nil {
-			log.Warnf("Error receiving from stream %s", s.addr)
+			log.Warnf("Error receiving from stream %s: %s", s.addr, err)
 			return err
 		}
 	}

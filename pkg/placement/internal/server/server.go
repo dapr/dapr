@@ -158,7 +158,9 @@ func (s *Server) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			<-ctx.Done()
-			s.loop.Close(new(loops.Shutdown))
+			s.loop.Close(&loops.Shutdown{
+				Error: context.Cause(ctx),
+			})
 			gserver.GracefulStop()
 			log.Info("Placement GRPC server stopped")
 			return nil
@@ -220,6 +222,9 @@ func (s *Server) ReportDaprStatus(stream v1pb.Placement_ReportDaprStatusServer) 
 	if err = s.authz.Host(stream, host); err != nil {
 		return err
 	}
+
+	log.Infof("Received status report connection from new namespace=%s id=%s host=%s",
+		host.GetNamespace(), host.GetId(), host.GetName())
 
 	ctx, cancel := context.WithCancelCause(stream.Context())
 	defer cancel(nil)

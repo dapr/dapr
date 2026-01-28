@@ -30,7 +30,7 @@ import (
 var log = logger.NewLogger("dapr.placement.server.loops.stream")
 
 var (
-	streamLoopFactory = loop.New[loops.Event](8)
+	StreamLoopFactory = loop.New[loops.Event](8)
 	streamCache       = sync.Pool{New: func() any {
 		return new(stream)
 	}}
@@ -73,7 +73,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 	stream.cancel = opts.Add.Cancel
 	stream.authz = opts.Authorizer
 
-	stream.loop = streamLoopFactory.NewLoop(stream)
+	stream.loop = StreamLoopFactory.NewLoop(stream)
 	stream.nsLoop = opts.NamespaceLoop
 
 	stream.ns = opts.Add.InitialHost.GetNamespace()
@@ -131,6 +131,5 @@ func (s *stream) handleShutdown(e *loops.StreamShutdown) {
 	log.Infof("Closing connection to %s: %s", s.addr, e.Error)
 	s.cancel(e.Error)
 	s.wg.Wait()
-	streamLoopFactory.CacheLoop(s.loop)
 	streamCache.Put(s)
 }

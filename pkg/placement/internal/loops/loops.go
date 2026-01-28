@@ -61,7 +61,9 @@ type ConnCloseStream struct {
 }
 
 // Shutdown is the event for shutting down the placement loops.
-type Shutdown struct{}
+type Shutdown struct {
+	Error error
+}
 
 type DisseminationTimeout struct {
 	Version uint64

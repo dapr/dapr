@@ -14,6 +14,7 @@ limitations under the License.
 package store
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 
@@ -83,15 +84,25 @@ func (s *Store) StatePlacementTable(version uint64) *v1pb.StatePlacementTable {
 
 func (s *Store) Set(streamIDx uint64, host *v1pb.Host) bool {
 	//nolint:protogetter
-	sort.Strings(host.Entities)
-	if existing, ok := s.hosts[streamIDx]; ok {
-		if proto.Equal(existing, host) {
-			return false
-		}
+	if !s.HostChanged(streamIDx, host) {
+		return false
 	}
 
 	s.hosts[streamIDx] = host
 	return true
+}
+
+func (s *Store) HostChanged(streamIDx uint64, host *v1pb.Host) bool {
+	//nolint:protogetter
+	sort.Strings(host.Entities)
+	existing, ok := s.hosts[streamIDx]
+	if !ok {
+		return true
+	}
+
+	return !(slices.Equal(existing.Entities, host.Entities) &&
+		host.GetId() == existing.GetId() &&
+		host.GetNamespace() == existing.GetNamespace())
 }
 
 func (s *Store) Delete(streamIDx uint64) {

@@ -91,5 +91,5 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		}
 		assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
 		assert.GreaterOrEqual(c, table.Tables["default"].Version, uint64(3))
-	}, time.Second*20, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*10)
 }

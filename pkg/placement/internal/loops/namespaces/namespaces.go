@@ -138,6 +138,7 @@ func (n *namespaces) handleCloseStream(closeStream *loops.ConnCloseStream) error
 	if dissLoop.connections == 0 {
 		delete(n.disseminators, closeStream.Namespace)
 		dissLoop.loop.Close(new(loops.Shutdown))
+		disseminator.LoopFactory.CacheLoop(dissLoop.loop)
 	}
 
 	return nil

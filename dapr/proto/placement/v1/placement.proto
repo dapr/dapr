@@ -75,8 +75,7 @@ message Host {
   string namespace = 8;
 
   // operation indicates the type of operation the host is responding to.
-  // Optional to indicate presence for older clients.
-  optional HostOperation operation = 9;
+  HostOperation operation = 9;
 
   // version made optional to check for presence. Version should match the
   // current operation table version.
@@ -85,7 +84,8 @@ message Host {
 
 enum HostOperation {
   UNKNOWN = 0;
-  UNLOCK = 1;
+  REPORT = 1;
   LOCK = 2;
   UPDATE = 3;
+  UNLOCK = 4;
 }

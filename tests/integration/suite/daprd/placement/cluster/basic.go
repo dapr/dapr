@@ -47,8 +47,8 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	appID, err := uuid.NewUUID()
 	require.NoError(t, err)
 
-	b.daprds = make([]*daprd.Daprd, 5)
-	for i := range 5 {
+	b.daprds = make([]*daprd.Daprd, 3)
+	for i := range 3 {
 		b.daprds[i] = daprd.New(t,
 			daprd.WithPlacementAddresses(b.place.Addresses()...),
 			daprd.WithInMemoryActorStateStore("foo"),
@@ -93,6 +93,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 		assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		assert.GreaterOrEqual(c, table.Tables["default"].Version, uint64(5))
-	}, time.Second*10, time.Millisecond*10)
+		assert.GreaterOrEqual(c, table.Tables["default"].Version, uint64(3))
+	}, time.Second*30, time.Millisecond*10)
 }

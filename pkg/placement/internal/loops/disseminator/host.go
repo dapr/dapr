@@ -22,19 +22,43 @@ import (
 func (d *disseminator) handleReportedHost(report *loops.ReportedHost) {
 	//nolint:protogetter
 	op := report.Host.Operation
-	if report.Host.Operation == nil {
-		// Special case old clients- this always moves the lock forward.
-		op = ptr.Of(d.currentOperation)
+
+	// TODO: @joshvanl: remove block in v1.18
+	if report.Host.Operation == v1pb.HostOperation_UNKNOWN {
+		// If the reported host has changes, treat it as a report.
+		if d.store.HostChanged(report.StreamIDx, report.Host) {
+			op = v1pb.HostOperation_REPORT
+		} else {
+			if d.currentOperation == v1pb.HostOperation_REPORT {
+				// Special case to ensure old clients become ready when batching a
+				// dissemination.
+				s, ok := d.streams[report.StreamIDx]
+				if ok {
+					s.loop.Enqueue(&loops.DisseminateUnlock{
+						Version: d.currentVersion,
+					})
+				}
+				return
+			}
+			// Special case old clients- this always moves the lock forward.
+			op = d.currentOperation
+		}
 	}
 
 	//nolint:protogetter
 	if report.Host.Version != nil && *report.Host.Version < d.currentVersion {
+		log.Debugf("Ignoring report from stream %d - old version %d (current %d)", report.StreamIDx, *report.Host.Version, d.currentVersion)
 		return
 	}
 
-	switch *op {
+	log.Debugf("Received report from stream (idx:%d) (op=%s) (ver=%d)", report.StreamIDx, op.String(), d.currentVersion)
+
+	switch op {
+	case v1pb.HostOperation_REPORT:
+		d.doReport(report.StreamIDx, report.Host)
+
 	case v1pb.HostOperation_UNLOCK:
-		d.handleReportedReport(report.StreamIDx, report.Host)
+		d.handleReportedUnlock(report.StreamIDx)
 
 	case v1pb.HostOperation_LOCK:
 		d.handleReportedLock(report.StreamIDx)
@@ -44,28 +68,19 @@ func (d *disseminator) handleReportedHost(report *loops.ReportedHost) {
 	}
 }
 
-func (d *disseminator) handleReportedReport(streamIDx uint64, host *v1pb.Host) {
+func (d *disseminator) doReport(streamIDx uint64, host *v1pb.Host) {
 	if !d.store.Set(streamIDx, host) {
-		stream, ok := d.streams[streamIDx]
-		if !ok {
-			return
-		}
-
-		stream.currentVersion = ptr.Of(d.currentVersion)
-		stream.currentState = ptr.Of(v1pb.HostOperation_UNLOCK)
-		if d.allStreamsHaveState(v1pb.HostOperation_UNLOCK) {
-			d.timeoutQ.Dequeue(d.currentVersion)
-		}
-
+		log.Debugf("Ignoring report from stream %d - no changes", streamIDx)
 		return
 	}
 
+	d.timeoutQ.Dequeue(d.currentVersion)
 	d.currentVersion++
-	d.currentOperation = v1pb.HostOperation_LOCK
 	d.timeoutQ.Enqueue(d.currentVersion)
+	d.currentOperation = v1pb.HostOperation_LOCK
 
 	for _, s := range d.streams {
-		s.currentState = ptr.Of(v1pb.HostOperation_LOCK)
+		s.currentState = ptr.Of(v1pb.HostOperation_REPORT)
 		s.loop.Enqueue(&loops.DisseminateLock{
 			Version: d.currentVersion,
 		})
@@ -110,6 +125,21 @@ func (d *disseminator) handleReportedUpdate(streamIDx uint64) {
 				Version: d.currentVersion,
 			})
 		}
+	}
+}
+
+func (d *disseminator) handleReportedUnlock(streamIDx uint64) {
+	stream, ok := d.streams[streamIDx]
+	if !ok {
+		return
+	}
+
+	stream.currentState = ptr.Of(v1pb.HostOperation_UNLOCK)
+	if d.allStreamsHaveState(v1pb.HostOperation_UNLOCK) {
+		d.currentOperation = v1pb.HostOperation_REPORT
+
+		d.timeoutQ.Dequeue(d.currentVersion)
+		log.Debugf("Dissemination of version %d complete", d.currentVersion)
 	}
 }
 

@@ -51,7 +51,7 @@ func (a *Authorizer) Host(stream v1pb.Placement_ReportDaprStatusServer, msg *v1p
 		return status.Errorf(codes.InvalidArgument, "received nil host report")
 	}
 
-	if (msg.Operation == nil) != (msg.Version == nil) {
+	if (msg.Operation == v1pb.HostOperation_UNKNOWN) != (msg.Version == nil) {
 		return status.Errorf(codes.InvalidArgument, "both operation and version must be set or both must be unset")
 	}
 

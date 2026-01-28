@@ -38,7 +38,7 @@ import (
 var log = logger.NewLogger("dapr.placement.server.loops.disseminator")
 
 var (
-	loopFactory = loop.New[loops.Event](1024)
+	LoopFactory = loop.New[loops.Event](1024)
 	dissCache   = sync.Pool{New: func() any {
 		return &disseminator{
 			streams: make(map[uint64]*streamConn),
@@ -55,10 +55,9 @@ type Options struct {
 }
 
 type streamConn struct {
-	loop           loop.Interface[loops.Event]
-	currentState   *v1pb.HostOperation
-	currentVersion *uint64
-	hasActors      bool
+	loop         loop.Interface[loops.Event]
+	currentState *v1pb.HostOperation
+	hasActors    bool
 }
 
 // disseminator is a control loop that creates and manages stream connections,
@@ -89,7 +88,7 @@ func New(opts Options) loop.Interface[loops.Event] {
 	diss.nsLoop = opts.NamespaceLoop
 	diss.authorizer = opts.Authorizer
 	diss.streamIDx = 0
-	diss.currentOperation = v1pb.HostOperation_UNLOCK
+	diss.currentOperation = v1pb.HostOperation_REPORT
 	diss.currentVersion = 0
 	diss.connCount.Store(0)
 	diss.actorConnCount.Store(0)
@@ -101,7 +100,7 @@ func New(opts Options) loop.Interface[loops.Event] {
 		})
 	}
 
-	diss.loop = loopFactory.NewLoop(diss)
+	diss.loop = LoopFactory.NewLoop(diss)
 
 	diss.timeoutQ = timeout.New(timeout.Options{
 		Loop:    diss.loop,
@@ -112,6 +111,8 @@ func New(opts Options) loop.Interface[loops.Event] {
 }
 
 func (d *disseminator) Handle(ctx context.Context, event loops.Event) error {
+	log.Debugf("Disseminator handling event (%s): %T", d.namespace, event)
+
 	switch e := event.(type) {
 	case *loops.ConnAdd:
 		d.handleAdd(ctx, e)
@@ -120,7 +121,7 @@ func (d *disseminator) Handle(ctx context.Context, event loops.Event) error {
 	case *loops.ConnCloseStream:
 		d.handleCloseStream(e)
 	case *loops.Shutdown:
-		d.handleShutdown()
+		d.handleShutdown(e)
 	case *loops.DisseminationTimeout:
 		d.handleTimeout(e)
 	case *loops.NamespaceTableRequest:
@@ -151,10 +152,9 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 	}()
 
 	d.streams[streamIDx] = &streamConn{
-		loop:           streamLoop,
-		currentState:   nil,
-		currentVersion: nil,
-		hasActors:      len(add.InitialHost.GetEntities()) > 0,
+		loop:         streamLoop,
+		currentState: nil,
+		hasActors:    len(add.InitialHost.GetEntities()) > 0,
 	}
 
 	monitoring.RecordRuntimesCount(d.connCount.Add(1), add.InitialHost.GetNamespace())
@@ -162,6 +162,7 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 		monitoring.RecordActorRuntimesCount(d.actorConnCount.Add(1), add.InitialHost.GetNamespace())
 	}
 
+	add.InitialHost.Operation = v1pb.HostOperation_REPORT
 	d.handleReportedHost(&loops.ReportedHost{
 		Host:      add.InitialHost,
 		StreamIDx: streamIDx,
@@ -170,26 +171,27 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 
 // handleCloseStream handles a close stream request.
 func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
-	stream, ok := d.streams[closeStream.StreamIDx]
+	s, ok := d.streams[closeStream.StreamIDx]
 	if !ok {
 		// Ignore old streams.
 		return
 	}
 
 	monitoring.RecordRuntimesCount(d.connCount.Add(-1), d.namespace)
-	if stream.hasActors {
+	if s.hasActors {
 		monitoring.RecordActorRuntimesCount(d.actorConnCount.Add(-1), d.namespace)
 	}
 
 	d.store.Delete(closeStream.StreamIDx)
 	delete(d.streams, closeStream.StreamIDx)
-	stream.loop.Close(&loops.StreamShutdown{
+	s.loop.Close(&loops.StreamShutdown{
 		Error: closeStream.Error,
 	})
+	stream.StreamLoopFactory.CacheLoop(s.loop)
 
 	d.currentVersion++
 	d.currentOperation = v1pb.HostOperation_LOCK
-	for _, s := range d.streams {
+	for _, s = range d.streams {
 		s.currentState = ptr.Of(v1pb.HostOperation_LOCK)
 		s.loop.Enqueue(&loops.DisseminateLock{
 			Version: d.currentVersion,
@@ -198,11 +200,15 @@ func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
 }
 
 // handleShutdown handles the shutdown of the streams.
-func (d *disseminator) handleShutdown() {
+func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 	defer d.wg.Wait()
 
-	for _, stream := range d.streams {
-		stream.loop.Close(new(loops.StreamShutdown))
+	for _, s := range d.streams {
+		s.loop.Close(&loops.StreamShutdown{
+			Error: shutdown.Error,
+		})
+
+		stream.StreamLoopFactory.CacheLoop(s.loop)
 	}
 
 	clear(d.streams)
@@ -212,7 +218,6 @@ func (d *disseminator) handleShutdown() {
 	monitoring.RecordRuntimesCount(0, d.namespace)
 	monitoring.RecordActorRuntimesCount(0, d.namespace)
 
-	loopFactory.CacheLoop(d.loop)
 	dissCache.Put(d)
 }
 
