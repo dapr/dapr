@@ -55,9 +55,10 @@ type Options struct {
 }
 
 type streamConn struct {
-	loop         loop.Interface[loops.Event]
-	currentState *v1pb.HostOperation
-	hasActors    bool
+	loop             loop.Interface[loops.Event]
+	currentState     *v1pb.HostOperation
+	hasActors        bool
+	sentDoubleUnlock uint64
 }
 
 // disseminator is a control loop that creates and manages stream connections,

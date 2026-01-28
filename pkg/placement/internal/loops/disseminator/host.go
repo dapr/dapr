@@ -33,7 +33,8 @@ func (d *disseminator) handleReportedHost(report *loops.ReportedHost) {
 				// Special case to ensure old clients become ready when batching a
 				// dissemination.
 				s, ok := d.streams[report.StreamIDx]
-				if ok {
+				if ok && s.sentDoubleUnlock < 3 {
+					s.sentDoubleUnlock++
 					s.loop.Enqueue(&loops.DisseminateUnlock{
 						Version: d.currentVersion,
 					})
@@ -94,6 +95,7 @@ func (d *disseminator) handleReportedLock(streamIDx uint64) {
 	}
 
 	stream.currentState = ptr.Of(v1pb.HostOperation_LOCK)
+	stream.sentDoubleUnlock = 0
 
 	if d.allStreamsHaveState(v1pb.HostOperation_LOCK) {
 		// All streams have locked, move to update phase.
@@ -115,6 +117,7 @@ func (d *disseminator) handleReportedUpdate(streamIDx uint64) {
 	}
 
 	stream.currentState = ptr.Of(v1pb.HostOperation_UPDATE)
+	stream.sentDoubleUnlock = 0
 
 	if d.allStreamsHaveState(v1pb.HostOperation_UPDATE) {
 		// All streams have updated, dissemination is complete, send out unlocks.
@@ -135,6 +138,8 @@ func (d *disseminator) handleReportedUnlock(streamIDx uint64) {
 	}
 
 	stream.currentState = ptr.Of(v1pb.HostOperation_UNLOCK)
+	stream.sentDoubleUnlock = 0
+
 	if d.allStreamsHaveState(v1pb.HostOperation_UNLOCK) {
 		d.currentOperation = v1pb.HostOperation_REPORT
 
