@@ -74,6 +74,7 @@ type Server struct {
 
 	isLeader atomic.Bool
 	readyCh  chan struct{}
+	shutdown atomic.Bool
 }
 
 func New(opts Options) *Server {
@@ -158,6 +159,7 @@ func (s *Server) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			<-ctx.Done()
+			s.shutdown.Store(true)
 			s.loop.Close(&loops.Shutdown{
 				Error: context.Cause(ctx),
 			})
@@ -211,6 +213,13 @@ func (s *Server) ReportDaprStatus(stream v1pb.Placement_ReportDaprStatusServer) 
 			codes.FailedPrecondition,
 			"node id=%s is not a leader. Only the leader can serve requests",
 			s.nodeID,
+		)
+	}
+
+	if s.shutdown.Load() {
+		return status.Errorf(
+			codes.Unavailable,
+			"placement server is shutting down",
 		)
 	}
 
