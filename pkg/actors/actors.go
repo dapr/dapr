@@ -202,7 +202,6 @@ func (a *actors) Init(opts InitOptions) error {
 		Namespace: a.namespace,
 		Hostname:  opts.Hostname,
 		Port:      a.port,
-		APILevel:  apiLevel,
 		Healthz:   a.healthz,
 		Mode:      a.mode,
 		Scheduler: opts.SchedulerReloader,

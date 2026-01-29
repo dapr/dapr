@@ -142,22 +142,32 @@ func (r *router) CallStream(ctx context.Context,
 }
 
 func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
-	if !req.SkipLock {
-		var cancel context.CancelFunc
-		var err error
-		ctx, cancel, err = r.placement.Lock(ctx)
-		if err != nil {
-			return backoff.Permanent(err)
-		}
-		defer cancel()
-	}
+	fmt.Printf(">>CALLING REMINDER %s - %s\n", req.ActorType, req.ActorID)
+	defer func() {
+		fmt.Printf("<<CALLED REMINDER %s - %s\n", req.ActorType, req.ActorID)
+	}()
+	//if !req.SkipLock {
+	//	var cancel context.CancelFunc
+	//	var err error
+	//	ctx, cancel, err = r.placement.Lock(ctx)
+	//	if err != nil {
+	//		return backoff.Permanent(err)
+	//	}
+	//	defer cancel()
+	//}
 
-	lar, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+	lar, cctx, cancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.ActorType,
 		ActorID:   req.ActorID,
 	})
 	if err != nil {
 		return err
+	}
+	if req.SkipLock {
+		cancel(nil)
+	} else {
+		defer cancel(nil)
+		ctx = cctx
 	}
 
 	if !lar.Local {
@@ -194,26 +204,29 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 }
 
 func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	fmt.Printf(">>CALLING ACTOR %s - %s\n", req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	defer func() {
+		fmt.Printf("<<CALLED ACTOR %s - %s\n", req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	}()
 	// If we are in a reentrancy which is local, skip the placement lock.
 	_, isDaprRemote := req.GetMetadata()["X-Dapr-Remote"]
 	_, isAPICall := req.GetMetadata()["Dapr-API-Call"]
 
-	if isAPICall || isDaprRemote {
-		var cancel context.CancelFunc
-		var err error
-		ctx, cancel, err = r.placement.Lock(ctx)
-		if err != nil {
-			return nil, backoff.Permanent(err)
-		}
-		defer cancel()
-	}
-
-	lar, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+	lar, cctx, cancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
+		fmt.Printf("<<CALL LOOKUP ACTOR: (REMOTE: %v) %s (%s)\n", isDaprRemote, err, ctx.Err())
 		return nil, fmt.Errorf("failed to lookup actor: %w", err)
+	}
+
+	if isAPICall || isDaprRemote {
+		defer cancel(nil)
+		ctx = cctx
+	} else {
+		cancel(nil)
+		fmt.Printf("<<CALL SKIP LOCK: (API CALL: %v, REMOTE: %v)\n", isAPICall, isDaprRemote)
 	}
 
 	if lar.Local {
@@ -221,6 +234,7 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 			var resp *internalv1pb.InternalInvokeResponse
 			resp, err = r.callLocalActor(ctx, req)
 			if err != nil {
+				fmt.Printf("<<CALL LOCAL ACTOR ERROR:\n", err)
 				if targetserrors.IsClosed(err) {
 					continue
 				}
@@ -240,6 +254,8 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	if err == nil {
 		return res, nil
 	}
+
+	fmt.Printf(">>GOT REMOTE ACTOR ERROR: (ctx=%s) %s\n", ctx.Err(), err)
 
 	attempt := resiliency.GetAttempt(ctx)
 	s, ok := status.FromError(err)
@@ -319,19 +335,14 @@ func (r *router) callStream(ctx context.Context,
 	req *internalv1pb.InternalInvokeRequest,
 	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
 ) error {
-	ctx, pcancel, err := r.placement.Lock(ctx)
-	if err != nil {
-		return backoff.Permanent(err)
-	}
-	defer pcancel()
-
-	lar, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+	lar, ctx, pcancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
 		return err
 	}
+	defer pcancel(nil)
 
 	if !lar.Local {
 		// If this is a dapr-dapr call and the actor didn't pass the local check
