@@ -100,8 +100,6 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 func (s *stream) Handle(ctx context.Context, event loops.Event) error {
 	var err error
 	switch e := event.(type) {
-	case *v1pb.Host:
-		s.handleRecive(e)
 	case *loops.DisseminateLock:
 		err = s.handleLock(e.Version)
 	case *loops.DisseminateUpdate:

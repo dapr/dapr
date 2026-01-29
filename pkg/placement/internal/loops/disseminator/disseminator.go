@@ -67,6 +67,7 @@ type disseminator struct {
 	nsLoop     loop.Interface[loops.Event]
 	loop       loop.Interface[loops.Event]
 	authorizer *authorizer.Authorizer
+	timeout    time.Duration
 
 	namespace string
 
@@ -94,6 +95,7 @@ func New(opts Options) loop.Interface[loops.Event] {
 	diss.connCount.Store(0)
 	diss.actorConnCount.Store(0)
 	diss.namespace = opts.Namespace
+	diss.timeout = opts.DisseminationTimeout
 
 	if diss.store == nil {
 		diss.store = store.New(store.Options{
@@ -205,11 +207,13 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 	defer d.wg.Wait()
 
 	for _, s := range d.streams {
-		s.loop.Close(&loops.StreamShutdown{
-			Error: shutdown.Error,
-		})
+		go func(s *streamConn) {
+			s.loop.Close(&loops.StreamShutdown{
+				Error: shutdown.Error,
+			})
 
-		stream.StreamLoopFactory.CacheLoop(s.loop)
+			stream.StreamLoopFactory.CacheLoop(s.loop)
+		}(s)
 	}
 
 	clear(d.streams)
@@ -234,7 +238,8 @@ func (d *disseminator) handleTimeout(timeout *loops.DisseminationTimeout) {
 			StreamIDx: idx,
 			Error: status.Errorf(
 				codes.DeadlineExceeded,
-				"dissemination timeout for version %d",
+				"dissemination timeout after %s for version %d",
+				d.timeout,
 				timeout.Version,
 			),
 		})

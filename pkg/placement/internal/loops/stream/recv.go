@@ -15,7 +15,6 @@ package stream
 
 import (
 	"github.com/dapr/dapr/pkg/placement/internal/loops"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 // recvLoop is the main loop for receiving messages from the stream. It handles
@@ -45,15 +44,10 @@ func (s *stream) recv() error {
 		return err
 	}
 
-	s.loop.Enqueue(resp)
-
-	return nil
-}
-
-// handleReceive processes incoming messages from the stream.
-func (s *stream) handleRecive(resp *v1pb.Host) {
 	s.nsLoop.Enqueue(&loops.ReportedHost{
 		Host:      resp,
 		StreamIDx: s.idx,
 	})
+
+	return nil
 }
