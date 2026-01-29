@@ -34,6 +34,8 @@ func (s *stream) handleLock(version uint64) error {
 
 	s.currentVersion = ptr.Of(version)
 
+	log.Debugf("Sending LOCK for version %d to stream %d", version, s.idx)
+
 	return s.channel.Send(&v1pb.PlacementOrder{
 		Operation: operationLock,
 		Version:   version,
@@ -46,6 +48,8 @@ func (s *stream) handleUpdate(version uint64, tables *v1pb.PlacementTables) erro
 	if s.currentVersion == nil || *s.currentVersion != version {
 		return nil
 	}
+
+	log.Debugf("Sending UPDATE for version %d to stream %d", version, s.idx)
 
 	return s.channel.Send(&v1pb.PlacementOrder{
 		Operation: operationUpdate,
@@ -60,6 +64,8 @@ func (s *stream) handleUnlock(version uint64) error {
 	if s.currentVersion == nil || *s.currentVersion != version {
 		return nil
 	}
+
+	log.Debugf("Sending UNLOCK for version %d to stream %d", version, s.idx)
 
 	return s.channel.Send(&v1pb.PlacementOrder{
 		Operation: operationUnlock,

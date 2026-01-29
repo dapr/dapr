@@ -85,6 +85,6 @@ func (l *lock) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(serr)
 		require.True(t, ok)
 		assert.Equal(t, codes.DeadlineExceeded, s.Code())
-		assert.Equal(t, "dissemination timeout for version 1", s.Message())
+		assert.Equal(t, "dissemination timeout after 1s for version 1", s.Message())
 	}
 }
