@@ -142,22 +142,18 @@ func (r *router) CallStream(ctx context.Context,
 }
 
 func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
-	if !req.SkipLock {
-		var cancel context.CancelFunc
-		var err error
-		ctx, cancel, err = r.placement.Lock(ctx)
-		if err != nil {
-			return backoff.Permanent(err)
-		}
-		defer cancel()
-	}
-
-	lar, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+	lar, cctx, cancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.ActorType,
 		ActorID:   req.ActorID,
 	})
 	if err != nil {
 		return err
+	}
+	if req.SkipLock {
+		cancel(nil)
+	} else {
+		defer cancel(nil)
+		ctx = cctx
 	}
 
 	if !lar.Local {
@@ -198,22 +194,19 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	_, isDaprRemote := req.GetMetadata()["X-Dapr-Remote"]
 	_, isAPICall := req.GetMetadata()["Dapr-API-Call"]
 
-	if isAPICall || isDaprRemote {
-		var cancel context.CancelFunc
-		var err error
-		ctx, cancel, err = r.placement.Lock(ctx)
-		if err != nil {
-			return nil, backoff.Permanent(err)
-		}
-		defer cancel()
-	}
-
-	lar, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+	lar, cctx, cancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup actor: %w", err)
+	}
+
+	if isAPICall || isDaprRemote {
+		defer cancel(nil)
+		ctx = cctx
+	} else {
+		cancel(nil)
 	}
 
 	if lar.Local {
@@ -319,19 +312,14 @@ func (r *router) callStream(ctx context.Context,
 	req *internalv1pb.InternalInvokeRequest,
 	stream func(*internalv1pb.InternalInvokeResponse) (bool, error),
 ) error {
-	ctx, pcancel, err := r.placement.Lock(ctx)
-	if err != nil {
-		return backoff.Permanent(err)
-	}
-	defer pcancel()
-
-	lar, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
+	lar, ctx, pcancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
 		return err
 	}
+	defer pcancel(nil)
 
 	if !lar.Local {
 		// If this is a dapr-dapr call and the actor didn't pass the local check

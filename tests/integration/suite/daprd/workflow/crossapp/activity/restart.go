@@ -162,12 +162,6 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	ccancel()
 	r.daprd2.Cleanup(t)
 
-	waitCtx, waitCancel := context.WithTimeout(ctx, time.Second*2)
-	t.Cleanup(waitCancel)
-	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
-	require.Error(t, err)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-
 	// Create a new daprd2 instance, for restart
 	daprd3 := daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),

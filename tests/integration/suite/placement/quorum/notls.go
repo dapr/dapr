@@ -21,8 +21,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	grpcinsecure "google.golang.org/grpc/credentials/insecure"
 
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -63,51 +61,35 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	n.places[1].WaitUntilRunning(t, ctx)
 	n.places[2].WaitUntilRunning(t, ctx)
 
-	var stream v1pb.Placement_ReportDaprStatusClient
+	var leader *placement.Placement
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		for _, p := range []*placement.Placement{n.places[0], n.places[1], n.places[2]} {
+			if p.IsLeader(t, ctx) {
+				leader = p
+				break
+			}
+		}
+		assert.NotNil(c, leader, "no leader found")
+	}, time.Second*20, time.Millisecond*10)
 
-	// Try connecting to each placement until one succeeds,
-	// indicating that a leader has been elected
-	j := -1
-	require.Eventually(t, func() bool {
-		j++
-		if j >= 3 {
-			j = 0
-		}
-		host := n.places[j].Address()
-		//nolint:staticcheck
-		conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
-			grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
-		)
-		if err != nil {
-			return false
-		}
-		t.Cleanup(func() { require.NoError(t, conn.Close()) })
-		client := v1pb.NewPlacementClient(conn)
+	require.NotNil(t, leader, "no leader found")
 
-		stream, err = client.ReportDaprStatus(ctx)
-		if err != nil {
-			return false
-		}
-		err = stream.Send(new(v1pb.Host))
-		if err != nil {
-			return false
-		}
-		_, err = stream.Recv()
-		if err != nil {
-			return false
-		}
-		return true
-	}, time.Second*10, time.Millisecond*10)
-
-	err := stream.Send(&v1pb.Host{
-		Name:     "app-1",
-		Port:     1234,
-		Load:     1,
-		Entities: []string{"entity-1", "entity-2"},
-		Id:       "app-1",
-		Pod:      "pod-1",
-	})
+	client := leader.Client(t, ctx)
+	stream, err := client.ReportDaprStatus(ctx)
 	require.NoError(t, err)
+
+	for range 3 {
+		err := stream.Send(&v1pb.Host{
+			Name:      "app-1",
+			Port:      1234,
+			Load:      1,
+			Entities:  []string{"entity-1", "entity-2"},
+			Id:        "app-1",
+			Pod:       "pod-1",
+			Namespace: "default",
+		})
+		require.NoError(t, err)
+	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		o, err := stream.Recv()

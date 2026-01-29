@@ -47,7 +47,6 @@ type Options struct {
 
 // connections is a control loop that creates and manages stream connections,
 // piping trigger requests.
-// TODO: @joshvanl: use a sync.Pool cache
 type connections struct {
 	cron   api.Interface
 	nsLoop loop.Interface[loops.Event]
@@ -158,6 +157,7 @@ func (c *connections) handleShutdown() {
 	clear(c.streams)
 
 	loopFactory.CacheLoop(c.loop)
+	connsCache.Put(c)
 }
 
 // getStreamLoop returns a stream loop from the pool based on the metadata.

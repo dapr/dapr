@@ -176,6 +176,9 @@ func (f *second) Run(t *testing.T, ctx context.Context) {
 			})
 			require.NoError(t, err)
 
+			_, err = stream.Recv()
+			require.NoError(t, err)
+
 			err = stream.Send(&v1pb.Host{
 				Id:        "app-1",
 				Namespace: "default",
@@ -184,7 +187,6 @@ func (f *second) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 
 			_, err = stream.Recv()
-
 			if tc.exp {
 				require.NoError(t, err)
 				return
