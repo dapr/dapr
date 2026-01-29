@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
@@ -135,7 +136,9 @@ func Test_HaltNonHosted(t *testing.T) {
 
 	assert.Equal(t, 7, mapLen(ff))
 
-	require.NoError(t, fact.HaltNonHosted(t.Context()))
+	require.NoError(t, fact.HaltNonHosted(t.Context(), func(r *api.LookupActorRequest) bool {
+		return pl.IsActorHosted(t.Context(), r.ActorType, r.ActorID)
+	}))
 	assert.Equal(t, 4, mapLen(ff))
 }
 

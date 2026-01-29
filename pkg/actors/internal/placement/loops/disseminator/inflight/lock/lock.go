@@ -28,7 +28,7 @@ type Claim struct {
 	Cancel  context.CancelCauseFunc
 }
 
-type Aquire struct {
+type Acquire struct {
 	Context context.Context
 	RespCh  chan *Claim
 }
@@ -60,8 +60,8 @@ func New() loop.Interface[Event] {
 
 func (l *lock) Handle(_ context.Context, event Event) error {
 	switch e := event.(type) {
-	case *Aquire:
-		l.handleAquire(e)
+	case *Acquire:
+		l.handleAcquire(e)
 	case *releaseClaim:
 		l.handleRelease(e)
 	case *CloseLock:
@@ -96,7 +96,7 @@ func (l *lock) handleRelease(release *releaseClaim) {
 	delete(l.acquires, release.idx)
 }
 
-func (l *lock) handleAquire(event *Aquire) {
+func (l *lock) handleAcquire(event *Acquire) {
 	idx := l.idx
 	l.idx++
 

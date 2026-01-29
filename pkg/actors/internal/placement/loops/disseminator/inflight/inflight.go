@@ -102,7 +102,7 @@ func (i *Inflight) Unlock(ctx context.Context) {
 	i.acquires = []func(){}
 }
 
-func (i *Inflight) Aquire(lu *loops.LockRequest) {
+func (i *Inflight) Acquire(lu *loops.LockRequest) {
 	// If still locked, queue the request.
 	if i.lock == nil {
 		i.acquires = append(i.acquires, func() {
@@ -114,7 +114,7 @@ func (i *Inflight) Aquire(lu *loops.LockRequest) {
 	lu.Response <- i.getLockResponse(lu)
 }
 
-func (i *Inflight) AquireLookup(lu *loops.LookupRequest) {
+func (i *Inflight) AcquireLookup(lu *loops.LookupRequest) {
 	// If still locked, queue the request.
 	if i.lock == nil {
 		i.acquires = append(i.acquires, func() {
@@ -128,7 +128,7 @@ func (i *Inflight) AquireLookup(lu *loops.LookupRequest) {
 
 func (i *Inflight) getLockResponse(lu *loops.LockRequest) *loops.LockResponse {
 	// TODO: @joshvanl, cache.
-	aq := &lock.Aquire{
+	aq := &lock.Acquire{
 		Context: lu.Context,
 		RespCh:  make(chan *lock.Claim),
 	}
@@ -143,7 +143,7 @@ func (i *Inflight) getLockResponse(lu *loops.LockRequest) *loops.LockResponse {
 
 func (i *Inflight) getLookupResponse(lu *loops.LookupRequest) *loops.LookupResponse {
 	// TODO: @joshvanl, cache.
-	aq := &lock.Aquire{
+	aq := &lock.Acquire{
 		Context: lu.Context,
 		RespCh:  make(chan *lock.Claim),
 	}

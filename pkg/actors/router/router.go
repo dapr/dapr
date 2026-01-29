@@ -142,20 +142,6 @@ func (r *router) CallStream(ctx context.Context,
 }
 
 func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
-	fmt.Printf(">>CALLING REMINDER %s - %s\n", req.ActorType, req.ActorID)
-	defer func() {
-		fmt.Printf("<<CALLED REMINDER %s - %s\n", req.ActorType, req.ActorID)
-	}()
-	//if !req.SkipLock {
-	//	var cancel context.CancelFunc
-	//	var err error
-	//	ctx, cancel, err = r.placement.Lock(ctx)
-	//	if err != nil {
-	//		return backoff.Permanent(err)
-	//	}
-	//	defer cancel()
-	//}
-
 	lar, cctx, cancel, err := r.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.ActorType,
 		ActorID:   req.ActorID,
@@ -204,10 +190,6 @@ func (r *router) callReminder(ctx context.Context, req *api.Reminder) error {
 }
 
 func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	fmt.Printf(">>CALLING ACTOR %s - %s\n", req.GetActor().GetActorType(), req.GetActor().GetActorId())
-	defer func() {
-		fmt.Printf("<<CALLED ACTOR %s - %s\n", req.GetActor().GetActorType(), req.GetActor().GetActorId())
-	}()
 	// If we are in a reentrancy which is local, skip the placement lock.
 	_, isDaprRemote := req.GetMetadata()["X-Dapr-Remote"]
 	_, isAPICall := req.GetMetadata()["Dapr-API-Call"]
@@ -217,7 +199,6 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
-		fmt.Printf("<<CALL LOOKUP ACTOR: (REMOTE: %v) %s (%s)\n", isDaprRemote, err, ctx.Err())
 		return nil, fmt.Errorf("failed to lookup actor: %w", err)
 	}
 
@@ -226,7 +207,6 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		ctx = cctx
 	} else {
 		cancel(nil)
-		fmt.Printf("<<CALL SKIP LOCK: (API CALL: %v, REMOTE: %v)\n", isAPICall, isDaprRemote)
 	}
 
 	if lar.Local {
@@ -234,7 +214,6 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 			var resp *internalv1pb.InternalInvokeResponse
 			resp, err = r.callLocalActor(ctx, req)
 			if err != nil {
-				fmt.Printf("<<CALL LOCAL ACTOR ERROR:\n", err)
 				if targetserrors.IsClosed(err) {
 					continue
 				}
@@ -254,8 +233,6 @@ func (r *router) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	if err == nil {
 		return res, nil
 	}
-
-	fmt.Printf(">>GOT REMOTE ACTOR ERROR: (ctx=%s) %s\n", ctx.Err(), err)
 
 	attempt := resiliency.GetAttempt(ctx)
 	s, ok := status.FromError(err)

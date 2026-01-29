@@ -197,7 +197,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		p.host.Entities = *recon.ActorTypes
 	}
 
-	log.Infof("Reporting initial host to placement service with initial types %v", p.host.Entities)
+	log.Infof("Reporting initial host to placement service with initial types %v", p.host.GetEntities())
 	p.dissLoop.Enqueue(&loops.ReportHost{
 		Host: proto.Clone(p.host).(*v1pb.Host),
 	})

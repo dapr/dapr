@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/channel/fake"
@@ -129,7 +130,9 @@ func Test_HaltNonHosted(t *testing.T) {
 
 	assert.Equal(t, 7, mapLen(ff))
 
-	require.NoError(t, fact.HaltNonHosted(t.Context()))
+	require.NoError(t, fact.HaltNonHosted(t.Context(), func(r *api.LookupActorRequest) bool {
+		return pl.IsActorHosted(t.Context(), r.ActorType, r.ActorID)
+	}))
 	assert.Equal(t, 4, mapLen(ff))
 }
 

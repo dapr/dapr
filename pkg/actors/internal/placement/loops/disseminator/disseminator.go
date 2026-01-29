@@ -106,7 +106,7 @@ func (d *disseminator) Handle(ctx context.Context, event loops.Event) error {
 	case *loops.LookupRequest:
 		d.handleLookupRequest(e)
 	case *loops.LockRequest:
-		d.handleAquireRequest(e)
+		d.handleAcquireRequest(e)
 	case *loops.ReportHost:
 		d.handleReportHost(e)
 	case *loops.StreamOrder:

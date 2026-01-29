@@ -24,7 +24,7 @@ func (d *disseminator) handleReportedHost(report *loops.ReportedHost) {
 	op := report.Host.Operation
 
 	// TODO: @joshvanl: remove block in v1.18
-	if report.Host.Operation == v1pb.HostOperation_UNKNOWN {
+	if report.Host.GetOperation() == v1pb.HostOperation_UNKNOWN {
 		// If the reported host has changes, treat it as a report.
 		if d.store.HostChanged(report.StreamIDx, report.Host) {
 			op = v1pb.HostOperation_REPORT

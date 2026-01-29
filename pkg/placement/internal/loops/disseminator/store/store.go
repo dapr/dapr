@@ -83,7 +83,6 @@ func (s *Store) StatePlacementTable(version uint64) *v1pb.StatePlacementTable {
 }
 
 func (s *Store) Set(streamIDx uint64, host *v1pb.Host) bool {
-	//nolint:protogetter
 	if !s.HostChanged(streamIDx, host) {
 		return false
 	}
@@ -100,7 +99,7 @@ func (s *Store) HostChanged(streamIDx uint64, host *v1pb.Host) bool {
 		return true
 	}
 
-	return !(slices.Equal(existing.Entities, host.Entities) &&
+	return !(slices.Equal(existing.GetEntities(), host.GetEntities()) &&
 		host.GetId() == existing.GetId() &&
 		host.GetNamespace() == existing.GetNamespace())
 }

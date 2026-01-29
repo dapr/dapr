@@ -30,11 +30,11 @@ const (
 )
 
 func (d *disseminator) handleLookupRequest(req *loops.LookupRequest) {
-	d.inflight.AquireLookup(req)
+	d.inflight.AcquireLookup(req)
 }
 
-func (d *disseminator) handleAquireRequest(req *loops.LockRequest) {
-	d.inflight.Aquire(req)
+func (d *disseminator) handleAcquireRequest(req *loops.LockRequest) {
+	d.inflight.Acquire(req)
 }
 
 func (d *disseminator) handleReportHost(report *loops.ReportHost) {
@@ -47,9 +47,9 @@ func (d *disseminator) handleReportHost(report *loops.ReportHost) {
 }
 
 func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder) error {
-	log.Debugf("Handling placement order=%s version=%d", order.Order.Operation, order.Order.GetVersion())
+	log.Debugf("Handling placement order=%s version=%d", order.Order.GetOperation(), order.Order.GetVersion())
 
-	switch order.Order.Operation {
+	switch order.Order.GetOperation() {
 	case operationLock:
 		d.currentOperation = v1pb.HostOperation_LOCK
 		d.currentVersion = order.Order.GetVersion()
@@ -66,7 +66,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 
 	case operationUpdate:
 		if d.currentOperation != v1pb.HostOperation_LOCK {
-			return fmt.Errorf("invalid operation sequence: expected LOCK before UPDATE")
+			return errors.New("invalid operation sequence: expected LOCK before UPDATE")
 		}
 		if d.currentVersion != order.Order.GetVersion() {
 			return fmt.Errorf("version mismatch: expected %d, got %d",
@@ -88,7 +88,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 
 	case operationUnlock:
 		if d.currentOperation != v1pb.HostOperation_UPDATE {
-			return fmt.Errorf("invalid operation sequence: expected UPDATE before UNLOCK")
+			return errors.New("invalid operation sequence: expected UPDATE before UNLOCK")
 		}
 		if d.currentVersion != order.Order.GetVersion() {
 			return fmt.Errorf("version mismatch: expected %d, got %d",
@@ -98,7 +98,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		}
 
 		if err := d.actorTable.HaltNonHosted(ctx, d.inflight.IsActorHostedNoLock); err != nil {
-			fmt.Errorf("error draining non-hosted actors: %s", err)
+			log.Errorf("Error draining non-hosted actors: %s", err)
 		}
 		d.inflight.Unlock(ctx)
 
@@ -120,7 +120,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		d.healthTarget.Ready()
 
 	default:
-		return fmt.Errorf("unknown operation: %s", order.Order.Operation)
+		return fmt.Errorf("unknown operation: %s", order.Order.GetOperation())
 	}
 
 	return nil
