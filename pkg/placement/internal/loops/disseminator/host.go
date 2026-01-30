@@ -32,6 +32,12 @@ func (d *disseminator) handleReportedHost(report *loops.ReportedHost) {
 			if d.currentOperation == v1pb.HostOperation_REPORT {
 				// Special case to ensure old clients become ready when batching a
 				// dissemination.
+				stream, ok := d.streams[report.StreamIDx]
+				if ok {
+					stream.loop.Enqueue(&loops.DisseminateLock{
+						Version: d.currentVersion,
+					})
+				}
 				return
 			}
 			// Special case old clients- this always moves the lock forward.
