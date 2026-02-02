@@ -62,7 +62,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	n.places[2].WaitUntilRunning(t, ctx)
 
 	var leader *placement.Placement
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		for _, p := range []*placement.Placement{n.places[0], n.places[1], n.places[2]} {
 			if p.IsLeader(t, ctx) {
 				leader = p
@@ -71,8 +71,6 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		}
 		assert.NotNil(c, leader, "no leader found")
 	}, time.Second*20, time.Millisecond*10)
-
-	require.NotNil(t, leader, "no leader found")
 
 	client := leader.Client(t, ctx)
 	stream, err := client.ReportDaprStatus(ctx)

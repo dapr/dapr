@@ -151,7 +151,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	var leader *placement.Placement
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		for _, p := range []*placement.Placement{j.places[0], j.places[1], j.places[2]} {
 			if p.IsLeader(t, ctx) {
 				leader = p
@@ -160,7 +160,6 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		}
 		assert.NotNil(c, leader, "no leader found")
 	}, time.Second*20, time.Millisecond*10)
-	require.NotNil(t, leader, "no leader found")
 
 	conn, cerr := grpc.DialContext(ctx, leader.Address(), grpc.WithBlock(), //nolint:staticcheck
 		grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID), //nolint:staticcheck
