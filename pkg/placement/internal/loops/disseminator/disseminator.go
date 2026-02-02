@@ -99,6 +99,7 @@ func New(opts Options) loop.Interface[loops.Event] {
 	diss.timeout = opts.DisseminationTimeout
 
 	diss.waitingToDisseminate = diss.waitingToDisseminate[:0]
+	diss.waitingToDelete = nil
 
 	if diss.store == nil {
 		diss.store = store.New(store.Options{
