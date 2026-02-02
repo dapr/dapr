@@ -134,12 +134,12 @@ func New(opts Options) Interface {
 	}
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
-	oworker := backend.NewOrchestrationWorker(
-		abackend,
-		executor,
-		wfBackendLogger,
-		topts...,
-	)
+	oworker := backend.NewOrchestrationWorker(backend.OrchestratorOptions{
+		Backend:  abackend,
+		Executor: executor,
+		Logger:   wfBackendLogger,
+		AppID:    opts.AppID,
+	}, topts...)
 
 	topts = nil
 	if opts.Spec.GetMaxConcurrentActivityInvocations() != nil {

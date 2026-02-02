@@ -32,7 +32,7 @@ type PendingTasksBackend interface {
 	// CompleteOrchestratorTask implements backend.Backend.
 	CompleteOrchestratorTask(ctx context.Context, response *protos.OrchestratorResponse) error
 	// WaitForActivityCompletion implements backend.Backend.
-	WaitForActivityCompletion(ctx context.Context, request *protos.ActivityRequest) (*protos.ActivityResponse, error)
+	WaitForActivityCompletion(request *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error)
 	// WaitForOrchestratorCompletion implements backend.Backend.
-	WaitForOrchestratorCompletion(ctx context.Context, request *protos.OrchestratorRequest) (*protos.OrchestratorResponse, error)
+	WaitForOrchestratorCompletion(request *protos.OrchestratorRequest) func(context.Context) (*protos.OrchestratorResponse, error)
 }
