@@ -32,7 +32,6 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.placement.server.loops.disseminator")
@@ -56,7 +55,7 @@ type Options struct {
 
 type streamConn struct {
 	loop         loop.Interface[loops.Event]
-	currentState *v1pb.HostOperation
+	currentState v1pb.HostOperation
 	hasActors    bool
 }
 
@@ -165,7 +164,7 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 
 	stream := &streamConn{
 		loop:         streamLoop,
-		currentState: nil,
+		currentState: v1pb.HostOperation_REPORT,
 		hasActors:    len(add.InitialHost.GetEntities()) > 0,
 	}
 
@@ -201,10 +200,13 @@ func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	})
 	stream.StreamLoopFactory.CacheLoop(s.loop)
 
+	d.timeoutQ.Dequeue(d.currentVersion)
 	d.currentVersion++
+	d.timeoutQ.Enqueue(d.currentVersion)
 	d.currentOperation = v1pb.HostOperation_LOCK
-	for _, s = range d.streams {
-		s.currentState = ptr.Of(v1pb.HostOperation_LOCK)
+
+	for _, s := range d.streams {
+		s.currentState = v1pb.HostOperation_REPORT
 		s.loop.Enqueue(&loops.DisseminateLock{
 			Version: d.currentVersion,
 		})

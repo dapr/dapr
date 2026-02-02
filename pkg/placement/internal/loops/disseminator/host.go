@@ -18,7 +18,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/placement/internal/loops"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/kit/ptr"
 )
 
 func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.ReportedHost) {
@@ -65,7 +64,7 @@ func (d *disseminator) doReport(streamIDx uint64, host *v1pb.Host) {
 	d.currentOperation = v1pb.HostOperation_LOCK
 
 	for _, s := range d.streams {
-		s.currentState = ptr.Of(v1pb.HostOperation_REPORT)
+		s.currentState = v1pb.HostOperation_REPORT
 		s.loop.Enqueue(&loops.DisseminateLock{
 			Version: d.currentVersion,
 		})
@@ -78,7 +77,7 @@ func (d *disseminator) handleReportedLock(streamIDx uint64) {
 		return
 	}
 
-	stream.currentState = ptr.Of(v1pb.HostOperation_LOCK)
+	stream.currentState = v1pb.HostOperation_LOCK
 
 	if d.allStreamsHaveState(v1pb.HostOperation_LOCK) {
 		// All streams have locked, move to update phase.
@@ -99,7 +98,7 @@ func (d *disseminator) handleReportedUpdate(streamIDx uint64) {
 		return
 	}
 
-	stream.currentState = ptr.Of(v1pb.HostOperation_UPDATE)
+	stream.currentState = v1pb.HostOperation_UPDATE
 
 	if d.allStreamsHaveState(v1pb.HostOperation_UPDATE) {
 		// All streams have updated, dissemination is complete, send out unlocks.
@@ -119,7 +118,7 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 		return
 	}
 
-	stream.currentState = ptr.Of(v1pb.HostOperation_UNLOCK)
+	stream.currentState = v1pb.HostOperation_UNLOCK
 
 	if d.allStreamsHaveState(v1pb.HostOperation_UNLOCK) {
 		d.currentOperation = v1pb.HostOperation_REPORT
@@ -139,7 +138,7 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 
 func (d *disseminator) allStreamsHaveState(state v1pb.HostOperation) bool {
 	for _, stream := range d.streams {
-		if stream.currentState == nil || *stream.currentState != state {
+		if stream.currentState != state {
 			return false
 		}
 	}
