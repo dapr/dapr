@@ -126,5 +126,7 @@ func (m *mtls) establishStream(t *testing.T, ctx context.Context, firstMessage *
 		return nil, err
 	}
 
+	_, err = stream.Recv()
+
 	return stream, err
 }
