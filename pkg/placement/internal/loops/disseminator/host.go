@@ -31,11 +31,13 @@ func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.Rep
 
 	//nolint:protogetter
 	if report.Host.Version != nil && *report.Host.Version < d.currentVersion {
-		log.Debugf("Ignoring report from stream %d - old version %d (current %d)", report.StreamIDx, *report.Host.Version, d.currentVersion)
+		log.Debugf("Ignoring report from stream %s:%d - old version %d (current %d)",
+			d.namespace, report.StreamIDx, *report.Host.Version, d.currentVersion)
 		return
 	}
 
-	log.Debugf("Received report from stream (idx:%d) (op=%s) (ver=%d)", report.StreamIDx, op.String(), d.currentVersion)
+	log.Debugf("Received report from stream (idx:%d) (ns=%s) (appID=%s) (op=%s) (ver=%d)",
+		report.StreamIDx, d.namespace, report.Host.Id, op.String(), d.currentVersion)
 
 	switch op {
 	case v1pb.HostOperation_REPORT:
@@ -54,7 +56,8 @@ func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.Rep
 
 func (d *disseminator) doReport(streamIDx uint64, host *v1pb.Host) {
 	if !d.store.Set(streamIDx, host) {
-		log.Debugf("Ignoring report from stream %d - no changes", streamIDx)
+		log.Debugf("Ignoring report from stream %s:%d - no changes",
+			d.namespace, streamIDx)
 		return
 	}
 
@@ -124,7 +127,7 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 		d.currentOperation = v1pb.HostOperation_REPORT
 
 		d.timeoutQ.Dequeue(d.currentVersion)
-		log.Debugf("Dissemination of version %d complete", d.currentVersion)
+		log.Debugf("Dissemination of version %d in %s complete", d.currentVersion, d.namespace)
 
 		// If there were connections deleted while we were disseminating, delete
 		// them now in a new dissemination cycle.

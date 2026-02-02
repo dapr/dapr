@@ -76,11 +76,10 @@ type disseminator struct {
 	streamIDx uint64
 	wg        sync.WaitGroup
 
-	currentOperation v1pb.HostOperation
-	currentVersion   uint64
-	connCount        atomic.Int64
-	actorConnCount   atomic.Int64
-
+	currentOperation     v1pb.HostOperation
+	currentVersion       uint64
+	connCount            atomic.Int64
+	actorConnCount       atomic.Int64
 	waitingToDisseminate []*loops.ConnAdd
 	waitingToDelete      []uint64
 }
@@ -202,6 +201,7 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 
 	clear(d.streams)
 	d.waitingToDisseminate = nil
+	d.waitingToDelete = nil
 	d.store.DeleteAll()
 	d.timeoutQ.Close()
 
@@ -226,17 +226,15 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 
 	log.Warnf("Dissemination timeout for version %d", timeout.Version)
 	for idx, s := range d.streams {
-		monitoring.RecordRuntimesCount(d.connCount.Add(-1), d.namespace)
-		if s.hasActors {
-			monitoring.RecordActorRuntimesCount(d.actorConnCount.Add(-1), d.namespace)
-		}
-
 		d.store.Delete(idx)
 		s.loop.Close(&loops.StreamShutdown{
 			Error: err,
 		})
 		stream.StreamLoopFactory.CacheLoop(s.loop)
 	}
+
+	monitoring.RecordRuntimesCount(0, d.namespace)
+	monitoring.RecordActorRuntimesCount(0, d.namespace)
 
 	clear(d.streams)
 	d.currentVersion++
@@ -246,11 +244,5 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 		add.Cancel(err)
 	}
 
-	if len(d.waitingToDisseminate) == 0 {
-		return
-	}
-
-	needs := d.waitingToDisseminate[0]
-	d.waitingToDisseminate = d.waitingToDisseminate[1:]
-	d.handleAdd(ctx, needs)
+	d.waitingToDisseminate = nil
 }
