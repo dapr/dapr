@@ -71,7 +71,15 @@ const (
 	DefaultAppHealthCheckPath = "/healthz"
 	// DefaultChannelAddress is the default local network address that user application listen on.
 	DefaultChannelAddress = "127.0.0.1"
+
+	// DisableSubscribeInitEndpoint is the config value to disable subscribe endpoint.
+	DisableSubscribeInitEndpoint = "subscribe"
+	// DisableConfigInitEndpoint is the config value to disable config endpoint.
+	DisableConfigInitEndpoint = "config"
 )
+
+// AllowedDisableInitEndpoints is the list of allowed init endpoints to disable.
+var AllowedDisableInitEndpoints = []string{DisableSubscribeInitEndpoint, DisableConfigInitEndpoint}
 
 // Config holds the Dapr Runtime configuration.
 type Config struct {
@@ -119,6 +127,7 @@ type Config struct {
 	Security                      security.Handler
 	Healthz                       healthz.Healthz
 	WorkflowEventSink             orchestrator.EventSink
+	DisableInitEndpoints          []string
 }
 
 type internalConfig struct {
@@ -156,6 +165,7 @@ type internalConfig struct {
 	healthz                      healthz.Healthz
 	outboundHealthz              healthz.Healthz
 	workflowEventSink            orchestrator.EventSink
+	disableInitEndpoints         []string
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -454,6 +464,21 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	default:
 		return nil, fmt.Errorf("invalid value for 'app-protocol': %v", c.AppProtocol)
 	}
+
+	filtered := make([]string, 0, len(c.DisableInitEndpoints))
+
+	for _, e := range c.DisableInitEndpoints {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e == "" {
+			continue
+		}
+		if ok := utils.Contains(AllowedDisableInitEndpoints, e); !ok {
+			return nil, fmt.Errorf("invalid value for 'disable-init-endpoints': %v", e)
+		}
+		filtered = append(filtered, e)
+	}
+
+	intc.disableInitEndpoints = filtered
 
 	intc.apiListenAddresses = strings.Split(c.DaprAPIListenAddresses, ",")
 	if len(intc.apiListenAddresses) == 0 {
