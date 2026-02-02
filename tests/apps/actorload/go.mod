@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/actorload
 
-go 1.24.11
+go 1.24.12
 
 require (
 	fortio.org/fortio v1.6.8
