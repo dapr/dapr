@@ -119,6 +119,8 @@ func (m *mtls) establishStream(t *testing.T, ctx context.Context, firstMessage *
 	client := v1pb.NewPlacementClient(conn)
 
 	stream, err := client.ReportDaprStatus(ctx)
+	require.NoError(t, err)
+
 	err = stream.Send(firstMessage)
 	if err != nil {
 		return nil, err
