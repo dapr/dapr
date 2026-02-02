@@ -48,7 +48,7 @@ const (
 	unlockOperation = "unlock"
 	updateOperation = "update"
 
-	statusReportHeartbeatInterval = 1 * time.Second
+	statusReportHeartbeatInterval = time.Second / 4
 )
 
 type Interface interface {
