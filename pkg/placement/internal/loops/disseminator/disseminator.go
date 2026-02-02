@@ -98,7 +98,7 @@ func New(opts Options) loop.Interface[loops.Event] {
 	diss.namespace = opts.Namespace
 	diss.timeout = opts.DisseminationTimeout
 
-	diss.waitingToDisseminate = diss.waitingToDisseminate[:0]
+	diss.waitingToDisseminate = nil
 	diss.waitingToDelete = nil
 
 	if diss.store == nil {
@@ -201,7 +201,7 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 	}
 
 	clear(d.streams)
-	d.waitingToDisseminate = d.waitingToDisseminate[:0]
+	d.waitingToDisseminate = nil
 	d.store.DeleteAll()
 	d.timeoutQ.Close()
 

@@ -39,6 +39,10 @@ func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	})
 	stream.StreamLoopFactory.CacheLoop(s.loop)
 
+	if len(d.streams) == 0 {
+		return
+	}
+
 	if d.currentOperation != v1pb.HostOperation_REPORT {
 		d.waitingToDelete = append(d.waitingToDelete, closeStream.StreamIDx)
 		return
