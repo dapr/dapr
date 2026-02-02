@@ -245,4 +245,5 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 	}
 
 	d.waitingToDisseminate = nil
+	d.waitingToDelete = nil
 }
