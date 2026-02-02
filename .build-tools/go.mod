@@ -26,7 +26,7 @@ require (
 	github.com/opencontainers/image-spec v1.0.3-0.20220729202839-6ad7100eb087 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/sirupsen/logrus v1.9.0 // indirect
+	github.com/sirupsen/logrus v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/vbatts/tar-split v0.11.2 // indirect
 	golang.org/x/sync v0.3.0 // indirect
