@@ -126,13 +126,35 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 		d.timeoutQ.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d complete", d.currentVersion)
 
-		if len(d.waitingToDisseminate) == 0 {
+		// If there were connections deleted while we were disseminating, delete
+		// them now in a new dissemination cycle.
+		if len(d.waitingToDelete) > 0 {
+			for _, toDelete := range d.waitingToDelete {
+				d.store.Delete(toDelete)
+			}
+
+			d.waitingToDelete = nil
+			d.currentVersion++
+			d.timeoutQ.Enqueue(d.currentVersion)
+			d.currentOperation = v1pb.HostOperation_LOCK
+
+			for _, s := range d.streams {
+				s.currentState = v1pb.HostOperation_REPORT
+				s.loop.Enqueue(&loops.DisseminateLock{
+					Version: d.currentVersion,
+				})
+			}
+
 			return
 		}
 
-		needs := d.waitingToDisseminate[0]
-		d.waitingToDisseminate = d.waitingToDisseminate[1:]
-		d.handleAdd(ctx, needs)
+		// If there are new connections to add while we were disseminating, add
+		// them now in a new dissemination cycle.
+		if len(d.waitingToDisseminate) > 0 {
+			needs := d.waitingToDisseminate[0]
+			d.waitingToDisseminate = d.waitingToDisseminate[1:]
+			d.handleAdd(ctx, needs)
+		}
 	}
 }
 

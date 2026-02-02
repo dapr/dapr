@@ -82,6 +82,7 @@ type disseminator struct {
 	actorConnCount   atomic.Int64
 
 	waitingToDisseminate []*loops.ConnAdd
+	waitingToDelete      []uint64
 }
 
 func New(opts Options) loop.Interface[loops.Event] {
@@ -178,39 +179,6 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 		Host:      add.InitialHost,
 		StreamIDx: streamIDx,
 	})
-}
-
-// handleCloseStream handles a close stream request.
-func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
-	s, ok := d.streams[closeStream.StreamIDx]
-	if !ok {
-		// Ignore old streams.
-		return
-	}
-
-	monitoring.RecordRuntimesCount(d.connCount.Add(-1), d.namespace)
-	if s.hasActors {
-		monitoring.RecordActorRuntimesCount(d.actorConnCount.Add(-1), d.namespace)
-	}
-
-	d.store.Delete(closeStream.StreamIDx)
-	delete(d.streams, closeStream.StreamIDx)
-	s.loop.Close(&loops.StreamShutdown{
-		Error: closeStream.Error,
-	})
-	stream.StreamLoopFactory.CacheLoop(s.loop)
-
-	d.timeoutQ.Dequeue(d.currentVersion)
-	d.currentVersion++
-	d.timeoutQ.Enqueue(d.currentVersion)
-	d.currentOperation = v1pb.HostOperation_LOCK
-
-	for _, s := range d.streams {
-		s.currentState = v1pb.HostOperation_REPORT
-		s.loop.Enqueue(&loops.DisseminateLock{
-			Version: d.currentVersion,
-		})
-	}
 }
 
 // handleShutdown handles the shutdown of the streams.
