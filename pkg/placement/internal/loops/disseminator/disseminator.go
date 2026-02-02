@@ -129,7 +129,7 @@ func (d *disseminator) Handle(ctx context.Context, event loops.Event) error {
 	case *loops.Shutdown:
 		d.handleShutdown(e)
 	case *loops.DisseminationTimeout:
-		d.handleTimeout(e)
+		d.handleTimeout(ctx, e)
 	case *loops.NamespaceTableRequest:
 		d.handleTableRequest(e)
 	default:
@@ -240,7 +240,7 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 	dissCache.Put(d)
 }
 
-func (d *disseminator) handleTimeout(timeout *loops.DisseminationTimeout) {
+func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.DisseminationTimeout) {
 	if timeout.Version != d.currentVersion {
 		// Ignore old timeouts.
 		return
@@ -254,15 +254,32 @@ func (d *disseminator) handleTimeout(timeout *loops.DisseminationTimeout) {
 	)
 
 	log.Warnf("Dissemination timeout for version %d", timeout.Version)
-	for idx := range d.streams {
-		d.handleCloseStream(&loops.ConnCloseStream{
-			StreamIDx: idx,
-			Error:     err,
+	for idx, s := range d.streams {
+		monitoring.RecordRuntimesCount(d.connCount.Add(-1), d.namespace)
+		if s.hasActors {
+			monitoring.RecordActorRuntimesCount(d.actorConnCount.Add(-1), d.namespace)
+		}
+
+		d.store.Delete(idx)
+		s.loop.Close(&loops.StreamShutdown{
+			Error: err,
 		})
+		stream.StreamLoopFactory.CacheLoop(s.loop)
 	}
+
+	clear(d.streams)
+	d.currentVersion++
+	d.currentOperation = v1pb.HostOperation_REPORT
 
 	for _, add := range d.waitingToDisseminate {
 		add.Cancel(err)
 	}
-	d.waitingToDisseminate = d.waitingToDisseminate[:0]
+
+	if len(d.waitingToDisseminate) == 0 {
+		return
+	}
+
+	needs := d.waitingToDisseminate[0]
+	d.waitingToDisseminate = d.waitingToDisseminate[1:]
+	d.handleAdd(ctx, needs)
 }
