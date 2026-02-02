@@ -55,10 +55,9 @@ type Options struct {
 }
 
 type streamConn struct {
-	loop             loop.Interface[loops.Event]
-	currentState     *v1pb.HostOperation
-	hasActors        bool
-	sentDoubleUnlock uint64
+	loop         loop.Interface[loops.Event]
+	currentState *v1pb.HostOperation
+	hasActors    bool
 }
 
 // disseminator is a control loop that creates and manages stream connections,
@@ -82,6 +81,8 @@ type disseminator struct {
 	currentVersion   uint64
 	connCount        atomic.Int64
 	actorConnCount   atomic.Int64
+
+	waitingToDisseminate []*loops.ConnAdd
 }
 
 func New(opts Options) loop.Interface[loops.Event] {
@@ -96,6 +97,8 @@ func New(opts Options) loop.Interface[loops.Event] {
 	diss.actorConnCount.Store(0)
 	diss.namespace = opts.Namespace
 	diss.timeout = opts.DisseminationTimeout
+
+	diss.waitingToDisseminate = diss.waitingToDisseminate[:0]
 
 	if diss.store == nil {
 		diss.store = store.New(store.Options{
@@ -120,7 +123,7 @@ func (d *disseminator) Handle(ctx context.Context, event loops.Event) error {
 	case *loops.ConnAdd:
 		d.handleAdd(ctx, e)
 	case *loops.ReportedHost:
-		d.handleReportedHost(e)
+		d.handleReportedHost(ctx, e)
 	case *loops.ConnCloseStream:
 		d.handleCloseStream(e)
 	case *loops.Shutdown:
@@ -138,6 +141,12 @@ func (d *disseminator) Handle(ctx context.Context, event loops.Event) error {
 
 // handleAdd adds a stream to the namespaced disseminator.
 func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
+	// If we are currently disseminating a lock, queue this addition.
+	if d.currentOperation != v1pb.HostOperation_REPORT {
+		d.waitingToDisseminate = append(d.waitingToDisseminate, add)
+		return
+	}
+
 	streamIDx := d.streamIDx
 	d.streamIDx++
 
@@ -154,19 +163,19 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 		_ = streamLoop.Run(ctx)
 	}()
 
-	d.streams[streamIDx] = &streamConn{
+	stream := &streamConn{
 		loop:         streamLoop,
 		currentState: nil,
 		hasActors:    len(add.InitialHost.GetEntities()) > 0,
 	}
 
 	monitoring.RecordRuntimesCount(d.connCount.Add(1), add.InitialHost.GetNamespace())
-	if d.streams[streamIDx].hasActors {
+	if stream.hasActors {
 		monitoring.RecordActorRuntimesCount(d.actorConnCount.Add(1), add.InitialHost.GetNamespace())
 	}
 
-	add.InitialHost.Operation = v1pb.HostOperation_REPORT
-	d.handleReportedHost(&loops.ReportedHost{
+	d.streams[streamIDx] = stream
+	d.handleReportedHost(ctx, &loops.ReportedHost{
 		Host:      add.InitialHost,
 		StreamIDx: streamIDx,
 	})
@@ -216,7 +225,12 @@ func (d *disseminator) handleShutdown(shutdown *loops.Shutdown) {
 		}(s)
 	}
 
+	for _, wait := range d.waitingToDisseminate {
+		wait.Cancel(shutdown.Error)
+	}
+
 	clear(d.streams)
+	d.waitingToDisseminate = d.waitingToDisseminate[:0]
 	d.store.DeleteAll()
 	d.timeoutQ.Close()
 
@@ -232,16 +246,23 @@ func (d *disseminator) handleTimeout(timeout *loops.DisseminationTimeout) {
 		return
 	}
 
+	err := status.Errorf(
+		codes.DeadlineExceeded,
+		"dissemination timeout after %s for version %d",
+		d.timeout,
+		timeout.Version,
+	)
+
 	log.Warnf("Dissemination timeout for version %d", timeout.Version)
 	for idx := range d.streams {
 		d.handleCloseStream(&loops.ConnCloseStream{
 			StreamIDx: idx,
-			Error: status.Errorf(
-				codes.DeadlineExceeded,
-				"dissemination timeout after %s for version %d",
-				d.timeout,
-				timeout.Version,
-			),
+			Error:     err,
 		})
 	}
+
+	for _, add := range d.waitingToDisseminate {
+		add.Cancel(err)
+	}
+	d.waitingToDisseminate = d.waitingToDisseminate[:0]
 }

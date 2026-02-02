@@ -14,35 +14,20 @@ limitations under the License.
 package disseminator
 
 import (
+	"context"
+
 	"github.com/dapr/dapr/pkg/placement/internal/loops"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/kit/ptr"
 )
 
-func (d *disseminator) handleReportedHost(report *loops.ReportedHost) {
-	//nolint:protogetter
-	op := report.Host.Operation
+func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.ReportedHost) {
+	op := report.Host.GetOperation()
 
 	// TODO: @joshvanl: remove block in v1.18
-	if report.Host.GetOperation() == v1pb.HostOperation_UNKNOWN {
-		// If the reported host has changes, treat it as a report.
-		if d.store.HostChanged(report.StreamIDx, report.Host) {
-			op = v1pb.HostOperation_REPORT
-		} else {
-			if d.currentOperation == v1pb.HostOperation_REPORT {
-				// Special case to ensure old clients become ready when batching a
-				// dissemination.
-				stream, ok := d.streams[report.StreamIDx]
-				if ok {
-					stream.loop.Enqueue(&loops.DisseminateLock{
-						Version: d.currentVersion,
-					})
-				}
-				return
-			}
-			// Special case old clients- this always moves the lock forward.
-			op = d.currentOperation
-		}
+	if op == v1pb.HostOperation_UNKNOWN {
+		// Special case old clients- this always moves the lock forward.
+		op = d.currentOperation
 	}
 
 	//nolint:protogetter
@@ -57,14 +42,14 @@ func (d *disseminator) handleReportedHost(report *loops.ReportedHost) {
 	case v1pb.HostOperation_REPORT:
 		d.doReport(report.StreamIDx, report.Host)
 
-	case v1pb.HostOperation_UNLOCK:
-		d.handleReportedUnlock(report.StreamIDx)
-
 	case v1pb.HostOperation_LOCK:
 		d.handleReportedLock(report.StreamIDx)
 
 	case v1pb.HostOperation_UPDATE:
 		d.handleReportedUpdate(report.StreamIDx)
+
+	case v1pb.HostOperation_UNLOCK:
+		d.handleReportedUnlock(ctx, report.StreamIDx)
 	}
 }
 
@@ -94,7 +79,6 @@ func (d *disseminator) handleReportedLock(streamIDx uint64) {
 	}
 
 	stream.currentState = ptr.Of(v1pb.HostOperation_LOCK)
-	stream.sentDoubleUnlock = 0
 
 	if d.allStreamsHaveState(v1pb.HostOperation_LOCK) {
 		// All streams have locked, move to update phase.
@@ -116,7 +100,6 @@ func (d *disseminator) handleReportedUpdate(streamIDx uint64) {
 	}
 
 	stream.currentState = ptr.Of(v1pb.HostOperation_UPDATE)
-	stream.sentDoubleUnlock = 0
 
 	if d.allStreamsHaveState(v1pb.HostOperation_UPDATE) {
 		// All streams have updated, dissemination is complete, send out unlocks.
@@ -130,20 +113,27 @@ func (d *disseminator) handleReportedUpdate(streamIDx uint64) {
 	}
 }
 
-func (d *disseminator) handleReportedUnlock(streamIDx uint64) {
+func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint64) {
 	stream, ok := d.streams[streamIDx]
 	if !ok {
 		return
 	}
 
 	stream.currentState = ptr.Of(v1pb.HostOperation_UNLOCK)
-	stream.sentDoubleUnlock = 0
 
 	if d.allStreamsHaveState(v1pb.HostOperation_UNLOCK) {
 		d.currentOperation = v1pb.HostOperation_REPORT
 
 		d.timeoutQ.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d complete", d.currentVersion)
+
+		if len(d.waitingToDisseminate) == 0 {
+			return
+		}
+
+		needs := d.waitingToDisseminate[0]
+		d.waitingToDisseminate = d.waitingToDisseminate[1:]
+		d.handleAdd(ctx, needs)
 	}
 }
 

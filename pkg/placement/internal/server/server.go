@@ -73,7 +73,6 @@ type Server struct {
 	loop  loop.Interface[loops.Event]
 
 	isLeader atomic.Bool
-	readyCh  chan struct{}
 	shutdown atomic.Bool
 }
 
@@ -92,7 +91,6 @@ func New(opts Options) *Server {
 		}),
 		replicationFactor:  opts.ReplicationFactor,
 		disseminateTimeout: opts.DisseminateTimeout,
-		readyCh:            make(chan struct{}),
 	}
 }
 
@@ -133,7 +131,6 @@ func (s *Server) Run(ctx context.Context) error {
 		DisseminationTimeout: s.disseminateTimeout,
 	})
 
-	close(s.readyCh)
 	s.htarget.Ready()
 
 	return concurrency.NewRunnerManager(
@@ -171,12 +168,6 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) StatePlacementTables(ctx context.Context) (*v1pb.StatePlacementTables, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-s.readyCh:
-	}
-
 	if !s.isLeader.Load() {
 		return nil, status.Errorf(
 			codes.FailedPrecondition,
