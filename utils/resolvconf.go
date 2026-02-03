@@ -41,7 +41,7 @@ func GetKubeClusterDomainFromDNS() (string, error) {
 	}
 
 	clusterDomain := strings.TrimPrefix(cname, apiSvc)
-	clusterDomain = strings.TrimSuffix(clusterDomain, ".")
+	clusterDomain = strings.TrimLeft(clusterDomain, ".")
 
 	return clusterDomain, nil
 }
