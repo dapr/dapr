@@ -37,7 +37,7 @@ func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.Rep
 	}
 
 	log.Debugf("Received report from stream (idx:%d) (ns=%s) (appID=%s) (op=%s) (ver=%d)",
-		report.StreamIDx, d.namespace, report.Host.Id, op.String(), d.currentVersion)
+		report.StreamIDx, d.namespace, report.Host.GetId(), op.String(), d.currentVersion)
 
 	switch op {
 	case v1pb.HostOperation_REPORT:
