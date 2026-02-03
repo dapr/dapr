@@ -16,6 +16,7 @@ package utils
 import (
 	"bufio"
 	"bytes"
+	"net"
 	"os"
 	"regexp"
 	"sort"
@@ -30,6 +31,20 @@ const (
 )
 
 var searchRegexp = regexp.MustCompile(`^\s*search\s*(([^\s]+\s*)*)$`)
+
+func GetKubeClusterDomainFromDNS() (string, error) {
+	const apiSvc = "kubernetes.default.svc"
+
+	cname, err := net.LookupCNAME(apiSvc)
+	if err != nil {
+		return "", err
+	}
+
+	clusterDomain := strings.TrimPrefix(cname, apiSvc)
+	clusterDomain = strings.TrimSuffix(clusterDomain, ".")
+
+	return clusterDomain, nil
+}
 
 // GetKubeClusterDomain search KubeClusterDomain value from /etc/resolv.conf file.
 func GetKubeClusterDomain() (string, error) {

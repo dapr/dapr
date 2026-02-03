@@ -47,7 +47,7 @@ func config(opts Options) (*embed.Config, error) {
 		tld := opts.Security.ControlPlaneTrustDomain().String()
 		if opts.Mode == modes.KubernetesMode {
 			var err error
-			tldd, err := utils.GetKubeClusterDomain()
+			tldd, err := utils.GetKubeClusterDomainFromDNS()
 			if err != nil {
 				log.Errorf("Failed to get cluster domain, falling back to %q: %w", tld, err)
 			} else {
