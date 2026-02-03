@@ -99,6 +99,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 		Loop:    diss.loop,
 		Timeout: opts.DisseminationTimeout,
 	})
+	diss.cancel = opts.Cancel
 
 	diss.streamLoop = stream.New(ctx, stream.Options{
 		Channel:       opts.Channel,
