@@ -96,10 +96,11 @@ func (i *Inflight) Set(in *v1pb.PlacementTables) {
 
 func (i *Inflight) Unlock(ctx context.Context) {
 	// Recreate the lock to allow queued requests to proceed.
-	i.lock = lock.New()
+	lock := lock.New()
+	i.lock = lock
 	i.wg.Add(1)
 	go func() {
-		_ = i.lock.Run(ctx)
+		_ = lock.Run(ctx)
 		i.wg.Done()
 	}()
 
