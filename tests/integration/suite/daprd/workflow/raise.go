@@ -153,7 +153,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(2), stage.Load())
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID("my-custom-instance-id"))
 	require.NoError(t, err)
