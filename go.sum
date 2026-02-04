@@ -504,8 +504,6 @@ github.com/dapr/components-contrib/tests/certification v0.0.0-20251104160704-920
 github.com/dapr/components-contrib/tests/certification v0.0.0-20251104160704-920ad8a7b958/go.mod h1:IUB5RJv0Gj5qxsHjjhvEBIlxPka7cD7KAn/Coa2y27M=
 github.com/dapr/durabletask-go v0.11.0 h1:e9Ns/3a2b6JDKGuvksvx6gCHn7rd+nwZZyAXbg5Ley4=
 github.com/dapr/durabletask-go v0.11.0/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
-github.com/dapr/kit v0.16.2-0.20251124175541-3ac186dff64d h1:csljij9d1IO6u9nqbg+TuSRmTZ+OXT8G49yh6zie1yI=
-github.com/dapr/kit v0.16.2-0.20251124175541-3ac186dff64d/go.mod h1:40ZWs5P6xfYf7O59XgwqZkIyDldTIXlhTQhGop8QoSM=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -1092,6 +1090,8 @@ github.com/jonboulle/clockwork v0.5.0 h1:Hyh9A8u51kptdkR+cqRpT1EebBwTn1oK9YfGYbd
 github.com/jonboulle/clockwork v0.5.0/go.mod h1:3mZlmanh0g2NDKO5TWZVJAfofYk64M7XN3SzBPjZF60=
 github.com/josharian/intern v1.0.0 h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8HmY=
 github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
+github.com/joshvanl/kit v0.0.0-20260204143827-0d983cb00d38 h1:SUVCHNzQTB7aCeTVsyAj0dQsApoJBBpmNyBl9SzxJMI=
+github.com/joshvanl/kit v0.0.0-20260204143827-0d983cb00d38/go.mod h1:40ZWs5P6xfYf7O59XgwqZkIyDldTIXlhTQhGop8QoSM=
 github.com/jpillora/backoff v1.0.0/go.mod h1:J/6gKK9jxlEcS3zixgDgUAsiuZ7yrSoa/FX5e0EB2j4=
 github.com/json-iterator/go v1.1.5/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
 github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=

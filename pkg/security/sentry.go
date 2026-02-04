@@ -169,9 +169,32 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			jwtVal = ptr.Of(resp.GetJwt().GetValue())
 		}
 
+		var perAudiencesJwts map[string]string
+		for aud, jwtS := range resp.GetPerAudienceJwts() {
+			tkn, err := jwt.Parse([]byte(jwtS.GetValue()),
+				jwt.WithAcceptableSkew(5*time.Minute),
+				jwt.WithContext(ctx),
+				jwt.WithVerify(false))
+			if err != nil {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_parse")
+				return nil, fmt.Errorf("error parsing JWT: %w", err)
+			}
+
+			if len(tkn.Audience()) != 1 || aud != tkn.Audience()[0] {
+				diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("jwt_aud")
+				return nil, errors.New("JWT audience mismatch")
+			}
+
+			if perAudiencesJwts == nil {
+				perAudiencesJwts = make(map[string]string)
+			}
+			perAudiencesJwts[aud] = jwtS.GetValue()
+		}
+
 		return &spiffe.SVIDResponse{
 			X509Certificates: workloadcert,
 			JWT:              jwtVal,
+			PerAudienceJWT:   perAudiencesJwts,
 		}, nil
 	}
 

@@ -45,7 +45,7 @@ message SignCertificateRequest {
   string namespace = 4;
   // A PEM-encoded x509 CSR.
   bytes certificate_signing_request = 5;
-  // Name of the validator to use, if not the default for the environemtn. 
+  // Name of the validator to use, if not the default for the environment.
   TokenValidator token_validator = 6;
   // List of audiences for the JWT.
   repeated string jwt_audiences = 7;
@@ -65,4 +65,8 @@ message SignCertificateResponse {
   // issue JWTs (not requested). The JWT contains the same identity information
   // as the certificate and is signed by the same issuing authority.
   optional google.protobuf.StringValue jwt = 4;
+
+  // Map of audience to JWT token for authentication, providing a per audience
+  // JWT.
+  map<string, google.protobuf.StringValue> per_audience_jwts = 5;
 }
