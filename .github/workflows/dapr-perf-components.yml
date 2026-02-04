@@ -384,7 +384,7 @@ jobs:
           version: ${{ env.KUBECTLVER }}
         id: install
       - name: Set up Helm ${{ env.HELMVER }}
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELMVER }}
       - name: Login to Azure

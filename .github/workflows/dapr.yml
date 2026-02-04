@@ -665,7 +665,7 @@ jobs:
       contents: read
     steps:
       - name: Set up Helm ${{ env.HELMVER }}
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELMVER }}
       - name: Check out code into the Go module directory
