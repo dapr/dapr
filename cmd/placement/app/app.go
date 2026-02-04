@@ -14,6 +14,7 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 
@@ -113,7 +114,7 @@ func Run() {
 	if opts.MetadataEnabled {
 		healthzHandlers = append(healthzHandlers, healthzserver.Handler{
 			Path: "/placement/state",
-			Getter: func() ([]byte, error) {
+			Getter: func(context.Context) ([]byte, error) {
 				var tables *placement.PlacementTables
 				tables, err = placementService.GetPlacementTables()
 				if err != nil {
