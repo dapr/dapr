@@ -26,31 +26,67 @@ service Placement {
 message PlacementOrder {
   PlacementTables tables = 1;
   string operation = 2;
+
+  uint64 version = 3;
 }
 
 message PlacementTables {
   map<string, PlacementTable> entries = 1;
+
+  // TODO: @joshvanl: mark deprecated: use version in PlacementOrder version
+  // instead.
   string version = 2;
-  // Minimum observed version of the Actor APIs supported by connected runtimes
+
+  // TODO: @joshvanl: mark deprecated: not used
   uint32 api_level = 3;
+
   int64 replication_factor = 4;
 }
 
 message PlacementTable {
+  // TODO: @joshvanl: mark deprecated: hosts map is no longer used.
   map<uint64, string> hosts = 1;
+
+  // TODO: @joshvanl: mark deprecated: sorted_set is no longer used.
   repeated uint64 sorted_set = 2;
+
+  // TODO: @joshvanl: rename to hosts_map.
   map<string, Host> load_map = 3;
+
+  // TODO: @joshvanl: mark deprecated: total_load is no longer used.
   int64 total_load = 4;
 }
 
 message Host {
+  // TODO: @joshvanl: make name and port optional.
   string name = 1;
   int64 port = 2;
+
+  // TODO: @joshvanl: mark deprecated: load is no longer used.
   int64 load = 3;
+
   repeated string entities = 4;
+
   string id = 5;
+
+  // TODO: @joshvanl: mark deprecated: not used
   string pod = 6;
-  // Version of the Actor APIs supported by the Dapr runtime
   uint32 api_level = 7;
+
   string namespace = 8;
+
+  // operation indicates the type of operation the host is responding to.
+  HostOperation operation = 9;
+
+  // version made optional to check for presence. Version should match the
+  // current operation table version.
+  optional uint64 version = 10;
+}
+
+enum HostOperation {
+  UNKNOWN = 0;
+  REPORT = 1;
+  LOCK = 2;
+  UPDATE = 3;
+  UNLOCK = 4;
 }
