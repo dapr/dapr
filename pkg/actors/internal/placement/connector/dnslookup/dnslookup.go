@@ -22,7 +22,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/connector"
 	"github.com/dapr/kit/logger"
 )
 
@@ -37,7 +37,7 @@ type dnsLookUpConnector struct {
 	resolver   lookupFunc
 }
 
-var log = logger.NewLogger("dapr.runtime.actors.placement.client.connector.dnslookup")
+var log = logger.NewLogger("dapr.runtime.actors.placement.manager.connector.dnslookup")
 
 func New(opts Options) (connector.Interface, error) {
 	host, port, err := net.SplitHostPort(opts.Address)
