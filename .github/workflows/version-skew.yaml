@@ -335,7 +335,7 @@ jobs:
         echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/v1.25.3_ha" >> $GITHUB_ENV
 
     - name: Create KinD Cluster
-      uses: helm/kind-action@v1.5.0
+      uses: helm/kind-action@v1.13.0
       with:
         config: kind.yaml
         cluster_name: kind
