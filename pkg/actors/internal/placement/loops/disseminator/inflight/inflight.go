@@ -75,8 +75,9 @@ func (i *Inflight) Lock(err error) {
 		Error: err,
 	})
 	i.wg.Wait()
-	lock.LoopFactory.CacheLoop(i.lock)
+	lo := i.lock
 	i.lock = nil
+	lock.LoopFactory.CacheLoop(lo)
 }
 
 func (i *Inflight) Set(in *v1pb.PlacementTables) {
