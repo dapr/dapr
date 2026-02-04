@@ -94,7 +94,7 @@ func Run() {
 				return serr
 			}
 
-			server, serr := server.New(server.Options{
+			server, serr := server.New(ctx, server.Options{
 				Port:                      opts.Port,
 				ListenAddress:             opts.ListenAddress,
 				OverrideBroadcastHostPort: opts.OverrideBroadcastHostPort,

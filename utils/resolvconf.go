@@ -16,11 +16,13 @@ package utils
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"net"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 const (
@@ -32,10 +34,17 @@ const (
 
 var searchRegexp = regexp.MustCompile(`^\s*search\s*(([^\s]+\s*)*)$`)
 
-func GetKubeClusterDomainFromDNS() (string, error) {
+func GetKubeClusterDomainFromDNS(ctx context.Context) (string, error) {
 	const apiSvc = "kubernetes.default.svc"
 
-	cname, err := net.LookupCNAME(apiSvc)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	r := net.Resolver{
+		PreferGo:     true,
+		StrictErrors: true,
+	}
+	cname, err := r.LookupCNAME(ctx, apiSvc)
 	if err != nil {
 		return "", err
 	}
