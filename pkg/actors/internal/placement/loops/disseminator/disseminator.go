@@ -109,8 +109,11 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 
 	diss.wg.Add(1)
 	go func() {
-		_ = diss.streamLoop.Run(ctx)
-		diss.wg.Done()
+		defer diss.wg.Done()
+		derr := diss.streamLoop.Run(ctx)
+		if derr != nil {
+			log.Errorf("Stream loop ended with error: %s", derr)
+		}
 	}()
 
 	return diss.loop

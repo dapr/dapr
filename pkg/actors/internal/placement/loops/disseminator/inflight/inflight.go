@@ -24,7 +24,10 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/kit/events/loop"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.runtime.actors.placement.loops.disseminator.inflight")
 
 var aquireCache = sync.Pool{
 	New: func() any {
@@ -100,8 +103,11 @@ func (i *Inflight) Unlock(ctx context.Context) {
 	i.lock = lock
 	i.wg.Add(1)
 	go func() {
-		_ = lock.Run(ctx)
-		i.wg.Done()
+		defer i.wg.Done()
+		lerr := lock.Run(ctx)
+		if lerr != nil {
+			log.Errorf("Inflight lock loop ended with error: %s", lerr)
+		}
 	}()
 
 	for _, a := range i.acquires {
