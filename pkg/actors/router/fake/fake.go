@@ -69,3 +69,8 @@ func (f *Fake) CallReminder(ctx context.Context, reminder *api.Reminder) error {
 func (f *Fake) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream func(*internalv1pb.InternalInvokeResponse) (bool, error)) error {
 	return f.callStreamFn(ctx, req, stream)
 }
+
+func (f *Fake) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
