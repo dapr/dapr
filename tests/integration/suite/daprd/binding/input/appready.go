@@ -145,6 +145,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		defer resp.Body.Close()
 		assert.Equal(c, http.StatusInternalServerError, resp.StatusCode)
 	}, time.Second*10, 10*time.Millisecond)
+	time.Sleep(time.Second)
 	called = a.bindingCalled.Load()
 	time.Sleep(time.Second * 2)
 	assert.Equal(t, called, a.bindingCalled.Load())
