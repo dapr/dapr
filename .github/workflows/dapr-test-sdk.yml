@@ -232,7 +232,7 @@ jobs:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up OpenJDK ${{ env.JDK_VER }}
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v5
         with:
           distribution: 'adopt'
           java-version: ${{ env.JDK_VER }}
