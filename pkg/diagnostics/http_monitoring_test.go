@@ -407,8 +407,8 @@ func TestHTTPMetricsPathMatchingActorEndpoints(t *testing.T) {
 	testHTTP.enabled = false
 	paths := []string{
 		"/v1.0/actors/{actorType}/{actorId}/method/{method}",
-		"/v1.0/actors/{actorType}/{actorId}/reminders/{reminder}",
-		"/v1.0/actors/{actorType}/{actorId}/timers/{timer}",
+		"/v1.0/actors/{actorType}/{actorId}/reminders/{name}",
+		"/v1.0/actors/{actorType}/{actorId}/timers/{name}",
 		"/v1.0/actors/{actorType}/{actorId}/state/{key}",
 		"/v1.0/actors/{actorType}/{actorId}/state",
 	}
@@ -433,12 +433,12 @@ func TestHTTPMetricsPathMatchingActorEndpoints(t *testing.T) {
 		{
 			name:          "actor reminder",
 			path:          "/v1.0/actors/WorkerActor/ActorID/reminders/MyReminder",
-			expectedMatch: "/v1.0/actors/{actorType}/{actorId}/reminders/{reminder}",
+			expectedMatch: "/v1.0/actors/{actorType}/{actorId}/reminders/{name}",
 		},
 		{
 			name:          "actor timer",
 			path:          "/v1.0/actors/WorkerActor/ActorID/timers/MyTimer",
-			expectedMatch: "/v1.0/actors/{actorType}/{actorId}/timers/{timer}",
+			expectedMatch: "/v1.0/actors/{actorType}/{actorId}/timers/{name}",
 		},
 		{
 			name:          "actor state get specific key",
