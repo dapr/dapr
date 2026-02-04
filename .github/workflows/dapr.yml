@@ -202,7 +202,7 @@ jobs:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
         run: make test
       - name: Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v5
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
