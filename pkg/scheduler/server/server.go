@@ -93,7 +93,7 @@ type Server struct {
 	closeCh chan struct{}
 }
 
-func New(opts Options) (*Server, error) {
+func New(ctx context.Context, opts Options) (*Server, error) {
 	var broadcastAddr string
 	switch {
 	case opts.OverrideBroadcastHostPort != nil:
@@ -108,7 +108,7 @@ func New(opts Options) (*Server, error) {
 		broadcastAddr = net.JoinHostPort(haddr, strconv.Itoa(opts.Port))
 	}
 
-	etcd, err := etcd.New(etcd.Options{
+	etcd, err := etcd.New(ctx, etcd.Options{
 		Name:                       opts.EtcdName,
 		Embed:                      opts.EtcdEmbed,
 		InitialCluster:             opts.EtcdInitialCluster,

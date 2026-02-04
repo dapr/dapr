@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/router"
@@ -178,7 +179,7 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	return errors.Join(errs.Slice()...)
 }
 
-func (f *factory) HaltNonHosted(ctx context.Context) error {
+func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -187,7 +188,10 @@ func (f *factory) HaltNonHosted(ctx context.Context) error {
 
 	f.table.Range(func(key, o any) bool {
 		oo := o.(*orchestrator)
-		if f.placement.IsActorHosted(ctx, oo.actorType, oo.actorID) {
+		if fn(&api.LookupActorRequest{
+			ActorType: f.actorType,
+			ActorID:   oo.actorID,
+		}) {
 			return true
 		}
 
