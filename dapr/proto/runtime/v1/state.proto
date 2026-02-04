@@ -16,6 +16,7 @@ syntax = "proto3";
 package dapr.proto.runtime.v1;
 
 import "dapr/proto/common/v1/common.proto";
+import "dapr/proto/placement/v1/placement.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprStateProtos";
