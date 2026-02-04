@@ -81,6 +81,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.app1.WaitUntilRunning(t, ctx)
+	h.app2.WaitUntilRunning(t, ctx)
 
 	client := client.HTTP(t)
 
