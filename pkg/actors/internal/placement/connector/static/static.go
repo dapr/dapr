@@ -18,14 +18,13 @@ package static
 import (
 	"context"
 
-	"github.com/dapr/kit/logger"
-
-	"github.com/dapr/dapr/pkg/actors/internal/placement/client/connector"
-
 	"google.golang.org/grpc"
+
+	"github.com/dapr/dapr/pkg/actors/internal/placement/connector"
+	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.placement.client.connector.static")
+var log = logger.NewLogger("dapr.runtime.actors.placement.manager.connector.static")
 
 type staticConnector struct {
 	addresses    []string
