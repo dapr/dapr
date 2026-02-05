@@ -19,6 +19,8 @@ import (
 
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/pkg/apis/common"
 )
 
 // +genclient
@@ -236,6 +238,12 @@ type OtelSpec struct {
 	Protocol        string `json:"protocol" yaml:"protocol"`
 	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
 	IsSecure        *bool  `json:"isSecure" yaml:"isSecure"`
+	// +optional
+	Headers string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// +optional
+	SecretRef *common.SecretKeyRef `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
+	// +optional
+	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.
