@@ -241,6 +241,10 @@ spec:
     {{- with .Values.global.extraVolumes.scheduler }}
       {{- toYaml . | nindent 6 }}
     {{- end }}
+{{- if .Values.affinity }}
+      affinity:
+{{ toYaml .Values.affinity | indent 8 }}
+{{- else }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -267,6 +271,11 @@ spec:
                   values:
                   - dapr-scheduler-server
               topologyKey: {{ .Values.global.ha.topologyKey }}
+{{- end }}
+{{- if .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+{{ toYaml .Values.topologySpreadConstraints | indent 8 }}
+{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}

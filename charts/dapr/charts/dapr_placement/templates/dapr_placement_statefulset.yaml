@@ -212,6 +212,11 @@ spec:
     {{- with .Values.global.extraVolumes.placement }}
       {{- toYaml . | nindent 6 }}
     {{- end }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
+  {{- if .Values.affinity }}
+      affinity:
+{{ toYaml .Values.affinity | indent 8 }}
+  {{- else }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -227,7 +232,7 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
-{{- if .Values.global.ha.enabled }}
+    {{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
@@ -239,6 +244,12 @@ spec:
                   values:
                   - dapr-placement-server
               topologyKey: {{ .Values.global.ha.topologyKey }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+{{ toYaml .Values.topologySpreadConstraints | indent 8 }}
+  {{- end }}
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:

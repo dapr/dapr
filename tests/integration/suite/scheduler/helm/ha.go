@@ -82,6 +82,45 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-port", "2379")
 	})
 
+	t.Run("affinity_can_be_customized", func(t *testing.T) {
+		// Test that custom affinity overrides default
+		helmCustom := helm.New(t,
+			helm.WithShowOnlySchedulerSTS(),
+			helm.WithValues(
+				"dapr_scheduler.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey=topology.kubernetes.io/zone",
+			),
+		)
+		helmCustom.Run(t, ctx)
+		defer helmCustom.Cleanup(t)
+
+		var stsCustom appsv1.StatefulSet
+		bsCustom, err := io.ReadAll(helmCustom.Stdout(t))
+		require.NoError(t, err)
+		require.NoError(t, yaml.Unmarshal(bsCustom, &stsCustom))
+		require.NotNil(t, stsCustom.Spec.Template.Spec.Affinity)
+		require.NotNil(t, stsCustom.Spec.Template.Spec.Affinity.PodAntiAffinity)
+		require.NotEmpty(t, stsCustom.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
+	})
+
+	t.Run("topology_spread_constraints_can_be_configured", func(t *testing.T) {
+		helmTSC := helm.New(t,
+			helm.WithShowOnlySchedulerSTS(),
+			helm.WithValues(
+				"dapr_scheduler.topologySpreadConstraints[0].maxSkew=1",
+				"dapr_scheduler.topologySpreadConstraints[0].topologyKey=topology.kubernetes.io/zone",
+			),
+		)
+		helmTSC.Run(t, ctx)
+		defer helmTSC.Cleanup(t)
+
+		var stsTSC appsv1.StatefulSet
+		bsTSC, err := io.ReadAll(helmTSC.Stdout(t))
+		require.NoError(t, err)
+		require.NoError(t, yaml.Unmarshal(bsTSC, &stsTSC))
+		require.NotEmpty(t, stsTSC.Spec.Template.Spec.TopologySpreadConstraints)
+		require.Equal(t, "topology.kubernetes.io/zone", stsTSC.Spec.Template.Spec.TopologySpreadConstraints[0].TopologyKey)
+	})
+
 	// namespaced
 	t.Run("initial_cluster_has_all_instances_dapr_system_namespace", func(t *testing.T) {
 		var stsNamespaced appsv1.StatefulSet
