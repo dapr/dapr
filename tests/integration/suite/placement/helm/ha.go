@@ -73,7 +73,8 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 		defer helmCustom.Cleanup(t)
 
 		var stsCustom appsv1.StatefulSet
-		bsCustom, err := io.ReadAll(helmCustom.Stdout(t))
+		var bsCustom []byte
+		bsCustom, err = io.ReadAll(helmCustom.Stdout(t))
 		require.NoError(t, err)
 		require.NoError(t, yaml.Unmarshal(bsCustom, &stsCustom))
 		require.NotNil(t, stsCustom.Spec.Template.Spec.Affinity)

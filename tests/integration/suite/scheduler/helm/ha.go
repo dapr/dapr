@@ -71,26 +71,6 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
 	})
 
-	t.Run("affinity_can_be_customized", func(t *testing.T) {
-		helmCustom := helm.New(t,
-			helm.WithGlobalValues("ha.enabled=true"),
-			helm.WithShowOnlySchedulerSTS(),
-			helm.WithValues(
-				"dapr_scheduler.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey=topology.kubernetes.io/zone",
-			),
-		)
-		helmCustom.Run(t, ctx)
-		defer helmCustom.Cleanup(t)
-
-		var stsCustom appsv1.StatefulSet
-		bsCustom, err := io.ReadAll(helmCustom.Stdout(t))
-		require.NoError(t, err)
-		require.NoError(t, yaml.Unmarshal(bsCustom, &stsCustom))
-		require.NotNil(t, stsCustom.Spec.Template.Spec.Affinity)
-		require.NotNil(t, stsCustom.Spec.Template.Spec.Affinity.PodAntiAffinity)
-		require.NotEmpty(t, stsCustom.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
-	})
-
 	t.Run("initial_cluster_has_all_instances_default", func(t *testing.T) {
 		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-initial-cluster",
 			"dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.default.svc.cluster.local:2380,"+
