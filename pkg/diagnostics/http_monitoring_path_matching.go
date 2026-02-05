@@ -15,31 +15,16 @@ package diagnostics
 
 import (
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 )
 
-var (
-	pathMatchHandlerFunc = func(pattern string) http.HandlerFunc {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rw, ok := w.(*pathMatchingRW)
-			if !ok {
-				log.Errorf("Failed to cast to PathMatchingRW")
-				return
-			}
-			rw.matchedPath = pattern
-		})
-	}
-
-	emptyHandlerFunc = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
-)
-
 type pathMatching struct {
-	mux *http.ServeMux
+	mux           *http.ServeMux
+	returnRawPath bool
 }
 
-// newPathMatching creates a new pathMatching instance.
+// newPathMatching creates a new pathMatching instance using ServeMux.
 // The root path ("/") must always be registered:
 // - If the user explicitly registers the root path, we match it accordingly.
 // - If the root path is not explicitly registered:
@@ -48,49 +33,53 @@ type pathMatching struct {
 //
 // All other paths in the 'paths' slice are cleaned, sorted, and registered.
 func newPathMatching(paths []string, legacy bool) *pathMatching {
-	if paths == nil {
-		return nil
-	}
-
 	if len(paths) == 0 {
 		return nil
 	}
 
 	mux := http.NewServeMux()
+	pm := &pathMatching{mux: mux}
 
 	cleanPaths, foundRootPath := cleanAndSortPaths(paths)
 
+	for _, pattern := range cleanPaths {
+		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {})
+	}
+
+	// Handle Legacy Root Fallback
 	if !foundRootPath {
 		if legacy {
-			mux.Handle("/", emptyHandlerFunc)
-		} else {
-			mux.Handle("/", pathMatchHandlerFunc(""))
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
+			pm.returnRawPath = true
 		}
 	}
 
-	for _, pattern := range cleanPaths {
-		mux.Handle(pattern, pathMatchHandlerFunc(pattern))
-	}
-
-	return &pathMatching{
-		mux: mux,
-	}
+	return pm
 }
 
-// cleanAndSortPaths processes the given slice of paths by sorting and compacting it,
-// and checks if the root path ("/") is included.
+// cleanAndSortPaths takes user input paths and returns a sorted, deduplicated list
+// of all patterns to be registered, including the auto-generated invoke variants.
 func cleanAndSortPaths(paths []string) ([]string, bool) {
+	cleanPaths := make([]string, 0, len(paths)*2)
 	foundRootPath := false
-	slices.Sort(paths)
-	paths = slices.Compact(paths)
-	cleanPaths := make([]string, 0, len(paths))
-	for _, path := range paths {
-		if path == "/" {
+
+	for _, raw := range paths {
+		p := NormalizeHTTPPath(raw)
+		cleanPaths = append(cleanPaths, p)
+
+		if p == "/" {
 			foundRootPath = true
 		}
-		cleanPaths = append(cleanPaths, path)
+
+		// Auto-register Service Invocation prefix
+		if !strings.HasPrefix(p, "/v1.0/invoke/") {
+			invokePath := "/v1.0/invoke/{app_id}/method" + p
+			cleanPaths = append(cleanPaths, invokePath)
+		}
 	}
-	return cleanPaths, foundRootPath
+
+	slices.Sort(cleanPaths)
+	return slices.Compact(cleanPaths), foundRootPath
 }
 
 func (pm *pathMatching) enabled() bool {
@@ -98,48 +87,33 @@ func (pm *pathMatching) enabled() bool {
 }
 
 func (pm *pathMatching) match(path string) (string, bool) {
-	if !pm.enabled() {
+	if !pm.enabled() || path == "" {
 		return "", false
 	}
 
-	if path == "" {
-		return "", false
+	cleanPath := NormalizeHTTPPath(path)
+	req, _ := http.NewRequest(http.MethodGet, cleanPath, nil)
+
+	_, pattern := pm.mux.Handler(req)
+
+	if pattern == "/" && pm.returnRawPath {
+		return cleanPath, true
 	}
 
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+	if pattern == "" {
+		return "", true
 	}
 
-	req := &http.Request{
-		Method: http.MethodGet,
-		URL: &url.URL{
-			Path: path,
-		},
+	return pattern, true
+}
+
+// NormalizeHTTPPath merges double slashes and ensures leading slash.
+func NormalizeHTTPPath(p string) string {
+	for strings.Contains(p, "//") {
+		p = strings.ReplaceAll(p, "//", "/")
 	}
-
-	crw := &pathMatchingRW{matchedPath: path}
-	pm.mux.ServeHTTP(crw, req)
-
-	return crw.matchedPath, true
-}
-
-type pathMatchingRW struct {
-	matchedPath string
-	header      http.Header
-}
-
-// Header returns a non-nil header map
-func (rw *pathMatchingRW) Header() http.Header {
-	if rw.header == nil {
-		rw.header = make(http.Header)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
 	}
-	return rw.header
-}
-
-func (rw *pathMatchingRW) Write(b []byte) (int, error) {
-	return len(b), nil
-}
-
-func (rw *pathMatchingRW) WriteHeader(statusCode int) {
-	// no-op
+	return p
 }
