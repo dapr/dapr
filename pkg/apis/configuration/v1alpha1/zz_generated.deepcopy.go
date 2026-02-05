@@ -21,6 +21,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/dapr/dapr/pkg/apis/common"
 	"k8s.io/apimachinery/pkg/runtime"
 	timex "time"
 )
@@ -588,6 +589,11 @@ func (in *OtelSpec) DeepCopyInto(out *OtelSpec) {
 	if in.IsSecure != nil {
 		in, out := &in.IsSecure, &out.IsSecure
 		*out = new(bool)
+		**out = **in
+	}
+	if in.SecretRef != nil {
+		in, out := &in.SecretRef, &out.SecretRef
+		*out = new(common.SecretKeyRef)
 		**out = **in
 	}
 }
