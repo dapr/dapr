@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -66,7 +65,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	m.sentry.WaitUntilRunning(t, ctx)
 	m.place.WaitUntilRunning(t, ctx)
 
-	assert.Eventually(t, func() bool {
+	require.Eventually(t, func() bool {
 		return m.place.IsLeader(t, ctx)
 	}, time.Second*10, time.Millisecond*10)
 
