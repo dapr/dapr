@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +34,7 @@ const (
 )
 
 // TestSchedulerHATopologySpreadConstraints tests that scheduler pods are distributed
-// across nodes when topology spread constraints are configured.
+// across nodes when topology spread constraints are configured in HA mode.
 func TestSchedulerHATopologySpreadConstraints(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -50,25 +49,19 @@ func TestSchedulerHATopologySpreadConstraints(t *testing.T) {
 	}
 	kubeClient := kubePlatform.KubeClient.ClientSet
 
-	t.Run("scheduler_pods_exist_in_ha_mode", func(t *testing.T) {
+	t.Run("scheduler_statefulset_exists", func(t *testing.T) {
 		sts, err := kubeClient.AppsV1().StatefulSets(daprSystemNamespace).Get(ctx, schedulerStatefulSetName, metav1.GetOptions{})
-		if err != nil {
-			t.Skipf("Scheduler StatefulSet not found, skipping: %v", err)
-			return
-		}
-
+		require.NoError(t, err, "Scheduler StatefulSet should exist")
 		require.NotNil(t, sts.Spec.Replicas)
-		assert.Equal(t, int32(3), *sts.Spec.Replicas, "Scheduler should have 3 replicas in HA mode")
+		require.Equal(t, int32(3), *sts.Spec.Replicas, "Scheduler should have 3 replicas")
 	})
 
 	t.Run("scheduler_pods_are_distributed", func(t *testing.T) {
 		pods, err := kubeClient.CoreV1().Pods(daprSystemNamespace).List(ctx, metav1.ListOptions{
 			LabelSelector: "app=dapr-scheduler-server",
 		})
-		if err != nil {
-			t.Skipf("Failed to list scheduler pods: %v", err)
-			return
-		}
+		require.NoError(t, err, "Should be able to list scheduler pods")
+		require.Greater(t, len(pods.Items), 0, "At least 1 scheduler pod should exist")
 
 		runningPods := 0
 		nodeMap := make(map[string][]string)
@@ -80,7 +73,7 @@ func TestSchedulerHATopologySpreadConstraints(t *testing.T) {
 			}
 		}
 
-		assert.GreaterOrEqual(t, runningPods, 1, "At least 1 scheduler pod should be running")
+		require.Greater(t, runningPods, 0, "At least 1 scheduler pod should be running")
 
 		t.Logf("Scheduler pod distribution across %d nodes:", len(nodeMap))
 		for node, podList := range nodeMap {
@@ -90,7 +83,7 @@ func TestSchedulerHATopologySpreadConstraints(t *testing.T) {
 		if len(nodeMap) > 1 {
 			for node, podList := range nodeMap {
 				if len(podList) > 1 {
-					t.Logf("WARNING: Node %s has %d scheduler pods - check topology spread constraints", node, len(podList))
+					t.Logf("WARNING: Node %s has %d scheduler pods - topology spread constraints may not be configured optimally", node, len(podList))
 				}
 			}
 		}
