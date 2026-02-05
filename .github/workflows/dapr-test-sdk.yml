@@ -105,7 +105,7 @@ jobs:
           python-version: "3.9"
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Checkout python-sdk repo to run tests.
@@ -238,7 +238,7 @@ jobs:
           java-version: ${{ env.JDK_VER }}
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Checkout java-sdk repo to run tests.
@@ -413,7 +413,7 @@ jobs:
           node-version: ${{ env.NODE_VER }}
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Checkout js-sdk repo to run tests.
@@ -538,7 +538,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Set up Python 3.9
