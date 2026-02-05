@@ -246,7 +246,7 @@ spec:
               topologyKey: {{ .Values.global.ha.topologyKey }}
     {{- end }}
   {{- end }}
-  {{- if .Values.topologySpreadConstraints }}
+  {{- if and (or (eq .Values.global.ha.enabled true) (eq .Values.ha true)) .Values.topologySpreadConstraints }}
       topologySpreadConstraints:
 {{ toYaml .Values.topologySpreadConstraints | indent 8 }}
   {{- end }}

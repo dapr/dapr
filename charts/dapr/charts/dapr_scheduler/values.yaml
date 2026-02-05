@@ -79,11 +79,11 @@ resources: {}
 extraEnvVars: {}
 
 # Topology spread constraints for pod distribution across zones/nodes
-# Allows strict enforcement of pod distribution for HA
+# Only applies when HA is enabled
 # Example:
 # topologySpreadConstraints:
 #   - maxSkew: 1
-#     topologyKey: topology.kubernetes.io/zone
+#     topologyKey: kubernetes.io/hostname
 #     whenUnsatisfiable: DoNotSchedule
 #     labelSelector:
 #       matchLabels:

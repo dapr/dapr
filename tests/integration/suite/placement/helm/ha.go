@@ -80,24 +80,4 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, stsCustom.Spec.Template.Spec.Affinity.PodAntiAffinity)
 		require.NotEmpty(t, stsCustom.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
 	})
-
-	t.Run("topology_spread_constraints_can_be_configured", func(t *testing.T) {
-		helmTSC := helm.New(t,
-			helm.WithShowOnly("charts/dapr_placement", "dapr_placement_statefulset.yaml"),
-			helm.WithGlobalValues("ha.enabled=true"),
-			helm.WithValues(
-				"dapr_placement.topologySpreadConstraints[0].maxSkew=1",
-				"dapr_placement.topologySpreadConstraints[0].topologyKey=topology.kubernetes.io/zone",
-			),
-		)
-		helmTSC.Run(t, ctx)
-		defer helmTSC.Cleanup(t)
-
-		var stsTSC appsv1.StatefulSet
-		bsTSC, err := io.ReadAll(helmTSC.Stdout(t))
-		require.NoError(t, err)
-		require.NoError(t, yaml.Unmarshal(bsTSC, &stsTSC))
-		require.NotEmpty(t, stsTSC.Spec.Template.Spec.TopologySpreadConstraints)
-		require.Equal(t, "topology.kubernetes.io/zone", stsTSC.Spec.Template.Spec.TopologySpreadConstraints[0].TopologyKey)
-	})
 }

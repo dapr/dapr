@@ -272,7 +272,7 @@ spec:
                   - dapr-scheduler-server
               topologyKey: {{ .Values.global.ha.topologyKey }}
 {{- end }}
-{{- if .Values.topologySpreadConstraints }}
+{{- if and (eq .Values.global.ha.enabled true) .Values.topologySpreadConstraints }}
       topologySpreadConstraints:
 {{ toYaml .Values.topologySpreadConstraints | indent 8 }}
 {{- end }}

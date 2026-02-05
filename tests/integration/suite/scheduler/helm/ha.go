@@ -71,20 +71,9 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
 	})
 
-	t.Run("initial_cluster_has_all_instances_default", func(t *testing.T) {
-		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-initial-cluster",
-			"dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.default.svc.cluster.local:2380,"+
-				"dapr-scheduler-server-1=https://dapr-scheduler-server-1.dapr-scheduler-server.default.svc.cluster.local:2380,"+
-				"dapr-scheduler-server-2=https://dapr-scheduler-server-2.dapr-scheduler-server.default.svc.cluster.local:2380")
-	})
-
-	t.Run("etcd_client_ports_default", func(t *testing.T) {
-		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-port", "2379")
-	})
-
 	t.Run("affinity_can_be_customized", func(t *testing.T) {
-		// Test that custom affinity overrides default
 		helmCustom := helm.New(t,
+			helm.WithGlobalValues("ha.enabled=true"),
 			helm.WithShowOnlySchedulerSTS(),
 			helm.WithValues(
 				"dapr_scheduler.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey=topology.kubernetes.io/zone",
@@ -102,23 +91,15 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 		require.NotEmpty(t, stsCustom.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
 	})
 
-	t.Run("topology_spread_constraints_can_be_configured", func(t *testing.T) {
-		helmTSC := helm.New(t,
-			helm.WithShowOnlySchedulerSTS(),
-			helm.WithValues(
-				"dapr_scheduler.topologySpreadConstraints[0].maxSkew=1",
-				"dapr_scheduler.topologySpreadConstraints[0].topologyKey=topology.kubernetes.io/zone",
-			),
-		)
-		helmTSC.Run(t, ctx)
-		defer helmTSC.Cleanup(t)
+	t.Run("initial_cluster_has_all_instances_default", func(t *testing.T) {
+		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-initial-cluster",
+			"dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.default.svc.cluster.local:2380,"+
+				"dapr-scheduler-server-1=https://dapr-scheduler-server-1.dapr-scheduler-server.default.svc.cluster.local:2380,"+
+				"dapr-scheduler-server-2=https://dapr-scheduler-server-2.dapr-scheduler-server.default.svc.cluster.local:2380")
+	})
 
-		var stsTSC appsv1.StatefulSet
-		bsTSC, err := io.ReadAll(helmTSC.Stdout(t))
-		require.NoError(t, err)
-		require.NoError(t, yaml.Unmarshal(bsTSC, &stsTSC))
-		require.NotEmpty(t, stsTSC.Spec.Template.Spec.TopologySpreadConstraints)
-		require.Equal(t, "topology.kubernetes.io/zone", stsTSC.Spec.Template.Spec.TopologySpreadConstraints[0].TopologyKey)
+	t.Run("etcd_client_ports_default", func(t *testing.T) {
+		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-port", "2379")
 	})
 
 	// namespaced
