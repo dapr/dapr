@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.24.11
+go 1.24.12
 
 require (
 	connectrpc.com/connect v1.19.1
@@ -14,9 +14,9 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/dapr/components-contrib v1.16.2-0.20260121142358-4d749a667028
-	github.com/dapr/durabletask-go v0.10.2-0.20260114164104-9ddc9d1ebc1f
+	github.com/dapr/durabletask-go v0.11.0
 	github.com/dapr/kit v0.16.2-0.20251124175541-3ac186dff64d
-	github.com/diagridio/go-etcd-cron v0.10.1-0.20260105221246-ee8c118dd834
+	github.com/diagridio/go-etcd-cron v0.12.0
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/cors v1.2.1
@@ -32,10 +32,10 @@ require (
 	github.com/grafana/k6-operator v0.0.8
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/hashicorp/go-hclog v1.6.3
-	github.com/hashicorp/go-msgpack/v2 v2.1.1
+	github.com/hashicorp/go-msgpack/v2 v2.1.5
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/hashicorp/raft v1.4.0
-	github.com/hashicorp/raft-boltdb v0.0.0-20230125174641-2a8082862702
+	github.com/hashicorp/raft v1.7.3
+	github.com/hashicorp/raft-boltdb v0.0.0-20251103221153-05f9dd7a5148
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/jhump/protoreflect v1.15.3
 	github.com/kelseyhightower/envconfig v1.4.0
@@ -297,6 +297,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
+	github.com/hashicorp/go-metrics v0.5.4 // indirect
 	github.com/hashicorp/go-msgpack v0.5.5 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect

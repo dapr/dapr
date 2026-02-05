@@ -325,7 +325,8 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	err = backoff.Retry(func() error {
 		_, eerr := router.Call(ctx, req)
 		status, ok := status.FromError(eerr)
-		if ok && status.Code() == codes.FailedPrecondition {
+		if ok && (status.Code() == codes.FailedPrecondition ||
+			status.Code() == codes.Unavailable) {
 			return eerr
 		}
 		if errors.Is(eerr, actorerrors.ErrCreatingActor) {
@@ -649,13 +650,13 @@ func (abe *Actors) callWithBackoff(ctx context.Context, fn func() error) error {
 }
 
 // WaitForActivityCompletion implements backend.Backend.
-func (abe *Actors) WaitForActivityCompletion(ctx context.Context, request *protos.ActivityRequest) (*protos.ActivityResponse, error) {
-	return abe.pendingTasksBackend.WaitForActivityCompletion(ctx, request)
+func (abe *Actors) WaitForActivityCompletion(request *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error) {
+	return abe.pendingTasksBackend.WaitForActivityCompletion(request)
 }
 
 // WaitForOrchestratorCompletion implements backend.Backend.
-func (abe *Actors) WaitForOrchestratorCompletion(ctx context.Context, request *protos.OrchestratorRequest) (*protos.OrchestratorResponse, error) {
-	return abe.pendingTasksBackend.WaitForOrchestratorCompletion(ctx, request)
+func (abe *Actors) WaitForOrchestratorCompletion(request *protos.OrchestratorRequest) func(context.Context) (*protos.OrchestratorResponse, error) {
+	return abe.pendingTasksBackend.WaitForOrchestratorCompletion(request)
 }
 
 func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
