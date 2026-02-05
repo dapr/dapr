@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	placementfake "github.com/dapr/dapr/pkg/actors/internal/placement/fake"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/channel/fake"
