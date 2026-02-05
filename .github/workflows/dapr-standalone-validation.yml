@@ -60,7 +60,7 @@ jobs:
       - name: Initialize with latest Dapr runtime
         run: dapr init --slim
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.ref }}
@@ -75,7 +75,7 @@ jobs:
           make ./dist/${GOOS}_${GOARCH}/release/daprd
       - name: "Check out code at ${{ github.base_ref }} for PR validation"
         if: github.event_name == 'pull_request'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.base_ref }}
