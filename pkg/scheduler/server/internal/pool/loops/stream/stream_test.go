@@ -237,9 +237,15 @@ func Test_Stream(t *testing.T) {
 		)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, api.TriggerResponseResult_SUCCESS, (*called1.Load()))
-			assert.Equal(c, api.TriggerResponseResult_FAILED, (*called2.Load()))
-			assert.Equal(c, api.TriggerResponseResult_FAILED, (*called3.Load()))
+			ptr1 := called1.Load()
+			ptr2 := called2.Load()
+			ptr3 := called3.Load()
+			if !(assert.NotNil(c, ptr1) || assert.NotNil(c, ptr2) || assert.NotNil(c, ptr2)) {
+				return
+			}
+			assert.Equal(c, api.TriggerResponseResult_SUCCESS, *ptr1)
+			assert.Equal(c, api.TriggerResponseResult_FAILED, *ptr2)
+			assert.Equal(c, api.TriggerResponseResult_FAILED, *ptr3)
 		}, time.Second*10, time.Millisecond*10)
 
 		suite.closeserver()
@@ -303,7 +309,9 @@ func Test_Stream(t *testing.T) {
 		suite.streamLoop.Close(new(loops.StreamShutdown))
 		suite.expectEvent(t, &loops.ConnCloseStream{StreamIDx: 123, Namespace: "ns"})
 		for i := range 10 {
-			assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, (*called[i].Load()))
+			ptr := called[i].Load()
+			require.NotNil(t, ptr, "callback %d not called", i)
+			assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, *ptr)
 		}
 	})
 }
