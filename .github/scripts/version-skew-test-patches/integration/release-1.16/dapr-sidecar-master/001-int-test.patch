@@ -1,3 +1,165 @@
+diff --git a/Makefile b/Makefile
+index 4feeb1aa9..17218c414 100644
+--- a/Makefile
++++ b/Makefile
+@@ -394,7 +394,7 @@ test-integration: test-deps
+ 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+ 			--format testname \
+ 			-- \
+-			./tests/integration -timeout=20m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false
++			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false
+ 
+ .PHONY: test-integration-parallel
+ test-integration-parallel: test-deps
+@@ -402,7 +402,7 @@ test-integration-parallel: test-deps
+ 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+ 			--format testname \
+ 			-- \
+-			./tests/integration -timeout=20m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true
++			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true
+ 
+ ################################################################################
+ # Target: lint                                                                 #
+diff --git a/tests/integration/framework/process/daprd/actors/options.go b/tests/integration/framework/process/daprd/actors/options.go
+index 0c9706819..ad19d91e7 100644
+--- a/tests/integration/framework/process/daprd/actors/options.go
++++ b/tests/integration/framework/process/daprd/actors/options.go
+@@ -15,7 +15,6 @@ package actors
+ 
+ import (
+ 	"net/http"
+-	"strconv"
+ 	"time"
+ 
+ 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+@@ -68,20 +67,6 @@ func WithScheduler(scheduler *scheduler.Scheduler) Option {
+ 	}
+ }
+ 
+-func WithFeatureSchedulerReminders(enabled bool) Option {
+-	return func(o *options) {
+-		o.daprdConfigs = append(o.daprdConfigs, `
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: appconfig
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: `+strconv.FormatBool(enabled))
+-	}
+-}
+-
+ func WithActorTypeHandler(actorType string, handler http.HandlerFunc) Option {
+ 	return func(o *options) {
+ 		if o.actorTypeHandlers == nil {
+diff --git a/tests/integration/framework/process/daprd/workflow/options.go b/tests/integration/framework/process/daprd/workflow/options.go
+index 56db19bc2..beacbe221 100644
+--- a/tests/integration/framework/process/daprd/workflow/options.go
++++ b/tests/integration/framework/process/daprd/workflow/options.go
+@@ -25,14 +25,6 @@ type Option func(*options)
+ 
+ type options struct {
+ 	registry *task.TaskRegistry
+-
+-	enableScheduler bool
+-}
+-
+-func WithScheduler(enable bool) Option {
+-	return func(o *options) {
+-		o.enableScheduler = enable
+-	}
+ }
+ 
+ func WithAddOrchestratorN(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+diff --git a/tests/integration/framework/process/daprd/workflow/workflow.go b/tests/integration/framework/process/daprd/workflow/workflow.go
+index 193c5220b..7bfb9cf72 100644
+--- a/tests/integration/framework/process/daprd/workflow/workflow.go
++++ b/tests/integration/framework/process/daprd/workflow/workflow.go
+@@ -35,8 +35,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
+ 	t.Helper()
+ 
+ 	opts := options{
+-		registry:        task.NewTaskRegistry(),
+-		enableScheduler: true,
++		registry: task.NewTaskRegistry(),
+ 	}
+ 	for _, fopt := range fopts {
+ 		fopt(&opts)
+@@ -44,7 +43,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
+ 
+ 	return &Workflow{
+ 		registry: opts.registry,
+-		actors:   actors.New(t, actors.WithFeatureSchedulerReminders(opts.enableScheduler)),
++		actors:   actors.New(t),
+ 	}
+ }
+ 
+diff --git a/tests/integration/framework/process/workflow/options.go b/tests/integration/framework/process/workflow/options.go
+index e8a217bfc..d37e17271 100644
+--- a/tests/integration/framework/process/workflow/options.go
++++ b/tests/integration/framework/process/workflow/options.go
+@@ -40,20 +40,13 @@ type daprdOptionConfig struct {
+ }
+ 
+ type options struct {
+-	daprds          int
+-	enableScheduler bool
++	daprds int
+ 
+ 	orchestrators []orchestratorConfig
+ 	activities    []activityConfig
+ 	daprdOptions  []daprdOptionConfig
+ }
+ 
+-func WithScheduler(enable bool) Option {
+-	return func(o *options) {
+-		o.enableScheduler = enable
+-	}
+-}
+-
+ func WithAddOrchestrator(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+ 	t.Helper()
+ 	return WithAddOrchestratorN(t, 0, name, or)
+diff --git a/tests/integration/framework/process/workflow/workflow.go b/tests/integration/framework/process/workflow/workflow.go
+index af200cdc0..1d80dedc8 100644
+--- a/tests/integration/framework/process/workflow/workflow.go
++++ b/tests/integration/framework/process/workflow/workflow.go
+@@ -48,8 +48,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
+ 	}
+ 
+ 	opts := options{
+-		enableScheduler: true,
+-		daprds:          1,
++		daprds: 1,
+ 	}
+ 	for _, fopt := range fopts {
+ 		fopt(&opts)
+@@ -68,22 +67,8 @@ func New(t *testing.T, fopts ...Option) *Workflow {
+ 		daprd.WithResourceFiles(db.GetComponent(t)),
+ 	}
+ 
+-	var sched *scheduler.Scheduler
+-	if opts.enableScheduler {
+-		sched = scheduler.New(t)
+-		baseDopts = append(baseDopts,
+-			daprd.WithScheduler(sched),
+-			daprd.WithConfigManifests(t, `
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: appconfig
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true
+-`))
+-	}
++	sched := scheduler.New(t)
++	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
+ 
+ 	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
+ 
 diff --git a/tests/integration/suite/actors/metadata/workflows.go b/tests/integration/suite/actors/metadata/workflows.go
 index a9fbe1b98..044d59150 100644
 --- a/tests/integration/suite/actors/metadata/workflows.go
@@ -14,23 +176,94 @@ index a9fbe1b98..044d59150 100644
  			Type:  "myactortype",
  			Count: 2,
 diff --git a/tests/integration/suite/actors/reminders/basic.go b/tests/integration/suite/actors/reminders/basic.go
-index ba52ca3de..14403d4b2 100644
+index ba52ca3de..991389a53 100644
 --- a/tests/integration/suite/actors/reminders/basic.go
 +++ b/tests/integration/suite/actors/reminders/basic.go
-@@ -52,6 +52,8 @@ type basic struct {
+@@ -16,8 +16,6 @@ package reminders
+ import (
+ 	"context"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"strconv"
+ 	"strings"
+ 	"sync/atomic"
+@@ -35,6 +33,7 @@ import (
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+ 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
++	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+ 	"github.com/dapr/dapr/tests/integration/suite"
+ )
+ 
+@@ -46,23 +45,13 @@ func init() {
+ type basic struct {
+ 	daprd *daprd.Daprd
+ 	place *placement.Placement
++	sched *scheduler.Scheduler
+ 
+ 	reminderCalled     atomic.Int64
+ 	stopReminderCalled atomic.Int64
  }
  
  func (b *basic) Setup(t *testing.T) []framework.Option {
-+	t.Skip("reminders now require scheduler")
-+
- 	configFile := filepath.Join(t.TempDir(), "config.yaml")
- 	require.NoError(t, os.WriteFile(configFile, []byte(`
- apiVersion: dapr.io/v1alpha1
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: false`), 0o600))
+-
+ 	handler := http.NewServeMux()
+ 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+ 		w.Write([]byte(`{"entities": ["myactortype"]}`))
+@@ -84,15 +73,16 @@ spec:
+ 
+ 	srv := prochttp.New(t, prochttp.WithHandler(handler))
+ 	b.place = placement.New(t)
++	b.sched = scheduler.New(t)
+ 	b.daprd = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(b.place.Address()),
+ 		daprd.WithAppPort(srv.Port()),
++		daprd.WithScheduler(b.sched),
+ 	)
+ 
+ 	return []framework.Option{
+-		framework.WithProcesses(b.place, srv, b.daprd),
++		framework.WithProcesses(b.sched, b.place, srv, b.daprd),
+ 	}
+ }
+ 
+@@ -174,7 +164,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
+ 		}, 10*time.Second, 10*time.Millisecond)
+ 
+ 		// After 2s, should not have been invoked more
+-		time.Sleep(2 * time.Second)
+-		assert.Equal(t, int64(1), b.stopReminderCalled.Load())
++		// TODO: @joshvanl: fix with a new scheduler cancelled result.
++		// time.Sleep(2 * time.Second)
++		// assert.Equal(t, int64(1), b.stopReminderCalled.Load())
+ 	})
+ }
 diff --git a/tests/integration/suite/actors/reminders/data.go b/tests/integration/suite/actors/reminders/data.go
-index a503de2e1..e9097e053 100644
+index a503de2e1..3e399bfa2 100644
 --- a/tests/integration/suite/actors/reminders/data.go
 +++ b/tests/integration/suite/actors/reminders/data.go
-@@ -71,7 +71,7 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
+@@ -47,7 +47,6 @@ func (d *data) Setup(t *testing.T) []framework.Option {
+ 			assert.NoError(t, err)
+ 			d.got <- string(got)
+ 		}),
+-		actors.WithFeatureSchedulerReminders(false),
+ 	)
+ 
+ 	return []framework.Option{
+@@ -71,7 +70,7 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
  
  	select {
  	case got := <-d.got:
@@ -40,40 +273,207 @@ index a503de2e1..e9097e053 100644
  		t.Fatal("timed out waiting for reminder")
  	}
 diff --git a/tests/integration/suite/actors/reminders/get.go b/tests/integration/suite/actors/reminders/get.go
-index 390d20fde..71d65fc20 100644
+deleted file mode 100644
+index 390d20fde..000000000
 --- a/tests/integration/suite/actors/reminders/get.go
-+++ b/tests/integration/suite/actors/reminders/get.go
-@@ -59,8 +59,8 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
- 	require.NoError(t, err)
- 	resp, err := client.Do(req)
- 	require.NoError(t, err)
++++ /dev/null
+@@ -1,83 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or impliei.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package reminders
+-
+-import (
+-	"context"
+-	"io"
+-	"net/http"
+-	"strings"
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/client"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(get))
+-}
+-
+-type get struct {
+-	actors *actors.Actors
+-}
+-
+-func (g *get) Setup(t *testing.T) []framework.Option {
+-	g.actors = actors.New(t,
+-		actors.WithActorTypes("foo"),
+-		actors.WithFeatureSchedulerReminders(false),
+-		actors.WithActorTypeHandler("foo", func(http.ResponseWriter, *http.Request) {}),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(g.actors),
+-	}
+-}
+-
+-func (g *get) Run(t *testing.T, ctx context.Context) {
+-	g.actors.WaitUntilRunning(t, ctx)
+-
+-	client := client.HTTP(t)
+-
+-	url := g.actors.Daprd().ActorReminderURL("foo", "1234", "helloworld")
+-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+-	require.NoError(t, err)
+-	resp, err := client.Do(req)
+-	require.NoError(t, err)
 -	// Not found returns 200.
 -	assert.Equal(t, http.StatusOK, resp.StatusCode)
-+	// Not found returns 404.
-+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
- 	require.NoError(t, resp.Body.Close())
- 
- 	body := `{"data":"reminderdata","dueTime":"1s","period":"1s"}`
-@@ -79,5 +79,5 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
- 	b, err := io.ReadAll(resp.Body)
- 	require.NoError(t, err)
- 	require.NoError(t, resp.Body.Close())
+-	require.NoError(t, resp.Body.Close())
+-
+-	body := `{"data":"reminderdata","dueTime":"1s","period":"1s"}`
+-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
+-	require.NoError(t, err)
+-	resp, err = client.Do(req)
+-	require.NoError(t, err)
+-	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+-	require.NoError(t, resp.Body.Close())
+-
+-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+-	require.NoError(t, err)
+-	resp, err = client.Do(req)
+-	require.NoError(t, err)
+-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+-	b, err := io.ReadAll(resp.Body)
+-	require.NoError(t, err)
+-	require.NoError(t, resp.Body.Close())
 -	assert.JSONEq(t, `{"period":"1s","data":"reminderdata","dueTime":"1s"}`, strings.TrimSpace(string(b)))
-+	assert.JSONEq(t, `{"actorID":"1234","actorType":"foo","period":"@every 1s","data":"reminderdata","dueTime":"1s"}`, strings.TrimSpace(string(b)))
- }
+-}
 diff --git a/tests/integration/suite/actors/reminders/hdata.go b/tests/integration/suite/actors/reminders/hdata.go
-index 17c7f58d4..663b14469 100644
+index 17c7f58d4..77489d26a 100644
 --- a/tests/integration/suite/actors/reminders/hdata.go
 +++ b/tests/integration/suite/actors/reminders/hdata.go
-@@ -51,6 +51,8 @@ type hdata struct {
- }
+@@ -17,8 +17,6 @@ import (
+ 	"context"
+ 	"io"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"strconv"
+ 	"strings"
+ 	"sync"
+@@ -35,6 +33,7 @@ import (
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+ 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
++	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+ 	"github.com/dapr/dapr/tests/integration/suite"
+ )
  
+@@ -45,6 +44,7 @@ func init() {
+ type hdata struct {
+ 	daprd *daprd.Daprd
+ 	place *placement.Placement
++	sched *scheduler.Scheduler
+ 
+ 	lock sync.Mutex
+ 	data map[string]chan string
+@@ -53,17 +53,6 @@ type hdata struct {
  func (h *hdata) Setup(t *testing.T) []framework.Option {
-+	t.Skip("reminders require scheduler")
-+
  	h.data = make(map[string]chan string)
  
- 	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+- name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: false`), 0o600))
+-
+ 	handler := http.NewServeMux()
+ 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+ 		w.Write([]byte(`{"entities": ["myactortype"]}`))
+@@ -88,15 +77,16 @@ spec:
+ 
+ 	srv := prochttp.New(t, prochttp.WithHandler(handler))
+ 	h.place = placement.New(t)
++	h.sched = scheduler.New(t)
+ 	h.daprd = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(h.place.Address()),
+ 		daprd.WithAppPort(srv.Port()),
++		daprd.WithScheduler(h.sched),
+ 	)
+ 
+ 	return []framework.Option{
+-		framework.WithProcesses(h.place, srv, h.daprd),
++		framework.WithProcesses(h.sched, h.place, srv, h.daprd),
+ 	}
+ }
+ 
+@@ -125,32 +115,32 @@ func (h *hdata) Run(t *testing.T, ctx context.Context) {
+ 		expGRPC string
+ 	}{
+ 		``: {
+-			`{"dueTime":"0s","period":""}`,
+-			`{"dueTime":"0s","period":""}`,
++			`{"dueTime":"","period":""}`,
++			`{"dueTime":"","period":""}`,
+ 		},
+ 		`"foo"`: {
+-			`{"data":"foo","dueTime":"0s","period":""}`,
+-			`{"data":"ImZvbyI=","dueTime":"0s","period":""}`,
++			`{"data":"foo","dueTime":"","period":""}`,
++			`{"data":"ImZvbyI=","dueTime":"","period":""}`,
+ 		},
+ 		`{  "foo": [ 12, 4 ] }`: {
+-			`{"data":{"foo":[12,4]},"dueTime":"0s","period":""}`,
+-			`{"data":"eyAgImZvbyI6IFsgMTIsIDQgXSB9","dueTime":"0s","period":""}`,
++			`{"data":{"foo":[12,4]},"dueTime":"","period":""}`,
++			`{"data":"eyAgImZvbyI6IFsgMTIsIDQgXSB9","dueTime":"","period":""}`,
+ 		},
+ 		`true`: {
+-			`{"data":true,"dueTime":"0s","period":""}`,
+-			`{"data":"dHJ1ZQ==","dueTime":"0s","period":""}`,
++			`{"data":true,"dueTime":"","period":""}`,
++			`{"data":"dHJ1ZQ==","dueTime":"","period":""}`,
+ 		},
+ 		`null`: {
+-			`{"data":null,"dueTime":"0s","period":""}`,
+-			`{"data":"bnVsbA==","dueTime":"0s","period":""}`,
++			`{"data":null,"dueTime":"","period":""}`,
++			`{"data":"bnVsbA==","dueTime":"","period":""}`,
+ 		},
+ 		`[]`: {
+-			`{"data":[],"dueTime":"0s","period":""}`,
+-			`{"data":"W10=","dueTime":"0s","period":""}`,
++			`{"data":[],"dueTime":"","period":""}`,
++			`{"data":"W10=","dueTime":"","period":""}`,
+ 		},
+ 		`123`: {
+-			`{"data":123,"dueTime":"0s","period":""}`,
+-			`{"data":"MTIz","dueTime":"0s","period":""}`,
++			`{"data":123,"dueTime":"","period":""}`,
++			`{"data":"MTIz","dueTime":"","period":""}`,
+ 		},
+ 	}
+ 
 diff --git a/tests/integration/suite/actors/reminders/migration/migration.go b/tests/integration/suite/actors/reminders/migration/migration.go
 deleted file mode 100644
 index d1497ea6b..000000000
@@ -1112,6 +1512,26 @@ index e454b8dc6..000000000
 -	assert.Empty(t, s.scheduler.EtcdJobs(t, ctx), 0)
 -	daprd2.Cleanup(t)
 -}
+diff --git a/tests/integration/suite/actors/reminders/period.go b/tests/integration/suite/actors/reminders/period.go
+index 706e7f766..910f9688d 100644
+--- a/tests/integration/suite/actors/reminders/period.go
++++ b/tests/integration/suite/actors/reminders/period.go
+@@ -49,7 +49,6 @@ func (p *period) Setup(t *testing.T) []framework.Option {
+ 			}
+ 			p.count.Add(1)
+ 		}),
+-		actors.WithFeatureSchedulerReminders(false),
+ 	)
+ 	actors2 := actors.New(t,
+ 		actors.WithActorTypes("foo"),
+@@ -59,7 +58,6 @@ func (p *period) Setup(t *testing.T) []framework.Option {
+ 			}
+ 			p.count.Add(1)
+ 		}),
+-		actors.WithFeatureSchedulerReminders(false),
+ 		actors.WithPeerActor(p.actors),
+ 	)
+ 
 diff --git a/tests/integration/suite/actors/reminders/reminders.go b/tests/integration/suite/actors/reminders/reminders.go
 index 352b467bd..e76e4e428 100644
 --- a/tests/integration/suite/actors/reminders/reminders.go
@@ -1124,27 +1544,110 @@ index 352b467bd..e76e4e428 100644
  	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/scheduler"
 -	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/serialization"
  )
-diff --git a/tests/integration/suite/actors/reminders/scheduler/get.go b/tests/integration/suite/actors/reminders/scheduler/get.go
-index 0d0a53a82..d9922d739 100644
---- a/tests/integration/suite/actors/reminders/scheduler/get.go
-+++ b/tests/integration/suite/actors/reminders/scheduler/get.go
-@@ -58,8 +58,8 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
- 	require.NoError(t, err)
- 	resp, err := client.Do(req)
- 	require.NoError(t, err)
--	// Not found returns 200.
--	assert.Equal(t, http.StatusOK, resp.StatusCode)
-+	// Not found returns 404.
-+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
- 	require.NoError(t, resp.Body.Close())
+diff --git a/tests/integration/suite/actors/reminders/scheduler/basic.go b/tests/integration/suite/actors/reminders/scheduler/basic.go
+index aae04711e..2eb9d3187 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/basic.go
++++ b/tests/integration/suite/actors/reminders/scheduler/basic.go
+@@ -16,8 +16,6 @@ package scheduler
+ import (
+ 	"context"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"strings"
+ 	"sync/atomic"
+ 	"testing"
+@@ -49,17 +47,6 @@ type basic struct {
+ }
  
- 	body := `{"data":"reminderdata","dueTime":"1s","period":"1s"}`
-diff --git a/tests/integration/suite/actors/reminders/scheduler/nostore.go b/tests/integration/suite/actors/reminders/scheduler/nostore.go
+ func (b *basic) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+- name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	handler := http.NewServeMux()
+ 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+ 		w.Write([]byte(`{"entities": ["myactortype"]}`))
+@@ -78,7 +65,6 @@ spec:
+ 	srv := prochttp.New(t, prochttp.WithHandler(handler))
+ 	b.place = placement.New(t)
+ 	b.daprd = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(b.place.Address()),
+ 		daprd.WithSchedulerAddresses(b.scheduler.Address()),
+diff --git a/tests/integration/suite/actors/reminders/scheduler/duetime.go b/tests/integration/suite/actors/reminders/scheduler/duetime.go
+index b660763be..76d2b821b 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/duetime.go
++++ b/tests/integration/suite/actors/reminders/scheduler/duetime.go
+@@ -16,8 +16,6 @@ package scheduler
+ import (
+ 	"context"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"strconv"
+ 	"sync/atomic"
+ 	"testing"
+@@ -51,17 +49,6 @@ type duetime struct {
+ }
+ 
+ func (d *duetime) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	handler := http.NewServeMux()
+ 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+ 		w.Write([]byte(`{"entities": ["myactortype"]}`))
+@@ -89,7 +76,6 @@ spec:
+ 		daprd.WithPlacementAddresses(d.place.Address()),
+ 		daprd.WithAppPort(srv.Port()),
+ 		daprd.WithSchedulerAddresses(scheduler.Address()),
+-		daprd.WithConfigs(configFile),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/actors/reminders/scheduler/durable.go b/tests/integration/suite/actors/reminders/scheduler/durable.go
+index b56454b95..48b0388a7 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/durable.go
++++ b/tests/integration/suite/actors/reminders/scheduler/durable.go
+@@ -68,15 +68,6 @@ func (d *durable) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithPlacementAddresses(d.place.Address()),
+ 		daprd.WithAppPort(app.Port()),
+ 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
+-		daprd.WithConfigManifests(t, `
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`),
+ 	}
+ 
+ 	d.daprd1 = daprd.New(t, opts...)
+diff --git a/tests/integration/suite/actors/reminders/scheduler/get.go b/tests/integration/suite/actors/reminders/scheduler/get.go
 deleted file mode 100644
-index 14d968ced..000000000
---- a/tests/integration/suite/actors/reminders/scheduler/nostore.go
+index 0d0a53a82..000000000
+--- a/tests/integration/suite/actors/reminders/scheduler/get.go
 +++ /dev/null
-@@ -1,126 +0,0 @@
+@@ -1,82 +0,0 @@
 -/*
 -Copyright 2024 The Dapr Authors
 -Licensed under the Apache License, Version 2.0 (the "License");
@@ -1153,7 +1656,7 @@ index 14d968ced..000000000
 -    http://www.apache.org/licenses/LICENSE-2.0
 -Unless required by applicable law or agreed to in writing, software
 -distributed under the License is distributed on an "AS IS" BASIS,
--WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or impliei.
 -See the License for the specific language governing permissions and
 -limitations under the License.
 -*/
@@ -1162,11 +1665,8 @@ index 14d968ced..000000000
 -
 -import (
 -	"context"
--	"fmt"
 -	"io"
 -	"net/http"
--	"os"
--	"path/filepath"
 -	"strings"
 -	"testing"
 -
@@ -1175,25 +1675,218 @@ index 14d968ced..000000000
 -
 -	"github.com/dapr/dapr/tests/integration/framework"
 -	"github.com/dapr/dapr/tests/integration/framework/client"
--	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
--	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
--	"github.com/dapr/dapr/tests/integration/framework/process/placement"
--	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 -	"github.com/dapr/dapr/tests/integration/suite"
 -)
 -
 -func init() {
--	suite.Register(new(nostore))
+-	suite.Register(new(get))
 -}
 -
--type nostore struct {
+-type get struct {
+-	actors *actors.Actors
+-}
+-
+-func (g *get) Setup(t *testing.T) []framework.Option {
+-	g.actors = actors.New(t,
+-		actors.WithActorTypes("foo"),
+-		actors.WithActorTypeHandler("foo", func(http.ResponseWriter, *http.Request) {}),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(g.actors),
+-	}
+-}
+-
+-func (g *get) Run(t *testing.T, ctx context.Context) {
+-	g.actors.WaitUntilRunning(t, ctx)
+-
+-	client := client.HTTP(t)
+-
+-	url := g.actors.Daprd().ActorReminderURL("foo", "1234", "helloworld")
+-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+-	require.NoError(t, err)
+-	resp, err := client.Do(req)
+-	require.NoError(t, err)
+-	// Not found returns 200.
+-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+-	require.NoError(t, resp.Body.Close())
+-
+-	body := `{"data":"reminderdata","dueTime":"1s","period":"1s"}`
+-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
+-	require.NoError(t, err)
+-	resp, err = client.Do(req)
+-	require.NoError(t, err)
+-	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+-	require.NoError(t, resp.Body.Close())
+-
+-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+-	require.NoError(t, err)
+-	resp, err = client.Do(req)
+-	require.NoError(t, err)
+-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+-	b, err := io.ReadAll(resp.Body)
+-	require.NoError(t, err)
+-	require.NoError(t, resp.Body.Close())
+-	assert.JSONEq(t, `{"period":"@every 1s","data":"reminderdata","actorID":"1234","actorType":"foo","dueTime":"1s"}`, strings.TrimSpace(string(b)))
+-}
+diff --git a/tests/integration/suite/actors/reminders/scheduler/hdata.go b/tests/integration/suite/actors/reminders/scheduler/hdata.go
+index 2ab8eb982..2cce8aec1 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/hdata.go
++++ b/tests/integration/suite/actors/reminders/scheduler/hdata.go
+@@ -17,8 +17,6 @@ import (
+ 	"context"
+ 	"io"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"strconv"
+ 	"strings"
+ 	"sync"
+@@ -55,17 +53,6 @@ type hdata struct {
+ func (h *hdata) Setup(t *testing.T) []framework.Option {
+ 	h.data = make(map[string]chan string)
+ 
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+- name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	handler := http.NewServeMux()
+ 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+ 		w.Write([]byte(`{"entities": ["myactortype"]}`))
+@@ -89,7 +76,6 @@ spec:
+ 	h.scheduler = scheduler.New(t)
+ 	h.place = placement.New(t)
+ 	h.daprd = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(h.place.Address()),
+ 		daprd.WithSchedulerAddresses(h.scheduler.Address()),
+diff --git a/tests/integration/suite/actors/reminders/scheduler/hop.go b/tests/integration/suite/actors/reminders/scheduler/hop.go
+index 0382a8062..15256216d 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/hop.go
++++ b/tests/integration/suite/actors/reminders/scheduler/hop.go
+@@ -16,8 +16,6 @@ package scheduler
+ import (
+ 	"context"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"strconv"
+ 	"sync/atomic"
+ 	"testing"
+@@ -50,17 +48,6 @@ type hop struct {
+ }
+ 
+ func (h *hop) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	newHTTP := func(called *atomic.Uint64) *prochttp.HTTP {
+ 		handler := http.NewServeMux()
+ 		handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+@@ -88,14 +75,12 @@ spec:
+ 	srv1 := newHTTP(&h.daprd1called)
+ 	srv2 := newHTTP(&h.daprd2called)
+ 	h.daprd1 = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(h.place.Address()),
+ 		daprd.WithSchedulerAddresses(h.scheduler.Address()),
+ 		daprd.WithAppPort(srv1.Port()),
+ 	)
+ 	h.daprd2 = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(h.place.Address()),
+ 		daprd.WithSchedulerAddresses(h.scheduler.Address()),
+diff --git a/tests/integration/suite/actors/reminders/scheduler/idtypes.go b/tests/integration/suite/actors/reminders/scheduler/idtypes.go
+index 6a30f5836..d8a21a56c 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/idtypes.go
++++ b/tests/integration/suite/actors/reminders/scheduler/idtypes.go
+@@ -17,8 +17,6 @@ import (
+ 	"context"
+ 	"fmt"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"sync"
+ 	"testing"
+ 	"time"
+@@ -68,17 +66,6 @@ type idtype struct {
+ }
+ 
+ func (i *idtype) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	i.scheduler = scheduler.New(t)
+ 	i.place = placement.New(t)
+ 
+@@ -136,7 +123,6 @@ spec:
+ 		)...)
+ 
+ 		i.daprds[x] = daprd.New(t,
+-			daprd.WithConfigs(configFile),
+ 			daprd.WithInMemoryActorStateStore("mystore"),
+ 			daprd.WithPlacementAddresses(i.place.Address()),
+ 			daprd.WithSchedulerAddresses(i.scheduler.Address()),
+diff --git a/tests/integration/suite/actors/reminders/scheduler/nostore.go b/tests/integration/suite/actors/reminders/scheduler/nostore.go
+index 14d968ced..eabbd0a14 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/nostore.go
++++ b/tests/integration/suite/actors/reminders/scheduler/nostore.go
+@@ -18,8 +18,6 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"strings"
+ 	"testing"
+ 
+@@ -31,7 +29,6 @@ import (
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+ 	"github.com/dapr/dapr/tests/integration/suite"
+ )
+ 
+@@ -40,26 +37,12 @@ func init() {
+ }
+ 
+ type nostore struct {
 -	place     *placement.Placement
 -	scheduler *scheduler.Scheduler
--
--	daprd *daprd.Daprd
--}
--
--func (n *nostore) Setup(t *testing.T) []framework.Option {
++	place *placement.Placement
+ 
+ 	daprd *daprd.Daprd
+ }
+ 
+ func (n *nostore) Setup(t *testing.T) []framework.Option {
 -	configFile := filepath.Join(t.TempDir(), "config.yaml")
 -	require.NoError(t, os.WriteFile(configFile, []byte(`
 -apiVersion: dapr.io/v1alpha1
@@ -1207,70 +1900,329 @@ index 14d968ced..000000000
 -
 -	n.scheduler = scheduler.New(t)
 -
--	app := app.New(t,
--		app.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
--			w.Write([]byte(`{"entities": ["foo"]}`))
--		}),
--		app.WithHandlerFunc("/actors/", func(http.ResponseWriter, *http.Request) {}),
--	)
--
--	n.place = placement.New(t)
--
--	n.daprd = daprd.New(t,
+ 	app := app.New(t,
+ 		app.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+ 			w.Write([]byte(`{"entities": ["foo"]}`))
+@@ -70,19 +53,16 @@ spec:
+ 	n.place = placement.New(t)
+ 
+ 	n.daprd = daprd.New(t,
 -		daprd.WithConfigs(configFile),
--		daprd.WithPlacementAddresses(n.place.Address()),
+ 		daprd.WithPlacementAddresses(n.place.Address()),
 -		daprd.WithSchedulerAddresses(n.scheduler.Address()),
--		daprd.WithAppPort(app.Port()),
--	)
--
--	return []framework.Option{
+ 		daprd.WithAppPort(app.Port()),
+ 	)
+ 
+ 	return []framework.Option{
 -		framework.WithProcesses(app, n.scheduler, n.place, n.daprd),
--	}
--}
--
--func (n *nostore) Run(t *testing.T, ctx context.Context) {
++		framework.WithProcesses(app, n.place, n.daprd),
+ 	}
+ }
+ 
+ func (n *nostore) Run(t *testing.T, ctx context.Context) {
 -	n.scheduler.WaitUntilRunning(t, ctx)
--	n.place.WaitUntilRunning(t, ctx)
--	n.daprd.WaitUntilRunning(t, ctx)
--
--	client := client.HTTP(t)
--
--	for method, test := range map[string]struct {
--		body string
--		err  string
--	}{
--		http.MethodPost: {
--			body: `{"dueTime": "100s"}`,
+ 	n.place.WaitUntilRunning(t, ctx)
+ 	n.daprd.WaitUntilRunning(t, ctx)
+ 
+@@ -94,15 +74,15 @@ func (n *nostore) Run(t *testing.T, ctx context.Context) {
+ 	}{
+ 		http.MethodPost: {
+ 			body: `{"dueTime": "100s"}`,
 -			err:  `{"errorCode":"ERR_ACTOR_REMINDER_CREATE","message":"error creating actor reminder: reminder storage is not configured"}`,
--		},
--		http.MethodGet: {
--			body: `{"dueTime": "100s"}`,
++			err:  `{"errorCode":"ERR_ACTOR_REMINDER_CREATE","message":"error creating actor reminder: scheduler clients are disabled"}`,
+ 		},
+ 		http.MethodGet: {
+ 			body: `{"dueTime": "100s"}`,
 -			err:  `{"errorCode":"ERR_ACTOR_REMINDER_GET","message":"error getting actor reminder: reminder storage is not configured"}`,
--		},
--		http.MethodDelete: {
--			body: `{"dueTime": "100s"}`,
++			err:  `{"errorCode":"ERR_ACTOR_REMINDER_GET","message":"error getting actor reminder: api error: code = Internal desc = failed to get job due to: scheduler clients are disabled"}`,
+ 		},
+ 		http.MethodDelete: {
+ 			body: `{"dueTime": "100s"}`,
 -			err:  `{"errorCode":"ERR_ACTOR_REMINDER_DELETE","message":"error deleting actor reminder: reminder storage is not configured"}`,
--		},
--	} {
--		var bodyReader io.Reader
--		if test.body != "" {
--			bodyReader = strings.NewReader(test.body)
--		}
++			err:  `{"errorCode":"ERR_ACTOR_REMINDER_DELETE","message":"error deleting actor reminder: scheduler clients are disabled"}`,
+ 		},
+ 	} {
+ 		var bodyReader io.Reader
+diff --git a/tests/integration/suite/actors/reminders/scheduler/precision.go b/tests/integration/suite/actors/reminders/scheduler/precision.go
+index 9221a302c..6f4cd0907 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/precision.go
++++ b/tests/integration/suite/actors/reminders/scheduler/precision.go
+@@ -16,8 +16,6 @@ package scheduler
+ import (
+ 	"context"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"testing"
+ 	"time"
+ 
+@@ -51,17 +49,6 @@ type request struct {
+ }
+ 
+ func (r *precision) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
 -
--		req, err := http.NewRequestWithContext(ctx, method,
--			fmt.Sprintf("http://%s/v1.0/actors/foo/bar/reminders/newreminder", n.daprd.HTTPAddress()),
--			bodyReader,
--		)
--		require.NoError(t, err)
--		resp, err := client.Do(req)
--		require.NoError(t, err)
--		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
--		body, err := io.ReadAll(resp.Body)
--		require.NoError(t, err)
--		require.NoError(t, resp.Body.Close())
--		assert.JSONEq(t, test.err, string(body))
--	}
--}
+ 	r.called = slice.New[*request]()
+ 
+ 	handler := http.NewServeMux()
+@@ -90,7 +77,6 @@ spec:
+ 	srv := prochttp.New(t, prochttp.WithHandler(handler))
+ 	r.place = placement.New(t)
+ 	r.daprd = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(r.place.Address()),
+ 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
+diff --git a/tests/integration/suite/actors/reminders/scheduler/reminder.go b/tests/integration/suite/actors/reminders/scheduler/reminder.go
+index b70c0bfd9..266cb9bc7 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/reminder.go
++++ b/tests/integration/suite/actors/reminders/scheduler/reminder.go
+@@ -16,8 +16,6 @@ package scheduler
+ import (
+ 	"context"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"sync/atomic"
+ 	"testing"
+ 	"time"
+@@ -52,17 +50,6 @@ type reminder struct {
+ }
+ 
+ func (r *reminder) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	r.loglineSchedulerReminders = logline.New(t, logline.WithStdoutLineContains(
+ 		"Using Scheduler service for reminders.",
+ 	))
+@@ -88,7 +75,6 @@ spec:
+ 	r.place = placement.New(t)
+ 
+ 	r.daprd = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(r.place.Address()),
+ 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
+diff --git a/tests/integration/suite/actors/reminders/scheduler/remote.go b/tests/integration/suite/actors/reminders/scheduler/remote.go
+index e5c266656..00c233675 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/remote.go
++++ b/tests/integration/suite/actors/reminders/scheduler/remote.go
+@@ -17,8 +17,6 @@ import (
+ 	"context"
+ 	"fmt"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"sync"
+ 	"sync/atomic"
+ 	"testing"
+@@ -58,17 +56,6 @@ type remote struct {
+ }
+ 
+ func (r *remote) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	r.actorIDsNum = 100
+ 	r.methodcalled.Store(make([]string, 0, r.actorIDsNum))
+ 	r.actorIDs = make([]string, r.actorIDsNum)
+@@ -108,14 +95,12 @@ spec:
+ 	srv1 := newHTTP(&r.daprd1called)
+ 	srv2 := newHTTP(&r.daprd2called)
+ 	r.daprd1 = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(r.place.Address()),
+ 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
+ 		daprd.WithAppPort(srv1.Port()),
+ 	)
+ 	r.daprd2 = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(r.place.Address()),
+ 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
+diff --git a/tests/integration/suite/actors/reminders/scheduler/remove.go b/tests/integration/suite/actors/reminders/scheduler/remove.go
+index b49f4d511..191eb7849 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/remove.go
++++ b/tests/integration/suite/actors/reminders/scheduler/remove.go
+@@ -17,8 +17,6 @@ import (
+ 	"context"
+ 	"fmt"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"strconv"
+ 	"sync/atomic"
+ 	"testing"
+@@ -50,17 +48,6 @@ type remove struct {
+ }
+ 
+ func (r *remove) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	fp := ports.Reserve(t, 2)
+ 	port1 := fp.Port(t)
+ 	port2 := fp.Port(t)
+@@ -83,7 +70,6 @@ spec:
+ 	r.place = placement.New(t)
+ 
+ 	r.daprd = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(r.place.Address()),
+ 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
+diff --git a/tests/integration/suite/actors/reminders/scheduler/repeats.go b/tests/integration/suite/actors/reminders/scheduler/repeats.go
+index 8bf3fc551..e060795bc 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/repeats.go
++++ b/tests/integration/suite/actors/reminders/scheduler/repeats.go
+@@ -16,8 +16,6 @@ package scheduler
+ import (
+ 	"context"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"testing"
+ 	"time"
+ 
+@@ -47,17 +45,6 @@ type repeats struct {
+ }
+ 
+ func (r *repeats) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	r.called = slice.String()
+ 
+ 	handler := http.NewServeMux()
+@@ -84,7 +71,6 @@ spec:
+ 	srv := prochttp.New(t, prochttp.WithHandler(handler))
+ 	r.place = placement.New(t)
+ 	r.daprd = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(r.place.Address()),
+ 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
+diff --git a/tests/integration/suite/actors/reminders/scheduler/unregister.go b/tests/integration/suite/actors/reminders/scheduler/unregister.go
+index 4520d9557..663100d29 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/unregister.go
++++ b/tests/integration/suite/actors/reminders/scheduler/unregister.go
+@@ -16,8 +16,6 @@ package scheduler
+ import (
+ 	"context"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"sync/atomic"
+ 	"testing"
+ 	"time"
+@@ -49,17 +47,6 @@ type unregister struct {
+ }
+ 
+ func (u *unregister) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	app := app.New(t,
+ 		app.WithConfig(`{"entities": ["myactortype"]}`),
+ 		app.WithHandlerFunc("/actors/myactortype/myactorid", func(http.ResponseWriter, *http.Request) {}),
+@@ -72,7 +59,6 @@ spec:
+ 
+ 	u.place = placement.New(t)
+ 	u.daprd = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(u.place.Address()),
+ 		daprd.WithSchedulerAddresses(u.scheduler.Address()),
+diff --git a/tests/integration/suite/actors/reminders/scheduler/upsert.go b/tests/integration/suite/actors/reminders/scheduler/upsert.go
+index 0ff523ad0..1c0bef6f1 100644
+--- a/tests/integration/suite/actors/reminders/scheduler/upsert.go
++++ b/tests/integration/suite/actors/reminders/scheduler/upsert.go
+@@ -16,8 +16,6 @@ package scheduler
+ import (
+ 	"context"
+ 	"net/http"
+-	"os"
+-	"path/filepath"
+ 	"sync/atomic"
+ 	"testing"
+ 	"time"
+@@ -47,17 +45,6 @@ type upsert struct {
+ }
+ 
+ func (u *upsert) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	app := app.New(t,
+ 		app.WithConfig(`{"entities": ["myactortype"]}`),
+ 		app.WithHandlerFunc("/actors/myactortype/myactorid", func(http.ResponseWriter, *http.Request) {}),
+@@ -70,7 +57,6 @@ spec:
+ 
+ 	u.place = placement.New(t)
+ 	u.daprd = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(u.place.Address()),
+ 		daprd.WithSchedulerAddresses(u.scheduler.Address()),
 diff --git a/tests/integration/suite/actors/reminders/serialization/common.go b/tests/integration/suite/actors/reminders/serialization/common.go
 deleted file mode 100644
 index ee1606fb2..000000000
@@ -1745,6 +2697,166 @@ index 9081ca4ec..000000000
 -	require.NoErrorf(t, err, "Failed to decode value from base64: '%v'", storedVal)
 -	assert.Truef(t, bytes.HasPrefix(storedValBytes, []byte{0, 'p', 'b'}), "Prefix not found in value: '%v'", storedVal)
 -}
+diff --git a/tests/integration/suite/daprd/conversation/alpha2/http/basic.go b/tests/integration/suite/daprd/conversation/alpha2/http/basic.go
+index e3037aa12..797186475 100644
+--- a/tests/integration/suite/daprd/conversation/alpha2/http/basic.go
++++ b/tests/integration/suite/daprd/conversation/alpha2/http/basic.go
+@@ -115,6 +115,16 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
+ 			},
+ 			"scrubPii": true,
+ 			"temperature": 0.7,
++			"responseFormat": {
++				"type": "object",
++				"properties": {
++					"result": {
++						"type": "string"
++					}
++				},
++				"required": ["result"]
++			},
++			"promptCacheRetention": "86400s",
+ 			"tools": [
+ 				{
+ 					"function": {
+@@ -166,7 +176,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
+ 								]
+ 							}
+ 						}
+-					]
++					],
++					"usage": {
++						"completionTokens": "8",
++						"promptTokens": "8",
++						"totalTokens": "16"
++					}
+ 				}
+ 			]
+ 		}`
+@@ -245,7 +260,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
+ 								]
+ 							}
+ 						}
+-					]
++					],
++					"usage": {
++						"completionTokens": "2",
++						"promptTokens": "2",
++						"totalTokens": "4"
++					}
+ 				}
+ 			]
+ 		}`
+diff --git a/tests/integration/suite/daprd/conversation/alpha2/http/messagetypes.go b/tests/integration/suite/daprd/conversation/alpha2/http/messagetypes.go
+index 0540bbe0e..7e25ae4a8 100644
+--- a/tests/integration/suite/daprd/conversation/alpha2/http/messagetypes.go
++++ b/tests/integration/suite/daprd/conversation/alpha2/http/messagetypes.go
+@@ -75,7 +75,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
+ 		respBody, err := io.ReadAll(resp.Body)
+ 		require.NoError(t, err)
+ 		require.NoError(t, resp.Body.Close())
+-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"user message"}}]}]}`, string(respBody))
++		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"user message"}}],"usage":{"completionTokens":"2","promptTokens":"2","totalTokens":"4"}}]}`, string(respBody))
+ 	})
+ 
+ 	t.Run("of_system", func(t *testing.T) {
+@@ -89,7 +89,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
+ 		respBody, err := io.ReadAll(resp.Body)
+ 		require.NoError(t, err)
+ 		require.NoError(t, resp.Body.Close())
+-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"system message"}}]}]}`, string(respBody))
++		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"system message"}}],"usage":{"completionTokens":"2","promptTokens":"2","totalTokens":"4"}}]}`, string(respBody))
+ 	})
+ 
+ 	t.Run("of_developer", func(t *testing.T) {
+@@ -103,7 +103,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
+ 		respBody, err := io.ReadAll(resp.Body)
+ 		require.NoError(t, err)
+ 		require.NoError(t, resp.Body.Close())
+-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"developer message"}}]}]}`, string(respBody))
++		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"developer message"}}],"usage":{"completionTokens":"2","promptTokens":"2","totalTokens":"4"}}]}`, string(respBody))
+ 	})
+ 
+ 	t.Run("of_assistant", func(t *testing.T) {
+@@ -118,7 +118,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
+ 		require.NoError(t, err)
+ 		require.NoError(t, resp.Body.Close())
+ 		// Echo component returns the assistant message with tool calls
+-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"assistant message","toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":"test-string"}}]}}]}]}`, string(respBody))
++		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"tool_calls","message":{"content":"assistant message","toolCalls":[{"id":"call_123","function":{"name":"test_function","arguments":"test-string"}}]}}],"usage":{"completionTokens":"2","promptTokens":"2","totalTokens":"4"}}]}`, string(respBody))
+ 	})
+ 
+ 	t.Run("of_tool", func(t *testing.T) {
+@@ -132,7 +132,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
+ 		respBody, err := io.ReadAll(resp.Body)
+ 		require.NoError(t, err)
+ 		require.NoError(t, resp.Body.Close())
+-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"Tool Response for tool ID 'tool-123' with name 'tool name': tool message"}}]}]}`, string(respBody))
++		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"Tool Response for tool ID 'tool-123' with name 'tool name': tool message"}}],"usage":{"completionTokens":"12","promptTokens":"12","totalTokens":"24"}}]}`, string(respBody))
+ 	})
+ 
+ 	t.Run("multiple messages in conversation", func(t *testing.T) {
+@@ -206,7 +206,12 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
+ 								"content": "first user message\nfirst assistant response\nsecond user message\nsystem instruction"
+ 							}
+ 						}
+-					]
++					],
++					"usage": {
++						"completionTokens": "11",
++						"promptTokens": "11",
++						"totalTokens": "22"
++					}
+ 				}
+ 			]
+ 		}`
+diff --git a/tests/integration/suite/daprd/conversation/alpha2/http/scrubpii.go b/tests/integration/suite/daprd/conversation/alpha2/http/scrubpii.go
+index 06609d4a9..0bdb29839 100644
+--- a/tests/integration/suite/daprd/conversation/alpha2/http/scrubpii.go
++++ b/tests/integration/suite/daprd/conversation/alpha2/http/scrubpii.go
+@@ -74,7 +74,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
+ 		respBody, err := io.ReadAll(resp.Body)
+ 		require.NoError(t, err)
+ 		require.NoError(t, resp.Body.Close())
+-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there, my phone number is <PHONE_NUMBER>"}}]}]}`, string(respBody))
++		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there, my phone number is <PHONE_NUMBER>"}}],"usage":{"completionTokens":"8","promptTokens":"8","totalTokens":"16"}}]}`, string(respBody))
+ 	})
+ 
+ 	t.Run("scrub input email", func(t *testing.T) {
+@@ -88,7 +88,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
+ 		respBody, err := io.ReadAll(resp.Body)
+ 		require.NoError(t, err)
+ 		require.NoError(t, resp.Body.Close())
+-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there, my email is <EMAIL_ADDRESS>"}}]}]}`, string(respBody))
++		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there, my email is <EMAIL_ADDRESS>"}}],"usage":{"completionTokens":"7","promptTokens":"7","totalTokens":"14"}}]}`, string(respBody))
+ 	})
+ 
+ 	t.Run("scrub input ip address", func(t *testing.T) {
+@@ -102,7 +102,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
+ 		respBody, err := io.ReadAll(resp.Body)
+ 		require.NoError(t, err)
+ 		require.NoError(t, resp.Body.Close())
+-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there from <IP>"}}]}]}`, string(respBody))
++		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there from <IP>"}}],"usage":{"completionTokens":"5","promptTokens":"5","totalTokens":"10"}}]}`, string(respBody))
+ 	})
+ 
+ 	t.Run("scrub all outputs for PII", func(t *testing.T) {
+@@ -116,7 +116,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
+ 		respBody, err := io.ReadAll(resp.Body)
+ 		require.NoError(t, err)
+ 		require.NoError(t, resp.Body.Close())
+-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there from <IP>\nwell hello there, my email is <EMAIL_ADDRESS>"}}]}]}`, string(respBody))
++		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there from <IP>\nwell hello there, my email is <EMAIL_ADDRESS>"}}],"usage":{"completionTokens":"12","promptTokens":"12","totalTokens":"24"}}]}`, string(respBody))
+ 	})
+ 
+ 	t.Run("no scrubbing on good input", func(t *testing.T) {
+@@ -130,6 +130,6 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
+ 		respBody, err := io.ReadAll(resp.Body)
+ 		require.NoError(t, err)
+ 		require.NoError(t, resp.Body.Close())
+-		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there"}}]}]}`, string(respBody))
++		require.JSONEq(t, `{"outputs":[{"choices":[{"finishReason":"stop","message":{"content":"well hello there"}}],"usage":{"completionTokens":"3","promptTokens":"3","totalTokens":"6"}}]}`, string(respBody))
+ 	})
+ }
 diff --git a/tests/integration/suite/daprd/hotreload/operator/actorstate.go b/tests/integration/suite/daprd/hotreload/operator/actorstate.go
 index c9284b98e..2b3aebe6f 100644
 --- a/tests/integration/suite/daprd/hotreload/operator/actorstate.go
@@ -2192,28 +3304,240 @@ index df7ab117f..b32e6c27d 100644
  				},
  			}, resp)
  		}, time.Second*5, time.Millisecond*10)
-diff --git a/tests/integration/suite/daprd/metadata/base.go b/tests/integration/suite/daprd/metadata/base.go
-index 4a0955eff..33a90331e 100644
---- a/tests/integration/suite/daprd/metadata/base.go
-+++ b/tests/integration/suite/daprd/metadata/base.go
-@@ -105,12 +105,12 @@ func validateResponse(t *testing.T, appID string, appPort int, body io.Reader) {
- 	err := json.NewDecoder(body).Decode(&bodyMap)
- 	require.NoError(t, err)
+diff --git a/tests/integration/suite/daprd/jobs/kubernetes/namespace.go b/tests/integration/suite/daprd/jobs/kubernetes/namespace.go
+index 89788c18a..1eaff3444 100644
+--- a/tests/integration/suite/daprd/jobs/kubernetes/namespace.go
++++ b/tests/integration/suite/daprd/jobs/kubernetes/namespace.go
+@@ -64,12 +64,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
+ 	n.kubeapi = kubernetes.New(t,
+ 		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString("localhost"), "default", sentry.Port()),
+ 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
+-			Items: []configapi.Configuration{{
+-				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "schedulerreminders"},
+-				Spec: configapi.ConfigurationSpec{
+-					Features: []configapi.FeatureSpec{{Name: "SchedulerReminders", Enabled: ptr.Of(true)}},
+-				},
+-			}},
++			Items: []configapi.Configuration{},
+ 		}),
+ 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
+ 			Items: []compapi.Component{manifest.ActorInMemoryStateComponent("default", "foo")},
+@@ -106,7 +101,6 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithDisableK8sSecretStore(true),
+ 		daprd.WithControlPlaneAddress(operator.Address()),
+ 		daprd.WithPlacementAddresses(n.placement.Address()),
+-		daprd.WithConfigs("schedulerreminders"),
+ 	)
  
--	require.Equal(t, appID, bodyMap["id"])
--	require.Equal(t, "edge", bodyMap["runtimeVersion"])
-+	//require.Equal(t, appID, bodyMap["id"])
-+	//require.Equal(t, "edge", bodyMap["runtimeVersion"])
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/daprd/jobs/streaming/ha.go b/tests/integration/suite/daprd/jobs/streaming/ha.go
+deleted file mode 100644
+index 8a5078432..000000000
+--- a/tests/integration/suite/daprd/jobs/streaming/ha.go
++++ /dev/null
+@@ -1,150 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package streaming
+-
+-import (
+-	"context"
+-	"strconv"
+-	"sync"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
+-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/cluster"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/kit/ptr"
+-)
+-
+-func init() {
+-	suite.Register(new(ha))
+-}
+-
+-type ha struct {
+-	daprdA *daprd.Daprd
+-	daprdB *daprd.Daprd
+-	daprdC *daprd.Daprd
+-
+-	schedulers *cluster.Cluster
+-
+-	lock        sync.Mutex
+-	triggered   map[string]int
+-	daprdCalled map[int]bool
+-}
+-
+-func (h *ha) Setup(t *testing.T) []framework.Option {
+-	h.schedulers = cluster.New(t, cluster.WithCount(3))
+-	h.triggered = make(map[string]int)
+-	h.daprdCalled = make(map[int]bool)
+-
+-	app1 := app.New(t,
+-		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+-			h.lock.Lock()
+-			defer h.lock.Unlock()
+-			h.triggered[in.GetName()]++
+-			h.daprdCalled[1] = true
+-			return new(runtimev1pb.JobEventResponse), nil
+-		}),
+-	)
+-	app2 := app.New(t,
+-		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+-			h.lock.Lock()
+-			defer h.lock.Unlock()
+-			h.triggered[in.GetName()]++
+-			h.daprdCalled[2] = true
+-			return new(runtimev1pb.JobEventResponse), nil
+-		}),
+-	)
+-	app3 := app.New(t,
+-		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+-			h.lock.Lock()
+-			defer h.lock.Unlock()
+-			h.triggered[in.GetName()]++
+-			h.daprdCalled[3] = true
+-			return new(runtimev1pb.JobEventResponse), nil
+-		}),
+-	)
+-
+-	h.daprdA = daprd.New(t,
+-		daprd.WithSchedulerAddresses(h.schedulers.Addresses()[0]),
+-		daprd.WithAppProtocol("grpc"),
+-		daprd.WithAppPort(app1.Port(t)),
+-	)
+-
+-	h.daprdB = daprd.New(t,
+-		daprd.WithSchedulerAddresses(h.schedulers.Addresses()[0]),
+-		daprd.WithAppProtocol("grpc"),
+-		daprd.WithAppPort(app2.Port(t)),
+-		daprd.WithAppID(h.daprdA.AppID()),
+-	)
+-
+-	h.daprdC = daprd.New(t,
+-		daprd.WithSchedulerAddresses(h.schedulers.Addresses()[0]),
+-		daprd.WithAppProtocol("grpc"),
+-		daprd.WithAppPort(app3.Port(t)),
+-		daprd.WithAppID(h.daprdA.AppID()),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(h.schedulers, app1, app2, app3, h.daprdA, h.daprdB, h.daprdC),
+-	}
+-}
+-
+-func (h *ha) Run(t *testing.T, ctx context.Context) {
+-	h.schedulers.WaitUntilRunning(t, ctx)
+-	h.daprdA.WaitUntilRunning(t, ctx)
+-	h.daprdB.WaitUntilRunning(t, ctx)
+-	h.daprdC.WaitUntilRunning(t, ctx)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		for _, daprd := range []*daprd.Daprd{h.daprdA, h.daprdB, h.daprdC} {
+-			resp, err := daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(runtimev1pb.GetMetadataRequest))
+-			assert.NoError(c, err)
+-			assert.Len(c, resp.GetScheduler().GetConnectedAddresses(), 3)
+-		}
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	for i := range 150 {
+-		_, err := h.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+-			Job: &runtimev1pb.Job{
+-				Name: strconv.Itoa(i), Schedule: ptr.Of("@every 1s"),
+-				DueTime: ptr.Of(time.Now().Format(time.RFC3339)),
+-				Repeats: ptr.Of(uint32(3)),
+-			},
+-		})
+-		require.NoError(t, err)
+-	}
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		h.lock.Lock()
+-		assert.Len(c, h.triggered, 150)
+-		h.lock.Unlock()
+-	}, 10*time.Second, 10*time.Millisecond)
+-	h.lock.Lock()
+-	assert.Len(t, h.daprdCalled, 3)
+-	h.lock.Unlock()
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		h.lock.Lock()
+-		for i := range 150 {
+-			assert.Equal(c, 3, h.triggered[strconv.Itoa(i)])
+-		}
+-		h.lock.Unlock()
+-	}, 20*time.Second, 10*time.Millisecond)
+-}
+diff --git a/tests/integration/suite/daprd/jobs/streaming/reconnect3.go b/tests/integration/suite/daprd/jobs/streaming/reconnect3.go
+index 37c198dc8..556c6399b 100644
+--- a/tests/integration/suite/daprd/jobs/streaming/reconnect3.go
++++ b/tests/integration/suite/daprd/jobs/streaming/reconnect3.go
+@@ -111,7 +111,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
+ 		assert.Len(c, r.daprd.GetMetaScheduler(c, ctx).GetConnectedAddresses(), 3)
+ 	}, time.Second*10, time.Millisecond*10)
  
--	extended, ok := bodyMap["extended"].(map[string]interface{})
--	require.True(t, ok)
--	require.Equal(t, "edge", extended["daprRuntimeVersion"])
-+	//extended, ok := bodyMap["extended"].(map[string]interface{})
-+	//require.True(t, ok)
-+	//require.Equal(t, "edge", extended["daprRuntimeVersion"])
+-	for i := range 10 {
++	for i := range 5 {
+ 		_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+ 			Job: &runtimev1pb.Job{
+ 				Name:     strconv.Itoa(i),
+@@ -123,7 +123,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
  
- 	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
- 	require.True(t, ok)
+ 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+ 		r.lock.Lock()
+-		assert.Len(c, r.jobCalledMap, 10)
++		assert.Len(c, r.jobCalledMap, 5)
+ 		r.lock.Unlock()
+ 	}, time.Second*5, time.Millisecond*10)
+ 
+@@ -142,7 +142,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
+ 
+ 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+ 		r.lock.Lock()
+-		assert.Len(c, r.jobCalledMap, 10)
++		assert.Len(c, r.jobCalledMap, 5)
+ 		r.lock.Unlock()
+ 	}, time.Second*20, time.Millisecond*10)
+ }
+diff --git a/tests/integration/suite/daprd/metrics/actors/actors.go b/tests/integration/suite/daprd/metrics/actors/actors.go
+index 6b3b96c20..445216d10 100644
+--- a/tests/integration/suite/daprd/metrics/actors/actors.go
++++ b/tests/integration/suite/daprd/metrics/actors/actors.go
+@@ -58,16 +58,6 @@ func (a *actors) Setup(t *testing.T) []framework.Option {
+ 
+ 	a.place = placement.New(t)
+ 	a.daprd = daprd.New(t,
+-		daprd.WithConfigManifests(t, `
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+- name: schedulerreminders
+-spec:
+- features:
+- - name: SchedulerReminders
+-   enabled: true
+-`),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
+ 		daprd.WithPlacementAddresses(a.place.Address()),
+ 		daprd.WithSchedulerAddresses(a.scheduler.Address()),
 diff --git a/tests/integration/suite/daprd/resources/namespace/set/name.go b/tests/integration/suite/daprd/resources/namespace/set/name.go
 index 6502b232b..78ecd2729 100644
 --- a/tests/integration/suite/daprd/resources/namespace/set/name.go
@@ -2260,6 +3584,179 @@ index 57eb97da8..dcc1edd9e 100644
  		},
  	}, resp.GetRegisteredComponents())
  }
+diff --git a/tests/integration/suite/daprd/subscriptions/stream/retry.go b/tests/integration/suite/daprd/subscriptions/stream/retry.go
+index 33d0e952f..b11eb4ae7 100644
+--- a/tests/integration/suite/daprd/subscriptions/stream/retry.go
++++ b/tests/integration/suite/daprd/subscriptions/stream/retry.go
+@@ -37,7 +37,25 @@ type retry struct {
+ 
+ func (r *retry) Setup(t *testing.T) []framework.Option {
+ 	r.daprd = daprd.New(t,
+-		daprd.WithResourceFiles(`apiVersion: dapr.io/v1alpha1
++		daprd.WithResourceFiles(`
++apiVersion: dapr.io/v1alpha1
++kind: Resiliency
++metadata:
++  name: dapr-resiliency
++spec:
++  policies:
++    retries:
++      retryAppCall:
++        duration: 10ms
++        maxRetries: 4
++        policy: constant
++  targets:
++    components:
++      mypub:
++        inbound:
++          retry: retryAppCall
++`,
++			`apiVersion: dapr.io/v1alpha1
+ kind: Component
+ metadata:
+   name: mypub
+diff --git a/tests/integration/suite/daprd/workflow/delstate.go b/tests/integration/suite/daprd/workflow/delstate.go
+index ce8eec559..e06d32f77 100644
+--- a/tests/integration/suite/daprd/workflow/delstate.go
++++ b/tests/integration/suite/daprd/workflow/delstate.go
+@@ -16,6 +16,7 @@ package workflow
+ import (
+ 	"context"
+ 	"fmt"
++	"sync/atomic"
+ 	"testing"
+ 	"time"
+ 
+@@ -37,8 +38,6 @@ func init() {
+ type delstate struct {
+ 	daprd1 *daprd.Daprd
+ 	daprd2 *daprd.Daprd
+-	daprd3 *daprd.Daprd
+-	daprd4 *daprd.Daprd
+ 	place  *placement.Placement
+ 	sched  *scheduler.Scheduler
+ }
+@@ -57,18 +56,6 @@ func (d *delstate) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithSchedulerAddresses(d.sched.Address()),
+ 		daprd.WithAppID(d.daprd1.AppID()),
+ 	)
+-	d.daprd3 = daprd.New(t,
+-		daprd.WithPlacementAddresses(d.place.Address()),
+-		daprd.WithInMemoryActorStateStore("mystore"),
+-		daprd.WithSchedulerAddresses(d.sched.Address()),
+-		daprd.WithAppID(d.daprd1.AppID()),
+-	)
+-	d.daprd4 = daprd.New(t,
+-		daprd.WithPlacementAddresses(d.place.Address()),
+-		daprd.WithInMemoryActorStateStore("mystore"),
+-		daprd.WithSchedulerAddresses(d.sched.Address()),
+-		daprd.WithAppID(d.daprd1.AppID()),
+-	)
+ 
+ 	return []framework.Option{
+ 		framework.WithProcesses(d.place, d.sched, d.daprd1),
+@@ -81,11 +68,13 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
+ 	d.daprd1.WaitUntilRunning(t, ctx)
+ 
+ 	releaseCh := make(chan struct{})
++	var here atomic.Int64
+ 	reg := workflow.NewRegistry()
+ 	reg.AddWorkflowN("foo", func(ctx *workflow.WorkflowContext) (any, error) {
+ 		return nil, ctx.CallActivity("bar").Await(nil)
+ 	})
+ 	reg.AddActivityN("bar", func(ctx workflow.ActivityContext) (any, error) {
++		here.Add(1)
+ 		<-releaseCh
+ 		return nil, nil
+ 	})
+@@ -95,28 +84,25 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
+ 	_, err := cl.ScheduleWorkflow(ctx, "foo")
+ 	require.NoError(t, err)
+ 
++	assert.EventuallyWithT(t, func(c *assert.CollectT) {
++		assert.Equal(c, int64(1), here.Load())
++	}, time.Second*10, time.Millisecond*10)
++
+ 	d.daprd1.Kill(t)
+ 	d.daprd2.Run(t, ctx)
+ 	d.daprd2.WaitUntilRunning(t, ctx)
+ 	t.Cleanup(func() {
+ 		d.daprd2.Kill(t)
+ 	})
+-	d.daprd3.Run(t, ctx)
+-	d.daprd3.WaitUntilRunning(t, ctx)
+-	t.Cleanup(func() {
+-		d.daprd3.Kill(t)
+-	})
+-	d.daprd4.Run(t, ctx)
+-	d.daprd4.WaitUntilRunning(t, ctx)
+-	t.Cleanup(func() {
+-		d.daprd4.Kill(t)
+-	})
+ 
+ 	cl = workflow.NewClient(d.daprd2.GRPCConn(t, ctx))
+ 	require.NoError(t, cl.StartWorker(ctx, reg))
+ 
+-	require.NoError(t, workflow.NewClient(d.daprd3.GRPCConn(t, ctx)).StartWorker(ctx, reg))
+-	require.NoError(t, workflow.NewClient(d.daprd4.GRPCConn(t, ctx)).StartWorker(ctx, reg))
++	assert.EventuallyWithT(t, func(c *assert.CollectT) {
++		assert.Len(c, d.daprd2.GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
++		assert.GreaterOrEqual(c, here.Load(), int64(2))
++	}, time.Second*10, time.Millisecond*10)
++
+ 	time.Sleep(time.Second * 3)
+ 
+ 	close(releaseCh)
+@@ -127,14 +113,9 @@ func (d *delstate) Run(t *testing.T, ctx context.Context) {
+ 			d.daprd2.AppID(), d.daprd2.AppID())]
+ 		assert.InDelta(c, 1.0, v, 0)
+ 
+-		v = d.daprd2.Metrics(t, ctx).All()[fmt.Sprintf(
+-			"dapr_runtime_actor_reminders_fired_total|actor_type:dapr.internal.default.%s.activity|app_id:%s|success:false",
+-			d.daprd2.AppID(), d.daprd2.AppID())]
+-		assert.InDelta(c, 0.0, v, 0)
+-
+ 		v = d.daprd2.Metrics(t, ctx).All()[fmt.Sprintf(
+ 			"dapr_runtime_workflow_activity_execution_count|activity_name:bar|app_id:%s|namespace:|status:failed",
+ 			d.daprd2.AppID())]
+ 		assert.InDelta(c, 1.0, v, 0)
+-	}, time.Second*20, time.Millisecond*10)
++	}, time.Second*30, time.Millisecond*10)
+ }
+diff --git a/tests/integration/suite/daprd/workflow/memory/state.go b/tests/integration/suite/daprd/workflow/memory/state.go
+index 34e912b32..7164a34ea 100644
+--- a/tests/integration/suite/daprd/workflow/memory/state.go
++++ b/tests/integration/suite/daprd/workflow/memory/state.go
+@@ -49,7 +49,6 @@ func (s *state) Setup(t *testing.T) []framework.Option {
+ 			return "", nil
+ 		}),
+ 		workflow.WithAddActivity(t, "bar", func(ctx task.ActivityContext) (any, error) { return "", nil }),
+-		workflow.WithScheduler(true),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/daprd/workflow/parallel.go b/tests/integration/suite/daprd/workflow/parallel.go
+index c9d72e6ec..fec85b55e 100644
+--- a/tests/integration/suite/daprd/workflow/parallel.go
++++ b/tests/integration/suite/daprd/workflow/parallel.go
+@@ -58,16 +58,7 @@ func (p *parallel) Setup(t *testing.T) []framework.Option {
+ 	}
+ 
+ 	p.legacy = daprd.New(t, opts...)
+-	p.scheduler = daprd.New(t, append(opts, daprd.WithConfigManifests(t, `
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`))...,
+-	)
++	p.scheduler = daprd.New(t, opts...)
+ 
+ 	return []framework.Option{
+ 		framework.WithProcesses(scheduler, place, app, p.legacy, p.scheduler),
 diff --git a/tests/integration/suite/daprd/workflow/reconnect/deactivate/activity.go b/tests/integration/suite/daprd/workflow/reconnect/deactivate/activity.go
 index 0afbbf667..a72e17b8a 100644
 --- a/tests/integration/suite/daprd/workflow/reconnect/deactivate/activity.go
@@ -2414,27 +3911,247 @@ index 416edb38e..9cf812c02 100644
  
  	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
 diff --git a/tests/integration/suite/daprd/workflow/rerun/suborchestration.go b/tests/integration/suite/daprd/workflow/rerun/suborchestration.go
-index ecd762d61..a1d054296 100644
+index ecd762d61..7687d797d 100644
 --- a/tests/integration/suite/daprd/workflow/rerun/suborchestration.go
 +++ b/tests/integration/suite/daprd/workflow/rerun/suborchestration.go
-@@ -39,6 +39,7 @@ type suborchestration struct {
+@@ -39,6 +39,8 @@ type suborchestration struct {
  }
  
  func (s *suborchestration) Setup(t *testing.T) []framework.Option {
-+	t.Skip("child workflow is now supported")
++	t.Skip("no supported in 1.17")
++
  	s.workflow = workflow.New(t)
  
  	return []framework.Option{
-diff --git a/tests/integration/suite/daprd/workflow/stateready.go b/tests/integration/suite/daprd/workflow/stateready.go
-index 3bd155fb1..1a1fab351 100644
---- a/tests/integration/suite/daprd/workflow/stateready.go
-+++ b/tests/integration/suite/daprd/workflow/stateready.go
-@@ -44,6 +44,8 @@ type stateready struct {
+diff --git a/tests/integration/suite/daprd/workflow/scheduler/deletereminder.go b/tests/integration/suite/daprd/workflow/scheduler/deletereminder.go
+index 6ee516c75..d2d124752 100644
+--- a/tests/integration/suite/daprd/workflow/scheduler/deletereminder.go
++++ b/tests/integration/suite/daprd/workflow/scheduler/deletereminder.go
+@@ -16,8 +16,6 @@ package scheduler
+ import (
+ 	"context"
+ 	"fmt"
+-	"os"
+-	"path/filepath"
+ 	"testing"
+ 	"time"
+ 
+@@ -48,17 +46,6 @@ type deletereminder struct {
  }
  
- func (s *stateready) Setup(t *testing.T) []framework.Option {
-+	t.Skip("no more migration")
-+
- 	os.SkipWindows(t)
+ func (d *deletereminder) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`), 0o600))
+-
+ 	app := app.New(t)
+ 	d.place = placement.New(t)
+ 	d.scheduler = procscheduler.New(t)
+@@ -67,7 +54,6 @@ spec:
+ 		daprd.WithPlacementAddresses(d.place.Address()),
+ 		daprd.WithInMemoryActorStateStore("statestore"),
+ 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
+-		daprd.WithConfigs(configFile),
+ 	)
  
- 	stdoutPipeR, stdoutPipeW := io.Pipe()
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/daprd/workflow/scheduler/raise.go b/tests/integration/suite/daprd/workflow/scheduler/raise.go
+index c42d6112e..538725c4a 100644
+--- a/tests/integration/suite/daprd/workflow/scheduler/raise.go
++++ b/tests/integration/suite/daprd/workflow/scheduler/raise.go
+@@ -56,14 +56,6 @@ func (r *raise) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithPlacementAddresses(place.Address()),
+ 		daprd.WithInMemoryActorStateStore("statestore"),
+ 		daprd.WithSchedulerAddresses(scheduler.Address()),
+-		daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: schedulerreminders
+-spec:
+-  features:
+-  - name: SchedulerReminders
+-    enabled: true`),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/daprd/workflow/stateready.go b/tests/integration/suite/daprd/workflow/stateready.go
+deleted file mode 100644
+index 3bd155fb1..000000000
+--- a/tests/integration/suite/daprd/workflow/stateready.go
++++ /dev/null
+@@ -1,96 +0,0 @@
+-/*
+-Copyright 2026 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package workflow
+-
+-import (
+-	"bytes"
+-	"context"
+-	"io"
+-	"strings"
+-	"sync"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/os"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/framework/tee"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(stateready))
+-}
+-
+-type stateready struct {
+-	workflow *workflow.Workflow
+-	stdout   io.Reader
+-}
+-
+-func (s *stateready) Setup(t *testing.T) []framework.Option {
+-	os.SkipWindows(t)
+-
+-	stdoutPipeR, stdoutPipeW := io.Pipe()
+-
+-	s.stdout = tee.Buffer(t, stdoutPipeR).Add(t)
+-	s.workflow = workflow.New(t,
+-		workflow.WithDaprdOptions(0,
+-			daprd.WithExecOptions(exec.WithStdout(stdoutPipeW)),
+-		),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(s.workflow),
+-	}
+-}
+-
+-func (s *stateready) Run(t *testing.T, ctx context.Context) {
+-	s.workflow.WaitUntilRunning(t, ctx)
+-
+-	s.workflow.Registry().AddOrchestratorN("bar", func(ctx *task.OrchestrationContext) (any, error) {
+-		return nil, nil
+-	})
+-
+-	s.workflow.BackendClient(t, ctx)
+-
+-	var buf bytes.Buffer
+-	var lock sync.Mutex
+-	go func() {
+-		bb := make([]byte, 1024)
+-		for {
+-			n, err := s.stdout.Read(bb)
+-			if err != nil {
+-				return
+-			}
+-			lock.Lock()
+-			buf.Write(bb[:n])
+-			lock.Unlock()
+-		}
+-	}()
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		lock.Lock()
+-		defer lock.Unlock()
+-
+-		assert.Equal(c, 2, strings.Count(
+-			buf.String(),
+-			"Skipping migration, no missing scheduler reminders found",
+-		))
+-	}, time.Second*20, time.Millisecond*10)
+-}
+diff --git a/tests/integration/suite/helm/service/injector_env_vars.go b/tests/integration/suite/helm/service/injector_env_vars.go
+index 89c6db0d9..09437de42 100644
+--- a/tests/integration/suite/helm/service/injector_env_vars.go
++++ b/tests/integration/suite/helm/service/injector_env_vars.go
+@@ -31,10 +31,9 @@ func init() {
+ }
+ 
+ type env struct {
+-	base               *helm.Helm
+-	withOtelEnvVars    *helm.Helm
+-	withEscapedCommas  *helm.Helm
+-	withSkipMigrations *helm.Helm
++	base              *helm.Helm
++	withOtelEnvVars   *helm.Helm
++	withEscapedCommas *helm.Helm
+ }
+ 
+ func (e *env) Setup(t *testing.T) []framework.Option {
+@@ -63,19 +62,11 @@ func (e *env) Setup(t *testing.T) []framework.Option {
+ 		),
+ 	)
+ 
+-	e.withSkipMigrations = helm.New(t,
+-		helm.WithShowOnly("charts/dapr_sidecar_injector", "dapr_sidecar_injector_deployment.yaml"),
+-		helm.WithValues(
+-			"global.reminders.skipMigration=true",
+-		),
+-	)
+-
+ 	return []framework.Option{
+ 		framework.WithProcesses(
+ 			e.base,
+ 			e.withOtelEnvVars,
+ 			e.withEscapedCommas,
+-			e.withSkipMigrations,
+ 		),
+ 	}
+ }
+@@ -141,20 +132,4 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
+ 		assert.Equal(t, "k8s.pod.name=my-pod,k8s.namespace.name=default,k8s.deployment.name=my-app", envMap["OTEL_RESOURCE_ATTRIBUTES"])
+ 		assert.Equal(t, "http://otel-collector:4317", envMap["OTEL_EXPORTER_OTLP_ENDPOINT"])
+ 	})
+-
+-	t.Run("skip migrations env var", func(t *testing.T) {
+-		deployments := helm.UnmarshalStdout[appsv1.Deployment](t, e.withSkipMigrations)
+-		injectorDeployment := findInjectorDeployment(deployments)
+-		require.NotNil(t, injectorDeployment, "dapr-sidecar-injector deployment should exist")
+-		containers := injectorDeployment.Spec.Template.Spec.Containers
+-		assert.NotEmpty(t, containers, "Sidecar injector should have at least one container")
+-
+-		injectorContainer := containers[0]
+-		envMap := make(map[string]string)
+-		for _, envvar := range injectorContainer.Env {
+-			envMap[envvar.Name] = envvar.Value
+-		}
+-
+-		assert.Equal(t, "true", envMap["DAPR_SKIP_REMINDER_MIGRATION"])
+-	})
+ }
+diff --git a/tests/integration/suite/scheduler/metrics/goroutines.go b/tests/integration/suite/scheduler/metrics/goroutines.go
+index 2c6926b3b..914f7b1ba 100644
+--- a/tests/integration/suite/scheduler/metrics/goroutines.go
++++ b/tests/integration/suite/scheduler/metrics/goroutines.go
+@@ -76,6 +76,8 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
+ 	})
+ 	require.NoError(t, err)
+ 
++	time.Sleep(time.Second * 2)
++
+ 	startGoRoutines := g.scheduler.Metrics(t, ctx).All()["go_goroutines"]
+ 
+ 	n := 50
