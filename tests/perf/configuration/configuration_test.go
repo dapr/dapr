@@ -36,7 +36,7 @@ var tr *runner.TestRunner
 const (
 	numHealthChecks                       = 60 // Number of times to check for endpoint health per app.
 	defaultConfigGetThresholdMs           = 60
-	defaultConfigSubscribeHTTPThresholdMs = 450 // HTTP subscribe makes per-key HTTP round-trips, resulting in higher latency than GRPC streaming
+	defaultConfigSubscribeHTTPThresholdMs = 430 // HTTP subscribe makes per-key HTTP round-trips, resulting in higher latency than GRPC streaming
 	defaultConfigSubscribeGRPCThresholdMs = 350 // GRPC subscribe uses streaming
 	testAppName                           = "configurationapp"
 )
