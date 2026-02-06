@@ -48,6 +48,10 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 func (n *notls) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
+	assert.Eventually(t, func() bool {
+		return n.place.IsLeader(t, ctx)
+	}, time.Second*10, time.Millisecond*10)
+
 	t.Run("actors in different namespaces are disseminated properly", func(t *testing.T) {
 		host1 := &v1pb.Host{
 			Name:      "myapp1",
