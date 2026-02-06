@@ -55,6 +55,10 @@ func (n *streamHang) Setup(t *testing.T) []framework.Option {
 func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
+	assert.Eventually(t, func() bool {
+		return n.place.IsLeader(t, ctx)
+	}, time.Second*10, time.Millisecond*10)
+
 	// Set up host1 and stream1 (not reading from stream)
 	host1 := &v1pb.Host{
 		Name:      "local/myapp1",
