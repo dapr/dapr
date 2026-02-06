@@ -44,10 +44,11 @@ type ComponentUpdateEvent struct {
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
 	log.Info("sidecar connected for component updates")
 
-	ch, err := a.compInformer.WatchUpdates(srv.Context(), in.GetNamespace())
+	ch, cancel, err := a.compInformer.WatchUpdates(srv.Context(), in.GetNamespace())
 	if err != nil {
 		return err
 	}
+	defer cancel()
 
 	updateComponentFunc := func(ctx context.Context, t operatorv1pb.ResourceEventType, c *componentsapi.Component) {
 		if c.Namespace != in.GetNamespace() {
