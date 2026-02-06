@@ -71,7 +71,9 @@ type disseminator struct {
 
 	timeoutQ *timeout.Timeout
 
-	streams   map[uint64]*streamConn
+	streams              map[uint64]*streamConn
+	streamsInTargetState int
+
 	store     *store.Store
 	streamIDx uint64
 	wg        sync.WaitGroup
@@ -96,6 +98,7 @@ func New(opts Options) loop.Interface[loops.Event] {
 	diss.actorConnCount.Store(0)
 	diss.namespace = opts.Namespace
 	diss.timeout = opts.DisseminationTimeout
+	diss.streamsInTargetState = 0
 
 	diss.waitingToDisseminate = nil
 	diss.waitingToDelete = nil
@@ -160,7 +163,10 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 	d.wg.Add(1)
 	go func() {
 		defer d.wg.Done()
-		_ = streamLoop.Run(ctx)
+		derr := streamLoop.Run(ctx)
+		if derr != nil {
+			log.Errorf("Stream loop for stream %s:%d exited with error: %v", d.namespace, streamIDx, derr)
+		}
 	}()
 
 	stream := &streamConn{

@@ -52,6 +52,7 @@ func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
 	d.currentVersion++
 	d.timeoutQ.Enqueue(d.currentVersion)
 	d.currentOperation = v1pb.HostOperation_LOCK
+	d.streamsInTargetState = 0
 
 	for _, s := range d.streams {
 		s.currentState = v1pb.HostOperation_REPORT

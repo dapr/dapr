@@ -65,6 +65,7 @@ func (d *disseminator) doReport(streamIDx uint64, host *v1pb.Host) {
 	d.currentVersion++
 	d.timeoutQ.Enqueue(d.currentVersion)
 	d.currentOperation = v1pb.HostOperation_LOCK
+	d.streamsInTargetState = 0
 
 	for _, s := range d.streams {
 		s.currentState = v1pb.HostOperation_REPORT
@@ -80,11 +81,15 @@ func (d *disseminator) handleReportedLock(streamIDx uint64) {
 		return
 	}
 
-	stream.currentState = v1pb.HostOperation_LOCK
+	if stream.currentState != v1pb.HostOperation_LOCK {
+		stream.currentState = v1pb.HostOperation_LOCK
+		d.streamsInTargetState++
+	}
 
-	if d.allStreamsHaveState(v1pb.HostOperation_LOCK) {
+	if d.streamsInTargetState == len(d.streams) {
 		// All streams have locked, move to update phase.
 		d.currentOperation = v1pb.HostOperation_UPDATE
+		d.streamsInTargetState = 0
 
 		for _, s := range d.streams {
 			s.loop.Enqueue(&loops.DisseminateUpdate{
@@ -101,11 +106,15 @@ func (d *disseminator) handleReportedUpdate(streamIDx uint64) {
 		return
 	}
 
-	stream.currentState = v1pb.HostOperation_UPDATE
+	if stream.currentState != v1pb.HostOperation_UPDATE {
+		stream.currentState = v1pb.HostOperation_UPDATE
+		d.streamsInTargetState++
+	}
 
-	if d.allStreamsHaveState(v1pb.HostOperation_UPDATE) {
+	if d.streamsInTargetState == len(d.streams) {
 		// All streams have updated, dissemination is complete, send out unlocks.
 		d.currentOperation = v1pb.HostOperation_UNLOCK
+		d.streamsInTargetState = 0
 
 		for _, s := range d.streams {
 			s.loop.Enqueue(&loops.DisseminateUnlock{
@@ -121,9 +130,12 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 		return
 	}
 
-	stream.currentState = v1pb.HostOperation_UNLOCK
+	if stream.currentState != v1pb.HostOperation_UNLOCK {
+		stream.currentState = v1pb.HostOperation_UNLOCK
+		d.streamsInTargetState++
+	}
 
-	if d.allStreamsHaveState(v1pb.HostOperation_UNLOCK) {
+	if d.streamsInTargetState == len(d.streams) {
 		d.currentOperation = v1pb.HostOperation_REPORT
 
 		d.timeoutQ.Dequeue(d.currentVersion)
@@ -140,6 +152,7 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 			d.currentVersion++
 			d.timeoutQ.Enqueue(d.currentVersion)
 			d.currentOperation = v1pb.HostOperation_LOCK
+			d.streamsInTargetState = 0
 
 			for _, s := range d.streams {
 				s.currentState = v1pb.HostOperation_REPORT
@@ -159,13 +172,4 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 			d.handleAdd(ctx, needs)
 		}
 	}
-}
-
-func (d *disseminator) allStreamsHaveState(state v1pb.HostOperation) bool {
-	for _, stream := range d.streams {
-		if stream.currentState != state {
-			return false
-		}
-	}
-	return true
 }

@@ -61,8 +61,10 @@ func (a *Authorizer) Host(stream v1pb.Placement_ReportDaprStatusServer, msg *v1p
 
 	// Ensure the provided host ID and namespace match those in the client SPIFFE
 	// ID.
-	if err = a.matchID(msg, clientID); err != nil {
-		return err
+	if clientID != nil {
+		if err = a.matchID(msg, clientID); err != nil {
+			return err
+		}
 	}
 
 	if err = a.actorTypes(msg); err != nil {
@@ -73,11 +75,6 @@ func (a *Authorizer) Host(stream v1pb.Placement_ReportDaprStatusServer, msg *v1p
 }
 
 func (a *Authorizer) matchID(host *v1pb.Host, clientID *spiffe.Parsed) error {
-	if clientID == nil {
-		// mTLS is not enabled; skip checks.
-		return nil
-	}
-
 	if host.GetId() != clientID.AppID() {
 		return status.Errorf(
 			codes.PermissionDenied,
