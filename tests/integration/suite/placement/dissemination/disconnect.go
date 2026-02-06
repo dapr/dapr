@@ -62,6 +62,10 @@ func (n *disconnect) Setup(t *testing.T) []framework.Option {
 func (n *disconnect) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
+	assert.Eventually(t, func() bool {
+		return n.place.IsLeader(t, ctx)
+	}, time.Second*10, time.Millisecond*10)
+
 	t.Run("disconnecting stream for host that HAD actors removes actors from the placement table if no other host for the appid is present in the namespace", func(t *testing.T) {
 		httpClient := client.HTTP(t)
 
