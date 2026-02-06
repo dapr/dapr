@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/perf/actor-activation-locker
 
-go 1.24.12
+go 1.25.7
 
 require (
 	github.com/bsm/redislock v0.8.2
