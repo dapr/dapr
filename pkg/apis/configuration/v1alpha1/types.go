@@ -239,11 +239,11 @@ type OtelSpec struct {
 	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
 	IsSecure        *bool  `json:"isSecure" yaml:"isSecure"`
 	// +optional
-	Headers string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Headers Headers []common.NameValuePair `json:"headers,omitempty" yaml:"headers,omitempty"`
 	// +optional
 	SecretRef *common.SecretKeyRef `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
 	// +optional
-	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Timeout *time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.
