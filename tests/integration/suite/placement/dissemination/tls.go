@@ -148,6 +148,10 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 	n.daprd2.WaitUntilRunning(t, ctx)
 	n.daprd3.WaitUntilRunning(t, ctx)
 
+	assert.Eventually(t, func() bool {
+		return n.place.IsLeader(t, ctx)
+	}, time.Second*10, time.Millisecond*10)
+
 	t.Run("host1 can see actor 1 in ns1, but not actors 2 and 3 in ns2", func(t *testing.T) {
 		client := n.daprd1.GRPCClient(t, ctx)
 
