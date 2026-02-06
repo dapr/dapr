@@ -5,8 +5,6 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
   name: configurations.dapr.io
-  labels:
-    app.kubernetes.io/part-of: "dapr"
 spec:
   group: dapr.io
   names:
@@ -473,10 +471,27 @@ spec:
                     properties:
                       endpointAddress:
                         type: string
+                      headers:
+                        type: string
                       isSecure:
                         type: boolean
                       protocol:
                         type: string
+                      secretRef:
+                        description: SecretKeyRef is a reference to a secret holding
+                          the value for the name/value item.
+                        properties:
+                          key:
+                            description: Field in the secret.
+                            type: string
+                          name:
+                            description: Secret name.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      timeout:
+                        type: integer
                     required:
                     - endpointAddress
                     - isSecure
