@@ -54,7 +54,9 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 }
 
 func processConfigurationSecrets(ctx context.Context, config *configurationapi.Configuration, namespace string, kubeClient client.Client) error {
-	if config.Spec.TracingSpec != nil && config.Spec.TracingSpec.Otel != nil && config.Spec.TracingSpec.Otel.SecretRef != nil {
+	if config.Spec.TracingSpec == nil || config.Spec.TracingSpec.Otel == nil ||config.Spec.TracingSpec.Otel.SecretRef == nil {
+	return nil
+}
 		secretRef := config.Spec.TracingSpec.Otel.SecretRef
 
 		if secretRef.Name != "" {
