@@ -1,4 +1,4 @@
-FROM golang:1.24.12
+FROM golang:1.24.13
 WORKDIR /actorload/
 COPY . .
 RUN make build

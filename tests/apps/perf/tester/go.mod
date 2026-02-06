@@ -1,3 +1,3 @@
 module github.com/dapr/dapr/tests/apps/perf/tester
 
-go 1.24.12
+go 1.24.13
