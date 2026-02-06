@@ -852,6 +852,9 @@ func TestActorFeatures(t *testing.T) {
 		log.Printf("Got metadata: Error='%v' Response='%s'", err, string(res))
 		require.NoError(t, err, "failed to get metadata")
 
+		// Add delay to make the test robust.
+		time.Sleep(5 * time.Second)
+
 		var previousMetadata metadata
 		err = json.Unmarshal(res, &previousMetadata)
 		require.NoError(t, err, "error marshalling to JSON")
