@@ -53,7 +53,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tmc/langchaingo v0.1.15-0.20251029190607-e35755df7084
 	go.etcd.io/etcd/api/v3 v3.5.21
-	go.etcd.io/etcd/client/pkg/v3 v3.5.21
+	go.etcd.io/etcd/client/pkg/v3 v3.6.7
 	go.etcd.io/etcd/client/v3 v3.5.21
 	go.etcd.io/etcd/server/v3 v3.5.21
 	go.mongodb.org/mongo-driver v1.14.0
