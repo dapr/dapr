@@ -14,46 +14,14 @@ limitations under the License.
 package informer
 
 import (
-	"context"
-
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/utils"
 )
 
-type handler[T meta.Resource] struct {
-	i       *informer[T]
-	batchCh <-chan *informerEvent[T]
-	appCh   chan<- *Event[T]
-	id      *spiffe.Parsed
-}
-
-func (h *handler[T]) loop(ctx context.Context) {
-	defer close(h.appCh)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-h.i.closeCh:
-			return
-		case event := <-h.batchCh:
-			env, ok := h.appEventFromEvent(event)
-			if !ok {
-				continue
-			}
-
-			select {
-			case <-ctx.Done():
-			case <-h.i.closeCh:
-			case h.appCh <- env:
-			}
-		}
-	}
-}
-
-func (h *handler[T]) appEventFromEvent(event *informerEvent[T]) (*Event[T], bool) {
-	if event.newObj.Manifest.GetNamespace() != h.id.Namespace() {
+func appEventFromEvent[T meta.Resource](id *spiffe.Parsed, event *informerEvent[T]) (*Event[T], bool) {
+	if event.newObj.Manifest.GetNamespace() != id.Namespace() {
 		return nil, false
 	}
 
@@ -61,12 +29,12 @@ func (h *handler[T]) appEventFromEvent(event *informerEvent[T]) (*Event[T], bool
 	var appInOld bool
 	if event.oldObj != nil {
 		manifest := *event.oldObj
-		appInOld = len(manifest.GetScopes()) == 0 || utils.Contains(manifest.GetScopes(), h.id.AppID())
+		appInOld = len(manifest.GetScopes()) == 0 || utils.Contains(manifest.GetScopes(), id.AppID())
 	}
 
 	newManifest := event.newObj.Manifest
 	var appInNew bool
-	if len(newManifest.GetScopes()) == 0 || utils.Contains(newManifest.GetScopes(), h.id.AppID()) {
+	if len(newManifest.GetScopes()) == 0 || utils.Contains(newManifest.GetScopes(), id.AppID()) {
 		appInNew = true
 	}
 
