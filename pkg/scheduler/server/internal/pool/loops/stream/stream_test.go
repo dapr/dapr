@@ -38,7 +38,7 @@ import (
 type suite struct {
 	srv          *serverfake.Fake
 	nsLoop       *fake.Fake
-	streamLoop   loop.Interface[loops.Event]
+	streamLoop   loop.Interface[loops.EventStream]
 	clientstream schedulerv1pb.Scheduler_WatchJobsClient
 	serverstream schedulerv1pb.Scheduler_WatchJobsServer
 	closeserver  context.CancelFunc
@@ -100,7 +100,7 @@ func newSuite(t *testing.T) *suite {
 	}
 }
 
-func (s *suite) expectEvent(t *testing.T, e loops.Event) {
+func (s *suite) expectEvent(t *testing.T, e loops.EventNS) {
 	t.Helper()
 
 	select {

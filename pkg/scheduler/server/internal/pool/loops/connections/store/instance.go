@@ -23,7 +23,7 @@ import (
 // TODO: sync.Pool
 type entry struct {
 	nextConn uint64
-	conns    []loop.Interface[loops.Event]
+	conns    []loop.Interface[loops.EventStream]
 }
 
 // TODO: sync.Pool
@@ -37,7 +37,7 @@ func newInstance() *instance {
 	}
 }
 
-func (i *instance) add(name string, conn loop.Interface[loops.Event]) context.CancelFunc {
+func (i *instance) add(name string, conn loop.Interface[loops.EventStream]) context.CancelFunc {
 	en, ok := i.entries[name]
 	if !ok {
 		en = new(entry)
@@ -59,7 +59,7 @@ func (i *instance) add(name string, conn loop.Interface[loops.Event]) context.Ca
 	}
 }
 
-func (i *instance) get(name string) (loop.Interface[loops.Event], bool) {
+func (i *instance) get(name string) (loop.Interface[loops.EventStream], bool) {
 	en, ok := i.entries[name]
 	if !ok {
 		return nil, false

@@ -27,7 +27,7 @@ import (
 var log = logger.NewLogger("dapr.runtime.actors.placement.loops.stream")
 
 var (
-	LoopFactory = loop.New[loops.Event](8)
+	LoopFactory = loop.New[loops.EventStream](8)
 	streamCache = sync.Pool{New: func() any {
 		return new(stream)
 	}}
@@ -35,21 +35,21 @@ var (
 
 type Options struct {
 	Channel       v1pb.Placement_ReportDaprStatusClient
-	PlacementLoop loop.Interface[loops.Event]
+	PlacementLoop loop.Interface[loops.EventPlace]
 	IDx           uint64
 }
 
 type stream struct {
 	channel   v1pb.Placement_ReportDaprStatusClient
-	placeLoop loop.Interface[loops.Event]
+	placeLoop loop.Interface[loops.EventPlace]
 	idx       uint64
 
-	loop loop.Interface[loops.Event]
+	loop loop.Interface[loops.EventStream]
 
 	wg sync.WaitGroup
 }
 
-func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
+func New(ctx context.Context, opts Options) loop.Interface[loops.EventStream] {
 	stream := streamCache.Get().(*stream)
 	stream.channel = opts.Channel
 	stream.placeLoop = opts.PlacementLoop
@@ -70,7 +70,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 	return stream.loop
 }
 
-func (s *stream) Handle(ctx context.Context, event loops.Event) error {
+func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 	var err error
 	switch e := event.(type) {
 	case *loops.StreamSend:
