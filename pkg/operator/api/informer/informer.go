@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"k8s.io/client-go/tools/cache"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -26,7 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/api/authz"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/meta"
-	"github.com/dapr/kit/events/batcher"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/kit/logger"
 )
 
@@ -37,7 +36,7 @@ type Options struct {
 // Interface is an interface for syncing Kubernetes manifests.
 type Interface[T meta.Resource] interface {
 	Run(context.Context) error
-	WatchUpdates(context.Context, string) (<-chan *Event[T], error)
+	WatchUpdates(context.Context, string) (<-chan *Event[T], context.CancelFunc, error)
 }
 
 // Event is a Kubernetes manifest event, containing the manifest and the event
@@ -48,14 +47,19 @@ type Event[T meta.Resource] struct {
 }
 
 type informer[T meta.Resource] struct {
-	cache   ctrlcache.Cache
-	lock    sync.Mutex
-	batcher *batcher.Batcher[int, *informerEvent[T]]
-	batchID atomic.Uint32
+	cache ctrlcache.Cache
+	lock  sync.Mutex
 
-	log     logger.Logger
-	closeCh chan struct{}
-	wg      sync.WaitGroup
+	idx      uint64
+	watchers map[uint64]*watcher[T]
+
+	log logger.Logger
+}
+
+type watcher[T meta.Resource] struct {
+	id  *spiffe.Parsed
+	ch  chan *Event[T]
+	ctx context.Context
 }
 
 type informerEvent[T meta.Resource] struct {
@@ -66,12 +70,9 @@ type informerEvent[T meta.Resource] struct {
 func New[T meta.Resource](opts Options) Interface[T] {
 	var zero T
 	return &informer[T]{
-		log: logger.NewLogger("dapr.operator.informer." + strings.ToLower(zero.Kind())),
-		batcher: batcher.New[int, *informerEvent[T]](batcher.Options{
-			Interval: 0,
-		}),
-		cache:   opts.Cache,
-		closeCh: make(chan struct{}),
+		log:      logger.NewLogger("dapr.operator.informer." + strings.ToLower(zero.Kind())),
+		watchers: make(map[uint64]*watcher[T]),
+		cache:    opts.Cache,
 	}
 }
 
@@ -98,40 +99,37 @@ func (i *informer[T]) Run(ctx context.Context) error {
 	}
 
 	<-ctx.Done()
-	close(i.closeCh)
-	i.batcher.Close()
-	i.wg.Wait()
+
 	return nil
 }
 
-func (i *informer[T]) WatchUpdates(ctx context.Context, ns string) (<-chan *Event[T], error) {
+func (i *informer[T]) WatchUpdates(ctx context.Context, ns string) (<-chan *Event[T], context.CancelFunc, error) {
 	id, err := authz.Request(ctx, ns)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	batchCh := make(chan *informerEvent[T], 10)
-	appCh := make(chan *Event[T], 10)
+	ch := make(chan *Event[T], 10)
+	idx := i.idx
+	i.idx++
 
-	i.batcher.Subscribe(ctx, batchCh)
-	i.wg.Add(1)
-	go func() {
-		defer i.wg.Done()
-		(&handler[T]{
-			i:       i,
-			appCh:   appCh,
-			batchCh: batchCh,
-			id:      id,
-		}).loop(ctx)
-	}()
+	i.lock.Lock()
+	i.watchers[idx] = &watcher[T]{
+		id:  id,
+		ch:  ch,
+		ctx: ctx,
+	}
+	i.lock.Unlock()
 
-	return appCh, nil
+	return ch, func() {
+		i.lock.Lock()
+		defer i.lock.Unlock()
+		delete(i.watchers, idx)
+		close(ch)
+	}, nil
 }
 
 func (i *informer[T]) handleEvent(ctx context.Context, oldObj, newObj any, eventType operatorv1.ResourceEventType) {
-	i.lock.Lock()
-	defer i.lock.Unlock()
-
 	newT, ok := i.anyToT(newObj)
 	if !ok {
 		return
@@ -152,8 +150,18 @@ func (i *informer[T]) handleEvent(ctx context.Context, oldObj, newObj any, event
 		event.oldObj = &oldT
 	}
 
-	i.batcher.Batch(int(i.batchID.Load()), event)
-	i.batchID.Add(1)
+	i.lock.Lock()
+	defer i.lock.Unlock()
+
+	for _, w := range i.watchers {
+		if ev, ok := appEventFromEvent[T](w.id, event); ok {
+			select {
+			case w.ch <- ev:
+			case <-w.ctx.Done():
+				// Watcher has disconnected, skip sending the event.
+			}
+		}
+	}
 }
 
 func (i *informer[T]) anyToT(obj any) (T, bool) {
