@@ -18,7 +18,6 @@ import (
 	b64 "encoding/base64"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -79,8 +78,6 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		log.Debugf("updated sidecar with component %s %s (%s) from pod %s/%s", t.String(), c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName())
 	}
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
 	for {
 		select {
 		case <-srv.Context().Done():
