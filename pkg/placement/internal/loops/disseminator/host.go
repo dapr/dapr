@@ -137,6 +137,7 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 
 	if d.streamsInTargetState == len(d.streams) {
 		d.currentOperation = v1pb.HostOperation_REPORT
+		d.streamsInTargetState = 0
 
 		d.timeoutQ.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d in %s complete", d.currentVersion, d.namespace)
@@ -152,7 +153,6 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 			d.currentVersion++
 			d.timeoutQ.Enqueue(d.currentVersion)
 			d.currentOperation = v1pb.HostOperation_LOCK
-			d.streamsInTargetState = 0
 
 			for _, s := range d.streams {
 				s.currentState = v1pb.HostOperation_REPORT
