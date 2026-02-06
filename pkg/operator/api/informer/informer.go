@@ -129,12 +129,14 @@ func (i *informer[T]) WatchUpdates(ctx context.Context, ns string) (<-chan *Even
 	i.lock.Unlock()
 
 	return ch, func() {
-		i.lock.Lock()
-		defer i.lock.Unlock()
-		if _, ok := i.watchers[idx]; ok {
-			delete(i.watchers, idx)
-			close(ch)
-		}
+		go func() {
+			i.lock.Lock()
+			defer i.lock.Unlock()
+			if _, ok := i.watchers[idx]; ok {
+				delete(i.watchers, idx)
+				close(ch)
+			}
+		}()
 	}, nil
 }
 
