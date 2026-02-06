@@ -16,7 +16,9 @@ package authz
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	grpcinsecure "google.golang.org/grpc/credentials/insecure"
@@ -46,6 +48,10 @@ func (n *nomtls) Setup(t *testing.T) []framework.Option {
 
 func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
+
+	assert.Eventually(t, func() bool {
+		return n.place.IsLeader(t, ctx)
+	}, time.Second*10, time.Millisecond*10)
 
 	host := n.place.Address()
 	//nolint:staticcheck
