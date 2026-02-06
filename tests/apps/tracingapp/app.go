@@ -29,7 +29,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/zipkin"
+	"go.opentelemetry.io/otel/exporters/zipkin" //nolint:staticcheck // SA1019: zipkin exporter is deprecated but still needed
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdk_trace "go.opentelemetry.io/otel/sdk/trace"
