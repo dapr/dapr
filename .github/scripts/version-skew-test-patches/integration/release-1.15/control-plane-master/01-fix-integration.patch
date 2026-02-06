@@ -21,7 +21,7 @@ index 05eb332d8..9381202b4 100644
  ################################################################################
  # Target: lint                                                                 #
 @@ -402,7 +402,7 @@ test-integration-parallel: test-deps
- # You can download version v1.64.6 at https://github.com/golangci/golangci-lint/releases/tag/v1.64.6
+ # You can download version v2.8.0 at https://github.com/golangci/golangci-lint/releases/tag/v2.8.0
  .PHONY: lint
  lint: check-linter
 -	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
