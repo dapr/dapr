@@ -100,6 +100,13 @@ func (i *informer[T]) Run(ctx context.Context) error {
 
 	<-ctx.Done()
 
+	i.lock.Lock()
+	defer i.lock.Unlock()
+	for idx, w := range i.watchers {
+		delete(i.watchers, idx)
+		close(w.ch)
+	}
+
 	return nil
 }
 
@@ -124,8 +131,10 @@ func (i *informer[T]) WatchUpdates(ctx context.Context, ns string) (<-chan *Even
 	return ch, func() {
 		i.lock.Lock()
 		defer i.lock.Unlock()
-		delete(i.watchers, idx)
-		close(ch)
+		if _, ok := i.watchers[idx]; ok {
+			delete(i.watchers, idx)
+			close(ch)
+		}
 	}, nil
 }
 
