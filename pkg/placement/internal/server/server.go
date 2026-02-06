@@ -141,9 +141,9 @@ func (s *Server) Run(ctx context.Context) error {
 				return lerr
 			}
 			log.Infof("Node id=%s has acquired leadership", s.nodeID)
+			s.isLeader.Store(true)
 			monitoring.RecordPlacementLeaderStatus(true)
 			monitoring.RecordRaftPlacementLeaderStatus(true)
-			s.isLeader.Store(true)
 			<-ctx.Done()
 			return ctx.Err()
 		},

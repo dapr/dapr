@@ -49,7 +49,7 @@ func (n *notimeout) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
 	assert.Eventually(t, func() bool {
-		return n.place.HasLeader(t, ctx)
+		return n.place.IsLeader(t, ctx)
 	}, time.Second*10, time.Millisecond*10)
 
 	client := n.place.Client(t, ctx)

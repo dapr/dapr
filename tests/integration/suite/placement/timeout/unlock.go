@@ -51,7 +51,7 @@ func (u *unlock) Run(t *testing.T, ctx context.Context) {
 	u.place.WaitUntilRunning(t, ctx)
 
 	assert.Eventually(t, func() bool {
-		return u.place.HasLeader(t, ctx)
+		return u.place.IsLeader(t, ctx)
 	}, time.Second*10, time.Millisecond*10)
 
 	client := u.place.Client(t, ctx)
