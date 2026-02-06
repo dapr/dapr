@@ -52,6 +52,10 @@ func (r *race) Setup(t *testing.T) []framework.Option {
 func (r *race) Run(t *testing.T, ctx context.Context) {
 	r.place.WaitUntilRunning(t, ctx)
 
+	assert.Eventually(t, func() bool {
+		return r.place.IsLeader(t, ctx)
+	}, time.Second*10, time.Millisecond*10)
+
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := r.place.Metrics(c, ctx)
 		assert.Len(c, metrics.MatchMetric("dapr_placement_leader_status"), 1)
