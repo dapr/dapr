@@ -45,7 +45,7 @@ const (
 	targetQPS float64 = 600
 
 	// Target for the QPS to trigger reminders.
-	targetTriggerQPS float64 = 13000
+	targetTriggerQPS float64 = 10200
 
 	// reminderCount is the number of reminders to register.
 	reminderCount = 20000
