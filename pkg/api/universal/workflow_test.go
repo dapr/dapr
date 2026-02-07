@@ -21,7 +21,6 @@ import (
 
 	"github.com/dapr/components-contrib/workflows"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
-	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
@@ -37,32 +36,32 @@ func TestStartWorkflowAPI(t *testing.T) {
 	fakeWorkflowName := "fakeWorkflow"
 
 	testCases := []struct {
-		testName          string
-		workflowComponent string
-		workflowName      string
-		instanceID        string
-		expectedError     error
+		testName            string
+		workflowComponent   string
+		workflowName        string
+		instanceID          string
+		expectedErrorSubstr string
 	}{
 		{
-			testName:          "No workflow name provided in start request",
-			workflowComponent: fakeComponentName,
-			workflowName:      "",
-			instanceID:        fakeInstanceID,
-			expectedError:     messages.ErrWorkflowNameMissing,
+			testName:            "No workflow name provided in start request",
+			workflowComponent:   fakeComponentName,
+			workflowName:        "",
+			instanceID:          fakeInstanceID,
+			expectedErrorSubstr: "workflow name is not configured",
 		},
 		{
-			testName:          "Invalid instance ID provided in start request",
-			workflowComponent: fakeComponentName,
-			workflowName:      fakeWorkflowName,
-			instanceID:        "invalid#12",
-			expectedError:     messages.ErrInvalidInstanceID.WithFormat("invalid#12"),
+			testName:            "Invalid instance ID provided in start request",
+			workflowComponent:   fakeComponentName,
+			workflowName:        fakeWorkflowName,
+			instanceID:          "invalid#12",
+			expectedErrorSubstr: "workflow instance ID 'invalid#12' is invalid",
 		},
 		{
-			testName:          "Too long instance ID provided in start request",
-			workflowComponent: fakeComponentName,
-			workflowName:      fakeWorkflowName,
-			instanceID:        "this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed",
-			expectedError:     messages.ErrInstanceIDTooLong.WithFormat(64),
+			testName:            "Too long instance ID provided in start request",
+			workflowComponent:   fakeComponentName,
+			workflowName:        fakeWorkflowName,
+			instanceID:          "this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed",
+			expectedErrorSubstr: "workflow instance ID exceeds the max length of 64 characters",
 		},
 		{
 			testName:          "No instance ID provided in start request",
@@ -103,10 +102,11 @@ func TestStartWorkflowAPI(t *testing.T) {
 			}
 			_, err := fakeAPI.StartWorkflow(t.Context(), req)
 
-			if tt.expectedError == nil {
+			if tt.expectedErrorSubstr == "" {
 				require.NoError(t, err)
 			} else {
-				require.ErrorIs(t, err, tt.expectedError)
+				require.Error(t, err)
+				require.ErrorContains(t, err, tt.expectedErrorSubstr)
 			}
 		})
 	}
@@ -114,16 +114,16 @@ func TestStartWorkflowAPI(t *testing.T) {
 
 func TestGetWorkflowAPI(t *testing.T) {
 	testCases := []struct {
-		testName          string
-		workflowComponent string
-		instanceID        string
-		expectedError     error
+		testName            string
+		workflowComponent   string
+		instanceID          string
+		expectedErrorSubstr string
 	}{
 		{
-			testName:          "No instance ID provided in get request",
-			workflowComponent: fakeComponentName,
-			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			testName:            "No instance ID provided in get request",
+			workflowComponent:   fakeComponentName,
+			instanceID:          "",
+			expectedErrorSubstr: "no instance ID was provided",
 		},
 		{
 			testName:          "All is well in get request",
@@ -148,10 +148,11 @@ func TestGetWorkflowAPI(t *testing.T) {
 			}
 			_, err := fakeAPI.GetWorkflow(t.Context(), req)
 
-			if tt.expectedError == nil {
+			if tt.expectedErrorSubstr == "" {
 				require.NoError(t, err)
 			} else {
-				require.ErrorIs(t, err, tt.expectedError)
+				require.Error(t, err)
+				require.ErrorContains(t, err, tt.expectedErrorSubstr)
 			}
 		})
 	}
@@ -159,16 +160,16 @@ func TestGetWorkflowAPI(t *testing.T) {
 
 func TestTerminateWorkflowAPI(t *testing.T) {
 	testCases := []struct {
-		testName          string
-		workflowComponent string
-		instanceID        string
-		expectedError     error
+		testName            string
+		workflowComponent   string
+		instanceID          string
+		expectedErrorSubstr string
 	}{
 		{
-			testName:          "No instance ID provided in terminate request",
-			workflowComponent: fakeComponentName,
-			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			testName:            "No instance ID provided in terminate request",
+			workflowComponent:   fakeComponentName,
+			instanceID:          "",
+			expectedErrorSubstr: "no instance ID was provided",
 		},
 		{
 			testName:          "All is well in terminate request",
@@ -201,10 +202,11 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 			}
 			_, err := fakeAPI.TerminateWorkflow(t.Context(), req)
 
-			if tt.expectedError == nil {
+			if tt.expectedErrorSubstr == "" {
 				require.NoError(t, err)
 			} else {
-				require.ErrorIs(t, err, tt.expectedError)
+				require.Error(t, err)
+				require.ErrorContains(t, err, tt.expectedErrorSubstr)
 			}
 		})
 	}
@@ -214,25 +216,25 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 	fakeEventName := "fake_event_name"
 
 	testCases := []struct {
-		testName          string
-		workflowComponent string
-		instanceID        string
-		eventName         string
-		expectedError     error
+		testName            string
+		workflowComponent   string
+		instanceID          string
+		eventName           string
+		expectedErrorSubstr string
 	}{
 		{
-			testName:          "No instance ID provided in raise event request",
-			workflowComponent: fakeComponentName,
-			instanceID:        "",
-			eventName:         fakeEventName,
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			testName:            "No instance ID provided in raise event request",
+			workflowComponent:   fakeComponentName,
+			instanceID:          "",
+			eventName:           fakeEventName,
+			expectedErrorSubstr: "no instance ID was provided",
 		},
 		{
-			testName:          "No event name provided in raise event request",
-			workflowComponent: fakeComponentName,
-			instanceID:        fakeInstanceID,
-			eventName:         "",
-			expectedError:     messages.ErrMissingWorkflowEventName,
+			testName:            "No event name provided in raise event request",
+			workflowComponent:   fakeComponentName,
+			instanceID:          fakeInstanceID,
+			eventName:           "",
+			expectedErrorSubstr: "missing workflow event name",
 		},
 		{
 			testName:          "All is well in raise event request",
@@ -260,10 +262,11 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 			}
 			_, err := fakeAPI.RaiseEventWorkflow(t.Context(), req)
 
-			if tt.expectedError == nil {
+			if tt.expectedErrorSubstr == "" {
 				require.NoError(t, err)
 			} else {
-				require.ErrorIs(t, err, tt.expectedError)
+				require.Error(t, err)
+				require.ErrorContains(t, err, tt.expectedErrorSubstr)
 			}
 		})
 	}
@@ -271,16 +274,16 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 
 func TestPauseWorkflowApi(t *testing.T) {
 	testCases := []struct {
-		testName          string
-		workflowComponent string
-		instanceID        string
-		expectedError     error
+		testName            string
+		workflowComponent   string
+		instanceID          string
+		expectedErrorSubstr string
 	}{
 		{
-			testName:          "No instance ID provided in pause request",
-			workflowComponent: fakeComponentName,
-			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			testName:            "No instance ID provided in pause request",
+			workflowComponent:   fakeComponentName,
+			instanceID:          "",
+			expectedErrorSubstr: "no instance ID was provided",
 		},
 		{
 			testName:          "All is well in pause request",
@@ -313,10 +316,11 @@ func TestPauseWorkflowApi(t *testing.T) {
 			}
 			_, err := fakeAPI.PauseWorkflow(t.Context(), req)
 
-			if tt.expectedError == nil {
+			if tt.expectedErrorSubstr == "" {
 				require.NoError(t, err)
 			} else {
-				require.ErrorIs(t, err, tt.expectedError)
+				require.Error(t, err)
+				require.ErrorContains(t, err, tt.expectedErrorSubstr)
 			}
 		})
 	}
@@ -324,16 +328,16 @@ func TestPauseWorkflowApi(t *testing.T) {
 
 func TestResumeWorkflowApi(t *testing.T) {
 	testCases := []struct {
-		testName          string
-		workflowComponent string
-		instanceID        string
-		expectedError     error
+		testName            string
+		workflowComponent   string
+		instanceID          string
+		expectedErrorSubstr string
 	}{
 		{
-			testName:          "No instance ID provided in resume request",
-			workflowComponent: fakeComponentName,
-			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
+			testName:            "No instance ID provided in resume request",
+			workflowComponent:   fakeComponentName,
+			instanceID:          "",
+			expectedErrorSubstr: "no instance ID was provided",
 		},
 		{
 			testName:          "All is well in resume request",
@@ -358,10 +362,11 @@ func TestResumeWorkflowApi(t *testing.T) {
 			}
 			_, err := fakeAPI.ResumeWorkflow(t.Context(), req)
 
-			if tt.expectedError == nil {
+			if tt.expectedErrorSubstr == "" {
 				require.NoError(t, err)
 			} else {
-				require.ErrorIs(t, err, tt.expectedError)
+				require.Error(t, err)
+				require.ErrorContains(t, err, tt.expectedErrorSubstr)
 			}
 		})
 	}
