@@ -399,6 +399,22 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 		assert.True(t, token.Expiry.After(time.Now()))
 	}
 
+	perJWTToken := resp.GetPerAudienceJwts()
+	require.Len(t, perJWTToken, len(services)+1, "Should have per-audience JWTs for each service and trust domain")
+	for _, serviceAudience := range append(services, "localhost") {
+		tokenString, exists := perJWTToken[serviceAudience]
+		require.True(t, exists, "Per-audience JWT should exist for %s", serviceAudience)
+
+		verifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: serviceAudience})
+		token, verifyErr := verifier.Verify(t.Context(), tokenString.GetValue())
+		require.NoError(t, verifyErr, "Per-audience JWT for %s should be valid", serviceAudience)
+
+		assert.Equal(t, expectedSubject, token.Subject)
+		assert.Equal(t, o.oidcBaseURL, token.Issuer)
+		assert.Equal(t, []string{serviceAudience}, token.Audience)
+		assert.True(t, token.Expiry.After(time.Now()))
+	}
+
 	// Test that unauthorized services cannot validate the token
 	unauthorizedVerifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: "unauthorized-service"})
 	_, err = unauthorizedVerifier.Verify(t.Context(), jwtToken.GetValue())
