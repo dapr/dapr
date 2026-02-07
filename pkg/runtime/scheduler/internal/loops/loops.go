@@ -17,21 +17,39 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-type Event interface{}
+type hostbase struct{}
+
+func (*hostbase) isEventHost() {}
+
+type EventHost interface{ isEventHost() }
+
+type connbase struct{}
+
+func (*connbase) isEventConn() {}
+
+type EventConn interface{ isEventConn() }
 
 type ReloadClients struct {
+	*hostbase
 	Addresses []string
 }
 
 type Connect struct {
+	*connbase
 	Clients []schedulerv1pb.SchedulerClient
 }
 
-type Disconnect struct{}
+type Disconnect struct {
+	*connbase
+}
 
 type Reconnect struct {
+	*connbase
 	AppTarget  *bool
 	ActorTypes *[]string
 }
 
-type Close struct{}
+type Close struct {
+	*connbase
+	*hostbase
+}

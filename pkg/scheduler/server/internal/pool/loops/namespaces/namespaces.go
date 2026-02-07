@@ -36,7 +36,7 @@ type Options struct {
 
 type connectionLoop struct {
 	connections uint64
-	loop        loop.Interface[loops.Event]
+	loop        loop.Interface[loops.EventConn]
 }
 
 // namespaces is the main control loop for managing stream
@@ -47,23 +47,23 @@ type namespaces struct {
 
 	// connections holds the active namespace connections.
 	connections map[string]*connectionLoop
-	loop        loop.Interface[loops.Event]
+	loop        loop.Interface[loops.EventNS]
 
 	wg sync.WaitGroup
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
+func New(opts Options) loop.Interface[loops.EventNS] {
 	ns := &namespaces{
 		cron:        opts.Cron,
 		cancelPool:  opts.CancelPool,
 		connections: make(map[string]*connectionLoop),
 	}
 
-	ns.loop = loop.New[loops.Event](1024).NewLoop(ns)
+	ns.loop = loop.New[loops.EventNS](1024).NewLoop(ns)
 	return ns.loop
 }
 
-func (n *namespaces) Handle(ctx context.Context, event loops.Event) error {
+func (n *namespaces) Handle(ctx context.Context, event loops.EventNS) error {
 	switch e := event.(type) {
 	case *loops.ConnAdd:
 		return n.handleAdd(ctx, e)

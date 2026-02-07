@@ -26,27 +26,27 @@ import (
 
 type Options struct {
 	Security  security.Handler
-	Connector loop.Interface[loops.Event]
+	Connector loop.Interface[loops.EventConn]
 	StreamN   uint
 }
 
 type hosts struct {
 	security  security.Handler
 	streamN   uint
-	connector loop.Interface[loops.Event]
+	connector loop.Interface[loops.EventConn]
 
 	closeConns []context.CancelFunc
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
-	return loop.New[loops.Event](1024).NewLoop(&hosts{
+func New(opts Options) loop.Interface[loops.EventHost] {
+	return loop.New[loops.EventHost](1024).NewLoop(&hosts{
 		streamN:   opts.StreamN,
 		security:  opts.Security,
 		connector: opts.Connector,
 	})
 }
 
-func (h *hosts) Handle(ctx context.Context, event loops.Event) error {
+func (h *hosts) Handle(ctx context.Context, event loops.EventHost) error {
 	switch e := event.(type) {
 	case *loops.ReloadClients:
 		return h.handleReloadClients(ctx, e)

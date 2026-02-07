@@ -74,7 +74,7 @@ type placement struct {
 	ready    *atomic.Bool
 	errCh    chan error
 
-	loop loop.Interface[loops.Event]
+	loop loop.Interface[loops.EventPlace]
 }
 
 func New(opts Options) (Interface, error) {

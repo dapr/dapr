@@ -34,7 +34,7 @@ import (
 var log = logger.NewLogger("dapr.runtime.actors.placement.loops.disseminator")
 
 var (
-	LoopFactoryCache = loop.New[loops.Event](1024)
+	LoopFactoryCache = loop.New[loops.EventDiss](1024)
 	loopCache        = sync.Pool{New: func() any {
 		return new(disseminator)
 	}}
@@ -42,7 +42,7 @@ var (
 
 type Options struct {
 	Channel       v1pb.Placement_ReportDaprStatusClient
-	PlacementLoop loop.Interface[loops.Event]
+	PlacementLoop loop.Interface[loops.EventPlace]
 	ActorTable    table.Interface
 	Scheduler     schedclient.Reloader
 	IDx           uint64
@@ -60,7 +60,7 @@ type disseminator struct {
 	namespace string
 	id        string
 
-	loop         loop.Interface[loops.Event]
+	loop         loop.Interface[loops.EventDiss]
 	inflight     *inflight.Inflight
 	actorTable   table.Interface
 	scheduler    schedclient.Reloader
@@ -71,7 +71,7 @@ type disseminator struct {
 	cancel         context.CancelCauseFunc
 	timeoutVersion uint64
 
-	streamLoop loop.Interface[loops.Event]
+	streamLoop loop.Interface[loops.EventStream]
 
 	wg sync.WaitGroup
 
@@ -79,7 +79,7 @@ type disseminator struct {
 	currentVersion   uint64
 }
 
-func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
+func New(ctx context.Context, opts Options) loop.Interface[loops.EventDiss] {
 	diss := loopCache.Get().(*disseminator)
 
 	diss.namespace = opts.Namespace
@@ -119,7 +119,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 	return diss.loop
 }
 
-func (d *disseminator) Handle(ctx context.Context, event loops.Event) error {
+func (d *disseminator) Handle(ctx context.Context, event loops.EventDiss) error {
 	switch e := event.(type) {
 	case *loops.LookupRequest:
 		d.handleLookupRequest(e)
