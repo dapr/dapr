@@ -5,6 +5,8 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
   name: configurations.dapr.io
+  labels:
+    app.kubernetes.io/part-of: "dapr"
 spec:
   group: dapr.io
   names:
