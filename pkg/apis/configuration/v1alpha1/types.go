@@ -238,12 +238,13 @@ type OtelSpec struct {
 	Protocol        string `json:"protocol" yaml:"protocol"`
 	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
 	IsSecure        *bool  `json:"isSecure" yaml:"isSecure"`
+	// Headers to add to the OTLP trace exporter request.
+	// Each header can contain plaintext values, reference secrets, or reference environment variables.
 	// +optional
-	Headers Headers []common.NameValuePair `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Headers []common.NameValuePair `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP trace exporter request.
 	// +optional
-	SecretRef *common.SecretKeyRef `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
-	// +optional
-	Timeout *time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Timeout *metav1.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.
