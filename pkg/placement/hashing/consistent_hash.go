@@ -336,6 +336,8 @@ func (c *Consistent) Hosts() (hosts []string) {
 }
 
 // GetLoads returns the loads of all the hosts.
+// TODO: @joshvanl: remove all load things. Double check we get the same result
+// when load is 0.
 func (c *Consistent) GetLoads() map[string]int64 {
 	loads := map[string]int64{}
 
