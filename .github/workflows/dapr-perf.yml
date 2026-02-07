@@ -248,7 +248,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
       - name: Login to Azure
@@ -408,7 +408,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
       - uses: azure/setup-kubectl@v3
