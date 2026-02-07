@@ -53,33 +53,38 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	}, nil
 }
 
+// processConfigurationSecrets resolves secret references in configuration resources.
 func processConfigurationSecrets(ctx context.Context, config *configurationapi.Configuration, namespace string, kubeClient client.Client) error {
-	if config.Spec.TracingSpec == nil || config.Spec.TracingSpec.Otel == nil ||config.Spec.TracingSpec.Otel.SecretRef == nil {
-	return nil
-}
-		secretRef := config.Spec.TracingSpec.Otel.SecretRef
+	if config.Spec.TracingSpec == nil || config.Spec.TracingSpec.Otel == nil {
+		return nil
+	}
 
-		if secretRef.Name != "" {
+	for i, header := range config.Spec.TracingSpec.Otel.Headers {
+		if header.SecretKeyRef.Name != "" {
 			var secret corev1.Secret
 			err := kubeClient.Get(ctx, types.NamespacedName{
-				Name:      secretRef.Name,
+				Name:      header.SecretKeyRef.Name,
 				Namespace: namespace,
 			}, &secret)
 			if err != nil {
-				return fmt.Errorf("failed to get secret %s for OTel headers: %w", secretRef.Name, err)
+				return fmt.Errorf("failed to get secret %s for header %s: %w", header.SecretKeyRef.Name, header.Name, err)
 			}
 
-			key := secretRef.Key
+			key := header.SecretKeyRef.Key
 			if key == "" {
-				key = secretRef.Name
+				return fmt.Errorf("secret key is required for header %s", header.Name)
 			}
 
 			val, ok := secret.Data[key]
 			if !ok {
-				return fmt.Errorf("key %s not found in secret %s", key, secretRef.Name)
+				return fmt.Errorf("key %s not found in secret %s", key, header.SecretKeyRef.Name)
 			}
 
-			config.Spec.TracingSpec.Otel.Headers = string(val)
+			enc, err := json.Marshal(string(val))
+			if err != nil {
+				return fmt.Errorf("failed to marshal secret value for header %s: %w", header.Name, err)
+			}
+			config.Spec.TracingSpec.Otel.Headers[i].Value.JSON.Raw = enc
 		}
 	}
 

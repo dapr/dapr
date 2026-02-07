@@ -30,9 +30,11 @@ import (
 	"github.com/spf13/cast"
 	"go.opencensus.io/stats/view"
 	yaml "gopkg.in/yaml.v3"
+	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -284,10 +286,10 @@ type OtelSpec struct {
 	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
 	// Defaults to true
 	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
-	// Headers to add to the request
-	Headers string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	// Timeout for the request in milliseconds
-	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"` // Defaults to 10000
+	// Headers to add to the OTLP trace exporter request
+	Headers []commonapi.NameValuePair `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP trace exporter request
+	Timeout *metav1.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // GetIsSecure returns true if the connection should be secured.
@@ -641,7 +643,17 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 	}
 
 	if headers != "" {
-		conf.Spec.TracingSpec.Otel.Headers = headers
+		headersMap, err := StringToHeader(headers)
+		if err != nil {
+			return err
+		}
+		// Convert map to NameValuePair array
+		for name, value := range headersMap {
+			conf.Spec.TracingSpec.Otel.Headers = append(conf.Spec.TracingSpec.Otel.Headers, commonapi.NameValuePair{
+				Name:  name,
+				Value: commonapi.DynamicValue{JSON: apiextensionsV1.JSON{Raw: []byte(fmt.Sprintf("%q", value))}},
+			})
+		}
 	}
 
 	var timeoutMs int
@@ -660,7 +672,8 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 	}
 
 	if timeoutMs > 0 {
-		conf.Spec.TracingSpec.Otel.Timeout = timeoutMs
+		timeout := metav1.Duration{Duration: time.Duration(timeoutMs) * time.Millisecond}
+		conf.Spec.TracingSpec.Otel.Timeout = &timeout
 	}
 	return nil
 }

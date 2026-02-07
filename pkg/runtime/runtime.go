@@ -521,15 +521,15 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 			if !tracingSpec.Otel.GetIsSecure() {
 				clientOptions = append(clientOptions, otlptracehttp.WithInsecure())
 			}
-			if tracingSpec.Otel.Headers != "" {
-				headers, err := config.StringToHeader(tracingSpec.Otel.Headers)
-				if err != nil {
-					return fmt.Errorf("invalid headers provided for Otel endpoint: %w", err)
+			if len(tracingSpec.Otel.Headers) > 0 {
+				headers := make(map[string]string)
+				for _, h := range tracingSpec.Otel.Headers {
+					headers[h.Name] = h.Value.String()
 				}
 				clientOptions = append(clientOptions, otlptracehttp.WithHeaders(headers))
 			}
-			if tracingSpec.Otel.Timeout > 0 {
-				clientOptions = append(clientOptions, otlptracehttp.WithTimeout(time.Duration(tracingSpec.Otel.Timeout)*time.Millisecond))
+			if tracingSpec.Otel.Timeout != nil {
+				clientOptions = append(clientOptions, otlptracehttp.WithTimeout(tracingSpec.Otel.Timeout.Duration))
 			}
 			client = otlptracehttp.NewClient(clientOptions...)
 		} else {
@@ -537,15 +537,15 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 			if !tracingSpec.Otel.GetIsSecure() {
 				clientOptions = append(clientOptions, otlptracegrpc.WithInsecure())
 			}
-			if tracingSpec.Otel.Headers != "" {
-				headers, err := config.StringToHeader(tracingSpec.Otel.Headers)
-				if err != nil {
-					return fmt.Errorf("invalid headers provided for Otel endpoint: %w", err)
+			if len(tracingSpec.Otel.Headers) > 0 {
+				headers := make(map[string]string)
+				for _, h := range tracingSpec.Otel.Headers {
+					headers[h.Name] = h.Value.String()
 				}
 				clientOptions = append(clientOptions, otlptracegrpc.WithHeaders(headers))
 			}
-			if tracingSpec.Otel.Timeout > 0 {
-				clientOptions = append(clientOptions, otlptracegrpc.WithTimeout(time.Duration(tracingSpec.Otel.Timeout)*time.Millisecond))
+			if tracingSpec.Otel.Timeout != nil {
+				clientOptions = append(clientOptions, otlptracegrpc.WithTimeout(tracingSpec.Otel.Timeout.Duration))
 			}
 			client = otlptracegrpc.NewClient(clientOptions...)
 		}
