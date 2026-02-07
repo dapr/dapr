@@ -33,28 +33,27 @@ message PlacementOrder {
 message PlacementTables {
   map<string, PlacementTable> entries = 1;
 
-  // TODO: @joshvanl: mark deprecated: use version in PlacementOrder version
-  // instead.
-  string version = 2;
+  // Deprecated: use version in PlacementOrder version instead.
+  string version = 2 [deprecated = true];
 
-  // TODO: @joshvanl: mark deprecated: not used
-  uint32 api_level = 3;
+  // Deprecated: not used
+  uint32 api_level = 3 [deprecated = true];
 
   int64 replication_factor = 4;
 }
 
 message PlacementTable {
-  // TODO: @joshvanl: mark deprecated: hosts map is no longer used.
-  map<uint64, string> hosts = 1;
+  // Deprecated: hosts map is no longer used.
+  map<uint64, string> hosts = 1 [deprecated = true];
 
-  // TODO: @joshvanl: mark deprecated: sorted_set is no longer used.
-  repeated uint64 sorted_set = 2;
+  // Deprecated: sorted_set is no longer used.
+  repeated uint64 sorted_set = 2 [deprecated = true];
 
   // TODO: @joshvanl: rename to hosts_map.
   map<string, Host> load_map = 3;
 
-  // TODO: @joshvanl: mark deprecated: total_load is no longer used.
-  int64 total_load = 4;
+  // Deprecated: total_load is no longer used.
+  int64 total_load = 4 [deprecated = true];
 }
 
 message Host {
@@ -62,16 +61,16 @@ message Host {
   string name = 1;
   int64 port = 2;
 
-  // TODO: @joshvanl: mark deprecated: load is no longer used.
-  int64 load = 3;
+  // Deprecated: load is no longer used.
+  int64 load = 3 [deprecated = true];
 
   repeated string entities = 4;
 
   string id = 5;
 
-  // TODO: @joshvanl: mark deprecated: not used
-  string pod = 6;
-  uint32 api_level = 7;
+  // Deprecated: not used
+  string pod = 6 [deprecated = true];
+  uint32 api_level = 7 [deprecated = true];
 
   string namespace = 8;
 

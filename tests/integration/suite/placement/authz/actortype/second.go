@@ -67,7 +67,7 @@ func (f *second) Run(t *testing.T, ctx context.Context) {
 	f.place.WaitUntilRunning(t, ctx)
 
 	assert.Eventually(t, func() bool {
-		return f.place.HasLeader(t, ctx)
+		return f.place.IsLeader(t, ctx)
 	}, time.Second*10, time.Millisecond*10)
 
 	secProv, err := security.New(ctx, security.Options{
@@ -176,6 +176,9 @@ func (f *second) Run(t *testing.T, ctx context.Context) {
 			})
 			require.NoError(t, err)
 
+			_, err = stream.Recv()
+			require.NoError(t, err)
+
 			err = stream.Send(&v1pb.Host{
 				Id:        "app-1",
 				Namespace: "default",
@@ -184,7 +187,6 @@ func (f *second) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 
 			_, err = stream.Recv()
-
 			if tc.exp {
 				require.NoError(t, err)
 				return

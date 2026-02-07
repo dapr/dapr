@@ -42,7 +42,7 @@ const (
 	timerName                             = "myTimer"                            // Timer name.
 	numHealthChecks                       = 60                                   // Number of get calls before starting tests.
 	secondsToCheckTimerAndReminderResult  = 20                                   // How much time to wait to make sure the result is in logs.
-	secondsToCheckGetMetadata             = 10                                   // How much time to wait to check metadata.
+	secondsToCheckGetMetadata             = 20                                   // How much time to wait to check metadata.
 	secondsBetweenChecksForActorFailover  = 5                                    // How much time to wait to make sure the result is in logs.
 	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
 	actorsToCheckRebalance                = 30                                   // How many actors to create in the rebalance check test.

@@ -15,6 +15,7 @@ package inflight
 
 import (
 	"context"
+	"strconv"
 	"sync"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -80,12 +81,13 @@ func (i *Inflight) Lock(err error) {
 	lock.LoopFactory.CacheLoop(lo)
 }
 
-func (i *Inflight) Set(in *v1pb.PlacementTables) {
+func (i *Inflight) Set(in *v1pb.PlacementTables, version uint64) {
 	entries := make(map[string]*hashing.Consistent)
 
 	for k, v := range in.GetEntries() {
 		loadMap := make(map[string]*hashing.Host, len(v.GetLoadMap()))
 		for lk, lv := range v.GetLoadMap() {
+			//nolint:staticcheck
 			loadMap[lk] = hashing.NewHost(lv.GetName(), lv.GetId(), lv.GetLoad(), lv.GetPort())
 		}
 
@@ -94,7 +96,7 @@ func (i *Inflight) Set(in *v1pb.PlacementTables) {
 
 	clear(i.hashTable.Entries)
 
-	i.hashTable.Version = in.GetVersion()
+	i.hashTable.Version = strconv.FormatUint(version, 10)
 	i.hashTable.Entries = entries
 }
 

@@ -67,7 +67,7 @@ func (f *first) Run(t *testing.T, ctx context.Context) {
 	f.place.WaitUntilRunning(t, ctx)
 
 	assert.Eventually(t, func() bool {
-		return f.place.HasLeader(t, ctx)
+		return f.place.IsLeader(t, ctx)
 	}, time.Second*10, time.Millisecond*10)
 
 	secProv, err := security.New(ctx, security.Options{
