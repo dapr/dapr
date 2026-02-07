@@ -357,8 +357,6 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 					// where it expects a text message instead of a tool call message
 					if _, ok := component.(*mistral.Mistral); ok {
 						langchainMsg.Parts = append(langchainMsg.Parts, langchaingokit.CreateToolCallPart(&toolCall))
-					} else if _, ok := component.(*ollama.Ollama); ok {
-						langchainMsg.Parts = append(langchainMsg.Parts, langchaingokit.CreateToolCallPart(&toolCall))
 					} else {
 						langchainMsg.Parts = append(langchainMsg.Parts, toolCall)
 					}

@@ -236,6 +236,8 @@ jobs:
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
+      # Ollama does not support Windows yet
+      OLLAMA_ENABLED: ${{ matrix.target_os != 'windows' }}
     steps:
       - name: Check localhost DNS resolution
         run: |
@@ -247,6 +249,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
+      - name: Setup Ollama CLI
+        if: matrix.target_os != 'windows'
+        uses: ai-action/setup-ollama@v2
+      - name: Pull Ollama model
+        if: matrix.target_os != 'windows'
+        run: ollama pull llama3.2:latest
       - name: Override DAPR_HOST_IP for MacOS
         if: matrix.target_os == 'darwin'
         run: |
