@@ -44,6 +44,9 @@ const (
 	ComponentsUDSMountPathEnvVar   = "DAPR_COMPONENT_SOCKETS_FOLDER"
 	ComponentsUDSDefaultFolder     = "/tmp/dapr-components-sockets"
 
+	// TODO: @joshvanl: Remove in 1.18
+	SchedulerHostAddressDNSAEnvVar = "DAPR_SCHEDULER_HOST_ADDRESS_DNS_A"
+
 	ModeKubernetes = modes.KubernetesMode // KubernetesMode is a Kubernetes Dapr mode.
 	ModeStandalone = modes.StandaloneMode // StandaloneMode is a Standalone Dapr mode.
 )
