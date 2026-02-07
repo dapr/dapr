@@ -219,6 +219,37 @@ func New(opts Options) (*Subscription, error) {
 			}
 			cloudEvent[contribpubsub.DataField] = msg.Data
 			cloudEvent[contribpubsub.DataContentTypeField] = contentType
+		case rtpubsub.IsCloudEventProtobufContentType(contentType):
+			// Protobuf CloudEvent format
+			cloudEvent, err = rtpubsub.DeserializeCloudEventProto(msg.Data)
+			if err != nil {
+				log.Errorf("error deserializing protobuf cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
+				if route.DeadLetterTopic != "" {
+					if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
+						return nil
+					}
+				}
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+				return err
+			}
+			// Propagate tracing from metadata if not in event
+			if _, ok := cloudEvent[contribpubsub.TraceIDField]; !ok {
+				if traceid, ok := msg.Metadata[contribpubsub.TraceIDField]; ok {
+					cloudEvent[contribpubsub.TraceIDField] = traceid
+				}
+			}
+			if _, ok := cloudEvent[contribpubsub.TraceParentField]; !ok {
+				if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
+					cloudEvent[contribpubsub.TraceParentField] = traceparent
+					cloudEvent[contribpubsub.TraceIDField] = traceparent
+				}
+			}
+			if _, ok := cloudEvent[contribpubsub.TraceStateField]; !ok {
+				if tracestate, ok := msg.Metadata[contribpubsub.TraceStateField]; ok {
+					cloudEvent[contribpubsub.TraceStateField] = tracestate
+				}
+			}
 		default:
 			// all messages consumed with "rawPayload=false" are deserialized as a CloudEvent
 			err = json.Unmarshal(msg.Data, &cloudEvent)
