@@ -34,10 +34,10 @@ func init() {
 }
 
 type http struct {
-	daprd               *daprd.Daprd
-	sub                 *subscriber.Subscriber
-	notfoundReceived    slice.Slice[string]
-	deadLetterReceived  slice.Slice[string]
+	daprd              *daprd.Daprd
+	sub                *subscriber.Subscriber
+	notfoundReceived   slice.Slice[string]
+	deadLetterReceived slice.Slice[string]
 }
 
 func (h *http) Setup(t *testing.T) []framework.Option {
