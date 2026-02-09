@@ -6,12 +6,8 @@ updates:
       interval: "daily"
     cooldown:
       default-days: 7
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
+    # Only allow security updates.
+    open-pull-requests-limit: 0
 
   # gomod root pkg
   - package-ecosystem: "gomod"
@@ -34,12 +30,8 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
+    # Only allow security updates.
+    open-pull-requests-limit: 0
 
   # gomod tests
   - package-ecosystem: "gomod"
@@ -65,9 +57,5 @@ updates:
       interval: "monthly"
     cooldown:
       default-days: 7
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
+    # Only allow security updates.
+    open-pull-requests-limit: 0
