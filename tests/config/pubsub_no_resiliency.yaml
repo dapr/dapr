@@ -16,7 +16,6 @@ spec:
   targets:
   
     components:
-
       messagebus:
         inbound:
           retry: pubsubRetry
