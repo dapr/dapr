@@ -16,12 +16,8 @@ updates:
       interval: "daily"
     cooldown:
       default-days: 7
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
+    # Only allow security updates.
+    open-pull-requests-limit: 0
 
   # gomod build tools
   - package-ecosystem: "gomod"
