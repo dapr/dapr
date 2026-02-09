@@ -17,6 +17,7 @@ import (
 	"context"
 	b64 "encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -41,6 +42,10 @@ type ComponentUpdateEvent struct {
 // TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
 // the caller.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
+	if a.closed.Load() {
+		return errors.New("server is closed")
+	}
+
 	log.Info("sidecar connected for component updates")
 
 	ch, cancel, err := a.compInformer.WatchUpdates(srv.Context(), in.GetNamespace())
