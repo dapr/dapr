@@ -78,3 +78,15 @@ index f6a740ffc..000000000
 -	})
 -	require.NoError(t, err)
 -}
+diff --git a/tests/integration/suite/placement/placement.go b/tests/integration/suite/placement/placement.go
+index 4c89cd496..87494b2e7 100644
+--- a/tests/integration/suite/placement/placement.go
++++ b/tests/integration/suite/placement/placement.go
+@@ -15,7 +15,6 @@ package placement
+ 
+ import (
+ 	_ "github.com/dapr/dapr/tests/integration/suite/placement/apilevel"
+-	_ "github.com/dapr/dapr/tests/integration/suite/placement/authz"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/placement/dissemination"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/placement/ha"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/placement/metrics"
