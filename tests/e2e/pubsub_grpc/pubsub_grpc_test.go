@@ -408,6 +408,59 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 	return subscriberExternalURL
 }
 
+// testResiliencyExhaustion: Wait for resiliency policy to exhaust (60 retries @ 1s = 60s + buffer)
+func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
+	var err error
+	var code int
+	log.Printf("Test resiliency exhaustion - messages should be dropped after retries exhausted")
+	err = utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health checks failed")
+	callInitialize(t, publisherExternalURL, protocol)
+
+	// Set subscriber to permanently return errors
+	req := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
+		RemoteApp: subscriberAppName,
+		Method:    "set-respond-error",
+		Protocol:  protocol,
+	}
+	reqBytes, _ := json.Marshal(req)
+	var lastRetryError error
+	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
+		if retryCount > 0 {
+			time.Sleep(10 * time.Second)
+		}
+		lastRetryError = nil
+		_, code, err = utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+		if err != nil {
+			lastRetryError = err
+			continue
+		}
+		if code != http.StatusOK {
+			lastRetryError = fmt.Errorf("unexpected http code: %v", code)
+			continue
+		}
+		break
+	}
+	require.Nil(t, lastRetryError, "error calling /tests/callSubscriberMethod: %v", lastRetryError)
+
+	sentMessages := testPublish(t, publisherExternalURL, protocol)
+	_ = sentMessages
+
+	// After exhaustion, messages should be ACK'd and dropped
+	log.Printf("Waiting 65 seconds for resiliency policy to exhaust retries (maxRetries=60)...")
+	time.Sleep(65 * time.Second)
+
+	log.Printf("Validating messages were dropped after retry exhaustion...")
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
+		ReceivedByTopicA:   []string{},
+		ReceivedByTopicB:   []string{},
+		ReceivedByTopicC:   []string{},
+		ReceivedByTopicRaw: []string{},
+	})
+	return subscriberExternalURL
+}
+
 //nolint:staticcheck
 func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
 	var err error
@@ -808,6 +861,11 @@ var pubsubTests = []struct {
 		name:               "publish with subscriber invalid status test redelivery of messages",
 		handler:            testValidateRedeliveryOrEmptyJSON,
 		subscriberResponse: "invalid-status",
+	},
+	{
+		name:               "publish with subscriber error test messages dropped after resiliency exhaustion",
+		handler:            testResiliencyExhaustion,
+		subscriberResponse: "error",
 	},
 	{
 		name:    "bulk publish and normal subscribe successfully",
