@@ -1,6 +1,5 @@
 version: 2
 updates:
-  # Git
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -9,7 +8,11 @@ updates:
       default-days: 7
     ignore:
       - dependency-name: "*"
-        update-types: ["version-update:semver-patch"]
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
+
   # gomod root pkg
   - package-ecosystem: "gomod"
     directory: "/"
@@ -19,7 +22,11 @@ updates:
       default-days: 7
     ignore:
       - dependency-name: "*"
-        update-types: ["version-update:semver-patch"]
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
+
   # gomod build tools
   - package-ecosystem: "gomod"
     directory: ".build-tools"
@@ -29,7 +36,11 @@ updates:
       default-days: 7
     ignore:
       - dependency-name: "*"
-        update-types: ["version-update:semver-patch"]
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
+
   # gomod tests
   - package-ecosystem: "gomod"
     directories:
@@ -56,4 +67,7 @@ updates:
       default-days: 7
     ignore:
       - dependency-name: "*"
-        update-types: ["version-update:semver-patch"]
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
