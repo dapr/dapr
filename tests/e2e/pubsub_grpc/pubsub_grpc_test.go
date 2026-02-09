@@ -356,6 +356,9 @@ func postSingleMessage(url string, data []byte) (int, error) {
 }
 
 func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
@@ -368,6 +371,9 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 }
 
 func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+
 	log.Printf("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
@@ -376,6 +382,9 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 }
 
 func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+
 	callInitialize(t, publisherExternalURL, protocol)
 
 	log.Printf("Test publish bulk subscribe success flow\n")
