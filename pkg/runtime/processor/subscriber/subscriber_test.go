@@ -439,12 +439,16 @@ func TestReloadPubSub(t *testing.T) {
 	assert.Equal(t, []string{"topic1", "topic4"}, gotTopics[0])
 	assert.Equal(t, []string{"topic2"}, gotTopics[1])
 	assert.Equal(t, []string{"topic3"}, gotTopics[2])
-	mockPubSub1.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
-	mockPubSub3.AssertNumberOfCalls(t, "Subscribe", 1)
-	mockPubSub1.AssertNumberOfCalls(t, "unsubscribed", 1)
-	mockPubSub2.AssertNumberOfCalls(t, "unsubscribed", 0)
-	mockPubSub3.AssertNumberOfCalls(t, "unsubscribed", 0)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		cc := &twithLog{CollectT: c}
+		mockPubSub1.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub2.AssertNumberOfCalls(cc, "Subscribe", 1)
+		mockPubSub3.AssertNumberOfCalls(cc, "Subscribe", 1)
+		mockPubSub1.AssertNumberOfCalls(cc, "unsubscribed", 1)
+		mockPubSub2.AssertNumberOfCalls(cc, "unsubscribed", 0)
+		mockPubSub3.AssertNumberOfCalls(cc, "unsubscribed", 0)
+	}, time.Second*10, time.Millisecond*10)
 
 	subs.ReloadPubSub("mockPubSub2")
 	assert.Eventually(t, func() bool {
@@ -453,12 +457,15 @@ func TestReloadPubSub(t *testing.T) {
 	assert.Equal(t, []string{"topic1", "topic4"}, gotTopics[0])
 	assert.Equal(t, []string{"topic2", "topic5"}, gotTopics[1])
 	assert.Equal(t, []string{"topic3"}, gotTopics[2])
-	mockPubSub1.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub3.AssertNumberOfCalls(t, "Subscribe", 1)
-	mockPubSub1.AssertNumberOfCalls(t, "unsubscribed", 1)
-	mockPubSub2.AssertNumberOfCalls(t, "unsubscribed", 1)
-	mockPubSub3.AssertNumberOfCalls(t, "unsubscribed", 0)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		cc := &twithLog{CollectT: c}
+		mockPubSub1.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub2.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub3.AssertNumberOfCalls(cc, "Subscribe", 1)
+		mockPubSub1.AssertNumberOfCalls(cc, "unsubscribed", 1)
+		mockPubSub2.AssertNumberOfCalls(cc, "unsubscribed", 1)
+		mockPubSub3.AssertNumberOfCalls(cc, "unsubscribed", 0)
+	}, time.Second*10, time.Millisecond*10)
 
 	subs.ReloadPubSub("mockPubSub3")
 	assert.Eventually(t, func() bool {
@@ -467,45 +474,57 @@ func TestReloadPubSub(t *testing.T) {
 	assert.Equal(t, []string{"topic1", "topic4"}, gotTopics[0])
 	assert.Equal(t, []string{"topic2", "topic5"}, gotTopics[1])
 	assert.Equal(t, []string{"topic3", "topic6"}, gotTopics[2])
-	mockPubSub1.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub3.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub1.AssertNumberOfCalls(t, "unsubscribed", 1)
-	mockPubSub2.AssertNumberOfCalls(t, "unsubscribed", 1)
-	mockPubSub3.AssertNumberOfCalls(t, "unsubscribed", 1)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		cc := &twithLog{CollectT: c}
+		mockPubSub1.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub2.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub3.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub1.AssertNumberOfCalls(cc, "unsubscribed", 1)
+		mockPubSub2.AssertNumberOfCalls(cc, "unsubscribed", 1)
+		mockPubSub3.AssertNumberOfCalls(cc, "unsubscribed", 1)
+	}, time.Second*10, time.Millisecond*10)
 
 	subs.StopPubSub("mockPubSub1")
 	assert.Eventually(t, func() bool {
 		return changeCalled[0].Load() == 6
 	}, time.Second, 10*time.Millisecond)
-	mockPubSub1.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub3.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub1.AssertNumberOfCalls(t, "unsubscribed", 3)
-	mockPubSub2.AssertNumberOfCalls(t, "unsubscribed", 1)
-	mockPubSub3.AssertNumberOfCalls(t, "unsubscribed", 1)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		cc := &twithLog{CollectT: c}
+		mockPubSub1.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub2.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub3.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub1.AssertNumberOfCalls(cc, "unsubscribed", 3)
+		mockPubSub2.AssertNumberOfCalls(cc, "unsubscribed", 1)
+		mockPubSub3.AssertNumberOfCalls(cc, "unsubscribed", 1)
+	}, time.Second*10, time.Millisecond*10)
 
 	subs.StopPubSub("mockPubSub2")
 	assert.Eventually(t, func() bool {
 		return changeCalled[1].Load() == 6
 	}, time.Second, 10*time.Millisecond)
-	mockPubSub1.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub3.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub1.AssertNumberOfCalls(t, "unsubscribed", 3)
-	mockPubSub2.AssertNumberOfCalls(t, "unsubscribed", 3)
-	mockPubSub3.AssertNumberOfCalls(t, "unsubscribed", 1)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		cc := &twithLog{CollectT: c}
+		mockPubSub1.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub2.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub3.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub1.AssertNumberOfCalls(cc, "unsubscribed", 3)
+		mockPubSub2.AssertNumberOfCalls(cc, "unsubscribed", 3)
+		mockPubSub3.AssertNumberOfCalls(cc, "unsubscribed", 1)
+	}, time.Second*10, time.Millisecond*10)
 
 	subs.StopPubSub("mockPubSub3")
 	assert.Eventually(t, func() bool {
 		return changeCalled[2].Load() == 6
 	}, time.Second, 10*time.Millisecond)
-	mockPubSub1.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub3.AssertNumberOfCalls(t, "Subscribe", 3)
-	mockPubSub1.AssertNumberOfCalls(t, "unsubscribed", 3)
-	mockPubSub2.AssertNumberOfCalls(t, "unsubscribed", 3)
-	mockPubSub3.AssertNumberOfCalls(t, "unsubscribed", 3)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		cc := &twithLog{CollectT: c}
+		mockPubSub1.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub2.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub3.AssertNumberOfCalls(cc, "Subscribe", 3)
+		mockPubSub1.AssertNumberOfCalls(cc, "unsubscribed", 3)
+		mockPubSub2.AssertNumberOfCalls(cc, "unsubscribed", 3)
+		mockPubSub3.AssertNumberOfCalls(cc, "unsubscribed", 3)
+	}, time.Second*10, time.Millisecond*10)
 }
 
 func TestSubscriptionRetryMechanisms(t *testing.T) {
