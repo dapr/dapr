@@ -30,7 +30,7 @@ import (
 var log = logger.NewLogger("dapr.placement.server.loops.stream")
 
 var (
-	StreamLoopFactory = loop.New[loops.Event](8)
+	StreamLoopFactory = loop.New[loops.EventStream](8)
 	streamCache       = sync.Pool{New: func() any {
 		return new(stream)
 	}}
@@ -39,7 +39,7 @@ var (
 type Options struct {
 	IDx           uint64
 	Add           *loops.ConnAdd
-	NamespaceLoop loop.Interface[loops.Event]
+	NamespaceLoop loop.Interface[loops.EventNamespace]
 	Authorizer    *authorizer.Authorizer
 }
 
@@ -51,10 +51,10 @@ type stream struct {
 
 	channel v1pb.Placement_ReportDaprStatusServer
 	cancel  context.CancelCauseFunc
-	nsLoop  loop.Interface[loops.Event]
+	nsLoop  loop.Interface[loops.EventNamespace]
 	authz   *authorizer.Authorizer
 
-	loop loop.Interface[loops.Event]
+	loop loop.Interface[loops.EventStream]
 
 	currentVersion *uint64
 
@@ -62,7 +62,7 @@ type stream struct {
 	wg   sync.WaitGroup
 }
 
-func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
+func New(ctx context.Context, opts Options) loop.Interface[loops.EventStream] {
 	addr := "unknown"
 	if p, ok := peer.FromContext(opts.Add.Channel.Context()); ok {
 		addr = p.Addr.String()
@@ -97,7 +97,7 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 	return stream.loop
 }
 
-func (s *stream) Handle(ctx context.Context, event loops.Event) error {
+func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 	var err error
 	switch e := event.(type) {
 	case *loops.DisseminateLock:

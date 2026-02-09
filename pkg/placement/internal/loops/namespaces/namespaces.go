@@ -38,7 +38,7 @@ type Options struct {
 
 type disseminatorLoop struct {
 	connections uint64
-	loop        loop.Interface[loops.Event]
+	loop        loop.Interface[loops.EventDisseminator]
 }
 
 // namespaces is the main control loop for managing stream
@@ -50,13 +50,13 @@ type namespaces struct {
 
 	// disseminators holds the active namespace connections.
 	disseminators map[string]*disseminatorLoop
-	loop          loop.Interface[loops.Event]
+	loop          loop.Interface[loops.EventNamespace]
 	authorizer    *authorizer.Authorizer
 
 	wg sync.WaitGroup
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
+func New(opts Options) loop.Interface[loops.EventNamespace] {
 	ns := &namespaces{
 		cancelPool:           opts.CancelPool,
 		replicationFactor:    opts.ReplicationFactor,
@@ -65,11 +65,11 @@ func New(opts Options) loop.Interface[loops.Event] {
 		disseminationTimeout: opts.DisseminationTimeout,
 	}
 
-	ns.loop = loop.New[loops.Event](1024).NewLoop(ns)
+	ns.loop = loop.New[loops.EventNamespace](1024).NewLoop(ns)
 	return ns.loop
 }
 
-func (n *namespaces) Handle(ctx context.Context, event loops.Event) error {
+func (n *namespaces) Handle(ctx context.Context, event loops.EventNamespace) error {
 	switch e := event.(type) {
 	case *loops.ConnAdd:
 		return n.handleAdd(ctx, e)
