@@ -79,4 +79,5 @@ const (
 	KeySentryRequestJwtAudiences        = "dapr.io/sentry-request-jwt-audiences"
 	KeySidecarSvcAnnotations            = "dapr.io/sidecar-svc-annotations"
 	KeyDisableInitEndpoints             = "dapr.io/disable-init-endpoints"
+	KeyEnableNativeSidecar              = "dapr.io/enable-native-sidecar"
 )
