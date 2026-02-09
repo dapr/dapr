@@ -165,6 +165,8 @@ func (i *informer[T]) handleEvent(ctx context.Context, oldObj, newObj any, event
 	for _, w := range i.watchers {
 		if ev, ok := appEventFromEvent[T](w.id, event); ok {
 			select {
+			case <-ctx.Done():
+				return
 			case w.ch <- ev:
 			case <-w.ctx.Done():
 				// Watcher has disconnected, skip sending the event.
