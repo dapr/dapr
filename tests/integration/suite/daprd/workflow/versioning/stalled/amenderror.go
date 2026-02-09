@@ -113,5 +113,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
-	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
+	md, err := client.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, md.RuntimeStatus)
 }
