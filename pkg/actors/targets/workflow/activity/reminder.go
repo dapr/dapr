@@ -15,6 +15,10 @@ package activity
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
+	"io"
 	"time"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -34,11 +38,46 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 		return err
 	}
 
-	// The activity actor should always create reminders for its own actor type and ID
+	// The activity actor should always create reminders for its own actor type
+	// and ID
 	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		DueTime:   dueTime.Format(time.RFC3339),
+		Name:      reminderName,
+		// One shot, retry forever, every second.
+		FailurePolicy: &commonv1pb.JobFailurePolicy{
+			Policy: &commonv1pb.JobFailurePolicy_Constant{
+				Constant: &commonv1pb.JobFailurePolicyConstant{
+					Interval:   durationpb.New(time.Second),
+					MaxRetries: nil,
+				},
+			},
+		},
+		Data: anydata,
+	})
+}
+
+func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
+	const namePrefix = "activity-result-"
+
+	b := make([]byte, 6)
+	_, err := io.ReadFull(rand.Reader, b)
+	if err != nil {
+		return fmt.Errorf("failed to generate reminder ID: %w", err)
+	}
+
+	reminderName := namePrefix + base64.RawURLEncoding.EncodeToString(b)
+
+	anydata, err := anypb.New(result)
+	if err != nil {
+		return err
+	}
+
+	return a.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+		ActorType: wfActorType,
+		ActorID:   wfActorID,
+		DueTime:   "0s",
 		Name:      reminderName,
 		// One shot, retry forever, every second.
 		FailurePolicy: &commonv1pb.JobFailurePolicy{

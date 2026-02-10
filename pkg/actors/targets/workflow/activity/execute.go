@@ -101,27 +101,38 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	}
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
 
-	// publish the result back to the workflow actor as a new event to be processed
-	resultData, err := proto.Marshal(wi.Result)
-	if err != nil {
-		// Returning non-recoverable error
-		executionStatus = diag.StatusFailed
-		return err
-	}
-
 	// send completed event to orchestrator wf actor
+	var remote bool
 	wfActorType := a.workflowActorType
 	if router := taskEvent.GetRouter(); router != nil {
 		wfActorType = a.actorTypeBuilder.Workflow(router.GetSourceAppID())
+		if router.GetSourceAppID() != a.appID {
+			remote = true
+		}
 	}
 
-	req := internalsv1pb.
-		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-		WithActor(wfActorType, workflowID).
-		WithData(resultData).
-		WithContentType(invokev1.ProtobufContentType)
+	// TODO: @joshvanl: remove `a.workflowsRemoteActivityReminder` check in later
+	// version.
+	if remote && a.workflowsRemoteActivityReminder {
+		err = a.createWorkflowResultReminder(ctx, wfActorType, workflowID, wi.Result)
+	} else {
+		// publish the result back to the workflow actor as a new event to be processed
+		var resultData []byte
+		resultData, err = proto.Marshal(wi.Result)
+		if err != nil {
+			// Returning non-recoverable error
+			executionStatus = diag.StatusFailed
+			return err
+		}
 
-	_, err = a.router.Call(ctx, req)
+		req := internalsv1pb.
+			NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
+			WithActor(wfActorType, workflowID).
+			WithData(resultData).
+			WithContentType(invokev1.ProtobufContentType)
+		_, err = a.router.Call(ctx, req)
+	}
+
 	switch {
 	case err != nil:
 		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {

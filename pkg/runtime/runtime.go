@@ -300,15 +300,16 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	wfe := wfengine.New(wfengine.Options{
-		AppID:                     runtimeConfig.id,
-		Namespace:                 namespace,
-		Actors:                    actors,
-		Spec:                      globalConfig.Spec.WorkflowSpec,
-		BackendManager:            processor.WorkflowBackend(),
-		Resiliency:                resiliencyProvider,
-		EventSink:                 runtimeConfig.workflowEventSink,
-		EnableClusteredDeployment: globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
-		ComponentStore:            compStore,
+		AppID:                           runtimeConfig.id,
+		Namespace:                       namespace,
+		Actors:                          actors,
+		Spec:                            globalConfig.Spec.WorkflowSpec,
+		BackendManager:                  processor.WorkflowBackend(),
+		Resiliency:                      resiliencyProvider,
+		EventSink:                       runtimeConfig.workflowEventSink,
+		EnableClusteredDeployment:       globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
+		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
+		ComponentStore:                  compStore,
 	})
 
 	jobsManager, err := scheduler.New(scheduler.Options{

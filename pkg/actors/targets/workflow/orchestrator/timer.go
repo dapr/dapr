@@ -39,7 +39,7 @@ func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent,
 	}
 
 	start := e.GetTimerFired().GetFireAt().AsTime()
-	reminderPrefix := "timer-" + strconv.Itoa(int(e.GetTimerFired().GetTimerId()))
+	reminderPrefix := reminderPrefixTimer + strconv.Itoa(int(e.GetTimerFired().GetTimerId()))
 	data := &backend.DurableTimer{TimerEvent: e, Generation: generation}
 
 	log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer, duetime=%s", o.actorID, reminderPrefix, start)
