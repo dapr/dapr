@@ -133,6 +133,12 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 
 	switch {
 	case err != nil:
+		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
+			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", a.actorID, wi.InstanceID, err)
+			executionStatus = diag.StatusFailed
+			return nil
+		}
+
 		if a.workflowsRemoteActivityReminder {
 			if cerr := a.createWorkflowResultReminder(ctx, wfActorType, workflowID, wi.Result); cerr == nil {
 				return nil
