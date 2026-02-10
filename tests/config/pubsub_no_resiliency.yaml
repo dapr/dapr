@@ -7,19 +7,15 @@ spec:
   policies:
 
     retries:
-      twoRetries:
+      # Policy for pubsub redelivery tests - allows retries before exhaustion
+      pubsubRetry:
         policy: constant
-        maxRetries: 2
-      noRetries:
-        policy: constant
-        maxRetries: 0
+        duration: 1s
+        maxRetries: 60  # 60 seconds retry window for redelivery tests
 
   targets:
   
     components:
-
       messagebus:
         inbound:
-          retry: noRetries
-        outbound:
-          retry: noRetries
+          retry: pubsubRetry

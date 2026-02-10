@@ -355,19 +355,46 @@ func postSingleMessage(url string, data []byte) (int, error) {
 	return statusCode, err
 }
 
+// waitForSubscriberReady waits for the subscriber app to be ready.
+func waitForSubscriberReady(t *testing.T, subscriberExternalURL, protocol string) {
+	if protocol == "http" {
+		err := utils.HealthCheckApps(subscriberExternalURL)
+		require.NoError(t, err, "Health check failed for HTTP subscriber")
+	} else {
+		require.Eventually(t, func() bool {
+			conn, err := grpc.Dial(subscriberExternalURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Printf("Waiting for gRPC subscriber at %s: %s", subscriberExternalURL, err.Error())
+				return false
+			}
+			conn.Close()
+			log.Printf("gRPC subscriber at %s is ready", subscriberExternalURL)
+			return true
+		}, 50*time.Second, 5*time.Second, "gRPC subscriber not ready after retries")
+	}
+}
+
 func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+	waitForSubscriberReady(t, subscriberExternalURL, protocol)
+
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	validateBulkMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	return subscriberExternalURL
 }
 
 func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+	waitForSubscriberReady(t, subscriberExternalURL, protocol)
+
 	log.Printf("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
@@ -376,6 +403,10 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 }
 
 func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+	waitForSubscriberReady(t, subscriberExternalURL, protocol)
+
 	callInitialize(t, publisherExternalURL, protocol)
 
 	log.Printf("Test publish bulk subscribe success flow\n")
@@ -405,6 +436,59 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 	require.Error(t, err)
 	// without topic, response should be 404
 	require.Equal(t, http.StatusNotFound, statusCode)
+	return subscriberExternalURL
+}
+
+// testResiliencyExhaustion: Wait for resiliency policy to exhaust (60 retries @ 1s = 60s + buffer)
+func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
+	var err error
+	var code int
+	log.Printf("Test resiliency exhaustion - messages should be dropped after retries exhausted")
+	err = utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health checks failed")
+	callInitialize(t, publisherExternalURL, protocol)
+
+	// Set subscriber to permanently return errors
+	req := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
+		RemoteApp: subscriberAppName,
+		Method:    "set-respond-error",
+		Protocol:  protocol,
+	}
+	reqBytes, _ := json.Marshal(req)
+	var lastRetryError error
+	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
+		if retryCount > 0 {
+			time.Sleep(10 * time.Second)
+		}
+		lastRetryError = nil
+		_, code, err = utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+		if err != nil {
+			lastRetryError = err
+			continue
+		}
+		if code != http.StatusOK {
+			lastRetryError = fmt.Errorf("unexpected http code: %v", code)
+			continue
+		}
+		break
+	}
+	require.Nil(t, lastRetryError, "error calling /tests/callSubscriberMethod: %v", lastRetryError)
+
+	sentMessages := testPublish(t, publisherExternalURL, protocol)
+	_ = sentMessages
+
+	// After exhaustion, messages should be ACK'd and dropped
+	log.Printf("Waiting 65 seconds for resiliency policy to exhaust retries (maxRetries=60)...")
+	time.Sleep(65 * time.Second)
+
+	log.Printf("Validating messages were dropped after retry exhaustion...")
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
+		ReceivedByTopicA:   []string{},
+		ReceivedByTopicB:   []string{},
+		ReceivedByTopicC:   []string{},
+		ReceivedByTopicRaw: []string{},
+	})
 	return subscriberExternalURL
 }
 
@@ -462,16 +546,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	require.NoError(t, err, "error restarting subscriber")
 	subscriberExternalURL = tr.Platform.AcquireAppExternalURL(subscriberAppName)
 	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
-	if protocol == "http" {
-		err = utils.HealthCheckApps(subscriberExternalURL)
-		require.NoError(t, err, "Health checks failed")
-	} else {
-		conn, err := grpc.Dial(subscriberExternalURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			log.Printf("Could not connect to app %s: %s", subscriberExternalURL, err.Error())
-		}
-		defer conn.Close()
-	}
+	waitForSubscriberReady(t, subscriberExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
@@ -808,6 +883,11 @@ var pubsubTests = []struct {
 		name:               "publish with subscriber invalid status test redelivery of messages",
 		handler:            testValidateRedeliveryOrEmptyJSON,
 		subscriberResponse: "invalid-status",
+	},
+	{
+		name:               "publish with subscriber error test messages dropped after resiliency exhaustion",
+		handler:            testResiliencyExhaustion,
+		subscriberResponse: "error",
 	},
 	{
 		name:    "bulk publish and normal subscribe successfully",
