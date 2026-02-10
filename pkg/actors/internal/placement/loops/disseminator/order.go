@@ -47,7 +47,13 @@ func (d *disseminator) handleReportHost(report *loops.ReportHost) {
 }
 
 func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder) error {
-	version, _ := strconv.ParseUint(order.Order.GetTables().GetVersion(), 10, 64)
+	var version uint64
+	if v := order.Order.GetVersion(); v > 0 {
+		version = v
+	} else {
+		//nolint:staticcheck
+		version, _ = strconv.ParseUint(order.Order.GetTables().GetVersion(), 10, 64)
+	}
 
 	log.Debugf("Handling placement order=%s version=%d", order.Order.GetOperation(), version)
 
@@ -82,7 +88,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		d.timeoutVersion++
 		d.timeoutQ.Enqueue(d.timeoutVersion)
 
-		d.inflight.Set(order.Order.GetTables())
+		d.inflight.Set(order.Order.GetTables(), version)
 		d.currentOperation = v1pb.HostOperation_UPDATE
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{
