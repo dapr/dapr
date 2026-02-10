@@ -22,7 +22,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -102,18 +104,14 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
 
 	// send completed event to orchestrator wf actor
-	var remote bool
 	wfActorType := a.workflowActorType
 	if router := taskEvent.GetRouter(); router != nil {
 		wfActorType = a.actorTypeBuilder.Workflow(router.GetSourceAppID())
-		if router.GetSourceAppID() != a.appID {
-			remote = true
-		}
 	}
 
 	// TODO: @joshvanl: remove `a.workflowsRemoteActivityReminder` check in later
 	// version.
-	if remote && a.workflowsRemoteActivityReminder {
+	if a.workflowsRemoteActivityReminder && a.actorNotReachable(ctx, wfActorType, workflowID) {
 		err = a.createWorkflowResultReminder(ctx, wfActorType, workflowID, wi.Result)
 	} else {
 		// publish the result back to the workflow actor as a new event to be processed
@@ -135,10 +133,10 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 
 	switch {
 	case err != nil:
-		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
-			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", a.actorID, wi.InstanceID, err)
-			executionStatus = diag.StatusFailed
-			return nil
+		if a.workflowsRemoteActivityReminder {
+			if cerr := a.createWorkflowResultReminder(ctx, wfActorType, workflowID, wi.Result); cerr == nil {
+				return nil
+			}
 		}
 
 		// Returning recoverable error, record metrics
@@ -153,4 +151,15 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	}
 
 	return nil
+}
+
+func (a *activity) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {
+	_, _, cancel, err := a.placement.LookupActor(ctx, &actorsapi.LookupActorRequest{
+		ActorType: wfActorType,
+		ActorID:   workflowID,
+	})
+	if cancel != nil {
+		cancel(nil)
+	}
+	return errors.Is(err, messages.ErrActorNoAddress)
 }
