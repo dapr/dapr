@@ -29,6 +29,13 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
+const (
+	reminderPrefixStart          = "start"
+	reminderPrefixNewEvent       = "new-event"
+	reminderPrefixTimer          = "timer-"
+	reminderPrefixActivityResult = "activity-result-"
+)
+
 func (o *orchestrator) createWorkflowReminder(ctx context.Context, namePrefix string, data proto.Message, start time.Time, targetAppID string) (string, error) {
 	actorType := o.actorTypeBuilder.Workflow(targetAppID)
 	return o.createReminderWithType(ctx, namePrefix, data, start, actorType)
