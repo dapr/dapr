@@ -355,11 +355,29 @@ func postSingleMessage(url string, data []byte) (int, error) {
 	return statusCode, err
 }
 
+// waitForSubscriberReady waits for the subscriber app to be ready.
+func waitForSubscriberReady(t *testing.T, subscriberExternalURL, protocol string) {
+	if protocol == "http" {
+		err := utils.HealthCheckApps(subscriberExternalURL)
+		require.NoError(t, err, "Health check failed for HTTP subscriber")
+	} else {
+		require.Eventually(t, func() bool {
+			conn, err := grpc.Dial(subscriberExternalURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Printf("Waiting for gRPC subscriber at %s: %s", subscriberExternalURL, err.Error())
+				return false
+			}
+			conn.Close()
+			log.Printf("gRPC subscriber at %s is ready", subscriberExternalURL)
+			return true
+		}, 50*time.Second, 5*time.Second, "gRPC subscriber not ready after retries")
+	}
+}
+
 func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
-	err = utils.HealthCheckApps(subscriberExternalURL)
-	require.NoError(t, err, "Health check failed for subscriber")
+	waitForSubscriberReady(t, subscriberExternalURL, protocol)
 
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
@@ -375,8 +393,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
-	err = utils.HealthCheckApps(subscriberExternalURL)
-	require.NoError(t, err, "Health check failed for subscriber")
+	waitForSubscriberReady(t, subscriberExternalURL, protocol)
 
 	log.Printf("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
@@ -388,8 +405,7 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
-	err = utils.HealthCheckApps(subscriberExternalURL)
-	require.NoError(t, err, "Health check failed for subscriber")
+	waitForSubscriberReady(t, subscriberExternalURL, protocol)
 
 	callInitialize(t, publisherExternalURL, protocol)
 
@@ -530,16 +546,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	require.NoError(t, err, "error restarting subscriber")
 	subscriberExternalURL = tr.Platform.AcquireAppExternalURL(subscriberAppName)
 	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
-	if protocol == "http" {
-		err = utils.HealthCheckApps(subscriberExternalURL)
-		require.NoError(t, err, "Health checks failed")
-	} else {
-		conn, err := grpc.Dial(subscriberExternalURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			log.Printf("Could not connect to app %s: %s", subscriberExternalURL, err.Error())
-		}
-		defer conn.Close()
-	}
+	waitForSubscriberReady(t, subscriberExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
