@@ -59,7 +59,7 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 }
 
 func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
-	const namePrefix = "activity-result-"
+	const reminderPrefixActivityResult = "activity-result-"
 
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
@@ -67,7 +67,7 @@ func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType
 		return fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 
-	reminderName := namePrefix + base64.RawURLEncoding.EncodeToString(b)
+	reminderName := reminderPrefixActivityResult + base64.RawURLEncoding.EncodeToString(b)
 
 	anydata, err := anypb.New(result)
 	if err != nil {
