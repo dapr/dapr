@@ -22,6 +22,12 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
+const (
+	reminderPrefixStart    = "start"
+	reminderPrefixNewEvent = "new-event"
+	reminderPrefixTimer    = "timer-"
+)
+
 func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {
