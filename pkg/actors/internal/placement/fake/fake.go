@@ -22,8 +22,8 @@ import (
 type Fake struct {
 	fnRun           func(context.Context) error
 	fnReady         func() bool
-	fnLock          func(context.Context) (context.Context, context.CancelFunc, error)
-	fnLookupActor   func(context.Context, *api.LookupActorRequest) (*api.LookupActorResponse, error)
+	fnLock          func(context.Context) (context.Context, context.CancelCauseFunc, error)
+	fnLookupActor   func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error)
 	fnIsActorHosted func(context.Context, string, string) bool
 }
 
@@ -31,11 +31,11 @@ func New() *Fake {
 	return &Fake{
 		fnRun:   func(ctx context.Context) error { <-ctx.Done(); return nil },
 		fnReady: func() bool { return true },
-		fnLock: func(ctx context.Context) (context.Context, context.CancelFunc, error) {
-			return ctx, func() {}, nil
+		fnLock: func(ctx context.Context) (context.Context, context.CancelCauseFunc, error) {
+			return ctx, func(_ error) {}, nil
 		},
-		fnLookupActor: func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error) {
-			return nil, nil
+		fnLookupActor: func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
+			return nil, ctx, func(_ error) {}, nil
 		},
 		fnIsActorHosted: func(ctx context.Context, actorType, actorID string) bool {
 			return false
@@ -53,12 +53,12 @@ func (f *Fake) WithReady(fn func() bool) *Fake {
 	return f
 }
 
-func (f *Fake) WithLock(fn func(context.Context) (context.Context, context.CancelFunc, error)) *Fake {
+func (f *Fake) WithLock(fn func(context.Context) (context.Context, context.CancelCauseFunc, error)) *Fake {
 	f.fnLock = fn
 	return f
 }
 
-func (f *Fake) WithLookupActor(fn func(context.Context, *api.LookupActorRequest) (*api.LookupActorResponse, error)) *Fake {
+func (f *Fake) WithLookupActor(fn func(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error)) *Fake {
 	f.fnLookupActor = fn
 	return f
 }
@@ -76,11 +76,11 @@ func (f *Fake) Ready() bool {
 	return f.fnReady()
 }
 
-func (f *Fake) Lock(ctx context.Context) (context.Context, context.CancelFunc, error) {
+func (f *Fake) Lock(ctx context.Context) (context.Context, context.CancelCauseFunc, error) {
 	return f.fnLock(ctx)
 }
 
-func (f *Fake) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error) {
+func (f *Fake) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
 	return f.fnLookupActor(ctx, req)
 }
 

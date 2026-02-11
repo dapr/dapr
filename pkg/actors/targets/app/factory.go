@@ -133,11 +133,14 @@ func (f *factory) HaltAll(ctx context.Context) error {
 	})
 }
 
-func (f *factory) HaltNonHosted(ctx context.Context) error {
+func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	return f.haltActors(ctx, true, func(actorID string) bool {
-		return f.placement.IsActorHosted(ctx, f.actorType, actorID)
+		return fn(&api.LookupActorRequest{
+			ActorType: f.actorType,
+			ActorID:   actorID,
+		})
 	})
 }
 
@@ -183,7 +186,7 @@ func (f *factory) handleIdleActor(target *app) {
 		log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
 		return
 	}
-	defer cancel()
+	defer cancel(nil)
 
 	f.lock.Lock()
 	defer f.lock.Unlock()

@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -77,4 +78,8 @@ func (i *timein) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
+
+	// Sleep to ensure entire runtime is spun up so we hit the log line on
+	// shutdown.
+	time.Sleep(time.Millisecond * 500)
 }

@@ -28,7 +28,7 @@ import (
 
 func TestServerConf(t *testing.T) {
 	t.Run("KubernetesMode", func(t *testing.T) {
-		config, err := config(Options{
+		config, err := config(t.Context(), Options{
 			Security:             fake.New(),
 			Mode:                 modes.KubernetesMode,
 			DataDir:              "",
@@ -62,7 +62,7 @@ func TestServerConf(t *testing.T) {
 	})
 
 	t.Run("StandaloneMode", func(t *testing.T) {
-		config, err := config(Options{
+		config, err := config(t.Context(), Options{
 			Security:             fake.New(),
 			Mode:                 modes.StandaloneMode,
 			DataDir:              "./data",
@@ -101,7 +101,7 @@ func TestServerConf(t *testing.T) {
 	})
 
 	t.Run("StandaloneMode listen on 0.0.0.0 when a host", func(t *testing.T) {
-		config, err := config(Options{
+		config, err := config(t.Context(), Options{
 			Security:             fake.New(),
 			Mode:                 modes.StandaloneMode,
 			DataDir:              "./data",
@@ -133,7 +133,7 @@ func TestServerConf(t *testing.T) {
 	})
 
 	t.Run("StandaloneMode listen on IP when an IP", func(t *testing.T) {
-		config, err := config(Options{
+		config, err := config(t.Context(), Options{
 			Security:             fake.New(),
 			Mode:                 modes.StandaloneMode,
 			DataDir:              "./data",
@@ -165,7 +165,7 @@ func TestServerConf(t *testing.T) {
 	})
 
 	t.Run("StandaloneMode listen on HTTP IP when an IP", func(t *testing.T) {
-		config, err := config(Options{
+		config, err := config(t.Context(), Options{
 			Security:             fake.New(),
 			Mode:                 modes.StandaloneMode,
 			DataDir:              "./data",

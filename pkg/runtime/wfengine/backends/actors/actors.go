@@ -325,7 +325,8 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	err = backoff.Retry(func() error {
 		_, eerr := router.Call(ctx, req)
 		status, ok := status.FromError(eerr)
-		if ok && status.Code() == codes.FailedPrecondition {
+		if ok && (status.Code() == codes.FailedPrecondition ||
+			status.Code() == codes.Unavailable) {
 			return eerr
 		}
 		if errors.Is(eerr, actorerrors.ErrCreatingActor) {

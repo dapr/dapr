@@ -48,11 +48,7 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("purge", func(ctx *dworkflow.WorkflowContext) (any, error) {
-		require.NoError(t, ctx.CallActivity("abc").Await(nil))
 		require.NoError(t, ctx.CreateTimer(time.Hour).Await(nil))
-		return nil, nil
-	})
-	reg.AddActivityN("abc", func(ctx dworkflow.ActivityContext) (any, error) {
 		return nil, nil
 	})
 

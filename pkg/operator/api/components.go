@@ -17,8 +17,8 @@ import (
 	"context"
 	b64 "encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -42,12 +42,17 @@ type ComponentUpdateEvent struct {
 // TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
 // the caller.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
+	if a.closed.Load() {
+		return errors.New("server is closed")
+	}
+
 	log.Info("sidecar connected for component updates")
 
-	ch, err := a.compInformer.WatchUpdates(srv.Context(), in.GetNamespace())
+	ch, cancel, err := a.compInformer.WatchUpdates(srv.Context(), in.GetNamespace())
 	if err != nil {
 		return err
 	}
+	defer cancel()
 
 	updateComponentFunc := func(ctx context.Context, t operatorv1pb.ResourceEventType, c *componentsapi.Component) {
 		if c.Namespace != in.GetNamespace() {
@@ -78,8 +83,6 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		log.Debugf("updated sidecar with component %s %s (%s) from pod %s/%s", t.String(), c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName())
 	}
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
 	for {
 		select {
 		case <-srv.Context().Done():

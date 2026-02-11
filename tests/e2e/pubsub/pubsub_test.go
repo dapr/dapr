@@ -308,6 +308,9 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 }
 
 func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+
 	setDesiredResponse(t, subscriberAppName, "drop", publisherExternalURL, protocol)
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 
@@ -332,6 +335,32 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 	return subscriberExternalURL
 }
 
+// testResiliencyExhaustion: Wait for resiliency policy to exhaust (60 retries @ 1s = 60s + buffer)
+func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
+	log.Printf("Test resiliency exhaustion - messages should be dropped after retries exhausted")
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+
+	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "error", publisherExternalURL, protocol)
+	sentMessages := testPublish(t, publisherExternalURL, protocol)
+	_ = sentMessages
+
+	// After exhaustion, messages should be ACK'd and dropped
+	log.Printf("Waiting 65 seconds for resiliency policy to exhaust retries (maxRetries=60)...")
+	time.Sleep(65 * time.Second)
+
+	log.Printf("Validating messages were dropped after retry exhaustion...")
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
+		ReceivedByTopicA:    []string{},
+		ReceivedByTopicB:    []string{},
+		ReceivedByTopicC:    []string{},
+		ReceivedByTopicRaw:  []string{},
+		ReceivedByTopicDead: []string{},
+	})
+	return subscriberExternalURL
+}
+
 func postSingleMessage(url string, data []byte) (int, error) {
 	// HTTPPostWithStatus by default sends with content-type application/json
 	start := time.Now()
@@ -348,18 +377,28 @@ func postSingleMessage(url string, data []byte) (int, error) {
 }
 
 func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+	err = utils.HealthCheckApps(subscriberExternalURL)
+	require.NoError(t, err, "Health check failed for subscriber")
+
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	validateBulkMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	return subscriberExternalURL
 }
 
 func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
+	err = utils.HealthCheckApps(subscriberExternalURL)
+	require.NoError(t, err, "Health check failed for subscriber")
+
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
@@ -395,6 +434,8 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 
 func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health check failed for publisher")
 
 	log.Println("Initialize the sets for this scenario ...")
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
@@ -411,8 +452,10 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else {
-		// Sleep a few seconds to ensure there's time for all messages to be delivered at least once, so if they have to be sent to the DLQ, they can be before we change the desired response status
-		time.Sleep(5 * time.Second)
+		// Sleep briefly to allow initial delivery attempts to fail
+		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
+		// so that when we flip to success, messages are still being retried
+		time.Sleep(2 * time.Second)
 	}
 
 	// set to respond with success
@@ -776,6 +819,11 @@ var pubsubTests = []struct {
 		name:               "publish with subscriber invalid status test redelivery of messages",
 		handler:            testValidateRedeliveryOrEmptyJSON,
 		subscriberResponse: "invalid-status",
+	},
+	{
+		name:               "publish with subscriber error test messages dropped after resiliency exhaustion",
+		handler:            testResiliencyExhaustion,
+		subscriberResponse: "error",
 	},
 	{
 		name:    "bulk publish and normal subscribe successfully",

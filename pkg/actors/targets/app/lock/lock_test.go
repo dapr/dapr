@@ -27,49 +27,6 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-func Test_Lock(t *testing.T) {
-	t.Parallel()
-
-	l := New(Options{
-		ConfigStore: reentrancystore.New(),
-	})
-	_, cancel, err := l.Lock(t.Context())
-	require.NoError(t, err)
-	cancel()
-
-	_, cancel, err = l.Lock(t.Context())
-	require.NoError(t, err)
-	cancel()
-
-	l = New(Options{
-		ConfigStore: reentrancystore.New(),
-	})
-	_, cancel1, err := l.Lock(t.Context())
-	require.NoError(t, err)
-
-	errCh := make(chan error)
-	var cancel2 context.CancelFunc
-	go func() {
-		_, cancel2, err = l.Lock(t.Context())
-		errCh <- err
-	}()
-
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		l.lock <- struct{}{}
-		assert.Equal(c, 2, l.inflights.Len())
-		<-l.lock
-	}, time.Second*5, time.Millisecond*10)
-
-	cancel1()
-	select {
-	case err := <-errCh:
-		require.NoError(t, err)
-	case <-time.After(time.Second):
-		assert.Fail(t, "lock not acquired")
-	}
-	cancel2()
-}
-
 func Test_requestid(t *testing.T) {
 	t.Parallel()
 

@@ -147,6 +147,6 @@ func (s *stream) handleShutdown() {
 		return true
 	})
 	s.inflight.Clear()
-	streamCache.Put(s)
 	streamLoopFactory.CacheLoop(s.loop)
+	streamCache.Put(s)
 }

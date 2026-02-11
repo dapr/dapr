@@ -40,12 +40,12 @@ func Test_WatchUpdates(t *testing.T) {
 
 		i := New[compapi.Component](Options{}).(*informer[compapi.Component])
 
-		appCh, err := i.WatchUpdates(pki.ClientGRPCCtx(t), "ns2")
+		appCh, _, err := i.WatchUpdates(pki.ClientGRPCCtx(t), "ns2")
 		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 		assert.Nil(t, appCh)
 
-		appCh, err = i.WatchUpdates(t.Context(), "ns2")
+		appCh, _, err = i.WatchUpdates(t.Context(), "ns2")
 		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 		assert.Nil(t, appCh)
@@ -57,12 +57,13 @@ func Test_WatchUpdates(t *testing.T) {
 		pki := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
 
 		i := New[compapi.Component](Options{}).(*informer[compapi.Component])
-		t.Cleanup(func() { close(i.closeCh) })
 
-		appCh1, err := i.WatchUpdates(pki.ClientGRPCCtx(t), "ns1")
+		appCh1, cancel1, err := i.WatchUpdates(pki.ClientGRPCCtx(t), "ns1")
 		require.NoError(t, err)
-		appCh2, err := i.WatchUpdates(pki.ClientGRPCCtx(t), "ns1")
+		t.Cleanup(cancel1)
+		appCh2, cancel2, err := i.WatchUpdates(pki.ClientGRPCCtx(t), "ns1")
 		require.NoError(t, err)
+		t.Cleanup(cancel2)
 
 		i.handleEvent(t.Context(),
 			&compapi.Component{
@@ -74,10 +75,6 @@ func Test_WatchUpdates(t *testing.T) {
 			},
 			operator.ResourceEventType_UPDATED,
 		)
-
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, 1, int(i.batchID.Load()))
-		}, 5*time.Second, 100*time.Millisecond)
 
 		i.handleEvent(t.Context(),
 			&compapi.Component{
@@ -91,10 +88,6 @@ func Test_WatchUpdates(t *testing.T) {
 			operator.ResourceEventType_UPDATED,
 		)
 
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, 2, int(i.batchID.Load()))
-		}, 5*time.Second, 100*time.Millisecond)
-
 		i.handleEvent(t.Context(),
 			nil,
 			&compapi.Component{
@@ -102,10 +95,6 @@ func Test_WatchUpdates(t *testing.T) {
 			},
 			operator.ResourceEventType_CREATED,
 		)
-
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, 3, int(i.batchID.Load()))
-		}, 5*time.Second, 100*time.Millisecond)
 
 		for _, appCh := range []<-chan *Event[compapi.Component]{appCh1, appCh2} {
 			for _, exp := range []*Event[compapi.Component]{

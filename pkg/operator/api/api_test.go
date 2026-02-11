@@ -236,7 +236,7 @@ func TestComponentUpdate(t *testing.T) {
 		}
 
 		fakeInformer := informerfake.New[componentsapi.Component]().
-			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[componentsapi.Component], error) {
+			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[componentsapi.Component], context.CancelFunc, error) {
 				ch := make(chan *informer.Event[componentsapi.Component])
 				go func() {
 					ch <- &informer.Event[componentsapi.Component]{
@@ -245,7 +245,7 @@ func TestComponentUpdate(t *testing.T) {
 					}
 					close(ch)
 				}()
-				return ch, nil
+				return ch, func() {}, nil
 			})
 
 		s := runtime.NewScheme()
@@ -279,7 +279,7 @@ func TestComponentUpdate(t *testing.T) {
 		}
 
 		fakeInformer := informerfake.New[componentsapi.Component]().
-			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[componentsapi.Component], error) {
+			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[componentsapi.Component], context.CancelFunc, error) {
 				ch := make(chan *informer.Event[componentsapi.Component])
 				go func() {
 					ch <- &informer.Event[componentsapi.Component]{
@@ -288,7 +288,7 @@ func TestComponentUpdate(t *testing.T) {
 					}
 					close(ch)
 				}()
-				return ch, nil
+				return ch, func() {}, nil
 			})
 
 		s := runtime.NewScheme()

@@ -197,9 +197,9 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 		require.Equal(t, numTraces, sampledCount, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
 	})
 
-	t.Run("traceparent is not provided and sampling is enabled (but almost 0 P=0.00001)", func(t *testing.T) {
+	t.Run("traceparent is not provided and sampling is enabled (but almost 0 P=0.0000001)", func(t *testing.T) {
 		const numTraces = 1000
-		sampledCount := runTraces(t, "test_trace", numTraces, "0.00001", false, 0)
+		sampledCount := runTraces(t, "test_trace", numTraces, "0.0000001", false, 0)
 		require.Less(t, sampledCount, int(numTraces*.001), "Expected to sample no traces (+/- 10%) but only sampled %d", sampledCount)
 	})
 }

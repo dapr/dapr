@@ -15,7 +15,6 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -99,8 +98,8 @@ func TestServerWithDialer[TServer any](logger logger.Logger, registersvc func(*g
 	}
 }
 
-func StartTestAppCallbackGRPCServer(t *testing.T, port int, mockServer runtimev1pb.AppCallbackServer) *grpc.Server {
-	lis, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+func StartTestAppCallbackGRPCServer(t *testing.T, mockServer runtimev1pb.AppCallbackServer) (*grpc.Server, int) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	grpcServer := grpc.NewServer()
 	go func() {
@@ -112,5 +111,5 @@ func StartTestAppCallbackGRPCServer(t *testing.T, port int, mockServer runtimev1
 	// wait until server starts
 	time.Sleep(MaxGRPCServerUptime)
 
-	return grpcServer
+	return grpcServer, lis.Addr().(*net.TCPAddr).Port
 }

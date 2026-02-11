@@ -108,7 +108,7 @@ var (
 	ErrActorNoPlacement              = APIError{"placement service is not configured", errorcodes.ErrActorNoPlacement, http.StatusBadRequest, grpcCodes.Unavailable}
 	ErrActorRuntimeClosed            = APIError{"actor runtime is closed", errorcodes.ErrActorRuntimeClosed, http.StatusServiceUnavailable, grpcCodes.Unavailable}
 	ErrActorNamespaceRequired        = APIError{"actors must have a namespace configured when running in Kubernetes mode", errorcodes.ErrActorNamespaceRequired, http.StatusPreconditionFailed, grpcCodes.FailedPrecondition}
-	ErrActorNoAddress                = APIError{"did not find address for actor", errorcodes.ErrActorNoAddress, http.StatusNotFound, grpcCodes.FailedPrecondition}
+	ErrActorNoAddress                = APIError{"did not find address for actor '%s'", errorcodes.ErrActorNoAddress, http.StatusNotFound, grpcCodes.FailedPrecondition}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", errorcodes.LockStoreNotConfigured, http.StatusInternalServerError, grpcCodes.FailedPrecondition}
