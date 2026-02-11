@@ -462,9 +462,12 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
-		// validate that there is no redelivery of messages
-		log.Printf("Validating no redelivered messages...")
-		time.Sleep(30 * time.Second)
+		// Wait until subscriber has no messages, then validate that there is no redelivery
+		log.Printf("Validating no redelivered messages for 'empty-json' subscriber...")
+		require.Eventually(t,
+			func() bool { return subscriberReceivedNoMessages(publisherExternalURL, subscriberAppName, protocol) },
+			60*time.Second, 5*time.Second,
+			"subscriber still had messages when expecting no redelivery")
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
 			// empty string slices
 			ReceivedByTopicA:    []string{},
@@ -474,13 +477,23 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			ReceivedByTopicDead: []string{},
 		})
 	} else if subscriberResponse == "error" {
-		log.Printf("Validating redelivered messages...")
-		time.Sleep(30 * time.Second)
+		log.Printf("Validating redelivered messages for 'error' subscriber...")
+		require.Eventually(t,
+			func() bool {
+				return subscriberReceivedExpectedCounts(publisherExternalURL, subscriberAppName, protocol, true, sentMessages)
+			},
+			120*time.Second, 5*time.Second,
+			"subscriber did not receive all messages (including dead letter) within timeout")
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages)
 	} else {
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages...")
-		time.Sleep(30 * time.Second)
+		require.Eventually(t,
+			func() bool {
+				return subscriberReceivedExpectedCounts(publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
+			},
+			90*time.Second, 5*time.Second,
+			"subscriber did not receive all redelivered messages within timeout")
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages)
 	}
 
@@ -513,6 +526,59 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, code)
+}
+
+// subscriberReceivedExpectedCounts returns true when the subscriber has received the expected
+// number of messages on each topic
+func subscriberReceivedExpectedCounts(publisherURL, subscriberApp, protocol string, validateDeadLetter bool, sentMessages receivedMessagesResponse) bool {
+	req := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
+		RemoteApp: subscriberApp,
+		Protocol:  protocol,
+		Method:    "getMessages",
+	}
+	rawReq, _ := json.Marshal(req)
+	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
+	if err != nil {
+		return false
+	}
+	var appResp receivedMessagesResponse
+	if json.Unmarshal(resp, &appResp) != nil {
+		return false
+	}
+	ok := len(appResp.ReceivedByTopicA) == len(sentMessages.ReceivedByTopicA) &&
+		len(appResp.ReceivedByTopicB) == len(sentMessages.ReceivedByTopicB) &&
+		len(appResp.ReceivedByTopicC) == len(sentMessages.ReceivedByTopicC) &&
+		len(appResp.ReceivedByTopicRaw) == len(sentMessages.ReceivedByTopicRaw)
+	if validateDeadLetter {
+		ok = ok && len(appResp.ReceivedByTopicDeadLetter) == len(sentMessages.ReceivedByTopicDeadLetter)
+	}
+	return ok
+}
+
+// subscriberReceivedNoMessages returns true when the subscriber has no messages on the main
+// topics
+func subscriberReceivedNoMessages(publisherURL, subscriberApp, protocol string) bool {
+	req := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
+		RemoteApp: subscriberApp,
+		Protocol:  protocol,
+		Method:    "getMessages",
+	}
+	rawReq, _ := json.Marshal(req)
+	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
+	if err != nil {
+		return false
+	}
+	var appResp receivedMessagesResponse
+	if json.Unmarshal(resp, &appResp) != nil {
+		return false
+	}
+	return len(appResp.ReceivedByTopicA) == 0 &&
+		len(appResp.ReceivedByTopicB) == 0 &&
+		len(appResp.ReceivedByTopicC) == 0 &&
+		len(appResp.ReceivedByTopicRaw) == 0 &&
+		len(appResp.ReceivedByTopicDeadLetter) == 0
 }
 
 func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) {

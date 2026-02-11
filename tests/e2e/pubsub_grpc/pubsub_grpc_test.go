@@ -478,9 +478,12 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 	_ = sentMessages
 
-	// After exhaustion, messages should be ACK'd and dropped
-	log.Printf("Waiting 65 seconds for resiliency policy to exhaust retries (maxRetries=60)...")
-	time.Sleep(65 * time.Second)
+	// After exhaustion, messages should be ACK'd and dropped. Wait until subscriber has no messages
+	log.Printf("Waiting for resiliency policy to exhaust retries (maxRetries=60)...")
+	require.Eventually(t,
+		func() bool { return subscriberReceivedNoMessages(publisherExternalURL, subscriberAppName, protocol) },
+		75*time.Second, 5*time.Second,
+		"subscriber still had messages after retry exhaustion timeout")
 
 	log.Printf("Validating messages were dropped after retry exhaustion...")
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
@@ -549,8 +552,12 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	waitForSubscriberReady(t, subscriberExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
-		// validate that there is no redelivery of messages
-		log.Printf("Validating no redelivered messages...")
+		// Wait until subscriber has no messages, then validate that there is no redelivery
+		log.Printf("Validating no redelivered messages for 'empty-json' subscriber...")
+		require.Eventually(t,
+			func() bool { return subscriberReceivedNoMessages(publisherExternalURL, subscriberAppName, protocol) },
+			60*time.Second, 5*time.Second,
+			"subscriber still had messages when expecting no redelivery")
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
 			// empty string slices
 			ReceivedByTopicA:   []string{},
@@ -561,6 +568,12 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	} else {
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages...")
+		require.Eventually(t,
+			func() bool {
+				return subscriberReceivedExpectedCounts(publisherExternalURL, subscriberAppName, protocol, sentMessages)
+			},
+			90*time.Second, 5*time.Second,
+			"subscriber did not receive all redelivered messages within timeout")
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	}
 	return subscriberExternalURL
@@ -594,6 +607,54 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 		break
 	}
 	require.Nil(t, lastRetryError, "error calling /tests/callSubscriberMethod: %v", lastRetryError)
+}
+
+// subscriberReceivedExpectedCounts returns true when the subscriber has received the expected
+// number of messages on each topic
+func subscriberReceivedExpectedCounts(publisherURL, subscriberApp, protocol string, sentMessages receivedMessagesResponse) bool {
+	req := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
+		RemoteApp: subscriberApp,
+		Protocol:  protocol,
+		Method:    "getMessages",
+	}
+	rawReq, _ := json.Marshal(req)
+	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
+	if err != nil {
+		return false
+	}
+	var appResp receivedMessagesResponse
+	if json.Unmarshal(resp, &appResp) != nil {
+		return false
+	}
+	return len(appResp.ReceivedByTopicA) == len(sentMessages.ReceivedByTopicA) &&
+		len(appResp.ReceivedByTopicB) == len(sentMessages.ReceivedByTopicB) &&
+		len(appResp.ReceivedByTopicC) == len(sentMessages.ReceivedByTopicC) &&
+		len(appResp.ReceivedByTopicRaw) == len(sentMessages.ReceivedByTopicRaw)
+}
+
+// subscriberReceivedNoMessages returns true when the subscriber has received no messages on
+// the main topics (used with require.Eventually for resiliency exhaustion test).
+func subscriberReceivedNoMessages(publisherURL, subscriberApp, protocol string) bool {
+	req := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
+		RemoteApp: subscriberApp,
+		Protocol:  protocol,
+		Method:    "getMessages",
+	}
+	rawReq, _ := json.Marshal(req)
+	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
+	if err != nil {
+		return false
+	}
+	var appResp receivedMessagesResponse
+	if json.Unmarshal(resp, &appResp) != nil {
+		return false
+	}
+	return len(appResp.ReceivedByTopicA) == 0 &&
+		len(appResp.ReceivedByTopicB) == 0 &&
+		len(appResp.ReceivedByTopicC) == 0 &&
+		len(appResp.ReceivedByTopicRaw) == 0
 }
 
 func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) {
