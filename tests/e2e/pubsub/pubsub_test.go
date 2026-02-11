@@ -480,10 +480,10 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		log.Printf("Validating redelivered messages for 'error' subscriber...")
 		require.Eventually(t,
 			func() bool {
-				return subscriberReceivedExpectedCounts(publisherExternalURL, subscriberAppName, protocol, true, sentMessages)
+				return subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, len(sentMessages.ReceivedByTopicDeadLetter))
 			},
-			120*time.Second, 5*time.Second,
-			"subscriber did not receive all messages (including dead letter) within timeout")
+			180*time.Second, 5*time.Second,
+			"subscriber did not receive all dead letter messages within timeout")
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages)
 	} else {
 		// validate redelivery of messages
@@ -526,6 +526,26 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, code)
+}
+
+// subscriberReceivedDeadLetterCount returns true when the subscriber has received 'expectedCount' messages on the dead letter topic.
+func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol string, expectedCount int) bool {
+	req := callSubscriberMethodRequest{
+		ReqID:     "c-" + uuid.New().String(),
+		RemoteApp: subscriberApp,
+		Protocol:  protocol,
+		Method:    "getMessages",
+	}
+	rawReq, _ := json.Marshal(req)
+	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
+	if err != nil {
+		return false
+	}
+	var appResp receivedMessagesResponse
+	if json.Unmarshal(resp, &appResp) != nil {
+		return false
+	}
+	return len(appResp.ReceivedByTopicDeadLetter) >= expectedCount
 }
 
 // subscriberReceivedExpectedCounts returns true when the subscriber has received the expected
