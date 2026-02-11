@@ -199,7 +199,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	path = h.getMetricsPath(path)
 	method = h.getMetricsMethod(method)
 
-	if h.legacy || h.pathMatcher.enabled() {
+	if h.legacy {
 		stats.RecordWithOptions(
 			ctx,
 			stats.WithRecorder(h.meter),
@@ -222,7 +222,7 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	path = h.getMetricsPath(path)
 	method = h.getMetricsMethod(method)
 
-	if h.legacy || h.pathMatcher.enabled() {
+	if h.legacy {
 		stats.RecordWithOptions(
 			ctx,
 			stats.WithRecorder(h.meter),
@@ -341,7 +341,9 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		}
 
 		var path string
-		if h.legacy || h.pathMatcher.enabled() {
+		if h.pathMatcher.enabled() {
+			path = r.URL.Path
+		} else if h.legacy {
 			path = h.convertPathToMetricLabel(r.URL.Path)
 		}
 

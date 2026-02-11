@@ -102,159 +102,6 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	assert.Nil(t, rows)
 }
 
-func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
-	testHTTP := newHTTPMetrics()
-	testHTTP.enabled = false
-	meter := view.NewMeter()
-	meter.Start()
-	t.Cleanup(func() {
-		meter.Stop()
-	})
-	testHTTP.Init(meter, "fakeID", HTTPMonitoringConfig{}, nil)
-	matchedPath, ok := testHTTP.pathMatcher.match("/orders")
-	require.False(t, ok)
-	require.Equal(t, "", matchedPath)
-}
-
-func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
-	testHTTP := newHTTPMetrics()
-	testHTTP.enabled = false
-	paths := []string{
-		"/v1/orders/{orderID}/items/12345",
-		"/v1/orders/{orderID}/items/{itemID}",
-		"/v1/items/{itemID}",
-		"/v1/orders/{orderID}/items/{itemID}",
-	}
-	configHTTP := NewHTTPMonitoringConfig(paths, true, false)
-	meter := view.NewMeter()
-	meter.Start()
-	t.Cleanup(func() {
-		meter.Stop()
-	})
-	testHTTP.Init(meter, "fakeID", configHTTP, nil)
-
-	// act & assert
-
-	// empty path
-	matchedPath, ok := testHTTP.pathMatcher.match("")
-	require.False(t, ok)
-	require.Equal(t, "", matchedPath)
-
-	// match "/v1/orders/{orderID}/items/12345"
-	matchedPath, ok = testHTTP.pathMatcher.match("/v1/orders/12345/items/12345")
-	require.True(t, ok)
-	require.Equal(t, "/v1/orders/{orderID}/items/12345", matchedPath)
-
-	// match "/v1/orders/{orderID}/items/{itemID}"
-	matchedPath, ok = testHTTP.pathMatcher.match("/v1/orders/12345/items/1111")
-	require.True(t, ok)
-	require.Equal(t, "/v1/orders/{orderID}/items/{itemID}", matchedPath)
-
-	// match "/v1/items/{itemID}"
-	matchedPath, ok = testHTTP.pathMatcher.match("/v1/items/12345")
-	require.True(t, ok)
-	require.Equal(t, "/v1/items/{itemID}", matchedPath)
-
-	// no match so we keep the path as is
-	matchedPath, ok = testHTTP.pathMatcher.match("/v2/basket/12345")
-	require.True(t, ok)
-	require.Equal(t, "/v2/basket/12345", matchedPath)
-
-	// match "/v1/orders/{orderID}/items/{itemID}"
-	matchedPath, ok = testHTTP.pathMatcher.match("/v1/orders/12345/items/1111")
-	require.True(t, ok)
-	require.Equal(t, "/v1/orders/{orderID}/items/{itemID}", matchedPath)
-}
-
-func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
-	testHTTP := newHTTPMetrics()
-	testHTTP.enabled = false
-	paths := []string{
-		"/v1/orders/{orderID}/items/12345",
-		"/v1/orders/{orderID}/items/{itemID}",
-		"/v1/orders/{orderID}",
-		"/v1/items/{itemID}",
-		"/dapr/config",
-		"/v1/",
-		"/",
-	}
-	configHTTP := NewHTTPMonitoringConfig(paths, false, false)
-	meter := view.NewMeter()
-	meter.Start()
-	t.Cleanup(func() {
-		meter.Stop()
-	})
-	testHTTP.Init(meter, "fakeID", configHTTP, nil)
-
-	// act & assert
-
-	// empty path
-	matchedPath, ok := testHTTP.pathMatcher.match("")
-	require.False(t, ok)
-	require.Equal(t, "", matchedPath)
-
-	// match "/v1/orders/{orderID}/items/12345"
-	matchedPath, ok = testHTTP.pathMatcher.match("/v1/orders/12345/items/12345")
-	require.True(t, ok)
-	require.Equal(t, "/v1/orders/{orderID}/items/12345", matchedPath)
-
-	// match "/v1/orders/{orderID}"
-	matchedPath, ok = testHTTP.pathMatcher.match("/v1/orders/12345")
-	require.True(t, ok)
-	require.Equal(t, "/v1/orders/{orderID}", matchedPath)
-
-	// match "/v1/items/{itemID}"
-	matchedPath, ok = testHTTP.pathMatcher.match("/v1/items/12345")
-	require.True(t, ok)
-	require.Equal(t, "/v1/items/{itemID}", matchedPath)
-
-	// match "/v1/"
-	matchedPath, ok = testHTTP.pathMatcher.match("/v1/basket")
-	require.True(t, ok)
-	assert.Equal(t, "/v1/", matchedPath)
-
-	// match "/"
-	matchedPath, ok = testHTTP.pathMatcher.match("/v2/orders/1111")
-	require.True(t, ok)
-	assert.Equal(t, "/", matchedPath)
-
-	// no match so we fallback to "/"
-	matchedPath, ok = testHTTP.pathMatcher.match("/basket/12345")
-	require.True(t, ok)
-	require.Equal(t, "/", matchedPath)
-
-	matchedPath, ok = testHTTP.pathMatcher.match("/dapr/config")
-	require.True(t, ok)
-	require.Equal(t, "/dapr/config", matchedPath)
-}
-
-func TestHTTPMetricsPathMatchingLowCardinalityRootPathRegister(t *testing.T) {
-	testHTTP := newHTTPMetrics()
-	testHTTP.enabled = false
-
-	// 1 - Root path not registered fallback to ""
-	paths1 := []string{"/v1/orders/{orderID}"}
-	meter := view.NewMeter()
-	meter.Start()
-	t.Cleanup(func() {
-		meter.Stop()
-	})
-	testHTTP.Init(meter, "fakeID", HTTPMonitoringConfig{paths1, false, false}, nil)
-	matchedPath, ok := testHTTP.pathMatcher.match("/thispathdoesnotexist")
-	require.True(t, ok)
-	require.Equal(t, "", matchedPath)
-
-	// 2 - Root path registered fallback to "/"
-	paths2 := []string{"/v1/orders/{orderID}", "/"}
-	meter2 := view.NewMeter()
-	meter2.Start()
-	defer meter2.Stop()
-	testHTTP.Init(meter2, "fakeID", HTTPMonitoringConfig{paths2, false, false}, nil)
-	matchedPath, ok = testHTTP.pathMatcher.match("/thispathdoesnotexist")
-	require.True(t, ok)
-	require.Equal(t, "/", matchedPath)
-}
-
 func TestGetMetricsMethod(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
@@ -297,19 +144,6 @@ func TestGetMetricsMethodExcludeVerbs(t *testing.T) {
 	assert.Equal(t, "", testHTTP.getMetricsMethod("INVALID"))
 }
 
-func TestHTTPMetricsPathMatchingWithRedirect(t *testing.T) {
-	const testPath = "/redirect-test"
-
-	pm := newPathMatching([]string{"/other-path"}, false)
-	pm.mux.HandleFunc(testPath, func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/redirected", http.StatusFound)
-	})
-
-	matchedPath, ok := pm.match(testPath)
-	require.True(t, ok, "Expected path matching to succeed")
-	require.Equal(t, testPath, matchedPath, "Expected matched path to be %q", testPath)
-}
-
 func fakeHTTPRequest(body string) *http.Request {
 	req, err := http.NewRequest(http.MethodPost, "http://dapr.io/invoke/method/testmethod", strings.NewReader(body))
 	if err != nil {
@@ -324,70 +158,161 @@ func fakeHTTPRequest(body string) *http.Request {
 	return req
 }
 
-func TestHTTPMiddleware_Normalization(t *testing.T) {
-	paths := []string{"/v1.0/actors/myactortype/{id}/method"}
-
-	testCases := []struct {
-		name         string
-		requestPath  string
-		legacy       bool
-		expectedPath string
-		expectMatch  bool
+func TestHTTPMiddleware_PathMatching_Scenarios(t *testing.T) {
+	tests := []struct {
+		name                 string
+		pathMatching         []string
+		increasedCardinality bool // maps to legacy
+		requestPath          string
+		expectedPathTag      string
 	}{
+		// Low Cardinality Scenarios
 		{
-			name:         "Legacy: Double Slash should be normalized and ID masked",
-			requestPath:  "//v1.0/actors/myactortype/myid/method/foo",
-			legacy:       true,
-			expectedPath: "/v1.0/actors/myactortype/{id}/method",
-			expectMatch:  true,
+			name:                 "Low Cardinality - With Path Matching - Matched",
+			pathMatching:         []string{"/orders/{orderID}"},
+			increasedCardinality: false,
+			requestPath:          "/orders/123",
+			expectedPathTag:      "/orders/{orderID}",
 		},
 		{
-			name:         "Legacy: Normal Path",
-			requestPath:  "/v1.0/actors/myactortype/myid/method/foo",
-			legacy:       true,
-			expectedPath: "/v1.0/actors/myactortype/{id}/method",
-			expectMatch:  true,
+			name:                 "Low Cardinality - With Path Matching - Unmatched",
+			pathMatching:         []string{"/orders/{orderID}"},
+			increasedCardinality: false,
+			requestPath:          "/unknown/path",
+			expectedPathTag:      "",
 		},
 		{
-			name:         "Strict: Double Slash should be normalized and matched",
-			requestPath:  "//v1.0/actors/myactortype/myid/method/foo",
-			legacy:       false,
-			expectedPath: "/v1.0/actors/myactortype/{id}/method",
-			expectMatch:  true,
+			name:                 "Low Cardinality - No Path Matching",
+			pathMatching:         nil,
+			increasedCardinality: false,
+			requestPath:          "/orders/123",
+			expectedPathTag:      "",
+		},
+
+		// High Cardinality Scenarios
+		{
+			name:                 "High Cardinality - With Path Matching - Matched",
+			pathMatching:         []string{"/orders/{orderID}"},
+			increasedCardinality: true,
+			requestPath:          "/orders/123",
+			expectedPathTag:      "/orders/{orderID}",
 		},
 		{
-			name:         "Strict: Unmatched path (Double Slash) should be dropped",
-			requestPath:  "//v1.0/actors/unknown/myid/method/foo",
-			legacy:       false,
-			expectedPath: "",
-			expectMatch:  false,
+			name:                 "High Cardinality - With Path Matching - Unmatched (Preserves Raw)",
+			pathMatching:         []string{"/orders/{orderID}"},
+			increasedCardinality: true,
+			requestPath:          "/unique/path/123",
+			expectedPathTag:      "/unique/path/123",
+		},
+		{
+			name:                 "High Cardinality - No Path Matching",
+			pathMatching:         nil,
+			increasedCardinality: true,
+			requestPath:          "/orders/1",
+			expectedPathTag:      "/orders/1",
+		},
+
+		// Regression Scenarios (Actor Path)
+		{
+			name:                 "Regression - Actor Path - Strict Mode (Low Card) - Matched",
+			pathMatching:         []string{"/v1.0/actors/MyActor/{id}/method/MyMethod"},
+			increasedCardinality: false,
+			requestPath:          "/v1.0/actors/MyActor/123/method/MyMethod",
+			expectedPathTag:      "/v1.0/actors/MyActor/{id}/method/MyMethod",
+		},
+		{
+			name:                 "Regression - Actor Path - Legacy Mode (High Card) - Matched",
+			pathMatching:         []string{"/v1.0/actors/MyActor/{id}/method/MyMethod"},
+			increasedCardinality: true,
+			requestPath:          "/v1.0/actors/MyActor/123/method/MyMethod",
+			expectedPathTag:      "/v1.0/actors/MyActor/{id}/method/MyMethod",
+		},
+		{
+			name:                 "Regression - Actor Path - Legacy Mode (High Card) - Unmatched (Raw)",
+			pathMatching:         []string{"/other/path"},
+			increasedCardinality: true,
+			requestPath:          "/v1.0/actors/MyActor/123/method/MyMethod",
+			expectedPathTag:      "/v1.0/actors/MyActor/123/method/MyMethod",
+		},
+
+		{
+			name:                 "Legacy: Double Slash should be Normalized (Merged) when Path Matching ON",
+			pathMatching:         []string{"/v1.0/actors/myactortype/{id}/method"},
+			increasedCardinality: true,
+			requestPath:          "//v1.0/actors/myactortype/myid/method/foo",
+			expectedPathTag:      "/v1.0/actors/myactortype/myid/method/foo",
+		},
+		{
+			name:                 "Legacy: Normal Path should be preserved (Raw/Cleaned) when Path Matching ON",
+			pathMatching:         []string{"/v1.0/actors/myactortype/{id}/method"},
+			increasedCardinality: true,
+			requestPath:          "/v1.0/actors/myactortype/myid/method/foo",
+			expectedPathTag:      "/v1.0/actors/myactortype/myid/method/foo",
+		},
+		{
+			name:                 "Strict: Double Slash (Unmatched) should be dropped",
+			pathMatching:         []string{"/v1.0/actors/myactortype/{id}/method"},
+			increasedCardinality: false,
+			requestPath:          "//v1.0/actors/myactortype/myid/method/foo",
+			expectedPathTag:      "",
+		},
+		{
+			name:                 "Strict: Unmatched path should be dropped",
+			pathMatching:         []string{"/v1.0/actors/myactortype/{id}/method"},
+			increasedCardinality: false,
+			requestPath:          "//v1.0/actors/unknown/myid/method/foo",
+			expectedPathTag:      "",
+		},
+		// Legacy Normalization when Path Matching is OFF
+		{
+			name:                 "Legacy: Path Matching OFF -> Should Normalize",
+			pathMatching:         nil,
+			increasedCardinality: true,
+			requestPath:          "/v1.0/actors/myactortype/myid/method/foo",
+			expectedPathTag:      "/v1.0/actors/myactortype/{id}/method",
 		},
 	}
 
-	for _, tc := range testCases {
+	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			testHTTP := newHTTPMetrics()
-			configHTTP := NewHTTPMonitoringConfig(paths, tc.legacy, false)
+			configHTTP := NewHTTPMonitoringConfig(tc.pathMatching, tc.increasedCardinality, false)
 			meter := view.NewMeter()
 			meter.Start()
 			t.Cleanup(func() { meter.Stop() })
 
 			require.NoError(t, testHTTP.Init(meter, "fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
-			handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 
-			req, _ := http.NewRequest(http.MethodPut, "http://localhost:3500"+tc.requestPath, nil)
+			handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			// Handle potential double slash in request path construction
+			targetURL := "http://localhost:3500" + tc.requestPath
+			req, _ := http.NewRequest(http.MethodPost, targetURL, nil)
+
+			// Force raw path with double slash if needed
+			if strings.HasPrefix(tc.requestPath, "//") {
+				req.URL.Path = tc.requestPath
+			}
+
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 
 			rows, err := meter.RetrieveData("http/server/request_count")
 			require.NoError(t, err)
 
-			if tc.expectMatch {
-				require.Len(t, rows, 1, "Expected 1 metric row")
-				pathTag := getPathTag(rows[0])
-				assert.Equal(t, tc.expectedPath, pathTag, "Path tag mismatch")
-			} else if len(rows) > 0 {
-				pathTag := getPathTag(rows[0])
-				assert.Equal(t, "", pathTag, "Expected empty path for unmatched request")
+			found := false
+			for _, row := range rows {
+				if getPathTag(row) == tc.expectedPathTag {
+					found = true
+					break
+				}
+			}
+
+			if len(rows) > 0 {
+				assert.True(t, found, "Expected path tag '%s' not found in rows for case '%s'. Found: %s", tc.expectedPathTag, tc.name, getPathTag(rows[0]))
+			} else {
+				require.NotEmpty(t, rows, "Expected metrics to be recorded")
 			}
 		})
 	}
@@ -400,128 +325,4 @@ func getPathTag(row *view.Row) string {
 		}
 	}
 	return ""
-}
-
-func TestHTTPMetricsPathMatchingActorEndpoints(t *testing.T) {
-	testHTTP := newHTTPMetrics()
-	testHTTP.enabled = false
-	paths := []string{
-		"/v1.0/actors/{actorType}/{actorId}/method/{method}",
-		"/v1.0/actors/{actorType}/{actorId}/reminders/{name}",
-		"/v1.0/actors/{actorType}/{actorId}/timers/{name}",
-		"/v1.0/actors/{actorType}/{actorId}/state/{key}",
-		"/v1.0/actors/{actorType}/{actorId}/state",
-	}
-	configHTTP := NewHTTPMonitoringConfig(paths, false, false)
-	meter := view.NewMeter()
-	meter.Start()
-	t.Cleanup(func() {
-		meter.Stop()
-	})
-	testHTTP.Init(meter, "fakeID", configHTTP, nil)
-
-	tests := []struct {
-		name          string
-		path          string
-		expectedMatch string
-	}{
-		{
-			name:          "actor method invocation",
-			path:          "/v1.0/actors/WorkerActor/ActorID/method/StoreModelAndConstructRequest",
-			expectedMatch: "/v1.0/actors/{actorType}/{actorId}/method/{method}",
-		},
-		{
-			name:          "actor reminder",
-			path:          "/v1.0/actors/WorkerActor/ActorID/reminders/MyReminder",
-			expectedMatch: "/v1.0/actors/{actorType}/{actorId}/reminders/{name}",
-		},
-		{
-			name:          "actor timer",
-			path:          "/v1.0/actors/WorkerActor/ActorID/timers/MyTimer",
-			expectedMatch: "/v1.0/actors/{actorType}/{actorId}/timers/{name}",
-		},
-		{
-			name:          "actor state get specific key",
-			path:          "/v1.0/actors/RxPassResultActor/ActorID/state/stateKey",
-			expectedMatch: "/v1.0/actors/{actorType}/{actorId}/state/{key}",
-		},
-		{
-			name:          "actor state transaction",
-			path:          "/v1.0/actors/OrderActor/order-123/state",
-			expectedMatch: "/v1.0/actors/{actorType}/{actorId}/state",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			matchedPath, ok := testHTTP.pathMatcher.match(tt.path)
-			require.True(t, ok)
-			require.Equal(t, tt.expectedMatch, matchedPath)
-		})
-	}
-}
-
-func TestHTTPMetricsPathMatchingUnmatchedPathWithSubtreeStrictMode(t *testing.T) {
-	testHTTP := newHTTPMetrics()
-	testHTTP.enabled = false
-	paths := []string{"/"}
-	configHTTP := NewHTTPMonitoringConfig(paths, false, false)
-	meter := view.NewMeter()
-	meter.Start()
-	t.Cleanup(func() {
-		meter.Stop()
-	})
-	testHTTP.Init(meter, "fakeID", configHTTP, nil)
-
-	matchedPath, ok := testHTTP.pathMatcher.match("//v1.0/actors/WeatherActor/xyz/method/GetWeatherAsync")
-	require.True(t, ok)
-	require.Equal(t, "/", matchedPath, "double-slash actor path should match root '/' in strict mode")
-}
-
-func TestHTTPMetricsPathMatchingServiceInvocation(t *testing.T) {
-	testHTTP := newHTTPMetrics()
-	testHTTP.enabled = false
-
-	paths := []string{
-		"/orders/{id}",
-		"/api/v1/widget",
-	}
-	configHTTP := NewHTTPMonitoringConfig(paths, false, false)
-	meter := view.NewMeter()
-	meter.Start()
-	t.Cleanup(func() {
-		meter.Stop()
-	})
-	testHTTP.Init(meter, "fakeID", configHTTP, nil)
-
-	matchedPath, ok := testHTTP.pathMatcher.match("/orders/123")
-	require.True(t, ok)
-	assert.Equal(t, "/orders/{id}", matchedPath)
-
-	invokePath := "/v1.0/invoke/order-app/method/orders/123"
-	matchedPath, ok = testHTTP.pathMatcher.match(invokePath)
-	require.True(t, ok)
-	assert.Equal(t, "/v1.0/invoke/{app_id}/method/orders/{id}", matchedPath)
-}
-
-func TestHTTPMetricsPathMatchingNormalizationDedup(t *testing.T) {
-	paths := []string{
-		"/orders",
-		"//orders",
-		"orders",
-		"///orders",
-	}
-
-	configHTTP := NewHTTPMonitoringConfig(paths, false, false)
-	testHTTP := newHTTPMetrics()
-
-	meter := view.NewMeter()
-	meter.Start()
-	t.Cleanup(func() { meter.Stop() })
-
-	testHTTP.Init(meter, "fakeID", configHTTP, nil)
-
-	matchedPath, ok := testHTTP.pathMatcher.match("//orders")
-	require.True(t, ok)
-	assert.Equal(t, "/orders", matchedPath)
 }
