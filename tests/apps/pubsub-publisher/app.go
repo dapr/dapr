@@ -29,6 +29,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	daprhttp "github.com/dapr/dapr/pkg/api/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -81,10 +82,45 @@ type appResponse struct {
 }
 
 type callSubscriberMethodRequest struct {
-	ReqID     string `json:"reqID"`
-	RemoteApp string `json:"remoteApp"`
-	Protocol  string `json:"protocol"`
-	Method    string `json:"method"`
+	ReqID        string   `json:"reqID"`
+	RemoteApp    string   `json:"remoteApp"`
+	Protocol     string   `json:"protocol"`
+	Method       string   `json:"method"`
+	PodEndpoints []string `json:"podEndpoints,omitempty"`
+}
+
+type receivedMessagesResponse struct {
+	ReceivedByTopicA          []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB          []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC          []string `json:"pubsub-c-topic"`
+	ReceivedByTopicJob        []string `json:"pubsub-job-topic"`
+	ReceivedByTopicRaw        []string `json:"pubsub-raw-topic"`
+	ReceivedByTopicDead       []string `json:"pubsub-dead-topic"`
+	ReceivedByTopicDeadLetter []string `json:"pubsub-deadletter-topic"`
+	ReceivedByTopicBulk       []string `json:"pubsub-bulk-topic"`
+	ReceivedByTopicRawBulk    []string `json:"pubsub-raw-bulk-topic"`
+	ReceivedByTopicCEBulk     []string `json:"pubsub-ce-bulk-topic"`
+	ReceivedByTopicDefBulk    []string `json:"pubsub-def-bulk-topic"`
+}
+
+func mergeSlices(a, b []string) []string {
+	s := sets.New(a...)
+	s.Insert(b...)
+	return sets.List(s)
+}
+
+func mergeReceivedMessages(acc, next *receivedMessagesResponse) {
+	acc.ReceivedByTopicA = mergeSlices(acc.ReceivedByTopicA, next.ReceivedByTopicA)
+	acc.ReceivedByTopicB = mergeSlices(acc.ReceivedByTopicB, next.ReceivedByTopicB)
+	acc.ReceivedByTopicC = mergeSlices(acc.ReceivedByTopicC, next.ReceivedByTopicC)
+	acc.ReceivedByTopicJob = mergeSlices(acc.ReceivedByTopicJob, next.ReceivedByTopicJob)
+	acc.ReceivedByTopicRaw = mergeSlices(acc.ReceivedByTopicRaw, next.ReceivedByTopicRaw)
+	acc.ReceivedByTopicDead = mergeSlices(acc.ReceivedByTopicDead, next.ReceivedByTopicDead)
+	acc.ReceivedByTopicDeadLetter = mergeSlices(acc.ReceivedByTopicDeadLetter, next.ReceivedByTopicDeadLetter)
+	acc.ReceivedByTopicBulk = mergeSlices(acc.ReceivedByTopicBulk, next.ReceivedByTopicBulk)
+	acc.ReceivedByTopicRawBulk = mergeSlices(acc.ReceivedByTopicRawBulk, next.ReceivedByTopicRawBulk)
+	acc.ReceivedByTopicCEBulk = mergeSlices(acc.ReceivedByTopicCEBulk, next.ReceivedByTopicCEBulk)
+	acc.ReceivedByTopicDefBulk = mergeSlices(acc.ReceivedByTopicDefBulk, next.ReceivedByTopicDefBulk)
 }
 
 var (
@@ -546,22 +582,61 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqID, req.Method, req.RemoteApp, req.Protocol)
 
 	var resp []byte
-	if req.Protocol == "grpc" {
-		resp, err = callSubscriberMethodGRPC(reqID, req.RemoteApp, req.Method)
+	// One aggregation over N pods - only for HTTP subscribers since not in the grpc test and using http requests
+	if req.Method == "getMessages" && req.Protocol == "http" && len(req.PodEndpoints) > 0 {
+		merged := &receivedMessagesResponse{}
+		for _, ep := range req.PodEndpoints {
+			u := "http://" + strings.TrimSpace(ep) + "/getMessages"
+			nextResp, callErr := getMessagesFromEndpoint(u)
+			if callErr != nil {
+				log.Printf("(%s) getMessages from %s: %v", reqID, ep, callErr)
+				continue
+			}
+			var next receivedMessagesResponse
+			if json.Unmarshal(nextResp, &next) == nil {
+				mergeReceivedMessages(merged, &next)
+			}
+		}
+		resp, err = json.Marshal(merged)
+		if err != nil {
+			log.Printf("(%s) getMessages merge marshal failed: %v", reqID, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	} else {
-		resp, err = callSubscriberMethodHTTP(reqID, req.RemoteApp, req.Method)
-	}
-
-	if err != nil {
-		log.Printf("(%s) Could not get logs from %s: %s", reqID, req.RemoteApp, err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		if req.Protocol == "grpc" {
+			resp, err = callSubscriberMethodGRPC(reqID, req.RemoteApp, req.Method)
+		} else {
+			resp, err = callSubscriberMethodHTTP(reqID, req.RemoteApp, req.Method)
+		}
+		if err != nil {
+			log.Printf("(%s) Could not get logs from %s: %s", reqID, req.RemoteApp, err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Write(resp)
 
 	duration := time.Now().Sub(startTime)
 	log.Printf("(%s) responded in %v via %s", reqID, formatDuration(duration), req.Protocol)
+}
+
+// getMessagesFromEndpoint POSTs to a subscriber pod's /getMessages
+func getMessagesFromEndpoint(url string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer([]byte("{}")))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
 }
 
 func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
