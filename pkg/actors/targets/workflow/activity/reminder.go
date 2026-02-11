@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/durabletask-go/backend"
 )
@@ -59,15 +60,13 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 }
 
 func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
-	const reminderPrefixActivityResult = "activity-result-"
-
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
 		return fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 
-	reminderName := reminderPrefixActivityResult + base64.RawURLEncoding.EncodeToString(b)
+	reminderName := common.ReminderPrefixActivityResult + base64.RawURLEncoding.EncodeToString(b)
 
 	anydata, err := anypb.New(result)
 	if err != nil {

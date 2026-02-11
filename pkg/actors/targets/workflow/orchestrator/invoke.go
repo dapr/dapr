@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -104,7 +105,7 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 		strings.HasPrefix(reminder.Name, reminderPrefixTimer):
 		return o.runWorkflowFromReminder(ctx, reminder)
 
-	case strings.HasPrefix(reminder.Name, reminderPrefixActivityResult):
+	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
 		return o.addWorkflowEvent(ctx, reminder.Data.GetValue())
 
 	default:
