@@ -1,5 +1,5 @@
 diff --git a/tests/e2e/resiliency/resiliency_test.go b/tests/e2e/resiliency/resiliency_test.go
-index 1ffa9c7bb..7b5bb3d5f 100644
+index 0fc584aa9..519afafc5 100644
 --- a/tests/e2e/resiliency/resiliency_test.go
 +++ b/tests/e2e/resiliency/resiliency_test.go
 @@ -539,6 +539,7 @@ func TestActorResiliency(t *testing.T) {
@@ -9,4 +9,4 @@ index 1ffa9c7bb..7b5bb3d5f 100644
 +			time.Sleep(time.Second * 6)
  			message := createFailureMessage(tc.FailureCount, tc.Timeout, nil)
  			b, _ := json.Marshal(message)
- 			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeActor/%s", externalURL, tc.protocol), b)
+ 			body, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeActor/%s", externalURL, tc.protocol), b)
