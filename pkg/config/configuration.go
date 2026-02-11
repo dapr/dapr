@@ -287,9 +287,9 @@ type OtelSpec struct {
 	// Defaults to true
 	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
 	// Headers to add to the OTLP trace exporter request
-	Headers []commonapi.NameValuePair `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Headers []string`json:"headers,omitempty" yaml:"headers,omitempty"`
 	// Timeout for the OTLP trace exporter request
-	Timeout *metav1.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Timeout *time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // GetIsSecure returns true if the connection should be secured.
