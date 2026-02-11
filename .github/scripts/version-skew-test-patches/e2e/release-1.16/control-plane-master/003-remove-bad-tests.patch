@@ -1,0 +1,5245 @@
+diff --git a/tests/integration/import.go b/tests/integration/import.go
+index 67623985f..d22198225 100644
+--- a/tests/integration/import.go
++++ b/tests/integration/import.go
+@@ -19,7 +19,6 @@ import (
+ 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/helm"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/operator"
+-	_ "github.com/dapr/dapr/tests/integration/suite/placement"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/deactivate/activity.go b/tests/integration/suite/daprd/workflow/reconnect/deactivate/activity.go
+deleted file mode 100644
+index 0afbbf667..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/deactivate/activity.go
++++ /dev/null
+@@ -1,101 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package deactivate
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(activity))
+-}
+-
+-type activity struct {
+-	workflow *workflow.Workflow
+-	called   atomic.Int64
+-	waitCh   chan struct{}
+-}
+-
+-func (a *activity) Setup(t *testing.T) []framework.Option {
+-	a.waitCh = make(chan struct{})
+-	a.workflow = workflow.New(t)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(a.workflow),
+-	}
+-}
+-
+-func (a *activity) Run(t *testing.T, ctx context.Context) {
+-	a.workflow.WaitUntilRunning(t, ctx)
+-
+-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		return nil, ctx.CallActivity("bar").Await(nil)
+-	})
+-	a.workflow.Registry().AddActivityN("bar", func(c task.ActivityContext) (any, error) {
+-		a.called.Add(1)
+-		<-a.waitCh
+-		return "", nil
+-	})
+-
+-	client := client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
+-
+-	cctx, cancel := context.WithCancel(ctx)
+-	t.Cleanup(cancel)
+-	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
+-
+-	// verify worker is connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+-	require.NoError(t, err)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, int64(1), a.called.Load())
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	cancel()
+-	// verify worker is disconnected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Empty(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
+-	}, time.Second*10, time.Millisecond*10)
+-	close(a.waitCh)
+-
+-	cctx, cancel = context.WithCancel(ctx)
+-	t.Cleanup(cancel)
+-	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
+-
+-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+-	t.Cleanup(waitCompletionCancel)
+-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+-	require.NoError(t, err)
+-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+-
+-	assert.Equal(t, int64(2), a.called.Load())
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/deactivate/completion.go b/tests/integration/suite/daprd/workflow/reconnect/deactivate/completion.go
+deleted file mode 100644
+index 5d60bceb1..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/deactivate/completion.go
++++ /dev/null
+@@ -1,125 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package deactivate
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(completion))
+-}
+-
+-type completion struct {
+-	workflow             *workflow.Workflow
+-	completionCalls      atomic.Int64
+-	a1Calls              atomic.Int64
+-	a2Calls              atomic.Int64
+-	completionReached    chan struct{}
+-	completionReachedAck chan struct{}
+-}
+-
+-func (a *completion) Setup(t *testing.T) []framework.Option {
+-	a.workflow = workflow.New(t)
+-	a.completionReached = make(chan struct{}, 1)
+-	a.completionReachedAck = make(chan struct{}, 1)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(a.workflow),
+-	}
+-}
+-
+-func (a *completion) Run(t *testing.T, ctx context.Context) {
+-	a.workflow.WaitUntilRunning(t, ctx)
+-
+-	worker1Ctx, worker1Cancel := context.WithCancel(ctx)
+-
+-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		err := ctx.CallActivity("a1").Await(nil)
+-		if err != nil {
+-			return nil, err
+-		}
+-		err = ctx.CallActivity("a2").Await(nil)
+-		if err != nil {
+-			return nil, err
+-		}
+-
+-		if a.completionCalls.Load() == 0 {
+-			close(a.completionReached)
+-			<-a.completionReachedAck
+-		}
+-		a.completionCalls.Add(1)
+-
+-		return nil, nil
+-	})
+-	a.workflow.Registry().AddActivityN("a1", func(c task.ActivityContext) (any, error) {
+-		a.a1Calls.Add(1)
+-		return "", nil
+-	})
+-	a.workflow.Registry().AddActivityN("a2", func(c task.ActivityContext) (any, error) {
+-		a.a2Calls.Add(1)
+-		return "", nil
+-	})
+-
+-	client := client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
+-
+-	require.NoError(t, client.StartWorkItemListener(worker1Ctx, a.workflow.Registry()))
+-	t.Cleanup(worker1Cancel)
+-
+-	// verify worker is connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+-	require.NoError(t, err)
+-
+-	<-a.completionReached
+-	worker1Cancel()
+-	// verify worker is disconnected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Empty(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
+-	}, time.Second*10, time.Millisecond*10)
+-	close(a.completionReachedAck)
+-
+-	require.NoError(t, client.StartWorkItemListener(ctx, a.workflow.Registry()))
+-	// verify a worker is still connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+-	t.Cleanup(waitCompletionCancel)
+-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+-	require.NoError(t, err)
+-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
+-
+-	assert.Equal(t, int64(1), a.a1Calls.Load())
+-	assert.Equal(t, int64(1), a.a2Calls.Load())
+-	assert.Equal(t, int64(2), a.completionCalls.Load())
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/deactivate/crossactivity.go b/tests/integration/suite/daprd/workflow/reconnect/deactivate/crossactivity.go
+deleted file mode 100644
+index 233a9f1f8..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/deactivate/crossactivity.go
++++ /dev/null
+@@ -1,113 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package deactivate
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(crossactivity))
+-}
+-
+-type crossactivity struct {
+-	workflow *workflow.Workflow
+-	calledA  atomic.Int64
+-	calledB  atomic.Int64
+-	waitCh   chan struct{}
+-}
+-
+-func (c *crossactivity) Setup(t *testing.T) []framework.Option {
+-	c.waitCh = make(chan struct{})
+-	c.workflow = workflow.New(t,
+-		workflow.WithDaprds(2),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(c.workflow),
+-	}
+-}
+-
+-func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
+-	c.workflow.WaitUntilRunning(t, ctx)
+-
+-	c.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		if err := ctx.CallActivity("bar").Await(nil); err != nil {
+-			return nil, err
+-		}
+-		return nil, ctx.CallActivity("xyz").Await(nil)
+-	})
+-	c.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+-		c.calledA.Add(1)
+-		<-c.waitCh
+-		return "", nil
+-	})
+-	c.workflow.Registry().AddActivityN("xyz", func(task.ActivityContext) (any, error) {
+-		c.calledB.Add(1)
+-		return "", nil
+-	})
+-
+-	cl := client.NewTaskHubGrpcClient(c.workflow.DaprN(0).GRPCConn(t, ctx), logger.New(t))
+-
+-	cctx, cancel := context.WithCancel(ctx)
+-	t.Cleanup(cancel)
+-	require.NoError(t, cl.StartWorkItemListener(cctx, c.workflow.Registry()))
+-
+-	// verify worker is connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+-		assert.Len(col, c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
+-	require.NoError(t, err)
+-
+-	assert.EventuallyWithT(t, func(cc *assert.CollectT) {
+-		assert.Equal(cc, int64(1), c.calledA.Load())
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	cancel()
+-	// verify worker is disconnected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+-		assert.Empty(col, c.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
+-	}, time.Second*10, time.Millisecond*10)
+-	close(c.waitCh)
+-
+-	cl = client.NewTaskHubGrpcClient(c.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
+-	cctx, cancel = context.WithCancel(ctx)
+-	t.Cleanup(cancel)
+-	require.NoError(t, cl.StartWorkItemListener(cctx, c.workflow.Registry()))
+-
+-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+-	t.Cleanup(waitCompletionCancel)
+-	meta, err := cl.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+-	require.NoError(t, err)
+-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+-
+-	assert.Equal(t, int64(2), c.calledA.Load())
+-	assert.Equal(t, int64(1), c.calledB.Load())
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/deactivate/orchestrator.go b/tests/integration/suite/daprd/workflow/reconnect/deactivate/orchestrator.go
+deleted file mode 100644
+index 51239e6ed..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/deactivate/orchestrator.go
++++ /dev/null
+@@ -1,103 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package deactivate
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(orchestrator))
+-}
+-
+-type orchestrator struct {
+-	workflow *workflow.Workflow
+-	called   atomic.Int64
+-	waitCh   chan struct{}
+-}
+-
+-func (a *orchestrator) Setup(t *testing.T) []framework.Option {
+-	a.waitCh = make(chan struct{})
+-	a.workflow = workflow.New(t)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(a.workflow),
+-	}
+-}
+-
+-func (a *orchestrator) Run(t *testing.T, ctx context.Context) {
+-	a.workflow.WaitUntilRunning(t, ctx)
+-
+-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		a.called.Add(1)
+-		<-a.waitCh
+-		return nil, ctx.CallActivity("bar").Await(nil)
+-	})
+-	a.workflow.Registry().AddActivityN("bar", func(c task.ActivityContext) (any, error) {
+-		return "", nil
+-	})
+-
+-	client := client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
+-
+-	cctx, cancel := context.WithCancel(ctx)
+-	t.Cleanup(cancel)
+-	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
+-
+-	// verify worker is connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	// scheduling a workflow with a provided start time
+-	// this call won't wait for the workflow to start executing
+-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithStartTime(time.Now()))
+-	require.NoError(t, err)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, int64(1), a.called.Load())
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	cancel()
+-	// verify worker is disconnected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Empty(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
+-	}, time.Second*10, time.Millisecond*10)
+-	close(a.waitCh)
+-
+-	cctx, cancel = context.WithCancel(ctx)
+-	t.Cleanup(cancel)
+-	require.NoError(t, client.StartWorkItemListener(cctx, a.workflow.Registry()))
+-
+-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+-	t.Cleanup(waitCompletionCancel)
+-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+-	require.NoError(t, err)
+-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+-
+-	assert.Equal(t, int64(3), a.called.Load())
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/deactivate/raiseevent.go b/tests/integration/suite/daprd/workflow/reconnect/deactivate/raiseevent.go
+deleted file mode 100644
+index c0d373546..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/deactivate/raiseevent.go
++++ /dev/null
+@@ -1,98 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package deactivate
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(raiseevent))
+-}
+-
+-type raiseevent struct {
+-	workflow *workflow.Workflow
+-	called   atomic.Int64
+-}
+-
+-func (r *raiseevent) Setup(t *testing.T) []framework.Option {
+-	r.workflow = workflow.New(t)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(r.workflow),
+-	}
+-}
+-
+-func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
+-	r.workflow.WaitUntilRunning(t, ctx)
+-
+-	r.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		r.called.Add(1)
+-		return nil, ctx.WaitForSingleEvent("event1", 1*time.Minute).Await(nil)
+-	})
+-
+-	client := client.NewTaskHubGrpcClient(r.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
+-
+-	cctx, cancel := context.WithCancel(ctx)
+-	t.Cleanup(cancel)
+-	require.NoError(t, client.StartWorkItemListener(cctx, r.workflow.Registry()))
+-
+-	// verify worker is connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, r.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+-	require.NoError(t, err)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, int64(1), r.called.Load())
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	cancel()
+-	// verify worker is disconnected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Empty(c, r.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	cctx, cancel = context.WithCancel(ctx)
+-	t.Cleanup(cancel)
+-	require.NoError(t, client.StartWorkItemListener(cctx, r.workflow.Registry()))
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.NoError(c, client.RaiseEvent(ctx, id, "event1"))
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+-	t.Cleanup(waitCompletionCancel)
+-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+-	require.NoError(t, err)
+-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+-
+-	assert.Equal(t, int64(2), r.called.Load())
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/midcall.go b/tests/integration/suite/daprd/workflow/reconnect/midcall.go
+deleted file mode 100644
+index 0150846e3..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/midcall.go
++++ /dev/null
+@@ -1,102 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package reconnect
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(midcall))
+-}
+-
+-type midcall struct {
+-	workflow *workflow.Workflow
+-}
+-
+-func (m *midcall) Setup(t *testing.T) []framework.Option {
+-	m.workflow = workflow.New(t,
+-		workflow.WithDaprds(2),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(m.workflow),
+-	}
+-}
+-
+-func (m *midcall) Run(t *testing.T, ctx context.Context) {
+-	m.workflow.WaitUntilRunning(t, ctx)
+-
+-	var here atomic.Int64
+-	m.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		here.Add(1)
+-		return nil, ctx.WaitForSingleEvent("bar", time.Minute).Await(nil)
+-	})
+-
+-	client1 := client.NewTaskHubGrpcClient(m.workflow.DaprN(0).GRPCConn(t, ctx), logger.New(t))
+-	require.NoError(t, client1.StartWorkItemListener(ctx, m.workflow.Registry()))
+-
+-	client2 := client.NewTaskHubGrpcClient(m.workflow.DaprN(1).GRPCConn(t, ctx), logger.New(t))
+-	require.NoError(t, client2.StartWorkItemListener(ctx, m.workflow.Registry()))
+-
+-	ids := make([]api.InstanceID, 5)
+-	var err error
+-	for i := range 5 {
+-		ids[i], err = client1.ScheduleNewOrchestration(ctx, "foo")
+-		require.NoError(t, err)
+-	}
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, int64(5), here.Load())
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	errCh := make(chan error, 10)
+-	go func() {
+-		time.Sleep(time.Second * 5)
+-		m.workflow.DaprN(1).Kill(t)
+-		for _, id := range ids {
+-			errCh <- client1.RaiseEvent(ctx, id, "bar")
+-		}
+-	}()
+-
+-	for _, id := range ids {
+-		go func(id api.InstanceID) {
+-			_, ferr := client1.WaitForOrchestrationStart(ctx, id)
+-			errCh <- ferr
+-		}(id)
+-	}
+-
+-	for range 10 {
+-		select {
+-		case <-time.After(time.Second * 10):
+-			require.Fail(t, "timed out waiting for event to be raised")
+-		case err = <-errCh:
+-			require.NoError(t, err)
+-		}
+-	}
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/reconnect.go b/tests/integration/suite/daprd/workflow/reconnect/reconnect.go
+deleted file mode 100644
+index cf0ab8578..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/reconnect.go
++++ /dev/null
+@@ -1,19 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package reconnect
+-
+-import (
+-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reconnect/deactivate"
+-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reconnect/reuse"
+-)
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/reuse/completionretry.go b/tests/integration/suite/daprd/workflow/reconnect/reuse/completionretry.go
+deleted file mode 100644
+index 52bdc976b..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/reuse/completionretry.go
++++ /dev/null
+@@ -1,133 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package reuse
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(completionretry))
+-}
+-
+-type completionretry struct {
+-	workflow             *workflow.Workflow
+-	completionCalls      atomic.Int64
+-	a1Calls              atomic.Int64
+-	a2Calls              atomic.Int64
+-	completionReached    chan struct{}
+-	completionReachedAck chan struct{}
+-}
+-
+-func (a *completionretry) Setup(t *testing.T) []framework.Option {
+-	a.workflow = workflow.New(t)
+-	a.completionReached = make(chan struct{}, 1)
+-	a.completionReachedAck = make(chan struct{}, 1)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(a.workflow),
+-	}
+-}
+-
+-func (a *completionretry) Run(t *testing.T, ctx context.Context) {
+-	a.workflow.WaitUntilRunning(t, ctx)
+-
+-	worker1Ctx, worker1Cancel := context.WithCancel(ctx)
+-
+-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		err := ctx.CallActivity("a1").Await(nil)
+-		if err != nil {
+-			return nil, err
+-		}
+-		err = ctx.CallActivity("a2").Await(nil)
+-		if err != nil {
+-			return nil, err
+-		}
+-
+-		a.completionCalls.Add(1)
+-		if a.completionCalls.Load() == 1 {
+-			close(a.completionReached)
+-			<-a.completionReachedAck
+-		}
+-
+-		return nil, nil
+-	})
+-	a.workflow.Registry().AddActivityN("a1", func(c task.ActivityContext) (any, error) {
+-		a.a1Calls.Add(1)
+-		return "", nil
+-	})
+-	a.workflow.Registry().AddActivityN("a2", func(c task.ActivityContext) (any, error) {
+-		a.a2Calls.Add(1)
+-		return "", nil
+-	})
+-
+-	client := client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
+-
+-	require.NoError(t, client.StartWorkItemListener(worker1Ctx, a.workflow.Registry()))
+-	t.Cleanup(worker1Cancel)
+-
+-	// verify worker is connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+-	require.NoError(t, err)
+-
+-	<-a.completionReached
+-
+-	// start another worker so the actors don't get deactivated
+-	require.NoError(t, client.StartWorkItemListener(ctx, a.workflow.Registry()))
+-	// verify we have 2 connected workers
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, 2, a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	// stop first worker
+-	worker1Cancel()
+-	// verify one worker disconnected
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, 1, a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	close(a.completionReachedAck)
+-
+-	// verify a worker is still connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+-	t.Cleanup(waitCompletionCancel)
+-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+-	require.NoError(t, err)
+-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
+-
+-	assert.Equal(t, int64(1), a.a1Calls.Load())
+-	assert.Equal(t, int64(1), a.a2Calls.Load())
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/reuse/midretry.go b/tests/integration/suite/daprd/workflow/reconnect/reuse/midretry.go
+deleted file mode 100644
+index f0beb48d7..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/reuse/midretry.go
++++ /dev/null
+@@ -1,134 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package reuse
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(midretry))
+-}
+-
+-type midretry struct {
+-	workflow                  *workflow.Workflow
+-	middleExecutionCalls      atomic.Int64
+-	a1Calls                   atomic.Int64
+-	a2Calls                   atomic.Int64
+-	middleExecutionReached    chan struct{}
+-	middleExecutionReachedAck chan struct{}
+-}
+-
+-func (a *midretry) Setup(t *testing.T) []framework.Option {
+-	a.workflow = workflow.New(t)
+-	a.middleExecutionReached = make(chan struct{}, 1)
+-	a.middleExecutionReachedAck = make(chan struct{}, 1)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(a.workflow),
+-	}
+-}
+-
+-func (a *midretry) Run(t *testing.T, ctx context.Context) {
+-	a.workflow.WaitUntilRunning(t, ctx)
+-
+-	worker1Ctx, worker1Cancel := context.WithCancel(ctx)
+-
+-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		err := ctx.CallActivity("a1").Await(nil)
+-		if err != nil {
+-			return nil, err
+-		}
+-
+-		a.middleExecutionCalls.Add(1)
+-		if a.middleExecutionCalls.Load() == 1 {
+-			close(a.middleExecutionReached)
+-			<-a.middleExecutionReachedAck
+-		}
+-
+-		err = ctx.CallActivity("a2").Await(nil)
+-		if err != nil {
+-			return nil, err
+-		}
+-		return nil, nil
+-	})
+-	a.workflow.Registry().AddActivityN("a1", func(c task.ActivityContext) (any, error) {
+-		a.a1Calls.Add(1)
+-		return "", nil
+-	})
+-	a.workflow.Registry().AddActivityN("a2", func(c task.ActivityContext) (any, error) {
+-		a.a2Calls.Add(1)
+-		return "", nil
+-	})
+-
+-	client := client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
+-
+-	require.NoError(t, client.StartWorkItemListener(worker1Ctx, a.workflow.Registry()))
+-	t.Cleanup(worker1Cancel)
+-
+-	// verify worker is connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+-	require.NoError(t, err)
+-
+-	<-a.middleExecutionReached
+-
+-	// start another worker so the actors don't get deactivated
+-	require.NoError(t, client.StartWorkItemListener(ctx, a.workflow.Registry()))
+-
+-	// verify we have 2 connected workers
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, 2, a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	// stop first worker
+-	worker1Cancel()
+-	// verify one worker disconnected
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, 1, a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	close(a.middleExecutionReachedAck)
+-
+-	// verify a worker is still connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+-	t.Cleanup(waitCompletionCancel)
+-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+-	require.NoError(t, err)
+-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
+-
+-	assert.Equal(t, int64(1), a.a1Calls.Load())
+-	assert.Equal(t, int64(1), a.a2Calls.Load())
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/reuse/raiseevent.go b/tests/integration/suite/daprd/workflow/reconnect/reuse/raiseevent.go
+deleted file mode 100644
+index 4640875d1..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/reuse/raiseevent.go
++++ /dev/null
+@@ -1,115 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package reuse
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(raiseevent))
+-}
+-
+-type raiseevent struct {
+-	workflow    *workflow.Workflow
+-	called      atomic.Int64
+-	awaiting    chan struct{}
+-	awaitingAck chan struct{}
+-}
+-
+-func (r *raiseevent) Setup(t *testing.T) []framework.Option {
+-	r.workflow = workflow.New(t)
+-	r.awaiting = make(chan struct{}, 1)
+-	r.awaitingAck = make(chan struct{}, 1)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(r.workflow),
+-	}
+-}
+-
+-func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
+-	r.workflow.WaitUntilRunning(t, ctx)
+-
+-	r.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		r.called.Add(1)
+-		task := ctx.WaitForSingleEvent("event1", 1*time.Minute)
+-		if r.called.Load() == 1 {
+-			close(r.awaiting)
+-			<-r.awaitingAck
+-		}
+-		return nil, task.Await(nil)
+-	})
+-
+-	client := client.NewTaskHubGrpcClient(r.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
+-
+-	cctx, cancel := context.WithCancel(ctx)
+-	t.Cleanup(cancel)
+-	require.NoError(t, client.StartWorkItemListener(cctx, r.workflow.Registry()))
+-
+-	// verify worker is connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, r.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	// scheduling a workflow with a provided start time
+-	// this call won't wait for the workflow to start executing
+-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithStartTime(time.Now()))
+-	require.NoError(t, err)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, int64(1), r.called.Load())
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	<-r.awaiting
+-
+-	// start another worker so the actors don't get deactivated
+-	require.NoError(t, client.StartWorkItemListener(ctx, r.workflow.Registry()))
+-	// verify we have 2 connected workers
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, 2, r.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	// stop first worker
+-	cancel()
+-	// verify one worker disconnected
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, 1, r.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	close(r.awaitingAck)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.NoError(c, client.RaiseEvent(ctx, id, "event1"))
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+-	t.Cleanup(waitCompletionCancel)
+-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+-	require.NoError(t, err)
+-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/reuse/startretry.go b/tests/integration/suite/daprd/workflow/reconnect/reuse/startretry.go
+deleted file mode 100644
+index 416edb38e..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/reuse/startretry.go
++++ /dev/null
+@@ -1,120 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package reuse
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(startretry))
+-}
+-
+-type startretry struct {
+-	workflow          *workflow.Workflow
+-	orchestratorCalls atomic.Int64
+-	activityCalls     atomic.Int64
+-	workflowStarted   chan struct{}
+-	workflowScheduled chan struct{}
+-}
+-
+-func (a *startretry) Setup(t *testing.T) []framework.Option {
+-	a.workflow = workflow.New(t)
+-	a.workflowScheduled = make(chan struct{}, 1)
+-	a.workflowStarted = make(chan struct{}, 1)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(a.workflow),
+-	}
+-}
+-
+-func (a *startretry) Run(t *testing.T, ctx context.Context) {
+-	a.workflow.WaitUntilRunning(t, ctx)
+-
+-	worker1Ctx, worker1Cancel := context.WithCancel(ctx)
+-
+-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		a.orchestratorCalls.Add(1)
+-		if a.orchestratorCalls.Load() == 1 {
+-			close(a.workflowStarted)
+-			<-a.workflowScheduled
+-		}
+-		return nil, ctx.CallActivity("bar").Await(nil)
+-	})
+-	a.workflow.Registry().AddActivityN("bar", func(c task.ActivityContext) (any, error) {
+-		a.activityCalls.Add(1)
+-		return "", nil
+-	})
+-
+-	client := client.NewTaskHubGrpcClient(a.workflow.Dapr().GRPCConn(t, ctx), logger.New(t))
+-
+-	require.NoError(t, client.StartWorkItemListener(worker1Ctx, a.workflow.Registry()))
+-	t.Cleanup(worker1Cancel)
+-
+-	// verify worker is connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	// scheduling a workflow with a provided start time
+-	// this call won't wait for the workflow to start executing
+-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithStartTime(time.Now()))
+-	require.NoError(t, err)
+-
+-	<-a.workflowStarted
+-
+-	// start another worker so the actors don't get deactivated
+-	require.NoError(t, client.StartWorkItemListener(ctx, a.workflow.Registry()))
+-
+-	// verify we have 2 connected workers
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, 2, a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	// stop first worker
+-	worker1Cancel()
+-	// verify one worker disconnected
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Equal(c, 1, a.workflow.Dapr().GetMetadata(t, ctx).Workflows.ConnectedWorkers)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	close(a.workflowScheduled)
+-
+-	// verify a worker is still connected by checking the expected registered actors
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 2)
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
+-	t.Cleanup(waitCompletionCancel)
+-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+-	require.NoError(t, err)
+-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED.String(), meta.GetRuntimeStatus().String())
+-
+-	assert.Equal(t, int64(1), a.activityCalls.Load())
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/waitfor.go b/tests/integration/suite/daprd/workflow/reconnect/waitfor.go
+deleted file mode 100644
+index 773b60cae..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/waitfor.go
++++ /dev/null
+@@ -1,88 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package reconnect
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(waitfor))
+-}
+-
+-type waitfor struct {
+-	workflow *workflow.Workflow
+-}
+-
+-func (w *waitfor) Setup(t *testing.T) []framework.Option {
+-	w.workflow = workflow.New(t,
+-		workflow.WithDaprds(2),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(w.workflow),
+-	}
+-}
+-
+-func (w *waitfor) Run(t *testing.T, ctx context.Context) {
+-	w.workflow.WaitUntilRunning(t, ctx)
+-
+-	var here atomic.Bool
+-	w.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		here.Store(true)
+-		return nil, ctx.WaitForSingleEvent("bar", time.Minute).Await(nil)
+-	})
+-
+-	client1 := client.NewTaskHubGrpcClient(w.workflow.DaprN(0).GRPCConn(t, ctx), logger.New(t))
+-	require.NoError(t, client1.StartWorkItemListener(ctx, w.workflow.Registry()))
+-
+-	ctxA, cancelA := context.WithCancel(ctx)
+-	client2 := client.NewTaskHubGrpcClient(w.workflow.DaprN(1).GRPCConn(t, ctx), logger.New(t))
+-	require.NoError(t, client2.StartWorkItemListener(ctxA, w.workflow.Registry()))
+-
+-	id, err := client1.ScheduleNewOrchestration(ctx, "foo")
+-	require.NoError(t, err)
+-
+-	assert.Eventually(t, here.Load, time.Second*10, time.Millisecond*10)
+-
+-	errCh := make(chan error, 1)
+-	go func() {
+-		time.Sleep(time.Second * 2)
+-		cancelA()
+-		errCh <- client1.RaiseEvent(ctx, id, "bar")
+-	}()
+-
+-	_, err = client1.WaitForOrchestrationCompletion(ctx, id)
+-	require.NoError(t, err)
+-
+-	select {
+-	case <-time.After(time.Second * 10):
+-		require.Fail(t, "timed out waiting for event to be raised")
+-	case err = <-errCh:
+-		require.NoError(t, err)
+-	}
+-}
+diff --git a/tests/integration/suite/daprd/workflow/reconnect/workflow.go b/tests/integration/suite/daprd/workflow/reconnect/workflow.go
+deleted file mode 100644
+index 57fd9cb0c..000000000
+--- a/tests/integration/suite/daprd/workflow/reconnect/workflow.go
++++ /dev/null
+@@ -1,19 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package reconnect
+-
+-import (
+-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reconnect/deactivate"
+-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reconnect/reuse"
+-)
+diff --git a/tests/integration/suite/daprd/workflow/restart.go b/tests/integration/suite/daprd/workflow/restart.go
+deleted file mode 100644
+index b8fc9d9bc..000000000
+--- a/tests/integration/suite/daprd/workflow/restart.go
++++ /dev/null
+@@ -1,103 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package workflow
+-
+-import (
+-	"context"
+-	"testing"
+-	"time"
+-
+-	"github.com/google/uuid"
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/durabletask-go/api"
+-	"github.com/dapr/durabletask-go/client"
+-	"github.com/dapr/durabletask-go/task"
+-)
+-
+-func init() {
+-	suite.Register(new(restart))
+-}
+-
+-type restart struct {
+-	place     *placement.Placement
+-	scheduler *scheduler.Scheduler
+-}
+-
+-func (r *restart) Setup(t *testing.T) []framework.Option {
+-	r.place = placement.New(t)
+-	r.scheduler = scheduler.New(t)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(r.place, r.scheduler),
+-	}
+-}
+-
+-func (r *restart) Run(t *testing.T, ctx context.Context) {
+-	r.scheduler.WaitUntilRunning(t, ctx)
+-	r.place.WaitUntilRunning(t, ctx)
+-
+-	registry := task.NewTaskRegistry()
+-	registry.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+-		return nil, ctx.CallActivity("bar").Await(nil)
+-	})
+-	registry.AddActivityN("bar", func(c task.ActivityContext) (any, error) {
+-		return "", nil
+-	})
+-
+-	appID := uuid.New().String()
+-
+-	timeTaken := make([]time.Duration, 0, 5)
+-	for range 5 {
+-		daprd := daprd.New(t,
+-			daprd.WithPlacementAddresses(r.place.Address()),
+-			daprd.WithInMemoryActorStateStore("mystore"),
+-			daprd.WithSchedulerAddresses(r.scheduler.Address()),
+-			daprd.WithAppID(appID),
+-		)
+-
+-		daprd.Run(t, ctx)
+-		daprd.WaitUntilRunning(t, ctx)
+-		t.Cleanup(func() {
+-			daprd.Cleanup(t)
+-		})
+-
+-		wctx, cancel := context.WithCancel(ctx)
+-		client := client.NewTaskHubGrpcClient(daprd.GRPCConn(t, wctx), logger.New(t))
+-		require.NoError(t, client.StartWorkItemListener(wctx, registry))
+-
+-		now := time.Now()
+-		id, err := client.ScheduleNewOrchestration(wctx, "foo", api.WithInstanceID("pauser"))
+-		require.NoError(t, err)
+-		_, err = client.WaitForOrchestrationCompletion(wctx, id)
+-		require.NoError(t, err)
+-		timeTaken = append(timeTaken, time.Since(now))
+-		cancel()
+-		daprd.Cleanup(t)
+-	}
+-
+-	// Ensure all workflows take similar amounts of time.
+-	for _, d1 := range timeTaken {
+-		for _, d2 := range timeTaken {
+-			assert.InDelta(t, d1.Seconds(), d2.Seconds(), float64(time.Second))
+-		}
+-	}
+-}
+diff --git a/tests/integration/suite/daprd/workflow/workflow.go b/tests/integration/suite/daprd/workflow/workflow.go
+index 55740a21a..78cae5a3b 100644
+--- a/tests/integration/suite/daprd/workflow/workflow.go
++++ b/tests/integration/suite/daprd/workflow/workflow.go
+@@ -23,7 +23,6 @@ import (
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/maxconcurrent"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/memory"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/nostatestore"
+-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reconnect"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/records"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/retries"
+diff --git a/tests/integration/suite/placement/apilevel/no_max.go b/tests/integration/suite/placement/apilevel/no_max.go
+deleted file mode 100644
+index 92a24a994..000000000
+--- a/tests/integration/suite/placement/apilevel/no_max.go
++++ /dev/null
+@@ -1,174 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package apilevel
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/client"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(noMax))
+-}
+-
+-// noMax tests placement reports API level with no maximum API level.
+-type noMax struct {
+-	place *placement.Placement
+-}
+-
+-func (n *noMax) Setup(t *testing.T) []framework.Option {
+-	n.place = placement.New(t,
+-		placement.WithMetadataEnabled(true),
+-		placement.WithMaxAPILevel(-1),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(n.place),
+-	}
+-}
+-
+-func (n *noMax) Run(t *testing.T, ctx context.Context) {
+-	const level1 = 20
+-	const level2 = 30
+-
+-	httpClient := client.HTTP(t)
+-
+-	n.place.WaitUntilRunning(t, ctx)
+-
+-	currentVersion := atomic.Uint32{}
+-	lastVersionUpdate := atomic.Int64{}
+-
+-	// Register the first host with the lower API level
+-	msg1 := &placementv1pb.Host{
+-		Name:     "myapp1",
+-		Port:     1111,
+-		Entities: []string{"someactor1"},
+-		Id:       "myapp1",
+-		ApiLevel: uint32(level1),
+-	}
+-	ctx1, cancel1 := context.WithCancel(ctx)
+-	placementMessageCh1 := n.place.RegisterHost(t, ctx1, msg1)
+-
+-	// Collect messages
+-	go func() {
+-		for {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case <-ctx1.Done():
+-				return
+-			case pt1 := <-placementMessageCh1:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				newAPILevel := pt1.GetApiLevel()
+-				oldAPILevel := currentVersion.Swap(newAPILevel)
+-				if oldAPILevel != newAPILevel {
+-					lastVersionUpdate.Store(time.Now().Unix())
+-				}
+-			}
+-		}
+-	}()
+-
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		assert.Equal(t, uint32(level1), currentVersion.Load())
+-	}, 10*time.Second, 50*time.Millisecond)
+-	lastUpdate := lastVersionUpdate.Load()
+-
+-	var versionInPlacementTable int
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		versionInPlacementTable = n.place.CheckAPILevelInState(t, httpClient, level1)
+-	}, 5*time.Second, 10*time.Millisecond)
+-
+-	// Register the second host with the higher API level
+-	msg2 := &placementv1pb.Host{
+-		Name:     "myapp2",
+-		Port:     2222,
+-		Entities: []string{"someactor2"},
+-		Id:       "myapp2",
+-		ApiLevel: uint32(level2),
+-	}
+-	ctx2, cancel2 := context.WithCancel(ctx)
+-	placementMessageCh2 := n.place.RegisterHost(t, ctx2, msg2)
+-
+-	go func() {
+-		for {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case <-ctx2.Done():
+-				return
+-			case pt2 := <-placementMessageCh2:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				newAPILevel := pt2.GetApiLevel()
+-				oldAPILevel := currentVersion.Swap(newAPILevel)
+-				if oldAPILevel != newAPILevel {
+-					lastVersionUpdate.Store(time.Now().Unix())
+-				}
+-			}
+-		}
+-	}()
+-
+-	// After 1s, we should not receive an update
+-	// This can take a while as dissemination happens on intervals
+-	time.Sleep(time.Second)
+-	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
+-
+-	// API level should still be lower (20), but table version should have increased
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		newTableVersion := n.place.CheckAPILevelInState(t, httpClient, level1)
+-		assert.Greater(t, newTableVersion, versionInPlacementTable)
+-	}, 10*time.Second, 10*time.Millisecond)
+-
+-	// Stop the first host, and the in API level should increase
+-	cancel1()
+-
+-	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+-		assert.Equal(t, uint32(level2), currentVersion.Load())
+-	}, 10*time.Second, 50*time.Millisecond)
+-
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		versionInPlacementTable = n.place.CheckAPILevelInState(t, httpClient, level2)
+-	}, 5*time.Second, 10*time.Millisecond)
+-
+-	// Trying to register a host with version 5 should fail
+-	n.place.AssertRegisterHostFails(t, ctx, 5)
+-
+-	// Stop the second host too
+-	cancel2()
+-
+-	// Ensure that the table version increases, but the API level remains the same
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		newTableVersion := n.place.CheckAPILevelInState(t, httpClient, level2)
+-		assert.Greater(t, newTableVersion, versionInPlacementTable)
+-	}, 5*time.Second, 10*time.Millisecond)
+-
+-	// Trying to register a host with version 10 should fail
+-	n.place.AssertRegisterHostFails(t, ctx, level1)
+-}
+diff --git a/tests/integration/suite/placement/apilevel/with_max.go b/tests/integration/suite/placement/apilevel/with_max.go
+deleted file mode 100644
+index c16537015..000000000
+--- a/tests/integration/suite/placement/apilevel/with_max.go
++++ /dev/null
+@@ -1,154 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package apilevel
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/client"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(withMax))
+-}
+-
+-// withMax tests placement reports API level with maximum API level.
+-type withMax struct {
+-	place *placement.Placement
+-}
+-
+-func (n *withMax) Setup(t *testing.T) []framework.Option {
+-	n.place = placement.New(t,
+-		placement.WithMaxAPILevel(25),
+-		placement.WithMetadataEnabled(true),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(n.place),
+-	}
+-}
+-
+-func (n *withMax) Run(t *testing.T, ctx context.Context) {
+-	const level1 = 20
+-	const level2 = 30
+-
+-	httpClient := client.HTTP(t)
+-
+-	n.place.WaitUntilRunning(t, ctx)
+-
+-	// Collect messages
+-	currentVersion := atomic.Uint32{}
+-	lastVersionUpdate := atomic.Int64{}
+-
+-	// Register the first host with the lower API level
+-	msg1 := &placementv1pb.Host{
+-		Name:     "myapp1",
+-		Port:     1111,
+-		Entities: []string{"someactor1"},
+-		Id:       "myapp1",
+-		ApiLevel: uint32(level1),
+-	}
+-	ctx1, cancel1 := context.WithCancel(ctx)
+-	placementMessageCh1 := n.place.RegisterHost(t, ctx1, msg1)
+-
+-	// Collect messages
+-	go func() {
+-		for {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case <-ctx1.Done():
+-				return
+-			case pt1 := <-placementMessageCh1:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-				newAPILevel := pt1.GetApiLevel()
+-				oldAPILevel := currentVersion.Swap(newAPILevel)
+-				if oldAPILevel != newAPILevel {
+-					lastVersionUpdate.Store(time.Now().Unix())
+-				}
+-			}
+-		}
+-	}()
+-
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		assert.Equal(t, uint32(level1), currentVersion.Load())
+-	}, 10*time.Second, 50*time.Millisecond)
+-	lastUpdate := lastVersionUpdate.Load()
+-
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		n.place.CheckAPILevelInState(t, httpClient, level1)
+-	}, 5*time.Second, 10*time.Millisecond)
+-
+-	// Register the second host with the higher API level
+-	msg2 := &placementv1pb.Host{
+-		Name:     "myapp2",
+-		Port:     2222,
+-		Entities: []string{"someactor2"},
+-		Id:       "myapp2",
+-		ApiLevel: uint32(level2),
+-	}
+-	placementMessageCh2 := n.place.RegisterHost(t, ctx, msg2)
+-
+-	go func() {
+-		for {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case pt2 := <-placementMessageCh2:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				newAPILevel := pt2.GetApiLevel()
+-				oldAPILevel := currentVersion.Swap(newAPILevel)
+-				if oldAPILevel != newAPILevel {
+-					lastVersionUpdate.Store(time.Now().Unix())
+-				}
+-			}
+-		}
+-	}()
+-
+-	// After 1s, we should not receive an update
+-	// This can take a while as dissemination happens on intervals
+-	time.Sleep(time.Second)
+-	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
+-
+-	// API level should not increase
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		n.place.CheckAPILevelInState(t, httpClient, level1)
+-	}, 5*time.Second, 10*time.Millisecond)
+-
+-	// Stop the first host, and the in API level should increase to the max (25)
+-	cancel1()
+-
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		assert.Equal(t, uint32(25), currentVersion.Load())
+-	}, 15*time.Second, 50*time.Millisecond)
+-
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		n.place.CheckAPILevelInState(t, httpClient, 25)
+-	}, 5*time.Second, 10*time.Millisecond)
+-}
+diff --git a/tests/integration/suite/placement/apilevel/with_min.go b/tests/integration/suite/placement/apilevel/with_min.go
+deleted file mode 100644
+index 1fb72ea98..000000000
+--- a/tests/integration/suite/placement/apilevel/with_min.go
++++ /dev/null
+@@ -1,156 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package apilevel
+-
+-import (
+-	"context"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/client"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(withMin))
+-}
+-
+-// withMin tests placement reports API level with minimum API level.
+-type withMin struct {
+-	place *placement.Placement
+-}
+-
+-func (n *withMin) Setup(t *testing.T) []framework.Option {
+-	n.place = placement.New(t,
+-		placement.WithMaxAPILevel(-1),
+-		placement.WithMinAPILevel(20),
+-		placement.WithMetadataEnabled(true),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(n.place),
+-	}
+-}
+-
+-func (n *withMin) Run(t *testing.T, ctx context.Context) {
+-	const (
+-		level1 = 20
+-		level2 = 30
+-	)
+-
+-	httpClient := client.HTTP(t)
+-
+-	n.place.WaitUntilRunning(t, ctx)
+-
+-	currentVersion := atomic.Uint32{}
+-	lastVersionUpdate := atomic.Int64{}
+-
+-	// API level should be lower
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		n.place.CheckAPILevelInState(t, httpClient, level1)
+-	}, 5*time.Second, 10*time.Millisecond)
+-
+-	// Trying to register a host with version 5 should fail
+-	n.place.AssertRegisterHostFails(t, ctx, 5)
+-
+-	// Register the first host with the lower API level
+-	msg1 := &placementv1pb.Host{
+-		Name:     "myapp1",
+-		Port:     1111,
+-		Entities: []string{"someactor1"},
+-		Id:       "myapp1",
+-		ApiLevel: uint32(level1),
+-	}
+-
+-	ctx1, cancel1 := context.WithCancel(ctx)
+-	placementMessageCh1 := n.place.RegisterHost(t, ctx1, msg1)
+-
+-	// Collect messages
+-	go func() {
+-		for {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case <-ctx1.Done():
+-				return
+-			case msg := <-placementMessageCh1:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				newAPILevel := msg.GetApiLevel()
+-				oldAPILevel := currentVersion.Swap(newAPILevel)
+-				if oldAPILevel != newAPILevel {
+-					lastVersionUpdate.Store(time.Now().Unix())
+-				}
+-			}
+-		}
+-	}()
+-
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		n.place.CheckAPILevelInState(t, httpClient, level1)
+-	}, 5*time.Second, 10*time.Millisecond)
+-
+-	// Register the second host with the higher API level
+-	msg2 := &placementv1pb.Host{
+-		Name:     "myapp2",
+-		Port:     2222,
+-		Entities: []string{"someactor2"},
+-		Id:       "myapp2",
+-		ApiLevel: uint32(level2),
+-	}
+-	placementMessageCh2 := n.place.RegisterHost(t, ctx, msg2)
+-
+-	go func() {
+-		for {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case pt2 := <-placementMessageCh2:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				newAPILevel := pt2.GetApiLevel()
+-				oldAPILevel := currentVersion.Swap(newAPILevel)
+-				if oldAPILevel != newAPILevel {
+-					lastVersionUpdate.Store(time.Now().Unix())
+-				}
+-			}
+-		}
+-	}()
+-
+-	// API level should not increase
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		n.place.CheckAPILevelInState(t, httpClient, level1)
+-	}, 5*time.Second, 10*time.Millisecond)
+-
+-	// Stop the first host, and the in API level should increase to the higher one (30)
+-	cancel1()
+-
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		assert.Equal(t, uint32(level2), currentVersion.Load())
+-	}, 15*time.Second, 50*time.Millisecond)
+-
+-	require.EventuallyWithT(t, func(t *assert.CollectT) {
+-		n.place.CheckAPILevelInState(t, httpClient, level2)
+-	}, 5*time.Second, 10*time.Millisecond)
+-}
+diff --git a/tests/integration/suite/placement/authz/mtls.go b/tests/integration/suite/placement/authz/mtls.go
+deleted file mode 100644
+index a44932e0b..000000000
+--- a/tests/integration/suite/placement/authz/mtls.go
++++ /dev/null
+@@ -1,155 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package authz
+-
+-import (
+-	"context"
+-	"os"
+-	"path/filepath"
+-	"testing"
+-	"time"
+-
+-	"github.com/spiffe/go-spiffe/v2/spiffeid"
+-	"github.com/stretchr/testify/require"
+-	"google.golang.org/grpc"
+-	"google.golang.org/grpc/codes"
+-	"google.golang.org/grpc/status"
+-
+-	"github.com/dapr/dapr/pkg/healthz"
+-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/pkg/security"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(mtls))
+-}
+-
+-// mtls tests placement can find quorum with tls disabled.
+-type mtls struct {
+-	sentry *sentry.Sentry
+-	place  *placement.Placement
+-}
+-
+-func (m *mtls) Setup(t *testing.T) []framework.Option {
+-	m.sentry = sentry.New(t)
+-
+-	taFile := filepath.Join(t.TempDir(), "ca.pem")
+-	require.NoError(t, os.WriteFile(taFile, m.sentry.CABundle().X509.TrustAnchors, 0o600))
+-	m.place = placement.New(t,
+-		placement.WithEnableTLS(true),
+-		placement.WithSentryAddress(m.sentry.Address()),
+-		placement.WithTrustAnchorsFile(taFile),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(m.sentry, m.place),
+-	}
+-}
+-
+-func (m *mtls) Run(t *testing.T, ctx context.Context) {
+-	m.sentry.WaitUntilRunning(t, ctx)
+-	m.place.WaitUntilRunning(t, ctx)
+-
+-	secProv, err := security.New(ctx, security.Options{
+-		SentryAddress:           m.sentry.Address(),
+-		ControlPlaneTrustDomain: "localhost",
+-		ControlPlaneNamespace:   "default",
+-		TrustAnchors:            m.sentry.CABundle().X509.TrustAnchors,
+-		AppID:                   "app-1",
+-		MTLSEnabled:             true,
+-		Healthz:                 healthz.New(),
+-	})
+-	require.NoError(t, err)
+-
+-	ctx, cancel := context.WithCancel(ctx)
+-
+-	errCh := make(chan error, 1)
+-	go func() {
+-		errCh <- secProv.Run(ctx)
+-	}()
+-	t.Cleanup(func() { cancel(); require.NoError(t, <-errCh) })
+-
+-	sec, err := secProv.Handler(ctx)
+-	require.NoError(t, err)
+-
+-	placeID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", "default", "dapr-placement")
+-	require.NoError(t, err)
+-
+-	host := m.place.Address()
+-	//nolint:staticcheck
+-	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), sec.GRPCDialOptionMTLS(placeID))
+-	require.NoError(t, err)
+-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+-	client := v1pb.NewPlacementClient(conn)
+-
+-	// Can only create hosts where the app ID match.
+-	// When no namespace is sent in the message, and tls is enabled
+-	// the placement service will infer the namespace from the SPIFFE ID.
+-	_, err = establishStream(t, ctx, client, &v1pb.Host{
+-		Id: "app-1",
+-	})
+-	require.NoError(t, err)
+-
+-	_, err = establishStream(t, ctx, client, &v1pb.Host{
+-		Id: "app-2",
+-	})
+-	require.Error(t, err)
+-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+-
+-	// Older sidecars (pre 1.4) will not send the namespace in the message.
+-	// In this case the namespace is inferred from the SPIFFE ID.
+-	_, err = establishStream(t, ctx, client, &v1pb.Host{
+-		Id:        "app-1",
+-		Namespace: "",
+-	})
+-	require.NoError(t, err)
+-
+-	// The namespace id in the message and SPIFFE ID should match
+-	_, err = establishStream(t, ctx, client, &v1pb.Host{
+-		Id:        "app-1",
+-		Namespace: "default",
+-	})
+-	require.NoError(t, err)
+-
+-	_, err = establishStream(t, ctx, client, &v1pb.Host{
+-		Id:        "app-1",
+-		Namespace: "foo",
+-	})
+-	require.Error(t, err)
+-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+-}
+-
+-func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementClient, firstMessage *v1pb.Host) (v1pb.Placement_ReportDaprStatusClient, error) {
+-	t.Helper()
+-	var stream v1pb.Placement_ReportDaprStatusClient
+-	var err error
+-
+-	require.Eventually(t, func() bool {
+-		stream, err = client.ReportDaprStatus(ctx)
+-		if err != nil {
+-			return false
+-		}
+-
+-		err = stream.Send(firstMessage)
+-		return err == nil
+-	}, 10*time.Second, 10*time.Millisecond)
+-
+-	_, err = stream.Recv()
+-
+-	return stream, err
+-}
+diff --git a/tests/integration/suite/placement/authz/nomtls.go b/tests/integration/suite/placement/authz/nomtls.go
+deleted file mode 100644
+index f6a740ffc..000000000
+--- a/tests/integration/suite/placement/authz/nomtls.go
++++ /dev/null
+@@ -1,74 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package authz
+-
+-import (
+-	"context"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-	"google.golang.org/grpc"
+-	grpcinsecure "google.golang.org/grpc/credentials/insecure"
+-
+-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(nomtls))
+-}
+-
+-// nomtls tests placement can find quorum with tls disabled.
+-type nomtls struct {
+-	place *placement.Placement
+-}
+-
+-func (n *nomtls) Setup(t *testing.T) []framework.Option {
+-	n.place = placement.New(t)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(n.place),
+-	}
+-}
+-
+-func (n *nomtls) Run(t *testing.T, ctx context.Context) {
+-	n.place.WaitUntilRunning(t, ctx)
+-
+-	host := n.place.Address()
+-	//nolint:staticcheck
+-	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
+-		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
+-	)
+-	require.NoError(t, err)
+-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+-
+-	client := v1pb.NewPlacementClient(conn)
+-
+-	// Can create hosts with any appIDs or namespaces.
+-	_, err = establishStream(t, ctx, client, new(v1pb.Host))
+-	require.NoError(t, err)
+-
+-	_, err = establishStream(t, ctx, client, &v1pb.Host{
+-		Name: "bar",
+-	})
+-	require.NoError(t, err)
+-
+-	_, err = establishStream(t, ctx, client, &v1pb.Host{
+-		Name:      "bar",
+-		Namespace: "ns1",
+-	})
+-	require.NoError(t, err)
+-}
+diff --git a/tests/integration/suite/placement/dissemination/disconnect.go b/tests/integration/suite/placement/dissemination/disconnect.go
+deleted file mode 100644
+index 60480f95f..000000000
+--- a/tests/integration/suite/placement/dissemination/disconnect.go
++++ /dev/null
+@@ -1,397 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package dissemination
+-
+-import (
+-	"context"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-	"google.golang.org/grpc"
+-	"google.golang.org/grpc/credentials/insecure"
+-
+-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/client"
+-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(disconnect))
+-}
+-
+-type disconnect struct {
+-	place *placement.Placement
+-
+-	loglineLastDisconnected *logline.LogLine
+-}
+-
+-func (n *disconnect) Setup(t *testing.T) []framework.Option {
+-	n.loglineLastDisconnected = logline.New(t, logline.WithStdoutLineContains(
+-		"handling last disconnected member in namespace ns1 , appid myapp1",
+-	))
+-
+-	n.place = placement.New(t,
+-		placement.WithMetadataEnabled(true),
+-		placement.WithExecOptions(
+-			exec.WithStdout(n.loglineLastDisconnected.Stdout()),
+-		),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(n.loglineLastDisconnected, n.place),
+-	}
+-}
+-
+-func (n *disconnect) Run(t *testing.T, ctx context.Context) {
+-	n.place.WaitUntilRunning(t, ctx)
+-
+-	t.Run("disconnecting stream for host that HAD actors removes actors from the placement table if no other host for the appid is present in the namespace", func(t *testing.T) {
+-		httpClient := client.HTTP(t)
+-
+-		oldTableVersion := 0
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			oldTableVersion = n.place.CheckAPILevelInState(t, httpClient, 0)
+-		}, 5*time.Second, 10*time.Millisecond)
+-
+-		host1 := &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actor1"},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		streamCtx, streamCancel := context.WithCancel(ctx)
+-		t.Cleanup(func() {
+-			streamCancel()
+-		})
+-		stream1 := n.getStream(t, streamCtx)
+-
+-		err := stream1.Send(host1)
+-		require.NoError(t, err)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream1.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream1.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		tableVersion := n.place.CheckAPILevelInState(t, httpClient, 10)
+-		require.Greater(t, tableVersion, oldTableVersion)
+-		oldTableVersion = tableVersion
+-
+-		// sidecar sends an update with empty entities
+-		emptyHost1 := &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		err = stream1.Send(emptyHost1)
+-		require.NoError(t, err)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream1.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream1.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Empty(c, placementTables.GetTables().GetEntries())
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		tableVersion = n.place.CheckAPILevelInState(t, httpClient, 10)
+-		require.Greater(t, tableVersion, oldTableVersion)
+-		oldTableVersion = tableVersion
+-
+-		// sidecar is scaled down and it disconnects from the placement service
+-		_ = stream1.CloseSend()
+-		streamCancel()
+-
+-		n.loglineLastDisconnected.EventuallyFoundAll(t)
+-
+-		newTableVersion := n.place.CheckAPILevelInState(t, httpClient, 10)
+-		require.Equal(t, newTableVersion, oldTableVersion)
+-	})
+-
+-	t.Run("disconnecting stream removes actors from the placement table if no other host for the appid is present in the namespace", func(t *testing.T) {
+-		hostMonitor := &v1pb.Host{
+-			Name:      "myappmonitor",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actormonitor"},
+-			Id:        "myappmonitor",
+-			ApiLevel:  uint32(20),
+-		}
+-		monitorCh := n.place.RegisterHost(t, ctx, hostMonitor)
+-
+-		select {
+-		case <-ctx.Done():
+-			require.Fail(t, "context done")
+-		case placementTables := <-monitorCh:
+-			require.Len(t, placementTables.GetEntries(), 1)
+-			require.Contains(t, placementTables.GetEntries(), "actormonitor")
+-
+-			entry, ok := placementTables.GetEntries()["actormonitor"]
+-			require.True(t, ok)
+-			loadMap := entry.GetLoadMap()
+-			require.Len(t, loadMap, 1)
+-			require.Contains(t, loadMap, hostMonitor.GetName())
+-		}
+-
+-		host1 := &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actor1"},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		streamCtx, streamCancel := context.WithCancel(ctx)
+-		t.Cleanup(func() {
+-			streamCancel()
+-		})
+-		stream1 := n.getStream(t, streamCtx)
+-
+-		err := stream1.Send(host1)
+-		require.NoError(t, err)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream1.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream1.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 2)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1")
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actormonitor")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		// sidecar is scaled down and it disconnects from the placement service
+-		_ = stream1.CloseSend()
+-		streamCancel()
+-
+-		// dissemination is done and monitorhost should receive an update
+-		msgCnt := 0
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case placementTables := <-monitorCh:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				msgCnt++
+-				assert.Len(c, placementTables.GetEntries(), 1)
+-				assert.Contains(c, placementTables.GetEntries(), "actormonitor")
+-			}
+-			assert.GreaterOrEqual(c, msgCnt, 1)
+-		}, 10*time.Second, 10*time.Millisecond)
+-	})
+-
+-	t.Run("disconnecting stream does not remove actors from the placement table if other host for the appid is present in the namespace", func(t *testing.T) {
+-		hostMonitor := &v1pb.Host{
+-			Name:      "myappmonitor",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actormonitor"},
+-			Id:        "myappmonitor",
+-			ApiLevel:  uint32(20),
+-		}
+-		monitorCh := n.place.RegisterHost(t, ctx, hostMonitor)
+-
+-		select {
+-		case <-ctx.Done():
+-			require.Fail(t, "context done")
+-		case placementTables := <-monitorCh:
+-			require.Len(t, placementTables.GetEntries(), 1)
+-			require.Contains(t, placementTables.GetEntries(), "actormonitor")
+-
+-			entry, ok := placementTables.GetEntries()["actormonitor"]
+-			require.True(t, ok)
+-			loadMap := entry.GetLoadMap()
+-			require.Len(t, loadMap, 1)
+-			require.Contains(t, loadMap, hostMonitor.GetName())
+-		}
+-
+-		host1App1 := &v1pb.Host{
+-			Name:      "myapp1-host1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actor1"},
+-			Id:        "app1",
+-			ApiLevel:  uint32(20),
+-		}
+-		host1Ch := n.place.RegisterHost(t, ctx, host1App1)
+-		select {
+-		case <-ctx.Done():
+-			require.Fail(t, "context done")
+-		case placementTables := <-host1Ch:
+-			require.Len(t, placementTables.GetEntries(), 2)
+-			require.Contains(t, placementTables.GetEntries(), "actormonitor")
+-			require.Contains(t, placementTables.GetEntries(), "actor1")
+-
+-			entry, ok := placementTables.GetEntries()["actor1"]
+-			require.True(t, ok)
+-			loadMap := entry.GetLoadMap()
+-			require.Len(t, loadMap, 1)
+-			require.Contains(t, loadMap, host1App1.GetName())
+-		}
+-
+-		host2App1 := &v1pb.Host{
+-			Name:      "myapp1-host2",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actor1"},
+-			Id:        "app1",
+-			ApiLevel:  uint32(20),
+-		}
+-		streamCtx, streamCancel := context.WithCancel(ctx)
+-		t.Cleanup(func() {
+-			streamCancel()
+-		})
+-		stream2 := n.getStream(t, streamCtx)
+-
+-		err := stream2.Send(host2App1)
+-		require.NoError(t, err)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream2.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream2.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 2)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1")
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actormonitor")
+-				entry, ok := placementTables.GetTables().GetEntries()["actor1"]
+-				require.True(t, ok)
+-				loadMap := entry.GetLoadMap()
+-				require.Len(t, loadMap, 2)
+-				require.Contains(t, loadMap, host1App1.GetName())
+-				require.Contains(t, loadMap, host2App1.GetName())
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				require.Fail(t, "context done")
+-			case placementTables := <-host1Ch:
+-				require.Len(t, placementTables.GetEntries(), 2)
+-				require.Contains(t, placementTables.GetEntries(), "actormonitor")
+-				require.Contains(t, placementTables.GetEntries(), "actor1")
+-
+-				entry, ok := placementTables.GetEntries()["actor1"]
+-				require.True(t, ok)
+-				loadMap := entry.GetLoadMap()
+-				require.Len(t, loadMap, 2)
+-				require.Contains(t, loadMap, host1App1.GetName())
+-				require.Contains(t, loadMap, host2App1.GetName())
+-			}
+-		}, time.Second*5, time.Millisecond*10)
+-
+-		// sidecar for host2App1 is scaled down and it disconnects from the placement service
+-		_ = stream2.CloseSend()
+-		streamCancel()
+-
+-		// dissemination is done and monitorhost should receive an update
+-		msgCnt := 0
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case placementTables := <-monitorCh:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				msgCnt++
+-				require.Len(c, placementTables.GetEntries(), 2)
+-				require.Contains(c, placementTables.GetEntries(), "actormonitor")
+-				require.Contains(c, placementTables.GetEntries(), "actor1")
+-				entry, ok := placementTables.GetEntries()["actor1"]
+-				require.True(t, ok)
+-				loadMap := entry.GetLoadMap()
+-				require.Len(c, loadMap, 1)
+-				require.Contains(c, loadMap, host1App1.GetName())
+-			}
+-			assert.GreaterOrEqual(c, msgCnt, 1)
+-		}, 10*time.Second, 10*time.Millisecond)
+-
+-		// host1App1 should receive an update
+-		msgCnt = 0
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case placementTables := <-host1Ch:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				msgCnt++
+-				require.Len(c, placementTables.GetEntries(), 2)
+-				require.Contains(c, placementTables.GetEntries(), "actormonitor")
+-				require.Contains(c, placementTables.GetEntries(), "actor1")
+-				entry, ok := placementTables.GetEntries()["actor1"]
+-				require.True(t, ok)
+-				loadMap := entry.GetLoadMap()
+-				require.Len(c, loadMap, 1)
+-				require.Contains(c, loadMap, host1App1.GetName())
+-			}
+-			assert.GreaterOrEqual(c, msgCnt, 1)
+-		}, time.Second*5, time.Millisecond*10)
+-	})
+-}
+-
+-func (n *disconnect) getStream(t *testing.T, ctx context.Context) v1pb.Placement_ReportDaprStatusClient {
+-	t.Helper()
+-
+-	//nolint:staticcheck
+-	conn, err := grpc.DialContext(ctx, n.place.Address(),
+-		grpc.WithBlock(),
+-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+-	)
+-	require.NoError(t, err)
+-	client := v1pb.NewPlacementClient(conn)
+-
+-	stream, err := client.ReportDaprStatus(ctx)
+-	require.NoError(t, err)
+-
+-	return stream
+-}
+diff --git a/tests/integration/suite/placement/dissemination/notls.go b/tests/integration/suite/placement/dissemination/notls.go
+deleted file mode 100644
+index 9951998ae..000000000
+--- a/tests/integration/suite/placement/dissemination/notls.go
++++ /dev/null
+@@ -1,552 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package dissemination
+-
+-import (
+-	"context"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-	"google.golang.org/grpc"
+-	"google.golang.org/grpc/credentials/insecure"
+-
+-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(notls))
+-}
+-
+-type notls struct {
+-	place *placement.Placement
+-}
+-
+-func (n *notls) Setup(t *testing.T) []framework.Option {
+-	n.place = placement.New(t)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(n.place),
+-	}
+-}
+-
+-func (n *notls) Run(t *testing.T, ctx context.Context) {
+-	n.place.WaitUntilRunning(t, ctx)
+-
+-	t.Run("actors in different namespaces are disseminated properly", func(t *testing.T) {
+-		host1 := &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actor1", "actor10"},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		host2 := &v1pb.Host{
+-			Name:      "myapp2",
+-			Namespace: "ns2",
+-			Port:      1232,
+-			Entities:  []string{"actor2", "actor3"},
+-			Id:        "myapp2",
+-			ApiLevel:  uint32(20),
+-		}
+-		host3 := &v1pb.Host{
+-			Name:      "myapp3",
+-			Namespace: "ns2",
+-			Port:      1233,
+-			Entities:  []string{"actor4", "actor5", "actor6", "actor10"},
+-			Id:        "myapp3",
+-			ApiLevel:  uint32(20),
+-		}
+-
+-		ctx3, cancel3 := context.WithCancel(ctx)
+-		placementMessageCh1 := n.place.RegisterHost(t, ctx, host1)
+-		placementMessageCh2 := n.place.RegisterHost(t, ctx, host2)
+-		placementMessageCh3 := n.place.RegisterHost(t, ctx3, host3)
+-
+-		select {
+-		case <-ctx.Done():
+-			cancel3()
+-			return
+-		case placementTables := <-placementMessageCh1:
+-			require.Len(t, placementTables.GetEntries(), 2)
+-			require.Contains(t, placementTables.GetEntries(), "actor1")
+-			require.Contains(t, placementTables.GetEntries(), "actor10")
+-
+-			entry, ok := placementTables.GetEntries()["actor10"]
+-			require.True(t, ok)
+-			loadMap := entry.GetLoadMap()
+-			require.Len(t, loadMap, 1)
+-			require.Contains(t, loadMap, host1.GetName())
+-		}
+-
+-		// Dissemination is done properly on host 2
+-		msgCnt := 0
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case placementTables := <-placementMessageCh2:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				msgCnt++
+-				assert.Len(c, placementTables.GetEntries(), 6)
+-				assert.Contains(c, placementTables.GetEntries(), "actor2")
+-				assert.Contains(c, placementTables.GetEntries(), "actor3")
+-				assert.Contains(c, placementTables.GetEntries(), "actor4")
+-				assert.Contains(c, placementTables.GetEntries(), "actor5")
+-				assert.Contains(c, placementTables.GetEntries(), "actor6")
+-				assert.Contains(c, placementTables.GetEntries(), "actor10")
+-
+-				entry, ok := placementTables.GetEntries()["actor10"]
+-				if assert.True(c, ok) {
+-					loadMap := entry.GetLoadMap()
+-					assert.Len(c, loadMap, 1)
+-					assert.Contains(c, loadMap, host3.GetName())
+-				}
+-			}
+-			assert.GreaterOrEqual(c, msgCnt, 1)
+-		}, 10*time.Second, 10*time.Millisecond)
+-
+-		// Dissemination is done properly on host 3
+-		msgCnt = 0
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case placementTables := <-placementMessageCh3:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				msgCnt++
+-				assert.Len(c, placementTables.GetEntries(), 6)
+-				assert.Contains(c, placementTables.GetEntries(), "actor2")
+-				assert.Contains(c, placementTables.GetEntries(), "actor3")
+-				assert.Contains(c, placementTables.GetEntries(), "actor4")
+-				assert.Contains(c, placementTables.GetEntries(), "actor5")
+-				assert.Contains(c, placementTables.GetEntries(), "actor6")
+-				assert.Contains(c, placementTables.GetEntries(), "actor10")
+-
+-				entry, ok := placementTables.GetEntries()["actor10"]
+-				if assert.True(c, ok) {
+-					loadMap := entry.GetLoadMap()
+-					assert.Len(c, loadMap, 1)
+-					assert.Contains(c, loadMap, host3.GetName())
+-				}
+-			}
+-			assert.GreaterOrEqual(c, msgCnt, 1)
+-		}, 10*time.Second, 10*time.Millisecond)
+-
+-		cancel3() // Disconnect host 3
+-
+-		// Host 2
+-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case placementTables := <-placementMessageCh2:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				assert.Len(t, placementTables.GetEntries(), 2)
+-				assert.Contains(t, placementTables.GetEntries(), "actor2")
+-				assert.Contains(t, placementTables.GetEntries(), "actor3")
+-			}
+-		}, 10*time.Second, 10*time.Millisecond)
+-	})
+-
+-	// old sidecars = pre 1.14
+-	t.Run("namespaces are disseminated properly when there are old sidecars in the cluster", func(t *testing.T) {
+-		host1 := &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actor1"},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		host2 := &v1pb.Host{
+-			Name:     "myapp2",
+-			Port:     1232,
+-			Entities: []string{"actor2", "actor3"},
+-			Id:       "myapp2",
+-			ApiLevel: uint32(20),
+-		}
+-		host3 := &v1pb.Host{
+-			Name:     "myapp3",
+-			Port:     1233,
+-			Entities: []string{"actor4", "actor5", "actor6"},
+-			Id:       "myapp3",
+-			ApiLevel: uint32(20),
+-		}
+-
+-		ctx3, cancel3 := context.WithCancel(ctx)
+-		placementMessageCh1 := n.place.RegisterHost(t, ctx, host1)
+-		placementMessageCh2 := n.place.RegisterHost(t, ctx, host2)
+-		placementMessageCh3 := n.place.RegisterHost(t, ctx3, host3)
+-
+-		// Dissemination is done properly on host 1
+-		msgCnt := 0
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case placementTables := <-placementMessageCh1:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				msgCnt++
+-				assert.Len(t, placementTables.GetEntries(), 1)
+-				assert.Contains(t, placementTables.GetEntries(), "actor1")
+-			}
+-
+-			// There's only one host in ns1, so we'll receive only one message
+-			assert.Equal(c, 1, msgCnt)
+-		}, 10*time.Second, 10*time.Millisecond)
+-
+-		// Dissemination is done properly on host 2
+-		msgCnt = 0
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case placementTables := <-placementMessageCh2:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				msgCnt++
+-				assert.Len(c, placementTables.GetEntries(), 5)
+-				assert.Contains(c, placementTables.GetEntries(), "actor2")
+-				assert.Contains(c, placementTables.GetEntries(), "actor3")
+-				assert.Contains(c, placementTables.GetEntries(), "actor4")
+-				assert.Contains(c, placementTables.GetEntries(), "actor5")
+-				assert.Contains(c, placementTables.GetEntries(), "actor6")
+-			}
+-			assert.GreaterOrEqual(c, msgCnt, 1)
+-		}, 10*time.Second, 10*time.Millisecond)
+-
+-		// Dissemination is done properly on host 3
+-		msgCnt = 0
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case placementTables := <-placementMessageCh3:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				msgCnt++
+-				assert.Len(c, placementTables.GetEntries(), 5)
+-				assert.Contains(c, placementTables.GetEntries(), "actor2")
+-				assert.Contains(c, placementTables.GetEntries(), "actor3")
+-				assert.Contains(c, placementTables.GetEntries(), "actor4")
+-				assert.Contains(c, placementTables.GetEntries(), "actor5")
+-				assert.Contains(c, placementTables.GetEntries(), "actor6")
+-			}
+-			assert.GreaterOrEqual(c, msgCnt, 1)
+-		}, 10*time.Second, 10*time.Millisecond)
+-
+-		cancel3() // Disconnect host 3
+-
+-		// Host 2
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			case placementTables := <-placementMessageCh2:
+-				if ctx.Err() != nil {
+-					return
+-				}
+-
+-				assert.Len(c, placementTables.GetEntries(), 2)
+-				assert.Contains(c, placementTables.GetEntries(), "actor2")
+-				assert.Contains(c, placementTables.GetEntries(), "actor3")
+-			}
+-		}, 10*time.Second, 10*time.Millisecond)
+-	})
+-
+-	t.Run("deactivated actors are removed from the placement table if no other actors in namespace", func(t *testing.T) {
+-		host1 := &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actor1", "actor2"},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		host2 := &v1pb.Host{
+-			Name:      "myapp2",
+-			Namespace: "ns1",
+-			Port:      1232,
+-			Entities:  []string{},
+-			Id:        "myapp2",
+-			ApiLevel:  uint32(20),
+-		}
+-
+-		stream1 := n.getStream(t, ctx)
+-		stream2 := n.getStream(t, ctx)
+-
+-		err := stream1.Send(host1)
+-		require.NoError(t, err)
+-		err = stream2.Send(host2)
+-		require.NoError(t, err)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream1.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream1.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 2)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1", "actor2")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream2.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream2.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 2)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1", "actor2")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		// Workflow actor has been unregistered, send an update to remove it from the placement table
+-		host1 = &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		err = stream1.Send(host1)
+-		require.NoError(t, err)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream1.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream1.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Empty(c, placementTables.GetTables().GetEntries())
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream2.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream2.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Empty(c, placementTables.GetTables().GetEntries())
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		t.Cleanup(func() {
+-			stream1.CloseSend()
+-			stream2.CloseSend()
+-		})
+-	})
+-
+-	t.Run("deactivated actors are removed from the placement table if other actors are present in the namespace", func(t *testing.T) {
+-		host1 := &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actor1"},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		host2 := &v1pb.Host{
+-			Name:      "myapp2",
+-			Namespace: "ns1",
+-			Port:      1232,
+-			Entities:  []string{"actor2"},
+-			Id:        "myapp2",
+-			ApiLevel:  uint32(20),
+-		}
+-
+-		stream1 := n.getStream(t, ctx)
+-		stream2 := n.getStream(t, ctx)
+-
+-		err := stream1.Send(host1)
+-		require.NoError(t, err)
+-		err = stream2.Send(host2)
+-		require.NoError(t, err)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream1.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream1.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 2)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1", "actor2")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream2.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream2.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 2)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1", "actor2")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		// Workflow actor has been unregistered, send an update to remove it from the placement table
+-		host1 = &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		err = stream1.Send(host1)
+-		require.NoError(t, err)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream1.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream1.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor2")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream2.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream2.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor2")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		t.Cleanup(func() {
+-			stream1.CloseSend()
+-			stream2.CloseSend()
+-		})
+-	})
+-
+-	t.Run("deactivated actors are removed from the placement table if no other hosts in the namespace", func(t *testing.T) {
+-		host1 := &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{"actor1"},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		stream1 := n.getStream(t, ctx)
+-
+-		err := stream1.Send(host1)
+-		require.NoError(t, err)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream1.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream1.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		// Workflow actor has been unregistered, send an update to remove it from the placement table
+-		host1 = &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "ns1",
+-			Port:      1231,
+-			Entities:  []string{},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		err = stream1.Send(host1)
+-		require.NoError(t, err)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream1.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream1.CloseSend()
+-				return
+-			}
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Empty(c, placementTables.GetTables().GetEntries())
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		t.Cleanup(func() {
+-			stream1.CloseSend()
+-		})
+-	})
+-}
+-
+-func (n *notls) getStream(t *testing.T, ctx context.Context) v1pb.Placement_ReportDaprStatusClient {
+-	t.Helper()
+-
+-	//nolint:staticcheck
+-	conn, err := grpc.DialContext(ctx, n.place.Address(),
+-		grpc.WithBlock(),
+-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+-	)
+-	require.NoError(t, err)
+-	client := v1pb.NewPlacementClient(conn)
+-
+-	stream, err := client.ReportDaprStatus(ctx)
+-	require.NoError(t, err)
+-
+-	return stream
+-}
+diff --git a/tests/integration/suite/placement/dissemination/race.go b/tests/integration/suite/placement/dissemination/race.go
+deleted file mode 100644
+index 0eb4e5efb..000000000
+--- a/tests/integration/suite/placement/dissemination/race.go
++++ /dev/null
+@@ -1,245 +0,0 @@
+-/*
+-Copyright 2025 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package dissemination
+-
+-import (
+-	"context"
+-	"errors"
+-	"fmt"
+-	"io"
+-	"sync"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-	"google.golang.org/grpc"
+-	"google.golang.org/grpc/credentials/insecure"
+-
+-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(race))
+-}
+-
+-type race struct {
+-	place *placement.Placement
+-}
+-
+-func (r *race) Setup(t *testing.T) []framework.Option {
+-	r.place = placement.New(t)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(r.place),
+-	}
+-}
+-
+-func (r *race) Run(t *testing.T, ctx context.Context) {
+-	r.place.WaitUntilRunning(t, ctx)
+-
+-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+-		metrics := r.place.Metrics(c, ctx)
+-		assert.Len(c, metrics.MatchMetric("dapr_placement_leader_status"), 1)
+-		assert.Len(c, metrics.MatchMetric("dapr_placement_raft_leader_status"), 1)
+-	}, time.Second*15, time.Millisecond*10)
+-
+-	for i := range 1100 {
+-		host := &v1pb.Host{
+-			Name:      fmt.Sprintf("inithost%d", i),
+-			Namespace: fmt.Sprintf("initns%d", i),
+-			Port:      1231,
+-			Entities:  []string{fmt.Sprintf("initactor%d", i)},
+-			Id:        fmt.Sprintf("initapp%d", i),
+-			ApiLevel:  uint32(20),
+-		}
+-		r.simulateHost(t, ctx, host)
+-	}
+-	time.Sleep(3 * time.Second)
+-
+-	t.Run("register mode hosts", func(t *testing.T) {
+-		host := &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "appns",
+-			Port:      1231,
+-			Entities:  []string{"appactor1"},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		emptyHost := &v1pb.Host{
+-			Name:      "myapp1",
+-			Namespace: "appns",
+-			Port:      1231,
+-			Entities:  []string{},
+-			Id:        "myapp1",
+-			ApiLevel:  uint32(20),
+-		}
+-		// wait for placement to be ready and register the initial host
+-		stream := r.reportDaprStatusAndWaitForAck(t, ctx, host)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream.CloseSend()
+-				return
+-			}
+-
+-			t.Logf("received operation: %s", placementTables.GetOperation())
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "appactor1")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		time.Sleep(1 * time.Second)
+-		require.NoError(t, stream.Send(emptyHost))
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream.CloseSend()
+-				return
+-			}
+-
+-			t.Logf("received operation: %s", placementTables.GetOperation())
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Empty(c, placementTables.GetTables().GetEntries())
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-
+-		time.Sleep(1 * time.Second)
+-		require.NoError(t, stream.Send(host))
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			placementTables, errR := stream.Recv()
+-			if !assert.NoError(c, errR) {
+-				_ = stream.CloseSend()
+-				return
+-			}
+-
+-			t.Logf("received operation: %s", placementTables.GetOperation())
+-
+-			if assert.Equal(c, "update", placementTables.GetOperation()) {
+-				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
+-				assert.Contains(c, placementTables.GetTables().GetEntries(), "appactor1")
+-			}
+-		}, time.Second*15, time.Millisecond*10)
+-	})
+-}
+-
+-func (r *race) getPlacementClient(t *testing.T, ctx context.Context) v1pb.PlacementClient {
+-	t.Helper()
+-
+-	//nolint:staticcheck
+-	conn, err := grpc.DialContext(ctx, r.place.Address(),
+-		grpc.WithBlock(),
+-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+-	)
+-	require.NoError(t, err)
+-	client := v1pb.NewPlacementClient(conn)
+-	return client
+-}
+-
+-func (r *race) reportDaprStatusAndWaitForAck(t *testing.T, ctx context.Context, initialHost *v1pb.Host) v1pb.Placement_ReportDaprStatusClient {
+-	t.Helper()
+-	client := r.getPlacementClient(t, ctx)
+-
+-	var stream v1pb.Placement_ReportDaprStatusClient
+-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+-		var err error
+-		stream, err = client.ReportDaprStatus(ctx)
+-		if !assert.NoError(c, err) {
+-			return
+-		}
+-
+-		if !assert.NoError(c, stream.Send(initialHost)) {
+-			_ = stream.CloseSend()
+-			return
+-		}
+-
+-		_, err = stream.Recv()
+-		if !assert.NoError(c, err) {
+-			_ = stream.CloseSend()
+-			return
+-		}
+-		t.Cleanup(func() {
+-			_ = stream.CloseSend()
+-		})
+-	}, time.Second*15, time.Millisecond*10)
+-
+-	return stream
+-}
+-
+-func (r *race) simulateHost(t *testing.T, ctx context.Context, host *v1pb.Host) {
+-	pclient := r.getPlacementClient(t, ctx)
+-	doneCh := make(chan error)
+-	streamCtx, streamCancel := context.WithCancel(ctx)
+-
+-	t.Cleanup(func() {
+-		streamCancel()
+-		select {
+-		case err := <-doneCh:
+-			if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
+-				require.NoError(t, err)
+-			}
+-		case <-time.After(time.Second * 5):
+-			assert.Fail(t, "timeout waiting for stream to close")
+-		}
+-	})
+-	go func(pclient v1pb.PlacementClient) {
+-		stream, err := pclient.ReportDaprStatus(streamCtx)
+-		mu := sync.Mutex{}
+-		if err != nil {
+-			doneCh <- err
+-			return
+-		}
+-		err = stream.Send(host)
+-		if err != nil {
+-			doneCh <- err
+-			return
+-		}
+-		_, err = stream.Recv()
+-		if err != nil {
+-			doneCh <- err
+-			return
+-		}
+-
+-		// Send dapr status messages every second
+-		go func(stream v1pb.Placement_ReportDaprStatusClient) {
+-			for {
+-				select {
+-				case <-streamCtx.Done():
+-					return
+-				case <-time.After(1 * time.Second):
+-					mu.Lock()
+-					err := stream.Send(host)
+-					mu.Unlock()
+-					if err != nil {
+-						doneCh <- err
+-						return
+-					}
+-				}
+-			}
+-		}(stream)
+-		<-streamCtx.Done()
+-		mu.Lock()
+-		defer mu.Unlock()
+-		doneCh <- stream.CloseSend()
+-	}(pclient)
+-}
+diff --git a/tests/integration/suite/placement/dissemination/streamhang.go b/tests/integration/suite/placement/dissemination/streamhang.go
+deleted file mode 100644
+index 1a1b4656a..000000000
+--- a/tests/integration/suite/placement/dissemination/streamhang.go
++++ /dev/null
+@@ -1,248 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package dissemination
+-
+-import (
+-	"context"
+-	"fmt"
+-	"runtime"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-	"google.golang.org/grpc"
+-	"google.golang.org/grpc/credentials/insecure"
+-	"google.golang.org/grpc/metadata"
+-
+-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(streamHang))
+-}
+-
+-type streamHang struct {
+-	place *placement.Placement
+-}
+-
+-func (n *streamHang) Setup(t *testing.T) []framework.Option {
+-	if runtime.GOOS == "windows" {
+-		t.Skip("Sending big messages is unpredictable on Windows CI runners")
+-	}
+-
+-	n.place = placement.New(t)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(n.place),
+-	}
+-}
+-
+-func (n *streamHang) Run(t *testing.T, ctx context.Context) {
+-	n.place.WaitUntilRunning(t, ctx)
+-
+-	// Set up host1 and stream1 (not reading from stream)
+-	host1 := &v1pb.Host{
+-		Name:      "local/myapp1",
+-		Namespace: "default",
+-		Port:      1232,
+-		Entities:  getActorsList(9000, "host1"),
+-		Id:        "myapp1",
+-		ApiLevel:  uint32(20),
+-	}
+-
+-	ctx1, cancel1 := context.WithCancel(ctx)
+-	t.Cleanup(cancel1)
+-	var err error
+-	var stream1 v1pb.Placement_ReportDaprStatusClient
+-	var streamCancel1 context.CancelFunc
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		stream1, streamCancel1 = n.getStream(c, ctx1)
+-		t.Cleanup(streamCancel1)
+-		if stream1 != nil {
+-			err = stream1.Send(host1)
+-			assert.NoError(c, err, "Failed to send host1")
+-		}
+-	}, 10*time.Second, 10*time.Millisecond)
+-
+-	// Intentionally not reading from stream1 to simulate a hang on the larger message after host 1 connects
+-
+-	time.Sleep(2 * time.Second) // Wait until first dissemination is triggered
+-
+-	host2 := &v1pb.Host{
+-		Name:      "local/myapp2",
+-		Namespace: "default",
+-		Port:      1231,
+-		Entities:  getActorsList(10, "host2"),
+-		Id:        "myapp2",
+-		ApiLevel:  uint32(20),
+-	}
+-
+-	ctx2, cancel2 := context.WithCancel(ctx)
+-	t.Cleanup(cancel2)
+-	var stream2 v1pb.Placement_ReportDaprStatusClient
+-	var streamCancel2 context.CancelFunc
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		stream2, streamCancel2 = n.getStream(c, ctx2)
+-		t.Cleanup(streamCancel2)
+-		if stream2 != nil {
+-			err = stream2.Send(host2)
+-			assert.NoError(c, err, "Failed to send host2")
+-		}
+-	}, 10*time.Second, 10*time.Millisecond)
+-
+-	// Start reading from stream2
+-	updateCh2 := make(chan *v1pb.PlacementTables, 5)
+-	go func() {
+-		defer close(updateCh2)
+-		for {
+-			select {
+-			case <-ctx.Done():
+-				return
+-			default:
+-			}
+-
+-			resp, err2 := stream2.Recv()
+-			if err2 != nil {
+-				break
+-			}
+-
+-			if resp.GetOperation() == "update" {
+-				select {
+-				case <-ctx.Done():
+-					return
+-				case updateCh2 <- resp.GetTables():
+-				}
+-			}
+-		}
+-	}()
+-
+-	// The placement tables message that the Placement server will try to disseminate to stream1 will
+-	// contain 9001 actors and around 90Kb - higher than the default stream write buffer size of 32KBs
+-	// So around this moment of the test, we're expecting the stream1 to hang and subsequently get removed
+-	// Then stream 2 should receive a new dissemination message containing only the actors from host2
+-	// Because of the retry mechanism on the placement side (3x1sec) plus the dissemination window
+-	// this takes a while
+-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+-		placementTables, ok := <-updateCh2
+-		require.True(t, ok)
+-		assert.Len(c, placementTables.GetEntries(), 10)
+-		assert.Contains(c, placementTables.GetEntries(), "host2-0")
+-	}, 30*time.Second, 100*time.Millisecond)
+-
+-	time.Sleep(1 * time.Second) // Wait until first dissemination is triggered
+-
+-	// Set up host3 and stream3 (reading from stream)
+-	host3 := &v1pb.Host{
+-		Name:      "local/myapp3",
+-		Namespace: "default",
+-		Port:      1233,
+-		Entities:  getActorsList(3, "host3"),
+-		Id:        "myapp3",
+-		ApiLevel:  uint32(20),
+-	}
+-
+-	ctx3, cancel3 := context.WithCancel(ctx)
+-	t.Cleanup(cancel3)
+-	var stream3 v1pb.Placement_ReportDaprStatusClient
+-	var streamCancel3 context.CancelFunc
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		stream3, streamCancel3 = n.getStream(c, ctx3)
+-		t.Cleanup(streamCancel3)
+-		if stream3 != nil {
+-			err = stream3.Send(host3)
+-			assert.NoError(c, err, "Failed to send host3")
+-		}
+-	}, 10*time.Second, 10*time.Millisecond)
+-
+-	err = stream2.Send(host2)
+-	require.NoError(t, err, "Failed to send host2")
+-
+-	// Start reading from stream3
+-	updateCh3 := make(chan *v1pb.PlacementTables)
+-	go func() {
+-		defer close(updateCh3)
+-		for {
+-			select {
+-			case <-ctx.Done():
+-				break
+-			default:
+-			}
+-
+-			resp, err := stream3.Recv()
+-			if err != nil {
+-				break
+-			}
+-
+-			if resp.GetOperation() == "update" {
+-				select {
+-				case <-ctx.Done():
+-					break
+-				case updateCh3 <- resp.GetTables():
+-				}
+-			}
+-		}
+-	}()
+-
+-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+-		placementTables, ok := <-updateCh3
+-		require.True(t, ok)
+-		assert.Len(c, placementTables.GetEntries(), 13)
+-		assert.Contains(c, placementTables.GetEntries(), "host2-0")
+-		assert.Contains(c, placementTables.GetEntries(), "host3-0")
+-		assert.NotContains(c, placementTables.GetEntries(), "host1-0")
+-	}, 15*time.Second, 500*time.Millisecond)
+-
+-	// Clean up
+-	streamCancel1()
+-	streamCancel2()
+-	streamCancel3()
+-}
+-
+-func (n *streamHang) getStream(t assert.TestingT, ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, func()) {
+-	//nolint:staticcheck
+-	conn, err := grpc.DialContext(ctx, n.place.Address(),
+-		grpc.WithBlock(),
+-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+-	)
+-	//nolint:testifylint
+-	if !assert.NoError(t, err) {
+-		return nil, func() {}
+-	}
+-	client := v1pb.NewPlacementClient(conn)
+-	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-accept-vnodes", "false")
+-
+-	stream, err := client.ReportDaprStatus(ctx)
+-	if !assert.NoError(t, err) {
+-		return nil, func() {}
+-	}
+-
+-	cancel := func() {
+-		stream.CloseSend()
+-		conn.Close()
+-	}
+-
+-	return stream, cancel
+-}
+-
+-func getActorsList(numActors int, prefix string) []string {
+-	actors := make([]string, 0, numActors)
+-	for i := range numActors {
+-		actors = append(actors, fmt.Sprintf("%s-%d", prefix, i))
+-	}
+-	return actors
+-}
+diff --git a/tests/integration/suite/placement/dissemination/tls.go b/tests/integration/suite/placement/dissemination/tls.go
+deleted file mode 100644
+index c950fce51..000000000
+--- a/tests/integration/suite/placement/dissemination/tls.go
++++ /dev/null
+@@ -1,256 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package dissemination
+-
+-import (
+-	"context"
+-	"fmt"
+-	"net/http"
+-	"os"
+-	"path/filepath"
+-	"strings"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(tls))
+-}
+-
+-type tls struct {
+-	sentry                 *sentry.Sentry
+-	place                  *placement.Placement
+-	daprd1, daprd2, daprd3 *daprd.Daprd
+-	srv1, srv2, srv3       *prochttp.HTTP
+-}
+-
+-func (n *tls) Setup(t *testing.T) []framework.Option {
+-	n.sentry = sentry.New(t)
+-
+-	taFile := filepath.Join(t.TempDir(), "ca.pem")
+-	require.NoError(t, os.WriteFile(taFile, n.sentry.CABundle().X509.TrustAnchors, 0o600))
+-	n.place = placement.New(t,
+-		placement.WithEnableTLS(true),
+-		placement.WithSentryAddress(n.sentry.Address()),
+-		placement.WithTrustAnchorsFile(taFile),
+-		placement.WithMetadataEnabled(true),
+-	)
+-
+-	handler1 := http.NewServeMux()
+-	handler1.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+-		types := []string{"actor1"}
+-		fmt.Fprintf(w, `{"entities": ["%s"]}`, strings.Join(types, `","`))
+-	})
+-	handler1.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+-		w.WriteHeader(http.StatusOK)
+-	})
+-	handler1.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+-		w.Write([]byte(`OK1`))
+-	})
+-
+-	handler2 := http.NewServeMux()
+-	handler2.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+-		types := []string{"actor2"}
+-		fmt.Fprintf(w, `{"entities": ["%s"]}`, strings.Join(types, `","`))
+-	})
+-	handler2.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+-		w.WriteHeader(http.StatusOK)
+-	})
+-	handler2.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+-		w.Write([]byte(`OK2`))
+-	})
+-
+-	handler3 := http.NewServeMux()
+-	handler3.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+-		types := []string{"actor1", "actor3"}
+-		// "actor1" exists in both app 1 and app3, but the apps are in a different namespace
+-		fmt.Fprintf(w, `{"entities": ["%s"]}`, strings.Join(types, `","`))
+-	})
+-	handler3.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+-		w.WriteHeader(http.StatusOK)
+-	})
+-	handler3.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+-		w.Write([]byte(`OK3`))
+-	})
+-
+-	n.srv1 = prochttp.New(t, prochttp.WithHandler(handler1))
+-	n.srv2 = prochttp.New(t, prochttp.WithHandler(handler2))
+-	n.srv3 = prochttp.New(t, prochttp.WithHandler(handler3))
+-
+-	n.daprd1 = daprd.New(t,
+-		daprd.WithInMemoryActorStateStore("mystore1"),
+-		daprd.WithAppID("my-app1"),
+-		daprd.WithNamespace("ns1"),
+-		daprd.WithMode("standalone"),
+-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(n.sentry.CABundle().X509.TrustAnchors))),
+-		daprd.WithSentryAddress(n.sentry.Address()),
+-		daprd.WithPlacementAddresses(n.place.Address()),
+-		daprd.WithEnableMTLS(true),
+-		daprd.WithAppPort(n.srv1.Port()),
+-	)
+-
+-	n.daprd2 = daprd.New(t,
+-		daprd.WithInMemoryActorStateStore("mystore2"),
+-		daprd.WithAppID("my-app2"),
+-		daprd.WithNamespace("ns2"),
+-		daprd.WithMode("standalone"),
+-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(n.sentry.CABundle().X509.TrustAnchors))),
+-		daprd.WithSentryAddress(n.sentry.Address()),
+-		daprd.WithPlacementAddresses(n.place.Address()),
+-		daprd.WithEnableMTLS(true),
+-		daprd.WithAppPort(n.srv2.Port()),
+-	)
+-
+-	n.daprd3 = daprd.New(t,
+-		daprd.WithInMemoryActorStateStore("mystore3"),
+-		daprd.WithAppID("my-app3"),
+-		daprd.WithNamespace("ns2"),
+-		daprd.WithMode("standalone"),
+-		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(n.sentry.CABundle().X509.TrustAnchors))),
+-		daprd.WithSentryAddress(n.sentry.Address()),
+-		daprd.WithPlacementAddresses(n.place.Address()),
+-		daprd.WithEnableMTLS(true),
+-		daprd.WithAppPort(n.srv3.Port()),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(n.sentry, n.place, n.srv1, n.srv2, n.srv3, n.daprd1, n.daprd2, n.daprd3),
+-	}
+-}
+-
+-func (n *tls) Run(t *testing.T, ctx context.Context) {
+-	n.sentry.WaitUntilRunning(t, ctx)
+-	n.place.WaitUntilRunning(t, ctx)
+-	n.daprd1.WaitUntilRunning(t, ctx)
+-	n.daprd2.WaitUntilRunning(t, ctx)
+-	n.daprd3.WaitUntilRunning(t, ctx)
+-
+-	t.Run("host1 can see actor 1 in ns1, but not actors 2 and 3 in ns2", func(t *testing.T) {
+-		client := n.daprd1.GRPCClient(t, ctx)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			val1, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "actor1",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.NoError(c, err)
+-			assert.Equal(t, "OK1", string(val1.GetData()))
+-
+-			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "actor2",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.Error(c, err)
+-
+-			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "actor3",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-
+-			assert.Error(c, err)
+-
+-			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "inexistant-actor",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.Error(c, err)
+-		}, time.Second*20, time.Millisecond*10, "actor not ready")
+-	})
+-
+-	t.Run("host2 can see actors 1,2,3 in ns2, but not actor 1 in ns1", func(t *testing.T) {
+-		client := n.daprd2.GRPCClient(t, ctx)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			val2, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "actor1",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.NoError(c, err)
+-			assert.Equal(t, "OK3", string(val2.GetData()))
+-
+-			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "actor2",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.NoError(c, err)
+-
+-			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "actor3",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.NoError(c, err)
+-
+-			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "inexistant-actor",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.Error(c, err)
+-		}, time.Second*20, time.Millisecond*10, "actors not ready")
+-	})
+-
+-	t.Run("host3 can see actors 1,2,3 in ns2, but not actor 1 in ns1", func(t *testing.T) {
+-		client := n.daprd3.GRPCClient(t, ctx)
+-
+-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+-			val3, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "actor1",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.NoError(c, err)
+-			assert.Equal(t, "OK3", string(val3.GetData()))
+-
+-			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "actor2",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.NoError(c, err)
+-
+-			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "actor3",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.NoError(c, err)
+-
+-			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+-				ActorType: "inexistant-actor",
+-				ActorId:   "myactorid",
+-				Method:    "foo",
+-			})
+-			assert.Error(c, err)
+-		}, time.Second*20, time.Millisecond*10, "actors not ready")
+-	})
+-}
+diff --git a/tests/integration/suite/placement/ha/failover.go b/tests/integration/suite/placement/ha/failover.go
+deleted file mode 100644
+index f2f0be959..000000000
+--- a/tests/integration/suite/placement/ha/failover.go
++++ /dev/null
+@@ -1,273 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package ha
+-
+-import (
+-	"context"
+-	"fmt"
+-	"net/http"
+-	"strings"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-	"google.golang.org/grpc"
+-	"google.golang.org/grpc/credentials/insecure"
+-
+-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(failover))
+-}
+-
+-type failover struct {
+-	fp         *ports.Ports
+-	placements []*placement.Placement
+-	srv        *prochttp.HTTP
+-}
+-
+-func (n *failover) Setup(t *testing.T) []framework.Option {
+-	n.fp = ports.Reserve(t, 3)
+-	port1, port2, port3 := n.fp.Port(t), n.fp.Port(t), n.fp.Port(t)
+-	opts := []placement.Option{
+-		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", port1, port2, port3)),
+-		placement.WithInitialClusterPorts(port1, port2, port3),
+-	}
+-	n.placements = []*placement.Placement{
+-		placement.New(t, append(opts, placement.WithID("p1"))...),
+-		placement.New(t, append(opts, placement.WithID("p2"))...),
+-		placement.New(t, append(opts, placement.WithID("p3"))...),
+-	}
+-
+-	// Dummy http server that returns the list of actors
+-	handler := http.NewServeMux()
+-	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+-		types := []string{"actor1"}
+-		fmt.Fprintf(w, `{"entities": ["%s"]}`, strings.Join(types, `","`))
+-	})
+-	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+-		w.WriteHeader(http.StatusOK)
+-	})
+-	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+-		w.Write([]byte(`OK1`))
+-	})
+-	n.srv = prochttp.New(t, prochttp.WithHandler(handler))
+-
+-	return []framework.Option{
+-		framework.WithProcesses(n.fp, n.srv, n.placements[0], n.placements[1], n.placements[2]),
+-	}
+-}
+-
+-func (n *failover) Run(t *testing.T, ctx context.Context) {
+-	for _, p := range n.placements {
+-		p.WaitUntilRunning(t, ctx)
+-	}
+-
+-	host1 := &v1pb.Host{
+-		Name:      "myapp1",
+-		Namespace: "ns1",
+-		Port:      1231,
+-		Entities:  []string{"actor1", "actor10"},
+-		Id:        "myapp1",
+-		ApiLevel:  uint32(20),
+-	}
+-	host2 := &v1pb.Host{
+-		Name:      "myapp2",
+-		Namespace: "ns2",
+-		Port:      1232,
+-		Entities:  []string{"actor2", "actor3"},
+-		Id:        "myapp2",
+-		ApiLevel:  uint32(20),
+-	}
+-	host3 := &v1pb.Host{
+-		Name:      "myapp3",
+-		Namespace: "ns2",
+-		Port:      1233,
+-		Entities:  []string{"actor4", "actor5", "actor6", "actor10"},
+-		Id:        "myapp3",
+-		ApiLevel:  uint32(20),
+-	}
+-
+-	leaderIndex := n.getLeader(t, ctx, -1)
+-
+-	placementMessageCh1 := n.placements[leaderIndex].RegisterHost(t, ctx, host1)
+-	placementMessageCh2 := n.placements[leaderIndex].RegisterHost(t, ctx, host2)
+-	placementMessageCh3 := n.placements[leaderIndex].RegisterHost(t, ctx, host3)
+-
+-	// Dissemination is done properly on host 1
+-	select {
+-	case <-ctx.Done():
+-		return
+-	case placementTables := <-placementMessageCh1:
+-		if ctx.Err() != nil {
+-			return
+-		}
+-
+-		require.Len(t, placementTables.GetEntries(), 2)
+-		require.Contains(t, placementTables.GetEntries(), "actor1")
+-		require.Contains(t, placementTables.GetEntries(), "actor10")
+-
+-		entry, ok := placementTables.GetEntries()["actor10"]
+-		require.True(t, ok)
+-		loadMap := entry.GetLoadMap()
+-		assert.Len(t, loadMap, 1)
+-		assert.Contains(t, loadMap, host1.GetName())
+-	}
+-
+-	// Dissemination is done properly on host 2
+-	msgCnt := 0
+-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+-		select {
+-		case <-ctx.Done():
+-			return
+-		case placementTables := <-placementMessageCh2:
+-			if ctx.Err() != nil {
+-				return
+-			}
+-
+-			msgCnt++
+-			assert.Len(c, placementTables.GetEntries(), 6)
+-			assert.Contains(c, placementTables.GetEntries(), "actor2")
+-			assert.Contains(c, placementTables.GetEntries(), "actor3")
+-			assert.Contains(c, placementTables.GetEntries(), "actor4")
+-			assert.Contains(c, placementTables.GetEntries(), "actor5")
+-			assert.Contains(c, placementTables.GetEntries(), "actor6")
+-			assert.Contains(c, placementTables.GetEntries(), "actor10")
+-
+-			entry, ok := placementTables.GetEntries()["actor10"]
+-			if assert.True(c, ok) {
+-				loadMap := entry.GetLoadMap()
+-				assert.Len(c, loadMap, 1)
+-				assert.Contains(c, loadMap, host3.GetName())
+-			}
+-		}
+-
+-		assert.GreaterOrEqual(c, msgCnt, 1)
+-	}, 10*time.Second, 10*time.Millisecond)
+-
+-	// Dissemination is done properly on host 3
+-	msgCnt = 0
+-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+-		select {
+-		case <-ctx.Done():
+-			return
+-		case placementTables := <-placementMessageCh3:
+-			if ctx.Err() != nil {
+-				return
+-			}
+-
+-			msgCnt++
+-			assert.Len(c, placementTables.GetEntries(), 6)
+-			assert.Contains(c, placementTables.GetEntries(), "actor2")
+-			assert.Contains(c, placementTables.GetEntries(), "actor3")
+-			assert.Contains(c, placementTables.GetEntries(), "actor4")
+-			assert.Contains(c, placementTables.GetEntries(), "actor5")
+-			assert.Contains(c, placementTables.GetEntries(), "actor6")
+-			assert.Contains(c, placementTables.GetEntries(), "actor10")
+-
+-			entry, ok := placementTables.GetEntries()["actor10"]
+-			if assert.True(c, ok) {
+-				loadMap := entry.GetLoadMap()
+-				assert.Len(c, loadMap, 1)
+-				assert.Contains(c, loadMap, host3.GetName())
+-			}
+-		}
+-		assert.GreaterOrEqual(c, msgCnt, 1)
+-	}, 10*time.Second, 10*time.Millisecond)
+-
+-	// Stop the placement leader and don't reconnect one of the hosts in ns2. Check that:
+-	// - a new leader has been elected
+-	// - dissemination message hasn't been sent to host1, because there haven't been changes in ns1
+-	// - dissemination message has been sent to host2, because host 3 hasn't reconnected, thus
+-	// 	there have been changes in the dissemination table
+-	n.placements[leaderIndex].Cleanup(t)
+-
+-	leaderIndex = n.getLeader(t, ctx, leaderIndex)
+-
+-	placementMessageCh2 = n.placements[leaderIndex].RegisterHost(t, ctx, host2)
+-	n.placements[leaderIndex].RegisterHost(t, ctx, host1)
+-
+-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+-		select {
+-		case <-ctx.Done():
+-			return
+-		case placementTables := <-placementMessageCh2:
+-			if ctx.Err() != nil {
+-				return
+-			}
+-
+-			msgCnt++
+-			assert.Len(t, placementTables.GetEntries(), 2)
+-			assert.Contains(t, placementTables.GetEntries(), "actor2")
+-			assert.Contains(t, placementTables.GetEntries(), "actor3")
+-		}
+-		assert.GreaterOrEqual(c, msgCnt, 1)
+-	}, 10*time.Second, 500*time.Millisecond)
+-}
+-
+-func (n *failover) getLeader(t *testing.T, ctx context.Context, skip int) int {
+-	// Connect to each placement until one succeeds, indicating that a leader has been elected.
+-	// If the condition is met, j is the index of the placement leader
+-	var stream v1pb.Placement_ReportDaprStatusClient
+-
+-	i := -1
+-	j := 0
+-	require.Eventually(t, func() bool {
+-		i++
+-		j = i % len(n.placements)
+-		if j == skip {
+-			return false
+-		}
+-
+-		host := n.placements[j].Address()
+-		//nolint:staticcheck
+-		conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
+-			grpc.WithTransportCredentials(insecure.NewCredentials()),
+-		)
+-		if err != nil {
+-			return false
+-		}
+-		t.Cleanup(func() { require.NoError(t, conn.Close()) })
+-
+-		client := v1pb.NewPlacementClient(conn)
+-
+-		stream, err = client.ReportDaprStatus(ctx)
+-		defer stream.CloseSend()
+-		if err != nil {
+-			return false
+-		}
+-
+-		// The dummy host doesn't host any actors, so it won't affect the placement table
+-		err = stream.Send(&v1pb.Host{
+-			ApiLevel: uint32(20),
+-		})
+-		if err != nil {
+-			return false
+-		}
+-		_, err = stream.Recv()
+-		if err != nil {
+-			return false
+-		}
+-		return true
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	return j
+-}
+diff --git a/tests/integration/suite/placement/metrics/actorheartbeat.go b/tests/integration/suite/placement/metrics/actorheartbeat.go
+deleted file mode 100644
+index 65c0dfed8..000000000
+--- a/tests/integration/suite/placement/metrics/actorheartbeat.go
++++ /dev/null
+@@ -1,88 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package metrics
+-
+-import (
+-	"context"
+-	"net/http"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(actorheartbeat))
+-}
+-
+-// actorheartbeat tests placement reports API level with no maximum API level.
+-type actorheartbeat struct {
+-	place *placement.Placement
+-	daprd *daprd.Daprd
+-}
+-
+-func (m *actorheartbeat) Setup(t *testing.T) []framework.Option {
+-	m.place = placement.New(t,
+-		placement.WithMetadataEnabled(true),
+-	)
+-
+-	srv := prochttp.New(t,
+-		prochttp.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+-			w.Write([]byte(`{"entities": ["myactortype1", "myactortype2"]}`))
+-		}),
+-		prochttp.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+-			w.Write([]byte(`OK`))
+-		}),
+-	)
+-
+-	m.daprd = daprd.New(t,
+-		daprd.WithInMemoryActorStateStore("mystore1"),
+-		daprd.WithPlacementAddresses(m.place.Address()),
+-		daprd.WithAppPort(srv.Port()),
+-		daprd.WithNamespace("ns1"))
+-
+-	return []framework.Option{
+-		framework.WithProcesses(m.place, m.daprd, srv),
+-	}
+-}
+-
+-func (m *actorheartbeat) Run(t *testing.T, ctx context.Context) {
+-	m.place.WaitUntilRunning(t, ctx)
+-	m.daprd.WaitUntilRunning(t, ctx)
+-
+-	var m1, m2, i int
+-	// Repeat the cycle 3 times to check if the actor heartbeat is increasing
+-	// We're using `require` because the condition should be true every time
+-	// The repeat cycle is a bit over 1sec so that we're sure we're not catching some edge condition
+-	require.Eventually(t, func() bool {
+-		i++
+-		metrics := m.place.Metrics(t, ctx)
+-
+-		metricActor1 := metrics.MatchMetric("dapr_placement_actor_heartbeat_timestamp", "actor_type:myactortype1", "app_id:"+m.daprd.AppID(), "host_name:"+m.daprd.InternalGRPCAddress(), "host_namespace:ns1")
+-		require.Len(t, metricActor1, 1)
+-		require.Greater(t, int(metricActor1[0].Value), m1)
+-
+-		metricActor2 := metrics.MatchMetric("dapr_placement_actor_heartbeat_timestamp", "actor_type:myactortype2", "app_id:"+m.daprd.AppID(), "host_name:"+m.daprd.InternalGRPCAddress(), "host_namespace:ns1")
+-		require.Len(t, metricActor2, 1)
+-		require.Greater(t, int(metricActor2[0].Value), m2)
+-
+-		return i >= 2
+-	}, 10*time.Second, 1100*time.Millisecond)
+-}
+diff --git a/tests/integration/suite/placement/metrics/leadership.go b/tests/integration/suite/placement/metrics/leadership.go
+deleted file mode 100644
+index 29763d819..000000000
+--- a/tests/integration/suite/placement/metrics/leadership.go
++++ /dev/null
+@@ -1,73 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package metrics
+-
+-import (
+-	"context"
+-	"fmt"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(leadership))
+-}
+-
+-// leadership tests placement reports API level with no maximum API level.
+-type leadership struct {
+-	fp         *ports.Ports
+-	placements []*placement.Placement
+-}
+-
+-func (l *leadership) Setup(t *testing.T) []framework.Option {
+-	l.fp = ports.Reserve(t, 3)
+-	port1, port2, port3 := l.fp.Port(t), l.fp.Port(t), l.fp.Port(t)
+-	opts := []placement.Option{
+-		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", port1, port2, port3)),
+-		placement.WithInitialClusterPorts(port1, port2, port3),
+-	}
+-	l.placements = []*placement.Placement{
+-		placement.New(t, append(opts, placement.WithID("p1"))...),
+-		placement.New(t, append(opts, placement.WithID("p2"))...),
+-		placement.New(t, append(opts, placement.WithID("p3"))...),
+-	}
+-
+-	return []framework.Option{
+-		framework.WithProcesses(l.fp, l.placements[0], l.placements[1], l.placements[2]),
+-	}
+-}
+-
+-func (l *leadership) Run(t *testing.T, ctx context.Context) {
+-	// TODO @elena-kolevska Add check for correctly reflected leadership status, not just if the metric is present
+-	for _, p := range l.placements {
+-		p.WaitUntilRunning(t, ctx)
+-	}
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		for i := range 3 {
+-			metrics := l.placements[i].Metrics(c, ctx)
+-			leaderStatus := metrics.MatchMetric("dapr_placement_leader_status")
+-			raftLeaderStatus := metrics.MatchMetric("dapr_placement_raft_leader_status")
+-			assert.Len(c, leaderStatus, 1)
+-			assert.Len(c, raftLeaderStatus, 1)
+-		}
+-	}, 10*time.Second, 10*time.Millisecond)
+-}
+diff --git a/tests/integration/suite/placement/metrics/runtimestotal.go b/tests/integration/suite/placement/metrics/runtimestotal.go
+deleted file mode 100644
+index 7a99bf093..000000000
+--- a/tests/integration/suite/placement/metrics/runtimestotal.go
++++ /dev/null
+@@ -1,252 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package metrics
+-
+-import (
+-	"context"
+-	"net/http"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(runtimestotal))
+-}
+-
+-// runtimestotal tests placement reports API level with no maximum API level.
+-type runtimestotal struct {
+-	place  *placement.Placement
+-	daprdA *daprd.Daprd
+-	daprdB *daprd.Daprd
+-	daprdC *daprd.Daprd
+-}
+-
+-func (m *runtimestotal) Setup(t *testing.T) []framework.Option {
+-	m.place = placement.New(t,
+-		placement.WithMetadataEnabled(true),
+-	)
+-
+-	// Start two application servers in different namespaces
+-	srvNS1 := prochttp.New(t,
+-		prochttp.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+-			w.Write([]byte(`{"entities": ["myactortype1", "myactortype2"]}`))
+-		}),
+-		prochttp.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+-			w.Write([]byte(`OK`))
+-		}),
+-	)
+-
+-	srvNS2 := prochttp.New(t,
+-		prochttp.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+-			w.Write([]byte(`{"entities": ["myactortype6"]}`))
+-		}),
+-		prochttp.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+-			w.Write([]byte(`OK`))
+-		}),
+-	)
+-
+-	// Start three sidecars in different namespaces
+-	m.daprdA = daprd.New(t,
+-		daprd.WithInMemoryActorStateStore("mystore1"),
+-		daprd.WithPlacementAddresses(m.place.Address()),
+-		daprd.WithAppPort(srvNS1.Port()),
+-		daprd.WithNamespace("ns1"))
+-	m.daprdB = daprd.New(t,
+-		daprd.WithInMemoryActorStateStore("mystore1"),
+-		daprd.WithPlacementAddresses(m.place.Address()),
+-		daprd.WithNamespace("ns1"))
+-	m.daprdC = daprd.New(t,
+-		daprd.WithInMemoryActorStateStore("mystore2"),
+-		daprd.WithPlacementAddresses(m.place.Address()),
+-		daprd.WithAppPort(srvNS2.Port()),
+-		daprd.WithNamespace("ns2"))
+-
+-	return []framework.Option{
+-		framework.WithProcesses(m.place, srvNS1, srvNS2),
+-	}
+-}
+-
+-func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
+-	m.place.WaitUntilRunning(t, ctx)
+-
+-	// Start first sidecar
+-	m.daprdA.Run(t, ctx)
+-	t.Cleanup(func() { m.daprdA.Cleanup(t) })
+-	m.daprdA.WaitUntilRunning(t, ctx)
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		metrics := m.place.Metrics(c, ctx)
+-
+-		// Namespace 1
+-		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m1, 1, "can't find dapr_placement_runtimes_total with label host_namespace:ns1 in metrics") {
+-			assert.Equal(c, 1, int(m1[0].Value))
+-		}
+-		m2 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m2, 1, "can't find dapr_placement_actor_runtimes_total with label host_namespace:ns1 in metrics") {
+-			assert.Equal(c, 1, int(m2[0].Value))
+-		}
+-
+-		// Namespace 2
+-		m3 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+-		assert.Empty(c, m3)
+-		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+-		assert.Empty(c, m4)
+-	}, 5*time.Second, 10*time.Millisecond, "daprdA sidecar didn't report dapr_placement_runtimes_total to Placement in time")
+-
+-	// Start second sidecar
+-	m.daprdB.Run(t, ctx)
+-	t.Cleanup(func() { m.daprdB.Cleanup(t) })
+-	m.daprdB.WaitUntilRunning(t, ctx)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		metrics := m.place.Metrics(c, ctx)
+-
+-		// Namespace 1
+-		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m1, 1, "can't find dapr_placement_runtimes_total with label host_namespace:ns1 in metrics") {
+-			assert.Equal(c, 2, int(m1[0].Value))
+-		}
+-		m2 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m2, 1, "can't find dapr_placement_actor_runtimes_total with label host_namespace:ns1 in metrics") {
+-			assert.Equal(c, 1, int(m2[0].Value))
+-		}
+-
+-		// Namespace 2
+-		m3 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+-		assert.Empty(c, m3)
+-		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+-		assert.Empty(c, m4)
+-	}, 5*time.Second, 10*time.Millisecond)
+-
+-	// Start third sidecar
+-	m.daprdC.Run(t, ctx)
+-	t.Cleanup(func() { m.daprdC.Cleanup(t) })
+-	m.daprdC.WaitUntilRunning(t, ctx)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		metrics := m.place.Metrics(c, ctx)
+-
+-		// Namespace 1
+-		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m1, 1) {
+-			assert.Equal(c, 2, int(m1[0].Value))
+-		}
+-		m2 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m2, 1) {
+-			assert.Equal(c, 1, int(m2[0].Value))
+-		}
+-
+-		// Namespace 2
+-		m3 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+-		if assert.Len(c, m3, 1) {
+-			assert.Equal(c, 1, int(m3[0].Value))
+-		}
+-
+-		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+-		if assert.Len(c, m4, 1) {
+-			assert.Equal(c, 1, int(m4[0].Value))
+-		}
+-	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
+-
+-	// Stop one sidecar
+-	m.daprdA.Cleanup(t)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		metrics := m.place.Metrics(c, ctx)
+-
+-		// Namespace 1
+-		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m1, 1) {
+-			assert.Equal(c, 1, int(m1[0].Value))
+-		}
+-		m2 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m2, 1) {
+-			assert.Equal(c, 0, int(m2[0].Value))
+-		}
+-
+-		// Namespace 2
+-		m3 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+-		if assert.Len(c, m3, 1) {
+-			assert.Equal(c, 1, int(m3[0].Value))
+-		}
+-		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+-		if assert.Len(c, m4, 1) {
+-			assert.Equal(c, 1, int(m4[0].Value))
+-		}
+-	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
+-
+-	// Stop another sidecar
+-	m.daprdB.Cleanup(t)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		metrics := m.place.Metrics(c, ctx)
+-
+-		// Namespace 1
+-		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m1, 1) {
+-			assert.Equal(c, 0, int(m1[0].Value))
+-		}
+-		m2 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m2, 1) {
+-			assert.Equal(c, 0, int(m2[0].Value))
+-		}
+-
+-		// Namespace 2
+-		m3 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+-		if assert.Len(c, m3, 1) {
+-			assert.Equal(c, 1, int(m3[0].Value))
+-		}
+-		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+-		if assert.Len(c, m4, 1) {
+-			assert.Equal(c, 1, int(m4[0].Value))
+-		}
+-	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
+-
+-	// Stop the last sidecar
+-	m.daprdC.Cleanup(t)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		metrics := m.place.Metrics(c, ctx)
+-
+-		// Namespace 1
+-		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m1, 1) {
+-			assert.Equal(c, 0, int(m1[0].Value))
+-		}
+-
+-		m2 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+-		if assert.Len(c, m2, 1) {
+-			assert.Equal(c, 0, int(m2[0].Value))
+-		}
+-
+-		// Namespace 2
+-		m3 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+-		if assert.Len(c, m3, 1) {
+-			assert.Equal(c, 0, int(m3[0].Value))
+-		}
+-
+-		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+-		if assert.Len(c, m4, 1) {
+-			assert.Equal(c, 0, int(m4[0].Value))
+-		}
+-	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
+-}
+diff --git a/tests/integration/suite/placement/placement.go b/tests/integration/suite/placement/placement.go
+deleted file mode 100644
+index 4c89cd496..000000000
+--- a/tests/integration/suite/placement/placement.go
++++ /dev/null
+@@ -1,23 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package placement
+-
+-import (
+-	_ "github.com/dapr/dapr/tests/integration/suite/placement/apilevel"
+-	_ "github.com/dapr/dapr/tests/integration/suite/placement/authz"
+-	_ "github.com/dapr/dapr/tests/integration/suite/placement/dissemination"
+-	_ "github.com/dapr/dapr/tests/integration/suite/placement/ha"
+-	_ "github.com/dapr/dapr/tests/integration/suite/placement/metrics"
+-	_ "github.com/dapr/dapr/tests/integration/suite/placement/quorum"
+-)
+diff --git a/tests/integration/suite/placement/quorum/insecure.go b/tests/integration/suite/placement/quorum/insecure.go
+deleted file mode 100644
+index cd3c555a0..000000000
+--- a/tests/integration/suite/placement/quorum/insecure.go
++++ /dev/null
+@@ -1,163 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package quorum
+-
+-import (
+-	"context"
+-	"fmt"
+-	"os"
+-	"path/filepath"
+-	"testing"
+-	"time"
+-
+-	"github.com/spiffe/go-spiffe/v2/spiffeid"
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-	"google.golang.org/grpc"
+-
+-	"github.com/dapr/dapr/pkg/healthz"
+-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/pkg/security"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+-	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(insecure))
+-}
+-
+-// insecure tests placement can find quorum with tls (insecure) enabled.
+-type insecure struct {
+-	places []*placement.Placement
+-	sentry *sentry.Sentry
+-}
+-
+-func (i *insecure) Setup(t *testing.T) []framework.Option {
+-	i.sentry = sentry.New(t)
+-	bundle := i.sentry.CABundle()
+-
+-	taFile := filepath.Join(t.TempDir(), "ca.pem")
+-	require.NoError(t, os.WriteFile(taFile, bundle.X509.TrustAnchors, 0o600))
+-
+-	fp := ports.Reserve(t, 3)
+-	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
+-	opts := []placement.Option{
+-		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", port1, port2, port3)),
+-		placement.WithInitialClusterPorts(port1, port2, port3),
+-		placement.WithEnableTLS(true),
+-		placement.WithTrustAnchorsFile(taFile),
+-		placement.WithSentryAddress(i.sentry.Address()),
+-	}
+-	i.places = []*placement.Placement{
+-		placement.New(t, append(opts, placement.WithID("p1"))...),
+-		placement.New(t, append(opts, placement.WithID("p2"))...),
+-		placement.New(t, append(opts, placement.WithID("p3"))...),
+-	}
+-
+-	return []framework.Option{
+-		framework.WithProcesses(i.sentry, fp, i.places[0], i.places[1], i.places[2]),
+-	}
+-}
+-
+-func (i *insecure) Run(t *testing.T, ctx context.Context) {
+-	i.sentry.WaitUntilRunning(t, ctx)
+-	i.places[0].WaitUntilRunning(t, ctx)
+-	i.places[1].WaitUntilRunning(t, ctx)
+-	i.places[2].WaitUntilRunning(t, ctx)
+-
+-	secProv, err := security.New(ctx, security.Options{
+-		SentryAddress:           i.sentry.Address(),
+-		ControlPlaneTrustDomain: "localhost",
+-		ControlPlaneNamespace:   "default",
+-		TrustAnchors:            i.sentry.CABundle().X509.TrustAnchors,
+-		AppID:                   "app-1",
+-		MTLSEnabled:             true,
+-		Healthz:                 healthz.New(),
+-	})
+-	require.NoError(t, err)
+-
+-	ctx, cancel := context.WithCancel(ctx)
+-
+-	errCh := make(chan error, 1)
+-	go func() {
+-		errCh <- secProv.Run(ctx)
+-	}()
+-	t.Cleanup(func() { cancel(); require.NoError(t, <-errCh) })
+-
+-	sec, err := secProv.Handler(ctx)
+-	require.NoError(t, err)
+-
+-	placeID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", "default", "dapr-placement")
+-	require.NoError(t, err)
+-
+-	var stream v1pb.Placement_ReportDaprStatusClient
+-
+-	// Try connecting to each placement until one succeeds,
+-	// indicating that a leader has been elected
+-	j := -1
+-	require.Eventually(t, func() bool {
+-		j++
+-		if j >= 3 {
+-			j = 0
+-		}
+-		host := i.places[j].Address()
+-		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(), //nolint:staticcheck
+-			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID), //nolint:staticcheck
+-		)
+-		if cerr != nil {
+-			return false
+-		}
+-		t.Cleanup(func() { require.NoError(t, conn.Close()) })
+-		client := v1pb.NewPlacementClient(conn)
+-
+-		stream, err = client.ReportDaprStatus(ctx)
+-		if err != nil {
+-			return false
+-		}
+-		err = stream.Send(&v1pb.Host{Id: "app-1", Namespace: "default"})
+-		if err != nil {
+-			return false
+-		}
+-		_, err = stream.Recv()
+-		if err != nil {
+-			return false
+-		}
+-		return true
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	err = stream.Send(&v1pb.Host{
+-		Name:      "app-1",
+-		Namespace: "default",
+-		Port:      1234,
+-		Load:      1,
+-		Entities:  []string{"entity-1", "entity-2"},
+-		Id:        "app-1",
+-		Pod:       "pod-1",
+-	})
+-	require.NoError(t, err)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		o, err := stream.Recv()
+-		require.NoError(t, err)
+-		assert.Equal(c, "update", o.GetOperation())
+-		if assert.NotNil(c, o.GetTables()) {
+-			assert.Len(c, o.GetTables().GetEntries(), 2)
+-			assert.Contains(c, o.GetTables().GetEntries(), "entity-1")
+-			assert.Contains(c, o.GetTables().GetEntries(), "entity-2")
+-		}
+-	}, time.Second*20, time.Millisecond*10)
+-}
+diff --git a/tests/integration/suite/placement/quorum/jwks.go b/tests/integration/suite/placement/quorum/jwks.go
+deleted file mode 100644
+index f710c848d..000000000
+--- a/tests/integration/suite/placement/quorum/jwks.go
++++ /dev/null
+@@ -1,251 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package quorum
+-
+-import (
+-	"context"
+-	"crypto/ecdsa"
+-	"crypto/elliptic"
+-	"crypto/rand"
+-	"encoding/json"
+-	"fmt"
+-	"os"
+-	"path/filepath"
+-	"strconv"
+-	"testing"
+-	"time"
+-
+-	"github.com/lestrrat-go/jwx/v2/jwa"
+-	"github.com/lestrrat-go/jwx/v2/jwk"
+-	"github.com/lestrrat-go/jwx/v2/jwt"
+-	"github.com/spiffe/go-spiffe/v2/spiffeid"
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-	"google.golang.org/grpc"
+-
+-	"github.com/dapr/dapr/pkg/healthz"
+-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/pkg/security"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+-	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-	"github.com/dapr/kit/ptr"
+-)
+-
+-func init() {
+-	suite.Register(new(jwks))
+-}
+-
+-// jwks tests placement can find quorum with tls (jwks) enabled.
+-type jwks struct {
+-	places       []*placement.Placement
+-	sentry       *sentry.Sentry
+-	appTokenFile string
+-}
+-
+-func (j *jwks) Setup(t *testing.T) []framework.Option {
+-	jwtPriv, jwtPub := j.genPrivateJWK(t)
+-
+-	tokenFiles := make([]string, 3)
+-	for i := range tokenFiles {
+-		token := j.signJWT(t, jwtPriv, "spiffe://localhost/ns/default/dapr-placement")
+-		tokenFiles[i] = filepath.Join(t.TempDir(), "token-"+strconv.Itoa(i))
+-		require.NoError(t, os.WriteFile(tokenFiles[i], token, 0o600))
+-	}
+-
+-	j.appTokenFile = filepath.Join(t.TempDir(), "app-token")
+-	require.NoError(t, os.WriteFile(j.appTokenFile,
+-		j.signJWT(t, jwtPriv, "spiffe://public/ns/default/app-1"),
+-		0o600),
+-	)
+-
+-	jwksConfig := `
+-kind: Configuration
+-apiVersion: dapr.io/v1alpha1
+-metadata:
+-  name: sentryconfig
+-spec:
+-  mtls:
+-    enabled: true
+-    tokenValidators:
+-      - name: jwks
+-        options:
+-          minRefreshInterval: 2m
+-          requestTimeout: 1m
+-          source: |
+-            {"keys":[` + string(jwtPub) + `]}
+-`
+-	j.sentry = sentry.New(t, sentry.WithConfiguration(jwksConfig))
+-	bundle := j.sentry.CABundle()
+-
+-	taFile := filepath.Join(t.TempDir(), "ca.pem")
+-	require.NoError(t, os.WriteFile(taFile, bundle.X509.TrustAnchors, 0o600))
+-
+-	fp := ports.Reserve(t, 3)
+-	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
+-	opts := []placement.Option{
+-		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", port1, port2, port3)),
+-		placement.WithInitialClusterPorts(port1, port2, port3),
+-		placement.WithEnableTLS(true),
+-		placement.WithTrustAnchorsFile(taFile),
+-		placement.WithSentryAddress(j.sentry.Address()),
+-	}
+-	j.places = []*placement.Placement{
+-		placement.New(t, append(opts, placement.WithID("p1"),
+-			placement.WithExecOptions(exec.WithEnvVars(t, "DAPR_SENTRY_TOKEN_FILE", tokenFiles[0])))...),
+-		placement.New(t, append(opts, placement.WithID("p2"),
+-			placement.WithExecOptions(exec.WithEnvVars(t, "DAPR_SENTRY_TOKEN_FILE", tokenFiles[1])))...),
+-		placement.New(t, append(opts, placement.WithID("p3"),
+-			placement.WithExecOptions(exec.WithEnvVars(t, "DAPR_SENTRY_TOKEN_FILE", tokenFiles[2])))...),
+-	}
+-
+-	return []framework.Option{
+-		framework.WithProcesses(j.sentry, fp, j.places[0], j.places[1], j.places[2]),
+-	}
+-}
+-
+-func (j *jwks) Run(t *testing.T, ctx context.Context) {
+-	j.sentry.WaitUntilRunning(t, ctx)
+-	j.places[0].WaitUntilRunning(t, ctx)
+-	j.places[1].WaitUntilRunning(t, ctx)
+-	j.places[2].WaitUntilRunning(t, ctx)
+-
+-	secProv, err := security.New(ctx, security.Options{
+-		SentryAddress:           j.sentry.Address(),
+-		ControlPlaneTrustDomain: "localhost",
+-		ControlPlaneNamespace:   "default",
+-		TrustAnchors:            j.sentry.CABundle().X509.TrustAnchors,
+-		AppID:                   "app-1",
+-		MTLSEnabled:             true,
+-		SentryTokenFile:         ptr.Of(j.appTokenFile),
+-		Healthz:                 healthz.New(),
+-	})
+-	require.NoError(t, err)
+-
+-	ctx, cancel := context.WithCancel(ctx)
+-
+-	errCh := make(chan error, 1)
+-	go func() {
+-		errCh <- secProv.Run(ctx)
+-	}()
+-	t.Cleanup(func() { cancel(); require.NoError(t, <-errCh) })
+-
+-	sec, err := secProv.Handler(ctx)
+-	require.NoError(t, err)
+-
+-	placeID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", "default", "dapr-placement")
+-	require.NoError(t, err)
+-
+-	var stream v1pb.Placement_ReportDaprStatusClient
+-
+-	// Try connecting to each placement until one succeeds,
+-	// indicating that a leader has been elected
+-	i := -1
+-	require.Eventually(t, func() bool {
+-		i++
+-		if i >= 3 {
+-			i = 0
+-		}
+-		host := j.places[i].Address()
+-		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(), //nolint:staticcheck
+-			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID), //nolint:staticcheck
+-		)
+-		if cerr != nil {
+-			return false
+-		}
+-		t.Cleanup(func() { require.NoError(t, conn.Close()) })
+-		client := v1pb.NewPlacementClient(conn)
+-
+-		stream, err = client.ReportDaprStatus(ctx)
+-		if err != nil {
+-			return false
+-		}
+-		err = stream.Send(&v1pb.Host{Id: "app-1"})
+-		if err != nil {
+-			return false
+-		}
+-		_, err = stream.Recv()
+-		if err != nil {
+-			return false
+-		}
+-		return true
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	err = stream.Send(&v1pb.Host{
+-		Name:      "app-1",
+-		Namespace: "default",
+-		Port:      1234,
+-		Load:      1,
+-		Entities:  []string{"entity-1", "entity-2"},
+-		Id:        "app-1",
+-		Pod:       "pod-1",
+-	})
+-	require.NoError(t, err)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		o, err := stream.Recv()
+-		if !assert.NoError(c, err) {
+-			return
+-		}
+-		assert.Equal(c, "update", o.GetOperation())
+-		if assert.NotNil(c, o.GetTables()) {
+-			assert.Len(c, o.GetTables().GetEntries(), 2)
+-			assert.Contains(c, o.GetTables().GetEntries(), "entity-1")
+-			assert.Contains(c, o.GetTables().GetEntries(), "entity-2")
+-		}
+-	}, time.Second*20, time.Millisecond*10)
+-}
+-
+-func (j *jwks) signJWT(t *testing.T, jwkPriv jwk.Key, id string) []byte {
+-	t.Helper()
+-
+-	now := time.Now()
+-
+-	token, err := jwt.NewBuilder().
+-		Audience([]string{"spiffe://localhost/ns/default/dapr-sentry"}).
+-		Expiration(now.Add(time.Hour)).
+-		IssuedAt(now).
+-		Subject(id).
+-		Build()
+-	require.NoError(t, err)
+-
+-	signed, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, jwkPriv))
+-	require.NoError(t, err)
+-
+-	return signed
+-}
+-
+-func (j *jwks) genPrivateJWK(t *testing.T) (jwk.Key, []byte) {
+-	t.Helper()
+-
+-	// Generate a signing key
+-	privK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+-	require.NoError(t, err)
+-
+-	jwtSigningKeyPriv, err := jwk.FromRaw(privK)
+-	require.NoError(t, err)
+-
+-	jwtSigningKeyPriv.Set("kid", "mykey")
+-	jwtSigningKeyPriv.Set("alg", "ES256")
+-	jwtSigningKeyPub, err := jwtSigningKeyPriv.PublicKey()
+-	require.NoError(t, err)
+-
+-	jwtSigningKeyPubJSON, err := json.Marshal(jwtSigningKeyPub)
+-	require.NoError(t, err)
+-
+-	return jwtSigningKeyPriv, jwtSigningKeyPubJSON
+-}
+diff --git a/tests/integration/suite/placement/quorum/notls.go b/tests/integration/suite/placement/quorum/notls.go
+deleted file mode 100644
+index af626d9a6..000000000
+--- a/tests/integration/suite/placement/quorum/notls.go
++++ /dev/null
+@@ -1,122 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package quorum
+-
+-import (
+-	"context"
+-	"fmt"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-	"google.golang.org/grpc"
+-	grpcinsecure "google.golang.org/grpc/credentials/insecure"
+-
+-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(notls))
+-}
+-
+-// notls tests placement can find quorum with tls disabled.
+-type notls struct {
+-	places []*placement.Placement
+-}
+-
+-func (n *notls) Setup(t *testing.T) []framework.Option {
+-	fp := ports.Reserve(t, 3)
+-	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
+-	opts := []placement.Option{
+-		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", port1, port2, port3)),
+-		placement.WithInitialClusterPorts(port1, port2, port3),
+-	}
+-	n.places = []*placement.Placement{
+-		placement.New(t, append(opts, placement.WithID("p1"))...),
+-		placement.New(t, append(opts, placement.WithID("p2"))...),
+-		placement.New(t, append(opts, placement.WithID("p3"))...),
+-	}
+-
+-	return []framework.Option{
+-		framework.WithProcesses(fp, n.places[0], n.places[1], n.places[2]),
+-	}
+-}
+-
+-func (n *notls) Run(t *testing.T, ctx context.Context) {
+-	n.places[0].WaitUntilRunning(t, ctx)
+-	n.places[1].WaitUntilRunning(t, ctx)
+-	n.places[2].WaitUntilRunning(t, ctx)
+-
+-	var stream v1pb.Placement_ReportDaprStatusClient
+-
+-	// Try connecting to each placement until one succeeds,
+-	// indicating that a leader has been elected
+-	j := -1
+-	require.Eventually(t, func() bool {
+-		j++
+-		if j >= 3 {
+-			j = 0
+-		}
+-		host := n.places[j].Address()
+-		//nolint:staticcheck
+-		conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
+-			grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
+-		)
+-		if err != nil {
+-			return false
+-		}
+-		t.Cleanup(func() { require.NoError(t, conn.Close()) })
+-		client := v1pb.NewPlacementClient(conn)
+-
+-		stream, err = client.ReportDaprStatus(ctx)
+-		if err != nil {
+-			return false
+-		}
+-		err = stream.Send(new(v1pb.Host))
+-		if err != nil {
+-			return false
+-		}
+-		_, err = stream.Recv()
+-		if err != nil {
+-			return false
+-		}
+-		return true
+-	}, time.Second*10, time.Millisecond*10)
+-
+-	err := stream.Send(&v1pb.Host{
+-		Name:     "app-1",
+-		Port:     1234,
+-		Load:     1,
+-		Entities: []string{"entity-1", "entity-2"},
+-		Id:       "app-1",
+-		Pod:      "pod-1",
+-	})
+-	require.NoError(t, err)
+-
+-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+-		o, err := stream.Recv()
+-		require.NoError(t, err)
+-		assert.Equal(c, "update", o.GetOperation())
+-		if assert.NotNil(c, o.GetTables()) {
+-			assert.Len(c, o.GetTables().GetEntries(), 2)
+-			assert.Contains(c, o.GetTables().GetEntries(), "entity-1")
+-			assert.Contains(c, o.GetTables().GetEntries(), "entity-2")
+-		}
+-	}, time.Second*20, time.Millisecond*10)
+-}
