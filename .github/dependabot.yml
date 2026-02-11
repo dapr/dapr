@@ -1,15 +1,14 @@
 version: 2
 updates:
-  # Git
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
     cooldown:
       default-days: 7
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-patch"]
+    # Only allow security updates.
+    open-pull-requests-limit: 0
+
   # gomod root pkg
   - package-ecosystem: "gomod"
     directory: "/"
@@ -17,9 +16,9 @@ updates:
       interval: "daily"
     cooldown:
       default-days: 7
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-patch"]
+    # Only allow security updates.
+    open-pull-requests-limit: 0
+
   # gomod build tools
   - package-ecosystem: "gomod"
     directory: ".build-tools"
@@ -27,9 +26,9 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-patch"]
+    # Only allow security updates.
+    open-pull-requests-limit: 0
+
   # gomod tests
   - package-ecosystem: "gomod"
     directories:
@@ -54,6 +53,5 @@ updates:
       interval: "monthly"
     cooldown:
       default-days: 7
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-patch"]
+    # Only allow security updates.
+    open-pull-requests-limit: 0
