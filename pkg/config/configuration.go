@@ -30,11 +30,9 @@ import (
 	"github.com/spf13/cast"
 	"go.opencensus.io/stats/view"
 	yaml "gopkg.in/yaml.v3"
-	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -647,12 +645,8 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 		if err != nil {
 			return err
 		}
-		// Convert map to NameValuePair array
 		for name, value := range headersMap {
-			conf.Spec.TracingSpec.Otel.Headers = append(conf.Spec.TracingSpec.Otel.Headers, commonapi.NameValuePair{
-				Name:  name,
-				Value: commonapi.DynamicValue{JSON: apiextensionsV1.JSON{Raw: []byte(fmt.Sprintf("%q", value))}},
-			})
+			conf.Spec.TracingSpec.Otel.Headers = append(conf.Spec.TracingSpec.Otel.Headers, name+"="+value)
 		}
 	}
 
@@ -672,7 +666,7 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 	}
 
 	if timeoutMs > 0 {
-		timeout := metav1.Duration{Duration: time.Duration(timeoutMs) * time.Millisecond}
+		timeout := time.Duration(timeoutMs) * time.Millisecond
 		conf.Spec.TracingSpec.Otel.Timeout = &timeout
 	}
 	return nil

@@ -6,14 +6,7 @@ metadata:
 spec:
   tracing:
     otel:
-      timeout:
-        duration: 5s
+      timeout: 5s
       headers:
-        - name: header1
-          secretKeyRef:
-            name: test-secret
-            key: header1
-        - name: header2
-          secretKeyRef:
-            name: test-secret
-            key: header2
+        - "header1=value1"
+        - "header2=value2"

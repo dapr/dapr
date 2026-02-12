@@ -516,20 +516,19 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 		}
 
 		var client otlptrace.Client
+		// Parse "key=value" header strings into a map
+		headers := parseOtelHeaders(tracingSpec.Otel.Headers)
+
 		if protocol == "http" {
 			clientOptions := []otlptracehttp.Option{otlptracehttp.WithEndpoint(endpoint)}
 			if !tracingSpec.Otel.GetIsSecure() {
 				clientOptions = append(clientOptions, otlptracehttp.WithInsecure())
 			}
-			if len(tracingSpec.Otel.Headers) > 0 {
-				headers := make(map[string]string)
-				for _, h := range tracingSpec.Otel.Headers {
-					headers[h.Name] = h.Value.String()
-				}
+			if len(headers) > 0 {
 				clientOptions = append(clientOptions, otlptracehttp.WithHeaders(headers))
 			}
 			if tracingSpec.Otel.Timeout != nil {
-				clientOptions = append(clientOptions, otlptracehttp.WithTimeout(tracingSpec.Otel.Timeout.Duration))
+				clientOptions = append(clientOptions, otlptracehttp.WithTimeout(*tracingSpec.Otel.Timeout))
 			}
 			client = otlptracehttp.NewClient(clientOptions...)
 		} else {
@@ -537,15 +536,11 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 			if !tracingSpec.Otel.GetIsSecure() {
 				clientOptions = append(clientOptions, otlptracegrpc.WithInsecure())
 			}
-			if len(tracingSpec.Otel.Headers) > 0 {
-				headers := make(map[string]string)
-				for _, h := range tracingSpec.Otel.Headers {
-					headers[h.Name] = h.Value.String()
-				}
+			if len(headers) > 0 {
 				clientOptions = append(clientOptions, otlptracegrpc.WithHeaders(headers))
 			}
 			if tracingSpec.Otel.Timeout != nil {
-				clientOptions = append(clientOptions, otlptracegrpc.WithTimeout(tracingSpec.Otel.Timeout.Duration))
+				clientOptions = append(clientOptions, otlptracegrpc.WithTimeout(*tracingSpec.Otel.Timeout))
 			}
 			client = otlptracegrpc.NewClient(clientOptions...)
 		}
@@ -571,6 +566,18 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 
 	a.tracerProvider = tpStore.RegisterTracerProvider()
 	return nil
+}
+
+// parseOtelHeaders converts a slice of "key=value" strings into a map.
+func parseOtelHeaders(headerStrings []string) map[string]string {
+	headers := make(map[string]string, len(headerStrings))
+	for _, h := range headerStrings {
+		k, v, found := strings.Cut(h, "=")
+		if found {
+			headers[k] = v
+		}
+	}
+	return headers
 }
 
 // createOtelResource creates an OpenTelemetry resource for tracing.

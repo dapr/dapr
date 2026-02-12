@@ -39,12 +39,13 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 		return nil, fmt.Errorf("error getting configuration %s/%s: %w", in.GetNamespace(), in.GetName(), err)
 	}
 
-	if err := processConfigurationSecrets(ctx, &config, in.GetNamespace(), a.Client); err != nil {
+	resolvedHeaders, err := processConfigurationSecrets(ctx, &config, in.GetNamespace(), a.Client)
+	if err != nil {
 		log.Warnf("error processing configuration %s secrets from pod %s/%s: %s", config.Name, in.GetNamespace(), in.GetPodName(), err)
 		return nil, fmt.Errorf("error processing configuration secrets: %w", err)
 	}
 
-	b, err := json.Marshal(&config)
+	b, err := marshalConfigurationWithResolvedOtel(&config, resolvedHeaders)
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling configuration: %w", err)
 	}
@@ -53,13 +54,71 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	}, nil
 }
 
-// processConfigurationSecrets resolves secret references in configuration resources.
-func processConfigurationSecrets(ctx context.Context, config *configurationapi.Configuration, namespace string, kubeClient client.Client) error {
-	if config.Spec.TracingSpec == nil || config.Spec.TracingSpec.Otel == nil {
-		return nil
+// marshalConfigurationWithResolvedOtel marshals the configuration, converting
+// CRD NameValuePair headers to simple "key=value" strings and metav1.Duration
+// timeout to time.Duration that the runtime internal config expects.
+func marshalConfigurationWithResolvedOtel(config *configurationapi.Configuration, resolvedHeaders []string) ([]byte, error) {
+	b, err := json.Marshal(config)
+	if err != nil {
+		return nil, err
 	}
 
-	for i, header := range config.Spec.TracingSpec.Otel.Headers {
+	if config.Spec.TracingSpec == nil || config.Spec.TracingSpec.Otel == nil {
+		return b, nil
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return nil, err
+	}
+
+	spec, ok := raw["spec"].(map[string]interface{})
+	if !ok {
+		return b, nil
+	}
+
+	tracing, ok := spec["tracing"].(map[string]interface{})
+	if !ok {
+		return b, nil
+	}
+
+	otel, ok := tracing["otel"].(map[string]interface{})
+	if !ok {
+		return b, nil
+	}
+
+	// Replace headers with resolved []string format
+	if len(resolvedHeaders) > 0 {
+		otel["headers"] = resolvedHeaders
+	} else {
+		delete(otel, "headers")
+	}
+
+	// Convert metav1.Duration timeout to time.Duration
+	if config.Spec.TracingSpec.Otel.Timeout != nil {
+		otel["timeout"] = config.Spec.TracingSpec.Otel.Timeout.Duration.Nanoseconds()
+	}
+
+	return json.Marshal(raw)
+}
+
+// processConfigurationSecrets resolves secret references in configuration
+// headers and returns the headers as simple "key=value" strings.
+func processConfigurationSecrets(ctx context.Context, config *configurationapi.Configuration, namespace string, kubeClient client.Client) ([]string, error) {
+	if config.Spec.TracingSpec == nil || config.Spec.TracingSpec.Otel == nil {
+		return nil, nil
+	}
+
+	otel := config.Spec.TracingSpec.Otel
+	if len(otel.Headers) == 0 {
+		return nil, nil
+	}
+
+	resolved := make([]string, 0, len(otel.Headers))
+
+	for _, header := range otel.Headers {
+		var value string
+
 		if header.SecretKeyRef.Name != "" {
 			var secret corev1.Secret
 			err := kubeClient.Get(ctx, types.NamespacedName{
@@ -67,26 +126,26 @@ func processConfigurationSecrets(ctx context.Context, config *configurationapi.C
 				Namespace: namespace,
 			}, &secret)
 			if err != nil {
-				return fmt.Errorf("failed to get secret %s for header %s: %w", header.SecretKeyRef.Name, header.Name, err)
+				return nil, fmt.Errorf("failed to get secret %s for header %s: %w", header.SecretKeyRef.Name, header.Name, err)
 			}
 
 			key := header.SecretKeyRef.Key
 			if key == "" {
-				return fmt.Errorf("secret key is required for header %s", header.Name)
+				return nil, fmt.Errorf("secret key is required for header %s", header.Name)
 			}
 
 			val, ok := secret.Data[key]
 			if !ok {
-				return fmt.Errorf("key %s not found in secret %s", key, header.SecretKeyRef.Name)
+				return nil, fmt.Errorf("key %s not found in secret %s", key, header.SecretKeyRef.Name)
 			}
 
-			enc, err := json.Marshal(string(val))
-			if err != nil {
-				return fmt.Errorf("failed to marshal secret value for header %s: %w", header.Name, err)
-			}
-			config.Spec.TracingSpec.Otel.Headers[i].Value.JSON.Raw = enc
+			value = string(val)
+		} else if header.HasValue() {
+			value = header.Value.String()
 		}
+
+		resolved = append(resolved, header.Name+"="+value)
 	}
 
-	return nil
+	return resolved, nil
 }

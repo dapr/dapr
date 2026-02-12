@@ -19,13 +19,12 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
-	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
-	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/kit/logger"
@@ -220,14 +219,14 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
 	})
 
-	t.Run("tracing spec headers value as string", func(t *testing.T) {
+	t.Run("tracing spec headers and timeout", func(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/tracing_config.yaml")
 		require.NoError(t, err)
 		require.Len(t, config.Spec.TracingSpec.Otel.Headers, 2)
-		assert.Equal(t, "header1", config.Spec.TracingSpec.Otel.Headers[0].Name)
-		assert.Equal(t, "header2", config.Spec.TracingSpec.Otel.Headers[1].Name)
+		assert.Equal(t, "header1=value1", config.Spec.TracingSpec.Otel.Headers[0])
+		assert.Equal(t, "header2=value2", config.Spec.TracingSpec.Otel.Headers[1])
 		require.NotNil(t, config.Spec.TracingSpec.Otel.Timeout)
-		assert.Equal(t, "5s", config.Spec.TracingSpec.Otel.Timeout.Duration.String())
+		assert.Equal(t, 5*time.Second, *config.Spec.TracingSpec.Otel.Timeout)
 	})
 
 	t.Run("tracing invalid spec", func(t *testing.T) {
@@ -481,22 +480,15 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	assert.Equal(t, "http", conf.Spec.TracingSpec.Otel.Protocol)
 	require.False(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
 	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 2)
-	assert.Equal(t, "api-key1", conf.Spec.TracingSpec.Otel.Headers[0].Name)
-	assert.Equal(t, "value1", conf.Spec.TracingSpec.Otel.Headers[0].Value.String())
-	assert.Equal(t, "api-key2", conf.Spec.TracingSpec.Otel.Headers[1].Name)
-	assert.Equal(t, "value2", conf.Spec.TracingSpec.Otel.Headers[1].Value.String())
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "api-key1=value1")
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "api-key2=value2")
 
 	// Spec from config file should not be overridden
 	conf = LoadDefaultConfiguration()
 	conf.Spec.TracingSpec.Otel.EndpointAddress = "configfileendpoint:4321"
 	conf.Spec.TracingSpec.Otel.Protocol = "grpc"
 	conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(true)
-	conf.Spec.TracingSpec.Otel.Headers = []commonapi.NameValuePair{
-		{
-			Name:  "another-key1",
-			Value: commonapi.DynamicValue{JSON: apiextensionsV1.JSON{Raw: []byte(`"value1"`)}},
-		},
-	}
+	conf.Spec.TracingSpec.Otel.Headers = []string{"another-key1=value1"}
 
 	// set tracing spec from env
 	err = SetTracingSpecFromEnv(conf)
@@ -506,8 +498,7 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
 	require.True(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
 	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 1)
-	assert.Equal(t, "another-key1", conf.Spec.TracingSpec.Otel.Headers[0].Name)
-	assert.Equal(t, "value1", conf.Spec.TracingSpec.Otel.Headers[0].Value.String())
+	assert.Equal(t, "another-key1=value1", conf.Spec.TracingSpec.Otel.Headers[0])
 }
 
 func TestTracingPrecedenceFromEnv(t *testing.T) {
@@ -527,12 +518,10 @@ func TestTracingPrecedenceFromEnv(t *testing.T) {
 	assert.Equal(t, "tracesendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
 	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 2)
-	assert.Equal(t, "traces-key1", conf.Spec.TracingSpec.Otel.Headers[0].Name)
-	assert.Equal(t, "value1", conf.Spec.TracingSpec.Otel.Headers[0].Value.String())
-	assert.Equal(t, "traces-key2", conf.Spec.TracingSpec.Otel.Headers[1].Name)
-	assert.Equal(t, "value2", conf.Spec.TracingSpec.Otel.Headers[1].Value.String())
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "traces-key1=value1")
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "traces-key2=value2")
 	require.NotNil(t, conf.Spec.TracingSpec.Otel.Timeout)
-	assert.Equal(t, int64(2000*1000000), conf.Spec.TracingSpec.Otel.Timeout.Duration.Nanoseconds())
+	assert.Equal(t, 2*time.Second, *conf.Spec.TracingSpec.Otel.Timeout)
 }
 
 func TestTracingTimeoutFromEnv(t *testing.T) {

@@ -618,16 +618,7 @@ func TestSetupTracing(t *testing.T) {
 				EndpointAddress: "foo.bar",
 				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
-				Headers: []commonapi.NameValuePair{
-					{
-						Name:  "header1",
-						Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte(`"value1"`)}},
-					},
-					{
-						Name:  "header2",
-						Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte(`"value2"`)}},
-					},
-				},
+				Headers: []string{"header1=value1", "header2=value2"},
 			},
 		},
 		expectedExporters: []sdktrace.SpanExporter{&otlptrace.Exporter{}},
@@ -648,12 +639,7 @@ func TestSetupTracing(t *testing.T) {
 				EndpointAddress: "foo.bar",
 				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
-				Headers: []commonapi.NameValuePair{
-					{
-						Name:  "invalidheaders",
-						Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte(`""`)}},
-					},
-				},
+				Headers: []string{"invalidheaders"},
 			},
 		},
 		expectedExporters: []sdktrace.SpanExporter{&otlptrace.Exporter{}},
