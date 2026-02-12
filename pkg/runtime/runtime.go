@@ -584,6 +584,10 @@ func createOtelResource(ctx context.Context, defaultServiceName string) *resourc
 		),
 		// Read OTEL_RESOURCE_ATTRIBUTES and OTEL_SERVICE_NAME from environment
 		resource.WithFromEnv(),
+		resource.WithProcess(),
+		resource.WithTelemetrySDK(),
+		resource.WithHost(),
+		resource.WithOS(),
 		resource.WithSchemaURL(semconv.SchemaURL),
 	)
 	if err != nil {
