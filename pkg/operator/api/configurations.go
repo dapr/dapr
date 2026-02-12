@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
@@ -57,49 +58,41 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 // marshalConfigurationWithResolvedOtel marshals the configuration, converting
 // CRD NameValuePair headers to simple "key=value" strings and metav1.Duration
 // timeout to time.Duration that the runtime internal config expects.
-func marshalConfigurationWithResolvedOtel(config *configurationapi.Configuration, resolvedHeaders []string) ([]byte, error) {
-	b, err := json.Marshal(config)
+func marshalConfigurationWithResolvedOtel(crdConfig *configurationapi.Configuration, resolvedHeaders []string) ([]byte, error) {
+	if crdConfig.Spec.TracingSpec == nil || crdConfig.Spec.TracingSpec.Otel == nil {
+		return json.Marshal(crdConfig)
+	}
+
+	// Deep copy and clear fields that have incompatible types between
+	// the CRD and the internal config
+	configCopy := crdConfig.DeepCopy()
+	configCopy.Spec.TracingSpec.Otel.Headers = nil
+	configCopy.Spec.TracingSpec.Otel.Timeout = nil
+
+	b, err := json.Marshal(configCopy)
 	if err != nil {
 		return nil, err
 	}
 
-	if config.Spec.TracingSpec == nil || config.Spec.TracingSpec.Otel == nil {
-		return b, nil
-	}
-
-	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
+	var ic config.Configuration
+	if err := json.Unmarshal(b, &ic); err != nil {
 		return nil, err
 	}
 
-	spec, ok := raw["spec"].(map[string]interface{})
-	if !ok {
-		return b, nil
+	// Set the converted OTel fields directly on the typed struct
+	if ic.Spec.TracingSpec == nil {
+		ic.Spec.TracingSpec = &config.TracingSpec{}
+	}
+	if ic.Spec.TracingSpec.Otel == nil {
+		ic.Spec.TracingSpec.Otel = &config.OtelSpec{}
+	}
+	ic.Spec.TracingSpec.Otel.Headers = resolvedHeaders
+	if crdConfig.Spec.TracingSpec.Otel.Timeout != nil {
+		timeout := crdConfig.Spec.TracingSpec.Otel.Timeout.Duration
+		ic.Spec.TracingSpec.Otel.Timeout = &timeout
 	}
 
-	tracing, ok := spec["tracing"].(map[string]interface{})
-	if !ok {
-		return b, nil
-	}
-
-	otel, ok := tracing["otel"].(map[string]interface{})
-	if !ok {
-		return b, nil
-	}
-
-	// Replace headers with resolved []string format
-	if len(resolvedHeaders) > 0 {
-		otel["headers"] = resolvedHeaders
-	} else {
-		delete(otel, "headers")
-	}
-
-	// Convert metav1.Duration timeout to time.Duration
-	if config.Spec.TracingSpec.Otel.Timeout != nil {
-		otel["timeout"] = config.Spec.TracingSpec.Otel.Timeout.Duration.Nanoseconds()
-	}
-
-	return json.Marshal(raw)
+	return json.Marshal(ic)
 }
 
 // processConfigurationSecrets resolves secret references in configuration
