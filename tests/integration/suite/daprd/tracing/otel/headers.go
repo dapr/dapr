@@ -102,5 +102,10 @@ func (h *headers) Run(t *testing.T, ctx context.Context) {
 
 		spans := h.collector.GetSpans()
 		require.NotEmpty(t, spans, "Should have received spans")
+
+		// Verify the custom headers were sent in the gRPC metadata
+		md := h.collector.GetHeaders()
+		assert.Equal(t, []string{"test-api-key-123"}, md.Get("x-api-key"))
+		assert.Equal(t, []string{"custom-value"}, md.Get("x-custom-header"))
 	})
 }
