@@ -285,7 +285,7 @@ type OtelSpec struct {
 	// Defaults to true
 	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
 	// Headers to add to the OTLP trace exporter request
-	Headers []string`json:"headers,omitempty" yaml:"headers,omitempty"`
+	Headers []string `json:"headers,omitempty" yaml:"headers,omitempty"`
 	// Timeout for the OTLP trace exporter request
 	Timeout *time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
