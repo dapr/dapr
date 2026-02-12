@@ -626,7 +626,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 func getMessagesFromEndpoint(url string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer([]byte("{}")))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBufferString("{}"))
 	if err != nil {
 		return nil, err
 	}
