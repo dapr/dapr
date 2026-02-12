@@ -454,8 +454,8 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else if subscriberResponse == "error" {
 		// on error response case wait for some time to allow messages to be redelivered before validating
-		log.Printf("Waiting 30 seconds for messages to be redelivered before validating...")
-		time.Sleep(30 * time.Second)
+		log.Printf("Waiting 60 seconds for messages to be redelivered before validating...")
+		time.Sleep(65 * time.Second)
 	} else {
 		// Sleep briefly to allow initial delivery attempts to fail
 		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
