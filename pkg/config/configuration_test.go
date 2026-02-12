@@ -524,6 +524,35 @@ func TestTracingPrecedenceFromEnv(t *testing.T) {
 	assert.Equal(t, 2*time.Second, *conf.Spec.TracingSpec.Otel.Timeout)
 }
 
+func TestTracingConfigHeadersPrecedenceOverEnv(t *testing.T) {
+	// When endpointAddress is already set in config, SetTracingSpecFromEnv
+	// returns early and env var headers/timeout are not applied
+	t.Setenv(env.OtlpExporterTracesHeaders, "env-key=env-value")
+	t.Setenv(env.OtlpExporterTracesTimeout, "5000")
+
+	conf := &Configuration{
+		Spec: ConfigurationSpec{
+			TracingSpec: &TracingSpec{
+				Otel: &OtelSpec{
+					EndpointAddress: "already-set:4317",
+					Protocol:        "grpc",
+					Headers:         []string{"config-key=config-value"},
+				},
+			},
+		},
+	}
+
+	err := SetTracingSpecFromEnv(conf)
+	require.NoError(t, err)
+
+	// Config headers should be unchanged; env var headers should NOT be appended
+	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 1)
+	assert.Equal(t, "config-key=config-value", conf.Spec.TracingSpec.Otel.Headers[0])
+
+	// Timeout should remain nil since env vars were not applied
+	assert.Nil(t, conf.Spec.TracingSpec.Otel.Timeout)
+}
+
 func TestTracingTimeoutFromEnv(t *testing.T) {
 	t.Setenv(env.OtlpExporterTracesTimeout, "invalid")
 	conf := LoadDefaultConfiguration()
