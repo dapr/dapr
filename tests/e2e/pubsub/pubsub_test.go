@@ -453,9 +453,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else if subscriberResponse == "error" {
-		// on error response case wait for some time to allow messages to be redelivered before validating
-		log.Printf("Waiting 60 seconds for messages to be redelivered before validating...")
-		time.Sleep(65 * time.Second)
+		time.Sleep(time.Second * 30)
 	} else {
 		// Sleep briefly to allow initial delivery attempts to fail
 		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
@@ -480,11 +478,11 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	} else if subscriberResponse == "error" {
 		// Wait for all messages to be dead-lettered. Publisher aggregates getMessages across replicas
 		log.Printf("Validating redelivered messages for 'error' subscriber...")
-		require.Eventually(t,
-			func() bool {
-				return subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, len(sentMessages.ReceivedByTopicDeadLetter), podEndpoints)
-			},
-			180*time.Second, 5*time.Second,
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+			assert.NoError(c, err, "error calling subscriber to get dead letter count")
+			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
+		}, 180*time.Second, 5*time.Second,
 			"subscriber did not receive all dead letter messages within timeout")
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 	} else {
@@ -525,9 +523,7 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 	require.Equal(t, http.StatusOK, code)
 }
 
-// subscriberReceivedDeadLetterCount returns true when the subscriber has at least expectedCount messages on the dead letter topic.
-// The publisher calls each pod once and merges to have an aggregation over N pods.
-func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol string, expectedCount int, podEndpoints []string) bool {
+func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol string, podEndpoints []string) (int, error) {
 	req := callSubscriberMethodRequest{
 		ReqID:        "c-" + uuid.New().String(),
 		RemoteApp:    subscriberApp,
@@ -538,13 +534,14 @@ func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol str
 	rawReq, _ := json.Marshal(req)
 	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
 	if err != nil {
-		return false
+		return 0, err
 	}
 	var appResp receivedMessagesResponse
 	if json.Unmarshal(resp, &appResp) != nil {
-		return false
+		return 0, err
 	}
-	return len(appResp.ReceivedByTopicDeadLetter) >= expectedCount
+
+	return len(appResp.ReceivedByTopicDeadLetter), nil
 }
 
 func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse, podEndpoints []string) {
