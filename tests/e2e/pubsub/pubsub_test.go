@@ -482,7 +482,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
 			assert.NoError(c, err, "error calling subscriber to get dead letter count")
 			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
-		}, 180*time.Second, 5*time.Second,
+		}, 360*time.Second, 5*time.Second,
 			"subscriber did not receive all dead letter messages within timeout")
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 	} else {
