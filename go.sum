@@ -497,6 +497,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/dapr/components-contrib v1.16.2-0.20260121142358-4d749a667028 h1:+nwtsfar3A6+1dL4/qZZFHfjPgrG0oJSA3Wz9mU4XTE=
 github.com/dapr/components-contrib v1.16.2-0.20260121142358-4d749a667028/go.mod h1:8QF6l4FPCPxsvkI+vAINP4+mFCHaN+1xlZGJdVoNydI=
+github.com/dapr/components-contrib v1.16.9 h1:kwdzOR5ZYzcEXpPVpb3v70usbczrjmWQKk1p9arlfsc=
+github.com/dapr/components-contrib v1.16.9/go.mod h1:9kKhxIcefVJtxGMKtnkgJuJzGBvAEcyvgtKRQzL/KpY=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20251104160704-920ad8a7b958 h1:DSZgzdXlbF75fwvEkMQpPqn1jjxmWVoBNmI4Bc4dS40=
 github.com/dapr/components-contrib/tests/certification v0.0.0-20251104160704-920ad8a7b958/go.mod h1:IUB5RJv0Gj5qxsHjjhvEBIlxPka7cD7KAn/Coa2y27M=
 github.com/dapr/durabletask-go v0.11.0 h1:e9Ns/3a2b6JDKGuvksvx6gCHn7rd+nwZZyAXbg5Ley4=
