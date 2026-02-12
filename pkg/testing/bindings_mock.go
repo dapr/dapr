@@ -39,13 +39,20 @@ func (m *MockBinding) Read(ctx context.Context, handler bindings.Handler) error 
 
 // Invoke is a mock invoke method.
 func (m *MockBinding) Invoke(ctx context.Context, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
-	args := m.Called(req)
-	return nil, args.Error(0)
+	args := m.Called(ctx, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*bindings.InvokeResponse), args.Error(1)
 }
 
 // Operations is a mock operations method.
 func (m *MockBinding) Operations() []bindings.OperationKind {
-	return []bindings.OperationKind{bindings.CreateOperation}
+	args := m.Called()
+	if args.Get(0) == nil {
+		return []bindings.OperationKind{bindings.CreateOperation}
+	}
+	return args.Get(0).([]bindings.OperationKind)
 }
 
 func (m *MockBinding) Close() error {

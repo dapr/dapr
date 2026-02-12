@@ -198,9 +198,13 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	})
 
 	t.Run("traceparent is not provided and sampling is enabled (but almost 0 P=0.00001)", func(t *testing.T) {
-		const numTraces = 1000
+		// Use larger sample size for more stable statistics with very low sampling rate
+		const expectSampled = 1 // 100000 * 0.00001 = 1
+		const numTraces = 100000
 		sampledCount := runTraces(t, "test_trace", numTraces, "0.00001", false, 0)
-		require.Less(t, sampledCount, int(numTraces*.001), "Expected to sample no traces (+/- 10%) but only sampled %d", sampledCount)
+		// Allow 50% tolerance since expected value is very small (1 trace)
+		require.InEpsilon(t, expectSampled, sampledCount, 0.5, "Expected to sample %d (+/- 50%%) traces but sampled %d", expectSampled, sampledCount)
+		require.Less(t, sampledCount, numTraces, "Expected to sample fewer than the total number of traces, but sampled all of them!")
 	})
 }
 
