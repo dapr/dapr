@@ -163,7 +163,7 @@ func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
 	}
 }
 
-// StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
+// StartInternalCallbackSpan starts trace span for internal callback such as input bindings.
 func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec *config.TracingSpec) (context.Context, trace.Span) {
 	if spec == nil || !diagUtils.IsTracingEnabled(spec.SamplingRate) {
 		return ctx, nil
@@ -172,6 +172,21 @@ func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trac
 	ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
 	//nolint:spancheck
 	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
+
+	//nolint:spancheck
+	return ctx, span
+}
+
+// StartPubsubConsumerSpan starts trace span for pubsub subscription message processing.
+// Uses SpanKindConsumer per OTel semantic conventions for messaging.
+func StartPubsubConsumerSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec *config.TracingSpec) (context.Context, trace.Span) {
+	if spec == nil || !diagUtils.IsTracingEnabled(spec.SamplingRate) {
+		return ctx, nil
+	}
+
+	ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
+	//nolint:spancheck
+	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindConsumer))
 
 	//nolint:spancheck
 	return ctx, span
