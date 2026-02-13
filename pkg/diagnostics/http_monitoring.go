@@ -124,13 +124,26 @@ func (h *httpMetrics) getMetricsPath(path string) string {
 	if _, ok := diagUtils.StaticPaths[path]; ok {
 		return path
 	}
-	if matchedPath, ok := h.pathMatcher.match(path); ok {
-		return matchedPath
+	matchedPath, ok := h.pathMatcher.match(path)
+	// Return the match if found, ignoring legacy root catch-all to allow fallback.
+	if ok && matchedPath != "" {
+		if !h.legacy || matchedPath != path {
+			return matchedPath
+		}
+	}
+	// Fallback: try matching normalized path
+	if h.pathMatcher.enabled() {
+		normalized := h.convertPathToMetricLabel(path)
+		if normalized != path {
+			if matchedPath, ok := h.pathMatcher.match(normalized); ok && matchedPath != "/" && matchedPath != "" {
+				return matchedPath
+			}
+		}
 	}
 	if !h.legacy {
 		return ""
 	}
-	return path
+	return h.convertPathToMetricLabel(path)
 }
 
 func (h *httpMetrics) getMetricsMethod(method string) string {
@@ -341,7 +354,9 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		}
 
 		var path string
-		if h.legacy || h.pathMatcher.enabled() {
+		if h.pathMatcher.enabled() {
+			path = NormalizeHTTPPath(r.URL.Path)
+		} else if h.legacy {
 			path = h.convertPathToMetricLabel(r.URL.Path)
 		}
 
