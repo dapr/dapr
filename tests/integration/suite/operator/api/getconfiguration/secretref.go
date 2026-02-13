@@ -29,7 +29,6 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	"github.com/dapr/kit/ptr"
 	"github.com/dapr/dapr/tests/integration/framework"
 	httpClient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -39,6 +38,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/otel"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -173,4 +173,3 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, []string{"my-secret-api-key"}, md.Get("x-api-key"))
 	})
 }
-
