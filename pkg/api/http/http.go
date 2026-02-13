@@ -1166,7 +1166,12 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 		pubsub.ApplyMetadata(envelope, features, metadata)
 
-		data, err = json.Marshal(envelope)
+		// Serialize based on requested format
+		if metadata[runtimePubsub.MetadataKeyCloudEventsFormat] == runtimePubsub.CloudEventsFormatProtobuf {
+			data, err = runtimePubsub.SerializeCloudEventProto(envelope)
+		} else {
+			data, err = json.Marshal(envelope)
+		}
 		if err != nil {
 			nerr := apierrors.PubSub(pubsubName).WithAppError(
 				a.universal.AppID(), err,
