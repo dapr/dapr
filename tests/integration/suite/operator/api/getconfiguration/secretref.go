@@ -162,11 +162,9 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		assert.Eventually(t, func() bool {
-			return len(s.collector.GetSpans()) > 0
-		}, time.Second*20, time.Millisecond*100, "should receive spans")
-
-		require.NotEmpty(t, s.collector.GetSpans(), "Should have received spans")
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+		  assert.NotEmpty(c, s.collector.GetSpans())
+		}, time.Second*20, time.Millisecond*10, "should receive spans with custom headers configured")
 
 		// Verify the custom headers were sent in the gRPC metadata
 		md := s.collector.GetHeaders()
