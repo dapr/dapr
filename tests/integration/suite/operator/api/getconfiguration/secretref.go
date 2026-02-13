@@ -172,7 +172,3 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, []string{"my-secret-api-key"}, md.Get("x-api-key"))
 	})
 }
-
-func boolPtr(b bool) *bool {
-	return &b
-}
