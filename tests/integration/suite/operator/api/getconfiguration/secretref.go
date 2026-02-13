@@ -73,7 +73,7 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 				Otel: &configapi.OtelSpec{
 					EndpointAddress: s.collector.OTLPGRPCAddress(),
 					Protocol:        "grpc",
-					IsSecure:        boolPtr(false),
+					IsSecure:        ptr.Of(false),
 					Headers: []commonapi.NameValuePair{
 						{
 							Name: "x-plain-header",
