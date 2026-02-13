@@ -228,6 +228,30 @@ func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 	require.Equal(t, "/dapr/config", matchedPath)
 }
 
+func TestHTTPMetricsPathMatchingLowCardinalityActorPath(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	testHTTP.enabled = false
+	paths := []string{
+		"/actors/WeatherActor/{id}/method/GetWeatherAsync",
+		"/v1.0/actors/WeatherActor/{id}/method/GetWeatherAsync",
+	}
+	configHTTP := NewHTTPMonitoringConfig(paths, false, false)
+	meter := view.NewMeter()
+	meter.Start()
+	t.Cleanup(func() {
+		meter.Stop()
+	})
+	testHTTP.Init(meter, "fakeID", configHTTP, nil)
+
+	rawPath := "/v1.0/actors/WeatherActor/actor-123/method/GetWeatherAsync"
+	got := testHTTP.getMetricsPath(rawPath)
+	require.Equal(t, "/v1.0/actors/WeatherActor/{id}/method/GetWeatherAsync", got,
+		"getMetricsPath should return matched pattern for actor path when pathMatching is set and increasedCardinality is false")
+
+	got = testHTTP.getMetricsPath("/some/other/path")
+	require.Equal(t, "", got, "non-matched path should map to catch-all (empty string)")
+}
+
 func TestHTTPMetricsPathMatchingLowCardinalityRootPathRegister(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
