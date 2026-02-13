@@ -473,9 +473,46 @@ spec:
                     properties:
                       endpointAddress:
                         type: string
+                      headers:
+                        description: |-
+                          Headers to add to the OTLP trace exporter request.
+                          Each header can contain plaintext values, reference secrets, or reference environment variables.
+                        items:
+                          description: NameValuePair is a name/value pair.
+                          properties:
+                            envRef:
+                              description: EnvRef is the name of an environmental
+                                variable to read the value from.
+                              type: string
+                            name:
+                              description: Name of the property.
+                              type: string
+                            secretKeyRef:
+                              description: SecretKeyRef is the reference of a value
+                                in a secret store component.
+                              properties:
+                                key:
+                                  description: Field in the secret.
+                                  type: string
+                                name:
+                                  description: Secret name.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            value:
+                              description: Value of the property, in plaintext.
+                              x-kubernetes-preserve-unknown-fields: true
+                          required:
+                          - name
+                          type: object
+                        type: array
                       isSecure:
                         type: boolean
                       protocol:
+                        type: string
+                      timeout:
+                        description: Timeout for the OTLP trace exporter request.
                         type: string
                     required:
                     - endpointAddress

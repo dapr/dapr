@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -35,6 +36,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -190,6 +192,268 @@ func TestProcessComponentSecrets(t *testing.T) {
 		jsonEnc, _ := json.Marshal(enc)
 
 		assert.JSONEq(t, string(jsonEnc), string(c.Spec.Metadata[0].Value.Raw))
+	})
+}
+
+func TestProcessConfigurationSecrets(t *testing.T) {
+	t.Run("no secret ref, no error", func(t *testing.T) {
+		config := configurationapi.Configuration{
+			Spec: configurationapi.ConfigurationSpec{
+				TracingSpec: &configurationapi.TracingSpec{
+					Otel: &configurationapi.OtelSpec{
+						EndpointAddress: "otel.example.com:4317",
+						Protocol:        "grpc",
+						Headers: []commonapi.NameValuePair{
+							{
+								Name: "plain-header",
+								Value: commonapi.DynamicValue{
+									JSON: apiextensionsV1.JSON{Raw: []byte(`"plain-value"`)},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := processConfigurationSecrets(t.Context(), &config, "default", nil)
+		require.NoError(t, err)
+		require.Len(t, config.Spec.TracingSpec.Otel.Headers, 1)
+		assert.Equal(t, "plain-header", config.Spec.TracingSpec.Otel.Headers[0].Name)
+		assert.Equal(t, "plain-value", config.Spec.TracingSpec.Otel.Headers[0].Value.String())
+	})
+
+	t.Run("secret ref exists, secret extracted", func(t *testing.T) {
+		config := configurationapi.Configuration{
+			Spec: configurationapi.ConfigurationSpec{
+				TracingSpec: &configurationapi.TracingSpec{
+					Otel: &configurationapi.OtelSpec{
+						EndpointAddress: "otel.example.com:4317",
+						Protocol:        "grpc",
+						Headers: []commonapi.NameValuePair{
+							{
+								Name: "api-key",
+								SecretKeyRef: commonapi.SecretKeyRef{
+									Name: "otel-secret",
+									Key:  "token",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		require.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "otel-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"token": []byte("my-secret-api-key"),
+				},
+			}).
+			Build()
+
+		err = processConfigurationSecrets(t.Context(), &config, "default", client)
+		require.NoError(t, err)
+		require.Len(t, config.Spec.TracingSpec.Otel.Headers, 1)
+		assert.Equal(t, "api-key", config.Spec.TracingSpec.Otel.Headers[0].Name)
+		assert.Equal(t, "my-secret-api-key", config.Spec.TracingSpec.Otel.Headers[0].Value.String())
+	})
+
+	t.Run("secret ref with missing secret returns error", func(t *testing.T) {
+		config := configurationapi.Configuration{
+			Spec: configurationapi.ConfigurationSpec{
+				TracingSpec: &configurationapi.TracingSpec{
+					Otel: &configurationapi.OtelSpec{
+						EndpointAddress: "otel.example.com:4317",
+						Protocol:        "grpc",
+						Headers: []commonapi.NameValuePair{
+							{
+								Name: "api-key",
+								SecretKeyRef: commonapi.SecretKeyRef{
+									Name: "nonexistent-secret",
+									Key:  "token",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		require.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			Build()
+
+		err = processConfigurationSecrets(t.Context(), &config, "default", client)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get secret")
+	})
+
+	t.Run("secret ref with missing key returns error", func(t *testing.T) {
+		config := configurationapi.Configuration{
+			Spec: configurationapi.ConfigurationSpec{
+				TracingSpec: &configurationapi.TracingSpec{
+					Otel: &configurationapi.OtelSpec{
+						EndpointAddress: "otel.example.com:4317",
+						Protocol:        "grpc",
+						Headers: []commonapi.NameValuePair{
+							{
+								Name: "api-key",
+								SecretKeyRef: commonapi.SecretKeyRef{
+									Name: "otel-secret",
+									Key:  "nonexistent-key",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		require.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "otel-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"token": []byte("my-secret-value"),
+				},
+			}).
+			Build()
+
+		err = processConfigurationSecrets(t.Context(), &config, "default", client)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "key nonexistent-key not found in secret")
+	})
+
+	t.Run("multiple headers with mix of plaintext and secrets", func(t *testing.T) {
+		config := configurationapi.Configuration{
+			Spec: configurationapi.ConfigurationSpec{
+				TracingSpec: &configurationapi.TracingSpec{
+					Otel: &configurationapi.OtelSpec{
+						EndpointAddress: "otel.example.com:4317",
+						Protocol:        "grpc",
+						Headers: []commonapi.NameValuePair{
+							{
+								Name: "plain-header",
+								Value: commonapi.DynamicValue{
+									JSON: apiextensionsV1.JSON{Raw: []byte(`"plain-value"`)},
+								},
+							},
+							{
+								Name: "secret-header",
+								SecretKeyRef: commonapi.SecretKeyRef{
+									Name: "otel-secret",
+									Key:  "token",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		require.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "otel-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"token": []byte("resolved-secret"),
+				},
+			}).
+			Build()
+
+		err = processConfigurationSecrets(t.Context(), &config, "default", client)
+		require.NoError(t, err)
+		require.Len(t, config.Spec.TracingSpec.Otel.Headers, 2)
+		assert.Equal(t, "plain-header", config.Spec.TracingSpec.Otel.Headers[0].Name)
+		assert.Equal(t, "plain-value", config.Spec.TracingSpec.Otel.Headers[0].Value.String())
+		assert.Equal(t, "secret-header", config.Spec.TracingSpec.Otel.Headers[1].Name)
+		assert.Equal(t, "resolved-secret", config.Spec.TracingSpec.Otel.Headers[1].Value.String())
+	})
+
+	t.Run("empty key returns error", func(t *testing.T) {
+		config := configurationapi.Configuration{
+			Spec: configurationapi.ConfigurationSpec{
+				TracingSpec: &configurationapi.TracingSpec{
+					Otel: &configurationapi.OtelSpec{
+						EndpointAddress: "otel.example.com:4317",
+						Protocol:        "grpc",
+						Headers: []commonapi.NameValuePair{
+							{
+								Name: "api-key",
+								SecretKeyRef: commonapi.SecretKeyRef{
+									Name: "otel-secret",
+									Key:  "",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		require.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "otel-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"token": []byte("my-secret-value"),
+				},
+			}).
+			Build()
+
+		err = processConfigurationSecrets(t.Context(), &config, "default", client)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "secret key is required")
 	})
 }
 
