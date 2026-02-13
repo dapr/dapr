@@ -20,6 +20,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
+
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
@@ -102,11 +104,12 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.OrchestrationRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent) error {
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
+	// Or if they still have any pending activity result awaited.
 	if !runtimestate.IsCompleted(rs) {
-		return fmt.Errorf("an active workflow with ID '%s' already exists", o.actorID)
+		return apierrors.Workflow(o.actorID).InstanceExists()
 	}
 	if o.activityResultAwaited.Load() {
-		return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", o.actorID)
+		return apierrors.Workflow(o.actorID).InstanceExists()
 	}
 	log.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", o.actorID)
 	state.Reset()
