@@ -35,22 +35,16 @@ type SubscriptionUpdateEvent struct {
 
 func (a *apiServer) OnSubscriptionUpdated(ctx context.Context, eventType operatorv1pb.ResourceEventType, subscription *subapi.Subscription) {
 	a.subLock.Lock()
-	var wg sync.WaitGroup
-	wg.Add(len(a.allSubscriptionUpdateChan))
+	defer a.subLock.Unlock()
 	for _, connUpdateChan := range a.allSubscriptionUpdateChan {
-		go func(connUpdateChan chan *SubscriptionUpdateEvent) {
-			defer wg.Done()
-			select {
-			case connUpdateChan <- &SubscriptionUpdateEvent{
-				Subscription: subscription,
-				EventType:    eventType,
-			}:
-			case <-ctx.Done():
-			}
-		}(connUpdateChan)
+		select {
+		case connUpdateChan <- &SubscriptionUpdateEvent{
+			Subscription: subscription,
+			EventType:    eventType,
+		}:
+		case <-ctx.Done():
+		}
 	}
-	wg.Wait()
-	a.subLock.Unlock()
 }
 
 // ListSubscriptions returns a list of Dapr pub/sub subscriptions.
