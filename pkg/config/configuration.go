@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -55,12 +56,6 @@ const (
 	// Enables feature to support workflows in a clustered deployment.
 	WorkflowsClusteredDeployment Feature = "WorkflowsClusteredDeployment"
 
-	// Enables a feature to make activities send their results to workflow when
-	// the workflow is running on a different application. Useful when using
-	// cross app workflows. Ensures that activities are not retried forever if
-	// the workflow app is not available, and instead queues the result for when
-	// the workflow app is back online. Strongly recommended to always be enabled
-	// if using the same Dapr version on all daprds.
 	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
 )
 
@@ -572,8 +567,8 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 	if len(b) == 0 {
 		return nil, fmt.Errorf("configuration %s not found", config)
 	}
-	conf := LoadDefaultConfiguration()
-	err = json.Unmarshal(b, conf)
+
+	conf, err := convertKubeConfiguration(b)
 	if err != nil {
 		return nil, err
 	}
@@ -585,6 +580,66 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
+	return conf, nil
+}
+
+// convertKubeConfiguration converts JSON bytes of a Kubernetes CRD Configuration
+// into the internal Configuration type. OTel headers ([]NameValuePair) are
+// converted to "key=value" strings, and metav1.Duration timeout is converted
+// to *time.Duration. All other fields share the same JSON tags and transfer
+// directly via marshal/unmarshal.
+func convertKubeConfiguration(b []byte) (*Configuration, error) {
+	var crdConf configurationapi.Configuration
+	if err := json.Unmarshal(b, &crdConf); err != nil {
+		return nil, err
+	}
+
+	if crdConf.Spec.TracingSpec == nil || crdConf.Spec.TracingSpec.Otel == nil ||
+		(len(crdConf.Spec.TracingSpec.Otel.Headers) == 0 && crdConf.Spec.TracingSpec.Otel.Timeout == nil) {
+		conf := LoadDefaultConfiguration()
+		if err := json.Unmarshal(b, conf); err != nil {
+			return nil, err
+		}
+		return conf, nil
+	}
+
+	crdCopy := crdConf.DeepCopy()
+	crdCopy.Spec.TracingSpec.Otel.Headers = nil
+	crdCopy.Spec.TracingSpec.Otel.Timeout = nil
+
+	cleaned, err := json.Marshal(crdCopy)
+	if err != nil {
+		return nil, err
+	}
+
+	conf := LoadDefaultConfiguration()
+	if err := json.Unmarshal(cleaned, conf); err != nil {
+		return nil, err
+	}
+
+	if conf.Spec.TracingSpec == nil {
+		conf.Spec.TracingSpec = &TracingSpec{}
+	}
+	if conf.Spec.TracingSpec.Otel == nil {
+		conf.Spec.TracingSpec.Otel = &OtelSpec{}
+	}
+
+	otel := crdConf.Spec.TracingSpec.Otel
+	for _, h := range otel.Headers {
+		var value string
+		if h.HasValue() {
+			value = h.Value.String()
+		}
+		conf.Spec.TracingSpec.Otel.Headers = append(
+			conf.Spec.TracingSpec.Otel.Headers, h.Name+"="+value,
+		)
+	}
+
+	if otel.Timeout != nil {
+		timeout := otel.Timeout.Duration
+		conf.Spec.TracingSpec.Otel.Timeout = &timeout
+	}
+
 	return conf, nil
 }
 

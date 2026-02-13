@@ -29,6 +29,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	"github.com/dapr/kit/ptr"
 	"github.com/dapr/dapr/tests/integration/framework"
 	httpClient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -45,9 +46,9 @@ func init() {
 }
 
 // secretref tests the full flow:
-// - operator resolves secret references in Configuration OTel headers,
-// - converts CRD types to runtime-compatible, internal config types,
-// - daprd receives the config,
+// - operator resolves secret references in Configuration OTel headers in-place,
+// - sends the CRD Configuration type with resolved values,
+// - daprd receives the CRD config and converts to internal types,
 // - traces are exported to the collector with the correct custom headers.
 type secretref struct {
 	collector *otel.Collector
@@ -163,7 +164,7 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-		  assert.NotEmpty(c, s.collector.GetSpans())
+			assert.NotEmpty(c, s.collector.GetSpans())
 		}, time.Second*20, time.Millisecond*10, "should receive spans with custom headers configured")
 
 		// Verify the custom headers were sent in the gRPC metadata
@@ -172,3 +173,4 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, []string{"my-secret-api-key"}, md.Get("x-api-key"))
 	})
 }
+

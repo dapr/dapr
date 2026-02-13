@@ -19,11 +19,12 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
@@ -40,13 +41,12 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 		return nil, fmt.Errorf("error getting configuration %s/%s: %w", in.GetNamespace(), in.GetName(), err)
 	}
 
-	resolvedHeaders, err := processConfigurationSecrets(ctx, &config, in.GetNamespace(), a.Client)
-	if err != nil {
+	if err := processConfigurationSecrets(ctx, &config, in.GetNamespace(), a.Client); err != nil {
 		log.Warnf("error processing configuration %s secrets from pod %s/%s: %s", config.Name, in.GetNamespace(), in.GetPodName(), err)
 		return nil, fmt.Errorf("error processing configuration secrets: %w", err)
 	}
 
-	b, err := marshalConfigurationWithResolvedOtel(&config, resolvedHeaders)
+	b, err := json.Marshal(&config)
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling configuration: %w", err)
 	}
@@ -55,90 +55,45 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	}, nil
 }
 
-// marshalConfigurationWithResolvedOtel marshals the configuration, converting
-// CRD NameValuePair headers to simple "key=value" strings and metav1.Duration
-// timeout to time.Duration that the runtime internal config expects.
-func marshalConfigurationWithResolvedOtel(crdConfig *configurationapi.Configuration, resolvedHeaders []string) ([]byte, error) {
-	if crdConfig.Spec.TracingSpec == nil || crdConfig.Spec.TracingSpec.Otel == nil {
-		return json.Marshal(crdConfig)
-	}
-
-	// Deep copy and clear fields that have incompatible types between
-	// the CRD and the internal config
-	configCopy := crdConfig.DeepCopy()
-	configCopy.Spec.TracingSpec.Otel.Headers = nil
-	configCopy.Spec.TracingSpec.Otel.Timeout = nil
-
-	b, err := json.Marshal(configCopy)
-	if err != nil {
-		return nil, err
-	}
-
-	var ic config.Configuration
-	if err := json.Unmarshal(b, &ic); err != nil {
-		return nil, err
-	}
-
-	// Set the converted OTel fields directly on the typed struct
-	if ic.Spec.TracingSpec == nil {
-		ic.Spec.TracingSpec = &config.TracingSpec{}
-	}
-	if ic.Spec.TracingSpec.Otel == nil {
-		ic.Spec.TracingSpec.Otel = &config.OtelSpec{}
-	}
-	ic.Spec.TracingSpec.Otel.Headers = resolvedHeaders
-	if crdConfig.Spec.TracingSpec.Otel.Timeout != nil {
-		timeout := crdConfig.Spec.TracingSpec.Otel.Timeout.Duration
-		ic.Spec.TracingSpec.Otel.Timeout = &timeout
-	}
-
-	return json.Marshal(ic)
-}
-
 // processConfigurationSecrets resolves secret references in configuration
-// headers and returns the headers as simple "key=value" strings.
-func processConfigurationSecrets(ctx context.Context, config *configurationapi.Configuration, namespace string, kubeClient client.Client) ([]string, error) {
+func processConfigurationSecrets(ctx context.Context, config *configurationapi.Configuration, namespace string, kubeClient client.Client) error {
 	if config.Spec.TracingSpec == nil || config.Spec.TracingSpec.Otel == nil {
-		return nil, nil
+		return nil
 	}
 
 	otel := config.Spec.TracingSpec.Otel
-	if len(otel.Headers) == 0 {
-		return nil, nil
-	}
-
-	resolved := make([]string, 0, len(otel.Headers))
-
-	for _, header := range otel.Headers {
-		var value string
-
-		if header.SecretKeyRef.Name != "" {
-			var secret corev1.Secret
-			err := kubeClient.Get(ctx, types.NamespacedName{
-				Name:      header.SecretKeyRef.Name,
-				Namespace: namespace,
-			}, &secret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get secret %s for header %s: %w", header.SecretKeyRef.Name, header.Name, err)
-			}
-
-			key := header.SecretKeyRef.Key
-			if key == "" {
-				return nil, fmt.Errorf("secret key is required for header %s", header.Name)
-			}
-
-			val, ok := secret.Data[key]
-			if !ok {
-				return nil, fmt.Errorf("key %s not found in secret %s", key, header.SecretKeyRef.Name)
-			}
-
-			value = string(val)
-		} else if header.HasValue() {
-			value = header.Value.String()
+	for i, header := range otel.Headers {
+		if header.SecretKeyRef.Name == "" {
+			continue
 		}
 
-		resolved = append(resolved, header.Name+"="+value)
+		key := header.SecretKeyRef.Key
+		if key == "" {
+			return fmt.Errorf("secret key is required for header %s", header.Name)
+		}
+
+		var secret corev1.Secret
+		err := kubeClient.Get(ctx, types.NamespacedName{
+			Name:      header.SecretKeyRef.Name,
+			Namespace: namespace,
+		}, &secret)
+		if err != nil {
+			return fmt.Errorf("failed to get secret %s for header %s: %w", header.SecretKeyRef.Name, header.Name, err)
+		}
+
+		val, ok := secret.Data[key]
+		if !ok {
+			return fmt.Errorf("key %s not found in secret %s", key, header.SecretKeyRef.Name)
+		}
+
+		jsonVal, err := json.Marshal(string(val))
+		if err != nil {
+			return err
+		}
+		otel.Headers[i].Value = commonapi.DynamicValue{
+			JSON: apiextensionsV1.JSON{Raw: jsonVal},
+		}
 	}
 
-	return resolved, nil
+	return nil
 }

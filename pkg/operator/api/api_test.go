@@ -216,10 +216,11 @@ func TestProcessConfigurationSecrets(t *testing.T) {
 			},
 		}
 
-		resolved, err := processConfigurationSecrets(t.Context(), &config, "default", nil)
+		err := processConfigurationSecrets(t.Context(), &config, "default", nil)
 		require.NoError(t, err)
-		require.Len(t, resolved, 1)
-		assert.Equal(t, "plain-header=plain-value", resolved[0])
+		require.Len(t, config.Spec.TracingSpec.Otel.Headers, 1)
+		assert.Equal(t, "plain-header", config.Spec.TracingSpec.Otel.Headers[0].Name)
+		assert.Equal(t, "plain-value", config.Spec.TracingSpec.Otel.Headers[0].Value.String())
 	})
 
 	t.Run("secret ref exists, secret extracted", func(t *testing.T) {
@@ -263,10 +264,11 @@ func TestProcessConfigurationSecrets(t *testing.T) {
 			}).
 			Build()
 
-		resolved, err := processConfigurationSecrets(t.Context(), &config, "default", client)
+		err = processConfigurationSecrets(t.Context(), &config, "default", client)
 		require.NoError(t, err)
-		require.Len(t, resolved, 1)
-		assert.Equal(t, "api-key=my-secret-api-key", resolved[0])
+		require.Len(t, config.Spec.TracingSpec.Otel.Headers, 1)
+		assert.Equal(t, "api-key", config.Spec.TracingSpec.Otel.Headers[0].Name)
+		assert.Equal(t, "my-secret-api-key", config.Spec.TracingSpec.Otel.Headers[0].Value.String())
 	})
 
 	t.Run("secret ref with missing secret returns error", func(t *testing.T) {
@@ -301,7 +303,7 @@ func TestProcessConfigurationSecrets(t *testing.T) {
 			WithScheme(s).
 			Build()
 
-		_, err = processConfigurationSecrets(t.Context(), &config, "default", client)
+		err = processConfigurationSecrets(t.Context(), &config, "default", client)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get secret")
 	})
@@ -347,7 +349,7 @@ func TestProcessConfigurationSecrets(t *testing.T) {
 			}).
 			Build()
 
-		_, err = processConfigurationSecrets(t.Context(), &config, "default", client)
+		err = processConfigurationSecrets(t.Context(), &config, "default", client)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "key nonexistent-key not found in secret")
 	})
@@ -399,11 +401,13 @@ func TestProcessConfigurationSecrets(t *testing.T) {
 			}).
 			Build()
 
-		resolved, err := processConfigurationSecrets(t.Context(), &config, "default", client)
+		err = processConfigurationSecrets(t.Context(), &config, "default", client)
 		require.NoError(t, err)
-		require.Len(t, resolved, 2)
-		assert.Equal(t, "plain-header=plain-value", resolved[0])
-		assert.Equal(t, "secret-header=resolved-secret", resolved[1])
+		require.Len(t, config.Spec.TracingSpec.Otel.Headers, 2)
+		assert.Equal(t, "plain-header", config.Spec.TracingSpec.Otel.Headers[0].Name)
+		assert.Equal(t, "plain-value", config.Spec.TracingSpec.Otel.Headers[0].Value.String())
+		assert.Equal(t, "secret-header", config.Spec.TracingSpec.Otel.Headers[1].Name)
+		assert.Equal(t, "resolved-secret", config.Spec.TracingSpec.Otel.Headers[1].Value.String())
 	})
 
 	t.Run("empty key returns error", func(t *testing.T) {
@@ -447,7 +451,7 @@ func TestProcessConfigurationSecrets(t *testing.T) {
 			}).
 			Build()
 
-		_, err = processConfigurationSecrets(t.Context(), &config, "default", client)
+		err = processConfigurationSecrets(t.Context(), &config, "default", client)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "secret key is required")
 	})
