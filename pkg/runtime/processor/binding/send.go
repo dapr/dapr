@@ -295,7 +295,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 		}
 
 		ctx = b.grpc.AddAppTokenToContext(ctx)
-		conn, err := b.grpc.GetAppClient()
+		conn, _, err := b.grpc.GetAppClient()
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
@@ -428,7 +428,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 }
 
 func (b *binding) getSubscribedBindingsGRPC(ctx context.Context) ([]string, error) {
-	conn, err := b.grpc.GetAppClient()
+	conn, _, err := b.grpc.GetAppClient()
 	if err != nil {
 		return nil, fmt.Errorf("error while getting app client: %w", err)
 	}
