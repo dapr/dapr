@@ -2280,7 +2280,7 @@ func TestOtelResourceDetection(t *testing.T) {
 			// Verify basic attributes prefixes
 			for prefix := range tc.expectedAttrsPrefix {
 				var found bool
-				for key, _ := range attrMap {
+				for key := range attrMap {
 					if strings.HasPrefix(key, prefix) {
 						found = true
 						break
