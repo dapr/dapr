@@ -2453,7 +2453,7 @@ func testSecurity(t *testing.T) security.Handler {
 }
 
 func TestOtelResourceDetection(t *testing.T) {
-	const DEFAULT_OTEL_SERVICE_NAME = "dapr-sidecar"
+	const DefaultOTelServiceName = "dapr-sidecar"
 
 	tests := []struct {
 		name                string
@@ -2467,7 +2467,7 @@ func TestOtelResourceDetection(t *testing.T) {
 			name:                "No environment variable, use default app ID",
 			otelServiceName:     "",
 			otelResourceAttrs:   "",
-			expectedServiceName: DEFAULT_OTEL_SERVICE_NAME,
+			expectedServiceName: DefaultOTelServiceName,
 			expectedAttrsPrefix: map[string]bool{
 				"os.":            true,
 				"host.":          true,
@@ -2515,8 +2515,8 @@ func TestOtelResourceDetection(t *testing.T) {
 			t.Setenv("OTEL_RESOURCE_ATTRIBUTES", tc.otelResourceAttrs)
 
 			ctx := t.Context()
-			r, err := createOtelResource(ctx, DEFAULT_OTEL_SERVICE_NAME)
-			assert.NoError(t, err, "creating OpenTelemetry resource should not error, err: %v", err)
+			r, err := createOtelResource(ctx, DefaultOTelServiceName)
+			require.ErrorIs(t, err, nil, "creating OpenTelemetry resource should not error, err: %v", err)
 
 			attrs := r.Attributes()
 
