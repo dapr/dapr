@@ -127,7 +127,7 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
-	if _, err := o.createWorkflowReminder(ctx, "start", nil, start, o.appID); err != nil {
+	if _, err := o.createWorkflowReminder(ctx, reminderPrefixStart, nil, start, o.appID); err != nil {
 		return err
 	}
 
