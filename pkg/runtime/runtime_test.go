@@ -2263,7 +2263,7 @@ func TestOtelResourceDetection(t *testing.T) {
 
 			ctx := t.Context()
 			r, err := createOtelResource(ctx, DefaultOTelServiceName)
-			require.ErrorIs(t, err, nil, "creating OpenTelemetry resource should not error, err: %v", err)
+			require.NoError(t, err, "creating OpenTelemetry resource should not error, err: %v", err)
 
 			attrs := r.Attributes()
 			attrMap := make(map[string]string)
