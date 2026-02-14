@@ -35,9 +35,9 @@ func TestConvertPathToMethodName(t *testing.T) {
 		{"/v1/actors/DemoActor/1/timer/name", "/v1/actors/DemoActor/{id}/timer"},
 		{"/v1/actors/DemoActor/1/timer/name?query=string", "/v1/actors/DemoActor/{id}/timer"},
 		{"v1/actors/DemoActor/1/timer/name", "/v1/actors/DemoActor/{id}/timer"},
-		{"actors/DemoActor/1/method/method1", "actors/DemoActor/{id}/method/method1"},
-		{"actors/DemoActor/1/method/timer/timer1", "actors/DemoActor/{id}/method/timer/timer1"},
-		{"actors/DemoActor/1/method/remind/reminder1", "actors/DemoActor/{id}/method/remind/reminder1"},
+		{"actors/DemoActor/1/method/method1", "/actors/DemoActor/{id}/method/method1"},
+		{"actors/DemoActor/1/method/timer/timer1", "/actors/DemoActor/{id}/method/timer"},
+		{"actors/DemoActor/1/method/remind/reminder1", "/actors/DemoActor/{id}/method/remind"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/mywf/start?instanceID=1234", "/v1.0-alpha1/workflows/workflowComponentName/mywf/start"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/mywf/start", "/v1.0-alpha1/workflows/workflowComponentName/mywf/start"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/1234/start/value1/value2", "/v1.0-alpha1/workflows/workflowComponentName/{instanceId}/start"},
@@ -51,6 +51,7 @@ func TestConvertPathToMethodName(t *testing.T) {
 		{"/v1.0-alpha1/workflows/workflowComponentName", "/v1.0-alpha1/workflows/workflowComponentName"},
 		{"/v1.0-alpha1/workflows", "/v1.0-alpha1/workflows"},
 		{"", ""},
+		{"/v1.0/invoke/myApp/method/orders/123", "/v1.0/invoke/myApp/method/orders"},
 	}
 
 	testHTTP := newHTTPMetrics()

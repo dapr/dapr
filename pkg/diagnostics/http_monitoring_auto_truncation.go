@@ -19,7 +19,7 @@ import (
 
 // convertPathToMetricLabel removes the variant parameters in URL path for low cardinality label space
 // For example, it removes {keys} param from /v1/state/statestore/{keys}.
-// This is only used for legacy metrics
+// This is used for Low Cardinality metrics fallback
 func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 	if path == "" {
 		return path
@@ -42,7 +42,16 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 	// Replace actor id with {id} for appcallback url - 'actors/DemoActor/1/method/method1'
 	if parsedPath[0] == "actors" {
 		parsedPath[2] = "{id}"
-		return strings.Join(parsedPath, "/")
+
+		// actors/Type/id/method/methodName
+		if len(parsedPath) > 3 && parsedPath[3] == "method" {
+			// Keep method name (index 4), truncate rest
+			if len(parsedPath) > 5 {
+				return "/" + strings.Join(parsedPath[0:5], "/")
+			}
+		}
+
+		return "/" + strings.Join(parsedPath, "/")
 	}
 
 	switch parsedPath[1] {
@@ -57,8 +66,33 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 		}
 		// ignore id part
 		parsedPath[3] = "{id}"
-		// Concat 5 items(v1, actors, DemoActor, {id}, timer) in /v1/actors/DemoActor/1/timer/name
+
+		// /v1/actors/Type/id/method/methodName
+		if parsedPath[4] == "method" {
+			if len(parsedPath) > 5 {
+				// We want to keep the method name, but truncate anything after it.
+				// parsedPath[5] contains the rest of the path (because of SplitN(..., 6))
+				// So we take the first segment of parsedPath[5] as the method name.
+				parts := strings.SplitN(parsedPath[5], "/", 2)
+				parsedPath[5] = parts[0]
+				return "/" + strings.Join(parsedPath[0:6], "/")
+			}
+			return "/" + strings.Join(parsedPath, "/")
+		}
+
+		// For state, reminders, timers, truncate after the category (index 4)
+		// Concat 5 items(v1, actors, DemoActor, {id}, state) in /v1/actors/DemoActor/1/state/key
 		return "/" + strings.Join(parsedPath[0:5], "/")
+	case "invoke":
+		if len(parsedPath) < 5 {
+			return path
+		}
+		// /v1.0/invoke/appId/method/methodName
+		if parsedPath[3] == "method" && len(parsedPath) > 4 {
+			// Return /v1.0/invoke/appId/method/methodName
+			return "/" + strings.Join(parsedPath[0:5], "/")
+		}
+		return path
 	case "workflows":
 		if len(parsedPath) < 4 {
 			return path

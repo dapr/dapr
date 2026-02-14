@@ -101,7 +101,7 @@ func (pm *pathMatching) match(path string) (string, bool) {
 	}
 
 	if pattern == "" {
-		return "", true
+		return "", false
 	}
 
 	return pattern, true
