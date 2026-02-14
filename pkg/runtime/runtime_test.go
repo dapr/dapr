@@ -2453,7 +2453,14 @@ func testSecurity(t *testing.T) security.Handler {
 }
 
 func TestOtelResourceDetection(t *testing.T) {
-	const DefaultOTelServiceName = "dapr-sidecar"
+	defaultOTelServiceName := "dapr-sidecar"
+	defaultAttrsPrefix := map[string]bool{
+		"os.":            true,
+		"host.":          true,
+		"service.":       true,
+		"process.":       true,
+		"telemetry.sdk.": true,
+	}
 
 	tests := []struct {
 		name                string
@@ -2467,40 +2474,22 @@ func TestOtelResourceDetection(t *testing.T) {
 			name:                "No environment variable, use default app ID",
 			otelServiceName:     "",
 			otelResourceAttrs:   "",
-			expectedServiceName: DefaultOTelServiceName,
-			expectedAttrsPrefix: map[string]bool{
-				"os.":            true,
-				"host.":          true,
-				"service.":       true,
-				"process.":       true,
-				"telemetry.sdk.": true,
-			},
+			expectedServiceName: defaultOTelServiceName,
+			expectedAttrsPrefix: defaultAttrsPrefix,
 		},
 		{
 			name:                "OTEL_SERVICE_NAME set, use it instead of default",
 			otelServiceName:     "service-abc",
 			otelResourceAttrs:   "",
 			expectedServiceName: "service-abc",
-			expectedAttrsPrefix: map[string]bool{
-				"os.":            true,
-				"host.":          true,
-				"service.":       true,
-				"process.":       true,
-				"telemetry.sdk.": true,
-			},
+			expectedAttrsPrefix: defaultAttrsPrefix,
 		},
 		{
 			name:                "OTEL_RESOURCE_ATTRIBUTES with custom attributes",
 			otelServiceName:     "service-abc",
 			otelResourceAttrs:   "test-key-a=aaaaa,test-key-b=bbbbb",
 			expectedServiceName: "service-abc",
-			expectedAttrsPrefix: map[string]bool{
-				"os.":            true,
-				"host.":          true,
-				"service.":       true,
-				"process.":       true,
-				"telemetry.sdk.": true,
-			},
+			expectedAttrsPrefix: defaultAttrsPrefix,
 			expectedAttrs: map[string]string{
 				"test-key-a": "aaaaa",
 				"test-key-b": "bbbbb",
