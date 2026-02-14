@@ -2251,7 +2251,7 @@ func TestOtelResourceDetection(t *testing.T) {
 			t.Setenv("OTEL_RESOURCE_ATTRIBUTES", tc.otelResourceAttrs)
 
 			ctx := t.Context()
-			r, err := createOtelResource(ctx, DefaultOTelServiceName)
+			r, err := createOtelResource(ctx, defaultOTelServiceName)
 			require.NoError(t, err, "creating OpenTelemetry resource should not error, err: %v", err)
 
 			attrs := r.Attributes()
