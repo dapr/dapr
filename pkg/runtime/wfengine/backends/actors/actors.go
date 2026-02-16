@@ -77,11 +77,20 @@ type Options struct {
 	Resiliency     resiliency.Provider
 	EventSink      orchestrator.EventSink
 	ComponentStore *compstore.ComponentStore
+
 	// experimental feature
 	// enabling this will use the cluster tasks backend for pending tasks, instead of the default local implementation
 	// the cluster tasks backend uses actors to share the state of pending tasks
 	// allowing to deploy multiple daprd replicas and expose them through a loadbalancer
 	EnableClusteredDeployment bool
+
+	// Enables a feature to make activities send their results to workflow when
+	// the workflow is running on a different application. Useful when using
+	// cross app workflows. Ensures that activities are not retried forever if
+	// the workflow app is not available, and instead queues the result for when
+	// the workflow app is back online. Strongly recommended to always be enabled
+	// if using the same Dapr version on all daprds.
+	WorkflowsRemoteActivityReminder bool
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
 }
@@ -94,13 +103,15 @@ type Actors struct {
 	retentionerActorType string
 	executorActorType    string
 
-	enableClusteredDeployment bool
-	pendingTasksBackend       PendingTasksBackend
-	resiliency                resiliency.Provider
-	actors                    actors.Interface
-	eventSink                 orchestrator.EventSink
-	compStore                 *compstore.ComponentStore
-	retentionPolicy           *config.WorkflowStateRetentionPolicy
+	pendingTasksBackend PendingTasksBackend
+	resiliency          resiliency.Provider
+	actors              actors.Interface
+	eventSink           orchestrator.EventSink
+	compStore           *compstore.ComponentStore
+	retentionPolicy     *config.WorkflowStateRetentionPolicy
+
+	enableClusteredDeployment       bool
+	workflowsRemoteActivityReminder bool
 
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
@@ -129,12 +140,14 @@ func New(opts Options) *Actors {
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       pendingTasksBackend,
-		enableClusteredDeployment: opts.EnableClusteredDeployment,
 		compStore:                 opts.ComponentStore,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
 		retentionPolicy:           opts.RetentionPolicy,
+
+		enableClusteredDeployment:       opts.EnableClusteredDeployment,
+		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	}
 }
 
@@ -183,8 +196,9 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 				return nil
 			}
 		},
-		Actors:           abe.actors,
-		ActorTypeBuilder: actorTypeBuilder,
+		Actors:                          abe.actors,
+		ActorTypeBuilder:                actorTypeBuilder,
+		WorkflowsRemoteActivityReminder: abe.workflowsRemoteActivityReminder,
 	}
 
 	opts := workflow.Options{
