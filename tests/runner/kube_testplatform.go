@@ -311,6 +311,29 @@ func (c *KubeTestPlatform) GetAppHostDetails(name string) (string, string, error
 	return pods[0].Name, pods[0].IP, nil
 }
 
+// GetAppPodEndpoints returns "ip:port" for each pod of the app.
+// Port matches cluster service targetPort: IngressPort if set, else AppPort if set, else DefaultContainerPort.
+func (c *KubeTestPlatform) GetAppPodEndpoints(name string) ([]string, error) {
+	app := c.AppResources.FindActiveResource(name)
+	appManager := app.(*kube.AppManager)
+	pods, err := appManager.GetHostDetails()
+	if err != nil {
+		return nil, err
+	}
+	desc := appManager.App()
+	port := kube.DefaultContainerPort
+	if desc.IngressPort > 0 {
+		port = desc.IngressPort
+	} else if desc.AppPort > 0 {
+		port = desc.AppPort
+	}
+	out := make([]string, 0, len(pods))
+	for _, p := range pods {
+		out = append(out, fmt.Sprintf("%s:%d", p.IP, port))
+	}
+	return out, nil
+}
+
 // Scale changes the number of replicas of the app.
 func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
 	app := c.AppResources.FindActiveResource(name)
