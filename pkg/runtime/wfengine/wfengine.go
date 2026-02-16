@@ -52,15 +52,17 @@ type Interface interface {
 }
 
 type Options struct {
-	AppID                     string
-	Namespace                 string
-	Actors                    actors.Interface
-	Spec                      *config.WorkflowSpec
-	BackendManager            processor.WorkflowBackendManager
-	Resiliency                resiliency.Provider
-	EventSink                 orchestrator.EventSink
-	EnableClusteredDeployment bool
-	ComponentStore            *compstore.ComponentStore
+	AppID          string
+	Namespace      string
+	Actors         actors.Interface
+	Spec           *config.WorkflowSpec
+	BackendManager processor.WorkflowBackendManager
+	Resiliency     resiliency.Provider
+	EventSink      orchestrator.EventSink
+	ComponentStore *compstore.ComponentStore
+
+	EnableClusteredDeployment       bool
+	WorkflowsRemoteActivityReminder bool
 }
 
 type engine struct {
@@ -84,14 +86,16 @@ func New(opts Options) Interface {
 
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend := backendactors.New(backendactors.Options{
-		AppID:                     opts.AppID,
-		Namespace:                 opts.Namespace,
-		Actors:                    opts.Actors,
-		Resiliency:                opts.Resiliency,
-		EventSink:                 opts.EventSink,
-		EnableClusteredDeployment: opts.EnableClusteredDeployment,
-		ComponentStore:            opts.ComponentStore,
-		RetentionPolicy:           retPolicy,
+		AppID:           opts.AppID,
+		Namespace:       opts.Namespace,
+		Actors:          opts.Actors,
+		Resiliency:      opts.Resiliency,
+		EventSink:       opts.EventSink,
+		ComponentStore:  opts.ComponentStore,
+		RetentionPolicy: retPolicy,
+
+		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
+		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	})
 
 	var getWorkItemsCount atomic.Int32

@@ -22,7 +22,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -101,33 +103,46 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	}
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
 
-	// publish the result back to the workflow actor as a new event to be processed
-	resultData, err := proto.Marshal(wi.Result)
-	if err != nil {
-		// Returning non-recoverable error
-		executionStatus = diag.StatusFailed
-		return err
-	}
-
 	// send completed event to orchestrator wf actor
 	wfActorType := a.workflowActorType
 	if router := taskEvent.GetRouter(); router != nil {
 		wfActorType = a.actorTypeBuilder.Workflow(router.GetSourceAppID())
 	}
 
-	req := internalsv1pb.
-		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
-		WithActor(wfActorType, workflowID).
-		WithData(resultData).
-		WithContentType(invokev1.ProtobufContentType)
+	// TODO: @joshvanl: remove `a.workflowsRemoteActivityReminder` check in later
+	// version.
+	if a.workflowsRemoteActivityReminder && a.actorNotReachable(ctx, wfActorType, workflowID) {
+		err = a.createWorkflowResultReminder(ctx, wfActorType, workflowID, wi.Result)
+	} else {
+		// publish the result back to the workflow actor as a new event to be processed
+		var resultData []byte
+		resultData, err = proto.Marshal(wi.Result)
+		if err != nil {
+			// Returning non-recoverable error
+			executionStatus = diag.StatusFailed
+			return err
+		}
 
-	_, err = a.router.Call(ctx, req)
+		req := internalsv1pb.
+			NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
+			WithActor(wfActorType, workflowID).
+			WithData(resultData).
+			WithContentType(invokev1.ProtobufContentType)
+		_, err = a.router.Call(ctx, req)
+	}
+
 	switch {
 	case err != nil:
 		if strings.HasSuffix(err.Error(), api.ErrInstanceNotFound.Error()) {
 			log.Errorf("Activity actor '%s': workflow actor instance not found when reporting activity result for workflow with instanceId '%s': %s", a.actorID, wi.InstanceID, err)
 			executionStatus = diag.StatusFailed
 			return nil
+		}
+
+		if a.workflowsRemoteActivityReminder {
+			if cerr := a.createWorkflowResultReminder(ctx, wfActorType, workflowID, wi.Result); cerr == nil {
+				return nil
+			}
 		}
 
 		// Returning recoverable error, record metrics
@@ -142,4 +157,15 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	}
 
 	return nil
+}
+
+func (a *activity) actorNotReachable(ctx context.Context, wfActorType, workflowID string) bool {
+	_, _, cancel, err := a.placement.LookupActor(ctx, &actorsapi.LookupActorRequest{
+		ActorType: wfActorType,
+		ActorID:   workflowID,
+	})
+	if cancel != nil {
+		cancel(nil)
+	}
+	return errors.Is(err, messages.ErrActorNoAddress)
 }
