@@ -91,7 +91,7 @@ func writeFolderReadme(dir string, imagePrefix string) error {
 		}
 		b.WriteString("\n")
 	}
-	return os.WriteFile(filepath.Join(dir, "README.md"), []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o644)
+	return os.WriteFile(filepath.Join(dir, "README.md"), []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o600)
 }
 
 type testGroup struct {
@@ -109,7 +109,7 @@ func groupPngsByTest(names []string) []testGroup {
 		}
 		m[base] = append(m[base], name)
 	}
-	var out []testGroup
+	out := make([]testGroup, 0, len(order))
 	for _, base := range order {
 		out = append(out, testGroup{baseName: base, files: m[base]})
 	}
@@ -129,7 +129,10 @@ func writeImgTag(b *strings.Builder, path, alt string) {
 func writeReadmes(baseOutputDir string) {
 	dirsWithPng := make(map[string]bool)
 	_ = filepath.WalkDir(baseOutputDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || !d.IsDir() {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
 			return nil
 		}
 		if len(listPngFiles(path)) > 0 {
@@ -199,7 +202,7 @@ func writeReadmes(baseOutputDir string) {
 		}
 
 		readmePath := filepath.Join(parent, "README.md")
-		if err := os.WriteFile(readmePath, []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(readmePath, []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o600); err != nil {
 			log.Printf("warning: could not write combined README %s: %v", readmePath, err)
 		}
 	}
