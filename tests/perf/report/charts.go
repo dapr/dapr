@@ -290,12 +290,21 @@ func main() {
 				}
 				if collectingSuite == SuiteFortio && strings.Contains(lowerLine, "\"runtype\"") {
 					jsonBuilder.Reset()
-					jsonBuilder.WriteString("{\n")
+					line = strings.TrimPrefix(strings.TrimSpace(line), "Test summary ")
+					// When output is split across Output events, the first event we see may be a continuation (e.g. "RunType":"...") missing the opening {
+					if !strings.HasPrefix(line, "{") {
+						line = "{" + line
+					}
 					jsonBuilder.WriteString(line)
 					continue
 				}
-				jsonBuilder.WriteString("\n")
-				jsonBuilder.WriteString(line)
+				// Fortio JSON is compact/single-line - concatenate continuations without newlines to avoid splitting mid-string
+				if collectingSuite == SuiteFortio {
+					jsonBuilder.WriteString(line)
+				} else {
+					jsonBuilder.WriteString("\n")
+					jsonBuilder.WriteString(line)
+				}
 				continue
 			}
 			// Not collecting yet, so decide start & determine if its k6 vs fortio from testModes
@@ -321,12 +330,16 @@ func main() {
 				continue
 			}
 			// Start Fortio collection when we see the first field like "RunType": & confirm json matches testModeFromTest
+			// Fortio output is "Test summary `{...}`" - strip the known prefix. When split across Output events, we may get a continuation missing the opening {
 			if testModeFromTest == "fortio" && strings.Contains(lower, "\"runtype\"") {
 				collecting = true
 				collectingSuite = SuiteFortio
 				jsonBuilder.Reset()
-				jsonBuilder.WriteString("{\n")
 				line := strings.ReplaceAll(ev.Output, "`", "")
+				line = strings.TrimPrefix(strings.TrimSpace(line), "Test summary ")
+				if !strings.HasPrefix(line, "{") {
+					line = "{" + line
+				}
 				jsonBuilder.WriteString(line)
 				continue
 			}
@@ -403,6 +416,9 @@ func main() {
 		_ = os.MkdirAll(cmp.outDir, 0o755)
 		makeVariantComparisonCharts(cmp.labels, cmp.runners, sanitizeName(cmp.baseName), cmp.outDir)
 	}
+
+	// Write README.md per folder (and combined at API roots for http & grpc) for displaying charts
+	writeReadmes(baseOutputDir)
 
 	log.Printf("Generated charts for performance tests in %s\n", baseOutputDir)
 }
