@@ -20,6 +20,7 @@ func sanitizeName(s string) string {
 	replacer := strings.NewReplacer(
 		"/", "_",
 		" ", "_",
+		":", "_", // Windows forbids colons in filenames
 		"[", "",
 		"]", "",
 		"=", "",

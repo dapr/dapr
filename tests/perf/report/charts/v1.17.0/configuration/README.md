@@ -1,38 +1,49 @@
 ## HTTP
 
-![TestConfigurationGetHTTPPerformance_data_volume.png](http/TestConfigurationGetHTTPPerformance_data_volume.png)
-![TestConfigurationGetHTTPPerformance_duration_breakdown.png](http/TestConfigurationGetHTTPPerformance_duration_breakdown.png)
-![TestConfigurationGetHTTPPerformance_duration_low.png](http/TestConfigurationGetHTTPPerformance_duration_low.png)
-![TestConfigurationGetHTTPPerformance_resource_cpu.png](http/TestConfigurationGetHTTPPerformance_resource_cpu.png)
-![TestConfigurationGetHTTPPerformance_resource_memory.png](http/TestConfigurationGetHTTPPerformance_resource_memory.png)
-![TestConfigurationGetHTTPPerformance_summary.png](http/TestConfigurationGetHTTPPerformance_summary.png)
-![TestConfigurationGetHTTPPerformance_tail_latency.png](http/TestConfigurationGetHTTPPerformance_tail_latency.png)
-![TestConfigurationGetHTTPPerformance_throughput.png](http/TestConfigurationGetHTTPPerformance_throughput.png)
-![TestConfigurationSubscribeHTTPPerformance_data_volume.png](http/TestConfigurationSubscribeHTTPPerformance_data_volume.png)
-![TestConfigurationSubscribeHTTPPerformance_duration_breakdown.png](http/TestConfigurationSubscribeHTTPPerformance_duration_breakdown.png)
-![TestConfigurationSubscribeHTTPPerformance_duration_low.png](http/TestConfigurationSubscribeHTTPPerformance_duration_low.png)
-![TestConfigurationSubscribeHTTPPerformance_resource_cpu.png](http/TestConfigurationSubscribeHTTPPerformance_resource_cpu.png)
-![TestConfigurationSubscribeHTTPPerformance_resource_memory.png](http/TestConfigurationSubscribeHTTPPerformance_resource_memory.png)
-![TestConfigurationSubscribeHTTPPerformance_summary.png](http/TestConfigurationSubscribeHTTPPerformance_summary.png)
-![TestConfigurationSubscribeHTTPPerformance_tail_latency.png](http/TestConfigurationSubscribeHTTPPerformance_tail_latency.png)
-![TestConfigurationSubscribeHTTPPerformance_throughput.png](http/TestConfigurationSubscribeHTTPPerformance_throughput.png)
+### TestConfigurationGetHTTPPerformance
+
+<img src="http/TestConfigurationGetHTTPPerformance_data_volume.png" alt="TestConfigurationGetHTTPPerformance_data_volume.png" />
+<img src="http/TestConfigurationGetHTTPPerformance_duration_breakdown.png" alt="TestConfigurationGetHTTPPerformance_duration_breakdown.png" />
+<img src="http/TestConfigurationGetHTTPPerformance_duration_low.png" alt="TestConfigurationGetHTTPPerformance_duration_low.png" />
+<img src="http/TestConfigurationGetHTTPPerformance_resource_cpu.png" alt="TestConfigurationGetHTTPPerformance_resource_cpu.png" />
+<img src="http/TestConfigurationGetHTTPPerformance_resource_memory.png" alt="TestConfigurationGetHTTPPerformance_resource_memory.png" />
+<img src="http/TestConfigurationGetHTTPPerformance_summary.png" alt="TestConfigurationGetHTTPPerformance_summary.png" />
+<img src="http/TestConfigurationGetHTTPPerformance_tail_latency.png" alt="TestConfigurationGetHTTPPerformance_tail_latency.png" />
+<img src="http/TestConfigurationGetHTTPPerformance_throughput.png" alt="TestConfigurationGetHTTPPerformance_throughput.png" />
+
+### TestConfigurationSubscribeHTTPPerformance
+
+<img src="http/TestConfigurationSubscribeHTTPPerformance_data_volume.png" alt="TestConfigurationSubscribeHTTPPerformance_data_volume.png" />
+<img src="http/TestConfigurationSubscribeHTTPPerformance_duration_breakdown.png" alt="TestConfigurationSubscribeHTTPPerformance_duration_breakdown.png" />
+<img src="http/TestConfigurationSubscribeHTTPPerformance_duration_low.png" alt="TestConfigurationSubscribeHTTPPerformance_duration_low.png" />
+<img src="http/TestConfigurationSubscribeHTTPPerformance_resource_cpu.png" alt="TestConfigurationSubscribeHTTPPerformance_resource_cpu.png" />
+<img src="http/TestConfigurationSubscribeHTTPPerformance_resource_memory.png" alt="TestConfigurationSubscribeHTTPPerformance_resource_memory.png" />
+<img src="http/TestConfigurationSubscribeHTTPPerformance_summary.png" alt="TestConfigurationSubscribeHTTPPerformance_summary.png" />
+<img src="http/TestConfigurationSubscribeHTTPPerformance_tail_latency.png" alt="TestConfigurationSubscribeHTTPPerformance_tail_latency.png" />
+<img src="http/TestConfigurationSubscribeHTTPPerformance_throughput.png" alt="TestConfigurationSubscribeHTTPPerformance_throughput.png" />
+
 ---------------
 
 ## gRPC
 
-![TestConfigurationGetGRPCPerformance_data_volume.png](grpc/TestConfigurationGetGRPCPerformance_data_volume.png)
-![TestConfigurationGetGRPCPerformance_duration_breakdown.png](grpc/TestConfigurationGetGRPCPerformance_duration_breakdown.png)
-![TestConfigurationGetGRPCPerformance_duration_low.png](grpc/TestConfigurationGetGRPCPerformance_duration_low.png)
-![TestConfigurationGetGRPCPerformance_resource_cpu.png](grpc/TestConfigurationGetGRPCPerformance_resource_cpu.png)
-![TestConfigurationGetGRPCPerformance_resource_memory.png](grpc/TestConfigurationGetGRPCPerformance_resource_memory.png)
-![TestConfigurationGetGRPCPerformance_summary.png](grpc/TestConfigurationGetGRPCPerformance_summary.png)
-![TestConfigurationGetGRPCPerformance_tail_latency.png](grpc/TestConfigurationGetGRPCPerformance_tail_latency.png)
-![TestConfigurationGetGRPCPerformance_throughput.png](grpc/TestConfigurationGetGRPCPerformance_throughput.png)
-![TestConfigurationSubscribeGRPCPerformance_data_volume.png](grpc/TestConfigurationSubscribeGRPCPerformance_data_volume.png)
-![TestConfigurationSubscribeGRPCPerformance_duration_breakdown.png](grpc/TestConfigurationSubscribeGRPCPerformance_duration_breakdown.png)
-![TestConfigurationSubscribeGRPCPerformance_duration_low.png](grpc/TestConfigurationSubscribeGRPCPerformance_duration_low.png)
-![TestConfigurationSubscribeGRPCPerformance_resource_cpu.png](grpc/TestConfigurationSubscribeGRPCPerformance_resource_cpu.png)
-![TestConfigurationSubscribeGRPCPerformance_resource_memory.png](grpc/TestConfigurationSubscribeGRPCPerformance_resource_memory.png)
-![TestConfigurationSubscribeGRPCPerformance_summary.png](grpc/TestConfigurationSubscribeGRPCPerformance_summary.png)
-![TestConfigurationSubscribeGRPCPerformance_tail_latency.png](grpc/TestConfigurationSubscribeGRPCPerformance_tail_latency.png)
-![TestConfigurationSubscribeGRPCPerformance_throughput.png](grpc/TestConfigurationSubscribeGRPCPerformance_throughput.png)
+### TestConfigurationGetGRPCPerformance
+
+<img src="grpc/TestConfigurationGetGRPCPerformance_data_volume.png" alt="TestConfigurationGetGRPCPerformance_data_volume.png" />
+<img src="grpc/TestConfigurationGetGRPCPerformance_duration_breakdown.png" alt="TestConfigurationGetGRPCPerformance_duration_breakdown.png" />
+<img src="grpc/TestConfigurationGetGRPCPerformance_duration_low.png" alt="TestConfigurationGetGRPCPerformance_duration_low.png" />
+<img src="grpc/TestConfigurationGetGRPCPerformance_resource_cpu.png" alt="TestConfigurationGetGRPCPerformance_resource_cpu.png" />
+<img src="grpc/TestConfigurationGetGRPCPerformance_resource_memory.png" alt="TestConfigurationGetGRPCPerformance_resource_memory.png" />
+<img src="grpc/TestConfigurationGetGRPCPerformance_summary.png" alt="TestConfigurationGetGRPCPerformance_summary.png" />
+<img src="grpc/TestConfigurationGetGRPCPerformance_tail_latency.png" alt="TestConfigurationGetGRPCPerformance_tail_latency.png" />
+<img src="grpc/TestConfigurationGetGRPCPerformance_throughput.png" alt="TestConfigurationGetGRPCPerformance_throughput.png" />
+
+### TestConfigurationSubscribeGRPCPerformance
+
+<img src="grpc/TestConfigurationSubscribeGRPCPerformance_data_volume.png" alt="TestConfigurationSubscribeGRPCPerformance_data_volume.png" />
+<img src="grpc/TestConfigurationSubscribeGRPCPerformance_duration_breakdown.png" alt="TestConfigurationSubscribeGRPCPerformance_duration_breakdown.png" />
+<img src="grpc/TestConfigurationSubscribeGRPCPerformance_duration_low.png" alt="TestConfigurationSubscribeGRPCPerformance_duration_low.png" />
+<img src="grpc/TestConfigurationSubscribeGRPCPerformance_resource_cpu.png" alt="TestConfigurationSubscribeGRPCPerformance_resource_cpu.png" />
+<img src="grpc/TestConfigurationSubscribeGRPCPerformance_resource_memory.png" alt="TestConfigurationSubscribeGRPCPerformance_resource_memory.png" />
+<img src="grpc/TestConfigurationSubscribeGRPCPerformance_summary.png" alt="TestConfigurationSubscribeGRPCPerformance_summary.png" />
+<img src="grpc/TestConfigurationSubscribeGRPCPerformance_tail_latency.png" alt="TestConfigurationSubscribeGRPCPerformance_tail_latency.png" />
+<img src="grpc/TestConfigurationSubscribeGRPCPerformance_throughput.png" alt="TestConfigurationSubscribeGRPCPerformance_throughput.png" />

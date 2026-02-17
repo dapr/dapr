@@ -1,10 +1,8 @@
-![TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png](TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png)
-![TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_memory.png](TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_memory.png)
-![TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png](TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png)
-![TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_memory.png](TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_memory.png)
-![TestPubsubPublishHttpPerformance_data_volume.png](TestPubsubPublishHttpPerformance_data_volume.png)
-![TestPubsubPublishHttpPerformance_duration_breakdown.png](TestPubsubPublishHttpPerformance_duration_breakdown.png)
-![TestPubsubPublishHttpPerformance_duration_low.png](TestPubsubPublishHttpPerformance_duration_low.png)
-![TestPubsubPublishHttpPerformance_summary.png](TestPubsubPublishHttpPerformance_summary.png)
-![TestPubsubPublishHttpPerformance_tail_latency.png](TestPubsubPublishHttpPerformance_tail_latency.png)
-![TestPubsubPublishHttpPerformance_throughput.png](TestPubsubPublishHttpPerformance_throughput.png)
+### TestPubsubPublishHttpPerformance
+
+<img src="TestPubsubPublishHttpPerformance_data_volume.png" alt="TestPubsubPublishHttpPerformance_data_volume.png" />
+<img src="TestPubsubPublishHttpPerformance_duration_breakdown.png" alt="TestPubsubPublishHttpPerformance_duration_breakdown.png" />
+<img src="TestPubsubPublishHttpPerformance_duration_low.png" alt="TestPubsubPublishHttpPerformance_duration_low.png" />
+<img src="TestPubsubPublishHttpPerformance_summary.png" alt="TestPubsubPublishHttpPerformance_summary.png" />
+<img src="TestPubsubPublishHttpPerformance_tail_latency.png" alt="TestPubsubPublishHttpPerformance_tail_latency.png" />
+<img src="TestPubsubPublishHttpPerformance_throughput.png" alt="TestPubsubPublishHttpPerformance_throughput.png" />

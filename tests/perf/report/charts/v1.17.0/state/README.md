@@ -1,41 +1,34 @@
 ## HTTP
 
-![TestStateGetGrpcPerformance_connection_stats.png](http/TestStateGetGrpcPerformance_connection_stats.png)
-![TestStateGetGrpcPerformance_data_volume.png](http/TestStateGetGrpcPerformance_data_volume.png)
-![TestStateGetGrpcPerformance_duration_breakdown.png](http/TestStateGetGrpcPerformance_duration_breakdown.png)
-![TestStateGetGrpcPerformance_duration_requested_vs_actual.png](http/TestStateGetGrpcPerformance_duration_requested_vs_actual.png)
-![TestStateGetGrpcPerformance_header_size.png](http/TestStateGetGrpcPerformance_header_size.png)
-![TestStateGetGrpcPerformance_histogram_count.png](http/TestStateGetGrpcPerformance_histogram_count.png)
-![TestStateGetGrpcPerformance_histogram_percent.png](http/TestStateGetGrpcPerformance_histogram_percent.png)
-![TestStateGetGrpcPerformance_payload_size.png](http/TestStateGetGrpcPerformance_payload_size.png)
-![TestStateGetGrpcPerformance_qps.png](http/TestStateGetGrpcPerformance_qps.png)
-![TestStateGetGrpcPerformance_summary.png](http/TestStateGetGrpcPerformance_summary.png)
-![TestStateGetGrpcPerformance_tail_latency.png](http/TestStateGetGrpcPerformance_tail_latency.png)
-![TestStateGetGrpcPerformance_throughput.png](http/TestStateGetGrpcPerformance_throughput.png)
-![TestStateGetHTTPPerformance_connection_stats.png](http/TestStateGetHTTPPerformance_connection_stats.png)
-![TestStateGetHTTPPerformance_data_volume.png](http/TestStateGetHTTPPerformance_data_volume.png)
-![TestStateGetHTTPPerformance_duration_breakdown.png](http/TestStateGetHTTPPerformance_duration_breakdown.png)
-![TestStateGetHTTPPerformance_duration_requested_vs_actual.png](http/TestStateGetHTTPPerformance_duration_requested_vs_actual.png)
-![TestStateGetHTTPPerformance_header_size.png](http/TestStateGetHTTPPerformance_header_size.png)
-![TestStateGetHTTPPerformance_histogram_count.png](http/TestStateGetHTTPPerformance_histogram_count.png)
-![TestStateGetHTTPPerformance_histogram_percent.png](http/TestStateGetHTTPPerformance_histogram_percent.png)
-![TestStateGetHTTPPerformance_payload_size.png](http/TestStateGetHTTPPerformance_payload_size.png)
-![TestStateGetHTTPPerformance_qps.png](http/TestStateGetHTTPPerformance_qps.png)
-![TestStateGetHTTPPerformance_resource_cpu.png](http/TestStateGetHTTPPerformance_resource_cpu.png)
-![TestStateGetHTTPPerformance_resource_memory.png](http/TestStateGetHTTPPerformance_resource_memory.png)
-![TestStateGetHTTPPerformance_summary.png](http/TestStateGetHTTPPerformance_summary.png)
-![TestStateGetHTTPPerformance_tail_latency.png](http/TestStateGetHTTPPerformance_tail_latency.png)
-![TestStateGetHTTPPerformance_throughput.png](http/TestStateGetHTTPPerformance_throughput.png)
+### TestStateGetHTTPPerformance
+
+<img src="http/TestStateGetHTTPPerformance_connection_stats.png" alt="TestStateGetHTTPPerformance_connection_stats.png" />
+<img src="http/TestStateGetHTTPPerformance_data_volume.png" alt="TestStateGetHTTPPerformance_data_volume.png" />
+<img src="http/TestStateGetHTTPPerformance_duration_breakdown.png" alt="TestStateGetHTTPPerformance_duration_breakdown.png" />
+<img src="http/TestStateGetHTTPPerformance_duration_requested_vs_actual.png" alt="TestStateGetHTTPPerformance_duration_requested_vs_actual.png" />
+<img src="http/TestStateGetHTTPPerformance_header_size.png" alt="TestStateGetHTTPPerformance_header_size.png" />
+<img src="http/TestStateGetHTTPPerformance_histogram_count.png" alt="TestStateGetHTTPPerformance_histogram_count.png" />
+<img src="http/TestStateGetHTTPPerformance_histogram_percent.png" alt="TestStateGetHTTPPerformance_histogram_percent.png" />
+<img src="http/TestStateGetHTTPPerformance_payload_size.png" alt="TestStateGetHTTPPerformance_payload_size.png" />
+<img src="http/TestStateGetHTTPPerformance_qps.png" alt="TestStateGetHTTPPerformance_qps.png" />
+<img src="http/TestStateGetHTTPPerformance_resource_cpu.png" alt="TestStateGetHTTPPerformance_resource_cpu.png" />
+<img src="http/TestStateGetHTTPPerformance_resource_memory.png" alt="TestStateGetHTTPPerformance_resource_memory.png" />
+<img src="http/TestStateGetHTTPPerformance_summary.png" alt="TestStateGetHTTPPerformance_summary.png" />
+<img src="http/TestStateGetHTTPPerformance_tail_latency.png" alt="TestStateGetHTTPPerformance_tail_latency.png" />
+<img src="http/TestStateGetHTTPPerformance_throughput.png" alt="TestStateGetHTTPPerformance_throughput.png" />
+
 ---------------
 
 ## gRPC
 
-![TestStateGetGrpcPerformance_duration_breakdown.png](grpc/TestStateGetGrpcPerformance_duration_breakdown.png)
-![TestStateGetGrpcPerformance_duration_requested_vs_actual.png](grpc/TestStateGetGrpcPerformance_duration_requested_vs_actual.png)
-![TestStateGetGrpcPerformance_histogram_count.png](grpc/TestStateGetGrpcPerformance_histogram_count.png)
-![TestStateGetGrpcPerformance_histogram_percent.png](grpc/TestStateGetGrpcPerformance_histogram_percent.png)
-![TestStateGetGrpcPerformance_qps.png](grpc/TestStateGetGrpcPerformance_qps.png)
-![TestStateGetGrpcPerformance_resource_cpu.png](grpc/TestStateGetGrpcPerformance_resource_cpu.png)
-![TestStateGetGrpcPerformance_resource_memory.png](grpc/TestStateGetGrpcPerformance_resource_memory.png)
-![TestStateGetGrpcPerformance_summary.png](grpc/TestStateGetGrpcPerformance_summary.png)
-![TestStateGetGrpcPerformance_tail_latency.png](grpc/TestStateGetGrpcPerformance_tail_latency.png)
+### TestStateGetGrpcPerformance
+
+<img src="grpc/TestStateGetGrpcPerformance_duration_breakdown.png" alt="TestStateGetGrpcPerformance_duration_breakdown.png" />
+<img src="grpc/TestStateGetGrpcPerformance_duration_requested_vs_actual.png" alt="TestStateGetGrpcPerformance_duration_requested_vs_actual.png" />
+<img src="grpc/TestStateGetGrpcPerformance_histogram_count.png" alt="TestStateGetGrpcPerformance_histogram_count.png" />
+<img src="grpc/TestStateGetGrpcPerformance_histogram_percent.png" alt="TestStateGetGrpcPerformance_histogram_percent.png" />
+<img src="grpc/TestStateGetGrpcPerformance_qps.png" alt="TestStateGetGrpcPerformance_qps.png" />
+<img src="grpc/TestStateGetGrpcPerformance_resource_cpu.png" alt="TestStateGetGrpcPerformance_resource_cpu.png" />
+<img src="grpc/TestStateGetGrpcPerformance_resource_memory.png" alt="TestStateGetGrpcPerformance_resource_memory.png" />
+<img src="grpc/TestStateGetGrpcPerformance_summary.png" alt="TestStateGetGrpcPerformance_summary.png" />
+<img src="grpc/TestStateGetGrpcPerformance_tail_latency.png" alt="TestStateGetGrpcPerformance_tail_latency.png" />
