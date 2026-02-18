@@ -80,9 +80,9 @@ type etcd struct {
 	readyCh             chan struct{}
 }
 
-func New(opts Options) (Interface, error) {
+func New(ctx context.Context, opts Options) (Interface, error) {
 	if opts.Embed {
-		config, err := config(opts)
+		config, err := config(ctx, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create etcd config: %w", err)
 		}

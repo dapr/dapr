@@ -44,7 +44,7 @@ type Interface interface {
 	UnRegisterActorTypes(actorTypes ...string) error
 	SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string)
 	HaltAll(ctx context.Context) error
-	HaltNonHosted(ctx context.Context) error
+	HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error
 	Len() map[string]int
 }
 
@@ -127,14 +127,14 @@ func (t *table) HaltAll(ctx context.Context) error {
 	return errors.Join(errs.Slice()...)
 }
 
-func (t *table) HaltNonHosted(ctx context.Context) error {
+func (t *table) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
 	var wg sync.WaitGroup
 	errs := slice.New[error]()
 	t.factories.Range(func(_, factory any) bool {
 		wg.Add(1)
 		go func(factory targets.Factory) {
 			defer wg.Done()
-			errs.Append(factory.HaltNonHosted(ctx))
+			errs.Append(factory.HaltNonHosted(ctx, fn))
 		}(factory.(targets.Factory))
 		return true
 	})

@@ -16,6 +16,7 @@ package actors
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/call"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/deactivation"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/dissemination"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/grpc"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/http"

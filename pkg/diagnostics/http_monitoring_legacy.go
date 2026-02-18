@@ -25,6 +25,8 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 		return path
 	}
 
+	path = NormalizeHTTPPath(path)
+
 	p := path
 	if p[0] == '/' {
 		p = path[1:]

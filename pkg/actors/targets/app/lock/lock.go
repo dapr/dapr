@@ -15,13 +15,13 @@ package lock
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
+	"github.com/dapr/dapr/pkg/actors/targets/errors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -29,8 +29,6 @@ import (
 )
 
 const headerReentrancyID = "Dapr-Reentrancy-Id"
-
-var ErrLockClosed = errors.New("actor lock is closed")
 
 type Options struct {
 	ActorType   string
@@ -76,10 +74,6 @@ func New(opts Options) *Lock {
 	}
 }
 
-func (l *Lock) Lock(ctx context.Context) (context.Context, context.CancelFunc, error) {
-	return l.LockRequest(ctx, nil)
-}
-
 func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvokeRequest) (context.Context, context.CancelFunc, error) {
 	if ctx.Err() != nil {
 		return nil, nil, ctx.Err()
@@ -91,7 +85,7 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 	select {
 	case l.lock <- struct{}{}:
 	case <-l.closeCh:
-		return nil, nil, ErrLockClosed
+		return nil, nil, errors.NewClosed(msg.GetMessage().GetMethod())
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
 	}
@@ -122,7 +116,7 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 		return nil, nil, ctx.Err()
 	case <-l.closeCh:
 		release()
-		return nil, nil, ErrLockClosed
+		return nil, nil, errors.NewClosed(msg.GetMessage().GetMethod())
 	case <-flight.startCh:
 		cctx, cancel := context.WithCancelCause(ctx)
 
@@ -133,7 +127,7 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 			case <-doneCh:
 			case <-l.closeCh:
 			}
-			cancel(ErrLockClosed)
+			cancel(errors.NewClosed(msg.GetMessage().GetMethod()))
 		}()
 
 		return cctx, release, nil

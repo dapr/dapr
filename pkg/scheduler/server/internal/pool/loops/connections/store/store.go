@@ -27,7 +27,6 @@ type Options struct {
 	ActorTypes []string
 }
 
-// TODO: sync.Pool
 type Store struct {
 	appIDs     *instance
 	actorTypes *instance

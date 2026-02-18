@@ -15,6 +15,7 @@ package placement
 
 import (
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -44,6 +45,7 @@ type options struct {
 	metadataEnabled     bool
 	mode                *string
 	namespace           string
+	disseminateTimeout  *time.Duration
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -148,5 +150,11 @@ func WithMode(mode string) Option {
 func WithNamespace(namespace string) Option {
 	return func(o *options) {
 		o.namespace = namespace
+	}
+}
+
+func WithDisseminateTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.disseminateTimeout = &timeout
 	}
 }

@@ -30,7 +30,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/exporters/zipkin"
+	"go.opentelemetry.io/otel/exporters/zipkin" //nolint:staticcheck // SA1019: zipkin exporter is deprecated but still needed
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
@@ -300,15 +300,16 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	wfe := wfengine.New(wfengine.Options{
-		AppID:                     runtimeConfig.id,
-		Namespace:                 namespace,
-		Actors:                    actors,
-		Spec:                      globalConfig.Spec.WorkflowSpec,
-		BackendManager:            processor.WorkflowBackend(),
-		Resiliency:                resiliencyProvider,
-		EventSink:                 runtimeConfig.workflowEventSink,
-		EnableClusteredDeployment: globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
-		ComponentStore:            compStore,
+		AppID:                           runtimeConfig.id,
+		Namespace:                       namespace,
+		Actors:                          actors,
+		Spec:                            globalConfig.Spec.WorkflowSpec,
+		BackendManager:                  processor.WorkflowBackend(),
+		Resiliency:                      resiliencyProvider,
+		EventSink:                       runtimeConfig.workflowEventSink,
+		EnableClusteredDeployment:       globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
+		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
+		ComponentStore:                  compStore,
 	})
 
 	jobsManager, err := scheduler.New(scheduler.Options{

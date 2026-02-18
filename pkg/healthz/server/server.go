@@ -27,7 +27,7 @@ import (
 
 type Handler struct {
 	Path   string
-	Getter func() ([]byte, error)
+	Getter func(ctx context.Context) ([]byte, error)
 }
 
 type Options struct {
@@ -60,7 +60,7 @@ func New(opts Options) *Server {
 	for _, handler := range opts.Handlers {
 		hdl := handler
 		mux.Handle(handler.Path, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			data, err := hdl.Getter()
+			data, err := hdl.Getter(request.Context())
 			if err != nil {
 				writer.WriteHeader(http.StatusInternalServerError)
 				writer.Write([]byte(err.Error()))

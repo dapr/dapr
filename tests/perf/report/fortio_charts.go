@@ -70,7 +70,7 @@ type FortioResult struct {
 
 // processFortioSummary parses Fortio style json perf output & converts them into a Runner
 // then stores them using the same aggregation mechanism
-func processFortioSummary(objJSON, testName, pkg, baseOutputDir string) {
+func processFortioSummary(objJSON, testName, pkg, baseOutputDir string, resourceByTest map[string]*ResourceUsage) {
 	raw := strings.TrimSpace(objJSON)
 	if raw == "" || !strings.HasPrefix(raw, "{") {
 		return
@@ -116,7 +116,11 @@ func processFortioSummary(objJSON, testName, pkg, baseOutputDir string) {
 		fmt.Fprintf(os.Stderr, "unknown API or transport for %s.\nfortio JSON: %s\n", testName, candidate)
 		return
 	}
-	storeRunner(r, info)
+	var ru *ResourceUsage
+	if resourceByTest != nil {
+		ru = resourceByTest[testName]
+	}
+	storeRunner(r, info, ru)
 
 	makeQPSChart(res, filePrefix, info.outDir)
 	makeDurationRequestedVsActualChart(res, filePrefix, info.outDir)

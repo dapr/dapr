@@ -74,7 +74,7 @@ func (n *namespaces) Handle(ctx context.Context, event loops.Event) error {
 	case *loops.Shutdown:
 		return n.handleShutdown(e)
 	default:
-		return fmt.Errorf("unknown connections event type: %T", e)
+		return fmt.Errorf("unknown namespaces event type: %T", e)
 	}
 }
 
@@ -92,7 +92,7 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 			defer n.wg.Done()
 			err := loop.Run(ctx)
 			if err != nil && !errors.Is(err, context.Canceled) {
-				log.Errorf("Error running stream loop: %v", err)
+				log.Errorf("Error running namespaces loop: %v", err)
 				n.cancelPool(err)
 			}
 		}()

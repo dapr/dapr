@@ -15,5 +15,6 @@ package crossapp
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp/activity"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp/resultreminder"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp/suborchestrator"
 )

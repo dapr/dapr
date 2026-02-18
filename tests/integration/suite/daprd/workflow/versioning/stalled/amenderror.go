@@ -16,7 +16,9 @@ package stalled
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -65,8 +67,8 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	clientCtx, cancelClient := context.WithCancel(ctx)
 	defer cancelClient()
 	client := d.workflow.BackendClient(t, clientCtx)
-	id, err := client.ScheduleNewOrchestration(ctx, "workflow")
-	require.NoError(t, err)
+	id, scheduleErr := client.ScheduleNewOrchestration(ctx, "workflow")
+	require.NoError(t, scheduleErr)
 
 	wf.WaitForOrchestratorStartedEvent(t, ctx, client, id)
 
@@ -86,7 +88,10 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
 
-	require.NoError(t, client.RaiseEvent(ctx, id, "Continue"))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NoError(c, client.RaiseEvent(ctx, id, "Continue"))
+	}, time.Second*20, time.Millisecond*10)
+
 	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
 	lastEvent := wf.GetLastHistoryEventOfType[protos.HistoryEvent_ExecutionStalled](t, ctx, client, id)
 	require.NotNil(t, lastEvent)
@@ -108,5 +113,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
-	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
+	md, completeErr := client.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, completeErr)
+	require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, md.RuntimeStatus)
 }

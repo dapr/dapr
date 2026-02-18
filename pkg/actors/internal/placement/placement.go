@@ -16,47 +16,41 @@ package placement
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
-	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"google.golang.org/grpc"
+
 	"github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
-	"github.com/dapr/dapr/pkg/actors/internal/placement/client"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/connector"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/dnslookup"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/connector/static"
+	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
+	loopsplacement "github.com/dapr/dapr/pkg/actors/internal/placement/loops/placement"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
-	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/concurrency/fifo"
-	"github.com/dapr/kit/concurrency/lock"
+	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement")
 
-const (
-	lockOperation   = "lock"
-	unlockOperation = "unlock"
-	updateOperation = "update"
-
-	statusReportHeartbeatInterval = 1 * time.Second
-)
-
 type Interface interface {
 	Run(context.Context) error
-	Ready() bool
-	Lock(context.Context) (context.Context, context.CancelFunc, error)
-	LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error)
+	Lock(context.Context) (context.Context, context.CancelCauseFunc, error)
+	LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error)
 	IsActorHosted(ctx context.Context, actorType, actorID string) bool
+	Ready() bool
 }
 
 type Options struct {
@@ -67,7 +61,6 @@ type Options struct {
 	Addresses []string
 
 	Scheduler schedclient.Reloader
-	APILevel  *apilevel.APILevel
 	Security  security.Handler
 	Table     table.Interface
 	Healthz   healthz.Healthz
@@ -75,261 +68,180 @@ type Options struct {
 }
 
 type placement struct {
-	client     *client.Client
-	actorTable table.Interface
-	apiLevel   *apilevel.APILevel
-	htarget    healthz.Target
+	hostname string
+	port     string
+	table    table.Interface
+	ready    *atomic.Bool
+	errCh    chan error
 
-	scheduler         schedclient.Reloader
-	hashTable         *hashing.ConsistentHashTables
-	virtualNodesCache *hashing.VirtualNodesCache
-
-	lock          *lock.OuterCancel
-	lockVersion   atomic.Uint64
-	updateVersion atomic.Uint64
-	operationLock *fifo.Mutex
-
-	tableUnlock context.CancelFunc
-
-	reloadTypes atomic.Bool
-
-	appID     string
-	namespace string
-	hostname  string
-	port      string
-	readyCh   chan struct{}
-	wg        sync.WaitGroup
-	closedCh  chan struct{}
+	loop loop.Interface[loops.Event]
 }
 
 func New(opts Options) (Interface, error) {
-	lock := lock.NewOuterCancel(errors.New("placement is disseminating"), time.Second*2)
+	if len(opts.Addresses) == 0 {
+		return nil, errors.New("no placement addresses provided")
+	}
 
-	client, err := client.New(client.Options{
-		Addresses: opts.Addresses,
-		Security:  opts.Security,
-		Table:     opts.Table,
-		Lock:      lock,
-		Healthz:   opts.Healthz,
-		Mode:      opts.Mode,
-		BaseHost: &v1pb.Host{
-			Name:      opts.Hostname + ":" + strconv.Itoa(opts.Port),
-			Id:        opts.AppID,
-			ApiLevel:  20,
-			Namespace: opts.Namespace,
-		},
-	})
+	placementID, err := spiffeid.FromSegments(
+		opts.Security.ControlPlaneTrustDomain(),
+		"ns", opts.Security.ControlPlaneNamespace(), "dapr-placement",
+	)
 	if err != nil {
 		return nil, err
 	}
 
+	var gopts []grpc.DialOption
+	gopts = append(gopts, opts.Security.GRPCDialOptionMTLS(placementID))
+
+	if diag.DefaultGRPCMonitoring.IsEnabled() {
+		gopts = append(
+			gopts,
+			grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
+		)
+	}
+
+	var conn connector.Interface
+	switch opts.Mode {
+	case modes.KubernetesMode:
+		// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
+		// With round robin load balancer, Dapr can find the leader automatically.
+		conn, err = dnslookup.New(dnslookup.Options{
+			Address:     opts.Addresses[0],
+			GRPCOptions: gopts,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create roundrobin client: %w", err)
+		}
+	default:
+		// In non-Kubernetes environment, will round robin over the provided addresses
+		conn, err = static.New(static.Options{
+			Addresses:   opts.Addresses,
+			GRPCOptions: gopts,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create roundrobin client: %w", err)
+		}
+	}
+
+	var ready atomic.Bool
+
+	errCh := make(chan error, 1)
+
 	return &placement{
-		client:            client,
-		actorTable:        opts.Table,
-		virtualNodesCache: hashing.NewVirtualNodesCache(),
-		hashTable: &hashing.ConsistentHashTables{
-			Entries: make(map[string]*hashing.Consistent),
-		},
-		appID:         opts.AppID,
-		port:          strconv.Itoa(opts.Port),
-		namespace:     opts.Namespace,
-		hostname:      opts.Hostname,
-		operationLock: fifo.New(),
-		apiLevel:      opts.APILevel,
-		scheduler:     opts.Scheduler,
-		htarget:       opts.Healthz.AddTarget("internal-placement-service"),
-		lock:          lock,
-		closedCh:      make(chan struct{}),
-		readyCh:       make(chan struct{}),
+		ready:    &ready,
+		hostname: opts.Hostname,
+		port:     strconv.Itoa(opts.Port),
+		table:    opts.Table,
+		loop: loopsplacement.New(loopsplacement.Options{
+			Ready:      &ready,
+			ActorTable: opts.Table,
+			Scheduler:  opts.Scheduler,
+			Hostname:   opts.Hostname,
+			Port:       strconv.Itoa(opts.Port),
+			ID:         opts.AppID,
+			Namespace:  opts.Namespace,
+			Healthz:    opts.Healthz,
+			Connector:  conn,
+			InitialHost: &v1pb.Host{
+				Name:      opts.Hostname + ":" + strconv.Itoa(opts.Port),
+				Id:        opts.AppID,
+				ApiLevel:  20,
+				Namespace: opts.Namespace,
+			},
+			DisseminationTimeout: time.Second * 5,
+			Cancel: func(cause error) {
+				errCh <- cause
+			},
+		}),
 	}, nil
 }
 
 func (p *placement) Run(ctx context.Context) error {
-	err := concurrency.NewRunnerManager(
-		p.client.Run,
+	ch, atypes := p.table.SubscribeToTypeUpdates(ctx)
+	defer func() {
+		cctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+		if err := p.table.HaltAll(cctx); err != nil {
+			log.Errorf("Failed to halt all actors during placement shutdown: %v", err)
+		}
+	}()
+
+	return concurrency.NewRunnerManager(
+		p.loop.Run,
 		func(ctx context.Context) error {
-			p.lock.Run(ctx)
-			return nil
+			select {
+			case err := <-p.errCh:
+				return err
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		},
 		func(ctx context.Context) error {
-			ch, actorTypes := p.actorTable.SubscribeToTypeUpdates(ctx)
-			if len(actorTypes) > 0 {
-				p.reloadTypes.Store(true)
-			}
-
-			log.Infof("Reporting actor types: %v", actorTypes)
-			if err := p.sendHost(ctx, actorTypes); err != nil {
-				return err
-			}
-
-			tch := time.NewTicker(statusReportHeartbeatInterval)
-			defer tch.Stop()
-
+			p.loop.Enqueue(&loops.PlacementReconnect{
+				ActorTypes: ptr.Of(atypes),
+			})
 			for {
 				select {
-				case actorTypes = <-ch:
-					p.scheduler.ReloadActorTypes([]string{})
-					p.reloadTypes.Store(true)
-					log.Infof("Updating actor types: %v", actorTypes)
-					// TODO: @joshvanl: it is a nonsense to be sending the same actor
-					// types over and over again, *every second*. This should be removed
-					// ASAP.
-				case <-tch.C:
+				case atypes := <-ch:
+					p.loop.Enqueue(&loops.UpdateTypes{
+						ActorTypes: atypes,
+					})
 				case <-ctx.Done():
-					return nil
+					log.Info("Placement client shutting down")
+					p.loop.Close(&loops.Shutdown{Error: ctx.Err()})
+					return ctx.Err()
 				}
-
-				if err := p.sendHost(ctx, actorTypes); err != nil {
-					return err
-				}
-			}
-		},
-		func(ctx context.Context) error {
-			defer p.wg.Wait()
-
-			for {
-				in, err := p.client.Recv(ctx)
-				if err != nil {
-					return err
-				}
-
-				p.handleReceive(ctx, in)
 			}
 		},
 	).Run(ctx)
-
-	close(p.closedCh)
-
-	p.operationLock.Lock()
-	if p.tableUnlock != nil {
-		p.tableUnlock()
-		p.tableUnlock = nil
-	}
-	p.operationLock.Unlock()
-
-	return err
 }
 
-// LookupActor returns the address of the actor.
-// Placement _must_ be locked before calling this method.
-func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error) {
-	table, ok := p.hashTable.Entries[req.ActorType]
-	if !ok {
-		return nil, messages.ErrActorNoAddress
-	}
+func (p *placement) Lock(ctx context.Context) (context.Context, context.CancelCauseFunc, error) {
+	ch := make(chan *loops.LockResponse, 1)
+	p.loop.Enqueue(&loops.LockRequest{
+		Context:  ctx,
+		Response: ch,
+	})
 
-	host, err := table.GetHost(req.ActorID)
-	if err != nil {
-		return nil, err
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	case resp := <-ch:
+		if resp.Context.Err() != nil {
+			return nil, nil, resp.Context.Err()
+		}
+		return resp.Context, resp.Cancel, nil
 	}
-
-	return &api.LookupActorResponse{
-		Address: host.Name,
-		AppID:   host.AppID,
-		Local:   p.isActorLocal(host.Name, p.hostname, p.port),
-	}, nil
 }
 
 func (p *placement) Ready() bool {
-	return p.client.Ready()
+	return p.ready.Load()
 }
 
-func (p *placement) sendHost(ctx context.Context, actorTypes []string) error {
-	if err := p.client.Send(ctx, actorTypes); err != nil {
-		diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
-		return err
-	}
+func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
+	ch := make(chan *loops.LookupResponse, 1)
+	p.loop.Enqueue(&loops.LookupRequest{
+		Context:  ctx,
+		Request:  req,
+		Response: ch,
+	})
 
-	diag.DefaultMonitoring.ActorStatusReported("send")
-
-	return nil
-}
-
-func (p *placement) handleReceive(ctx context.Context, in *v1pb.PlacementOrder) {
-	p.operationLock.Lock()
-	defer p.operationLock.Unlock()
-
-	log.Debugf("Placement order received: %s", in.GetOperation())
-	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.GetOperation())
-
-	switch in.GetOperation() {
-	case lockOperation:
-		p.handleLockOperation(ctx)
-	case updateOperation:
-		p.handleUpdateOperation(ctx, in.GetTables())
-	case unlockOperation:
-		p.handleUnlockOperation(ctx)
-	}
-}
-
-func (p *placement) Lock(ctx context.Context) (context.Context, context.CancelFunc, error) {
 	select {
-	case <-p.readyCh:
 	case <-ctx.Done():
-		return nil, nil, ctx.Err()
-	}
-	return p.lock.RLock(ctx)
-}
-
-func (p *placement) handleLockOperation(ctx context.Context) {
-	lockVersion := p.lockVersion.Add(1)
-
-	if p.tableUnlock != nil {
-		return
-	}
-
-	p.tableUnlock = p.lock.Lock()
-
-	clear(p.hashTable.Entries)
-
-	// If we don't receive an unlock in 15 seconds, unlock the table.
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		select {
-		case <-ctx.Done():
-		case <-time.After(time.Second * 15):
-			p.operationLock.Lock()
-			defer p.operationLock.Unlock()
-			if p.updateVersion.Load() < lockVersion {
-				p.updateVersion.Store(lockVersion)
-				clear(p.hashTable.Entries)
-				if p.tableUnlock != nil {
-					p.tableUnlock()
-					p.tableUnlock = nil
-				}
-			}
+		return nil, nil, nil, ctx.Err()
+	case resp := <-ch:
+		if resp.Error != nil {
+			return nil, nil, nil, resp.Error
 		}
-	}()
-}
-
-func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.PlacementTables) {
-	p.apiLevel.Set(in.GetApiLevel())
-
-	entries := make(map[string]*hashing.Consistent)
-
-	for k, v := range in.GetEntries() {
-		loadMap := make(map[string]*hashing.Host, len(v.GetLoadMap()))
-		for lk, lv := range v.GetLoadMap() {
-			loadMap[lk] = hashing.NewHost(lv.GetName(), lv.GetId(), lv.GetLoad(), lv.GetPort())
+		if resp.Context.Err() != nil {
+			return nil, nil, nil, resp.Context.Err()
 		}
-
-		entries[k] = hashing.NewFromExisting(loadMap, in.GetReplicationFactor(), p.virtualNodesCache)
+		return resp.Response, resp.Context, resp.Cancel, nil
 	}
-
-	clear(p.hashTable.Entries)
-	p.hashTable.Version = in.GetVersion()
-	p.hashTable.Entries = entries
-
-	if err := p.actorTable.HaltNonHosted(ctx); err != nil {
-		log.Errorf("Error draining non-hosted actors: %s", err)
-	}
-
-	log.Infof("Placement tables updated, version: %s", in.GetVersion())
 }
 
 func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string) bool {
-	lar, err := p.LookupActor(ctx, &api.LookupActorRequest{
+	lar, _, cancel, err := p.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -337,50 +249,7 @@ func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string
 		log.Errorf("failed to lookup actor %s/%s: %s", actorType, actorID, err)
 		return false
 	}
+	cancel(nil)
 
-	return lar != nil && p.isActorLocal(lar.Address, p.hostname, p.port)
-}
-
-func (p *placement) handleUnlockOperation(ctx context.Context) {
-	if p.updateVersion.Add(1) != p.lockVersion.Load() {
-		return
-	}
-
-	select {
-	case <-p.readyCh:
-	default:
-		found := true
-		for _, actorType := range p.actorTable.Types() {
-			if _, ok := p.hashTable.Entries[actorType]; !ok {
-				found = false
-				break
-			}
-		}
-
-		if found {
-			close(p.readyCh)
-		}
-	}
-
-	if p.reloadTypes.Load() {
-		p.scheduler.ReloadActorTypes(p.actorTable.Types())
-		p.reloadTypes.Store(false)
-	}
-
-	p.htarget.Ready()
-	p.tableUnlock()
-	p.tableUnlock = nil
-}
-
-func (p *placement) isActorLocal(targetActorAddress, hostAddress string, port string) bool {
-	if targetActorAddress == hostAddress+":"+port {
-		// Easy case when there is a perfect match
-		return true
-	}
-
-	if utils.IsLocalhost(hostAddress) && strings.HasSuffix(targetActorAddress, ":"+port) {
-		return utils.IsLocalhost(targetActorAddress[0 : len(targetActorAddress)-len(port)-1])
-	}
-
-	return false
+	return lar != nil && loops.IsActorLocal(lar.Address, p.hostname, p.port)
 }

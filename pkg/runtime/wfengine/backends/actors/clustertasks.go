@@ -93,39 +93,41 @@ func (be *ClusterTasksBackend) CancelActivityTask(ctx context.Context, id api.In
 	return err
 }
 
-func (be *ClusterTasksBackend) WaitForActivityCompletion(ctx context.Context, req *protos.ActivityRequest) (*protos.ActivityResponse, error) {
-	router, err := be.actors.Router(ctx)
-	if err != nil {
-		return nil, err
+func (be *ClusterTasksBackend) WaitForActivityCompletion(req *protos.ActivityRequest) func(context.Context) (*protos.ActivityResponse, error) {
+	return func(ctx context.Context) (*protos.ActivityResponse, error) {
+		router, err := be.actors.Router(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		key := backend.GetActivityExecutionKey(
+			req.GetOrchestrationInstance().GetInstanceId(),
+			req.GetTaskId(),
+		)
+		sreq := internalsv1pb.
+			NewInternalInvokeRequest(executor.MethodWatchComplete).
+			WithActor(be.executorActorType, key).
+			WithContentType(invokev1.ProtobufContentType)
+
+		var resp protos.ActivityResponse
+		err = router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
+			if res == nil {
+				return false, errors.New("received nil response from activity completion")
+			}
+			if res.GetStatus().GetCode() == int32(codes.Aborted) {
+				return false, api.ErrTaskCancelled
+			}
+			if err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp); err != nil {
+				return false, err
+			}
+			return true, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return &resp, nil
 	}
-
-	key := backend.GetActivityExecutionKey(
-		req.GetOrchestrationInstance().GetInstanceId(),
-		req.GetTaskId(),
-	)
-	sreq := internalsv1pb.
-		NewInternalInvokeRequest(executor.MethodWatchComplete).
-		WithActor(be.executorActorType, key).
-		WithContentType(invokev1.ProtobufContentType)
-
-	var resp protos.ActivityResponse
-	err = router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
-		if res == nil {
-			return false, errors.New("received nil response from activity completion")
-		}
-		if res.GetStatus().GetCode() == int32(codes.Aborted) {
-			return false, api.ErrTaskCancelled
-		}
-		if err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp); err != nil {
-			return false, err
-		}
-		return true, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
 }
 
 func (be *ClusterTasksBackend) CompleteOrchestratorTask(ctx context.Context, resp *protos.OrchestratorResponse) error {
@@ -164,33 +166,35 @@ func (be *ClusterTasksBackend) CancelOrchestratorTask(ctx context.Context, id ap
 	return err
 }
 
-func (be *ClusterTasksBackend) WaitForOrchestratorCompletion(ctx context.Context, req *protos.OrchestratorRequest) (*protos.OrchestratorResponse, error) {
-	router, err := be.actors.Router(ctx)
-	if err != nil {
-		return nil, err
+func (be *ClusterTasksBackend) WaitForOrchestratorCompletion(req *protos.OrchestratorRequest) func(context.Context) (*protos.OrchestratorResponse, error) {
+	return func(ctx context.Context) (*protos.OrchestratorResponse, error) {
+		router, err := be.actors.Router(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		sreq := internalsv1pb.
+			NewInternalInvokeRequest(executor.MethodWatchComplete).
+			WithActor(be.executorActorType, req.GetInstanceId()).
+			WithContentType(invokev1.ProtobufContentType)
+
+		var resp protos.OrchestratorResponse
+		err = router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
+			if res == nil {
+				return false, errors.New("received nil response from activity completion")
+			}
+			if res.GetStatus().GetCode() == int32(codes.Aborted) {
+				return false, api.ErrTaskCancelled
+			}
+			if err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp); err != nil {
+				return false, err
+			}
+			return true, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return &resp, nil
 	}
-
-	sreq := internalsv1pb.
-		NewInternalInvokeRequest(executor.MethodWatchComplete).
-		WithActor(be.executorActorType, req.GetInstanceId()).
-		WithContentType(invokev1.ProtobufContentType)
-
-	var resp protos.OrchestratorResponse
-	err = router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
-		if res == nil {
-			return false, errors.New("received nil response from activity completion")
-		}
-		if res.GetStatus().GetCode() == int32(codes.Aborted) {
-			return false, api.ErrTaskCancelled
-		}
-		if err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp); err != nil {
-			return false, err
-		}
-		return true, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
 }
