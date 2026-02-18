@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +73,7 @@ spec:
         - /v1.0/invoke/myapp/method/orders/1234
         - /v1.0/invoke/myapp/method/orders/{orderID}
         - /v1.0/invoke/myapp/method/orders
+        - /v1.0/state/mystore/{key}
 `),
 	)
 
@@ -82,6 +84,17 @@ spec:
 
 func (h *lowCardinality) Run(t *testing.T, ctx context.Context) {
 	h.daprd.WaitUntilRunning(t, ctx)
+
+	t.Run("increasedCardinality false and pathMatching: metric path label is matched path not empty", func(t *testing.T) {
+		body := `[{"key": "foo", "value": "v1"}]`
+		h.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore", strings.NewReader(body), "content-type", "application/json")
+		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/state/mystore/foo")
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := h.daprd.Metrics(c, ctx).All()
+			matchedKey := "dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/state/mystore/{key}|status:200"
+			assert.Equal(c, 1, int(metrics[matchedKey]), "expected: GET state/key under matched path")
+		}, time.Second*10, time.Millisecond*10)
+	})
 
 	t.Run("service invocation - matches ingres/egress", func(t *testing.T) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/orders/1111")
