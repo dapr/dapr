@@ -1,0 +1,20 @@
+diff --git a/tests/e2e/resiliency/resiliency_test.go b/tests/e2e/resiliency/resiliency_test.go
+index 1ffa9c7bb..0fc584aa9 100644
+--- a/tests/e2e/resiliency/resiliency_test.go
++++ b/tests/e2e/resiliency/resiliency_test.go
+@@ -541,12 +541,12 @@ func TestActorResiliency(t *testing.T) {
+ 		t.Run(tc.Name, func(t *testing.T) {
+ 			message := createFailureMessage(tc.FailureCount, tc.Timeout, nil)
+ 			b, _ := json.Marshal(message)
+-			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeActor/%s", externalURL, tc.protocol), b)
++			body, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeActor/%s", externalURL, tc.protocol), b)
+ 			require.NoError(t, err)
+ 			if !tc.shouldFail {
+-				require.Equal(t, 200, code)
++				require.Equal(t, 200, code, fmt.Sprintf("Unexpected response body: %s", string(body)))
+ 			} else {
+-				require.Equal(t, 500, code)
++				require.Equal(t, 500, code, fmt.Sprintf("Unexpected response body: %s", string(body)))
+ 			}
+ 
+ 			// Let the binding propagate and give time for retries/timeout.
