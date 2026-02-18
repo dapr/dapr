@@ -1,0 +1,24 @@
+diff --git a/tests/integration/import.go b/tests/integration/import.go
+index 67623985f..d22198225 100644
+--- a/tests/integration/import.go
++++ b/tests/integration/import.go
+@@ -19,7 +19,6 @@ import (
+ 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/helm"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/operator"
+-	_ "github.com/dapr/dapr/tests/integration/suite/placement"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
+diff --git a/tests/integration/suite/daprd/workflow/workflow.go b/tests/integration/suite/daprd/workflow/workflow.go
+index 55740a21a..78cae5a3b 100644
+--- a/tests/integration/suite/daprd/workflow/workflow.go
++++ b/tests/integration/suite/daprd/workflow/workflow.go
+@@ -23,7 +23,6 @@ import (
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/maxconcurrent"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/memory"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/nostatestore"
+-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/reconnect"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/records"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/rerun"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/retries"
