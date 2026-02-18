@@ -77,3 +77,7 @@ securityContext:
 resources: {}
 
 extraEnvVars: {}
+
+# Pod anti-affinity scheduling policy: use the full Kubernetes field name.
+# Valid values: "preferredDuringSchedulingIgnoredDuringExecution" or "requiredDuringSchedulingIgnoredDuringExecution".
+podAntiAffinityPolicy: requiredDuringSchedulingIgnoredDuringExecution

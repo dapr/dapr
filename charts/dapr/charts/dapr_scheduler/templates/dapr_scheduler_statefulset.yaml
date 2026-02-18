@@ -257,6 +257,16 @@ spec:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
         podAntiAffinity:
+{{- if eq .Values.podAntiAffinityPolicy "requiredDuringSchedulingIgnoredDuringExecution" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - dapr-scheduler-server
+            topologyKey: {{ .Values.global.ha.topologyKey }}
+{{- else }}
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
             podAffinityTerm:
@@ -267,6 +277,7 @@ spec:
                   values:
                   - dapr-scheduler-server
               topologyKey: {{ .Values.global.ha.topologyKey }}
+{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}
