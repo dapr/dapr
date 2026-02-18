@@ -50,7 +50,7 @@ jobs:
       GOPROXY: "https://proxy.golang.org"
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
@@ -119,7 +119,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Dependency review
         uses: actions/dependency-review-action@v4
       - uses: actions/setup-go@v6
@@ -149,7 +149,7 @@ jobs:
       GOPROXY: "https://proxy.golang.org"
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
@@ -191,7 +191,7 @@ jobs:
       TEST_OUTPUT_FILE_PREFIX: "test_report"
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
@@ -241,7 +241,7 @@ jobs:
         run: |
           python3 -c 'import socket;print("localhost resolves to:",list(info[4][0] for info in socket.getaddrinfo("localhost", None)))'
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
@@ -332,10 +332,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
-        with:
-          version: v0.10.1 # Don't use latest since it broke our workflow once
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
@@ -452,9 +450,10 @@ jobs:
       contents: read
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - uses: docker/setup-buildx-action@v3
       - name: Set REPO_OWNER
         if: matrix.target_os != 'darwin'
         shell: bash
@@ -559,7 +558,7 @@ jobs:
         sidecar_flavor: ["allcomponents", "stablecomponents"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Updates version for sidecar flavor
@@ -669,7 +668,7 @@ jobs:
         with:
           version: ${{ env.HELMVER }}
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Set REPO_OWNER
@@ -733,7 +732,7 @@ jobs:
           name: dapr_helm_charts_package
           path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
       - name: Checkout Helm Charts Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         env:
           DAPR_HELM_REPO: dapr/helm-charts
           DAPR_HELM_REPO_CODE_PATH: helm-charts
@@ -775,7 +774,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Trigger GitHub workflow
