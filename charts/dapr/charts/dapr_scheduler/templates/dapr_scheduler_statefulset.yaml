@@ -257,7 +257,7 @@ spec:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
         podAntiAffinity:
-{{- if eq .Values.podAntiAffinityPolicy "requiredDuringSchedulingIgnoredDuringExecution" }}
+{{- if eq .Values.global.ha.podAntiAffinityPolicy "requiredDuringSchedulingIgnoredDuringExecution" }}
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchExpressions:

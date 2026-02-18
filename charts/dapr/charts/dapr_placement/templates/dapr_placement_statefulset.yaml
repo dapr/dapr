@@ -229,7 +229,7 @@ spec:
 {{- end }}
 {{- if .Values.global.ha.enabled }}
         podAntiAffinity:
-{{- if eq .Values.podAntiAffinityPolicy "requiredDuringSchedulingIgnoredDuringExecution" }}
+{{- if eq .Values.global.ha.podAntiAffinityPolicy "requiredDuringSchedulingIgnoredDuringExecution" }}
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchExpressions:
