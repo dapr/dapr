@@ -335,7 +335,7 @@ func (o *OtelSpec) UnmarshalJSON(data []byte) error {
 		}
 	}
 
-	if len(raw.Timeout) > 0 {
+	if raw.Timeout != nil {
 		var d time.Duration
 		if err := json.Unmarshal(raw.Timeout, &d); err != nil {
 			var s string
