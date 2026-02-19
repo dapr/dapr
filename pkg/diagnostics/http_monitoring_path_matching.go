@@ -93,6 +93,9 @@ func (pm *pathMatching) match(path string) (string, bool) {
 
 	cleanPath := NormalizeHTTPPath(path)
 	req, _ := http.NewRequest(http.MethodGet, cleanPath, nil)
+	if req.URL != nil {
+		req.URL.Path = cleanPath
+	}
 
 	_, pattern := pm.mux.Handler(req)
 
