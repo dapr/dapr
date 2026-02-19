@@ -45,6 +45,7 @@ type Clients struct {
 	disabled     chan struct{}
 	currentAddrs []string
 
+	wg      sync.WaitGroup
 	lock    sync.RWMutex
 	hasInit chan struct{}
 }
@@ -64,6 +65,8 @@ func (c *Clients) Disable() {
 func (c *Clients) Reload(ctx context.Context, addresses []string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	c.wg.Wait()
 
 	c.currentAddrs = []string{}
 	c.close()
@@ -100,24 +103,25 @@ func (c *Clients) Reload(ctx context.Context, addresses []string) error {
 }
 
 // Next returns the next client in a round-robin manner.
-func (c *Clients) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, error) {
+func (c *Clients) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, context.CancelFunc, error) {
 	select {
 	case <-c.hasInit:
 	case <-c.disabled:
-		return nil, errors.New("scheduler clients are disabled")
+		return nil, nil, errors.New("scheduler clients are disabled")
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
 
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
 	if len(c.clients) == 0 {
-		return nil, errors.New("no scheduler client initialized")
+		return nil, nil, errors.New("no scheduler client initialized")
 	}
 
+	c.wg.Add(1)
 	//nolint:gosec
-	return c.clients[int(c.lastUsedIdx.Add(1))%len(c.clients)], nil
+	return c.clients[int(c.lastUsedIdx.Add(1))%len(c.clients)], c.wg.Done, nil
 }
 
 func (c *Clients) Addresses() []string {
