@@ -403,7 +403,7 @@ func waitForSubscriberReady(t *testing.T, subscriberExternalURL, protocol string
 	}
 }
 
-func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string, podEndpoints []string) string {
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
 	waitForSubscriberReady(t, subscriberExternalURL, protocol)
@@ -415,11 +415,11 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
 
 	time.Sleep(10 * time.Second)
-	validateBulkMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+	validateBulkMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages, podEndpoints)
 	return subscriberExternalURL
 }
 
-func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string, podEndpoints []string) string {
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
 	waitForSubscriberReady(t, subscriberExternalURL, protocol)
@@ -427,17 +427,15 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 	log.Printf("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
-	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages, podEndpoints)
 	return subscriberExternalURL
 }
 
-func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string, podEndpoints []string) string {
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
 	waitForSubscriberReady(t, subscriberExternalURL, protocol)
 
-	podEndpoints, err := tr.Platform.GetAppPodEndpoints(subscriberAppName)
-	require.NoError(t, err, "get subscriber pod endpoints")
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.NoError(c, initializeSubscriber(publisherExternalURL, protocol), "initialize subscriber")
 		empty, err := subscriberMainTopicsEmpty(publisherExternalURL, protocol, podEndpoints)
@@ -449,11 +447,11 @@ func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, su
 	sentMessages := testPublishForBulkSubscribe(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
-	validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+	validateMessagesReceivedWhenSomeTopicsBulkSubscribed(t, publisherExternalURL, subscriberAppName, protocol, sentMessages, podEndpoints)
 	return subscriberExternalURL
 }
 
-func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string) string {
+func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string, _ []string) string {
 	log.Printf("Test publish without topic")
 	commandBody := publishCommand{
 		ReqID:    "c-" + uuid.New().String(),
@@ -476,14 +474,12 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 }
 
 // testResiliencyExhaustion: Wait for resiliency policy to exhaust (5 retries @ 1s = 5s + buffer)
-func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
+func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string, podEndpoints []string) string {
 	var err error
 	var code int
 	log.Printf("Test resiliency exhaustion - messages should be dropped after retries exhausted")
 	err = utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health checks failed")
-	podEndpoints, err := tr.Platform.GetAppPodEndpoints(subscriberAppName)
-	require.NoError(t, err, "get subscriber pod endpoints")
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.NoError(c, initializeSubscriber(publisherExternalURL, protocol), "initialize subscriber")
 		empty, err := subscriberMainTopicsEmpty(publisherExternalURL, protocol, podEndpoints)
@@ -531,12 +527,12 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 		ReceivedByTopicB:   []string{},
 		ReceivedByTopicC:   []string{},
 		ReceivedByTopicRaw: []string{},
-	})
+	}, podEndpoints)
 	return subscriberExternalURL
 }
 
 //nolint:staticcheck
-func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
+func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string, podEndpoints []string) string {
 	var err error
 	var code int
 	log.Print("Validating publisher health...")
@@ -544,8 +540,6 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	require.NoError(t, err, "Health checks failed")
 
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
-	podEndpoints, err := tr.Platform.GetAppPodEndpoints(subscriberAppName)
-	require.NoError(t, err, "get subscriber pod endpoints (for HA getMessages merge)")
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.NoError(c, initializeSubscriber(publisherExternalURL, protocol), "initialize subscriber")
 		empty, err := subscriberMainTopicsEmpty(publisherExternalURL, protocol, podEndpoints)
@@ -593,7 +587,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 	if subscriberResponse == "empty-json" {
 		// on empty-json response case immediately validate the received messages
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages, podEndpoints)
 	}
 
 	// restart application
@@ -614,11 +608,11 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			ReceivedByTopicB:   []string{},
 			ReceivedByTopicC:   []string{},
 			ReceivedByTopicRaw: []string{},
-		})
+		}, podEndpoints)
 	} else {
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages...")
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages, podEndpoints)
 	}
 	return subscriberExternalURL
 }
@@ -653,15 +647,16 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 	require.Nil(t, lastRetryError, "error calling /tests/callSubscriberMethod: %v", lastRetryError)
 }
 
-func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) {
+func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse, podEndpoints []string) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)
 
 	request := callSubscriberMethodRequest{
-		RemoteApp: subscriberApp,
-		Protocol:  protocol,
-		Method:    "getMessages",
+		RemoteApp:    subscriberApp,
+		Protocol:     protocol,
+		Method:       "getMessages",
+		PodEndpoints: podEndpoints,
 	}
 
 	var appResp receivedMessagesResponse
@@ -725,16 +720,17 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 }
 
 func validateMessagesReceivedBySubscriber(
-	t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse,
+	t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse, podEndpoints []string,
 ) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)
 
 	request := callSubscriberMethodRequest{
-		RemoteApp: subscriberApp,
-		Protocol:  protocol,
-		Method:    "getMessages",
+		RemoteApp:    subscriberApp,
+		Protocol:     protocol,
+		Method:       "getMessages",
+		PodEndpoints: podEndpoints,
 	}
 
 	var appResp receivedMessagesResponse
@@ -797,16 +793,17 @@ func validateMessagesReceivedBySubscriber(
 }
 
 func validateMessagesReceivedWhenSomeTopicsBulkSubscribed(
-	t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedBulkMessagesResponse,
+	t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedBulkMessagesResponse, podEndpoints []string,
 ) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)
 
 	request := callSubscriberMethodRequest{
-		RemoteApp: subscriberApp,
-		Protocol:  protocol,
-		Method:    "getMessages",
+		RemoteApp:    subscriberApp,
+		Protocol:     protocol,
+		Method:       "getMessages",
+		PodEndpoints: podEndpoints,
 	}
 
 	var appResp receivedBulkMessagesResponse
@@ -906,7 +903,7 @@ func TestMain(m *testing.M) {
 
 var pubsubTests = []struct {
 	name               string
-	handler            func(*testing.T, string, string, string, string, string) string
+	handler            func(*testing.T, string, string, string, string, string, []string) string
 	subscriberResponse string
 }{
 	{
@@ -970,7 +967,9 @@ func TestPubSubGRPC(t *testing.T) {
 	protocol := "grpc"
 	for _, tc := range pubsubTests {
 		t.Run(fmt.Sprintf("%s_%s", tc.name, protocol), func(t *testing.T) {
-			tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName, protocol)
+			podEndpoints, err := tr.Platform.GetAppPodEndpoints(subscriberAppName)
+			require.NoError(t, err, "get subscriber pod endpoints")
+			tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName, protocol, podEndpoints)
 		})
 	}
 }
