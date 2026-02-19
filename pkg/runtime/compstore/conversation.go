@@ -31,7 +31,11 @@ func (c *ComponentStore) GetConversation(name string) (conversation.Conversation
 func (c *ComponentStore) ListConversations() map[string]conversation.Conversation {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.conversations
+	mcopy := make(map[string]conversation.Conversation, len(c.conversations))
+	for k, v := range c.conversations {
+		mcopy[k] = v
+	}
+	return mcopy
 }
 
 func (c *ComponentStore) DeleteConversation(name string) {

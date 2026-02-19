@@ -31,7 +31,11 @@ func (c *ComponentStore) GetSecretStore(name string) (secretstores.SecretStore, 
 func (c *ComponentStore) ListSecretStores() map[string]secretstores.SecretStore {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.secrets
+	mcopy := make(map[string]secretstores.SecretStore, len(c.secrets))
+	for k, v := range c.secrets {
+		mcopy[k] = v
+	}
+	return mcopy
 }
 
 func (c *ComponentStore) DeleteSecretStore(name string) {

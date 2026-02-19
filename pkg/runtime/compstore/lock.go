@@ -31,7 +31,11 @@ func (c *ComponentStore) GetLock(name string) (lock.Store, bool) {
 func (c *ComponentStore) ListLocks() map[string]lock.Store {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.locks
+	mcopy := make(map[string]lock.Store, len(c.locks))
+	for k, v := range c.locks {
+		mcopy[k] = v
+	}
+	return mcopy
 }
 
 func (c *ComponentStore) DeleteLock(name string) {

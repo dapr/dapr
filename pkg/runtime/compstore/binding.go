@@ -31,7 +31,11 @@ func (c *ComponentStore) GetInputBinding(name string) (bindings.InputBinding, bo
 func (c *ComponentStore) ListInputBindings() map[string]bindings.InputBinding {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.inputBindings
+	mcopy := make(map[string]bindings.InputBinding, len(c.inputBindings))
+	for k, v := range c.inputBindings {
+		mcopy[k] = v
+	}
+	return mcopy
 }
 
 func (c *ComponentStore) DeleteInputBinding(name string) {
@@ -56,7 +60,11 @@ func (c *ComponentStore) GetInputBindingRoute(name string) (string, bool) {
 func (c *ComponentStore) ListInputBindingRoutes() map[string]string {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.inputBindingRoutes
+	mcopy := make(map[string]string, len(c.inputBindingRoutes))
+	for k, v := range c.inputBindingRoutes {
+		mcopy[k] = v
+	}
+	return mcopy
 }
 
 func (c *ComponentStore) DeleteInputBindingRoute(name string) {
@@ -81,7 +89,11 @@ func (c *ComponentStore) GetOutputBinding(name string) (bindings.OutputBinding, 
 func (c *ComponentStore) ListOutputBindings() map[string]bindings.OutputBinding {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.outputBindings
+	mcopy := make(map[string]bindings.OutputBinding, len(c.outputBindings))
+	for k, v := range c.outputBindings {
+		mcopy[k] = v
+	}
+	return mcopy
 }
 
 func (c *ComponentStore) DeleteOutputBinding(name string) {

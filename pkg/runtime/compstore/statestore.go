@@ -47,7 +47,11 @@ func (c *ComponentStore) GetStateStore(name string) (state.Store, bool) {
 func (c *ComponentStore) ListStateStores() map[string]state.Store {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.states
+	mcopy := make(map[string]state.Store, len(c.states))
+	for k, v := range c.states {
+		mcopy[k] = v
+	}
+	return mcopy
 }
 
 func (c *ComponentStore) DeleteStateStore(name string) {

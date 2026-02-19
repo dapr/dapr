@@ -37,7 +37,11 @@ func (c *ComponentStore) GetConfiguration(name string) (configuration.Store, boo
 func (c *ComponentStore) ListConfigurations() map[string]configuration.Store {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.configurations
+	mcopy := make(map[string]configuration.Store, len(c.configurations))
+	for k, v := range c.configurations {
+		mcopy[k] = v
+	}
+	return mcopy
 }
 
 func (c *ComponentStore) ConfigurationsLen() int {

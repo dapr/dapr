@@ -45,7 +45,11 @@ func (c *ComponentStore) GetPubSubComponent(name string) (pubsub.PubSub, bool) {
 func (c *ComponentStore) ListPubSubs() map[string]*rtpubsub.PubsubItem {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.pubSubs
+	mcopy := make(map[string]*rtpubsub.PubsubItem, len(c.pubSubs))
+	for k, v := range c.pubSubs {
+		mcopy[k] = v
+	}
+	return mcopy
 }
 
 func (c *ComponentStore) PubSubsLen() int {
