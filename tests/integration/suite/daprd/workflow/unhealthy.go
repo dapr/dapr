@@ -123,8 +123,12 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 
 	close(releaseCh)
 
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
-	require.NoError(t, err)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		cctx, cancel := context.WithTimeout(ctx, time.Second*3)
+		defer cancel()
+		_, err = client.WaitForOrchestrationCompletion(cctx, id)
+		assert.NoError(c, err)
+	}, time.Second*30, time.Millisecond*10)
 
 	u.logline.EventuallyFoundAll(t)
 
