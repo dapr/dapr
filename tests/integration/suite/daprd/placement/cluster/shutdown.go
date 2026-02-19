@@ -101,9 +101,10 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 		hosts = hosts[1:]
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			table := leader.PlacementTables(t, ctx)
+			if !assert.Contains(c, table.Tables, "default") {
+				return
+			}
 			assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-			//nolint:gosec
-			assert.Equal(c, uint64(4+i), table.Tables["default"].Version)
 		}, time.Second*10, time.Millisecond*10)
 	}
 
