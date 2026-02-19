@@ -1,0 +1,119 @@
+## HTTP
+
+### TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus
+
+<img src="http/TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_data_volume.png" alt="TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_data_volume.png" />
+<img src="http/TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_duration_breakdown.png" alt="TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_duration_breakdown.png" />
+<img src="http/TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_duration_low.png" alt="TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_duration_low.png" />
+<img src="http/TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png" alt="TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png" />
+<img src="http/TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_memory.png" alt="TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_resource_memory.png" />
+<img src="http/TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_summary.png" alt="TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_summary.png" />
+<img src="http/TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_tail_latency.png" alt="TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_tail_latency.png" />
+<img src="http/TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_throughput.png" alt="TestPubsubBulkPublishBulkSubscribeHttpPerformance_kafka-messagebus_throughput.png" />
+
+### TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk
+
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_data_volume.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_data_volume.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_duration_breakdown.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_duration_breakdown.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_duration_low.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_duration_low.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_summary.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_summary.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_tail_latency.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_tail_latency.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_throughput.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_bulk_throughput.png" />
+
+### TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal
+
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_data_volume.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_data_volume.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_duration_breakdown.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_duration_breakdown.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_duration_low.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_duration_low.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_summary.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_summary.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_tail_latency.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_tail_latency.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_throughput.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b100_s1KB_normal_throughput.png" />
+
+### TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk
+
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_data_volume.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_data_volume.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_duration_breakdown.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_duration_breakdown.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_duration_low.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_duration_low.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_summary.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_summary.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_tail_latency.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_tail_latency.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_throughput.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_bulk_throughput.png" />
+
+### TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal
+
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_data_volume.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_data_volume.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_duration_breakdown.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_duration_breakdown.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_duration_low.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_duration_low.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_summary.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_summary.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_tail_latency.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_tail_latency.png" />
+<img src="http/TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_throughput.png" alt="TestPubsubBulkPublishHttpPerformance_memory-broker_b10_s1KB_normal_throughput.png" />
+
+### TestPubsubBulkPublishHttpPerformance_variants_duration
+
+<img src="http/TestPubsubBulkPublishHttpPerformance_variants_duration.png" alt="TestPubsubBulkPublishHttpPerformance_variants_duration.png" />
+
+### TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus
+
+<img src="http/TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_data_volume.png" alt="TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_data_volume.png" />
+<img src="http/TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_duration_breakdown.png" alt="TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_duration_breakdown.png" />
+<img src="http/TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_duration_low.png" alt="TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_duration_low.png" />
+<img src="http/TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png" alt="TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_cpu.png" />
+<img src="http/TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_memory.png" alt="TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_resource_memory.png" />
+<img src="http/TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_summary.png" alt="TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_summary.png" />
+<img src="http/TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_tail_latency.png" alt="TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_tail_latency.png" />
+<img src="http/TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_throughput.png" alt="TestPubsubBulkPublishSubscribeHttpPerformance_kafka-messagebus_throughput.png" />
+
+---------------
+
+## gRPC
+
+### TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event
+
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_duration_breakdown.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_duration_breakdown.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_duration_requested_vs_actual.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_duration_requested_vs_actual.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_histogram_count.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_histogram_count.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_histogram_percent.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_histogram_percent.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_qps.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_qps.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_resource_cpu.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_resource_cpu.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_resource_memory.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_resource_memory.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_summary.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_summary.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_tail_latency.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_with_with_cloud_event_tail_latency.png" />
+
+### TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)
+
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_duration_breakdown.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_duration_breakdown.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_duration_requested_vs_actual.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_duration_requested_vs_actual.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_histogram_count.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_histogram_count.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_histogram_percent.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_histogram_percent.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_qps.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_qps.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_resource_cpu.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_resource_cpu.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_resource_memory.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_resource_memory.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_summary.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_summary.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_tail_latency.png" alt="TestBulkPubsubPublishGrpcPerformance_In-memory_without_cloud_event_(raw_payload)_tail_latency.png" />
+
+### TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event
+
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_duration_breakdown.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_duration_breakdown.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_duration_requested_vs_actual.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_duration_requested_vs_actual.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_histogram_count.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_histogram_count.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_histogram_percent.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_histogram_percent.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_qps.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_qps.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_resource_cpu.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_resource_cpu.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_resource_memory.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_resource_memory.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_summary.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_summary.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_tail_latency.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_with_cloud_event_tail_latency.png" />
+
+### TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)
+
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_duration_breakdown.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_duration_breakdown.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_duration_requested_vs_actual.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_duration_requested_vs_actual.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_histogram_count.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_histogram_count.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_histogram_percent.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_histogram_percent.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_qps.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_qps.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_resource_cpu.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_resource_cpu.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_resource_memory.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_resource_memory.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_summary.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_summary.png" />
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_tail_latency.png" alt="TestBulkPubsubPublishGrpcPerformance_Kafka_without_cloud_event_(raw_payload)_tail_latency.png" />
+
+### TestBulkPubsubPublishGrpcPerformance_variants_duration
+
+<img src="grpc/TestBulkPubsubPublishGrpcPerformance_variants_duration.png" alt="TestBulkPubsubPublishGrpcPerformance_variants_duration.png" />

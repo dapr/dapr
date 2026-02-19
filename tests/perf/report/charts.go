@@ -25,9 +25,10 @@ import (
 
 // Collect all runs of the same test for aggregates when more than 1 iteration is run
 type combinedTestResult struct {
-	name    string
-	outDir  string
-	runners []Runner
+	name           string
+	outDir         string
+	runners        []Runner
+	resourceUsages []*ResourceUsage
 }
 
 var combinedResults = make(map[string]combinedTestResult)
@@ -132,7 +133,7 @@ func main() {
 	}
 
 	// TODO: cassie update this once automated based on release version
-	baseOutputDir := filepath.Join("charts", "master")
+	baseOutputDir := filepath.Join("charts", "v1.17.0")
 	if err = os.MkdirAll(baseOutputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error creating charts directory %s: %v\n", baseOutputDir, err)
 		os.Exit(1)
@@ -172,9 +173,9 @@ func main() {
 					if final != "" {
 						switch collectingSuite {
 						case SuiteK6:
-							processK6Summary(final, currentTest, currentPkg, baseOutputDir)
+							processK6Summary(final, currentTest, currentPkg, baseOutputDir, resourceByTest)
 						case SuiteFortio:
-							processFortioSummary(final, currentTest, currentPkg, baseOutputDir)
+							processFortioSummary(final, currentTest, currentPkg, baseOutputDir, resourceByTest)
 						default:
 							if debugEnabled {
 								debugf("no suite for %s.%s. Dropping collected JSON...", currentPkg, currentTest)
@@ -223,7 +224,7 @@ func main() {
 				continue
 			}
 
-			// Always try to parse resource usage lines
+			// Always try to parse resource usage lines, resource charts are drawn in the combinedResults loop
 			// TODO: cassie add a GH step to verify that this is logged in newly added perf tests
 			if usage, ok := parseResourceUsageLine(ev.Output); ok {
 				ru := resourceByTest[currentTest]
@@ -237,28 +238,6 @@ func main() {
 				} else if usage.resource == "sidecar" {
 					ru.SidecarCPUm = usage.cpuMilli
 					ru.SidecarMemMB = usage.memMB
-				}
-				if !ru.Drawn && ru.AppCPUm > 0 && ru.SidecarCPUm > 0 {
-					// draw charts once we have the resource data
-					apiName, transport, ok := classifyAPIAndTransport(currentPkg, currentTest)
-					if ok {
-						// specific to bulk pubsub dir
-						if strings.Contains(ev.Package, "pubsub") && strings.Contains(ev.Package, "bulk") {
-							apiName = "pubsub/bulk"
-						}
-						outDir := filepath.Join(baseOutputDir, apiName)
-						if transport != "" {
-							outDir = filepath.Join(outDir, transport)
-						}
-						err = os.MkdirAll(outDir, 0o755)
-						if err != nil {
-							fmt.Fprintf(os.Stderr, "error creating output directory %s: %v\n", outDir, err)
-						}
-						filePrefix := sanitizeName(currentTest)
-						makeResourceCPUChart(*ru, filePrefix, outDir)
-						makeResourceMemChart(*ru, filePrefix, outDir)
-						ru.Drawn = true
-					}
 				}
 			} else if rs, ok := parseRestartLine(ev.Output); ok {
 				ru := resourceByTest[currentTest]
@@ -290,12 +269,21 @@ func main() {
 				}
 				if collectingSuite == SuiteFortio && strings.Contains(lowerLine, "\"runtype\"") {
 					jsonBuilder.Reset()
-					jsonBuilder.WriteString("{\n")
+					line = strings.TrimPrefix(strings.TrimSpace(line), "Test summary ")
+					// When output is split across Output events, the first event we see may be a continuation (ex: "RunType":"...") missing the opening {
+					if !strings.HasPrefix(line, "{") {
+						line = "{" + line
+					}
 					jsonBuilder.WriteString(line)
 					continue
 				}
-				jsonBuilder.WriteString("\n")
-				jsonBuilder.WriteString(line)
+				// Fortio JSON is compact/single-line - concatenate continuations without newlines to avoid splitting mid-string
+				if collectingSuite == SuiteFortio {
+					jsonBuilder.WriteString(line)
+				} else {
+					jsonBuilder.WriteString("\n")
+					jsonBuilder.WriteString(line)
+				}
 				continue
 			}
 			// Not collecting yet, so decide start & determine if its k6 vs fortio from testModes
@@ -321,12 +309,16 @@ func main() {
 				continue
 			}
 			// Start Fortio collection when we see the first field like "RunType": & confirm json matches testModeFromTest
+			// Fortio output is "Test summary `{...}`" - strip the known prefix. When split across Output events, we may get a continuation missing the opening {
 			if testModeFromTest == "fortio" && strings.Contains(lower, "\"runtype\"") {
 				collecting = true
 				collectingSuite = SuiteFortio
 				jsonBuilder.Reset()
-				jsonBuilder.WriteString("{\n")
 				line := strings.ReplaceAll(ev.Output, "`", "")
+				line = strings.TrimPrefix(strings.TrimSpace(line), "Test summary ")
+				if !strings.HasPrefix(line, "{") {
+					line = "{" + line
+				}
 				jsonBuilder.WriteString(line)
 				continue
 			}
@@ -342,9 +334,9 @@ func main() {
 				if final != "" {
 					switch collectingSuite {
 					case SuiteK6:
-						processK6Summary(final, currentTest, currentPkg, baseOutputDir)
+						processK6Summary(final, currentTest, currentPkg, baseOutputDir, resourceByTest)
 					case SuiteFortio:
-						processFortioSummary(final, currentTest, currentPkg, baseOutputDir)
+						processFortioSummary(final, currentTest, currentPkg, baseOutputDir, resourceByTest)
 					default:
 					}
 				}
@@ -392,6 +384,20 @@ func main() {
 
 		// comparison chart across runs (skipped if only 1 run)
 		makeCombinedCharts(result.runners, prefix, result.outDir)
+
+		// resource_cpu & resource_memory charts
+		if len(result.resourceUsages) > 0 {
+			var ru *ResourceUsage
+			if runCount == 1 {
+				ru = result.resourceUsages[0]
+			} else if len(result.resourceUsages) >= 2 {
+				ru = aggregateResourceUsages(result.resourceUsages)
+			}
+			if ru != nil {
+				makeResourceCPUChart(*ru, prefix, result.outDir)
+				makeResourceMemChart(*ru, prefix, result.outDir)
+			}
+		}
 	}
 
 	// PubSub variant comparison charts bc it runs with a t.run with multiple inputs here:
@@ -404,7 +410,40 @@ func main() {
 		makeVariantComparisonCharts(cmp.labels, cmp.runners, sanitizeName(cmp.baseName), cmp.outDir)
 	}
 
+	// Write README.md per folder (and combined at API roots for http & grpc) for displaying charts
+	writeReadmes(baseOutputDir)
+	log.Printf("Generated READMEs for charts in %s\n", baseOutputDir)
+
 	log.Printf("Generated charts for performance tests in %s\n", baseOutputDir)
+}
+
+// aggregateResourceUsages averages ResourceUsage across runs
+func aggregateResourceUsages(usages []*ResourceUsage) *ResourceUsage {
+	if len(usages) == 0 {
+		return nil
+	}
+	if len(usages) == 1 {
+		return usages[0]
+	}
+	n := float64(len(usages))
+	var avg ResourceUsage
+	for _, ru := range usages {
+		avg.AppCPUm += ru.AppCPUm
+		avg.AppMemMB += ru.AppMemMB
+		avg.SidecarCPUm += ru.SidecarCPUm
+		avg.SidecarMemMB += ru.SidecarMemMB
+		if ru.TargetRestarts > avg.TargetRestarts {
+			avg.TargetRestarts = ru.TargetRestarts
+		}
+		if ru.TesterRestarts > avg.TesterRestarts {
+			avg.TesterRestarts = ru.TesterRestarts
+		}
+	}
+	avg.AppCPUm /= n
+	avg.AppMemMB /= n
+	avg.SidecarCPUm /= n
+	avg.SidecarMemMB /= n
+	return &avg
 }
 
 // aggregateRunners builds a runner whose metrics are the per-field
