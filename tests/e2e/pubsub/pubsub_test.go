@@ -184,7 +184,7 @@ func sendToPublisherBulk(t *testing.T, publisherExternalURL string, topic string
 
 	statusCode, err := postSingleMessage(url, jsonValue)
 	// return on an unsuccessful publish
-	if statusCode != http.StatusOK && statusCode != http.StatusNoContent {
+	if statusCode != http.StatusNoContent {
 		return nil, err
 	}
 
@@ -313,12 +313,7 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 	require.NoError(t, err, "Health check failed for publisher")
 
 	setDesiredResponse(t, subscriberAppName, "drop", publisherExternalURL, protocol)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NoError(c, initializeSubscriber(subscriberAppName, publisherExternalURL, protocol), "initialize subscriber")
-		empty, err := subscriberMainTopicsEmpty(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
-		assert.NoError(c, err, "getMessages after initialize")
-		assert.True(c, empty, "subscriber state should be clear before sending")
-	}, 30*time.Second, 2*time.Second, "subscriber state not clear after initialize")
+	callInitialize(t, subscriberAppName, publisherExternalURL, protocol, podEndpoints)
 
 	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-topic", protocol, nil, "")
 	require.NoError(t, err)
@@ -347,12 +342,7 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NoError(c, initializeSubscriber(subscriberAppName, publisherExternalURL, protocol), "initialize subscriber")
-		empty, err := subscriberMainTopicsEmpty(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
-		assert.NoError(c, err, "getMessages after initialize")
-		assert.True(c, empty, "subscriber state should be clear before sending")
-	}, 30*time.Second, 2*time.Second, "subscriber state not clear after initialize")
+	callInitialize(t, subscriberAppName, publisherExternalURL, protocol, podEndpoints)
 	setDesiredResponse(t, subscriberAppName, "error", publisherExternalURL, protocol)
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 	_ = sentMessages
@@ -449,12 +439,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	require.NoError(t, err, "Health check failed for publisher")
 
 	log.Println("Initialize the sets for this scenario ...")
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NoError(c, initializeSubscriber(subscriberAppName, publisherExternalURL, protocol), "initialize subscriber")
-		empty, err := subscriberMainTopicsEmpty(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
-		assert.NoError(c, err, "getMessages after initialize")
-		assert.True(c, empty, "subscriber state should be clear (no messages on topics) before sending")
-	}, 30*time.Second, 2*time.Second, "subscriber state not clear after initialize")
+	callInitialize(t, subscriberAppName, publisherExternalURL, protocol, podEndpoints)
 
 	// set to respond with specified subscriber response
 	setDesiredResponse(t, subscriberAppName, subscriberResponse, publisherExternalURL, protocol)
@@ -466,12 +451,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		time.Sleep(10 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
 
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.NoError(c, initializeSubscriber(subscriberAppName, publisherExternalURL, protocol), "initialize subscriber")
-			empty, err := subscriberMainTopicsEmpty(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
-			assert.NoError(c, err, "getMessages after initialize")
-			assert.True(c, empty, "subscriber state should be clear before no-redelivery check")
-		}, 30*time.Second, 2*time.Second, "subscriber state not clear after re-initialize for empty-json")
+		callInitialize(t, subscriberAppName, publisherExternalURL, protocol, podEndpoints)
 	} else if subscriberResponse == "error" {
 		log.Printf("Waiting 8s for retries to exhaust and messages to be dead-lettered...")
 		time.Sleep(8 * time.Second)
@@ -523,22 +503,18 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	return subscriberExternalURL
 }
 
-func initializeSubscriber(subscriberAppName, publisherURL, protocol string) error {
+func callInitialize(t *testing.T, subscriberAppName, publisherExternalURL string, protocol string, podEndpoints []string) {
 	req := callSubscriberMethodRequest{
-		ReqID:     "c-" + uuid.New().String(),
-		RemoteApp: subscriberAppName,
-		Method:    "initialize",
-		Protocol:  protocol,
+		ReqID:        "c-" + uuid.New().String(),
+		RemoteApp:    subscriberAppName,
+		Method:       "initialize",
+		Protocol:     protocol,
+		PodEndpoints: podEndpoints,
 	}
 	reqBytes, _ := json.Marshal(req)
-	_, code, err := utils.HTTPPostWithStatus(publisherURL+"/tests/callSubscriberMethod", reqBytes)
-	if err != nil {
-		return err
-	}
-	if code != http.StatusOK && code != http.StatusNoContent {
-		return fmt.Errorf("initialize: expected 200 or 204, got %d", code)
-	}
-	return nil
+	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, code)
 }
 
 func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, publisherExternalURL, protocol string) {
@@ -552,10 +528,9 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 	reqBytes, _ := json.Marshal(req)
 	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
 	require.NoError(t, err)
-	require.True(t, code == http.StatusOK || code == http.StatusNoContent, "setDesiredResponse: expected 200 or 204, got %d", code)
+	require.Equal(t, http.StatusOK, code)
 }
 
-// subscriberReceivedDeadLetterCount returns the number of messages received on the dead-letter topic.
 func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol string, podEndpoints []string) (int, error) {
 	req := callSubscriberMethodRequest{
 		ReqID:        "c-" + uuid.New().String(),
@@ -575,30 +550,6 @@ func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol str
 	}
 
 	return len(appResp.ReceivedByTopicDeadLetter), nil
-}
-
-// subscriberMainTopicsEmpty returns true if the subscriber has no messages on the topics
-func subscriberMainTopicsEmpty(publisherURL, subscriberApp, protocol string, podEndpoints []string) (bool, error) {
-	req := callSubscriberMethodRequest{
-		ReqID:        "c-" + uuid.New().String(),
-		RemoteApp:    subscriberApp,
-		Protocol:     protocol,
-		Method:       "getMessages",
-		PodEndpoints: podEndpoints,
-	}
-	rawReq, _ := json.Marshal(req)
-	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
-	if err != nil {
-		return false, err
-	}
-	var appResp receivedMessagesResponse
-	if json.Unmarshal(resp, &appResp) != nil {
-		return false, err
-	}
-	return len(appResp.ReceivedByTopicA) == 0 &&
-		len(appResp.ReceivedByTopicB) == 0 &&
-		len(appResp.ReceivedByTopicC) == 0 &&
-		len(appResp.ReceivedByTopicRaw) == 0, nil
 }
 
 func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse, podEndpoints []string) {

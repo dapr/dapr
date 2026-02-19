@@ -582,8 +582,8 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqID, req.Method, req.RemoteApp, req.Protocol)
 
 	var resp []byte
-	// One aggregation over N pods - only for HTTP subscribers since not in the grpc test and using http requests
-	if req.Method == "getMessages" && req.Protocol == "http" && len(req.PodEndpoints) > 0 {
+	// One aggregation over N pods. Subscriber app exposes /getMessages over HTTP.
+	if req.Method == "getMessages" && len(req.PodEndpoints) > 0 {
 		merged := &receivedMessagesResponse{}
 		for _, ep := range req.PodEndpoints {
 			u := "http://" + strings.TrimSpace(ep) + "/getMessages"
@@ -603,6 +603,14 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+	} else if req.Method == "initialize" && len(req.PodEndpoints) > 0 {
+		// clear state on every subscriber pod so we don't accumulate messages from previous tests
+		for _, ep := range req.PodEndpoints {
+			if callErr := postToEndpoint("http://" + strings.TrimSpace(ep) + "/initialize"); callErr != nil {
+				log.Printf("(%s) initialize from %s: %v", reqID, ep, callErr)
+			}
+		}
+		resp = []byte("{}")
 	} else {
 		if req.Protocol == "grpc" {
 			resp, err = callSubscriberMethodGRPC(reqID, req.RemoteApp, req.Method)
@@ -637,6 +645,26 @@ func getMessagesFromEndpoint(url string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	return io.ReadAll(resp.Body)
+}
+
+// postToEndpoint POSTs to a subscriber pod endpoint (ex: /initialize)
+func postToEndpoint(url string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBufferString("{}"))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {

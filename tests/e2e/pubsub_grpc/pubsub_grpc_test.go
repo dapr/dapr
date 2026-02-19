@@ -75,7 +75,7 @@ type callSubscriberMethodRequest struct {
 	RemoteApp    string   `json:"remoteApp"`
 	Protocol     string   `json:"protocol"`
 	Method       string   `json:"method"`
-	PodEndpoints []string `json:"podEndpoints,omitempty"` // for getMessages: call each pod once and merge (HA)
+	PodEndpoints []string `json:"podEndpoints,omitempty"`
 }
 
 // data returned from the subscriber app.
@@ -180,7 +180,7 @@ func sendToPublisherBulk(t *testing.T, publisherExternalURL string, topic string
 
 	statusCode, err := postSingleMessage(url, jsonValue)
 	// return on an unsuccessful publish
-	if statusCode != http.StatusOK && statusCode != http.StatusNoContent {
+	if statusCode != http.StatusOK {
 		return nil, err
 	}
 
@@ -241,46 +241,18 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 	return sentMessages, nil
 }
 
-func initializeSubscriber(publisherURL, protocol string) error {
-	req := callSubscriberMethodRequest{
-		ReqID:     "c-" + uuid.New().String(),
-		RemoteApp: subscriberAppName,
-		Method:    "initialize",
-		Protocol:  protocol,
-	}
-	reqBytes, _ := json.Marshal(req)
-	_, code, err := utils.HTTPPostWithStatus(publisherURL+"/tests/callSubscriberMethod", reqBytes)
-	if err != nil {
-		return err
-	}
-	if code != http.StatusOK && code != http.StatusNoContent {
-		return fmt.Errorf("initialize: expected 200 or 204, got %d", code)
-	}
-	return nil
-}
-
-// subscriberMainTopicsEmpty returns true if the subscriber has no messages on the topics
-func subscriberMainTopicsEmpty(publisherURL, protocol string, podEndpoints []string) (bool, error) {
+func callInitialize(t *testing.T, publisherExternalURL string, protocol string, podEndpoints []string) {
 	req := callSubscriberMethodRequest{
 		ReqID:        "c-" + uuid.New().String(),
 		RemoteApp:    subscriberAppName,
+		Method:       "initialize",
 		Protocol:     protocol,
-		Method:       "getMessages",
 		PodEndpoints: podEndpoints,
 	}
-	rawReq, _ := json.Marshal(req)
-	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
-	if err != nil {
-		return false, err
-	}
-	var appResp receivedMessagesResponse
-	if err := json.Unmarshal(resp, &appResp); err != nil {
-		return false, fmt.Errorf("unmarshal getMessages response: %w", err)
-	}
-	return len(appResp.ReceivedByTopicA) == 0 &&
-		len(appResp.ReceivedByTopicB) == 0 &&
-		len(appResp.ReceivedByTopicC) == 0 &&
-		len(appResp.ReceivedByTopicRaw) == 0, nil
+	reqBytes, _ := json.Marshal(req)
+	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, code)
 }
 
 func testPublishBulk(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
@@ -436,12 +408,7 @@ func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, su
 	require.NoError(t, err, "Health check failed for publisher")
 	waitForSubscriberReady(t, subscriberExternalURL, protocol)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NoError(c, initializeSubscriber(publisherExternalURL, protocol), "initialize subscriber")
-		empty, err := subscriberMainTopicsEmpty(publisherExternalURL, protocol, podEndpoints)
-		assert.NoError(c, err, "getMessages after initialize")
-		assert.True(c, empty, "subscriber state should be clear before sending")
-	}, 30*time.Second, 2*time.Second, "subscriber state not clear after initialize")
+	callInitialize(t, publisherExternalURL, protocol, podEndpoints)
 
 	log.Printf("Test publish bulk subscribe success flow\n")
 	sentMessages := testPublishForBulkSubscribe(t, publisherExternalURL, protocol)
@@ -480,12 +447,7 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	log.Printf("Test resiliency exhaustion - messages should be dropped after retries exhausted")
 	err = utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health checks failed")
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NoError(c, initializeSubscriber(publisherExternalURL, protocol), "initialize subscriber")
-		empty, err := subscriberMainTopicsEmpty(publisherExternalURL, protocol, podEndpoints)
-		assert.NoError(c, err, "getMessages after initialize")
-		assert.True(c, empty, "subscriber state should be clear before sending")
-	}, 30*time.Second, 2*time.Second, "subscriber state not clear after initialize")
+	callInitialize(t, publisherExternalURL, protocol, podEndpoints)
 
 	// Set subscriber to permanently return errors
 	req := callSubscriberMethodRequest{
@@ -506,7 +468,7 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 			lastRetryError = err
 			continue
 		}
-		if code != http.StatusOK && code != http.StatusNoContent {
+		if code != http.StatusOK {
 			lastRetryError = fmt.Errorf("unexpected http code: %v", code)
 			continue
 		}
@@ -540,20 +502,9 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	require.NoError(t, err, "Health checks failed")
 
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NoError(c, initializeSubscriber(publisherExternalURL, protocol), "initialize subscriber")
-		empty, err := subscriberMainTopicsEmpty(publisherExternalURL, protocol, podEndpoints)
-		assert.NoError(c, err, "getMessages after initialize")
-		assert.True(c, empty, "subscriber state should be clear (no messages on main topics) before sending")
-	}, 30*time.Second, 2*time.Second, "subscriber state not clear after initialize")
 	if subscriberResponse == "empty-json" {
 		log.Println("Initialize the sets again in the subscriber application for this scenario ...")
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.NoError(c, initializeSubscriber(publisherExternalURL, protocol), "initialize subscriber")
-			empty, err := subscriberMainTopicsEmpty(publisherExternalURL, protocol, podEndpoints)
-			assert.NoError(c, err, "getMessages after initialize")
-			assert.True(c, empty, "subscriber state should be clear before no-redelivery check")
-		}, 30*time.Second, 2*time.Second, "subscriber state not clear after re-initialize for empty-json")
+		callInitialize(t, publisherExternalURL, protocol, podEndpoints)
 	}
 
 	// set to respond with specified subscriber response
@@ -575,7 +526,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			lastRetryError = err
 			continue
 		}
-		if code != http.StatusOK && code != http.StatusNoContent {
+		if code != http.StatusOK {
 			lastRetryError = fmt.Errorf("unexpected http code: %v", code)
 			continue
 		}
@@ -597,7 +548,6 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	subscriberExternalURL = tr.Platform.AcquireAppExternalURL(subscriberAppName)
 	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
 	waitForSubscriberReady(t, subscriberExternalURL, protocol)
-	time.Sleep(5 * time.Second)
 
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
@@ -637,7 +587,7 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 			lastRetryError = err
 			continue
 		}
-		if code != http.StatusOK && code != http.StatusNoContent {
+		if code != http.StatusOK {
 			lastRetryError = fmt.Errorf("unexpected http code: %v", code)
 			continue
 		}
