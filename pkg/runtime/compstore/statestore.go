@@ -15,6 +15,7 @@ package compstore
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/dapr/components-contrib/state"
 )
@@ -47,11 +48,7 @@ func (c *ComponentStore) GetStateStore(name string) (state.Store, bool) {
 func (c *ComponentStore) ListStateStores() map[string]state.Store {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	mcopy := make(map[string]state.Store, len(c.states))
-	for k, v := range c.states {
-		mcopy[k] = v
-	}
-	return mcopy
+	return maps.Clone(c.states)
 }
 
 func (c *ComponentStore) DeleteStateStore(name string) {

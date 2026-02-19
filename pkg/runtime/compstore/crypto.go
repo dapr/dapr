@@ -14,6 +14,8 @@ limitations under the License.
 package compstore
 
 import (
+	"maps"
+
 	"github.com/dapr/components-contrib/crypto"
 )
 
@@ -33,11 +35,7 @@ func (c *ComponentStore) GetCryptoProvider(name string) (crypto.SubtleCrypto, bo
 func (c *ComponentStore) ListCryptoProviders() map[string]crypto.SubtleCrypto {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	mcopy := make(map[string]crypto.SubtleCrypto, len(c.cryptoProviders))
-	for k, v := range c.cryptoProviders {
-		mcopy[k] = v
-	}
-	return mcopy
+	return maps.Clone(cryptoProviders)
 }
 
 func (c *ComponentStore) DeleteCryptoProvider(name string) {

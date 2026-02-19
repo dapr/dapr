@@ -13,7 +13,11 @@ limitations under the License.
 
 package compstore
 
-import "github.com/dapr/components-contrib/secretstores"
+import (
+	"maps"
+
+	"github.com/dapr/components-contrib/secretstores"
+)
 
 func (c *ComponentStore) AddSecretStore(name string, store secretstores.SecretStore) {
 	c.lock.Lock()
@@ -31,11 +35,7 @@ func (c *ComponentStore) GetSecretStore(name string) (secretstores.SecretStore, 
 func (c *ComponentStore) ListSecretStores() map[string]secretstores.SecretStore {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	mcopy := make(map[string]secretstores.SecretStore, len(c.secrets))
-	for k, v := range c.secrets {
-		mcopy[k] = v
-	}
-	return mcopy
+	return maps.Clone(c.secrets)
 }
 
 func (c *ComponentStore) DeleteSecretStore(name string) {

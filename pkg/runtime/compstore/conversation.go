@@ -13,7 +13,11 @@ limitations under the License.
 
 package compstore
 
-import "github.com/dapr/components-contrib/conversation"
+import (
+	"maps"
+
+	"github.com/dapr/components-contrib/conversation"
+)
 
 func (c *ComponentStore) AddConversation(name string, conversation conversation.Conversation) {
 	c.lock.Lock()
@@ -31,11 +35,7 @@ func (c *ComponentStore) GetConversation(name string) (conversation.Conversation
 func (c *ComponentStore) ListConversations() map[string]conversation.Conversation {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	mcopy := make(map[string]conversation.Conversation, len(c.conversations))
-	for k, v := range c.conversations {
-		mcopy[k] = v
-	}
-	return mcopy
+	return maps.Clone(c.conversations)
 }
 
 func (c *ComponentStore) DeleteConversation(name string) {

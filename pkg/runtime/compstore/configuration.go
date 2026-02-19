@@ -14,6 +14,8 @@ limitations under the License.
 package compstore
 
 import (
+	"maps"
+
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/logger"
@@ -37,11 +39,7 @@ func (c *ComponentStore) GetConfiguration(name string) (configuration.Store, boo
 func (c *ComponentStore) ListConfigurations() map[string]configuration.Store {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	mcopy := make(map[string]configuration.Store, len(c.configurations))
-	for k, v := range c.configurations {
-		mcopy[k] = v
-	}
-	return mcopy
+	return maps.Clone(c.configurations)
 }
 
 func (c *ComponentStore) ConfigurationsLen() int {

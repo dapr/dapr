@@ -16,6 +16,7 @@ package compstore
 import (
 	"errors"
 	"fmt"
+	"maps"
 
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
@@ -85,9 +86,7 @@ func (c *ComponentStore) CommitPendingComponent() error {
 func (c *ComponentStore) ListComponents() []compsv1alpha1.Component {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	comps := make([]compsv1alpha1.Component, len(c.components))
-	copy(comps, c.components)
-	return comps
+	return maps.Clone(c.components)
 }
 
 func (c *ComponentStore) DeleteComponent(name string) {
