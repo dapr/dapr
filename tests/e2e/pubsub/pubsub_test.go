@@ -453,8 +453,13 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else if subscriberResponse == "error" {
-		// Wait for resiliency to exhaust (60s) so all messages are dead-lettered before we flip to success
-		time.Sleep(70 * time.Second)
+		log.Printf("Waiting for all %d messages to be dead-lettered before flipping subscriber to success...", len(sentMessages.ReceivedByTopicDeadLetter))
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+			assert.NoError(c, err, "error calling subscriber to get dead letter count")
+			assert.GreaterOrEqual(c, got, len(sentMessages.ReceivedByTopicDeadLetter), "dead letter count")
+		}, 360*time.Second, 5*time.Second,
+			"subscriber did not receive all dead letter messages within timeout (before flip)")
 	} else {
 		// Sleep briefly to allow initial delivery attempts to fail
 		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
