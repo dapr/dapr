@@ -33,7 +33,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -56,6 +55,12 @@ const (
 	// Enables feature to support workflows in a clustered deployment.
 	WorkflowsClusteredDeployment Feature = "WorkflowsClusteredDeployment"
 
+	// Enables a feature to make activities send their results to workflow when
+	// the workflow is running on a different application. Useful when using
+	// cross app workflows. Ensures that activities are not retried forever if
+	// the workflow app is not available, and instead queues the result for when
+	// the workflow app is back online. Strongly recommended to always be enabled
+	// if using the same Dapr version on all daprds.
 	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
 )
 
@@ -289,6 +294,64 @@ type OtelSpec struct {
 func (o OtelSpec) GetIsSecure() bool {
 	// Defaults to true if nil
 	return o.IsSecure == nil || *o.IsSecure
+}
+
+// UnmarshalJSON handles both the internal config format
+// and the Kubernetes CRD format sent by the operator.
+func (o *OtelSpec) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Protocol        string          `json:"protocol,omitempty"`
+		EndpointAddress string          `json:"endpointAddress,omitempty"`
+		IsSecure        *bool           `json:"isSecure,omitempty"`
+		Headers         json.RawMessage `json:"headers,omitempty"`
+		Timeout         json.RawMessage `json:"timeout,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	o.Protocol = raw.Protocol
+	o.EndpointAddress = raw.EndpointAddress
+	o.IsSecure = raw.IsSecure
+
+	if len(raw.Headers) > 0 {
+		if err := json.Unmarshal(raw.Headers, &o.Headers); err != nil {
+			var pairs []struct {
+				Name  string          `json:"name"`
+				Value json.RawMessage `json:"value,omitempty"`
+			}
+			if err := json.Unmarshal(raw.Headers, &pairs); err != nil {
+				return fmt.Errorf("failed to parse otel headers: %w", err)
+			}
+			o.Headers = make([]string, 0, len(pairs))
+			for _, p := range pairs {
+				var val string
+				if len(p.Value) > 0 {
+					//nolint:errcheck
+					json.Unmarshal(p.Value, &val)
+				}
+				o.Headers = append(o.Headers, p.Name+"="+val)
+			}
+		}
+	}
+
+	if len(raw.Timeout) > 0 {
+		var d time.Duration
+		if err := json.Unmarshal(raw.Timeout, &d); err != nil {
+			var s string
+			if err := json.Unmarshal(raw.Timeout, &s); err != nil {
+				return fmt.Errorf("failed to parse otel timeout: %w", err)
+			}
+			parsed, err := time.ParseDuration(s)
+			if err != nil {
+				return fmt.Errorf("invalid otel timeout duration %q: %w", s, err)
+			}
+			d = parsed
+		}
+		o.Timeout = &d
+	}
+
+	return nil
 }
 
 // MetricSpec configuration for metrics.
@@ -567,9 +630,8 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 	if len(b) == 0 {
 		return nil, fmt.Errorf("configuration %s not found", config)
 	}
-
-	conf, err := convertKubeConfiguration(b)
-	if err != nil {
+	var conf Configuration
+	if err = json.Unmarshal(b, &conf); err != nil {
 		return nil, err
 	}
 
@@ -580,67 +642,7 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
-	return conf, nil
-}
-
-// convertKubeConfiguration converts JSON bytes of a Kubernetes CRD Configuration
-// into the internal Configuration type. OTel headers ([]NameValuePair) are
-// converted to "key=value" strings, and metav1.Duration timeout is converted
-// to *time.Duration. All other fields share the same JSON tags and transfer
-// directly via marshal/unmarshal.
-func convertKubeConfiguration(b []byte) (*Configuration, error) {
-	var crdConf configurationapi.Configuration
-	if err := json.Unmarshal(b, &crdConf); err != nil {
-		return nil, err
-	}
-
-	if crdConf.Spec.TracingSpec == nil || crdConf.Spec.TracingSpec.Otel == nil ||
-		(len(crdConf.Spec.TracingSpec.Otel.Headers) == 0 && crdConf.Spec.TracingSpec.Otel.Timeout == nil) {
-		conf := LoadDefaultConfiguration()
-		if err := json.Unmarshal(b, conf); err != nil {
-			return nil, err
-		}
-		return conf, nil
-	}
-
-	crdCopy := crdConf.DeepCopy()
-	crdCopy.Spec.TracingSpec.Otel.Headers = nil
-	crdCopy.Spec.TracingSpec.Otel.Timeout = nil
-
-	cleaned, err := json.Marshal(crdCopy)
-	if err != nil {
-		return nil, err
-	}
-
-	conf := LoadDefaultConfiguration()
-	if err := json.Unmarshal(cleaned, conf); err != nil {
-		return nil, err
-	}
-
-	if conf.Spec.TracingSpec == nil {
-		conf.Spec.TracingSpec = &TracingSpec{}
-	}
-	if conf.Spec.TracingSpec.Otel == nil {
-		conf.Spec.TracingSpec.Otel = &OtelSpec{}
-	}
-
-	otel := crdConf.Spec.TracingSpec.Otel
-	for _, h := range otel.Headers {
-		var value string
-		if h.HasValue() {
-			value = h.Value.String()
-		}
-		conf.Spec.TracingSpec.Otel.Headers = append(
-			conf.Spec.TracingSpec.Otel.Headers, h.Name+"="+value,
-		)
-	}
-
-	if otel.Timeout != nil {
-		timeout := otel.Timeout.Duration
-		conf.Spec.TracingSpec.Otel.Timeout = &timeout
-	}
-
-	return conf, nil
+	return &conf, nil
 }
 
 // Update configuration from Otlp Environment Variables, if they exist.
