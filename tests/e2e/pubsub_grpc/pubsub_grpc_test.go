@@ -179,7 +179,7 @@ func sendToPublisherBulk(t *testing.T, publisherExternalURL string, topic string
 
 	statusCode, err := postSingleMessage(url, jsonValue)
 	// return on an unsuccessful publish
-	if statusCode != http.StatusOK {
+	if statusCode != http.StatusOK && statusCode != http.StatusNoContent {
 		return nil, err
 	}
 
