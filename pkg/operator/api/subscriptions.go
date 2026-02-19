@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -135,8 +134,6 @@ func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateReques
 		log.Debugf("updated sidecar with subscription %s %s to pod %s/%s", t.String(), sub.GetName(), in.GetNamespace(), in.GetPodName())
 	}
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
 	for {
 		select {
 		case <-srv.Context().Done():
@@ -145,11 +142,7 @@ func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateReques
 			if !ok {
 				return nil
 			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				updateSubscriptionFunc(srv.Context(), c.EventType, c.Subscription)
-			}()
+			updateSubscriptionFunc(srv.Context(), c.EventType, c.Subscription)
 		}
 	}
 }
