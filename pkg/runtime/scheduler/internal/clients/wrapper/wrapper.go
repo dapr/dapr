@@ -129,12 +129,13 @@ type apiFn func(client v1pb.SchedulerClient) error
 
 func (w *wrapper) call(ctx context.Context, fn apiFn) error {
 	for {
-		client, err := w.clients.Next(ctx)
+		client, done, err := w.clients.Next(ctx)
 		if err != nil {
 			return err
 		}
 
 		err = fn(client)
+		done()
 		status, ok := status.FromError(err)
 		if ok && status.Code() == codes.Canceled {
 			continue
