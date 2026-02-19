@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -299,55 +300,24 @@ func (o *OtelSpec) GetIsSecure() bool {
 // UnmarshalJSON handles both the internal config format
 // and the Kubernetes CRD format sent by the operator.
 func (o *OtelSpec) UnmarshalJSON(data []byte) error {
-	var raw struct {
-		Protocol        string          `json:"protocol,omitempty"`
-		EndpointAddress string          `json:"endpointAddress,omitempty"`
-		IsSecure        *bool           `json:"isSecure,omitempty"`
-		Headers         json.RawMessage `json:"headers,omitempty"`
-		Timeout         *json.RawMessage `json:"timeout,omitempty"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
+	var crd configapi.OtelSpec
+	if err := json.Unmarshal(data, &crd); err != nil {
 		return err
 	}
 
-	o.Protocol = raw.Protocol
-	o.EndpointAddress = raw.EndpointAddress
-	o.IsSecure = raw.IsSecure
+	o.Protocol = crd.Protocol
+	o.EndpointAddress = crd.EndpointAddress
+	o.IsSecure = crd.IsSecure
 
-	if len(raw.Headers) > 0 {
-		if err := json.Unmarshal(raw.Headers, &o.Headers); err != nil {
-			var pairs []struct {
-				Name  string          `json:"name"`
-				Value json.RawMessage `json:"value,omitempty"`
-			}
-			if err := json.Unmarshal(raw.Headers, &pairs); err != nil {
-				return fmt.Errorf("failed to parse otel headers: %w", err)
-			}
-			o.Headers = make([]string, 0, len(pairs))
-			for _, p := range pairs {
-				var val string
-				if len(p.Value) > 0 {
-					//nolint:errcheck
-					json.Unmarshal(p.Value, &val)
-				}
-				o.Headers = append(o.Headers, p.Name+"="+val)
-			}
+	if crd.Headers != nil {
+		o.Headers = make([]string, 0, len(crd.Headers))
+		for _, p := range crd.Headers {
+			o.Headers = append(o.Headers, p.Name+"="+p.Value.String())
 		}
 	}
 
-	if raw.Timeout != nil {
-		var d time.Duration
-		if err := json.Unmarshal(raw.Timeout, &d); err != nil {
-			var s string
-			if err := json.Unmarshal(raw.Timeout, &s); err != nil {
-				return fmt.Errorf("failed to parse otel timeout: %w", err)
-			}
-			parsed, err := time.ParseDuration(s)
-			if err != nil {
-				return fmt.Errorf("invalid otel timeout duration %q: %w", s, err)
-			}
-			d = parsed
-		}
+	if crd.Timeout != nil {
+		d := crd.Timeout.Duration
 		o.Timeout = &d
 	}
 
