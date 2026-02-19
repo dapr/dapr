@@ -102,8 +102,17 @@ func (e *Etcd) Run(t *testing.T, ctx context.Context) {
 	for i, config := range e.configs {
 		e.fp[i].Free(t)
 
-		etcd, err := embed.StartEtcd(config)
-		require.NoError(t, err)
+		var etcd *embed.Etcd
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			var err error
+			etcd, err = embed.StartEtcd(config)
+			if !assert.NoError(c, err) {
+				if strings.Contains(err.Error(), "bind: address already in use") {
+					return
+				}
+				require.NoError(t, err)
+			}
+		}, time.Second*20, time.Millisecond*10)
 
 		t.Logf("Running etcd with config: %+v", etcd.Config())
 
