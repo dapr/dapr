@@ -291,7 +291,7 @@ type OtelSpec struct {
 }
 
 // GetIsSecure returns true if the connection should be secured.
-func (o OtelSpec) GetIsSecure() bool {
+func (o *OtelSpec) GetIsSecure() bool {
 	// Defaults to true if nil
 	return o.IsSecure == nil || *o.IsSecure
 }
