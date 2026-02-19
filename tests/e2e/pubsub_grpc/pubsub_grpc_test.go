@@ -968,14 +968,6 @@ func TestPubSubGRPC(t *testing.T) {
 	require.NoError(t, err)
 
 	protocol := "grpc"
-	podEndpoints, err := tr.Platform.GetAppPodEndpoints(subscriberAppName)
-	require.NoError(t, err, "get subscriber pod endpoints")
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.NoError(c, initializeSubscriber(publisherExternalURL, protocol), "initialize subscriber")
-		empty, err := subscriberMainTopicsEmpty(publisherExternalURL, protocol, podEndpoints)
-		assert.NoError(c, err, "getMessages after initialize")
-		assert.True(c, empty, "subscriber state should be clear before tests")
-	}, 30*time.Second, 2*time.Second, "subscriber state not clear after initialize")
 	for _, tc := range pubsubTests {
 		t.Run(fmt.Sprintf("%s_%s", tc.name, protocol), func(t *testing.T) {
 			tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName, protocol)

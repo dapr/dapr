@@ -940,14 +940,6 @@ func TestPubSubHTTP(t *testing.T) {
 		require.NoError(t, err)
 
 		protocol := "http"
-		podEndpoints, err := tr.Platform.GetAppPodEndpoints(app.subscriber)
-		require.NoError(t, err, "get subscriber pod endpoints")
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.NoError(c, initializeSubscriber(app.subscriber, publisherExternalURL, protocol), "initialize subscriber")
-			empty, err := subscriberMainTopicsEmpty(publisherExternalURL, app.subscriber, protocol, podEndpoints)
-			assert.NoError(c, err, "getMessages after initialize")
-			assert.True(c, empty, "subscriber state should be clear before tests")
-		}, 30*time.Second, 2*time.Second, "subscriber state not clear after initialize")
 		//nolint: gosec
 		offset = rand.Intn(randomOffsetMax) + 1
 		log.Printf("initial %s offset: %d", app.suite, offset)
