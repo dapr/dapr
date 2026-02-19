@@ -35,7 +35,7 @@ func (c *ComponentStore) GetCryptoProvider(name string) (crypto.SubtleCrypto, bo
 func (c *ComponentStore) ListCryptoProviders() map[string]crypto.SubtleCrypto {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return maps.Clone(cryptoProviders)
+	return maps.Clone(c.cryptoProviders)
 }
 
 func (c *ComponentStore) DeleteCryptoProvider(name string) {
