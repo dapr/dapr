@@ -453,7 +453,8 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else if subscriberResponse == "error" {
-		time.Sleep(time.Second * 30)
+		// Wait for resiliency to exhaust (60s) so all messages are dead-lettered before we flip to success
+		time.Sleep(70 * time.Second)
 	} else {
 		// Sleep briefly to allow initial delivery attempts to fail
 		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
