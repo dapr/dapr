@@ -361,6 +361,7 @@ func startDaprAPIServer(t *testing.T, testAPIServer *api, token string) *bufconn
 	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		//nolint:staticcheck
 		conn, err := grpc.DialContext(t.Context(), "bufnet", grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
