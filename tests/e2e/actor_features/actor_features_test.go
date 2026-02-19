@@ -868,9 +868,6 @@ func TestActorFeatures(t *testing.T) {
 			require.NoError(t, err, "failed to check metadata for actor %d", index)
 		}
 
-		// Add delay to make the test robust.
-		time.Sleep(5 * time.Second)
-
 		res, err = httpGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
 		log.Printf("Got metadata: Error='%v' Response='%s'", err, string(res))
 		require.NoError(t, err, "failed to get metadata")
