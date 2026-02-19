@@ -11,7 +11,7 @@ spec:
       pubsubRetry:
         policy: constant
         duration: 1s
-        maxRetries: 60  # 60 seconds retry window for redelivery tests
+        maxRetries: 5
 
   targets:
   

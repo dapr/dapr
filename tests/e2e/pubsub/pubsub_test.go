@@ -336,7 +336,7 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 	return subscriberExternalURL
 }
 
-// testResiliencyExhaustion: Wait for resiliency policy to exhaust (60 retries @ 1s = 60s + buffer)
+// testResiliencyExhaustion: Wait for resiliency policy to exhaust (5 retries @ 1s = 5s + buffer)
 func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string, podEndpoints []string) string {
 	log.Printf("Test resiliency exhaustion - messages should be dropped after retries exhausted")
 	err := utils.HealthCheckApps(publisherExternalURL)
@@ -348,8 +348,8 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	_ = sentMessages
 
 	// After exhaustion, messages should be ACK'd and dropped
-	log.Printf("Waiting 65 seconds for resiliency policy to exhaust retries (maxRetries=60)...")
-	time.Sleep(65 * time.Second)
+	log.Printf("Waiting 10 seconds for resiliency policy to exhaust retries (maxRetries=5)...")
+	time.Sleep(8 * time.Second)
 
 	log.Printf("Validating messages were dropped after retry exhaustion...")
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
@@ -453,16 +453,18 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
 	} else if subscriberResponse == "error" {
+		log.Printf("Waiting 8s for retries to exhaust and messages to be dead-lettered...")
+		time.Sleep(8 * time.Second)
 		log.Printf("Waiting for all %d messages to be dead-lettered before flipping subscriber to success...", len(sentMessages.ReceivedByTopicDeadLetter))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
 			assert.NoError(c, err, "error calling subscriber to get dead letter count")
 			assert.GreaterOrEqual(c, got, len(sentMessages.ReceivedByTopicDeadLetter), "dead letter count")
-		}, 360*time.Second, 5*time.Second,
+		}, 300*time.Second, 5*time.Second,
 			"subscriber did not receive all dead letter messages within timeout (before flip)")
 	} else {
 		// Sleep briefly to allow initial delivery attempts to fail
-		// We sleep less than the resiliency retry window (60 retries × 1s = 60s)
+		// We sleep less than the resiliency retry window (5 retries × 1s = 5s)
 		// so that when we flip to success, messages are still being retried
 		time.Sleep(2 * time.Second)
 	}

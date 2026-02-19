@@ -439,7 +439,7 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 	return subscriberExternalURL
 }
 
-// testResiliencyExhaustion: Wait for resiliency policy to exhaust (60 retries @ 1s = 60s + buffer)
+// testResiliencyExhaustion: Wait for resiliency policy to exhaust (5 retries @ 1s = 5s + buffer)
 func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
 	var err error
 	var code int
@@ -479,8 +479,8 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	_ = sentMessages
 
 	// After exhaustion, messages should be ACK'd and dropped
-	log.Printf("Waiting 65 seconds for resiliency policy to exhaust retries (maxRetries=60)...")
-	time.Sleep(65 * time.Second)
+	log.Printf("Waiting 8 seconds for resiliency policy to exhaust retries (maxRetries=5)...")
+	time.Sleep(8 * time.Second)
 
 	log.Printf("Validating messages were dropped after retry exhaustion...")
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
