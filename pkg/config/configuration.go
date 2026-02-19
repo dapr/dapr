@@ -304,7 +304,7 @@ func (o *OtelSpec) UnmarshalJSON(data []byte) error {
 		EndpointAddress string          `json:"endpointAddress,omitempty"`
 		IsSecure        *bool           `json:"isSecure,omitempty"`
 		Headers         json.RawMessage `json:"headers,omitempty"`
-		Timeout         json.RawMessage `json:"timeout,omitempty"`
+		Timeout         *json.RawMessage `json:"timeout,omitempty"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
