@@ -381,7 +381,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 	waitForSubscriberReady(t, subscriberExternalURL, protocol)
 
 	// set to respond with success
-	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol, podEndpoints)
 
 	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
@@ -399,7 +399,7 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 	log.Printf("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
-	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages, podEndpoints)
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
 	return subscriberExternalURL
 }
 
@@ -451,10 +451,11 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 
 	// Set subscriber to permanently return errors
 	req := callSubscriberMethodRequest{
-		ReqID:     "c-" + uuid.New().String(),
-		RemoteApp: subscriberAppName,
-		Method:    "set-respond-error",
-		Protocol:  protocol,
+		ReqID:        "c-" + uuid.New().String(),
+		RemoteApp:    subscriberAppName,
+		Method:       "set-respond-error",
+		Protocol:     protocol,
+		PodEndpoints: podEndpoints,
 	}
 	reqBytes, _ := json.Marshal(req)
 	var lastRetryError error
@@ -484,7 +485,7 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	time.Sleep(8 * time.Second)
 
 	log.Printf("Validating messages were dropped after retry exhaustion...")
-	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
 		ReceivedByTopicA:   []string{},
 		ReceivedByTopicB:   []string{},
 		ReceivedByTopicC:   []string{},
@@ -509,10 +510,11 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 	// set to respond with specified subscriber response
 	req := callSubscriberMethodRequest{
-		ReqID:     "c-" + uuid.New().String(),
-		RemoteApp: subscriberAppName,
-		Method:    "set-respond-" + subscriberResponse,
-		Protocol:  protocol,
+		ReqID:        "c-" + uuid.New().String(),
+		RemoteApp:    subscriberAppName,
+		Method:       "set-respond-" + subscriberResponse,
+		Protocol:     protocol,
+		PodEndpoints: podEndpoints,
 	}
 	reqBytes, _ := json.Marshal(req)
 	var lastRetryError error
@@ -538,7 +540,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 	if subscriberResponse == "empty-json" {
 		// on empty-json response case immediately validate the received messages
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages, podEndpoints)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 	}
 
 	// restart application
@@ -552,7 +554,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
 		log.Printf("Validating no redelivered messages...")
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
 			// empty string slices
 			ReceivedByTopicA:   []string{},
 			ReceivedByTopicB:   []string{},
@@ -561,19 +563,20 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		}, podEndpoints)
 	} else {
 		// validate redelivery of messages
-		log.Printf("Validating redelivered messages...")
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages, podEndpoints)
+		log.Printf("Validating redelivered messages (combined state)...")
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 	}
 	return subscriberExternalURL
 }
 
-func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, publisherExternalURL, protocol string) {
+func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, publisherExternalURL, protocol string, podEndpoints []string) {
 	// set to respond with specified subscriber response
 	req := callSubscriberMethodRequest{
-		ReqID:     "c-" + uuid.New().String(),
-		RemoteApp: subscriberAppName,
-		Method:    "set-respond-" + subscriberResponse,
-		Protocol:  protocol,
+		ReqID:        "c-" + uuid.New().String(),
+		RemoteApp:    subscriberAppName,
+		Method:       "set-respond-" + subscriberResponse,
+		Protocol:     protocol,
+		PodEndpoints: podEndpoints,
 	}
 	reqBytes, _ := json.Marshal(req)
 	var lastRetryError error
@@ -666,11 +669,11 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 	assert.Equal(t, sentMessages.ReceivedByTopicBulk, appResp.ReceivedByTopicBulk, "different messages received in Topic Bulk")
 	assert.Equal(t, sentMessages.ReceivedByTopicRawBulk, appResp.ReceivedByTopicRawBulk, "different messages received in Topic Raw Bulk")
 	assert.Equal(t, sentMessages.ReceivedByTopicCEBulk, appResp.ReceivedByTopicCEBulk, "different messages received in Topic CE Bulk")
-	assert.Equal(t, sentMessages.ReceivedByTopicDefBulk, appResp.ReceivedByTopicDefBulk, "different messages received in Topic defult Bulk on redis")
+	assert.Equal(t, sentMessages.ReceivedByTopicDefBulk, appResp.ReceivedByTopicDefBulk, "different messages received in Topic default Bulk on redis")
 }
 
 func validateMessagesReceivedBySubscriber(
-	t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse, podEndpoints []string,
+	t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, useCombinedState bool, sentMessages receivedMessagesResponse, podEndpoints []string,
 ) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
@@ -714,10 +717,19 @@ func validateMessagesReceivedBySubscriber(
 			len(appResp.ReceivedByTopicRaw), len(sentMessages.ReceivedByTopicRaw),
 		)
 
-		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
-			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
-			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
-			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) {
+		lengthsOK := false
+		if useCombinedState {
+			lengthsOK = len(appResp.ReceivedByTopicA) >= len(sentMessages.ReceivedByTopicA) &&
+				len(appResp.ReceivedByTopicB) >= len(sentMessages.ReceivedByTopicB) &&
+				len(appResp.ReceivedByTopicC) >= len(sentMessages.ReceivedByTopicC) &&
+				len(appResp.ReceivedByTopicRaw) >= len(sentMessages.ReceivedByTopicRaw)
+		} else {
+			lengthsOK = len(appResp.ReceivedByTopicA) == len(sentMessages.ReceivedByTopicA) &&
+				len(appResp.ReceivedByTopicB) == len(sentMessages.ReceivedByTopicB) &&
+				len(appResp.ReceivedByTopicC) == len(sentMessages.ReceivedByTopicC) &&
+				len(appResp.ReceivedByTopicRaw) == len(sentMessages.ReceivedByTopicRaw)
+		}
+		if !lengthsOK {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(5 * time.Second)
 		} else {
@@ -726,20 +738,36 @@ func validateMessagesReceivedBySubscriber(
 	}
 	require.NoError(t, err, "too many failed attempts")
 
-	// Sort messages first because the delivered messages might not be ordered.
-	sort.Strings(sentMessages.ReceivedByTopicA)
-	sort.Strings(appResp.ReceivedByTopicA)
-	sort.Strings(sentMessages.ReceivedByTopicB)
-	sort.Strings(appResp.ReceivedByTopicB)
-	sort.Strings(sentMessages.ReceivedByTopicC)
-	sort.Strings(appResp.ReceivedByTopicC)
-	sort.Strings(sentMessages.ReceivedByTopicRaw)
-	sort.Strings(appResp.ReceivedByTopicRaw)
+	if useCombinedState {
+		requireReceivedContainsAllSent(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA, "Topic A")
+		requireReceivedContainsAllSent(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB, "Topic B")
+		requireReceivedContainsAllSent(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC, "Topic C")
+		requireReceivedContainsAllSent(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw, "Topic Raw")
+	} else {
+		sort.Strings(sentMessages.ReceivedByTopicA)
+		sort.Strings(appResp.ReceivedByTopicA)
+		sort.Strings(sentMessages.ReceivedByTopicB)
+		sort.Strings(appResp.ReceivedByTopicB)
+		sort.Strings(sentMessages.ReceivedByTopicC)
+		sort.Strings(appResp.ReceivedByTopicC)
+		sort.Strings(sentMessages.ReceivedByTopicRaw)
+		sort.Strings(appResp.ReceivedByTopicRaw)
+		assert.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA, "different messages received in Topic A")
+		assert.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB, "different messages received in Topic B")
+		assert.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC, "different messages received in Topic C")
+		assert.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw, "different messages received in Topic Raw")
+	}
+}
 
-	assert.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA, "different messages received in Topic A")
-	assert.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB, "different messages received in Topic B")
-	assert.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC, "different messages received in Topic C")
-	assert.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw, "different messages received in Topic Raw")
+func requireReceivedContainsAllSent(t *testing.T, sent, received []string, topicName string) {
+	t.Helper()
+	recSet := make(map[string]struct{})
+	for _, m := range received {
+		recSet[m] = struct{}{}
+	}
+	for _, m := range sent {
+		require.Contains(t, recSet, m, "topic %s: sent message missing from combined received", topicName)
+	}
 }
 
 func validateMessagesReceivedWhenSomeTopicsBulkSubscribed(

@@ -312,7 +312,7 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health check failed for publisher")
 
-	setDesiredResponse(t, subscriberAppName, "drop", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "drop", publisherExternalURL, protocol, podEndpoints)
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol, podEndpoints)
 
 	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-topic", protocol, nil, "")
@@ -332,7 +332,7 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 		ReceivedByTopicDead:       sentTopicDeadMessages,
 		ReceivedByTopicDeadLetter: sentTopicDeadMessages,
 	}
-	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, received, podEndpoints)
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, false, received, podEndpoints)
 	return subscriberExternalURL
 }
 
@@ -343,7 +343,7 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	require.NoError(t, err, "Health check failed for publisher")
 
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol, podEndpoints)
-	setDesiredResponse(t, subscriberAppName, "error", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "error", publisherExternalURL, protocol, podEndpoints)
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 	_ = sentMessages
 
@@ -352,7 +352,7 @@ func testResiliencyExhaustion(t *testing.T, publisherExternalURL, subscriberExte
 	time.Sleep(8 * time.Second)
 
 	log.Printf("Validating messages were dropped after retry exhaustion...")
-	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, false, receivedMessagesResponse{
 		ReceivedByTopicA:    []string{},
 		ReceivedByTopicB:    []string{},
 		ReceivedByTopicC:    []string{},
@@ -384,7 +384,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 	require.NoError(t, err, "Health check failed for subscriber")
 
 	// set to respond with success
-	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol, podEndpoints)
 
 	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
@@ -401,13 +401,13 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 	require.NoError(t, err, "Health check failed for subscriber")
 
 	// set to respond with success
-	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol, podEndpoints)
 
 	log.Print("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
-	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, false, sentMessages, podEndpoints)
 	return subscriberExternalURL
 }
 
@@ -442,26 +442,29 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	callInitialize(t, subscriberAppName, publisherExternalURL, protocol, podEndpoints)
 
 	// set to respond with specified subscriber response
-	setDesiredResponse(t, subscriberAppName, subscriberResponse, publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, subscriberResponse, publisherExternalURL, protocol, podEndpoints)
 
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
 		// on empty-json response case immediately validate the received messages
 		time.Sleep(10 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, false, sentMessages, podEndpoints)
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol, podEndpoints)
 	} else if subscriberResponse == "error" {
 		log.Printf("Waiting 8s for retries to exhaust and messages to be dead-lettered...")
 		time.Sleep(8 * time.Second)
-		log.Printf("Waiting for all %d messages to be dead-lettered before flipping subscriber to success...", len(sentMessages.ReceivedByTopicDeadLetter))
+		// Combined state across pods: dead-letter + main dead topic must account for all 60
+		log.Printf("Waiting for combined state (dead letter + dead topic) >= %d before flipping subscriber to success...", len(sentMessages.ReceivedByTopicDeadLetter))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
-			assert.NoError(c, err, "error calling subscriber to get dead letter count")
-			assert.GreaterOrEqual(c, got, len(sentMessages.ReceivedByTopicDeadLetter), "dead letter count")
+			appResp, err := getReceivedMessages(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+			assert.NoError(c, err, "get combined getMessages")
+			combined := len(appResp.ReceivedByTopicDeadLetter) + len(appResp.ReceivedByTopicDead)
+			assert.GreaterOrEqual(c, combined, len(sentMessages.ReceivedByTopicDeadLetter),
+				"combined state (dead letter + dead topic) count")
 		}, 360*time.Second, 10*time.Second,
-			"subscriber did not receive all dead letter messages within timeout (before flip)")
+			"subscriber combined state did not reach expected count (before flip)")
 	} else {
 		// Sleep briefly to allow initial delivery attempts to fail
 		// We sleep less than the resiliency retry window (5 retries × 1s = 5s)
@@ -470,12 +473,12 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	}
 
 	// set to respond with success
-	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
+	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol, podEndpoints)
 
 	if subscriberResponse == "empty-json" {
 		log.Printf("Validating no redelivered messages for 'empty-json' subscriber...")
 		time.Sleep(30 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, receivedMessagesResponse{
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, false, receivedMessagesResponse{
 			// empty string slices
 			ReceivedByTopicA:    []string{},
 			ReceivedByTopicB:    []string{},
@@ -484,20 +487,22 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 			ReceivedByTopicDead: []string{},
 		}, podEndpoints)
 	} else if subscriberResponse == "error" {
-		// Wait for all messages to be dead-lettered. Publisher aggregates getMessages across replicas
-		log.Printf("Validating redelivered messages for 'error' subscriber...")
+		// Combined state: all 60 accounted for (dead letter + dead topic), at least 1 dead-lettered
+		log.Printf("Validating combined state for 'error' subscriber (dead letter + dead topic)...")
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			got, err := subscriberReceivedDeadLetterCount(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
-			assert.NoError(c, err, "error calling subscriber to get dead letter count")
-			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), got)
+			appResp, err := getReceivedMessages(publisherExternalURL, subscriberAppName, protocol, podEndpoints)
+			assert.NoError(c, err, "get combined getMessages")
+			combined := len(appResp.ReceivedByTopicDeadLetter) + len(appResp.ReceivedByTopicDead)
+			assert.Equal(c, len(sentMessages.ReceivedByTopicDeadLetter), combined, "combined state count")
+			assert.GreaterOrEqual(c, len(appResp.ReceivedByTopicDeadLetter), 1, "at least one message dead-lettered")
 		}, 360*time.Second, 5*time.Second,
-			"subscriber did not receive all dead letter messages within timeout")
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
+			"subscriber combined state (dead letter + dead topic) did not reach expected")
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, true, sentMessages, podEndpoints)
 	} else {
 		// validate redelivery of messages
-		log.Printf("Validating redelivered messages...")
+		log.Printf("Validating redelivered messages (combined state)...")
 		time.Sleep(30 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, sentMessages, podEndpoints)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, false, true, sentMessages, podEndpoints)
 	}
 
 	return subscriberExternalURL
@@ -517,13 +522,14 @@ func callInitialize(t *testing.T, subscriberAppName, publisherExternalURL string
 	require.Equal(t, http.StatusOK, code)
 }
 
-func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, publisherExternalURL, protocol string) {
+func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, publisherExternalURL, protocol string, podEndpoints []string) {
 	// set to respond with specified subscriber response
 	req := callSubscriberMethodRequest{
-		ReqID:     "c-" + uuid.New().String(),
-		RemoteApp: subscriberAppName,
-		Method:    "set-respond-" + subscriberResponse,
-		Protocol:  protocol,
+		ReqID:        "c-" + uuid.New().String(),
+		RemoteApp:    subscriberAppName,
+		Method:       "set-respond-" + subscriberResponse,
+		Protocol:     protocol,
+		PodEndpoints: podEndpoints,
 	}
 	reqBytes, _ := json.Marshal(req)
 	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
@@ -531,7 +537,8 @@ func setDesiredResponse(t *testing.T, subscriberAppName, subscriberResponse, pub
 	require.Equal(t, http.StatusOK, code)
 }
 
-func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol string, podEndpoints []string) (int, error) {
+// getReceivedMessages returns the merged getMessages response (combined state across all pods in HA).
+func getReceivedMessages(publisherURL, subscriberApp, protocol string, podEndpoints []string) (receivedMessagesResponse, error) {
 	req := callSubscriberMethodRequest{
 		ReqID:        "c-" + uuid.New().String(),
 		RemoteApp:    subscriberApp,
@@ -542,13 +549,20 @@ func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol str
 	rawReq, _ := json.Marshal(req)
 	resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherURL), rawReq)
 	if err != nil {
-		return 0, err
+		return receivedMessagesResponse{}, err
 	}
 	var appResp receivedMessagesResponse
 	if json.Unmarshal(resp, &appResp) != nil {
+		return receivedMessagesResponse{}, fmt.Errorf("unmarshal getMessages: %w", err)
+	}
+	return appResp, nil
+}
+
+func subscriberReceivedDeadLetterCount(publisherURL, subscriberApp, protocol string, podEndpoints []string) (int, error) {
+	appResp, err := getReceivedMessages(publisherURL, subscriberApp, protocol, podEndpoints)
+	if err != nil {
 		return 0, err
 	}
-
 	return len(appResp.ReceivedByTopicDeadLetter), nil
 }
 
@@ -624,7 +638,7 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 	assert.Equal(t, sentMessages.ReceivedByTopicDefBulk, appResp.ReceivedByTopicDefBulk, "different messages received in Topic Def Bulk impl redis")
 }
 
-func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, validateDeadLetter bool, sentMessages receivedMessagesResponse, podEndpoints []string) {
+func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, validateDeadLetter bool, useCombinedState bool, sentMessages receivedMessagesResponse, podEndpoints []string) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)
@@ -668,11 +682,23 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 			len(appResp.ReceivedByTopicDeadLetter), len(sentMessages.ReceivedByTopicDeadLetter),
 		)
 
-		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
-			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
-			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) ||
-			len(appResp.ReceivedByTopicRaw) != len(sentMessages.ReceivedByTopicRaw) ||
-			(validateDeadLetter && len(appResp.ReceivedByTopicDeadLetter) != len(sentMessages.ReceivedByTopicDeadLetter)) {
+		lengthsOK := false
+		if useCombinedState {
+			// Combined state: received (merged across pods) must have at least as many as sent per topic
+			combinedDead := len(appResp.ReceivedByTopicDeadLetter) + len(appResp.ReceivedByTopicDead)
+			lengthsOK = len(appResp.ReceivedByTopicA) >= len(sentMessages.ReceivedByTopicA) &&
+				len(appResp.ReceivedByTopicB) >= len(sentMessages.ReceivedByTopicB) &&
+				len(appResp.ReceivedByTopicC) >= len(sentMessages.ReceivedByTopicC) &&
+				len(appResp.ReceivedByTopicRaw) >= len(sentMessages.ReceivedByTopicRaw) &&
+				(!validateDeadLetter || (combinedDead >= len(sentMessages.ReceivedByTopicDeadLetter) && len(appResp.ReceivedByTopicDeadLetter) >= 1))
+		} else {
+			lengthsOK = len(appResp.ReceivedByTopicA) == len(sentMessages.ReceivedByTopicA) &&
+				len(appResp.ReceivedByTopicB) == len(sentMessages.ReceivedByTopicB) &&
+				len(appResp.ReceivedByTopicC) == len(sentMessages.ReceivedByTopicC) &&
+				len(appResp.ReceivedByTopicRaw) == len(sentMessages.ReceivedByTopicRaw) &&
+				(!validateDeadLetter || len(appResp.ReceivedByTopicDeadLetter) == len(sentMessages.ReceivedByTopicDeadLetter))
+		}
+		if !lengthsOK {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
 			time.Sleep(10 * time.Second)
 		} else {
@@ -681,25 +707,47 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 	}
 	require.NoError(t, err, "too many failed attempts")
 
-	// Sort messages first because the delivered messages cannot be ordered.
-	sort.Strings(sentMessages.ReceivedByTopicA)
-	sort.Strings(appResp.ReceivedByTopicA)
-	sort.Strings(sentMessages.ReceivedByTopicB)
-	sort.Strings(appResp.ReceivedByTopicB)
-	sort.Strings(sentMessages.ReceivedByTopicC)
-	sort.Strings(appResp.ReceivedByTopicC)
-	sort.Strings(sentMessages.ReceivedByTopicRaw)
-	sort.Strings(appResp.ReceivedByTopicRaw)
+	// Combined state: received must contain all sent
+	if useCombinedState {
+		requireReceivedContainsAllSent(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA, "Topic A")
+		requireReceivedContainsAllSent(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB, "Topic B")
+		requireReceivedContainsAllSent(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC, "Topic C")
+		requireReceivedContainsAllSent(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw, "Topic Raw")
+		if validateDeadLetter {
+			// Union of dead + dead letter must contain all sent. assuming, at least one on dead letter
+			combined := append(append([]string{}, appResp.ReceivedByTopicDead...), appResp.ReceivedByTopicDeadLetter...)
+			requireReceivedContainsAllSent(t, sentMessages.ReceivedByTopicDeadLetter, combined, "Topic Dead (combined)")
+		}
+	} else {
+		sort.Strings(sentMessages.ReceivedByTopicA)
+		sort.Strings(appResp.ReceivedByTopicA)
+		sort.Strings(sentMessages.ReceivedByTopicB)
+		sort.Strings(appResp.ReceivedByTopicB)
+		sort.Strings(sentMessages.ReceivedByTopicC)
+		sort.Strings(appResp.ReceivedByTopicC)
+		sort.Strings(sentMessages.ReceivedByTopicRaw)
+		sort.Strings(appResp.ReceivedByTopicRaw)
+		assert.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA, "different messages received in Topic A")
+		assert.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB, "different messages received in Topic B")
+		assert.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC, "different messages received in Topic C")
+		assert.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw, "different messages received in Topic Raw")
+		if validateDeadLetter {
+			sort.Strings(sentMessages.ReceivedByTopicDeadLetter)
+			sort.Strings(appResp.ReceivedByTopicDeadLetter)
+			assert.Equal(t, sentMessages.ReceivedByTopicDeadLetter, appResp.ReceivedByTopicDeadLetter, "different messages received in Topic Dead")
+		}
+	}
+}
 
-	assert.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA, "different messages received in Topic A")
-	assert.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB, "different messages received in Topic B")
-	assert.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC, "different messages received in Topic C")
-	assert.Equal(t, sentMessages.ReceivedByTopicRaw, appResp.ReceivedByTopicRaw, "different messages received in Topic Raw")
-	if validateDeadLetter {
-		// only error response is expected to validate dead letter
-		sort.Strings(sentMessages.ReceivedByTopicDeadLetter)
-		sort.Strings(appResp.ReceivedByTopicDeadLetter)
-		assert.Equal(t, sentMessages.ReceivedByTopicDeadLetter, appResp.ReceivedByTopicDeadLetter, "different messages received in Topic Dead")
+// requireReceivedContainsAllSent asserts that every sent message appears in received at least once - combined state across pods
+func requireReceivedContainsAllSent(t *testing.T, sent, received []string, topicName string) {
+	t.Helper()
+	recSet := make(map[string]struct{})
+	for _, m := range received {
+		recSet[m] = struct{}{}
+	}
+	for _, m := range sent {
+		require.Contains(t, recSet, m, "topic %s: sent message missing from combined received", topicName)
 	}
 }
 

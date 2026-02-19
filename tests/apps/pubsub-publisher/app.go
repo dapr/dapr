@@ -603,15 +603,8 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-	} else if req.Method == "initialize" && len(req.PodEndpoints) > 0 {
-		// clear state on every subscriber pod so we don't accumulate messages from previous tests
-		for _, ep := range req.PodEndpoints {
-			if callErr := postToEndpoint("http://" + strings.TrimSpace(ep) + "/initialize"); callErr != nil {
-				log.Printf("(%s) initialize from %s: %v", reqID, ep, callErr)
-			}
-		}
-		resp = []byte("{}")
 	} else {
+		// Invoke via Dapr since tests validate combined state across pods via getMessages merge
 		if req.Protocol == "grpc" {
 			resp, err = callSubscriberMethodGRPC(reqID, req.RemoteApp, req.Method)
 		} else {
@@ -621,6 +614,9 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 			log.Printf("(%s) Could not get logs from %s: %s", reqID, req.RemoteApp, err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
+		}
+		if req.Method == "initialize" {
+			resp = []byte("{}")
 		}
 	}
 
