@@ -74,8 +74,9 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 		}
 
 		select {
-		case a.subOrchestratorStarted <- struct{}{}:
+		case <-a.subOrchestratorStarted:
 		default:
+			close(a.subOrchestratorStarted)
 		}
 
 		// Block until allowed to proceed (which will never happen in this test)
@@ -146,30 +147,24 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	err = client2.StartWorkItemListener(cctx, a.registry2)
 	require.NoError(t, err)
 
-	var id api.InstanceID
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		id, err = client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
-		assert.NoError(c, err)
+	id, err := client1.ScheduleNewOrchestration(ctx, "AppDownWorkflow", api.WithInput("Hello from app1"))
+	require.NoError(t, err)
 
-		// Wait for sub-orchestrator to start
-		select {
-		case <-a.subOrchestratorStarted:
-		case <-time.After(5 * time.Second):
-			c.Errorf("Timeout waiting for sub-orchestrator to start")
-		}
-	}, 20*time.Second, 100*time.Millisecond)
+	// Wait for sub-orchestrator to start
+	select {
+	case <-a.subOrchestratorStarted:
+	case <-time.After(10 * time.Second):
+		require.Fail(t, "Timeout waiting for sub-orchestrator to start")
+	}
 
 	// Stop app2 to simulate app going down mid-execution
 	ccancel()
 	daprd2Cancel()
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		// Expect completion to hang, so timeout
-		waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
-		defer waitCancel()
-
-		_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
-		assert.Error(c, err)
-		assert.EqualError(c, err, "context deadline exceeded")
-	}, 20*time.Second, 100*time.Millisecond)
+	// Expect completion to hang, so timeout
+	waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer waitCancel()
+	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+	require.Error(t, err)
+	assert.EqualError(t, err, "context deadline exceeded")
 }

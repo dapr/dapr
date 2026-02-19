@@ -353,10 +353,22 @@ func startDaprAPIServer(t *testing.T, testAPIServer *api, token string) *bufconn
 			t.Fatalf("timeout waiting for server to stop")
 		}
 	})
+
+	runtimev1pb.RegisterDaprServer(server, testAPIServer)
+
 	go func() {
-		runtimev1pb.RegisterDaprServer(server, testAPIServer)
 		errCh <- server.Serve(lis)
 	}()
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		//nolint:staticcheck
+		conn, err := grpc.DialContext(t.Context(), "bufnet", grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		if assert.NoError(c, err) {
+			conn.Close()
+		}
+	}, time.Second*5, time.Millisecond*10)
 
 	return lis
 }
