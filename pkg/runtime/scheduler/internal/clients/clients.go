@@ -66,8 +66,6 @@ func (c *Clients) Reload(ctx context.Context, addresses []string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	c.wg.Wait()
-
 	c.currentAddrs = []string{}
 	c.close()
 
@@ -131,6 +129,8 @@ func (c *Clients) Addresses() []string {
 }
 
 func (c *Clients) close() {
+	c.wg.Wait()
+
 	var wg sync.WaitGroup
 	wg.Add(len(c.closeFns))
 	for _, closeFn := range c.closeFns {
