@@ -647,6 +647,13 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 
 // Update configuration from Otlp Environment Variables, if they exist.
 func SetTracingSpecFromEnv(conf *Configuration) error {
+	if conf.Spec.TracingSpec == nil {
+		conf.Spec.TracingSpec = &TracingSpec{}
+	}
+	if conf.Spec.TracingSpec.Otel == nil {
+		conf.Spec.TracingSpec.Otel = &OtelSpec{}
+	}
+
 	// If Otel Endpoint is already set, then don't override.
 	if conf.Spec.TracingSpec.Otel.EndpointAddress != "" {
 		return nil
