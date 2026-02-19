@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -78,7 +79,7 @@ func (e *executor) complete(ctx context.Context, req *internalsv1pb.InternalInvo
 	case <-e.cancelCh:
 		return errors.New("canceled before completion result was sent")
 	case <-e.closeCh:
-		return errors.New("executor closed")
+		return targeterrors.NewClosed("executor")
 	case <-ctx.Done():
 		return errors.New("context cancelled before completion result was sent")
 	}
@@ -132,7 +133,7 @@ func (e *executor) watchComplete(ctx context.Context, stream func(*internalsv1pb
 	select {
 	case e.watchLock <- struct{}{}:
 	case <-e.closeCh:
-		return errors.New("executor closed")
+		return targeterrors.NewClosed("executor")
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -144,7 +145,7 @@ func (e *executor) watchComplete(ctx context.Context, stream func(*internalsv1pb
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-e.closeCh:
-		return errors.New("executor closed")
+		return targeterrors.NewClosed("executor")
 	case <-e.cancelCh:
 		_, err := stream(&internalsv1pb.InternalInvokeResponse{
 			Status: &internalsv1pb.Status{
