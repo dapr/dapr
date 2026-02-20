@@ -154,7 +154,7 @@ jobs:
         with:
           go-version-file: "go.mod"
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6.1.1
+        uses: golangci/golangci-lint-action@v9.2.0
         with:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
