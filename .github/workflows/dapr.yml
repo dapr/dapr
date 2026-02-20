@@ -127,6 +127,7 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
       - name: Run govulncheck
         run: govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
+        timeout-minutes: 10
         shell: bash
       - name: Dependency review
         uses: actions/dependency-review-action@v4
