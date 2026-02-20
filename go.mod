@@ -520,11 +520,12 @@ replace (
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 
-// Uncomment for local development for testing with changes in the components-contrib && kit repositories.
+// Uncomment for local development for testing with changes in the components-contrib, kit, and durabletask repositories.
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
+// replace github.com/dapr/durabletask-go => ../durabletask-go
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
