@@ -18,7 +18,6 @@ import (
 	nethttp "net/http"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,7 +39,6 @@ type up struct {
 	app1 *actors.Actors
 	app2 *actors.Actors
 
-	called     atomic.Int32
 	holdInDown chan struct{}
 	inDelete   slice.Slice[string]
 }
