@@ -114,7 +114,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Login to Azure
         if: env.CHECKOUT_REPO != ''
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Build test prefix
@@ -253,7 +253,7 @@ jobs:
           go-version-file: 'go.mod'
       - name: Login to Azure
         if: env.CHECKOUT_REPO != ''
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Login to cache registry
@@ -421,7 +421,7 @@ jobs:
           version: ${{ env.HELMVER }}
       - name: Login to Azure
         if: env.CHECKOUT_REPO != ''
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Build test prefix and set env vars
@@ -544,7 +544,7 @@ jobs:
     if: always()
     steps:
       - name: Login to Azure
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Build test prefix
