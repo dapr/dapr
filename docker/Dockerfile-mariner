@@ -1,7 +1,7 @@
 # Note: current directory must be ./dist
 
-ARG MARINER_VERSION=2.0
-FROM mcr.microsoft.com/cbl-mariner/distroless/minimal:${MARINER_VERSION}-nonroot
+ARG MARINER_VERSION=3.0
+FROM mcr.microsoft.com/azurelinux/distroless/minimal:${MARINER_VERSION}
 ARG PKG_FILES
 # The base image specifies the user with its name ("nonroot").
 # This is the equivalent UID: Kubernetes requires a numeric ID for "runAsRoot: false" support
