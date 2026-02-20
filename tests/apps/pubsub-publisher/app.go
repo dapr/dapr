@@ -592,25 +592,25 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqID, req.Method, req.RemoteApp, req.Protocol)
 
 	var resp []byte
-	if len(req.PodEndpoints) > 0 {
-		if req.Method == "getMessages" {
-			resp, err = getMessagesFromPodsAndMerge(reqID, req.RemoteApp, req.PodEndpoints)
+	// Fanout getMessages across pods for both protocols (HTTP app endpoint && gRPC sidecar invoke)
+	if req.Method == "getMessages" {
+		resp, err = getMessagesFromPodsAndMerge(reqID, req.RemoteApp, req.Protocol, req.PodEndpoints)
+		if err != nil {
+			log.Printf("(%s) getMessages merge marshal failed: %v", reqID, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	} else if req.Protocol == "http" {
+		// HTTP should fan out to all app pods
+		for _, ep := range req.PodEndpoints {
+			_, err = invokeMethodOnAppHTTP(strings.TrimSpace(ep), req.Method)
 			if err != nil {
-				log.Printf("(%s) getMessages merge marshal failed: %v", reqID, err)
+				log.Printf("(%s) %s on %s: %v", reqID, req.Method, ep, err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-		} else {
-			for _, ep := range req.PodEndpoints {
-				_, err = invokeMethodOnSpecificSidecar(strings.TrimSpace(ep), req.RemoteApp, req.Method, reqID)
-				if err != nil {
-					log.Printf("(%s) %s on %s: %v", reqID, req.Method, ep, err)
-					w.WriteHeader(http.StatusInternalServerError)
-					return
-				}
-			}
-			resp = []byte("{}")
 		}
+		resp = []byte("{}")
 	} else {
 		if req.Protocol == "grpc" {
 			resp, err = callLocalSubscriberMethodGRPC(reqID, req.RemoteApp, req.Method)
@@ -633,10 +633,16 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) responded in %v via %s", reqID, formatDuration(duration), req.Protocol)
 }
 
-func getMessagesFromPodsAndMerge(reqID, remoteApp string, podEndpoints []string) ([]byte, error) {
+func getMessagesFromPodsAndMerge(reqID, remoteApp, protocol string, podEndpoints []string) ([]byte, error) {
 	merged := &receivedMessagesResponse{}
 	for _, ep := range podEndpoints {
-		nextResp, callErr := invokeMethodOnSpecificSidecar(strings.TrimSpace(ep), remoteApp, "getMessages", reqID)
+		var nextResp []byte
+		var callErr error
+		if protocol == "grpc" {
+			nextResp, callErr = invokeMethodOnSidecarHTTP(strings.TrimSpace(ep), remoteApp, "getMessages", reqID)
+		} else {
+			nextResp, callErr = invokeMethodOnAppHTTP(strings.TrimSpace(ep), "getMessages")
+		}
 		if callErr != nil {
 			log.Printf("(%s) getMessages from %s: %v", reqID, ep, callErr)
 			continue
@@ -651,14 +657,37 @@ func getMessagesFromPodsAndMerge(reqID, remoteApp string, podEndpoints []string)
 	return json.Marshal(merged)
 }
 
-func invokeMethodOnSpecificSidecar(podEndpoint, appID, method, reqID string) ([]byte, error) {
+func invokeMethodOnAppHTTP(podEndpoint, method string) ([]byte, error) {
+	url := fmt.Sprintf("http://%s/%s", podEndpoint, method)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBufferString("{}"))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("status=%d body=%s", resp.StatusCode, string(body))
+	}
+	return body, nil
+}
+
+func invokeMethodOnSidecarHTTP(podEndpoint, appID, method, reqID string) ([]byte, error) {
 	host := podEndpoint
 	if h, _, err := net.SplitHostPort(podEndpoint); err == nil {
 		host = h
 	}
 	qs := netUrl.Values{"reqid": []string{reqID}}.Encode()
 	url := fmt.Sprintf("http://%s:%d/v1.0/invoke/%s/method/%s?%s", host, daprPortHTTP, appID, method, qs)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBufferString("{}"))

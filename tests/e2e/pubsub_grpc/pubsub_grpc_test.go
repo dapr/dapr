@@ -966,8 +966,14 @@ func TestPubSubGRPC(t *testing.T) {
 	protocol := "grpc"
 	for _, tc := range pubsubTests {
 		t.Run(fmt.Sprintf("%s_%s", tc.name, protocol), func(t *testing.T) {
-			podEndpoints, err := tr.Platform.GetAppPodEndpoints(subscriberAppName)
-			require.NoError(t, err, "get subscriber pod endpoints")
+			var podEndpoints []string
+			require.EventuallyWithT(t, func(c *assert.CollectT) {
+				podEndpoints, err = tr.Platform.GetAppPodEndpoints(subscriberAppName)
+				assert.NoError(c, err, "get subscriber pod endpoints")
+				assert.NotEmpty(c, podEndpoints, "subscriber pod endpoints must not be empty")
+				assert.True(c, len(podEndpoints) == 1 || len(podEndpoints) == 3,
+					"subscriber pod endpoint count must be 1 (non-HA) or 3 (HA), got %d", len(podEndpoints))
+			}, 60*time.Second, 2*time.Second, "subscriber pod endpoints were not ready")
 			tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName, protocol, podEndpoints)
 		})
 	}
