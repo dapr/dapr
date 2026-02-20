@@ -41,7 +41,7 @@ type Options struct {
 	Healthz   healthz.Healthz
 	Security  security.Handler
 	Clients   *clients.Clients
-	HostLoop  loop.Interface[loops.Event]
+	HostLoop  loop.Interface[loops.EventHost]
 }
 
 type WatchHosts struct {
@@ -50,7 +50,7 @@ type WatchHosts struct {
 	security security.Handler
 	clients  *clients.Clients
 
-	loop loop.Interface[loops.Event]
+	loop loop.Interface[loops.EventHost]
 }
 
 func New(opts Options) *WatchHosts {

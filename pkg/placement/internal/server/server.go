@@ -70,7 +70,7 @@ type Server struct {
 	disseminateTimeout time.Duration
 
 	authz *authorizer.Authorizer
-	loop  loop.Interface[loops.Event]
+	loop  loop.Interface[loops.EventNamespace]
 
 	isLeader atomic.Bool
 	shutdown atomic.Bool

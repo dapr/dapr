@@ -22,7 +22,7 @@ import (
 )
 
 type Options struct {
-	Loop    loop.Interface[loops.Event]
+	Loop    loop.Interface[loops.EventDiss]
 	Timeout time.Duration
 }
 

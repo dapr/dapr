@@ -49,8 +49,8 @@ type Options struct {
 
 // Scheduler manages the connection to the cluster of schedulers.
 type Scheduler struct {
-	connector  loop.Interface[loops.Event]
-	hosts      loop.Interface[loops.Event]
+	connector  loop.Interface[loops.EventConn]
+	hosts      loop.Interface[loops.EventHost]
 	watchhosts *watchhosts.WatchHosts
 	client     client.Interface
 

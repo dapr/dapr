@@ -37,7 +37,7 @@ import (
 var log = logger.NewLogger("dapr.placement.server.loops.disseminator")
 
 var (
-	LoopFactory = loop.New[loops.Event](1024)
+	LoopFactory = loop.New[loops.EventDisseminator](1024)
 	dissCache   = sync.Pool{New: func() any {
 		return &disseminator{
 			streams: make(map[uint64]*streamConn),
@@ -46,7 +46,7 @@ var (
 )
 
 type Options struct {
-	NamespaceLoop        loop.Interface[loops.Event]
+	NamespaceLoop        loop.Interface[loops.EventNamespace]
 	Namespace            string
 	ReplicationFactor    int64
 	Authorizer           *authorizer.Authorizer
@@ -54,7 +54,7 @@ type Options struct {
 }
 
 type streamConn struct {
-	loop         loop.Interface[loops.Event]
+	loop         loop.Interface[loops.EventStream]
 	currentState v1pb.HostOperation
 	hasActors    bool
 }
@@ -62,8 +62,8 @@ type streamConn struct {
 // disseminator is a control loop that creates and manages stream connections,
 // disseminating actor type updates with a 3 stage lock.
 type disseminator struct {
-	nsLoop     loop.Interface[loops.Event]
-	loop       loop.Interface[loops.Event]
+	nsLoop     loop.Interface[loops.EventNamespace]
+	loop       loop.Interface[loops.EventDisseminator]
 	authorizer *authorizer.Authorizer
 	timeout    time.Duration
 
@@ -86,7 +86,7 @@ type disseminator struct {
 	waitingToDelete      []uint64
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
+func New(opts Options) loop.Interface[loops.EventDisseminator] {
 	diss := dissCache.Get().(*disseminator)
 
 	diss.nsLoop = opts.NamespaceLoop
@@ -119,7 +119,7 @@ func New(opts Options) loop.Interface[loops.Event] {
 	return diss.loop
 }
 
-func (d *disseminator) Handle(ctx context.Context, event loops.Event) error {
+func (d *disseminator) Handle(ctx context.Context, event loops.EventDisseminator) error {
 	log.Debugf("Disseminator handling event (%s): %T", d.namespace, event)
 
 	switch e := event.(type) {

@@ -39,7 +39,7 @@ import (
 
 type suite struct {
 	cancelCalled *atomic.Pointer[error]
-	connLoop     loop.Interface[loops.Event]
+	connLoop     loop.Interface[loops.EventNS]
 	prefixes     *[]string
 	prefixesMu   *sync.Mutex
 }

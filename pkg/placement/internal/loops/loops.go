@@ -19,42 +19,68 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-// Event is a generic interface for all events in placement.
-type Event any
+type nsbase struct{}
+
+func (*nsbase) isEventNamespace() {}
+
+type EventNamespace interface{ isEventNamespace() }
+
+type dissbase struct{}
+
+func (*dissbase) isEventDisseminator() {}
+
+type EventDisseminator interface{ isEventDisseminator() }
+
+type streambase struct{}
+
+func (*streambase) isEventStream() {}
+
+type EventStream interface{ isEventStream() }
 
 // ConnAdd is the event for adding a new connection to placement.
 type ConnAdd struct {
+	*nsbase
+	*dissbase
 	Channel     v1pb.Placement_ReportDaprStatusServer
 	Cancel      context.CancelCauseFunc
 	InitialHost *v1pb.Host
 }
 
 type ReportedHost struct {
+	*nsbase
+	*dissbase
 	Host      *v1pb.Host
 	StreamIDx uint64
 }
 
 type DisseminateLock struct {
+	*streambase
 	Version uint64
 }
 
 type DisseminateUpdate struct {
+	*streambase
 	Tables  *v1pb.PlacementTables
 	Version uint64
 }
 
 type DisseminateUnlock struct {
+	*streambase
 	Version uint64
 }
 
 // StreamShutdown is the event for shutting down the placement client stream.
 type StreamShutdown struct {
+	*nsbase
+	*streambase
 	Error error
 }
 
 // ConnCloseStream is the event for closing a connection to the placement from
 // the stream.
 type ConnCloseStream struct {
+	*nsbase
+	*dissbase
 	StreamIDx uint64
 	Namespace string
 	Error     error
@@ -62,17 +88,22 @@ type ConnCloseStream struct {
 
 // Shutdown is the event for shutting down the placement loops.
 type Shutdown struct {
+	*nsbase
+	*dissbase
 	Error error
 }
 
 type DisseminationTimeout struct {
+	*dissbase
 	Version uint64
 }
 
 type NamespaceTableRequest struct {
+	*dissbase
 	Table func(*v1pb.StatePlacementTable)
 }
 
 type StateTableRequest struct {
+	*nsbase
 	State func(*v1pb.StatePlacementTables)
 }
