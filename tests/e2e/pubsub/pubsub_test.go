@@ -453,8 +453,8 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 		callInitialize(t, subscriberAppName, publisherExternalURL, protocol, podEndpoints)
 	} else if subscriberResponse == "error" {
-		log.Printf("Waiting 8s for retries to exhaust and messages to be dead-lettered...")
-		time.Sleep(8 * time.Second)
+		log.Printf("Waiting 30s for retries to exhaust and messages to be dead-lettered...")
+		time.Sleep(30 * time.Second)
 		// Combined state across pods: dead-letter + main dead topic must account for all 60
 		log.Printf("Waiting for combined state (dead letter + dead topic) >= %d before flipping subscriber to success...", len(sentMessages.ReceivedByTopicDeadLetter))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {

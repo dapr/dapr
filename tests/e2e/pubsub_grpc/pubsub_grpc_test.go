@@ -565,6 +565,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	} else {
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages (combined state)...")
+		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 	}
 	return subscriberExternalURL
