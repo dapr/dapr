@@ -37,7 +37,7 @@ import (
 // Proxy is the interface for a gRPC transparent proxy.
 type Proxy interface {
 	Handler() grpc.StreamHandler
-	SetRemoteAppFn(func(string) (remoteApp, error))
+	SetRemoteAppFn(func(context.Context, string) (remoteApp, error))
 	SetTelemetryFn(func(context.Context) context.Context)
 }
 
@@ -45,7 +45,7 @@ type proxy struct {
 	appID              string
 	appClientFn        func() (grpc.ClientConnInterface, error)
 	connectionFactory  messageClientConnection
-	remoteAppFn        func(appID string) (remoteApp, error)
+	remoteAppFn        func(ctx context.Context, appID string) (remoteApp, error)
 	telemetryFn        func(context.Context) context.Context
 	appendAppTokenFn   func(context.Context) context.Context
 	acl                *config.AccessControlList
@@ -80,8 +80,8 @@ func NewProxy(opts ProxyOpts) Proxy {
 // Handler returns a Stream Handler for handling requests that arrive for services that are not recognized by the server.
 func (p *proxy) Handler() grpc.StreamHandler {
 	return grpcProxy.TransparentHandler(p.intercept,
-		func(appID, methodName string) *resiliency.PolicyDefinition {
-			_, isLocal, err := p.isLocal(appID)
+		func(ctx context.Context, appID, methodName string) *resiliency.PolicyDefinition {
+			_, isLocal, err := p.isLocal(ctx, appID)
 			if err == nil && !isLocal {
 				return p.resiliency.EndpointPolicy(appID, appID+":"+methodName)
 			}
@@ -115,7 +115,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		return ctx, nil, nil, nopTeardown, errors.New("failed to proxy request: proxy not initialized. daprd startup may be incomplete")
 	}
 
-	target, isLocal, err := p.isLocal(appID)
+	target, isLocal, err := p.isLocal(ctx, appID)
 	if err != nil {
 		return ctx, nil, nil, nopTeardown, err
 	}
@@ -163,7 +163,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 }
 
 // SetRemoteAppFn sets a function that helps the proxy resolve an app ID to an actual address.
-func (p *proxy) SetRemoteAppFn(remoteAppFn func(appID string) (remoteApp, error)) {
+func (p *proxy) SetRemoteAppFn(remoteAppFn func(ctx context.Context, appID string) (remoteApp, error)) {
 	p.remoteAppFn = remoteAppFn
 }
 
@@ -172,12 +172,12 @@ func (p *proxy) SetTelemetryFn(spanFn func(context.Context) context.Context) {
 	p.telemetryFn = spanFn
 }
 
-func (p *proxy) isLocal(appID string) (remoteApp, bool, error) {
+func (p *proxy) isLocal(ctx context.Context, appID string) (remoteApp, bool, error) {
 	if p.remoteAppFn == nil {
 		return remoteApp{}, false, errors.New("failed to proxy request: proxy not initialized; daprd startup may be incomplete")
 	}
 
-	target, err := p.remoteAppFn(appID)
+	target, err := p.remoteAppFn(ctx, appID)
 	if err != nil {
 		return remoteApp{}, false, err
 	}
