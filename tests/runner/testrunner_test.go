@@ -56,6 +56,14 @@ func (m *MockPlatform) GetAppHostDetails(name string) (string, string, error) {
 	return args.String(0), args.String(0), args.Error(0)
 }
 
+func (m *MockPlatform) GetAppPodEndpoints(name string) ([]string, error) {
+	args := m.Called(name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
 func (m *MockPlatform) AddComponents(comps []kube.ComponentDescription) error {
 	args := m.Called(comps)
 	return args.Error(0)

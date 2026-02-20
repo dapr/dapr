@@ -13,7 +13,11 @@ limitations under the License.
 
 package compstore
 
-import "github.com/dapr/components-contrib/lock"
+import (
+	"maps"
+
+	"github.com/dapr/components-contrib/lock"
+)
 
 func (c *ComponentStore) AddLock(name string, store lock.Store) {
 	c.lock.Lock()
@@ -31,7 +35,7 @@ func (c *ComponentStore) GetLock(name string) (lock.Store, bool) {
 func (c *ComponentStore) ListLocks() map[string]lock.Store {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.locks
+	return maps.Clone(c.locks)
 }
 
 func (c *ComponentStore) DeleteLock(name string) {

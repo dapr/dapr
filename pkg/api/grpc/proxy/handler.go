@@ -36,7 +36,7 @@ var errRetryOnStreamingRPC = status.Error(codes.FailedPrecondition, "cannot use 
 
 type replayBufferCh chan *codec.Frame
 
-type getPolicyFn func(appID, methodName string) *resiliency.PolicyDefinition
+type getPolicyFn func(ctx context.Context, appID, methodName string) *resiliency.PolicyDefinition
 
 // RegisterService sets up a proxy handler for a particular gRPC service and method.
 // The behaviour is the same as if you were registering a handler method, e.g. from a codegenerated pb.go file.
@@ -105,7 +105,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	if len(v) == 0 || s.getPolicyFn == nil {
 		policyDef = resiliency.NoOp{}.EndpointPolicy("", "")
 	} else {
-		policyDef = s.getPolicyFn(v[0], fullMethodName)
+		policyDef = s.getPolicyFn(ctx, v[0], fullMethodName)
 		grpcDestinationAppID = v[0]
 	}
 

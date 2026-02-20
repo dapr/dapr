@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -35,22 +34,16 @@ type SubscriptionUpdateEvent struct {
 
 func (a *apiServer) OnSubscriptionUpdated(ctx context.Context, eventType operatorv1pb.ResourceEventType, subscription *subapi.Subscription) {
 	a.subLock.Lock()
-	var wg sync.WaitGroup
-	wg.Add(len(a.allSubscriptionUpdateChan))
+	defer a.subLock.Unlock()
 	for _, connUpdateChan := range a.allSubscriptionUpdateChan {
-		go func(connUpdateChan chan *SubscriptionUpdateEvent) {
-			defer wg.Done()
-			select {
-			case connUpdateChan <- &SubscriptionUpdateEvent{
-				Subscription: subscription,
-				EventType:    eventType,
-			}:
-			case <-ctx.Done():
-			}
-		}(connUpdateChan)
+		select {
+		case connUpdateChan <- &SubscriptionUpdateEvent{
+			Subscription: subscription,
+			EventType:    eventType,
+		}:
+		case <-ctx.Done():
+		}
 	}
-	wg.Wait()
-	a.subLock.Unlock()
 }
 
 // ListSubscriptions returns a list of Dapr pub/sub subscriptions.
@@ -141,8 +134,6 @@ func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateReques
 		log.Debugf("updated sidecar with subscription %s %s to pod %s/%s", t.String(), sub.GetName(), in.GetNamespace(), in.GetPodName())
 	}
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
 	for {
 		select {
 		case <-srv.Context().Done():
@@ -151,11 +142,7 @@ func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateReques
 			if !ok {
 				return nil
 			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				updateSubscriptionFunc(srv.Context(), c.EventType, c.Subscription)
-			}()
+			updateSubscriptionFunc(srv.Context(), c.EventType, c.Subscription)
 		}
 	}
 }
