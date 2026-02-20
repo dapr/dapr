@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	netUrl "net/url"
 	"os"
@@ -592,15 +591,15 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqID, req.Method, req.RemoteApp, req.Protocol)
 
 	var resp []byte
-	// Fanout getMessages across pods for both protocols (HTTP app endpoint && gRPC sidecar invoke)
-	if req.Method == "getMessages" {
-		resp, err = getMessagesFromPodsAndMerge(reqID, req.RemoteApp, req.Protocol, req.PodEndpoints)
+	// Fanout+merge getMessages only for HTTP app endpoints
+	if req.Method == "getMessages" && req.Protocol == "http" && len(req.PodEndpoints) > 0 {
+		resp, err = getMessagesFromPodsAndMerge(reqID, req.PodEndpoints)
 		if err != nil {
 			log.Printf("(%s) getMessages merge marshal failed: %v", reqID, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-	} else if req.Protocol == "http" {
+	} else if req.Protocol == "http" && len(req.PodEndpoints) > 0 {
 		// HTTP should fan out to all app pods
 		for _, ep := range req.PodEndpoints {
 			_, err = invokeMethodOnAppHTTP(strings.TrimSpace(ep), req.Method)
@@ -633,16 +632,10 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) responded in %v via %s", reqID, formatDuration(duration), req.Protocol)
 }
 
-func getMessagesFromPodsAndMerge(reqID, remoteApp, protocol string, podEndpoints []string) ([]byte, error) {
+func getMessagesFromPodsAndMerge(reqID string, podEndpoints []string) ([]byte, error) {
 	merged := &receivedMessagesResponse{}
 	for _, ep := range podEndpoints {
-		var nextResp []byte
-		var callErr error
-		if protocol == "grpc" {
-			nextResp, callErr = invokeMethodOnSidecarHTTP(strings.TrimSpace(ep), remoteApp, "getMessages", reqID)
-		} else {
-			nextResp, callErr = invokeMethodOnAppHTTP(strings.TrimSpace(ep), "getMessages")
-		}
+		nextResp, callErr := invokeMethodOnAppHTTP(strings.TrimSpace(ep), "getMessages")
 		if callErr != nil {
 			log.Printf("(%s) getMessages from %s: %v", reqID, ep, callErr)
 			continue
@@ -659,35 +652,6 @@ func getMessagesFromPodsAndMerge(reqID, remoteApp, protocol string, podEndpoints
 
 func invokeMethodOnAppHTTP(podEndpoint, method string) ([]byte, error) {
 	url := fmt.Sprintf("http://%s/%s", podEndpoint, method)
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBufferString("{}"))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status=%d body=%s", resp.StatusCode, string(body))
-	}
-	return body, nil
-}
-
-func invokeMethodOnSidecarHTTP(podEndpoint, appID, method, reqID string) ([]byte, error) {
-	host := podEndpoint
-	if h, _, err := net.SplitHostPort(podEndpoint); err == nil {
-		host = h
-	}
-	qs := netUrl.Values{"reqid": []string{reqID}}.Encode()
-	url := fmt.Sprintf("http://%s:%d/v1.0/invoke/%s/method/%s?%s", host, daprPortHTTP, appID, method, qs)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBufferString("{}"))
