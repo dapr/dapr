@@ -136,6 +136,7 @@ jobs:
               sleep 30
             done ) &
           MON_PID=$!
+          export GOMEMLIMIT=12GiB
           govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
 
   lint-slow:
