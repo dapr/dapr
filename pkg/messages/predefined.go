@@ -120,21 +120,6 @@ var (
 	ErrUnlockFailed               = APIError{"failed to release lock: %s", errorcodes.LockUnlock, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Workflow.
-	ErrStartWorkflow                 = APIError{"error starting workflow '%s': %s", errorcodes.WorkflowStart, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrWorkflowGetResponse           = APIError{"error while getting workflow info on instance '%s': %s", errorcodes.WorkflowGet, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrWorkflowNameMissing           = APIError{"workflow name is not configured", errorcodes.WorkflowNameMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrInstanceIDTooLong             = APIError{"workflow instance ID exceeds the max length of %d characters", errorcodes.WorkflowInstanceIDTooLong, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrInvalidInstanceID             = APIError{"workflow instance ID '%s' is invalid: only alphanumeric and underscore characters are allowed", errorcodes.WorkflowInstanceIDInvalid, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrWorkflowComponentDoesNotExist = APIError{"workflow component '%s' does not exist", errorcodes.WorkflowComponentNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrMissingOrEmptyInstance        = APIError{"no instance ID was provided", errorcodes.WorkflowInstanceIDProvidedMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrWorkflowInstanceNotFound      = APIError{"unable to find workflow with the provided instance ID: %s", errorcodes.WorkflowInstanceIDNotFound, http.StatusNotFound, grpcCodes.NotFound}
-	ErrNoOrMissingWorkflowComponent  = APIError{"no workflow component was provided", errorcodes.WorkflowComponentMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrTerminateWorkflow             = APIError{"error terminating workflow '%s': %s", errorcodes.WorkflowTerminate, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", errorcodes.WorkflowEventNameMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow '%s': %s", errorcodes.WorkflowRaiseEvent, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrPauseWorkflow                 = APIError{"error pausing workflow %s: %s", errorcodes.WorkflowPause, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrResumeWorkflow                = APIError{"error resuming workflow %s: %s", errorcodes.WorkflowResume, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrPurgeWorkflow                 = APIError{"error purging workflow %s: %s", errorcodes.WorkflowPurge, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Conversation
 	ErrConversationNotFound      = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}

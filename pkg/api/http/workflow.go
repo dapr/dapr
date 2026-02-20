@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -297,7 +298,7 @@ func (a *api) onGetWorkflowHandler() http.HandlerFunc {
 			InModifier: workflowInModifier[*runtimev1pb.GetWorkflowRequest],
 			OutModifier: func(out *runtimev1pb.GetWorkflowResponse) (any, error) {
 				if out.GetProperties() == nil {
-					return nil, messages.ErrWorkflowInstanceNotFound.WithFormat(out.GetInstanceId())
+					return nil, apierrors.Workflow(out.GetInstanceId()).InstanceNotFound()
 				}
 				return out, nil
 			},
