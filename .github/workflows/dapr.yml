@@ -136,7 +136,7 @@ jobs:
               sleep 30
             done ) &
           MON_PID=$!
-          govulncheck -C '.' -format text -scan-level=package --tags=unit,allcomponents,integration ./...
+          govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
 
   lint-slow:
     name: golangci-lint
