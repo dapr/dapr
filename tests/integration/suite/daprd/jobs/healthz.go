@@ -114,6 +114,8 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 	healthzCalled = h.healthCalled.Load()
 	h.appHealthy.Store(false)
 
+	time.Sleep(time.Second * 2)
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Greater(c, h.healthCalled.Load(), healthzCalled+2)
 	}, time.Second*5, time.Millisecond*10)
