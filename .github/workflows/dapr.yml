@@ -20,7 +20,6 @@ on:
       - main
       - master
       - release-*
-      - feature/*
     tags:
       - v*
   pull_request:
@@ -28,7 +27,6 @@ on:
       - main
       - master
       - release-*
-      - feature/*
 
 permissions: {}
 
@@ -69,8 +67,8 @@ jobs:
           TRAILING_WHITESPACE=0
           # only check changed docs in pr
           for file in $(git diff --cached --name-only --diff-filter=ACRMTU $GITHUB_BASE_REF | grep "\.md"); do
-            if grep -r '[[:blank:]]$' "$1" > /dev/null; then
-              echo "trailing whitespace: ${1}" >&2
+            if grep -r '[[:blank:]]$' "$file" > /dev/null; then
+              echo "trailing whitespace: ${file}" >&2
               ERRORS=yes
               ((TRAILING_WHITESPACE=TRAILING_WHITESPACE+1))
             fi
@@ -128,7 +126,7 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        run: govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
+        run: GOMEMLIMIT=12GiB govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
         shell: bash
 
   lint-slow:
