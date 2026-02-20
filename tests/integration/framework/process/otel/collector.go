@@ -36,6 +36,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
@@ -50,6 +51,7 @@ type Collector struct {
 	listener    net.Listener
 	server      *grpc.Server
 	spans       []*tracepb.ResourceSpans
+	headers     metadata.MD
 	mu          sync.RWMutex
 	srvErrCh    chan error
 	runOnce     sync.Once
@@ -139,6 +141,12 @@ func (c *Collector) Export(ctx context.Context, req *coltracepb.ExportTraceServi
 	defer c.mu.Unlock()
 
 	c.spans = append(c.spans, req.GetResourceSpans()...)
+
+	// Capture gRPC metadata from the incoming request
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		c.headers = md
+	}
+
 	return &coltracepb.ExportTraceServiceResponse{}, nil
 }
 
@@ -155,6 +163,13 @@ func (c *Collector) GetSpans() []*tracepb.ResourceSpans {
 	result := make([]*tracepb.ResourceSpans, len(c.spans))
 	copy(result, c.spans)
 	return result
+}
+
+// GetHeaders returns the gRPC metadata received from the last Export request.
+func (c *Collector) GetHeaders() metadata.MD {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.headers
 }
 
 // OTLPGRPCAddress returns the gRPC endpoint address for the collector

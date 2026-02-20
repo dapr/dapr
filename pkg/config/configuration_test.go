@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -218,11 +219,14 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
 	})
 
-	t.Run("tracing spec headers value as string", func(t *testing.T) {
+	t.Run("tracing spec headers and timeout", func(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/tracing_config.yaml")
 		require.NoError(t, err)
-		assert.Equal(t, "header1=value1,header2=value2", config.Spec.TracingSpec.Otel.Headers)
-		assert.Equal(t, 5000, config.Spec.TracingSpec.Otel.Timeout)
+		require.Len(t, config.Spec.TracingSpec.Otel.Headers, 2)
+		assert.Equal(t, "header1=value1", config.Spec.TracingSpec.Otel.Headers[0])
+		assert.Equal(t, "header2=value2", config.Spec.TracingSpec.Otel.Headers[1])
+		require.NotNil(t, config.Spec.TracingSpec.Otel.Timeout)
+		assert.Equal(t, 5*time.Second, *config.Spec.TracingSpec.Otel.Timeout)
 	})
 
 	t.Run("tracing invalid spec", func(t *testing.T) {
@@ -475,14 +479,16 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	assert.Equal(t, "otlpendpoint:1234", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "http", conf.Spec.TracingSpec.Otel.Protocol)
 	require.False(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
-	assert.Equal(t, "api-key1=value1,api-key2=value2", conf.Spec.TracingSpec.Otel.Headers)
+	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 2)
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "api-key1=value1")
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "api-key2=value2")
 
 	// Spec from config file should not be overridden
 	conf = LoadDefaultConfiguration()
 	conf.Spec.TracingSpec.Otel.EndpointAddress = "configfileendpoint:4321"
 	conf.Spec.TracingSpec.Otel.Protocol = "grpc"
 	conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(true)
-	conf.Spec.TracingSpec.Otel.Headers = "another-key1=value1,another-key2=value2"
+	conf.Spec.TracingSpec.Otel.Headers = []string{"another-key1=value1"}
 
 	// set tracing spec from env
 	err = SetTracingSpecFromEnv(conf)
@@ -491,7 +497,8 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	assert.Equal(t, "configfileendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
 	require.True(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
-	assert.Equal(t, "another-key1=value1,another-key2=value2", conf.Spec.TracingSpec.Otel.Headers)
+	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 1)
+	assert.Equal(t, "another-key1=value1", conf.Spec.TracingSpec.Otel.Headers[0])
 }
 
 func TestTracingPrecedenceFromEnv(t *testing.T) {
@@ -510,8 +517,40 @@ func TestTracingPrecedenceFromEnv(t *testing.T) {
 
 	assert.Equal(t, "tracesendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
-	assert.Equal(t, "traces-key1=value1,traces-key2=value2", conf.Spec.TracingSpec.Otel.Headers)
-	assert.Equal(t, 2000, conf.Spec.TracingSpec.Otel.Timeout)
+	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 2)
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "traces-key1=value1")
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "traces-key2=value2")
+	require.NotNil(t, conf.Spec.TracingSpec.Otel.Timeout)
+	assert.Equal(t, 2*time.Second, *conf.Spec.TracingSpec.Otel.Timeout)
+}
+
+func TestTracingConfigHeadersPrecedenceOverEnv(t *testing.T) {
+	// When endpointAddress is already set in config, SetTracingSpecFromEnv
+	// returns early and env var headers/timeout are not applied
+	t.Setenv(env.OtlpExporterTracesHeaders, "env-key=env-value")
+	t.Setenv(env.OtlpExporterTracesTimeout, "5000")
+
+	conf := &Configuration{
+		Spec: ConfigurationSpec{
+			TracingSpec: &TracingSpec{
+				Otel: &OtelSpec{
+					EndpointAddress: "already-set:4317",
+					Protocol:        "grpc",
+					Headers:         []string{"config-key=config-value"},
+				},
+			},
+		},
+	}
+
+	err := SetTracingSpecFromEnv(conf)
+	require.NoError(t, err)
+
+	// Config headers should be unchanged; env var headers should NOT be appended
+	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 1)
+	assert.Equal(t, "config-key=config-value", conf.Spec.TracingSpec.Otel.Headers[0])
+
+	// Timeout should remain nil since env vars were not applied
+	assert.Nil(t, conf.Spec.TracingSpec.Otel.Timeout)
 }
 
 func TestTracingTimeoutFromEnv(t *testing.T) {
@@ -520,13 +559,13 @@ func TestTracingTimeoutFromEnv(t *testing.T) {
 	err := SetTracingSpecFromEnv(conf)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid syntax")
-	assert.Equal(t, 0, conf.Spec.TracingSpec.Otel.Timeout)
+	assert.Nil(t, conf.Spec.TracingSpec.Otel.Timeout)
 
 	t.Setenv(env.OtlpExporterTracesTimeout, "-1")
 	conf = LoadDefaultConfiguration()
 	err = SetTracingSpecFromEnv(conf)
 	require.NoError(t, err)
-	assert.Equal(t, 0, conf.Spec.TracingSpec.Otel.Timeout)
+	assert.Nil(t, conf.Spec.TracingSpec.Otel.Timeout)
 }
 
 func TestAPIAccessRules(t *testing.T) {
