@@ -17,7 +17,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -87,7 +86,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
 
-	assert.NoError(t, client.RaiseEvent(ctx, id, "Continue"))
+	require.NoError(t, client.RaiseEvent(ctx, id, "Continue"))
 
 	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
 	lastEvent := wf.GetLastHistoryEventOfType[protos.HistoryEvent_ExecutionStalled](t, ctx, client, id)
