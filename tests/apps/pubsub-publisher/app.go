@@ -592,46 +592,30 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqID, req.Method, req.RemoteApp, req.Protocol)
 
 	var resp []byte
-	// One aggregation over N pods
-	if req.Method == "getMessages" && len(req.PodEndpoints) > 0 {
-		merged := &receivedMessagesResponse{}
-		for _, ep := range req.PodEndpoints {
-			nextResp, callErr := invokeMethodOnPodSidecar(strings.TrimSpace(ep), req.RemoteApp, "getMessages", reqID)
-			if callErr != nil {
-				log.Printf("(%s) getMessages from %s: %v", reqID, ep, callErr)
-				continue
-			}
-			var next receivedMessagesResponse
-			if json.Unmarshal(nextResp, &next) == nil {
-				mergeReceivedMessages(merged, &next)
-			} else {
-				log.Printf("(%s) getMessages from %s: unmarshal failed; raw=%s", reqID, ep, string(nextResp))
-			}
-		}
-
-		resp, err = json.Marshal(merged)
-		if err != nil {
-			log.Printf("(%s) getMessages merge marshal failed: %v", reqID, err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-	} else if len(req.PodEndpoints) > 0 && (req.Method == "initialize" || strings.HasPrefix(req.Method, "set-respond-")) {
-		// target each pod's sidecar
-		for _, ep := range req.PodEndpoints {
-			_, callErr := invokeMethodOnPodSidecar(strings.TrimSpace(ep), req.RemoteApp, req.Method, reqID)
-			if callErr != nil {
-				log.Printf("(%s) %s on %s: %v", reqID, req.Method, ep, callErr)
+	if len(req.PodEndpoints) > 0 {
+		if req.Method == "getMessages" {
+			resp, err = getMessagesFromPodsAndMerge(reqID, req.RemoteApp, req.PodEndpoints)
+			if err != nil {
+				log.Printf("(%s) getMessages merge marshal failed: %v", reqID, err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-		}
-		resp = []byte("{}")
-	} else {
-		// Invoke via Dapr since tests validate combined state across pods via getMessages merge
-		if req.Protocol == "grpc" {
-			resp, err = callSubscriberMethodGRPC(reqID, req.RemoteApp, req.Method)
 		} else {
-			resp, err = callSubscriberMethodHTTP(reqID, req.RemoteApp, req.Method)
+			for _, ep := range req.PodEndpoints {
+				_, err = invokeMethodOnSpecificSidecar(strings.TrimSpace(ep), req.RemoteApp, req.Method, reqID)
+				if err != nil {
+					log.Printf("(%s) %s on %s: %v", reqID, req.Method, ep, err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+			}
+			resp = []byte("{}")
+		}
+	} else {
+		if req.Protocol == "grpc" {
+			resp, err = callLocalSubscriberMethodGRPC(reqID, req.RemoteApp, req.Method)
+		} else {
+			resp, err = callLocalSubscriberMethodHTTP(reqID, req.RemoteApp, req.Method)
 		}
 		if err != nil {
 			log.Printf("(%s) Could not get logs from %s: %s", reqID, req.RemoteApp, err.Error())
@@ -649,7 +633,25 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) responded in %v via %s", reqID, formatDuration(duration), req.Protocol)
 }
 
-func invokeMethodOnPodSidecar(podEndpoint, appID, method, reqID string) ([]byte, error) {
+func getMessagesFromPodsAndMerge(reqID, remoteApp string, podEndpoints []string) ([]byte, error) {
+	merged := &receivedMessagesResponse{}
+	for _, ep := range podEndpoints {
+		nextResp, callErr := invokeMethodOnSpecificSidecar(strings.TrimSpace(ep), remoteApp, "getMessages", reqID)
+		if callErr != nil {
+			log.Printf("(%s) getMessages from %s: %v", reqID, ep, callErr)
+			continue
+		}
+		var next receivedMessagesResponse
+		if json.Unmarshal(nextResp, &next) == nil {
+			mergeReceivedMessages(merged, &next)
+		} else {
+			log.Printf("(%s) getMessages from %s: unmarshal failed; raw=%s", reqID, ep, string(nextResp))
+		}
+	}
+	return json.Marshal(merged)
+}
+
+func invokeMethodOnSpecificSidecar(podEndpoint, appID, method, reqID string) ([]byte, error) {
 	host := podEndpoint
 	if h, _, err := net.SplitHostPort(podEndpoint); err == nil {
 		host = h
@@ -679,7 +681,7 @@ func invokeMethodOnPodSidecar(podEndpoint, appID, method, reqID string) ([]byte,
 	return body, nil
 }
 
-func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
+func callLocalSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 	invokeReq := &commonv1pb.InvokeRequest{
 		Method: method,
 	}
@@ -703,7 +705,7 @@ func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 	return resp.GetData().GetValue(), nil
 }
 
-func callSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {
+func callLocalSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {
 	qs := netUrl.Values{"reqid": []string{reqID}}.Encode()
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s?%s", daprPortHTTP, appName, method, qs)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
