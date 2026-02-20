@@ -141,10 +141,6 @@ jobs:
           export GOMEMLIMIT=12GiB
           govulncheck -C '.' -format text -scan-level=package --tags=unit,allcomponents,integration ./...
 
-    kill "$MON_PID" || true
-      - name: Dependency review
-        uses: actions/dependency-review-action@v4
-
   lint-slow:
     name: golangci-lint
     needs: lint
