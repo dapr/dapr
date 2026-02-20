@@ -136,9 +136,6 @@ jobs:
               sleep 30
             done ) &
           MON_PID=$!
-          # optional caps to reduce spikes
-          export GOMAXPROCS=2
-          export GOMEMLIMIT=12GiB
           govulncheck -C '.' -format text -scan-level=package --tags=unit,allcomponents,integration ./...
 
   lint-slow:
