@@ -47,9 +47,9 @@ func connectionFn(ctx context.Context, address, id string, namespace string, cus
 	return conn, teardown, err
 }
 
-func appClientFn() (grpc.ClientConnInterface, error) {
-	appClient, _, err := connectionFn(context.Background(), "a:123", "a", "")
-	return appClient, err
+func appClientFn() (grpc.ClientConnInterface, func(bool), error) {
+	appClient, teardown, err := connectionFn(context.Background(), "a:123", "a", "")
+	return appClient, teardown, err
 }
 
 func TestNewProxy(t *testing.T) {

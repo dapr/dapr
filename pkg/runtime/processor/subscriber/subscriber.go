@@ -543,10 +543,12 @@ func (s *Subscriber) initProgrammaticSubscriptions(ctx context.Context) error {
 		subscriptions, err = rtpubsub.GetSubscriptionsHTTP(ctx, appChannel, log, s.resiliency, s.appID)
 	} else {
 		var conn grpc.ClientConnInterface
-		conn, err = s.grpc.GetAppClient()
+		var teardown func(bool)
+		conn, teardown, err = s.grpc.GetAppClient()
 		if err != nil {
 			return fmt.Errorf("error while getting app client: %w", err)
 		}
+		defer teardown(false)
 		client := runtimev1pb.NewAppCallbackClient(conn)
 		subscriptions, err = rtpubsub.GetSubscriptionsGRPC(ctx, client, log, s.resiliency)
 	}
