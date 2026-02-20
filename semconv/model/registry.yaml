@@ -1,0 +1,142 @@
+groups:
+  # Dapr Workflow Attributes
+  - id: registry.dapr.workflow
+    type: attribute_group
+    display_name: Dapr Workflow Attributes
+    brief: 'Semantic conventions for Dapr workflow engine (durabletask).'
+    attributes:
+      - id: dapr.workflow.type
+        type:
+          members:
+            - id: orchestration
+              value: "orchestration"
+              brief: "Workflow orchestration"
+              stability: development
+            - id: activity
+              value: "activity"
+              brief: "Workflow activity"
+              stability: development
+            - id: timer
+              value: "timer"
+              brief: "Workflow timer"
+              stability: development
+        stability: development
+        brief: "The type of workflow component."
+
+      - id: dapr.workflow.name
+        type: string
+        stability: development
+        brief: "The name of the workflow or activity being executed."
+        examples: ["OrderProcessingWorkflow", "ProcessPaymentActivity"]
+
+      - id: dapr.workflow.instance_id
+        type: string
+        stability: development
+        brief: "The unique instance ID of the workflow execution."
+        examples: ["order-wf-123", "dd54fc63-082c-4f70-8dfa-ad7489d71605"]
+
+      - id: dapr.workflow.task_id
+        type: int
+        stability: development
+        brief: "The task ID of the activity or timer within the workflow."
+        examples: [0, 1, 2]
+
+      - id: dapr.workflow.version
+        type: string
+        stability: development
+        brief: "The version of the workflow or activity."
+        examples: ["1.0", "v2"]
+
+      - id: dapr.workflow.status
+        type:
+          members:
+            - id: running
+              value: "RUNNING"
+              brief: "Workflow is currently running"
+              stability: development
+            - id: completed
+              value: "COMPLETED"
+              brief: "Workflow completed successfully"
+              stability: development
+            - id: failed
+              value: "FAILED"
+              brief: "Workflow failed with an error"
+              stability: development
+            - id: terminated
+              value: "TERMINATED"
+              brief: "Workflow was terminated"
+              stability: development
+            - id: pending
+              value: "PENDING"
+              brief: "Workflow is pending execution"
+              stability: development
+            - id: suspended
+              value: "SUSPENDED"
+              brief: "Workflow is suspended"
+              stability: development
+            - id: continued_as_new
+              value: "CONTINUED_AS_NEW"
+              brief: "Workflow continued as new instance"
+              stability: development
+        stability: development
+        brief: "The runtime status of the workflow."
+
+      - id: dapr.workflow.parent_instance_id
+        type: string
+        stability: development
+        brief: "The instance ID of the parent workflow for sub-orchestrations."
+        examples: ["parent-wf-123"]
+
+      - id: dapr.workflow.parent_name
+        type: string
+        stability: development
+        brief: "The name of the parent workflow for sub-orchestrations."
+        examples: ["ParentOrderWorkflow"]
+
+  # Dapr Workflow Async Operations
+  - id: registry.dapr.workflow.async
+    type: attribute_group
+    display_name: Dapr Workflow Async Operation Attributes
+    brief: 'Attributes for async workflow operations like external events and timers.'
+    attributes:
+      - id: dapr.workflow.event.name
+        type: string
+        stability: development
+        brief: "The name of the external event raised to the workflow."
+        examples: ["OrderApproved", "PaymentReceived", "UserInput"]
+
+      - id: dapr.workflow.timer.fire_at
+        type: string
+        stability: development
+        brief: "The ISO 8601 timestamp when the timer is scheduled to fire."
+        examples: ["2024-01-15T10:30:00Z"]
+
+      - id: dapr.workflow.timer.id
+        type: int
+        stability: development
+        brief: "The unique identifier of the timer within the workflow."
+        examples: [0, 1, 2]
+
+  # Dapr Workflow Actor Attributes (internal)
+  - id: registry.dapr.workflow.actor
+    type: attribute_group
+    display_name: Dapr Workflow Actor Attributes
+    brief: 'Internal attributes for workflow actor implementation.'
+    attributes:
+      - id: dapr.workflow.actor.type
+        type: string
+        stability: development
+        brief: "The actor type used internally for workflow execution."
+        examples: ["dapr.internal.wfengine.workflow", "dapr.internal.wfengine.activity"]
+
+      - id: dapr.workflow.actor.id
+        type: string
+        stability: development
+        brief: "The actor ID which corresponds to the workflow or activity instance."
+        examples: ["order-123", "order-123::0::1"]
+
+      - id: dapr.workflow.actor.generation
+        type: int
+        stability: development
+        brief: "The generation number of the workflow state."
+        examples: [1, 2, 3]
