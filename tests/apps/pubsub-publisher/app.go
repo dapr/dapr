@@ -596,7 +596,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	if req.Method == "getMessages" && len(req.PodEndpoints) > 0 {
 		merged := &receivedMessagesResponse{}
 		for _, ep := range req.PodEndpoints {
-			nextResp, callErr := getMessagesFromPodSidecar(strings.TrimSpace(ep), req.RemoteApp, reqID)
+			nextResp, callErr := invokeMethodOnPodSidecar(strings.TrimSpace(ep), req.RemoteApp, "getMessages", reqID)
 			if callErr != nil {
 				log.Printf("(%s) getMessages from %s: %v", reqID, ep, callErr)
 				continue
@@ -608,12 +608,24 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 				log.Printf("(%s) getMessages from %s: unmarshal failed; raw=%s", reqID, ep, string(nextResp))
 			}
 		}
+
 		resp, err = json.Marshal(merged)
 		if err != nil {
 			log.Printf("(%s) getMessages merge marshal failed: %v", reqID, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+	} else if len(req.PodEndpoints) > 0 && (req.Method == "initialize" || strings.HasPrefix(req.Method, "set-respond-")) {
+		// target each pod's sidecar
+		for _, ep := range req.PodEndpoints {
+			_, callErr := invokeMethodOnPodSidecar(strings.TrimSpace(ep), req.RemoteApp, req.Method, reqID)
+			if callErr != nil {
+				log.Printf("(%s) %s on %s: %v", reqID, req.Method, ep, callErr)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
+		resp = []byte("{}")
 	} else {
 		// Invoke via Dapr since tests validate combined state across pods via getMessages merge
 		if req.Protocol == "grpc" {
@@ -637,14 +649,13 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) responded in %v via %s", reqID, formatDuration(duration), req.Protocol)
 }
 
-// getMessagesFromPodSidecar invokes getMessages through the pod's sidecar
-func getMessagesFromPodSidecar(podEndpoint, appID, reqID string) ([]byte, error) {
+func invokeMethodOnPodSidecar(podEndpoint, appID, method, reqID string) ([]byte, error) {
 	host := podEndpoint
 	if h, _, err := net.SplitHostPort(podEndpoint); err == nil {
 		host = h
 	}
 	qs := netUrl.Values{"reqid": []string{reqID}}.Encode()
-	url := fmt.Sprintf("http://%s:%d/v1.0/invoke/%s/method/getMessages?%s", host, daprPortHTTP, appID, qs)
+	url := fmt.Sprintf("http://%s:%d/v1.0/invoke/%s/method/%s?%s", host, daprPortHTTP, appID, method, qs)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -666,26 +677,6 @@ func getMessagesFromPodSidecar(podEndpoint, appID, reqID string) ([]byte, error)
 		return nil, fmt.Errorf("status=%d body=%s", resp.StatusCode, string(body))
 	}
 	return body, nil
-}
-
-// postToEndpoint POSTs to a subscriber pod endpoint (ex: /initialize)
-func postToEndpoint(url string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBufferString("{}"))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("unexpected status %d", resp.StatusCode)
-	}
-	return nil
 }
 
 func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {

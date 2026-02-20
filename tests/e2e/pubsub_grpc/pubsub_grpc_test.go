@@ -635,6 +635,7 @@ func validateBulkMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL
 			time.Sleep(10 * time.Second)
 			continue
 		}
+		normalizeReceivedMessagesResponse(&appResp)
 
 		log.Printf(
 			"subscriber received %d/%d messages on pubsub-bulk-topic, %d/%d messages on pubsub-raw-bulk-topic "+
@@ -709,6 +710,7 @@ func validateMessagesReceivedBySubscriber(
 			time.Sleep(10 * time.Second)
 			continue
 		}
+		normalizeReceivedMessagesResponse(&appResp)
 
 		log.Printf(
 			"subscriber received %d/%d messages on pubsub-a-topic, %d/%d on pubsub-b-topic and %d/%d on pubsub-c-topic and %d/%d on pubsub-raw-topic",
@@ -769,6 +771,24 @@ func requireReceivedContainsAllSent(t *testing.T, sent, received []string, topic
 	for _, m := range sent {
 		require.Contains(t, recSet, m, "topic %s: sent message missing from combined received", topicName)
 	}
+}
+
+func normalizeReceivedMessagesResponse(resp *receivedMessagesResponse) {
+	resp.ReceivedByTopicA = normalizeStringSlice(resp.ReceivedByTopicA)
+	resp.ReceivedByTopicB = normalizeStringSlice(resp.ReceivedByTopicB)
+	resp.ReceivedByTopicC = normalizeStringSlice(resp.ReceivedByTopicC)
+	resp.ReceivedByTopicRaw = normalizeStringSlice(resp.ReceivedByTopicRaw)
+	resp.ReceivedByTopicBulk = normalizeStringSlice(resp.ReceivedByTopicBulk)
+	resp.ReceivedByTopicRawBulk = normalizeStringSlice(resp.ReceivedByTopicRawBulk)
+	resp.ReceivedByTopicCEBulk = normalizeStringSlice(resp.ReceivedByTopicCEBulk)
+	resp.ReceivedByTopicDefBulk = normalizeStringSlice(resp.ReceivedByTopicDefBulk)
+}
+
+func normalizeStringSlice(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
 }
 
 func validateMessagesReceivedWhenSomeTopicsBulkSubscribed(
