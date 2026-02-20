@@ -618,7 +618,7 @@ func TestSetupTracing(t *testing.T) {
 				EndpointAddress: "foo.bar",
 				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
-				Headers:         "header1=value1,header2=value2",
+				Headers:         []string{"header1=value1", "header2=value2"},
 			},
 		},
 		expectedExporters: []sdktrace.SpanExporter{&otlptrace.Exporter{}},
@@ -639,10 +639,10 @@ func TestSetupTracing(t *testing.T) {
 				EndpointAddress: "foo.bar",
 				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
-				Headers:         "invalidheaders",
+				Headers:         []string{"invalidheaders"},
 			},
 		},
-		expectedErr: "invalid headers provided for Otel endpoint",
+		expectedExporters: []sdktrace.SpanExporter{&otlptrace.Exporter{}},
 	}, {
 		name: "stdout trace exporter",
 		tracingConfig: config.TracingSpec{
@@ -677,7 +677,9 @@ func TestSetupTracing(t *testing.T) {
 			// Setup tracing with the fake tracer provider  store to confirm
 			// the right exporter was registered.
 			tpStore := newFakeTracerProviderStore()
-			if err := rt.setupTracing(t.Context(), rt.hostAddress, tpStore); tc.expectedErr != "" {
+			err = rt.setupTracing(t.Context(), rt.hostAddress, tpStore)
+			if tc.expectedErr != "" {
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				require.NoError(t, err)
