@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	netUrl "net/url"
 	"os"
@@ -101,6 +102,11 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicRawBulk    []string `json:"pubsub-raw-bulk-topic"`
 	ReceivedByTopicCEBulk     []string `json:"pubsub-ce-bulk-topic"`
 	ReceivedByTopicDefBulk    []string `json:"pubsub-def-bulk-topic"`
+
+	ReceivedByTopicRawSub     []string `json:"pubsub-raw-sub-topic"`
+	ReceivedByTopicCESub      []string `json:"pubsub-ce-sub-topic"`
+	ReceivedByTopicRawBulkSub []string `json:"pubsub-raw-bulk-sub-topic"`
+	ReceivedByTopicCEBulkSub  []string `json:"pubsub-ce-bulk-sub-topic"`
 }
 
 func mergeSlices(a, b []string) []string {
@@ -121,6 +127,10 @@ func mergeReceivedMessages(acc, next *receivedMessagesResponse) {
 	acc.ReceivedByTopicRawBulk = mergeSlices(acc.ReceivedByTopicRawBulk, next.ReceivedByTopicRawBulk)
 	acc.ReceivedByTopicCEBulk = mergeSlices(acc.ReceivedByTopicCEBulk, next.ReceivedByTopicCEBulk)
 	acc.ReceivedByTopicDefBulk = mergeSlices(acc.ReceivedByTopicDefBulk, next.ReceivedByTopicDefBulk)
+	acc.ReceivedByTopicRawSub = mergeSlices(acc.ReceivedByTopicRawSub, next.ReceivedByTopicRawSub)
+	acc.ReceivedByTopicCESub = mergeSlices(acc.ReceivedByTopicCESub, next.ReceivedByTopicCESub)
+	acc.ReceivedByTopicRawBulkSub = mergeSlices(acc.ReceivedByTopicRawBulkSub, next.ReceivedByTopicRawBulkSub)
+	acc.ReceivedByTopicCEBulkSub = mergeSlices(acc.ReceivedByTopicCEBulkSub, next.ReceivedByTopicCEBulkSub)
 }
 
 var (
@@ -582,12 +592,11 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) callSubscriberMethod: Call %s on %s via %s", reqID, req.Method, req.RemoteApp, req.Protocol)
 
 	var resp []byte
-	// One aggregation over N pods. Subscriber app exposes /getMessages over HTTP.
+	// One aggregation over N pods
 	if req.Method == "getMessages" && len(req.PodEndpoints) > 0 {
 		merged := &receivedMessagesResponse{}
 		for _, ep := range req.PodEndpoints {
-			u := "http://" + strings.TrimSpace(ep) + "/getMessages"
-			nextResp, callErr := getMessagesFromEndpoint(u)
+			nextResp, callErr := getMessagesFromPodSidecar(strings.TrimSpace(ep), req.RemoteApp, reqID)
 			if callErr != nil {
 				log.Printf("(%s) getMessages from %s: %v", reqID, ep, callErr)
 				continue
@@ -595,6 +604,8 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 			var next receivedMessagesResponse
 			if json.Unmarshal(nextResp, &next) == nil {
 				mergeReceivedMessages(merged, &next)
+			} else {
+				log.Printf("(%s) getMessages from %s: unmarshal failed; raw=%s", reqID, ep, string(nextResp))
 			}
 		}
 		resp, err = json.Marshal(merged)
@@ -626,8 +637,15 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 	log.Printf("(%s) responded in %v via %s", reqID, formatDuration(duration), req.Protocol)
 }
 
-// getMessagesFromEndpoint POSTs to a subscriber pod's /getMessages
-func getMessagesFromEndpoint(url string) ([]byte, error) {
+// getMessagesFromPodSidecar invokes getMessages through the pod's sidecar
+func getMessagesFromPodSidecar(podEndpoint, appID, reqID string) ([]byte, error) {
+	host := podEndpoint
+	if h, _, err := net.SplitHostPort(podEndpoint); err == nil {
+		host = h
+	}
+	qs := netUrl.Values{"reqid": []string{reqID}}.Encode()
+	url := fmt.Sprintf("http://%s:%d/v1.0/invoke/%s/method/getMessages?%s", host, daprPortHTTP, appID, qs)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBufferString("{}"))
@@ -640,7 +658,14 @@ func getMessagesFromEndpoint(url string) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("status=%d body=%s", resp.StatusCode, string(body))
+	}
+	return body, nil
 }
 
 // postToEndpoint POSTs to a subscriber pod endpoint (ex: /initialize)

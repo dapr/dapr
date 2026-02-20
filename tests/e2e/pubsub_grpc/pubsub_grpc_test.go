@@ -540,6 +540,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 
 	if subscriberResponse == "empty-json" {
 		// on empty-json response case immediately validate the received messages
+		time.Sleep(10 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, sentMessages, podEndpoints)
 	}
 
