@@ -118,26 +118,16 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-      - name: Run govulncheck (with live telemetry)
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck
+        run: GOMEMLIMIT=12GiB govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
         shell: bash
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          ( while true; do
-              echo "---- $(date -u) ----"
-              free -h || true
-              df -h  || true
-              uptime || true
-              sleep 30
-            done ) &
-          MON_PID=$!
-          export GOMEMLIMIT=12GiB
-          govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
 
   lint-slow:
     name: golangci-lint
