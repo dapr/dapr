@@ -120,8 +120,6 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
-      - name: Dependency review
-        uses: actions/dependency-review-action@v4
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
@@ -130,6 +128,8 @@ jobs:
       - name: Run govulncheck
         run: govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
         shell: bash
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
 
   lint-slow:
     name: golangci-lint
