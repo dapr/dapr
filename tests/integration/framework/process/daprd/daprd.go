@@ -219,9 +219,11 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	t.Helper()
 
 	client := client.HTTP(t)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
-	require.NoError(t, err)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		cctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(cctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
+		require.NoError(t, err)
 		resp, err := client.Do(req)
 		if assert.NoError(c, err) {
 			defer resp.Body.Close()
