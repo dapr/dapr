@@ -1,3 +1,27 @@
+## Highlights
+
+State management in v1.17 delivers sub-millisecond median latency on both transports at 1,000 QPS sustained load — among the lowest overhead of any Dapr API surface.
+
+**How to read these numbers:** Latency percentiles (p50/p90/p99/p99.9) show the distribution of individual request times across 60,000 requests — p50 is what most users experience, p99.9 is the extreme tail (1 in 1,000 requests). "Dapr overhead" is measured by comparing the Dapr-proxied result to a direct call to the state store with no sidecar involved.
+
+**gRPC** (16 connections, 1,000 QPS target):
+- Median (p50): **0.57 ms** | p90: **0.93 ms** | p99: **1.65 ms** | p99.9: **2.66 ms**
+- Dapr adds just **+0.12 ms** at p50 vs. direct store access
+- 60,000 requests — **100% success rate**, 0 pod restarts
+
+Sub-millisecond median at 1,000 QPS means state reads through Dapr are effectively instant in any real-world context. The sidecar added just 0.12 ms on top of going directly to the state store — Dapr's proxy overhead here is negligible. Even at the 99.9th percentile (the worst 1 in 1,000 requests), latency stays under 3 ms.
+
+**HTTP** (16 connections, 1,000 QPS target):
+- Median (p50): **0.73 ms** | p90: **1.60 ms** | p99: **1.97 ms** | p99.9: **2.84 ms**
+- Dapr adds just **+0.28 ms** at p50 vs. direct store access
+- 60,000 requests — **100% success rate**, 0 pod restarts
+
+HTTP state access is similarly fast with a median under 1 ms. The slightly higher overhead (0.28 ms vs. 0.12 ms for gRPC) reflects the additional work of HTTP/1.1 header parsing compared to gRPC's binary framing — both remain well within sub-millisecond territory for the typical request.
+
+Both transports hit their QPS targets precisely (999.97–999.98 actual vs. 1,000 requested).
+
+---
+
 ## HTTP
 
 ### TestStateGetHTTPPerformance
