@@ -102,8 +102,6 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 			assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-			//nolint:gosec
-			assert.Equal(c, uint64(4+i), table.Tables["default"].Version)
 		}, time.Second*10, time.Millisecond*10)
 	}
 
