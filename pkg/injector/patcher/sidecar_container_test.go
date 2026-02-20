@@ -1567,6 +1567,73 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("native sidecar", testSuiteGenerator([]testCase{
+		{
+			name:        "restart policy not set by default",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.RestartPolicy)
+			},
+		},
+		{
+			name: "restart policy set to Always when native sidecar enabled via config",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.EnableNativeSidecar = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				require.NotNil(t, container.RestartPolicy)
+				assert.Equal(t, corev1.ContainerRestartPolicyAlways, *container.RestartPolicy)
+			},
+		},
+		{
+			name: "restart policy set to Always when native sidecar enabled via annotation",
+			annotations: map[string]string{
+				annotations.KeyEnableNativeSidecar: "true",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				require.NotNil(t, container.RestartPolicy)
+				assert.Equal(t, corev1.ContainerRestartPolicyAlways, *container.RestartPolicy)
+			},
+		},
+		{
+			name: "restart policy not set when native sidecar disabled via annotation",
+			annotations: map[string]string{
+				annotations.KeyEnableNativeSidecar: "false",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.RestartPolicy)
+			},
+		},
+		{
+			name: "native sidecar preserves graceful shutdown args",
+			annotations: map[string]string{
+				annotations.KeyGracefulShutdownSeconds: "15",
+			},
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.EnableNativeSidecar = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				require.NotNil(t, container.RestartPolicy)
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-graceful-shutdown-seconds 15")
+			},
+		},
+		{
+			name: "native sidecar preserves block shutdown duration",
+			annotations: map[string]string{
+				annotations.KeyBlockShutdownDuration: "5s",
+			},
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.EnableNativeSidecar = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				require.NotNil(t, container.RestartPolicy)
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-block-shutdown-duration 5s")
+			},
+		},
+	}))
+
 	t.Run("jwt audiences", testSuiteGenerator([]testCase{
 		{
 			name:        "omitted when not set",

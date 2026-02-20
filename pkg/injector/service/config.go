@@ -48,6 +48,7 @@ type Config struct {
 	ReadOnlyRootFilesystem            string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 	EnableK8sDownwardAPIs             string `envconfig:"ENABLE_K8S_DOWNWARD_APIS"`
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
+	NativeSidecarEnabled              string `envconfig:"NATIVE_SIDECAR_ENABLED"`
 
 	TrustAnchorsFile        string `envconfig:"DAPR_TRUST_ANCHORS_FILE"`
 	ControlPlaneTrustDomain string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
@@ -60,6 +61,7 @@ type Config struct {
 	parsedReadOnlyRootFilesystem     bool
 	parsedEnableK8sDownwardAPIs      bool
 	parsedSidecarDropALLCapabilities bool
+	parsedNativeSidecarEnabled       bool
 	parsedEntrypointTolerations      []corev1.Toleration
 	parsedRunAsUser                  *int64
 	parsedRunAsGroup                 *int64
@@ -146,6 +148,10 @@ func (c Config) GetDropCapabilities() bool {
 	return c.parsedSidecarDropALLCapabilities
 }
 
+func (c Config) GetNativeSidecarEnabled() bool {
+	return c.parsedNativeSidecarEnabled
+}
+
 func (c Config) GetActorsEnabled() bool {
 	return c.parsedActorsEnabled
 }
@@ -192,6 +198,7 @@ func (c *Config) parse() (err error) {
 	c.parsedReadOnlyRootFilesystem = isTruthyDefaultTrue(c.ReadOnlyRootFilesystem)
 	c.parsedEnableK8sDownwardAPIs = strings.IsTruthy(c.EnableK8sDownwardAPIs)
 	c.parsedSidecarDropALLCapabilities = strings.IsTruthy(c.SidecarDropALLCapabilities)
+	c.parsedNativeSidecarEnabled = strings.IsTruthy(c.NativeSidecarEnabled)
 
 	// Parse the runAsUser and runAsGroup
 	c.parsedRunAsUser, err = parseStringToInt64Pointer(c.RunAsUser)

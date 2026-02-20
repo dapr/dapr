@@ -147,6 +147,46 @@ func TestGetInjectorConfig(t *testing.T) {
 	})
 }
 
+func TestNativeSidecarConfig(t *testing.T) {
+	t.Setenv("NAMESPACE", "test-namespace")
+	t.Setenv("SIDECAR_IMAGE", "daprd-test-image")
+
+	t.Run("default is disabled", func(t *testing.T) {
+		t.Setenv("NATIVE_SIDECAR_ENABLED", "")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.False(t, cfg.GetNativeSidecarEnabled())
+	})
+
+	t.Run("enabled with truthy value", func(t *testing.T) {
+		t.Setenv("NATIVE_SIDECAR_ENABLED", "true")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.True(t, cfg.GetNativeSidecarEnabled())
+	})
+
+	t.Run("enabled with 1", func(t *testing.T) {
+		t.Setenv("NATIVE_SIDECAR_ENABLED", "1")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.True(t, cfg.GetNativeSidecarEnabled())
+	})
+
+	t.Run("disabled with falsy value", func(t *testing.T) {
+		t.Setenv("NATIVE_SIDECAR_ENABLED", "false")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.False(t, cfg.GetNativeSidecarEnabled())
+	})
+
+	t.Run("disabled with 0", func(t *testing.T) {
+		t.Setenv("NATIVE_SIDECAR_ENABLED", "0")
+		cfg, err := GetConfig()
+		require.NoError(t, err)
+		assert.False(t, cfg.GetNativeSidecarEnabled())
+	})
+}
+
 func TestImagePullPolicy(t *testing.T) {
 	testCases := []struct {
 		testName       string

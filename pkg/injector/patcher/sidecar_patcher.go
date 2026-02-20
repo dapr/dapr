@@ -119,9 +119,21 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 		patchOps = append(patchOps, c.getVolumesPatchOperations(volumes, PatchPathVolumes)...)
 	}
 
+	// When native sidecar is enabled, inject into initContainers with
+	// restartPolicy: Always (KEP-753) instead of regular containers.
+	sidecarPatchPath := PatchPathContainers
+	if c.EnableNativeSidecar {
+		sidecarPatchPath = PatchPathInitContainers
+		if len(c.pod.Spec.InitContainers) == 0 {
+			patchOps = append(patchOps,
+				NewPatchOperation("add", PatchPathInitContainers, []corev1.Container{}),
+			)
+		}
+	}
+
 	// Other patch operations
 	patchOps = append(patchOps,
-		NewPatchOperation("add", PatchPathContainers+"/-", sidecarContainer),
+		NewPatchOperation("add", sidecarPatchPath+"/-", sidecarContainer),
 		NewPatchOperation("add", PatchPathLabels+"/dapr.io~1sidecar-injected", "true"),
 		NewPatchOperation("add", PatchPathLabels+"/dapr.io~1app-id", c.GetAppID()),
 		NewPatchOperation("add", PatchPathLabels+"/dapr.io~1metrics-enabled", strconv.FormatBool(c.EnableMetrics)),
@@ -139,10 +151,16 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	return patchOps, nil
 }
 
-// podContainsSidecarContainer returns true if the pod contains a sidecar container (i.e. a container named "daprd").
+// podContainsSidecarContainer returns true if the pod contains a sidecar container (i.e. a container named "daprd")
+// in either spec.containers or spec.initContainers.
 func (c *SidecarConfig) podContainsSidecarContainer() bool {
-	for _, c := range c.pod.Spec.Containers {
-		if c.Name == injectorConsts.SidecarContainerName {
+	for _, ctr := range c.pod.Spec.Containers {
+		if ctr.Name == injectorConsts.SidecarContainerName {
+			return true
+		}
+	}
+	for _, ctr := range c.pod.Spec.InitContainers {
+		if ctr.Name == injectorConsts.SidecarContainerName {
 			return true
 		}
 	}

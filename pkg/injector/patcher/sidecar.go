@@ -122,6 +122,7 @@ type SidecarConfig struct {
 	SentryRequestJwtAudiences           string  `annotation:"dapr.io/sentry-request-jwt-audiences"`
 	DaprServiceAnnotations              string  `annotation:"dapr.io/sidecar-svc-annotations"`
 	DisableInitEndpoint                 *string `annotation:"dapr.io/disable-init-endpoints"`
+	EnableNativeSidecar                 bool    `annotation:"dapr.io/enable-native-sidecar"`
 
 	pod *corev1.Pod
 }
