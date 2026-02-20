@@ -97,7 +97,7 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	for i := range s.daprds[:2] {
-		s.daprds[i].Cleanup(t)
+		s.daprds[i].Kill(t)
 		hosts = hosts[1:]
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			table := leader.PlacementTables(t, ctx)
@@ -108,7 +108,7 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 		}, time.Second*10, time.Millisecond*10)
 	}
 
-	s.daprds[2].Cleanup(t)
+	s.daprds[2].Kill(t)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		table := leader.PlacementTables(t, ctx)
 		assert.Equal(c, &placement.TableState{

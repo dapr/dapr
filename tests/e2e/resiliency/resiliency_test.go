@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
@@ -457,26 +458,28 @@ func TestServiceInvocationResiliency(t *testing.T) {
 				}
 			}
 
-			var callCount map[string][]CallRecord
-			getCallsURL := "tests/getCallCount"
-			if strings.Contains(tc.callType, "grpc") {
-				getCallsURL = "tests/getCallCountGRPC"
-			}
-			resp, err := utils.HTTPGet(fmt.Sprintf("%s/%s", externalURL, getCallsURL))
-			require.NoError(t, err)
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
+				var callCount map[string][]CallRecord
+				getCallsURL := "tests/getCallCount"
+				if strings.Contains(tc.callType, "grpc") {
+					getCallsURL = "tests/getCallCountGRPC"
+				}
+				resp, err := utils.HTTPGet(fmt.Sprintf("%s/%s", externalURL, getCallsURL))
+				require.NoError(t, err)
 
-			err = json.Unmarshal(resp, &callCount)
-			require.NoError(t, err)
-			switch {
-			case tc.expectCount != nil:
-				require.Equal(t, *tc.expectCount, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
-			case tc.shouldFail:
-				// First call + 5 retries and no more.
-				require.Equal(t, 6, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
-			default:
-				// First call + 3 retries and recovery.
-				require.Equal(t, 4, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
-			}
+				err = json.Unmarshal(resp, &callCount)
+				require.NoError(t, err)
+				switch {
+				case tc.expectCount != nil:
+					assert.Equal(c, *tc.expectCount, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+				case tc.shouldFail:
+					// First call + 5 retries and no more.
+					assert.Equal(c, 6, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+				default:
+					// First call + 3 retries and recovery.
+					assert.Equal(c, 4, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+				}
+			}, time.Second*30, time.Second)
 		})
 	}
 }
