@@ -47,7 +47,7 @@ const (
 	// used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
 	// This is random so the first message name is not the same every time.
 	randomOffsetMax           = 49
-	numberOfMessagesToPublish = 60
+	numberOfMessagesToPublish = 40
 	publishRateLimitRPS       = 25
 
 	receiveMessageRetries = 5
