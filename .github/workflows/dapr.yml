@@ -123,16 +123,25 @@ jobs:
           go-version-file: "go.mod"
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-      - name: Run govulncheck
-        run: govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
-        timeout-minutes: 10
+      - name: Run govulncheck (with live telemetry)
         shell: bash
-      - name: Diagnostics on failure
-        if: failure()
+        timeout-minutes: 10
         run: |
-          echo "== free -h =="; free -h || true
-          echo "== df -h =="; df -h || true
-          echo "== dmesg (tail) =="; sudo dmesg -T | tail -200 || true
+          set -euo pipefail
+          ( while true; do
+              echo "---- $(date -u) ----"
+              free -h || true
+              df -h  || true
+              uptime || true
+              sleep 30
+            done ) &
+          MON_PID=$!
+          # optional caps to reduce spikes
+          export GOMAXPROCS=2
+          export GOMEMLIMIT=12GiB
+          govulncheck -C '.' -format text -scan-level=package --tags=unit,allcomponents,integration ./...
+
+    kill "$MON_PID" || true
       - name: Dependency review
         uses: actions/dependency-review-action@v4
 
