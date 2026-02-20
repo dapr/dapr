@@ -35,6 +35,8 @@ const (
 	GrpcServiceSpanAttributeKey          = string(semconv.RPCServiceKey)
 	NetPeerNameSpanAttributeKey          = string(semconv.NetPeerNameKey)
 	RPCSystemSpanAttributeKey            = string(semconv.RPCSystemKey)
+	// This was removed from the OTEL spec and is kept for backwards compatibility with some tracing backends
+	MessagingDestinationKindSpanAttributeKey = "messaging.destination.kind"
 
 	DaprAPISpanAttributeKey           = "dapr.api"
 	DaprAPIStatusCodeSpanAttributeKey = "dapr.status_code"

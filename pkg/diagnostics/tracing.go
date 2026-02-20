@@ -158,8 +158,9 @@ func ConstructInputBindingSpanAttributes(bindingName, url string) map[string]str
 // ConstructSubscriptionSpanAttributes creates span attributes for Pubsub subscription.
 func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
 	return map[string]string{
-		diagConsts.MessagingSystemSpanAttributeKey:      diagConsts.PubsubBuildingBlockType,
-		diagConsts.MessagingDestinationSpanAttributeKey: topic,
+		diagConsts.MessagingSystemSpanAttributeKey:          diagConsts.PubsubBuildingBlockType,
+		diagConsts.MessagingDestinationSpanAttributeKey:     topic,
+		diagConsts.MessagingDestinationKindSpanAttributeKey: topic,
 	}
 }
 
