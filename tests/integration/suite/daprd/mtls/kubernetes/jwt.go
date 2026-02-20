@@ -281,7 +281,7 @@ func (j *jwtvalidation) Run(t *testing.T, ctx context.Context) {
 	require.NotEmpty(t, aud, "Audience claim should not be empty")
 	audList, ok := aud.([]string)
 	require.True(t, ok, "Audience claim should be a list of strings")
-	require.Contains(t, audList, "public", "Audience claim should contain 'public'")
+	require.Equal(t, []string{"public"}, audList, "Audience claim should contain 'public'")
 
 	// Validate that expiration is in the future
 	exp, ok := expTime.(time.Time)

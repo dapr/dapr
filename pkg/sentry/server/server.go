@@ -230,10 +230,11 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	log.Debugf("Successfully signed certificate for %s/%s", namespace, req.GetId())
 
-	var jwtToken *wrapperspb.StringValue
-	if s.jwtEnabled {
-		audiences := append([]string{res.TrustDomain.String()}, req.GetJwtAudiences()...) // Default audience is the trust domain
+	audiences := append([]string{res.TrustDomain.String()}, req.GetJwtAudiences()...) // Default audience is the trust domain
 
+	var jwtToken *wrapperspb.StringValue
+	var perJWTToken map[string]*wrapperspb.StringValue
+	if s.jwtEnabled {
 		// Generate a JWT with the same identity
 		tkn, err := s.ca.Generate(ctx, &jwt.Request{
 			TrustDomain: res.TrustDomain,
@@ -249,6 +250,27 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 			return nil, status.Error(codes.Internal, "failed to generate JWT: empty token")
 		}
 		jwtToken = wrapperspb.String(tkn)
+
+		for _, audience := range audiences {
+			tkn, err := s.ca.Generate(ctx, &jwt.Request{
+				TrustDomain: res.TrustDomain,
+				Audiences:   []string{audience},
+				Namespace:   req.GetNamespace(),
+				AppID:       req.GetId(),
+				TTL:         s.jwtTTL,
+			})
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to generate JWT for audience %s: %v", audience, err)
+			}
+			if tkn == "" {
+				return nil, status.Errorf(codes.Internal, "failed to generate JWT for audience %s: empty token", audience)
+			}
+
+			if perJWTToken == nil {
+				perJWTToken = make(map[string]*wrapperspb.StringValue)
+			}
+			perJWTToken[audience] = wrapperspb.String(tkn)
+		}
 	}
 
 	return &sentryv1pb.SignCertificateResponse{
@@ -256,5 +278,6 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		TrustChainCertificates: [][]byte{s.ca.TrustAnchors()},
 		ValidUntil:             timestamppb.New(chain[0].NotAfter),
 		Jwt:                    jwtToken,
+		PerAudienceJwts:        perJWTToken,
 	}, nil
 }
