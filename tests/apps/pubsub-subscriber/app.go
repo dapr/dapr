@@ -269,6 +269,20 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	case respondWithError:
+		// When Dapr dead-letters msgs, they arrive on pubsub-deadletter-topic.
+		// return success & store, so the test can verify. Only return
+		// error for the main dead topic, dead-letter deliveries must succeed.
+		if strings.HasSuffix(r.URL.String(), pubsubDeadLetter) && err == nil {
+			lock.Lock()
+			if !receivedMessagesDeadLetter.Has(msg) {
+				receivedMessagesDeadLetter.Insert(msg)
+			}
+			lock.Unlock()
+			log.Printf("(%s) Accepting dead-letter message (error mode)", reqID)
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(appResponse{Message: "consumed", Status: "SUCCESS"})
+			return
+		}
 		log.Printf("(%s) Responding with ERROR", reqID)
 		// do not store received messages, respond with error
 		w.WriteHeader(http.StatusInternalServerError)
