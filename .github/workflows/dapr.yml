@@ -20,7 +20,6 @@ on:
       - main
       - master
       - release-*
-      - feature/*
     tags:
       - v*
   pull_request:
@@ -28,7 +27,6 @@ on:
       - main
       - master
       - release-*
-      - feature/*
 
 permissions: {}
 
@@ -129,6 +127,12 @@ jobs:
         run: govulncheck -C '.' -format text --tags=unit,allcomponents,integration ./...
         timeout-minutes: 10
         shell: bash
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "== free -h =="; free -h || true
+          echo "== df -h =="; df -h || true
+          echo "== dmesg (tail) =="; sudo dmesg -T | tail -200 || true
       - name: Dependency review
         uses: actions/dependency-review-action@v4
 
