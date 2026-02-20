@@ -52,6 +52,9 @@ const (
 	// Enables support for hot reloading of Daprd Components.
 	HotReload Feature = "HotReload"
 
+	// Enables AES-CBC-AEAD automatic encryption for state stores.
+	StateV2Encryption Feature = "StateV2Encryption"
+
 	// Enables feature to support workflows in a clustered deployment.
 	WorkflowsClusteredDeployment Feature = "WorkflowsClusteredDeployment"
 
