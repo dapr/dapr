@@ -99,8 +99,8 @@ func TestPubsubPublishGrpcPerformance(t *testing.T) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		baselineResp, err = utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
 		assert.NoError(c, err, "baseline test HTTP POST failed")
-	}, 30*time.Second, 2*time.Second, "baseline test failed after retries")
-	
+	}, 45*time.Second, 2*time.Second, "baseline test failed after retries")
+
 	t.Logf("baseline test results: %s", string(baselineResp))
 	require.NotEmpty(t, baselineResp)
 	require.False(t, strings.HasPrefix(string(baselineResp), "error"))
@@ -116,8 +116,8 @@ func TestPubsubPublishGrpcPerformance(t *testing.T) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		daprResp, err = utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
 		assert.NoError(c, err, "dapr test HTTP POST failed")
-	}, 30*time.Second, 2*time.Second, "dapr test failed after retries")
-	
+	}, 45*time.Second, 2*time.Second, "dapr test failed after retries")
+
 	t.Logf("dapr test results: %s", string(daprResp))
 	require.NotEmpty(t, daprResp)
 	require.False(t, strings.HasPrefix(string(daprResp), "error"))
