@@ -85,11 +85,17 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		}
 
 		d.timeoutQ.Dequeue(d.timeoutVersion)
-		d.timeoutVersion++
-		d.timeoutQ.Enqueue(d.timeoutVersion)
 
 		d.inflight.Set(order.Order.GetTables(), version)
 		d.currentOperation = v1pb.HostOperation_UPDATE
+
+		if err := d.actorTable.HaltNonHosted(ctx, d.inflight.IsActorHostedNoLock); err != nil {
+			log.Errorf("Error draining non-hosted actors: %s", err)
+		}
+
+		d.timeoutVersion++
+		d.timeoutQ.Enqueue(d.timeoutVersion)
+
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{
 				Operation: v1pb.HostOperation_UPDATE,
@@ -119,9 +125,6 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		log.Infof("Dissemination complete for version %d, unlocking disseminator %s/%s",
 			version, d.namespace, d.id,
 		)
-		if err := d.actorTable.HaltNonHosted(ctx, d.inflight.IsActorHostedNoLock); err != nil {
-			log.Errorf("Error draining non-hosted actors: %s", err)
-		}
 
 		d.currentOperation = v1pb.HostOperation_UNLOCK
 		d.scheduler.ReloadActorTypes(d.actorTable.Types())
