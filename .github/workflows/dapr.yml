@@ -207,9 +207,46 @@ jobs:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
 
+  integration-build:
+    name: Build for integration tests
+    runs-on: "${{ matrix.os }}"
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+          # TODO: @joshvanl Upgrade to latest once dns is fixed.
+          - os: macos-14
+            target_os: darwin
+            target_arch: amd64
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v6
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+      - name: Run make release to build for integration tests
+        run: make build
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v4
+        with:
+          name: "{{ matrix.target_os }}_dist"
+          path: dist
+
   integration-tests:
     name: Integration tests
     runs-on: "${{ matrix.os }}"
+    needs: integration-build
     permissions:
       contents: read
     strategy:
@@ -266,6 +303,12 @@ jobs:
       TEST_OUTPUT_FILE_PREFIX: "test_report"
       TEST_PARTITION_TOTAL: "3"
       TEST_PARTITION_INDEX: "${{ matrix.partition }}"
+      DAPR_INTEGRATION_DAPRD_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/daprd"
+      DAPR_INTEGRATION_INJECTOR_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/injector"
+      DAPR_INTEGRATION_OPERATOR_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/operator"
+      DAPR_INTEGRATION_PLACEMENT_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/placement"
+      DAPR_INTEGRATION_SCHEDULER_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/scheduler"
+      DAPR_INTEGRATION_SENTRY_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/sentry"
     steps:
       - name: Check localhost DNS resolution
         run: |
@@ -281,8 +324,13 @@ jobs:
         if: matrix.target_os == 'darwin'
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
+      - name: Download a single artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: "{{ matrix.target_os }}_dist"
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
+
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
