@@ -80,7 +80,7 @@ func TestState(t *testing.T) {
 	_, err = utils.HTTPGetNTimes(externalURL, 60)
 	require.NoError(t, err)
 
-	const connectionString = `"host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"`
+	connectionString := fmt.Sprintf(`"host=dapr-postgres-postgresql.%s.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"`, kube.DaprTestNamespaceBase)
 
 	t.Run("Create state Component and save/get state", func(t *testing.T) {
 		cl.Delete(ctx, &compapi.Component{

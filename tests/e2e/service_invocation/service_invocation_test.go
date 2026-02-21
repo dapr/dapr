@@ -74,7 +74,7 @@ const (
 
 var (
 	tr                 *runner.TestRunner
-	secondaryNamespace = "dapr-tests-2"
+	secondaryNamespace = kube.WithNamespaceSuffix(kube.DaprTestNamespace, "2")
 )
 
 func TestMain(m *testing.M) {
@@ -1495,7 +1495,7 @@ func TestNegativeCases(t *testing.T) {
 				// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
 				require.False(t, testResults.MainCallSuccessful)
 				require.Equal(t, 500, status)
-				require.Contains(t, string(testResults.RawBody), "failed to resolve address for 'missing-service-0-dapr.dapr-tests.svc.cluster.local'")
+				require.Contains(t, string(testResults.RawBody), fmt.Sprintf("failed to resolve address for 'missing-service-0-dapr.%s.svc.cluster.local'", kube.DaprTestNamespace))
 				require.Nil(t, err)
 			})
 
@@ -1518,7 +1518,7 @@ func TestNegativeCases(t *testing.T) {
 				require.Nil(t, testResults.RawBody)
 				require.Nil(t, err)
 				require.NotNil(t, testResults.RawError)
-				require.Contains(t, testResults.RawError, "failed to resolve address for 'missing-service-0-dapr.dapr-tests.svc.cluster.local'")
+				require.Contains(t, testResults.RawError, fmt.Sprintf("failed to resolve address for 'missing-service-0-dapr.%s.svc.cluster.local'", kube.DaprTestNamespace))
 			})
 
 			t.Run("service_timeout_http", func(t *testing.T) {

@@ -284,7 +284,20 @@ func (c *KubeTestPlatform) GetOrCreateNamespace(parentCtx context.Context, names
 		ctx, cancel = context.WithTimeout(parentCtx, 30*time.Second)
 		ns, err = namespaceClient.Create(ctx, obj, metav1.CreateOptions{})
 		cancel()
+		if err == nil {
+			// In per-package namespace mode, replicate the test components into the newly-created namespace.
+			// This keeps test packages isolated while still pointing to shared infra in the base namespace.
+			if applyErr := kube.EnsureTestComponentsApplied(parentCtx, namespace); applyErr != nil {
+				return ns, applyErr
+			}
+		}
 		return ns, err
+	}
+
+	if err == nil {
+		if applyErr := kube.EnsureTestComponentsApplied(parentCtx, namespace); applyErr != nil {
+			return ns, applyErr
+		}
 	}
 
 	return ns, err

@@ -16,6 +16,7 @@ package kubernetes
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"k8s.io/client-go/kubernetes"
 	appv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
@@ -29,6 +30,12 @@ import (
 
 	daprclient "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	componentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
+)
+
+const (
+	// Env vars to control Kubernetes client throttling when running tests with high parallelism.
+	DaprTestK8sQPSEnvVar   = "DAPR_TEST_K8S_QPS"
+	DaprTestK8sBurstEnvVar = "DAPR_TEST_K8S_BURST"
 )
 
 // KubeClient holds instances of Kubernetes clientset
@@ -93,9 +100,20 @@ func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, *api
 		return nil, nil, err
 	}
 
-	// Reduce the QPS to avoid rate-limiting
-	clConfig.QPS = 3
-	clConfig.Burst = 5
+	// By default we raise QPS/Burst to better support high parallelism.
+	// These can be tuned down via environment variables if a cluster is sensitive to API load.
+	clConfig.QPS = 25
+	clConfig.Burst = 50
+	if v := os.Getenv(DaprTestK8sQPSEnvVar); v != "" {
+		if f, err := strconv.ParseFloat(v, 32); err == nil {
+			clConfig.QPS = float32(f)
+		}
+	}
+	if v := os.Getenv(DaprTestK8sBurstEnvVar); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			clConfig.Burst = i
+		}
+	}
 	return clConfig, &rawConfig, nil
 }
 
