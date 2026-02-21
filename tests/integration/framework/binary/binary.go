@@ -66,12 +66,14 @@ func BuildAll(t *testing.T) {
 	helperRootDir := helperRootDir(t)
 	for _, name := range helperBinaryNames {
 		if runtime.GOOS == "windows" {
+			//nolint:testifylint
 			build(t, name, options{
 				dir:      helperRootDir,
 				buildDir: name,
 			})
 			wg.Done()
 		} else {
+			//nolint:testifylint
 			go func(name string) {
 				defer wg.Done()
 				build(t, name, options{

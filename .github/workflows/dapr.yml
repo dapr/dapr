@@ -407,53 +407,44 @@ jobs:
             target_os: linux
             target_arch: amd64
             partition: 0
-            exe: ""
           - os: ubuntu-latest
             target_os: linux
             target_arch: amd64
             partition: 1
-            exe: ""
           - os: ubuntu-latest
             target_os: linux
             target_arch: amd64
             partition: 2
-            exe: ""
           # windows
           - os: windows-2022
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
             partition: 0
-            exe: ".exe"
           - os: windows-2022
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
             partition: 1
-            exe: ".exe"
           - os: windows-2022
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
             partition: 2
-            exe: ".exe"
           # macOS
           # TODO: @joshvanl Upgrade to latest once dns is fixed.
           - os: macos-14
             target_os: darwin
             target_arch: amd64
             partition: 0
-            exe: ""
           - os: macos-14
             target_os: darwin
             target_arch: amd64
             partition: 1
-            exe: ""
           - os: macos-14
             target_os: darwin
             target_arch: amd64
             partition: 2
-            exe: ""
     env:
       GOPROXY: "https://proxy.golang.org"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
@@ -477,19 +468,35 @@ jobs:
         with:
           name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}_allcomponents
           path: ${{ env.ARCHIVE_OUTDIR }}
-      - name: Extract the archive
+      - name: Extract the archive (unix)
+        if: matrix.target_os != 'windows'
         shell: bash
         run: |
           cd ${{ env.ARCHIVE_OUTDIR }}
           ls -la
           pwd
           for f in *.tar.gz; do tar -xzf "$f"; done
-          echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/daprd${{ matrix.exe }}" >>${GITHUB_ENV}
-          echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/injector${{ matrix.exe }}" >>${GITHUB_ENV}
-          echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/operator${{ matrix.exe }}" >>${GITHUB_ENV}
-          echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/placement${{ matrix.exe }}" >>${GITHUB_ENV}
-          echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/scheduler${{ matrix.exe }}" >>${GITHUB_ENV}
-          echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/sentry${{ matrix.exe }}" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/daprd" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/injector" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/operator" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/placement" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/scheduler" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/sentry" >>${GITHUB_ENV}
+          cd -
+      - name: Extract the archive (windows)
+        if: matrix.target_os == 'windows'
+        shell: bash
+        run: |
+          cd ${{ env.ARCHIVE_OUTDIR }}
+          ls -la
+          pwd
+          unzip *.zip
+          echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/daprd.exe" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/injector.exe" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/operator.exe" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/placement.exe" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/scheduler.exe" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/sentry.exe" >>${GITHUB_ENV}
           cd -
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
