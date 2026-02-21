@@ -14,8 +14,11 @@ limitations under the License.
 package kubernetes
 
 import (
+	"crypto/sha1"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -47,6 +50,17 @@ const (
 	// DaprTestNamespaceEnvVar is the environment variable for setting the Kubernetes namespace for e2e tests.
 	DaprTestNamespaceEnvVar = "DAPR_TEST_NAMESPACE"
 
+	// DaprTestNamespaceModeEnvVar controls how namespaces are assigned to tests.
+	//
+	// - "shared" (default): all tests run in the same namespace (DAPR_TEST_NAMESPACE)
+	// - "per-package": each Go test package uses its own derived namespace to enable high parallelism.
+	DaprTestNamespaceModeEnvVar = "DAPR_TEST_NAMESPACE_MODE"
+
+	// DaprTestNamespaceModeShared runs tests in a single shared namespace.
+	DaprTestNamespaceModeShared = "shared"
+	// DaprTestNamespaceModePerPackage runs each Go test package in a derived namespace.
+	DaprTestNamespaceModePerPackage = "per-package"
+
 	// TargetOsEnvVar Environment variable for setting Kubernetes node affinity OS.
 	TargetOsEnvVar = "TARGET_OS"
 
@@ -61,8 +75,19 @@ const (
 )
 
 var (
-	// DaprTestNamespace is the default Kubernetes namespace for e2e tests.
+	// DaprTestNamespaceBase is the base Kubernetes namespace used to install shared test dependencies
+	// (Redis/Kafka/Postgres/Zipkin, etc).
+	DaprTestNamespaceBase = "dapr-tests"
+
+	// DaprTestNamespace is the Kubernetes namespace where tests in the current Go test package run.
+	// When DaprTestNamespaceMode is "per-package", this is a derived namespace.
 	DaprTestNamespace = "dapr-tests"
+
+	// DaprTestNamespaceMode is the configured namespace mode.
+	DaprTestNamespaceMode = DaprTestNamespaceModeShared
+
+	// DaprTestRunID is a short identifier for the current test process.
+	DaprTestRunID = ""
 
 	// TargetOs is default os affinity for Kubernetes nodes.
 	TargetOs = "linux"
@@ -377,8 +402,19 @@ func int32Ptr(i int32) *int32 {
 }
 
 func init() {
+	// Base namespace used by the infra installed by `make setup-3rd-party` and `make setup-test-components`.
 	if ns, ok := os.LookupEnv(DaprTestNamespaceEnvVar); ok {
+		DaprTestNamespaceBase = ns
 		DaprTestNamespace = ns
+	}
+	if mode, ok := os.LookupEnv(DaprTestNamespaceModeEnvVar); ok && mode != "" {
+		DaprTestNamespaceMode = mode
+	}
+	if DaprTestNamespaceMode == DaprTestNamespaceModePerPackage {
+		DaprTestRunID = shortRunID()
+		DaprTestNamespace = uniqueTestNamespace(DaprTestNamespaceBase, DaprTestRunID)
+		// Ensure any downstream code that reads the env var gets the derived namespace.
+		_ = os.Setenv(DaprTestNamespaceEnvVar, DaprTestNamespace)
 	}
 	if os, ok := os.LookupEnv(TargetOsEnvVar); ok {
 		TargetOs = os
@@ -391,4 +427,71 @@ func init() {
 		EnableAPILogging = !kitstrings.IsTruthy(v)
 	}
 	EnableDebugLogging = kitstrings.IsTruthy(os.Getenv(DebugLoggingEnvVar))
+}
+
+func shortRunID() string {
+	// Deterministic per-process and short enough to keep namespace length within limits.
+	h := sha1.Sum([]byte(fmt.Sprintf("%s:%d", os.Args[0], os.Getpid())))
+	// 8 hex chars is plenty to avoid collisions.
+	return fmt.Sprintf("%x", h)[:8]
+}
+
+func uniqueTestNamespace(baseNS, runID string) string {
+	// Derive a readable identifier from the test binary name.
+	bin := filepath.Base(os.Args[0])
+	bin = strings.TrimSuffix(bin, ".test")
+	bin = strings.ToLower(bin)
+	bin = sanitizeK8sName(bin)
+	if bin == "" {
+		bin = "pkg"
+	}
+	// Assemble and truncate to k8s namespace limits (<= 63 characters).
+	ns := fmt.Sprintf("%s-%s-%s", baseNS, bin, runID)
+	return truncateK8sName(ns, 63)
+}
+
+func sanitizeK8sName(s string) string {
+	// Kubernetes namespace: DNS label (RFC 1123): lowercase alphanum or '-', start/end alphanum.
+	// Replace invalid chars with '-'.
+	b := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' {
+			b = append(b, c)
+		} else {
+			b = append(b, '-')
+		}
+	}
+	out := strings.Trim(string(b), "-")
+	for strings.Contains(out, "--") {
+		out = strings.ReplaceAll(out, "--", "-")
+	}
+	return out
+}
+
+func truncateK8sName(s string, max int) string {
+	if len(s) <= max {
+		return strings.Trim(s, "-")
+	}
+	// Keep the suffix (which includes runID) by trimming from the middle.
+	// The caller already includes base + '-' + bin + '-' + runID.
+	out := s[:max]
+	out = strings.Trim(out, "-")
+	if out == "" {
+		return "dapr-tests"
+	}
+	return out
+}
+
+// testsDir returns the absolute path to the repository's ./tests directory.
+func testsDir() string {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		return ""
+	}
+	// this file is .../tests/platforms/kubernetes/kubeobj.go
+	d := filepath.Dir(thisFile) // .../tests/platforms/kubernetes
+	d = filepath.Dir(d)         // .../tests/platforms
+	d = filepath.Dir(d)         // .../tests
+	return d
 }
