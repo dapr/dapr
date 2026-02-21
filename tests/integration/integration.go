@@ -17,6 +17,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"reflect"
 	"regexp"
 	"strings"
@@ -31,12 +32,17 @@ import (
 )
 
 var (
-	focusF       = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
-	parallelFlag = flag.Bool("integration-parallel", true, "Disable running integration tests in parallel")
+	focusF         = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
+	partitionTotal = flag.Uint64("partition-total", 1, "Total number of partitions to split the test suite into. Used in conjunction with `partition-index`.")
+	partitionIndex = flag.Uint64("partition-index", 0, "Index of the partition to run. Used in conjunction with `partition-total`.")
+	parallelFlag   = flag.Bool("integration-parallel", true, "Disable running integration tests in parallel")
 )
 
 func RunIntegrationTests(t *testing.T) {
 	flag.Parse()
+
+	require.GreaterOrEqual(t, *partitionTotal, uint64(1), "partition-total must be at least 1")
+	require.Less(t, *partitionIndex, *partitionTotal, "partition-index must be less than partition-total")
 
 	focus, err := regexp.Compile(*focusF)
 	require.NoError(t, err, "Invalid parameter focus")
@@ -54,20 +60,35 @@ func RunIntegrationTests(t *testing.T) {
 	focusedTests := make([]suite.NamedCase, 0)
 	skippedTests := 0
 	for _, tcase := range suite.All(t) {
-		// Continue rather than using `t.Skip` to reduce the noise in the test output.
+		// Continue rather than using `t.Skip` to reduce the noise in the test
+		// output.
 		if !focus.MatchString(tcase.Name()) {
 			skippedTests++
 			continue
+		}
+
+		if *partitionTotal > 1 {
+			fnvHash := fnv.New32a()
+			_, err = fnvHash.Write([]byte(tcase.Name()))
+			require.NoError(t, err, "hashing test case name should not fail")
+			hashValue := uint64(fnvHash.Sum32())
+			if hashValue%*partitionTotal != *partitionIndex {
+				skippedTests++
+				continue
+			}
 		}
 		focusedTests = append(focusedTests, tcase)
 	}
 
 	startTime := time.Now()
 	t.Cleanup(func() {
-		executionMessage := fmt.Sprintf("Total integration test execution time for %d test cases: %s", len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100))
+		executionMessage := fmt.Sprintf("Total integration (partition:%d/%d) test execution time for %d test cases: %s",
+			*partitionIndex, *partitionTotal,
+			len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100),
+		)
 		t.Log(strings.Repeat("-", len(executionMessage)))
 		if skippedTests > 0 {
-			t.Logf("%d test cases were skipped due to focus", skippedTests)
+			t.Logf("%d test cases were skipped due to focus or test partition", skippedTests)
 		}
 		t.Log(executionMessage)
 		t.Log(strings.Repeat("-", len(executionMessage)))

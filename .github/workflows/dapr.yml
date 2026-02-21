@@ -157,12 +157,10 @@ jobs:
         uses: golangci/golangci-lint-action@v6.1.1
         with:
           version: ${{ env.GOLANGCILINT_VER }}
-          skip-cache: true
           args: --build-tags allcomponents --timeout=15m
 
   unit-tests:
     name: Unit tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     permissions:
       contents: read
@@ -208,49 +206,6 @@ jobs:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
 
-  integration-tests:
-    name: Integration tests
-    needs: lint
-    runs-on: "${{ matrix.os }}"
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target_os: linux
-            target_arch: amd64
-          - os: windows-2022
-            target_os: windows
-            target_arch: amd64
-            windows_version: ltsc2022
-          # TODO: @joshvanl Upgrade to latest once dns is fixed.
-          - os: macos-14
-            target_os: darwin
-            target_arch: amd64
-    env:
-      GOOS: "${{ matrix.target_os }}"
-      GOARCH: "${{ matrix.target_arch }}"
-      GOPROXY: "https://proxy.golang.org"
-      TEST_OUTPUT_FILE_PREFIX: "test_report"
-    steps:
-      - name: Check localhost DNS resolution
-        run: |
-          python3 -c 'import socket;print("localhost resolves to:",list(info[4][0] for info in socket.getaddrinfo("localhost", None)))'
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v6
-      - name: Set up Go
-        id: setup-go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-      - name: Override DAPR_HOST_IP for MacOS
-        if: matrix.target_os == 'darwin'
-        run: |
-          echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
-      - name: Run make test-integration-parallel
-        run: make test-integration-parallel
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
@@ -436,6 +391,118 @@ jobs:
             DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
           fi
         shell: bash
+
+  integration-tests:
+    name: Integration tests
+    runs-on: "${{ matrix.os }}"
+    needs: build
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # linux
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+            partition: 0
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+            partition: 1
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+            partition: 2
+          # windows
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+            partition: 0
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+            partition: 1
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+            partition: 2
+          # macOS
+          # TODO: @joshvanl Upgrade to latest once dns is fixed.
+          - os: macos-14
+            target_os: darwin
+            target_arch: amd64
+            partition: 0
+          - os: macos-14
+            target_os: darwin
+            target_arch: amd64
+            partition: 1
+          - os: macos-14
+            target_os: darwin
+            target_arch: amd64
+            partition: 2
+    env:
+      GOPROXY: "https://proxy.golang.org"
+      TEST_OUTPUT_FILE_PREFIX: "test_report"
+      TEST_PARTITION_TOTAL: "3"
+      TEST_PARTITION_INDEX: "${{ matrix.partition }}"
+      ARCHIVE_OUTDIR: "dist/archives"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v6
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+      - name: Override DAPR_HOST_IP for MacOS
+        if: matrix.target_os == 'darwin'
+        run: |
+          echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
+      - name: Download a single artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}_allcomponents
+          path: ${{ env.ARCHIVE_OUTDIR }}
+      - name: Extract the archive (unix)
+        if: matrix.target_os != 'windows'
+        shell: bash
+        run: |
+          cd ${{ env.ARCHIVE_OUTDIR }}
+          for f in *.tar.gz; do tar -xzf "$f"; done
+          echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/daprd" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/injector" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/operator" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/placement" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/scheduler" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/sentry" >>${GITHUB_ENV}
+          cd -
+      - name: Extract the archive (windows)
+        if: matrix.target_os == 'windows'
+        shell: bash
+        run: |
+          cd ${{ env.ARCHIVE_OUTDIR }}
+          for f in *.zip; do unzip "$f"; done
+          echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/daprd.exe" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/injector.exe" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/operator.exe" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/placement.exe" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/scheduler.exe" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/sentry.exe" >>${GITHUB_ENV}
+          cd -
+      - name: Run make test-integration-parallel
+        run: make test-integration-parallel
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_integration_${{ matrix.partition }}.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
+
   publish:
     name: Publish binaries
     needs: build
