@@ -479,7 +479,7 @@ jobs:
       - name: Download a single artifact
         uses: actions/download-artifact@v5
         with:
-          name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ matrix.sidecar_flavor }}
+          name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}_allcomponents
           path: ${{ env.ARCHIVE_OUTDIR }}
       - name: Extract the archive
         run: |
