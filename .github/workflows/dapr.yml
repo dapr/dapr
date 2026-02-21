@@ -162,7 +162,6 @@ jobs:
 
   unit-tests:
     name: Unit tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     permissions:
       contents: read
@@ -210,7 +209,6 @@ jobs:
 
   integration-tests:
     name: Integration tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     permissions:
       contents: read

@@ -33,8 +33,8 @@ import (
 
 var (
 	focusF         = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
-	partitionTotal = flag.Uint("partition-total", 1, "Total number of partitions to split the test suite into. Used in conjunction with `partition-index`.")
-	partitionIndex = flag.Uint("partition-index", 0, "Index of the partition to run. Used in conjunction with `partition-total`.")
+	partitionTotal = flag.Uint64("partition-total", 1, "Total number of partitions to split the test suite into. Used in conjunction with `partition-index`.")
+	partitionIndex = flag.Uint64("partition-index", 0, "Index of the partition to run. Used in conjunction with `partition-total`.")
 	parallelFlag   = flag.Bool("integration-parallel", true, "Disable running integration tests in parallel")
 )
 
@@ -71,8 +71,8 @@ func RunIntegrationTests(t *testing.T) {
 			fnvHash := fnv.New32a()
 			_, err = fnvHash.Write([]byte(tcase.Name()))
 			require.NoError(t, err, "hashing test case name should not fail")
-			hashValue := fnvHash.Sum32()
-			if hashValue%uint32(*partitionTotal) != uint32(*partitionIndex) {
+			hashValue := uint64(fnvHash.Sum32())
+			if hashValue%*partitionTotal != *partitionIndex {
 				skippedTests++
 				continue
 			}
