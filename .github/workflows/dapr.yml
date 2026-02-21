@@ -240,7 +240,7 @@ jobs:
       - name: Archive code coverage results
         uses: actions/upload-artifact@v4
         with:
-          name: "{{ matrix.target_os }}_dist"
+          name: "${{ matrix.target_os }}_dist"
           path: dist
 
   integration-tests:
@@ -327,7 +327,8 @@ jobs:
       - name: Download a single artifact
         uses: actions/download-artifact@v5
         with:
-          name: "{{ matrix.target_os }}_dist"
+          name: "${{ matrix.target_os }}_dist"
+          path: dist
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
 
