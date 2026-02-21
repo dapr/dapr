@@ -82,7 +82,10 @@ func RunIntegrationTests(t *testing.T) {
 
 	startTime := time.Now()
 	t.Cleanup(func() {
-		executionMessage := fmt.Sprintf("Total integration test execution time for %d test cases: %s", len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100))
+		executionMessage := fmt.Sprintf("Total integration (partition:%d/%d) test execution time for %d test cases: %s",
+			*partitionIndex, *partitionTotal,
+			len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100),
+		)
 		t.Log(strings.Repeat("-", len(executionMessage)))
 		if skippedTests > 0 {
 			t.Logf("%d test cases were skipped due to focus or test partition", skippedTests)
