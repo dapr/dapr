@@ -488,6 +488,8 @@ jobs:
         run: |
           cd ${{ env.ARCHIVE_OUTDIR }}
           for f in *.tar.gz; do tar -xzf "$f"; done
+          ls -la
+          pwd
           cd -
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
