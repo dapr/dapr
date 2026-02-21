@@ -235,7 +235,7 @@ jobs:
         with:
           go-version-file: "go.mod"
       - name: Run make release to build for integration tests
-        run: make build
+        run: make -j build
       - name: Archive code coverage results
         uses: actions/upload-artifact@v4
         with:
@@ -257,55 +257,64 @@ jobs:
             target_os: linux
             target_arch: amd64
             partition: 0
+            exe: ""
           - os: ubuntu-latest
             target_os: linux
             target_arch: amd64
             partition: 1
+            exe: ""
           - os: ubuntu-latest
             target_os: linux
             target_arch: amd64
             partition: 2
+            exe: ""
           # windows
           - os: windows-2022
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
             partition: 0
+            exe: ".exe"
           - os: windows-2022
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
             partition: 1
+            exe: ".exe"
           - os: windows-2022
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
             partition: 2
+            exe: ".exe"
           # macOS
           # TODO: @joshvanl Upgrade to latest once dns is fixed.
           - os: macos-14
             target_os: darwin
             target_arch: amd64
             partition: 0
+            exe: ""
           - os: macos-14
             target_os: darwin
             target_arch: amd64
             partition: 1
+            exe: ""
           - os: macos-14
             target_os: darwin
             target_arch: amd64
             partition: 2
+            exe: ""
     env:
       GOPROXY: "https://proxy.golang.org"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
       TEST_PARTITION_TOTAL: "3"
       TEST_PARTITION_INDEX: "${{ matrix.partition }}"
-      DAPR_INTEGRATION_DAPRD_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/daprd"
-      DAPR_INTEGRATION_INJECTOR_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/injector"
-      DAPR_INTEGRATION_OPERATOR_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/operator"
-      DAPR_INTEGRATION_PLACEMENT_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/placement"
-      DAPR_INTEGRATION_SCHEDULER_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/scheduler"
-      DAPR_INTEGRATION_SENTRY_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/sentry"
+      DAPR_INTEGRATION_DAPRD_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/daprd${{ matrix.exe }}"
+      DAPR_INTEGRATION_INJECTOR_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/injector${{ matrix.exe }}"
+      DAPR_INTEGRATION_OPERATOR_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/operator${{ matrix.exe }}"
+      DAPR_INTEGRATION_PLACEMENT_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/placement${{ matrix.exe }}"
+      DAPR_INTEGRATION_SCHEDULER_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/scheduler${{ matrix.exe }}"
+      DAPR_INTEGRATION_SENTRY_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/sentry${{ matrix.exe }}"
     steps:
       - name: Check localhost DNS resolution
         run: |
@@ -315,8 +324,6 @@ jobs:
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
       - name: Override DAPR_HOST_IP for MacOS
         if: matrix.target_os == 'darwin'
         run: |

@@ -400,7 +400,7 @@ test-integration: test-deps
 			--format testname \
 			-- \
 			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false \
-			--partition-total=$(TEST_PARTITION_TOTAL) -partition-index=$(TEST_PARTITION_INDEX) $(ARGS)
+			--partition-total=$(TEST_PARTITION_TOTAL) --partition-index=$(TEST_PARTITION_INDEX) $(ARGS)
 
 .PHONY: test-integration-parallel
 test-integration-parallel: test-deps
@@ -409,7 +409,7 @@ test-integration-parallel: test-deps
 			--format testname \
 			-- \
 			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true \
-			--partition-total=$(TEST_PARTITION_TOTAL) -partition-index=$(TEST_PARTITION_INDEX) $(ARGS)
+			--partition-total=$(TEST_PARTITION_TOTAL) --partition-index=$(TEST_PARTITION_INDEX) $(ARGS)
 
 ################################################################################
 # Target: lint                                                                 #
