@@ -96,9 +96,10 @@ KUBECTL=kubectl
 DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
 DAPR_TEST_LOG_PATH?=./dist/logs
 
-# Number of test packages to run in parallel. Defaults to the number of e2e
-# test directories so that every package can run at the same time.
-E2E_PARALLEL ?= $(words $(wildcard tests/e2e/*/))
+# Number of test packages to run in parallel. Defaults to 4 to match the
+# number of KinD worker nodes, preventing cluster resource exhaustion.
+# Override with a higher value if your cluster has more capacity.
+E2E_PARALLEL ?= 4
 
 ifeq ($(DAPR_TEST_STATE_STORE),)
 DAPR_TEST_STATE_STORE=postgres
