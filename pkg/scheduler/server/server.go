@@ -140,7 +140,6 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 
 	cron := cron.New(cron.Options{
 		ID:      opts.EtcdName,
-		Healthz: opts.Healthz,
 		Host:    &schedulerv1pb.Host{Address: broadcastAddr},
 		Etcd:    etcd,
 		Workers: opts.Workers,
