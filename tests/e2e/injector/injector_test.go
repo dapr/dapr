@@ -118,6 +118,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestDaprVolumeMount(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
@@ -144,6 +145,7 @@ func TestDaprVolumeMount(t *testing.T) {
 }
 
 func TestDaprSslCertInstallation(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 

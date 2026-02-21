@@ -434,6 +434,7 @@ var grpcProxyTests = []struct {
 }
 
 func TestServiceInvocation(t *testing.T) {
+	t.Parallel()
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
 			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
@@ -550,6 +551,7 @@ func TestServiceInvocation(t *testing.T) {
 }
 
 func TestServiceInvocationExternally(t *testing.T) {
+	t.Parallel()
 	if kitstrings.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
 		t.Skip()
 	}
@@ -659,6 +661,7 @@ func TestServiceInvocationExternally(t *testing.T) {
 }
 
 func TestGRPCProxy(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL("grpcproxyclient")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 	var err error
@@ -692,6 +695,7 @@ func TestGRPCProxy(t *testing.T) {
 }
 
 func TestHeadersExternal(t *testing.T) {
+	t.Parallel()
 	if kitstrings.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
 		t.Skip()
 	}
@@ -721,6 +725,7 @@ func TestHeadersExternal(t *testing.T) {
 }
 
 func TestHeaders(t *testing.T) {
+	t.Parallel()
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
 			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
@@ -1352,6 +1357,7 @@ func verifyHTTPToHTTPExternal(t *testing.T, hostIP string, hostname string, url 
 }
 
 func TestUppercaseMiddlewareServiceInvocation(t *testing.T) {
+	t.Parallel()
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
 			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
@@ -1391,6 +1397,7 @@ func TestUppercaseMiddlewareServiceInvocation(t *testing.T) {
 }
 
 func TestLoadBalancing(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
@@ -1425,6 +1432,7 @@ func TestLoadBalancing(t *testing.T) {
 }
 
 func TestNegativeCases(t *testing.T) {
+	t.Parallel()
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
 			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
@@ -1670,6 +1678,7 @@ func TestNegativeCases(t *testing.T) {
 }
 
 func TestNegativeCasesExternal(t *testing.T) {
+	t.Parallel()
 	if kitstrings.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
 		t.Skip()
 	}
@@ -1737,6 +1746,7 @@ func TestNegativeCasesExternal(t *testing.T) {
 }
 
 func TestCrossNamespaceCases(t *testing.T) {
+	t.Parallel()
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
 			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
@@ -1782,6 +1792,7 @@ func TestCrossNamespaceCases(t *testing.T) {
 }
 
 func TestPathURLNormalization(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 

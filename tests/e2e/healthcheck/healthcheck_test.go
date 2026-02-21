@@ -124,14 +124,17 @@ func TestMain(m *testing.M) {
 }
 
 func TestAppHealthCheckHTTP(t *testing.T) {
+	t.Parallel()
 	testAppHealthCheckProtocol(t, "http")
 }
 
 func TestAppHealthCheckGRPC(t *testing.T) {
+	t.Parallel()
 	testAppHealthCheckProtocol(t, "grpc")
 }
 
 func TestAppHealthCheckH2C(t *testing.T) {
+	t.Parallel()
 	testAppHealthCheckProtocol(t, "h2c")
 }
 

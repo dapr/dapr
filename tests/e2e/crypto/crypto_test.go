@@ -125,6 +125,7 @@ func TestWaitReady(t *testing.T) {
 }
 
 func TestCrypto(t *testing.T) {
+	t.Parallel()
 	appExternalURL := tr.Platform.AcquireAppExternalURL("cryptoapp")
 	require.NotEmpty(t, appExternalURL, "appExternalURL must not be empty")
 
@@ -181,6 +182,7 @@ func TestCrypto(t *testing.T) {
 }
 
 func TestSubtleCrypto(t *testing.T) {
+	t.Parallel()
 	if !subtleCryptoEnabled {
 		t.Skip("Skipping Subtle Crypto APIs test because they are not enabled in the binary")
 	}

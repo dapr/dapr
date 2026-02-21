@@ -439,6 +439,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestStateApp(t *testing.T) {
+	t.Parallel()
 	testCases := generateTestCases(true)                       // For HTTP
 	testCases = append(testCases, generateTestCases(false)...) // For gRPC
 
@@ -490,6 +491,7 @@ func TestStateApp(t *testing.T) {
 }
 
 func TestStateTransactionApps(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
@@ -544,6 +546,7 @@ func TestStateTransactionApps(t *testing.T) {
 }
 
 func TestMissingKeyDirect(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
@@ -575,6 +578,7 @@ func TestMissingKeyDirect(t *testing.T) {
 }
 
 func TestMissingAndMisconfiguredStateStore(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
@@ -644,6 +648,7 @@ func TestMissingAndMisconfiguredStateStore(t *testing.T) {
 }
 
 func TestQueryStateStore(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
@@ -691,6 +696,7 @@ func TestQueryStateStore(t *testing.T) {
 }
 
 func TestEtags(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 

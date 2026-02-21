@@ -179,6 +179,7 @@ var allowListsForServiceInvocationForProxyTests = []struct {
 }
 
 func TestServiceInvocationWithAllowListsForGrpcProxy(t *testing.T) {
+	t.Parallel()
 	externalURL := tr.Platform.AcquireAppExternalURL("grpcproxyclient")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 	var err error
@@ -212,6 +213,7 @@ func TestServiceInvocationWithAllowListsForGrpcProxy(t *testing.T) {
 }
 
 func TestServiceInvocationWithAllowLists(t *testing.T) {
+	t.Parallel()
 	config, err := tr.Platform.GetConfiguration("daprsystem")
 	if err != nil {
 		t.Logf("configuration name: daprsystem, get failed: %s \n", err.Error())
