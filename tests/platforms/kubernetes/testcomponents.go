@@ -181,7 +181,7 @@ func getenvDefault(key, def string) string {
 
 var (
 	// Matches lines like: namespace: "dapr-tests" or namespace: 'dapr-tests'
-	reNamespaceDaprTests = regexp.MustCompile(`(?m)^\s*namespace:\s*(["']?)dapr-tests\1\s*$`)
+	reNamespaceDaprTests = regexp.MustCompile(`(?m)^\s*namespace:\s*['"]?dapr-tests['"]?\s*$`)
 )
 
 func patchManifest(yaml, targetNS, baseNS string) string {
