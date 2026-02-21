@@ -138,7 +138,7 @@ func Run() {
 
 			for {
 				server, gerr := getServer()
-				if err != nil {
+				if gerr != nil {
 					return gerr
 				}
 
