@@ -460,12 +460,6 @@ jobs:
       TEST_PARTITION_TOTAL: "3"
       TEST_PARTITION_INDEX: "${{ matrix.partition }}"
       ARCHIVE_OUTDIR: "dist/archives"
-      DAPR_INTEGRATION_DAPRD_PATH: "./dist/archives/daprd${{ matrix.exe }}"
-      DAPR_INTEGRATION_INJECTOR_PATH: "./dist/archives/injector${{ matrix.exe }}"
-      DAPR_INTEGRATION_OPERATOR_PATH: "./dist/archives/operator${{ matrix.exe }}"
-      DAPR_INTEGRATION_PLACEMENT_PATH: "./dist/archives/placement${{ matrix.exe }}"
-      DAPR_INTEGRATION_SCHEDULER_PATH: "./dist/archives/scheduler${{ matrix.exe }}"
-      DAPR_INTEGRATION_SENTRY_PATH: "./dist/archives/sentry${{ matrix.exe }}"
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
@@ -490,6 +484,12 @@ jobs:
           for f in *.tar.gz; do tar -xzf "$f"; done
           ls -la
           pwd
+          echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/daprd${{ matrix.exe }}" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/injector${{ matrix.exe }}" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/operator${{ matrix.exe }}" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/placement${{ matrix.exe }}" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/scheduler${{ matrix.exe }}" >>${GITHUB_ENV}
+          echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/sentry${{ matrix.exe }}" >>${GITHUB_ENV}
           cd -
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
