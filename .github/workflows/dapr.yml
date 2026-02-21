@@ -485,7 +485,14 @@ jobs:
           path: ${{ env.ARCHIVE_OUTDIR }}
       - name: Extract the archive
         run: |
-          cd ${{ env.ARCHIVE_OUTDIR }} && unzip *.zip && for f in *.tar.gz; do tar -xzf "$f"; done && cd -
+          cd ${{ env.ARCHIVE_OUTDIR }}
+          if ! ls *.zip 1> /dev/null 2>&1; then
+            echo "Error: No zip files found in ${ARCHIVE_OUTDIR}."
+            exit 1
+          fi
+          unzip *.zip
+          for f in *.tar.gz; do tar -xzf "$f"; done
+          cd -
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
       - name: Upload test results
