@@ -486,6 +486,7 @@ jobs:
       - name: Extract the archive
         run: |
           cd ${{ env.ARCHIVE_OUTDIR }}
+          ls -la
           if ! ls *.zip 1> /dev/null 2>&1; then
             echo "Error: No zip files found in ${ARCHIVE_OUTDIR}."
             exit 1
