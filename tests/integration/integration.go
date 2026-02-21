@@ -41,7 +41,7 @@ var (
 func RunIntegrationTests(t *testing.T) {
 	flag.Parse()
 
-	require.GreaterOrEqual(t, *partitionTotal, uint(1), "partition-total must be at least 1")
+	require.GreaterOrEqual(t, *partitionTotal, uint64(1), "partition-total must be at least 1")
 	require.Less(t, *partitionIndex, *partitionTotal, "partition-index must be less than partition-total")
 
 	focus, err := regexp.Compile(*focusF)
