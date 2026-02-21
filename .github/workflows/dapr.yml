@@ -157,7 +157,6 @@ jobs:
         uses: golangci/golangci-lint-action@v6.1.1
         with:
           version: ${{ env.GOLANGCILINT_VER }}
-          skip-cache: true
           args: --build-tags allcomponents --timeout=15m
 
   unit-tests:
@@ -297,18 +296,16 @@ jobs:
             target_arch: amd64
             partition: 2
     env:
-      GOOS: "${{ matrix.target_os }}"
-      GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
       TEST_PARTITION_TOTAL: "3"
       TEST_PARTITION_INDEX: "${{ matrix.partition }}"
-      DAPR_INTEGRATION_DAPRD_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/daprd"
-      DAPR_INTEGRATION_INJECTOR_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/injector"
-      DAPR_INTEGRATION_OPERATOR_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/operator"
-      DAPR_INTEGRATION_PLACEMENT_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/placement"
-      DAPR_INTEGRATION_SCHEDULER_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/scheduler"
-      DAPR_INTEGRATION_SENTRY_PATH: "dist/{{ matrix.target_os }}_{{ matrix.target_arch }}/release/sentry"
+      DAPR_INTEGRATION_DAPRD_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/daprd"
+      DAPR_INTEGRATION_INJECTOR_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/injector"
+      DAPR_INTEGRATION_OPERATOR_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/operator"
+      DAPR_INTEGRATION_PLACEMENT_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/placement"
+      DAPR_INTEGRATION_SCHEDULER_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/scheduler"
+      DAPR_INTEGRATION_SENTRY_PATH: "dist/${{ matrix.target_os }}_${{ matrix.target_arch }}/release/sentry"
     steps:
       - name: Check localhost DNS resolution
         run: |
@@ -331,6 +328,12 @@ jobs:
           path: dist
       - name: Run make test-integration-parallel
         run: make test-integration-parallel
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_integration.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
 
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
