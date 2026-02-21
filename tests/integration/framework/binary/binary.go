@@ -159,6 +159,7 @@ func build(t *testing.T, name string, opts options) {
 		//nolint:usetesting
 		assert.NoError(t, os.Setenv(EnvKey(name), binPath))
 	} else {
+		require.FileExists(t, EnvValue(name))
 		t.Logf("%q set, using %q pre-built binary", EnvKey(name), EnvValue(name))
 	}
 }
