@@ -481,9 +481,9 @@ jobs:
         shell: bash
         run: |
           cd ${{ env.ARCHIVE_OUTDIR }}
-          for f in *.tar.gz; do tar -xzf "$f"; done
           ls -la
           pwd
+          for f in *.tar.gz; do tar -xzf "$f"; done
           echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/daprd${{ matrix.exe }}" >>${GITHUB_ENV}
           echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/injector${{ matrix.exe }}" >>${GITHUB_ENV}
           echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/operator${{ matrix.exe }}" >>${GITHUB_ENV}
@@ -497,7 +497,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_integration.json
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_integration_${{ matrix.partition }}.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
 
   publish:
