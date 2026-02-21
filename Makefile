@@ -390,13 +390,17 @@ else
 TEST_ADDITIONAL_TAGS:=
 endif
 
+TEST_PATITION_TOTAL ?= 1
+TEST_PATITION_INDEX ?= 0
+
 .PHONY: test-integration
 test-integration: test-deps
 		CGO_ENABLED=1 gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false $(ARGS)
+			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false \
+			--partition-total=$(TEST_PATITION_TOTAL) -partition-index=$(TEST_PATITION_INDEX) $(ARGS)
 
 .PHONY: test-integration-parallel
 test-integration-parallel: test-deps
@@ -404,7 +408,8 @@ test-integration-parallel: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true $(ARGS)
+			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true \
+			--partition-total=$(TEST_PATITION_TOTAL) -partition-index=$(TEST_PATITION_INDEX) $(ARGS)
 
 ################################################################################
 # Target: lint                                                                 #

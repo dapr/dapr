@@ -235,6 +235,8 @@ jobs:
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
+      TEST_PATITION_TOTAL: "3"
+      TEST_PATITION_INDEX: "${{ matrix.partition }}"
     steps:
       - name: Check localhost DNS resolution
         run: |
@@ -251,7 +253,7 @@ jobs:
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
       - name: Run make test-integration-parallel
-        run: make test-integration-parallel --partition-total=3 --partition-index=${{ matrix.partition }}
+        run: make test-integration-parallel
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
