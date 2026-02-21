@@ -22,9 +22,11 @@ import (
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -60,8 +62,26 @@ func (l *leases) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := client.Leases(ctx)
+		resp, err = client.Leases(ctx)
 		require.NoError(c, err)
 		assert.Len(c, resp.Leases, 1)
 	}, time.Second*30, time.Millisecond*10)
+
+	l.scheduler.WaitUntilRunning(t, ctx)
+
+	_, err = l.scheduler.Client(t, ctx).ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
+		Name:      "testJob",
+		Overwrite: true,
+		Job:       &schedulerv1pb.Job{DueTime: ptr.Of("3h")},
+		Metadata: &schedulerv1pb.JobMetadata{
+			AppId:     "foo",
+			Namespace: "default",
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Job{
+					Job: new(schedulerv1pb.TargetJob),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
 }
