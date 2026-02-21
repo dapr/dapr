@@ -217,26 +217,57 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        partition: [0, 1, 2]
         include:
+          # linux
           - os: ubuntu-latest
             target_os: linux
             target_arch: amd64
+            partition: 0
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+            partition: 1
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+            partition: 2
+          # windows
           - os: windows-2022
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
+            partition: 0
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+            partition: 1
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+            partition: 2
+          # macOS
           # TODO: @joshvanl Upgrade to latest once dns is fixed.
           - os: macos-14
             target_os: darwin
             target_arch: amd64
+            partition: 0
+          - os: macos-14
+            target_os: darwin
+            target_arch: amd64
+            partition: 1
+          - os: macos-14
+            target_os: darwin
+            target_arch: amd64
+            partition: 2
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
-      TEST_PATITION_TOTAL: "3"
-      TEST_PATITION_INDEX: "${{ matrix.partition }}"
+      TEST_PARTITION_TOTAL: "3"
+      TEST_PARTITION_INDEX: "${{ matrix.partition }}"
     steps:
       - name: Check localhost DNS resolution
         run: |
