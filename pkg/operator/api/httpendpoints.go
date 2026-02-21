@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,9 +30,7 @@ import (
 func (a *apiServer) OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
 	a.endpointLock.Lock()
 	for _, endpointUpdateChan := range a.allEndpointsUpdateChan {
-		go func(endpointUpdateChan chan *httpendpointsapi.HTTPEndpoint) {
-			endpointUpdateChan <- endpoint
-		}(endpointUpdateChan)
+		endpointUpdateChan <- endpoint
 	}
 	a.endpointLock.Unlock()
 }
@@ -191,8 +188,6 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 		log.Infof("updated sidecar with http endpoint %s from pod %s/%s", e.GetName(), in.GetNamespace(), in.GetPodName())
 	}
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
 	for {
 		select {
 		case <-srv.Context().Done():
@@ -201,11 +196,7 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 			if !ok {
 				return nil
 			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				updateHTTPEndpointFunc(srv.Context(), c)
-			}()
+			updateHTTPEndpointFunc(srv.Context(), c)
 		}
 	}
 }
