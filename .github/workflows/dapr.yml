@@ -484,6 +484,7 @@ jobs:
           name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}_allcomponents
           path: ${{ env.ARCHIVE_OUTDIR }}
       - name: Extract the archive
+        shell: bash
         run: |
           cd ${{ env.ARCHIVE_OUTDIR }}
           for f in *.tar.gz; do tar -xzf "$f"; done
