@@ -148,7 +148,7 @@ func New(opts Options) (Interface, error) {
 				ApiLevel:  20,
 				Namespace: opts.Namespace,
 			},
-			DisseminationTimeout: time.Second * 5,
+			DisseminationTimeout: time.Second * 7,
 			Cancel: func(cause error) {
 				errCh <- cause
 			},
