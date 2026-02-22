@@ -1,3 +1,38 @@
+## Highlights
+
+Dapr pub/sub in v1.17 delivers sub-millisecond publish latency at 1,000 QPS on gRPC, with the Bulk Publish API providing dramatic throughput improvements for high-volume scenarios. All test runs completed with **100% success rate** and zero pod restarts.
+
+**How to read these numbers:** Latency percentiles (p50/p90/p99) show the distribution of individual publish times — p50 is the typical experience, p99 captures the rare slow requests. "16 connections" means 16 concurrent publishers hitting the sidecar simultaneously at 1,000 QPS. "Dapr overhead" is measured by comparing the proxied result against a baseline that bypasses Dapr entirely.
+
+**Standard publish — gRPC** (16 connections, 1,000 QPS):
+- Median (p50): **0.60 ms** | p90: **0.94 ms** | p99: **1.87 ms**
+- 60,000 publish operations — 100% success
+
+With 60,000 publishes at 1,000 QPS, the Dapr sidecar received each message and forwarded it to the broker in a median of 0.60 ms. Nine in ten requests completed in under 1 ms. Every publish succeeded with zero errors.
+
+**Standard publish — HTTP**:
+- Median (p50): **0.35 ms** | p95: **0.49 ms** — 100% success
+
+HTTP publish latency is even lower than gRPC in this configuration, with 95% of requests completing in under 0.5 ms. The tight distribution means publish latency through Dapr is nearly constant regardless of load.
+
+**Bulk Publish API — Kafka (gRPC)**: the most impactful scenario for high-throughput systems:
+- Single-message publish: **91 QPS** → Bulk publish: **200 QPS** — **2.2× throughput improvement**
+- Latency reduced by **138.11 ms at p50** and **223.50 ms at p90** vs. single-message publishing
+
+Without bulk publish, Kafka's per-message broker overhead capped throughput at ~91 QPS. The Bulk Publish API batches multiple messages into a single broker write, unlocking the full 200 QPS target. This isn't just a throughput win — p50 latency dropped by 138.11 ms per message, meaning each individual message also arrives significantly faster when sent in bulk.
+
+**Bulk Publish API — In-memory (gRPC)** (cloud event, 1 KB payload):
+- Median: **10.79 ms** | p90: **17.19 ms** — with latency up to **47.22 ms lower** than single-message
+
+Even for in-memory brokers (no network hop to an external broker), bulk publish reduces per-message latency by 47.22 ms at the median compared to publishing messages one at a time. The gain comes from amortizing the per-call overhead of the Dapr API across the batch.
+
+**Bulk Publish HTTP** (memory broker, batch of 10, 1 KB):
+- **13,635 iterations/sec** throughput, p95: **8.70 ms** — 100% success
+
+HTTP bulk publish at batch=10 achieves over 13,000 requests per second — 3.7× the throughput of single-message HTTP publish — with 95% of requests completing in under 9 ms.
+
+---
+
 ## HTTP
 
 ### TestPubsubPublishHttpPerformance
