@@ -81,7 +81,7 @@ type WorkflowAccessPolicyRule struct {
 	// Caller workflow identity selector.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
-	Callers []WorkflowCallerSelector `json:"caller" yaml:"caller"`
+	Callers []WorkflowCallerSelector `json:"callers" yaml:"callers"`
 
 	// Operations authorized for these callers against the target app.
 	// Rules are evaluated in-order; first match wins.
