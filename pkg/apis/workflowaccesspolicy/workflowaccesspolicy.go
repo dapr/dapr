@@ -50,8 +50,8 @@ type WorkflowCallerSelector struct {
 	//Namespace *string `json:"namespace" yaml:"namespace"`
 
 	// AppIDs of the calling app.
-	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:Items{MinLength=1}
 	AppIDs []string `json:"appID" yaml:"appID"`
 
 	// Workflow name (or glob pattern) of the calling workflow.
