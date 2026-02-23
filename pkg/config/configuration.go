@@ -600,8 +600,8 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 	if len(b) == 0 {
 		return nil, fmt.Errorf("configuration %s not found", config)
 	}
-	var conf Configuration
-	if err = json.Unmarshal(b, &conf); err != nil {
+	conf := LoadDefaultConfiguration()
+	if err = json.Unmarshal(b, conf); err != nil {
 		return nil, err
 	}
 
@@ -612,7 +612,7 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
-	return &conf, nil
+	return conf, nil
 }
 
 // Update configuration from Otlp Environment Variables, if they exist.
