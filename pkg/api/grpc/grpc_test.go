@@ -275,8 +275,8 @@ func startTestServerWithTracing() (*grpc.Server, *string, *bufconn.Listener) {
 		grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
 	)
 
+	internalv1pb.RegisterServiceInvocationServer(server, &mockGRPCAPI{})
 	go func() {
-		internalv1pb.RegisterServiceInvocationServer(server, &mockGRPCAPI{})
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -314,8 +314,8 @@ func startInternalServer(testAPIServer *api) (*grpc.Server, *bufconn.Listener) {
 	lis := bufconn.Listen(bufconnBufSize)
 
 	server := grpc.NewServer()
+	internalv1pb.RegisterServiceInvocationServer(server, testAPIServer)
 	go func() {
-		internalv1pb.RegisterServiceInvocationServer(server, testAPIServer)
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
