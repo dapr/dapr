@@ -196,7 +196,7 @@ func (rt *retryGRPCProxy) runGrpcProxyScenario(t *testing.T, ctx context.Context
 	app2 := grpcapp.New(t, rt.grpcProxyHandler)
 	app2.Run(t, ctx)
 	t.Cleanup(func() {
-		app1.Cleanup(t)
+		app2.Cleanup(t)
 	})
 
 	daprd2 := daprd.New(t,
