@@ -173,6 +173,9 @@ type httpTestScenario struct {
 func (rt *retryHTTP) runHTTPScenario(t *testing.T, ctx context.Context, scenario httpTestScenario) {
 	app1 := httpapp.New(t, rt.handlerFuncRoot, rt.handlerFuncRetry)
 	app1.Run(t, ctx)
+	t.Cleanup(func() {
+		app1.Cleanup(t)
+	})
 
 	daprd1 := daprd.New(t,
 		daprd.WithAppPort(app1.Port()),
@@ -184,6 +187,9 @@ func (rt *retryHTTP) runHTTPScenario(t *testing.T, ctx context.Context, scenario
 
 	app2 := httpapp.New(t, rt.handlerFuncRoot, rt.handlerFuncRetry)
 	app2.Run(t, ctx)
+	t.Cleanup(func() {
+		app2.Cleanup(t)
+	})
 
 	daprd2 := daprd.New(t,
 		daprd.WithAppPort(app2.Port()),

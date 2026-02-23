@@ -184,6 +184,9 @@ type grpcTestScenario struct {
 func (rt *retryGRPC) runGrpcScenario(t *testing.T, ctx context.Context, scenario grpcTestScenario) {
 	app1 := grpcapp.New(t, rt.grpcOnInvokeHandler)
 	app1.Run(t, ctx)
+	t.Cleanup(func() {
+		app1.Cleanup(t)
+	})
 
 	daprd1 := daprd.New(t,
 		daprd.WithAppPort(app1.Port(t)),
@@ -195,6 +198,9 @@ func (rt *retryGRPC) runGrpcScenario(t *testing.T, ctx context.Context, scenario
 
 	app2 := grpcapp.New(t, rt.grpcOnInvokeHandler)
 	app2.Run(t, ctx)
+	t.Cleanup(func() {
+		app2.Cleanup(t)
+	})
 
 	daprd2 := daprd.New(t,
 		daprd.WithAppPort(app2.Port(t)),

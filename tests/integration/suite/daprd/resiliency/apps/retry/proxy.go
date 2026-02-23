@@ -181,6 +181,9 @@ type grpcProxyTestScenario struct {
 func (rt *retryGRPCProxy) runGrpcProxyScenario(t *testing.T, ctx context.Context, scenario grpcProxyTestScenario) {
 	app1 := grpcapp.New(t, rt.grpcProxyHandler)
 	app1.Run(t, ctx)
+	t.Cleanup(func() {
+		app1.Cleanup(t)
+	})
 
 	daprd1 := daprd.New(t,
 		daprd.WithAppPort(app1.Port(t)),
@@ -192,6 +195,9 @@ func (rt *retryGRPCProxy) runGrpcProxyScenario(t *testing.T, ctx context.Context
 
 	app2 := grpcapp.New(t, rt.grpcProxyHandler)
 	app2.Run(t, ctx)
+	t.Cleanup(func() {
+		app1.Cleanup(t)
+	})
 
 	daprd2 := daprd.New(t,
 		daprd.WithAppPort(app2.Port(t)),
