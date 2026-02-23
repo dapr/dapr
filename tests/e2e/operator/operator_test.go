@@ -31,7 +31,6 @@ import (
 
 const (
 	appName            = "hellodapr"
-	daprServiceName    = appName + "-dapr"
 	appIDAnnotationKey = "dapr.io/app-id"
 )
 
@@ -61,12 +60,15 @@ func TestMain(m *testing.M) {
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
 	code := tr.Start(m)
 
+	// Verify that the Dapr service is cleaned up after the app is deleted
+	// The Dapr service name is based on the formatted app-id: <formatted-app-name>-dapr
+	formattedDaprServiceName := kube.FormatAppID(appName) + "-dapr"
 	for _, app := range testApps {
-		_, err := tr.Platform.GetService(daprServiceName)
+		_, err := tr.Platform.GetService(formattedDaprServiceName)
 		if err == nil {
-			log.Fatalf("the dapr service %s still exists after app %s deleted", daprServiceName, app.AppName)
+			log.Fatalf("the dapr service %s still exists after app %s deleted", formattedDaprServiceName, app.AppName)
 		} else if !errors.IsNotFound(err) {
-			log.Fatalf("failed to get dapr service %s, err: %v", daprServiceName, err)
+			log.Fatalf("failed to get dapr service %s, err: %v", formattedDaprServiceName, err)
 		}
 	}
 
@@ -74,7 +76,10 @@ func TestMain(m *testing.M) {
 }
 
 func TestHelloDapr(t *testing.T) {
-	service, err := tr.Platform.GetService(daprServiceName)
+	// The Dapr service name is based on the formatted app-id: <formatted-app-name>-dapr
+	formattedDaprServiceName := kube.FormatAppID(appName) + "-dapr"
+	service, err := tr.Platform.GetService(formattedDaprServiceName)
 	require.NoError(t, err)
-	require.Equal(t, appName, service.Annotations[appIDAnnotationKey])
+	// The app-id annotation should also be the formatted name
+	require.Equal(t, kube.FormatAppID(appName), service.Annotations[appIDAnnotationKey])
 }

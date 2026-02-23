@@ -97,7 +97,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.DaprEnabled {
 		annotationObject = map[string]string{
 			"dapr.io/enabled":                           "true",
-			"dapr.io/app-id":                            appDesc.AppName, // Use original name for Dapr app-id to ensure service invocation works
+			"dapr.io/app-id":                            FormatAppID(appDesc.AppName),
 			"dapr.io/sidecar-cpu-limit":                 appDesc.DaprCPULimit,
 			"dapr.io/sidecar-cpu-request":               appDesc.DaprCPURequest,
 			"dapr.io/sidecar-memory-limit":              appDesc.DaprMemoryLimit,
