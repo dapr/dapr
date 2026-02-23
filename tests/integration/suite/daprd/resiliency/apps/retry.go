@@ -61,8 +61,8 @@ spec:
     retries:
       DefaultAppRetryPolicy:
         policy: constant
-        duration: 10ms
-        maxRetries: 3
+        duration: 1ms
+        maxRetries: 2
         matching:
           httpStatusCodes: "%s"
 `
@@ -76,8 +76,8 @@ spec:
     retries:
       DefaultAppRetryPolicy:
         policy: constant
-        duration: 10ms
-        maxRetries: 3
+        duration: 1ms
+        maxRetries: 2
         matching:
           gRPCStatusCodes: "%s"
 `
@@ -390,8 +390,8 @@ func (rt *retry) runGrpcScenario(t *testing.T, ctx context.Context, scenario tes
 
 		expectedCount := 1
 		if scenario.expectRetries {
-			// 4 = 1 try + 3 retries.
-			expectedCount = 4
+			// 3 = 1 try + 2 retries.
+			expectedCount = 3
 			require.Error(t, err)
 		}
 
@@ -448,8 +448,8 @@ func (rt *retry) runGrpcProxyScenario(t *testing.T, ctx context.Context, scenari
 
 		expectedCount := 1
 		if scenario.expectRetries {
-			// 4 = 1 try + 3 retries.
-			expectedCount = 4
+			// 3 = 1 try + 2 retries.
+			expectedCount = 3
 			require.Error(t, err)
 		}
 
@@ -498,8 +498,8 @@ func (rt *retry) runHTTPScenario(t *testing.T, ctx context.Context, scenario tes
 
 		expectedCount := 1
 		if scenario.expectRetries {
-			// 4 = 1 try + 3 retries.
-			expectedCount = 4
+			// 3 = 1 try + 2 retries.
+			expectedCount = 3
 		}
 		assert.Equal(t, expectedCount, rt.getCount(key), "Retry count mismatch for test case '%s' with codes %s and test code %d", scenario.title, scenario.statusCodes, statusCode)
 	}
