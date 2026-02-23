@@ -14,6 +14,7 @@ limitations under the License.
 package serviceinvocation
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/accesscontrol"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/http"
 )
