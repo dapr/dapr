@@ -80,8 +80,8 @@ func TestBuildDeploymentObject(t *testing.T) {
 		assert.Equal(t, formattedName, obj.ObjectMeta.Name)
 		assert.Equal(t, "testapp-abc12345", obj.ObjectMeta.Name)
 
-		// assert - Dapr app-id should also be formatted for parallel test isolation
-		assert.Equal(t, "testapp-abc12345", obj.Spec.Template.Annotations["dapr.io/app-id"])
+		// assert - Dapr app-id should use ORIGINAL name for service invocation to work
+		assert.Equal(t, "testapp", obj.Spec.Template.Annotations["dapr.io/app-id"])
 	})
 
 	t.Run("Unix socket", func(t *testing.T) {
