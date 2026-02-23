@@ -94,8 +94,13 @@ func NewAppManager(client *KubeClient, namespace string, app AppDescription) *Ap
 	}
 }
 
-// Name returns app name.
+// Name returns the formatted app name (with test ID suffix if set).
 func (m *AppManager) Name() string {
+	return FormatAppName(m.app.AppName)
+}
+
+// OriginalName returns the original app name without test ID suffix.
+func (m *AppManager) OriginalName() string {
 	return m.app.AppName
 }
 
@@ -213,7 +218,7 @@ func (m *AppManager) Dispose(wait bool) error {
 			}
 		}
 
-		if _, err := m.WaitUntilServiceState(m.app.AppName, m.IsServiceDeleted); err != nil {
+		if _, err := m.WaitUntilServiceState(m.Name(), m.IsServiceDeleted); err != nil {
 			return err
 		}
 	} else {
@@ -254,7 +259,7 @@ func (m *AppManager) WaitUntilJobState(isState func(*batchv1.Job, error) bool) (
 
 	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
 		var err error
-		lastJob, err = jobsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
+		lastJob, err = jobsClient.Get(ctx, m.Name(), metav1.GetOptions{})
 		done := isState(lastJob, err)
 		if !done && err != nil {
 			return true, err
@@ -299,7 +304,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
 		var err error
-		lastDeployment, err = deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
+		lastDeployment, err = deploymentsClient.Get(ctx, m.Name(), metav1.GetOptions{})
 		done := isState(lastDeployment, err)
 		if !done && err != nil {
 			return true, err
@@ -314,7 +319,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
 		podList, err := podClient.List(ctx, metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+			LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.Name()),
 		})
 		// Reset Spec and ObjectMeta which could contain sensitive info like credentials
 		lastDeployment.Spec.Reset()
@@ -411,7 +416,7 @@ func (m *AppManager) ValidateSidecar() error {
 	// Filter only 'testapp=appName' labeled Pods
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.Name()),
 	})
 	cancel()
 	if err != nil {
@@ -419,7 +424,7 @@ func (m *AppManager) ValidateSidecar() error {
 	}
 
 	if len(podList.Items) != int(m.app.Replicas) {
-		return fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
+		return fmt.Errorf("expected number of pods for %s: %d, received: %d", m.Name(), m.app.Replicas, len(podList.Items))
 	}
 
 	// Each pod must have daprd sidecar
@@ -452,7 +457,7 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 	// Filter only 'testapp=appName' labeled Pods
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.Name()),
 	})
 	cancel()
 	if err != nil {
@@ -497,7 +502,7 @@ func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int
 	// Filter only 'testapp=appName' labeled Pods
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.Name()),
 	})
 	cancel()
 	if err != nil {
@@ -535,7 +540,7 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-	scale, err := deploymentsClient.GetScale(ctx, m.app.AppName, metav1.GetOptions{})
+	scale, err := deploymentsClient.GetScale(ctx, m.Name(), metav1.GetOptions{})
 	cancel()
 	if err != nil {
 		return err
@@ -549,7 +554,7 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 	m.app.Replicas = replicas
 
 	ctx, cancel = context.WithTimeout(m.ctx, 30*time.Second)
-	_, err = deploymentsClient.UpdateScale(ctx, m.app.AppName, scale, metav1.UpdateOptions{})
+	_, err = deploymentsClient.UpdateScale(ctx, m.Name(), scale, metav1.UpdateOptions{})
 	cancel()
 
 	return err
@@ -560,7 +565,7 @@ func (m *AppManager) SetAppEnv(key, value string) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-	deployment, err := deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
+	deployment, err := deploymentsClient.Get(ctx, m.Name(), metav1.GetOptions{})
 	cancel()
 	if err != nil {
 		return err
@@ -613,8 +618,8 @@ func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 
 // AcquireExternalURL gets external ingress endpoint from service when it is ready.
 func (m *AppManager) AcquireExternalURL() string {
-	log.Printf("Waiting until service ingress is ready for %s...\n", m.app.AppName)
-	svc, err := m.WaitUntilServiceState(m.app.AppName, m.IsServiceIngressReady)
+	log.Printf("Waiting until service ingress is ready for %s...\n", m.Name())
+	svc, err := m.WaitUntilServiceState(m.Name(), m.IsServiceIngressReady)
 	if err != nil {
 		log.Printf("Service ingress for %s is not ready: %s", m.app.AppName, err)
 		return ""
@@ -764,7 +769,7 @@ func (m *AppManager) DeleteJob(ignoreNotFound bool) error {
 
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	defer cancel()
-	if err := jobsClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
+	if err := jobsClient.Delete(ctx, m.Name(), metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil && (ignoreNotFound && !apierrors.IsNotFound(err)) {
 		return err
@@ -780,7 +785,7 @@ func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	defer cancel()
-	if err := deploymentsClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
+	if err := deploymentsClient.Delete(ctx, m.Name(), metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil && (ignoreNotFound && !apierrors.IsNotFound(err)) {
 		return err
@@ -796,7 +801,7 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	defer cancel()
-	if err := serviceClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
+	if err := serviceClient.Delete(ctx, m.Name(), metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil && (ignoreNotFound && !apierrors.IsNotFound(err)) {
 		return err
@@ -816,7 +821,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	// Filter only 'testapp=appName' labeled Pods
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.Name()),
 	})
 	cancel()
 	if err != nil {
@@ -824,7 +829,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	}
 
 	if len(podList.Items) != int(m.app.Replicas) {
-		return nil, fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
+		return nil, fmt.Errorf("expected number of pods for %s: %d, received: %d", m.Name(), m.app.Replicas, len(podList.Items))
 	}
 
 	result := make([]PodInfo, 0, len(podList.Items))
@@ -897,7 +902,7 @@ func (m *AppManager) GetTotalRestarts() (int, error) {
 	// Filter only 'testapp=appName' labeled Pods
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.Name()),
 	})
 	cancel()
 	if err != nil {

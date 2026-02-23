@@ -14,6 +14,8 @@ limitations under the License.
 package kubernetes
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
@@ -47,6 +49,10 @@ const (
 	// DaprTestNamespaceEnvVar is the environment variable for setting the Kubernetes namespace for e2e tests.
 	DaprTestNamespaceEnvVar = "DAPR_TEST_NAMESPACE"
 
+	// DaprTestIDEnvVar is the environment variable for setting a unique test ID for parallel test isolation.
+	// When set, this ID is appended to app names to prevent collisions between parallel test runs.
+	DaprTestIDEnvVar = "DAPR_TEST_ID"
+
 	// TargetOsEnvVar Environment variable for setting Kubernetes node affinity OS.
 	TargetOsEnvVar = "TARGET_OS"
 
@@ -63,6 +69,10 @@ const (
 var (
 	// DaprTestNamespace is the default Kubernetes namespace for e2e tests.
 	DaprTestNamespace = "dapr-tests"
+
+	// TestID is a unique identifier for this test run, used to isolate parallel tests.
+	// When set, it is appended to app names to prevent collisions.
+	TestID = ""
 
 	// TargetOs is default os affinity for Kubernetes nodes.
 	TargetOs = "linux"
@@ -87,7 +97,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if appDesc.DaprEnabled {
 		annotationObject = map[string]string{
 			"dapr.io/enabled":                           "true",
-			"dapr.io/app-id":                            appDesc.AppName,
+			"dapr.io/app-id":                            FormatAppID(appDesc.AppName),
 			"dapr.io/sidecar-cpu-limit":                 appDesc.DaprCPULimit,
 			"dapr.io/sidecar-cpu-request":               appDesc.DaprCPURequest,
 			"dapr.io/sidecar-memory-limit":              appDesc.DaprMemoryLimit,
@@ -185,11 +195,12 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		}
 	}
 
+	formattedName := FormatAppName(appDesc.AppName)
 	labels := appDesc.Labels
 	if len(labels) == 0 {
 		labels = make(map[string]string, 1)
 	}
-	labels[TestAppLabelKey] = appDesc.AppName
+	labels[TestAppLabelKey] = formattedName
 
 	var podAffinity *apiv1.PodAffinity
 	if len(appDesc.PodAffinityLabels) > 0 {
@@ -279,16 +290,17 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 		appDesc.AppPort = DefaultContainerPort
 	}
 
+	formattedName := FormatAppName(appDesc.AppName)
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      appDesc.AppName,
+			Name:      formattedName,
 			Namespace: namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: int32Ptr(appDesc.Replicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					TestAppLabelKey: appDesc.AppName,
+					TestAppLabelKey: formattedName,
 				},
 			},
 			Template: buildPodTemplate(appDesc),
@@ -301,9 +313,10 @@ func buildJobObject(namespace string, appDesc AppDescription) *batchv1.Job {
 	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly
 		appDesc.AppPort = DefaultContainerPort
 	}
+	formattedName := FormatAppName(appDesc.AppName)
 	job := batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      appDesc.AppName,
+			Name:      formattedName,
 			Namespace: namespace,
 		},
 		Spec: batchv1.JobSpec{
@@ -329,17 +342,18 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 		targetPort = appDesc.AppPort
 	}
 
+	formattedName := FormatAppName(appDesc.AppName)
 	return &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      appDesc.AppName,
+			Name:      formattedName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				TestAppLabelKey: appDesc.AppName,
+				TestAppLabelKey: formattedName,
 			},
 		},
 		Spec: apiv1.ServiceSpec{
 			Selector: map[string]string{
-				TestAppLabelKey: appDesc.AppName,
+				TestAppLabelKey: formattedName,
 			},
 			Ports: []apiv1.ServicePort{
 				{
@@ -380,6 +394,13 @@ func init() {
 	if ns, ok := os.LookupEnv(DaprTestNamespaceEnvVar); ok {
 		DaprTestNamespace = ns
 	}
+	if id, ok := os.LookupEnv(DaprTestIDEnvVar); ok {
+		TestID = id
+	} else {
+		// Auto-generate a unique test ID for parallel test isolation.
+		// This ensures that each test package gets unique app names.
+		TestID = generateTestID()
+	}
 	if os, ok := os.LookupEnv(TargetOsEnvVar); ok {
 		TargetOs = os
 	}
@@ -391,4 +412,30 @@ func init() {
 		EnableAPILogging = !kitstrings.IsTruthy(v)
 	}
 	EnableDebugLogging = kitstrings.IsTruthy(os.Getenv(DebugLoggingEnvVar))
+}
+
+// generateTestID generates a short random ID for test isolation.
+func generateTestID() string {
+	b := make([]byte, 4)
+	_, err := rand.Read(b)
+	if err != nil {
+		// Fallback to empty string if we can't generate random bytes
+		return ""
+	}
+	return hex.EncodeToString(b)
+}
+
+// FormatAppName returns the app name with the test ID suffix if TestID is set.
+// This ensures unique app names when running tests in parallel.
+func FormatAppName(appName string) string {
+	if TestID == "" {
+		return appName
+	}
+	return fmt.Sprintf("%s-%s", appName, TestID)
+}
+
+// FormatAppID returns the Dapr app ID with the test ID suffix if TestID is set.
+// This ensures unique app IDs when running tests in parallel.
+func FormatAppID(appID string) string {
+	return FormatAppName(appID)
 }

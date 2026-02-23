@@ -77,8 +77,38 @@ func (r *TestResources) popActiveResource() Disposable {
 }
 
 // FindActiveResource finds active resource by resource name.
+// It first tries to find by formatted name, then by original name.
 func (r *TestResources) FindActiveResource(name string) Disposable {
+	r.activeResourcesLock.Lock()
+	defer r.activeResourcesLock.Unlock()
+
 	for _, res := range r.activeResources {
+		if res.Name() == name {
+			return res
+		}
+	}
+
+	return nil
+}
+
+// OriginalNamer is an interface for resources that have an original name.
+type OriginalNamer interface {
+	OriginalName() string
+}
+
+// FindActiveResourceByOriginalName finds active resource by its original (unformatted) name.
+// This is useful when tests use the original app name constant to look up resources.
+func (r *TestResources) FindActiveResourceByOriginalName(name string) Disposable {
+	r.activeResourcesLock.Lock()
+	defer r.activeResourcesLock.Unlock()
+
+	for _, res := range r.activeResources {
+		if on, ok := res.(OriginalNamer); ok {
+			if on.OriginalName() == name {
+				return res
+			}
+		}
+		// Fallback to formatted name for backward compatibility
 		if res.Name() == name {
 			return res
 		}

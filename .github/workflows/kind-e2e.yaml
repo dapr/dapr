@@ -226,6 +226,8 @@ jobs:
         make test-e2e-all
       env:
         DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
+        # Run e2e tests in parallel - each test package gets a unique ID for isolation
+        DAPR_E2E_PARALLELISM: 8
 
     - name: Save control plane logs
       if: always()
