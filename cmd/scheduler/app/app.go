@@ -94,45 +94,62 @@ func Run() {
 				return serr
 			}
 
-			server, serr := server.New(ctx, server.Options{
-				Port:                      opts.Port,
-				ListenAddress:             opts.ListenAddress,
-				OverrideBroadcastHostPort: opts.OverrideBroadcastHostPort,
+			getServer := func() (*server.Server, error) {
+				server, serr := server.New(ctx, server.Options{
+					Port:                      opts.Port,
+					ListenAddress:             opts.ListenAddress,
+					OverrideBroadcastHostPort: opts.OverrideBroadcastHostPort,
 
-				Mode:     modes.DaprMode(opts.Mode),
-				Security: secHandler,
-				Healthz:  healthz,
+					Mode:     modes.DaprMode(opts.Mode),
+					Security: secHandler,
+					Healthz:  healthz,
 
-				KubeConfig:                     opts.KubeConfig,
-				EtcdEmbed:                      opts.EtcdEmbed,
-				EtcdDataDir:                    opts.EtcdDataDir,
-				EtcdName:                       opts.ID,
-				EtcdInitialCluster:             opts.EtcdInitialCluster,
-				EtcdClientPort:                 opts.EtcdClientPort,
-				EtcdClientListenAddress:        opts.EtcdClientListenAddress,
-				EtcdSpaceQuota:                 opts.EtcdSpaceQuota,
-				EtcdCompactionMode:             opts.EtcdCompactionMode,
-				EtcdCompactionRetention:        opts.EtcdCompactionRetention,
-				EtcdSnapshotCount:              opts.EtcdSnapshotCount,
-				EtcdMaxSnapshots:               opts.EtcdMaxSnapshots,
-				EtcdMaxWALs:                    opts.EtcdMaxWALs,
-				EtcdBackendBatchLimit:          opts.EtcdBackendBatchLimit,
-				EtcdBackendBatchInterval:       opts.EtcdBackendBatchInterval,
-				EtcdDefragThresholdMB:          opts.EtcdDefragThresholdMB,
-				EtcdInitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
-				EtcdMetrics:                    opts.EtcdMetrics,
+					KubeConfig:                     opts.KubeConfig,
+					EtcdEmbed:                      opts.EtcdEmbed,
+					EtcdDataDir:                    opts.EtcdDataDir,
+					EtcdName:                       opts.ID,
+					EtcdInitialCluster:             opts.EtcdInitialCluster,
+					EtcdClientPort:                 opts.EtcdClientPort,
+					EtcdClientListenAddress:        opts.EtcdClientListenAddress,
+					EtcdSpaceQuota:                 opts.EtcdSpaceQuota,
+					EtcdCompactionMode:             opts.EtcdCompactionMode,
+					EtcdCompactionRetention:        opts.EtcdCompactionRetention,
+					EtcdSnapshotCount:              opts.EtcdSnapshotCount,
+					EtcdMaxSnapshots:               opts.EtcdMaxSnapshots,
+					EtcdMaxWALs:                    opts.EtcdMaxWALs,
+					EtcdBackendBatchLimit:          opts.EtcdBackendBatchLimit,
+					EtcdBackendBatchInterval:       opts.EtcdBackendBatchInterval,
+					EtcdDefragThresholdMB:          opts.EtcdDefragThresholdMB,
+					EtcdInitialElectionTickAdvance: opts.EtcdInitialElectionTickAdvance,
+					EtcdMetrics:                    opts.EtcdMetrics,
 
-				EtcdClientEndpoints: opts.EtcdClientEndpoints,
-				EtcdClientUsername:  opts.EtcdClientUsername,
-				EtcdClientPassword:  opts.EtcdClientPassword,
+					EtcdClientEndpoints: opts.EtcdClientEndpoints,
+					EtcdClientUsername:  opts.EtcdClientUsername,
+					EtcdClientPassword:  opts.EtcdClientPassword,
 
-				Workers: opts.Workers,
-			})
-			if serr != nil {
-				return serr
+					Workers: opts.Workers,
+				})
+				if serr != nil {
+					return nil, serr
+				}
+
+				return server, nil
 			}
 
-			return server.Run(ctx)
+			for {
+				server, gerr := getServer()
+				if gerr != nil {
+					return gerr
+				}
+
+				if gerr = server.Run(ctx); gerr != nil {
+					return gerr
+				}
+
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+			}
 		},
 	).Run(ctx)
 	if err != nil {
