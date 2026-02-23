@@ -65,6 +65,25 @@ func TestBuildDeploymentObject(t *testing.T) {
 		MetricsEnabled: true,
 	}
 
+	t.Run("Dapr app-id uses original name when TestID is set", func(t *testing.T) {
+		// Save and restore TestID
+		originalTestID := TestID
+		defer func() { TestID = originalTestID }()
+
+		TestID = "abc12345"
+
+		// act
+		obj := buildDeploymentObject("testNamespace", testApp)
+
+		// assert - Kubernetes resource name should be formatted
+		formattedName := FormatAppName(testApp.AppName)
+		assert.Equal(t, formattedName, obj.ObjectMeta.Name)
+		assert.Equal(t, "testapp-abc12345", obj.ObjectMeta.Name)
+
+		// assert - Dapr app-id should use ORIGINAL name for service invocation to work
+		assert.Equal(t, "testapp", obj.Spec.Template.Annotations["dapr.io/app-id"])
+	})
+
 	t.Run("Unix socket", func(t *testing.T) {
 		testApp.UnixDomainSocketPath = "/var/run"
 		defer func() {
