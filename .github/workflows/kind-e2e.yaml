@@ -185,7 +185,7 @@ jobs:
 
     - name: Build and push test apps
       run: |
-        make build-push-e2e-app-all
+        make -j build-push-e2e-app-all
 
     - name: Setup Dapr
       run: |
@@ -199,21 +199,20 @@ jobs:
         fi
         make docker-deploy-k8s
 
-    - name: Setup Redis
+    - name: Setup dependencies (parallel)
       run: |
-        make setup-test-env-redis
-
-    - name: Setup Kafka
-      run: |
-        make setup-test-env-kafka
-
-    - name: Setup Zipkin
-      run: |
-        make setup-test-env-zipkin
-
-    - name: Setup postgres
-      run: |
-        make setup-test-env-postgres
+        set -euo pipefail
+        # Run installs in parallel
+        make setup-test-env-redis &  p1=$!
+        make setup-test-env-kafka &  p2=$!
+        make setup-test-env-zipkin & p3=$!
+        make setup-test-env-postgres & p4=$!
+        # Wait and fail if any failed
+        fail=0
+        for p in $p1 $p2 $p3 $p4; do
+          if ! wait $p; then fail=1; fi
+        done
+        exit $fail
 
     - name: Setup test components
       run: |
