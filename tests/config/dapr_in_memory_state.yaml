@@ -7,5 +7,5 @@ spec:
   version: v1
   initTimeout: 1m
   metadata:
-    - name: spacehold
-      value: metadata-is-required
+  - name: spacehold
+    value: metadata-is-required

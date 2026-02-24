@@ -11,4 +11,4 @@ spec:
   - name: redisHost
     value: localhost:6379
   - name: redisPassword
-    value: "not_a_password"
+    value: not_a_password

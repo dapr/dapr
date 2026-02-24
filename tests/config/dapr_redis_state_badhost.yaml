@@ -11,4 +11,4 @@ spec:
   - name: redisHost
     value: badhost:6379
   - name: redisPassword
-    value: ""
+    value: ''
