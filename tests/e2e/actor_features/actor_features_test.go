@@ -37,25 +37,25 @@ import (
 )
 
 const (
-	appName                               = "actorfeatures"                      // App name in Dapr.
-	baseActorType                         = "testactorfeatures"                  // Base actor type name (will be formatted with TestID).
-	reminderName                          = "myReminder"                         // Reminder name.
-	timerName                             = "myTimer"                            // Timer name.
-	numHealthChecks                       = 60                                   // Number of get calls before starting tests.
-	secondsToCheckTimerAndReminderResult  = 20                                   // How much time to wait to make sure the result is in logs.
-	secondsToCheckGetMetadata             = 40                                   // How much time to wait to check metadata.
-	secondsBetweenChecksForActorFailover  = 5                                    // How much time to wait to make sure the result is in logs.
-	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
-	actorsToCheckRebalance                = 30                                   // How many actors to create in the rebalance check test.
-	appScaleToCheckRebalance              = 2                                    // How many instances of the app to create to validate rebalance.
-	actorsToCheckMetadata                 = 5                                    // How many actors to create in get metdata test.
-	appScaleToCheckMetadata               = 1                                    // How many instances of the app to test get metadata.
-	actorInvokeURLFormat                  = "%s/test/%s/%s/%s/%s"                // URL to invoke a Dapr's actor method in test app (actorType is now a parameter).
-	actorDeleteURLFormat                  = "%s/actors/%s/%s"                    // URL to deactivate an actor in test app (actorType is now a parameter).
-	actorlogsURLFormat                    = "%s/test/logs"                       // URL to fetch logs from test app.
-	actorMetadataURLFormat                = "%s/test/metadata"                   // URL to fetch metadata from test app.
-	shutdownURLFormat                     = "%s/test/shutdown"                   // URL to shutdown sidecar and app.
-	actorInvokeRetriesAfterRestart        = 10                                   // Number of retried to invoke actor after restart.
+	appName                               = "actorfeatures"       // App name in Dapr.
+	baseActorType                         = "testactorfeatures"   // Base actor type name (will be formatted with TestID).
+	reminderName                          = "myReminder"          // Reminder name.
+	timerName                             = "myTimer"             // Timer name.
+	numHealthChecks                       = 60                    // Number of get calls before starting tests.
+	secondsToCheckTimerAndReminderResult  = 20                    // How much time to wait to make sure the result is in logs.
+	secondsToCheckGetMetadata             = 40                    // How much time to wait to check metadata.
+	secondsBetweenChecksForActorFailover  = 5                     // How much time to wait to make sure the result is in logs.
+	minimumCallsForTimerAndReminderResult = 10                    // How many calls to timer or reminder should be at minimum.
+	actorsToCheckRebalance                = 30                    // How many actors to create in the rebalance check test.
+	appScaleToCheckRebalance              = 2                     // How many instances of the app to create to validate rebalance.
+	actorsToCheckMetadata                 = 5                     // How many actors to create in get metdata test.
+	appScaleToCheckMetadata               = 1                     // How many instances of the app to test get metadata.
+	actorInvokeURLFormat                  = "%s/test/%s/%s/%s/%s" // URL to invoke a Dapr's actor method in test app (actorType is now a parameter).
+	actorDeleteURLFormat                  = "%s/actors/%s/%s"     // URL to deactivate an actor in test app (actorType is now a parameter).
+	actorlogsURLFormat                    = "%s/test/logs"        // URL to fetch logs from test app.
+	actorMetadataURLFormat                = "%s/test/metadata"    // URL to fetch metadata from test app.
+	shutdownURLFormat                     = "%s/test/shutdown"    // URL to shutdown sidecar and app.
+	actorInvokeRetriesAfterRestart        = 10                    // Number of retried to invoke actor after restart.
 )
 
 // actorType returns the formatted actor type with TestID for parallel test isolation.
@@ -190,7 +190,7 @@ func TestActorInvocation(t *testing.T) {
 	t.Run("Actor remote invocation", func(t *testing.T) {
 		actorID := guuid.New().String()
 
-		res, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorType(), actorID, "method", "testmethod"), []byte{})
+		res, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "testmethod"), []byte{})
 		if err != nil {
 			log.Printf("failed to invoke method testmethod. Error='%v' Response='%s'", err, string(res))
 		}
@@ -266,25 +266,25 @@ func TestActorFeatures(t *testing.T) {
 		// Each test needs to have a different actorID
 		actorID := guuid.New().String()
 
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorType(), actorID, "method", "savestatetest"), []byte{})
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "savestatetest"), []byte{})
 		if err != nil {
 			log.Printf("failed to invoke method savestatetest. Error='%v' Response='%s'", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke method savestatetest")
 
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorType(), actorID, "method", "getstatetest"), []byte{})
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "getstatetest"), []byte{})
 		if err != nil {
 			log.Printf("failed to invoke method getstatetest. Error='%v' Response='%s'", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke method getstatetest")
 
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorType(), actorID, "method", "savestatetest2"), []byte{})
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "savestatetest2"), []byte{})
 		if err != nil {
 			log.Printf("failed to invoke method savestatetest2. Error='%v' Response='%s'", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke method savestatetest2")
 
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorType(), actorID, "method", "getstatetest2"), []byte{})
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "getstatetest2"), []byte{})
 		if err != nil {
 			log.Printf("failed to invoke method getstatetest2. Error='%v' Response='%s'", err, string(res))
 		}
