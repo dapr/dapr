@@ -567,7 +567,7 @@ func TestServiceInvocationExternally(t *testing.T) {
 			if kubePlatform, ok := tr.Platform.(*runner.KubeTestPlatform); ok {
 				// To perform healthchecks, we need to first get the Load Balancer address
 				// Our tests will still use the hostname within the cluster for reliability reasons
-				app := kubePlatform.AppResources.FindActiveResource("serviceinvocation-callee-external").(*kube.AppManager)
+				app := kubePlatform.AppResources.FindActiveResourceByOriginalName("serviceinvocation-callee-external").(*kube.AppManager)
 				svc, err := app.WaitUntilServiceState("service-invocation-external", app.IsServiceIngressReady)
 				require.NoError(t, err)
 

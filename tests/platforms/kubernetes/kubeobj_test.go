@@ -65,7 +65,7 @@ func TestBuildDeploymentObject(t *testing.T) {
 		MetricsEnabled: true,
 	}
 
-	t.Run("Dapr app-id uses original name when TestID is set", func(t *testing.T) {
+	t.Run("Dapr app-id uses formatted name when TestID is set", func(t *testing.T) {
 		// Save and restore TestID
 		originalTestID := TestID
 		defer func() { TestID = originalTestID }()
@@ -80,8 +80,8 @@ func TestBuildDeploymentObject(t *testing.T) {
 		assert.Equal(t, formattedName, obj.ObjectMeta.Name)
 		assert.Equal(t, "testapp-abc12345", obj.ObjectMeta.Name)
 
-		// assert - Dapr app-id should use ORIGINAL name for service invocation to work
-		assert.Equal(t, "testapp", obj.Spec.Template.Annotations["dapr.io/app-id"])
+		// assert - Dapr app-id should use formatted name to isolate parallel tests
+		assert.Equal(t, "testapp-abc12345", obj.Spec.Template.Annotations["dapr.io/app-id"])
 	})
 
 	t.Run("Unix socket", func(t *testing.T) {
