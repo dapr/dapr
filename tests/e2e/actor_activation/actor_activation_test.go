@@ -32,13 +32,19 @@ import (
 )
 
 const (
-	appName                          = "actorapp"                                // App name in Dapr.
-	numHealthChecks                  = 60                                        // Number of get calls before starting tests.
-	secondsToCheckActorRemainsActive = 1                                         // How much time to wait to make sure actor is deactivated
-	secondsToCheckActorDeactivation  = 20                                        // How much time to wait to make sure actor is deactivated
-	actorInvokeURLFormat             = "%s/test/testactor/%s/method/actormethod" // URL to invoke a Dapr's actor method in test app.
-	actorlogsURLFormat               = "%s/test/logs"                            // URL to fetch logs from test app.
+	appName                          = "actorapp"                          // App name in Dapr.
+	baseActorType                    = "testactor"                         // Base actor type (will be formatted with TestID).
+	numHealthChecks                  = 60                                  // Number of get calls before starting tests.
+	secondsToCheckActorRemainsActive = 1                                   // How much time to wait to make sure actor is deactivated
+	secondsToCheckActorDeactivation  = 20                                  // How much time to wait to make sure actor is deactivated
+	actorInvokeURLFormat             = "%s/test/%s/%s/method/actormethod"  // URL to invoke a Dapr's actor method in test app (actorType is now a parameter).
+	actorlogsURLFormat               = "%s/test/logs"                      // URL to fetch logs from test app.
 )
+
+// formattedActorType returns the actor type with TestID for parallel test isolation.
+func formattedActorType() string {
+	return kube.FormatAppID(baseActorType)
+}
 
 // represents a response for the APIs in this app.
 type actorLogEntry struct {
@@ -98,6 +104,10 @@ func TestMain(m *testing.M) {
 			Replicas:            1,
 			IngressEnabled:      true,
 			MetricsEnabled:      true,
+			// Pass formatted actor type for parallel test isolation
+			AppEnv: map[string]string{
+				"TEST_APP_ACTOR_TYPE": kube.FormatAppID(baseActorType),
+			},
 		},
 	}
 
@@ -122,7 +132,7 @@ func TestActorActivation(t *testing.T) {
 	t.Run("Actor deactivates due to timeout.", func(t *testing.T) {
 		actorID := "100"
 
-		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID)
+		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, formattedActorType(), actorID)
 
 		_, err = utils.HTTPPost(invokeURL, []byte{})
 		require.NoError(t, err)
@@ -152,7 +162,7 @@ func TestActorActivation(t *testing.T) {
 
 	t.Run("Actor does not deactivate since there is no timeout.", func(t *testing.T) {
 		actorID := guuid.New().String()
-		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID)
+		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, formattedActorType(), actorID)
 
 		_, err = utils.HTTPPost(invokeURL, []byte{})
 		require.NoError(t, err)
