@@ -6,6 +6,10 @@ NAMESPACE_PREFIX="${DAPR_E2E_NAMESPACE_PREFIX:-dapr-e2e}"
 RUN_ID="${DAPR_E2E_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 INFRA_NS="${DAPR_TEST_ENV_NAMESPACE:-${DAPR_TEST_NAMESPACE:-dapr-tests}}"
 KEEP_ON_FAIL="${DAPR_E2E_KEEP_NAMESPACES_ON_FAIL:-false}"
+GO_TAGS="${DAPR_E2E_GO_TAGS:-e2e}"
+
+# Where to write JSON/JUnit outputs (workflow expects test_report_e2e.*)
+OUTPUT_PREFIX="${TEST_OUTPUT_FILE_PREFIX:-./test_report}"
 
 ROOT_CONTAINER_LOG_PATH="${DAPR_CONTAINER_LOG_PATH:-./dist/container_logs}"
 ROOT_TEST_LOG_PATH="${DAPR_TEST_LOG_PATH:-./dist/logs}"
@@ -17,11 +21,23 @@ if [[ -n "${DAPR_E2E_TEST:-}" ]]; then
   for t in ${DAPR_E2E_TEST}; do
     # Expand to all packages under that suite
     while IFS= read -r p; do
+      [[ -z "$p" ]] && continue
       PKGS+=("$p")
-    done < <(go list "./tests/e2e/${t}/..." 2>/dev/null || true)
+    done < <(
+      go list -tags="$GO_TAGS" \
+        -f '{{if or (gt (len .TestGoFiles) 0) (gt (len .XTestGoFiles) 0)}}{{.ImportPath}}{{end}}' \
+        "./tests/e2e/${t}/..." 2>/dev/null | sed '/^$/d' || true
+    )
   done
 else
-  mapfile -t PKGS < <(go list ./tests/e2e/...)
+  # Most e2e test packages only contain *_test.go files behind the "e2e" build tag.
+  # If we don't include tags here, `go list` will only return helper packages such as tests/e2e/utils
+  # and you'll end up running 0 tests.
+  mapfile -t PKGS < <(
+    go list -tags="$GO_TAGS" \
+      -f '{{if or (gt (len .TestGoFiles) 0) (gt (len .XTestGoFiles) 0)}}{{.ImportPath}}{{end}}' \
+      ./tests/e2e/... | sed '/^$/d'
+  )
 fi
 
 if [[ ${#PKGS[@]} -eq 0 ]]; then
@@ -69,8 +85,11 @@ run_one() {
   DAPR_TEST_NAMESPACE="$ns" \
   DAPR_TEST_ENV_NAMESPACE="$INFRA_NS" \
   DAPR_TEST_ID= \
-    gotestsum --format standard-quiet -- \
-      -timeout 20m -count=1 -v -tags=e2e "$pkg" 2>&1 | tee "$tpath/gotestsum.log"
+    gotestsum \
+      --jsonfile "${OUTPUT_PREFIX}_e2e.${ns}.json" \
+      --junitfile "${OUTPUT_PREFIX}_e2e.${ns}.xml" \
+      --format standard-quiet -- \
+        -timeout 20m -count=1 -v -tags="$GO_TAGS" "$pkg" 2>&1 | tee "$tpath/gotestsum.log"
   local rc=${PIPESTATUS[0]}
   set -e
 
@@ -90,7 +109,7 @@ run_one() {
 }
 
 export -f ns_for_pkg run_one
-export NAMESPACE_PREFIX RUN_ID INFRA_NS KEEP_ON_FAIL ROOT_CONTAINER_LOG_PATH ROOT_TEST_LOG_PATH
+export NAMESPACE_PREFIX RUN_ID INFRA_NS KEEP_ON_FAIL ROOT_CONTAINER_LOG_PATH ROOT_TEST_LOG_PATH GO_TAGS OUTPUT_PREFIX
 
 # Run packages in parallel.
-printf '%s\n' "${PKGS[@]}" | xargs -n 1 -P "$PARALLELISM" -I {} bash -lc 'run_one "$@"' _ {}
+printf '%s\n' "${PKGS[@]}" | xargs -P "$PARALLELISM" -I {} bash -lc 'run_one "$@"' _ {}
