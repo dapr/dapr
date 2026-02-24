@@ -103,6 +103,14 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Orches
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
 	if !runtimestate.IsCompleted(rs) {
+		// This happens when the parent's runWorkflow created the child workflow
+		// successfully but crashed before persisting its own state, causing it to
+		// re-execute and attempt the child creation again.
+		if o.isSameParentCreation(state, startEvent) {
+			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
+				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetOrchestrationInstance().GetInstanceId())
+			return nil
+		}
 		return fmt.Errorf("an active workflow with ID '%s' already exists", o.actorID)
 	}
 	if o.activityResultAwaited.Load() {
@@ -114,11 +122,6 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Orches
 }
 
 func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *backend.HistoryEvent, state *wfenginestate.State) error {
-	state.AddToInbox(startEvent)
-	if err := o.saveInternalState(ctx, state); err != nil {
-		return err
-	}
-
 	start := startEvent.GetTimestamp().AsTime()
 	if ts := startEvent.GetExecutionStarted().GetScheduledStartTimestamp(); ts != nil {
 		start = ts.AsTime()
@@ -130,8 +133,27 @@ func (o *orchestrator) scheduleWorkflowStart(ctx context.Context, startEvent *ba
 	if _, err := o.createWorkflowReminder(ctx, reminderPrefixStart, nil, start, o.appID); err != nil {
 		return err
 	}
+	state.AddToInbox(startEvent)
+	if err := o.saveInternalState(ctx, state); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func (o *orchestrator) isSameParentCreation(state *wfenginestate.State, startEvent *backend.HistoryEvent) bool {
+	newParent := startEvent.GetExecutionStarted().GetParentInstance()
+	if newParent == nil {
+		return false
+	}
+
+	existingParent := o.getExecutionStartedEvent(state).GetParentInstance()
+	if existingParent == nil {
+		return false
+	}
+
+	return existingParent.GetOrchestrationInstance().GetInstanceId() == newParent.GetOrchestrationInstance().GetInstanceId() &&
+		existingParent.GetTaskScheduledId() == newParent.GetTaskScheduledId()
 }
 
 func isStatusMatch(statuses []api.OrchestrationStatus, runtimeStatus api.OrchestrationStatus) bool {
