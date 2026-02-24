@@ -40,6 +40,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
+	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
 var (
@@ -246,7 +247,7 @@ func opDenyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func opRedirectHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Location", "http://localhost:3500/v1.0/invoke/serviceinvocation-callee-1/method/opAllow")
+	w.Header().Add("Location", fmt.Sprintf("http://localhost:3500/v1.0/invoke/%s/method/opAllow", kube.FormatAppID("serviceinvocation-callee-1")))
 	w.WriteHeader(http.StatusTemporaryRedirect)
 	response := "opRedirect is called"
 	json.NewEncoder(w).Encode(appResponse{Message: response})
@@ -307,7 +308,7 @@ func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, 
 }
 
 func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers http.Header) (*http.Response, error) {
-	url := fmt.Sprintf("http://localhost:%s/v1.0/invoke/%s/method/%s", strconv.Itoa(daprHTTPPort), remoteApp, method)
+	url := fmt.Sprintf("http://localhost:%s/v1.0/invoke/%s/method/%s", strconv.Itoa(daprHTTPPort), kube.FormatAppID(remoteApp), method)
 	log.Printf("invoke url is %s", url)
 
 	var t io.Reader
@@ -1394,7 +1395,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 
 	// post
 	url := fmt.Sprintf(
-		"http://localhost:%s/v1.0/invoke/serviceinvocation-callee-0/method/posthandler",
+		fmt.Sprintf("http://localhost:%s/v1.0/invoke/%s/method/posthandler", strconv.Itoa(daprHTTPPort), kube.FormatAppID("serviceinvocation-callee-0")),
 		strconv.Itoa(daprHTTPPort))
 
 	testSizes := []struct {

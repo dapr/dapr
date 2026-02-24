@@ -370,6 +370,20 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 
 // buildDaprComponentObject creates dapr component object.
 func buildDaprComponentObject(componentName string, typeName string, scopes []string, annotations map[string]string, metaData []commonapi.NameValuePair) *v1alpha1.Component {
+	// Scope component to the formatted app IDs when running in parallel.
+	//
+	// Dapr matches component scopes against the app-id, and e2e tests append a
+	// unique suffix to app IDs via DAPR_TEST_ID. Without this, scoped components
+	// would not apply to the suffixed apps, causing missing state stores, actor
+	// stores, etc. when tests run in parallel.
+	if len(scopes) > 0 {
+		formatted := make([]string, 0, len(scopes))
+		for _, s := range scopes {
+			formatted = append(formatted, FormatAppID(s))
+		}
+		scopes = formatted
+	}
+
 	return &v1alpha1.Component{
 		TypeMeta: metav1.TypeMeta{
 			Kind: DaprComponentsKind,

@@ -37,6 +37,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/tests/apps/utils"
+	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
 var (
@@ -110,7 +111,7 @@ func triggerInvoke(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	appID := query.Get("appId")
 
-	url := fmt.Sprintf("http://127.0.0.1:%d/v1.0/invoke/%s/method/invoke/something", daprHTTPPort, appID)
+	url := fmt.Sprintf("http://127.0.0.1:%d/v1.0/invoke/%s/method/invoke/something", daprHTTPPort, kube.FormatAppID(appID))
 	/* #nosec */
 	req, _ := http.NewRequest(http.MethodPost, url, nil)
 	req = req.WithContext(newCtx)

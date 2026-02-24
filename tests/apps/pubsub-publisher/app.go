@@ -35,6 +35,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
+	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
 const (
@@ -665,7 +666,7 @@ func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 
 func callSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {
 	qs := netUrl.Values{"reqid": []string{reqID}}.Encode()
-	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s?%s", daprPortHTTP, appName, method, qs)
+	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s?%s", daprPortHTTP, kube.FormatAppID(appName), method, qs)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer([]byte{}))

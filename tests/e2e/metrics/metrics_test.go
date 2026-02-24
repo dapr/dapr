@@ -169,7 +169,7 @@ func invokeDaprHTTP(t *testing.T, app string, n, daprPort int) {
 	require.NoError(t, err)
 	for i := 0; i < n; i++ {
 		// We don't evaluate the response here as we're only testing the metrics
-		_, err = utils.HTTPPost(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/tests/green", daprPort, app), body)
+		_, err = utils.HTTPPost(fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/tests/green", daprPort, kube.FormatAppID(app)), body)
 		require.NoError(t, err)
 	}
 }

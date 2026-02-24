@@ -26,6 +26,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/dapr/dapr/tests/apps/utils"
+	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
 var (
@@ -67,7 +68,7 @@ func testLogCall(w http.ResponseWriter, r *http.Request) {
 	service := mux.Vars(r)["service"]
 
 	input := "hello"
-	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/logCall", daprPort, service)
+	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/logCall", daprPort, kube.FormatAppID(service))
 	resp, err := http.Post(url, "application/json", bytes.NewReader([]byte(input))) //nolint:gosec
 	if err != nil {
 		log.Printf("Could not call service")
