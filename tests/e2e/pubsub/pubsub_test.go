@@ -775,7 +775,7 @@ func TestMain(m *testing.M) {
 				"idleCheckFrequency": {Raw: `"1s"`},
 				"readTimeout":        {Raw: `"1s"`},
 			},
-			Scopes: []string{publisherPluggableAppName, subscriberPluggableAppName},
+			Scopes: []string{publisherAppName, subscriberAppName, publisherPluggableAppName, subscriberPluggableAppName},
 		})
 
 		pluggableTestApps := []kube.AppDescription{

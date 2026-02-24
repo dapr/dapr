@@ -12,6 +12,3 @@ spec:
     value: badhost:6379
   - name: redisPassword
     value: ""
-scopes:
-  - stateapp
-  - stateapp-pluggable

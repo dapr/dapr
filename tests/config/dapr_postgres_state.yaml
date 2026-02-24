@@ -26,11 +26,3 @@ spec:
       value: v2
     - name: metadataTableName
       value: dapr_metadata_v2
-scopes:
-  - stateapp
-  - stateapp-pluggable
-  - httpmetrics
-  - grpcmetrics
-  - disabledmetric
-  - perf-workflowsapp
-  - perf-workflowsapp-actors

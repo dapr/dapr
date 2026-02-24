@@ -9,6 +9,4 @@ spec:
   metadata:
     - name: spacehold
       value: metadata-is-required
-scopes:
- - perfstatehttp
  - perfstategrpc

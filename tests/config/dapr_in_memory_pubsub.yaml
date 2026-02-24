@@ -7,10 +7,3 @@ spec:
   version: v1
   initTimeout: 1m
   metadata: []
-scopes:
-  - pubsub-perf-bulk-grpc
-  - pubsub-perf-grpc
-  - healthapp-http
-  - healthapp-grpc
-  - healthapp-h2c
-  - pubsub-subscriber-streaming

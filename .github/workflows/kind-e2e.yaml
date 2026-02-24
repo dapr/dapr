@@ -179,13 +179,13 @@ jobs:
 
     - name: Build and push Dapr
       run: |
-        make build-linux
-        make docker-build
-        make docker-push
+        make -j build-linux
+        make -j docker-build
+        make -j docker-push
 
     - name: Build and push test apps
       run: |
-        make -j build-push-e2e-app-all
+        make build-push-e2e-app-all
 
     - name: Setup Dapr
       run: |

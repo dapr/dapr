@@ -32,6 +32,3 @@ spec:
     value: dapre2e
   - name: collection
     value: items-query
-scopes:
-  - stateapp
-  - stateapp-pluggable

@@ -35,9 +35,6 @@ spec:
       value: "false"
     - name: initialOffset
       value: oldest
-scopes:
-  - pluggable-bindinginput
-  - pluggable-bindingoutput
 
 ---
 apiVersion: dapr.io/v1alpha1
@@ -64,9 +61,6 @@ spec:
       value: "false"
     - name: initialOffset
       value: oldest
-scopes:
-  - pluggable-bindinginputgrpc
-  - pluggable-bindingoutput
 
 ---
 apiVersion: dapr.io/v1alpha1
@@ -96,5 +90,3 @@ spec:
       value: /pluggable-custom-path
     - name: initialOffset
       value: oldest
-scopes:
-  - pluggable-bindinginput

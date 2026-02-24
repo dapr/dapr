@@ -26,5 +26,3 @@ spec:
         key: host
     - name: redisPassword
       value: ""
-scopes:
-  - stateapp-pluggable

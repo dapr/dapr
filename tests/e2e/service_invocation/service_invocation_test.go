@@ -91,7 +91,7 @@ func TestMain(m *testing.M) {
 
 	secrets := []kube.SecretDescription{
 		{
-			Name:      "external-tls",
+			Name:      kube.FormatAppID(kube.FormatAppID("external-tls")),
 			Namespace: kube.DaprTestNamespace,
 			Data: map[string][]byte{
 				"ca.crt":  pki.RootCertPEM,
@@ -100,7 +100,7 @@ func TestMain(m *testing.M) {
 			},
 		},
 		{
-			Name:      "dapr-tls-client",
+			Name:      kube.FormatAppID(kube.FormatAppID("dapr-tls-client")),
 			Namespace: kube.DaprTestNamespace,
 			Data: map[string][]byte{
 				"ca.crt":  pki.RootCertPEM,
@@ -214,7 +214,7 @@ func TestMain(m *testing.M) {
 						Name: "secret-volume",
 						VolumeSource: apiv1.VolumeSource{
 							Secret: &apiv1.SecretVolumeSource{
-								SecretName: "external-tls",
+								SecretName: kube.FormatAppID(kube.FormatAppID("external-tls")),
 							},
 						},
 					},
