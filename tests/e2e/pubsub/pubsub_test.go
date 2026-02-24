@@ -721,32 +721,24 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:                   publisherAppName,
-			DaprEnabled:               true,
-			ImageName:                 "e2e-pubsub-publisher",
-			Replicas:                  1,
-			IngressEnabled:            true,
-			MetricsEnabled:            true,
-			AppMemoryLimit:            "200Mi",
-			AppMemoryRequest:          "100Mi",
-			InjectPluggableComponents: true,
-			AppEnv: map[string]string{
-				PubSubEnvVar: PubSubPluggableName,
-			},
+			AppName:          publisherAppName,
+			DaprEnabled:      true,
+			ImageName:        "e2e-pubsub-publisher",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
 		{
-			AppName:                   subscriberAppName,
-			DaprEnabled:               true,
-			ImageName:                 "e2e-pubsub-subscriber",
-			Replicas:                  1,
-			IngressEnabled:            true,
-			MetricsEnabled:            true,
-			AppMemoryLimit:            "200Mi",
-			AppMemoryRequest:          "100Mi",
-			InjectPluggableComponents: true,
-			AppEnv: map[string]string{
-				PubSubEnvVar: PubSubPluggableName,
-			},
+			AppName:          subscriberAppName,
+			DaprEnabled:      true,
+			ImageName:        "e2e-pubsub-subscriber",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
 	}
 
@@ -775,7 +767,7 @@ func TestMain(m *testing.M) {
 				"idleCheckFrequency": {Raw: `"1s"`},
 				"readTimeout":        {Raw: `"1s"`},
 			},
-			Scopes: []string{publisherAppName, subscriberAppName, publisherPluggableAppName, subscriberPluggableAppName},
+			Scopes: []string{publisherPluggableAppName, subscriberPluggableAppName},
 		})
 
 		pluggableTestApps := []kube.AppDescription{

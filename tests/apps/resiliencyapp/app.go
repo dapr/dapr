@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"io"
 	"log"
 	"net/http"
@@ -450,7 +449,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		if targetMethod == "" {
 			targetMethod = "resiliencyInvocation"
 		}
-		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s", daprHttpPort, kube.FormatAppID(targetApp), targetMethod)
+		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s", daprHttpPort, targetApp, targetMethod)
 
 		req, _ := http.NewRequest("POST", url, r.Body)
 		defer r.Body.Close()

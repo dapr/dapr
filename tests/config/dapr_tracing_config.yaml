@@ -6,4 +6,4 @@ spec:
   tracing:
     samplingRate: "1"
     zipkin:
-      endpointAddress: "http://dapr-zipkin:9411/api/v2/spans"
+      endpointAddress: "http://dapr-zipkin.${DAPR_TEST_ENV_NAMESPACE}.svc.cluster.local:9411/api/v2/spans"

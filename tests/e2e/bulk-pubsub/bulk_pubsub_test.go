@@ -56,7 +56,6 @@ const (
 	publisherAppName      = "pubsub-publisher-bulk-subscribe"
 	bulkSubscriberAppName = "pubsub-bulk-subscriber"
 	PubSubEnvVar          = "DAPR_TEST_PUBSUB_NAME"
-	PubSubPluggableName   = "pluggable-messagebus"
 )
 
 var (
@@ -373,32 +372,24 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:                   publisherAppName,
-			DaprEnabled:               true,
-			ImageName:                 "e2e-pubsub-publisher",
-			Replicas:                  1,
-			IngressEnabled:            true,
-			MetricsEnabled:            true,
-			AppMemoryLimit:            "200Mi",
-			AppMemoryRequest:          "100Mi",
-			InjectPluggableComponents: true,
-			AppEnv: map[string]string{
-				PubSubEnvVar: PubSubPluggableName,
-			},
+			AppName:          publisherAppName,
+			DaprEnabled:      true,
+			ImageName:        "e2e-pubsub-publisher",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
 		{
-			AppName:                   bulkSubscriberAppName,
-			DaprEnabled:               true,
-			ImageName:                 "e2e-pubsub-bulk-subscriber",
-			Replicas:                  1,
-			IngressEnabled:            true,
-			MetricsEnabled:            true,
-			AppMemoryLimit:            "200Mi",
-			AppMemoryRequest:          "100Mi",
-			InjectPluggableComponents: true,
-			AppEnv: map[string]string{
-				PubSubEnvVar: PubSubPluggableName,
-			},
+			AppName:          bulkSubscriberAppName,
+			DaprEnabled:      true,
+			ImageName:        "e2e-pubsub-bulk-subscriber",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
 	}
 	log.Printf("Creating TestRunner")
