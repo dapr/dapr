@@ -9,4 +9,3 @@ spec:
   metadata:
     - name: spacehold
       value: metadata-is-required
- - perfstategrpc
