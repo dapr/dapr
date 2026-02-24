@@ -737,18 +737,26 @@ func TestActorFeatures(t *testing.T) {
 			err2 <- err
 		}()
 
-		require.NoError(t, <-err1, "error in equest 1")
+		require.NoError(t, <-err1, "error in request 1")
 		require.NoError(t, <-err2, "error in request 2")
 
-		res, err = httpGet(logsURL)
-		if err != nil {
-			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
-		}
-		require.NoError(t, err, "failed to get logs")
-		logOne := findActorAction(res, actorIDOne, "concurrency")
-		logTwo := findActorAction(res, actorIDTwo, "concurrency")
-		require.NotNil(t, logOne, "logOne is nil")
-		require.NotNil(t, logTwo, "logTwo is nil")
+		// Poll logs with retries because the test app's /test/logs endpoint may not
+		// reflect the completed actor calls immediately (eventual consistency).
+		var logOne, logTwo *actorLogEntry
+		err = backoff.Retry(func() error {
+			res, err = httpGet(logsURL)
+			if err != nil {
+				log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
+				return err
+			}
+			logOne = findActorAction(res, actorIDOne, "concurrency")
+			logTwo = findActorAction(res, actorIDTwo, "concurrency")
+			if logOne == nil || logTwo == nil {
+				return fmt.Errorf("log entries not yet present: logOne=%v logTwo=%v", logOne, logTwo)
+			}
+			return nil
+		}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10))
+		require.NoError(t, err, "timed out waiting for both concurrency log entries")
 		require.True(t, (logOne.StartTimestamp < logOne.EndTimestamp)) // Sanity check on the app response.
 		require.True(t, (logTwo.StartTimestamp < logTwo.EndTimestamp)) // Sanity check on the app response.
 		// Both methods run in parallel, with the sleep time both should start before the other ends.

@@ -189,8 +189,18 @@ func TestInputBindingResiliency(t *testing.T) {
 					require.Greater(t, callCount[message.ID][6].TimeSeen.Sub(callCount[message.ID][5].TimeSeen), time.Millisecond*100)
 				}
 			} else {
-				// First call + FailureCount retries including recovery.
-				require.Equal(t, 1+*tc.FailureCount, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+				expected := 1 + *tc.FailureCount
+				// When the binding returns a non-500 status code that is treated as
+				// success (e.g. 404 with FailureCount=0) the at-least-once delivery
+				// guarantee of the binding may cause an extra invocation before the
+				// runtime records success, so we allow expected or expected+1 calls.
+				if tc.responseStatusCode != nil && *tc.responseStatusCode != 500 && *tc.FailureCount == 0 {
+					require.LessOrEqual(t, expected, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+					require.LessOrEqual(t, len(callCount[message.ID]), expected+1, fmt.Sprintf("Call count mismatch for message %s: expected %d..%d got %d", message.ID, expected, expected+1, len(callCount[message.ID])))
+				} else {
+					// First call + FailureCount retries including recovery.
+					require.Equal(t, expected, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+				}
 			}
 		})
 	}
