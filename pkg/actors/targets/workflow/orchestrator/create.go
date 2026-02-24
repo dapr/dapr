@@ -107,7 +107,7 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Orches
 		// successfully but crashed before persisting its own state, causing it to
 		// re-execute and attempt the child creation again.
 		if o.isSameParentCreation(state, startEvent) {
-			log.Warnf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
+			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
 				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetOrchestrationInstance().GetInstanceId())
 			return nil
 		}

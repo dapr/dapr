@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -58,9 +58,7 @@ const (
 )
 
 func (c *childidempotent) Setup(t *testing.T) []framework.Option {
-	if runtime.GOOS == "windows" {
-		t.Skip("skipping unix socket based test on windows")
-	}
+	os.SkipWindows(t)
 
 	c.store = &failOnceMultiStore{Wrapped: inmemory.New(t).(*inmemory.Wrapped)}
 
@@ -158,7 +156,7 @@ func (c *childidempotent) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(ac *assert.CollectT) {
 		keys := c.workflow.Scheduler().ListAllKeys(t, ctx, startReminderPrefix)
 		assert.Empty(ac, keys)
-	}, 15*time.Second, 200*time.Millisecond)
+	}, 15*time.Second, 10*time.Millisecond)
 
 	_, err = gclient.RaiseEventWorkflowBeta1(ctx, &rtv1.RaiseEventWorkflowRequest{
 		InstanceId:        parentID,
@@ -183,7 +181,7 @@ func (c *childidempotent) Run(t *testing.T, ctx context.Context) {
 		if assert.NoError(c, err) {
 			assert.Equal(c, "COMPLETED", resp.GetRuntimeStatus())
 		}
-	}, 30*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 10*time.Millisecond)
 
 	assert.True(t, c.store.DidFail(), "injected save failure should have triggered")
 }
