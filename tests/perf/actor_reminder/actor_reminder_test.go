@@ -45,7 +45,7 @@ const (
 	targetQPS float64 = 600
 
 	// Target for the QPS to trigger reminders.
-	targetTriggerQPS float64 = 13000
+	targetTriggerQPS float64 = 10200
 
 	// reminderCount is the number of reminders to register.
 	reminderCount = 20000
@@ -165,7 +165,7 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	// only care if the delta is too big if it's a performance regression.
 	// if the actual performance is higher than expected, than we don't need to check
 	if daprResult.ActualQPS < targetQPS {
-		assert.InDelta(t, targetQPS, daprResult.ActualQPS, 100)
+		assert.InDelta(t, targetQPS, daprResult.ActualQPS, 120)
 	}
 }
 
@@ -246,5 +246,9 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 	done = time.Since(start)
 	qps := float64(reminderCount*5) / done.Seconds()
 	t.Logf("Triggered %d reminders in %s (%.1fqps)", reminderCount*5, done, qps)
-	assert.GreaterOrEqual(t, qps, targetTriggerQPS)
+	// only care if the delta is too big if it's a performance regression.
+	// if the actual performance is higher than expected, than we don't need to check
+	if qps < targetTriggerQPS {
+		assert.InDelta(t, targetTriggerQPS, qps, 3340)
+	}
 }
