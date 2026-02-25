@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,18 +11,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package terminate
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -31,51 +32,54 @@ import (
 )
 
 func init() {
-	suite.Register(new(terminatecompleted))
+	suite.Register(new(httpclient))
 }
 
-type terminatecompleted struct {
+type httpclient struct {
 	workflow *workflow.Workflow
 }
 
-func (e *terminatecompleted) Setup(t *testing.T) []framework.Option {
-	e.workflow = workflow.New(t)
+func (h *httpclient) Setup(t *testing.T) []framework.Option {
+	h.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(e.workflow),
+		framework.WithProcesses(h.workflow),
 	}
 }
 
-func (e *terminatecompleted) Run(t *testing.T, ctx context.Context) {
-	e.workflow.WaitUntilRunning(t, ctx)
+func (h *httpclient) Run(t *testing.T, ctx context.Context) {
+	h.workflow.WaitUntilRunning(t, ctx)
 
-	e.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	holdCh := make(chan struct{})
+	var inAct atomic.Bool
+	h.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
-	e.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	h.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+		inAct.Store(true)
+		<-holdCh
 		return nil, nil
 	})
 
-	cl := e.workflow.BackendClient(t, ctx)
+	cl := h.workflow.BackendClient(t, ctx)
 	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
-	_, err = cl.WaitForOrchestrationCompletion(ctx, id)
-	require.NoError(t, err)
-	require.NoError(t, cl.TerminateOrchestration(ctx, id))
 
-	//nolint:staticcheck
-	_, err = e.workflow.Dapr().GRPCClient(t, ctx).TerminateWorkflowAlpha1(ctx, &rtv1.TerminateWorkflowRequest{
-		InstanceId:        string(id),
-		WorkflowComponent: "dapr",
-	})
-	require.NoError(t, err)
+	assert.Eventually(t, inAct.Load, time.Second*10, time.Millisecond*10)
 
-	rurl := fmt.Sprintf("http://%s/v1.0-beta1/workflows/dapr/%s/terminate", e.workflow.Dapr().HTTPAddress(), id)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rurl, nil)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", h.workflow.Dapr().HTTPPort(), id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)
 	resp, err := client.HTTP(t).Do(req)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
+
+	close(holdCh)
+
+	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, err)
+
+	require.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.RuntimeStatus.String())
 }
