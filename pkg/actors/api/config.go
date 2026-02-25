@@ -23,7 +23,7 @@ import (
 const (
 	DefaultIdleTimeout = time.Minute * 60
 
-	DefaultOngoingCallTimeout   = time.Second * 60
+	DefaultOngoingCallTimeout   = time.Second * 2
 	DefaultReentrancyStackLimit = 32
 )
 
@@ -34,7 +34,7 @@ type EntityConfig struct {
 	Entities                   []string
 	ActorIdleTimeout           time.Duration
 	DrainOngoingCallTimeout    time.Duration
-	DrainRebalancedActors      bool
+	DrainRebalancedActors      *bool
 	ReentrancyConfig           config.ReentrancyConfig
 	RemindersStoragePartitions int
 }

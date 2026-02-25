@@ -85,6 +85,14 @@ func New(t *testing.T, fopts ...Option) *Actors {
 		config += fmt.Sprintf(`,"actorIdleTimeout":"%s"`, *opts.actorIdleTimeout)
 	}
 
+	if opts.drainOngoingCallTimeout != nil {
+		config += fmt.Sprintf(`,"drainOngoingCallTimeout":"%s"`, *opts.drainOngoingCallTimeout)
+	}
+
+	if opts.drainRebalancedActors != nil {
+		config += fmt.Sprintf(`,"drainRebalancedActors":%t`, *opts.drainRebalancedActors)
+	}
+
 	if len(opts.entityConfig) > 0 {
 		b, err := json.Marshal(opts.entityConfig)
 		require.NoError(t, err)

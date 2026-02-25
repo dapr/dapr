@@ -93,9 +93,6 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			log.Errorf("Error draining non-hosted actors: %s", err)
 		}
 
-		d.timeoutVersion++
-		d.timeoutQ.Enqueue(d.timeoutVersion)
-
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{
 				Operation: v1pb.HostOperation_UPDATE,
@@ -119,8 +116,6 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			)
 			return nil
 		}
-
-		d.timeoutQ.Dequeue(d.timeoutVersion)
 
 		log.Infof("Dissemination complete for version %d, unlocking disseminator %s/%s",
 			version, d.namespace, d.id,

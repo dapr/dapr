@@ -28,17 +28,19 @@ type options struct {
 	db    *sqlite.SQLite
 	types []string
 
-	placement         *placement.Placement
-	scheduler         *scheduler.Scheduler
-	daprdConfigs      []string
-	actorTypeHandlers map[string]http.HandlerFunc
-	handlers          map[string]http.HandlerFunc
-	reentry           *bool
-	reentryMaxDepth   *uint32
-	actorIdleTimeout  *time.Duration
-	entityConfig      []entityConfig
-	resources         []string
-	maxBodySize       *string
+	placement               *placement.Placement
+	scheduler               *scheduler.Scheduler
+	daprdConfigs            []string
+	actorTypeHandlers       map[string]http.HandlerFunc
+	handlers                map[string]http.HandlerFunc
+	reentry                 *bool
+	reentryMaxDepth         *uint32
+	actorIdleTimeout        *time.Duration
+	drainOngoingCallTimeout *time.Duration
+	drainRebalancedActors   *bool
+	entityConfig            []entityConfig
+	resources               []string
+	maxBodySize             *string
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -108,6 +110,18 @@ func WithReentryMaxDepth(maxDepth uint32) Option {
 func WithActorIdleTimeout(timeout time.Duration) Option {
 	return func(o *options) {
 		o.actorIdleTimeout = &timeout
+	}
+}
+
+func WithDrainOngoingCallTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.drainOngoingCallTimeout = &timeout
+	}
+}
+
+func WithDrainRebalancedActors(drain bool) Option {
+	return func(o *options) {
+		o.drainRebalancedActors = &drain
 	}
 }
 

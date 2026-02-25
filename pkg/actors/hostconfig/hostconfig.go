@@ -23,7 +23,7 @@ import (
 type Config struct {
 	AppChannel              channel.AppChannel
 	EntityConfigs           []config.EntityConfig
-	DrainRebalancedActors   bool
+	DrainRebalancedActors   *bool
 	DrainOngoingCallTimeout string
 	HostedActorTypes        []string
 	DefaultIdleTimeout      string
