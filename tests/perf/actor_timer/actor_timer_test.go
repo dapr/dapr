@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest: "250Mi",
 			AppCPULimit:       "4.0",
 			AppCPURequest:     "0.1",
-			AppMemoryLimit:    "800Mi",
+			AppMemoryLimit:    "1300Mi",
 			AppMemoryRequest:  "2500Mi",
 			Labels: map[string]string{
 				"daprtest": serviceApplicationName,
