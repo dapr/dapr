@@ -83,11 +83,8 @@ type DisseminationTimeout struct {
 }
 
 type SetDrainOngoingCallTimeout struct {
+	Drain   *bool
 	Timeout *time.Duration
-}
-
-type SetDrainRebalancedActors struct {
-	Drain *bool
 }
 
 func IsActorLocal(targetActorAddress, hostAddress string, port string) bool {

@@ -462,8 +462,7 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 	// Update the placement service with the drain settings so that during
 	// dissemination, in-flight actor calls are given the configured time to
 	// complete before being forcefully cancelled.
-	a.placement.SetDrainOngoingCallTimeout(&drainOngoingCallTimeout)
-	a.placement.SetDrainRebalancedActors(cfg.DrainRebalancedActors)
+	a.placement.SetDrainOngoingCallTimeout(cfg.DrainRebalancedActors, &drainOngoingCallTimeout)
 
 	return nil
 }

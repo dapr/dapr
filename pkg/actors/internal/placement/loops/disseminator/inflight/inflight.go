@@ -17,6 +17,7 @@ import (
 	"context"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -40,17 +41,15 @@ var aquireCache = sync.Pool{
 }
 
 type Options struct {
-	Hostname                string
-	Port                    string
-	DrainOngoingCallTimeout *time.Duration
-	DrainRebalancedActors   *bool
+	Hostname string
+	Port     string
 }
 
 type Inflight struct {
 	hostname                string
 	port                    string
-	drainOngoingCallTimeout *time.Duration
-	drainRebalancedActors   *bool
+	drainOngoingCallTimeout atomic.Pointer[time.Duration]
+	drainRebalancedActors   atomic.Pointer[bool]
 
 	acquires []func()
 	lock     loop.Interface[lock.Event]
@@ -62,11 +61,9 @@ type Inflight struct {
 
 func New(opts Options) *Inflight {
 	return &Inflight{
-		hostname:                opts.Hostname,
-		port:                    opts.Port,
-		drainOngoingCallTimeout: opts.DrainOngoingCallTimeout,
-		drainRebalancedActors:   opts.DrainRebalancedActors,
-		virtualNodesCache:       hashing.NewVirtualNodesCache(),
+		hostname:          opts.Hostname,
+		port:              opts.Port,
+		virtualNodesCache: hashing.NewVirtualNodesCache(),
 		hashTable: &hashing.ConsistentHashTables{
 			Entries: make(map[string]*hashing.Consistent),
 		},
@@ -81,8 +78,8 @@ func (i *Inflight) Lock(err error) {
 
 	i.lock.Close(&lock.CloseLock{
 		Error:                 err,
-		Timeout:               i.drainOngoingCallTimeout,
-		DrainRebalancedActors: i.drainRebalancedActors,
+		Timeout:               i.drainOngoingCallTimeout.Load(),
+		DrainRebalancedActors: i.drainRebalancedActors.Load(),
 	})
 	i.wg.Wait()
 	lo := i.lock
@@ -210,10 +207,7 @@ func (i *Inflight) resolve(req *api.LookupActorRequest) (*api.LookupActorRespons
 	}, nil
 }
 
-func (i *Inflight) SetDrainOngoingCallTimeout(timeout *time.Duration) {
-	i.drainOngoingCallTimeout = timeout
-}
-
-func (i *Inflight) SetDrainRebalancedActors(drain *bool) {
-	i.drainRebalancedActors = drain
+func (i *Inflight) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration) {
+	i.drainRebalancedActors.Store(drain)
+	i.drainOngoingCallTimeout.Store(timeout)
 }

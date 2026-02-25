@@ -51,8 +51,7 @@ type Interface interface {
 	LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error)
 	IsActorHosted(ctx context.Context, actorType, actorID string) bool
 	Ready() bool
-	SetDrainOngoingCallTimeout(timeout *time.Duration)
-	SetDrainRebalancedActors(drain *bool)
+	SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration)
 }
 
 type Options struct {
@@ -256,14 +255,9 @@ func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string
 	return lar != nil && loops.IsActorLocal(lar.Address, p.hostname, p.port)
 }
 
-func (p *placement) SetDrainOngoingCallTimeout(timeout *time.Duration) {
+func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration) {
 	p.loop.Enqueue(&loops.SetDrainOngoingCallTimeout{
+		Drain:   drain,
 		Timeout: timeout,
-	})
-}
-
-func (p *placement) SetDrainRebalancedActors(drain *bool) {
-	p.loop.Enqueue(&loops.SetDrainRebalancedActors{
-		Drain: drain,
 	})
 }
