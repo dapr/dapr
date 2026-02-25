@@ -200,20 +200,6 @@ func (f *factory) handleIdleActor(target *app) {
 }
 
 func (f *factory) halt(ctx context.Context, app *app, drain bool) error {
-	if drain {
-		if f.entityConfig != nil {
-			drain = f.entityConfig.DrainRebalancedActors
-		} else {
-			drain = f.drainRebalancedActors
-		}
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, f.drainOngoingCallTimeout)
-	defer cancel()
-	if !drain {
-		cancel()
-	}
-
 	key := app.Key()
 
 	diag.DefaultMonitoring.ActorRebalanced(app.Type())

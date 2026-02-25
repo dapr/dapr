@@ -456,11 +456,15 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 	a.table.RegisterActorTypes(table.RegisterActorTypeOptions{
 		Factories: factories,
 		HostOptions: &table.ActorHostOptions{
-			EntityConfigs:           entityConfigs,
-			DrainRebalancedActors:   true,
-			DrainOngoingCallTimeout: drainOngoingCallTimeout,
+			EntityConfigs: entityConfigs,
 		},
 	})
+
+	// Update the placement service with the drain settings so that during
+	// dissemination, in-flight actor calls are given the configured time to
+	// complete before being forcefully cancelled.
+	a.placement.SetDrainOngoingCallTimeout(&drainOngoingCallTimeout)
+	a.placement.SetDrainRebalancedActors(cfg.DrainRebalancedActors)
 
 	return nil
 }

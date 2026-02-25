@@ -46,7 +46,7 @@ const (
 	keepAliveTimeoutMin     = 1 * time.Second
 	keepAliveTimeoutMax     = 10 * time.Second
 
-	disseminateTimeoutDefault = 8 * time.Second
+	disseminateTimeoutDefault = 15 * time.Second
 )
 
 type Options struct {

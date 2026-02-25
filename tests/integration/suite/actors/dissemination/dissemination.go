@@ -15,4 +15,5 @@ package dissemination
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/dissemination/call"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/dissemination/drain"
 )

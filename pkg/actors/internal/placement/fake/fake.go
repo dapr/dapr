@@ -15,6 +15,7 @@ package fake
 
 import (
 	"context"
+	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 )
@@ -86,4 +87,10 @@ func (f *Fake) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*a
 
 func (f *Fake) IsActorHosted(ctx context.Context, actorType, actorID string) bool {
 	return f.fnIsActorHosted(ctx, actorType, actorID)
+}
+
+func (f *Fake) SetDrainOngoingCallTimeout(*time.Duration) {
+}
+
+func (f *Fake) SetDrainRebalancedActors(*bool) {
 }

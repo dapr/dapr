@@ -17,6 +17,7 @@ import (
 	"context"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
@@ -39,13 +40,17 @@ var aquireCache = sync.Pool{
 }
 
 type Options struct {
-	Hostname string
-	Port     string
+	Hostname                string
+	Port                    string
+	DrainOngoingCallTimeout *time.Duration
+	DrainRebalancedActors   *bool
 }
 
 type Inflight struct {
-	hostname string
-	port     string
+	hostname                string
+	port                    string
+	drainOngoingCallTimeout *time.Duration
+	drainRebalancedActors   *bool
 
 	acquires []func()
 	lock     loop.Interface[lock.Event]
@@ -57,9 +62,11 @@ type Inflight struct {
 
 func New(opts Options) *Inflight {
 	return &Inflight{
-		hostname:          opts.Hostname,
-		port:              opts.Port,
-		virtualNodesCache: hashing.NewVirtualNodesCache(),
+		hostname:                opts.Hostname,
+		port:                    opts.Port,
+		drainOngoingCallTimeout: opts.DrainOngoingCallTimeout,
+		drainRebalancedActors:   opts.DrainRebalancedActors,
+		virtualNodesCache:       hashing.NewVirtualNodesCache(),
 		hashTable: &hashing.ConsistentHashTables{
 			Entries: make(map[string]*hashing.Consistent),
 		},
@@ -73,7 +80,9 @@ func (i *Inflight) Lock(err error) {
 	}
 
 	i.lock.Close(&lock.CloseLock{
-		Error: err,
+		Error:                 err,
+		Timeout:               i.drainOngoingCallTimeout,
+		DrainRebalancedActors: i.drainRebalancedActors,
 	})
 	i.wg.Wait()
 	lo := i.lock
@@ -199,4 +208,12 @@ func (i *Inflight) resolve(req *api.LookupActorRequest) (*api.LookupActorRespons
 		AppID:   host.AppID,
 		Local:   loops.IsActorLocal(host.Name, i.hostname, i.port),
 	}, nil
+}
+
+func (i *Inflight) SetDrainOngoingCallTimeout(timeout *time.Duration) {
+	i.drainOngoingCallTimeout = timeout
+}
+
+func (i *Inflight) SetDrainRebalancedActors(drain *bool) {
+	i.drainRebalancedActors = drain
 }
