@@ -17,6 +17,8 @@ import (
 	"context"
 	"strconv"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
@@ -44,8 +46,10 @@ type Options struct {
 }
 
 type Inflight struct {
-	hostname string
-	port     string
+	hostname                string
+	port                    string
+	drainOngoingCallTimeout atomic.Pointer[time.Duration]
+	drainRebalancedActors   atomic.Pointer[bool]
 
 	acquires []func()
 	lock     loop.Interface[lock.Event]
@@ -73,7 +77,9 @@ func (i *Inflight) Lock(err error) {
 	}
 
 	i.lock.Close(&lock.CloseLock{
-		Error: err,
+		Error:                 err,
+		Timeout:               i.drainOngoingCallTimeout.Load(),
+		DrainRebalancedActors: i.drainRebalancedActors.Load(),
 	})
 	i.wg.Wait()
 	lo := i.lock
@@ -199,4 +205,9 @@ func (i *Inflight) resolve(req *api.LookupActorRequest) (*api.LookupActorRespons
 		AppID:   host.AppID,
 		Local:   loops.IsActorLocal(host.Name, i.hostname, i.port),
 	}, nil
+}
+
+func (i *Inflight) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration) {
+	i.drainRebalancedActors.Store(drain)
+	i.drainOngoingCallTimeout.Store(timeout)
 }
