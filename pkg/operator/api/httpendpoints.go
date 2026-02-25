@@ -16,27 +16,18 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"sync"
 
-	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
+	loopsclient "github.com/dapr/dapr/pkg/operator/api/loops/client"
+	"github.com/dapr/dapr/pkg/operator/api/loops/sender"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
-
-func (a *apiServer) OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
-	a.endpointLock.Lock()
-	for _, endpointUpdateChan := range a.allEndpointsUpdateChan {
-		go func(endpointUpdateChan chan *httpendpointsapi.HTTPEndpoint) {
-			endpointUpdateChan <- endpoint
-		}(endpointUpdateChan)
-	}
-	a.endpointLock.Unlock()
-}
 
 func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint, namespace string, kubeClient client.Client) error {
 	for i, header := range endpoint.Spec.Headers {
@@ -136,76 +127,42 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 	return resp, nil
 }
 
-// HTTPEndpointUpdate updates Dapr sidecars whenever an http endpoint in the cluster is modified.
+// HTTPEndpointUpdate handles HTTP endpoint update streaming for a connected client.
+// Each client connection gets its own client loop that watches the informer
+// and sends updates over the gRPC stream.
 func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointUpdateServer) error { //nolint:nosnakecase
-	if _, err := authz.Request(srv.Context(), in.GetNamespace()); err != nil {
-		return err
+	if a.closed.Load() {
+		return errors.New("server is closed")
 	}
 
 	log.Info("sidecar connected for http endpoint updates")
-	keyObj, err := uuid.NewRandom()
+
+	ctx := srv.Context()
+
+	// Verify authorization via informer's WatchUpdates, which checks SPIFFE ID
+	ch, cancel, err := a.endpointInformer.WatchUpdates(ctx, in.GetNamespace())
 	if err != nil {
 		return err
 	}
-	key := keyObj.String()
 
-	a.endpointLock.Lock()
-	if a.closed.Load() {
-		a.endpointLock.Unlock()
-		return nil
-	}
-	a.allEndpointsUpdateChan[key] = make(chan *httpendpointsapi.HTTPEndpoint, 1)
-	updateChan := a.allEndpointsUpdateChan[key]
-	a.endpointLock.Unlock()
+	// Create a client for this connection
+	client := loopsclient.New(ctx, loopsclient.Options[httpendpointsapi.HTTPEndpoint]{
+		EventCh:        ch,
+		CancelWatch:    cancel,
+		Stream:         sender.New(srv),
+		Namespace:      in.GetNamespace(),
+		PodName:        in.GetPodName(),
+		KubeClient:     a.Client,
+		ProcessSecrets: processHTTPEndpointSecrets,
+	})
 
-	defer func() {
-		a.endpointLock.Lock()
-		defer a.endpointLock.Unlock()
-		delete(a.allEndpointsUpdateChan, key)
-	}()
-
-	updateHTTPEndpointFunc := func(ctx context.Context, e *httpendpointsapi.HTTPEndpoint) {
-		if e.Namespace != in.GetNamespace() {
-			return
-		}
-
-		err := processHTTPEndpointSecrets(ctx, e, in.GetNamespace(), a.Client)
-		if err != nil {
-			log.Warnf("error processing http endpoint %s secrets from pod %s/%s: %s", e.Name, in.GetNamespace(), in.GetPodName(), err)
-			return
-		}
-		b, err := json.Marshal(&e)
-		if err != nil {
-			log.Warnf("error serializing  http endpoint %s from pod %s/%s: %s", e.GetName(), in.GetNamespace(), in.GetPodName(), err)
-			return
-		}
-
-		err = srv.Send(&operatorv1pb.HTTPEndpointUpdateEvent{
-			HttpEndpoints: b,
-		})
-		if err != nil {
-			log.Warnf("error updating sidecar with http endpoint %s from pod %s/%s: %s", e.GetName(), in.GetNamespace(), in.GetPodName(), err)
-			return
-		}
-
-		log.Infof("updated sidecar with http endpoint %s from pod %s/%s", e.GetName(), in.GetNamespace(), in.GetPodName())
+	// Run the client - this will block until context is done or event channel closes
+	if err := client.Run(ctx); err != nil {
+		log.Warnf("http endpoint client loop ended with error: %s", err)
 	}
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	for {
-		select {
-		case <-srv.Context().Done():
-			return nil
-		case c, ok := <-updateChan:
-			if !ok {
-				return nil
-			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				updateHTTPEndpointFunc(srv.Context(), c)
-			}()
-		}
-	}
+	// Cache the client loop for reuse
+	client.CacheLoop()
+
+	return nil
 }
