@@ -441,13 +441,12 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 			Type:       actorType,
 			Reentrancy: reentrancy,
 			Factory: app.New(app.Options{
-				ActorType:               actorType,
-				AppChannel:              cfg.AppChannel,
-				Resiliency:              a.resiliency,
-				IdleTimeout:             idleTimeout,
-				Reentrancy:              a.reentrancyStore,
-				DrainOngoingCallTimeout: drainOngoingCallTimeout,
-				Placement:               a.placement,
+				ActorType:   actorType,
+				AppChannel:  cfg.AppChannel,
+				Resiliency:  a.resiliency,
+				IdleTimeout: idleTimeout,
+				Reentrancy:  a.reentrancyStore,
+				Placement:   a.placement,
 			}),
 		})
 	}
