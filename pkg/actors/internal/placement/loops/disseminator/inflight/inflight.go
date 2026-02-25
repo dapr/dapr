@@ -46,8 +46,11 @@ type Options struct {
 }
 
 type Inflight struct {
-	hostname                string
-	port                    string
+	hostname   string
+	port       string
+	localAddr  string
+	portSuffix string
+
 	drainOngoingCallTimeout atomic.Pointer[time.Duration]
 	drainRebalancedActors   atomic.Pointer[bool]
 
@@ -63,6 +66,8 @@ func New(opts Options) *Inflight {
 	return &Inflight{
 		hostname:          opts.Hostname,
 		port:              opts.Port,
+		localAddr:         opts.Hostname + ":" + opts.Port,
+		portSuffix:        ":" + opts.Port,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
 		hashTable: &hashing.ConsistentHashTables{
 			Entries: make(map[string]*hashing.Consistent),
@@ -155,6 +160,7 @@ func (i *Inflight) getLockResponse(lu *loops.LockRequest) *loops.LockResponse {
 
 	i.lock.Enqueue(aq)
 	claim := <-aq.RespCh
+	aq.Context = nil
 	aquireCache.Put(aq)
 
 	return &loops.LockResponse{
@@ -169,42 +175,44 @@ func (i *Inflight) getLookupResponse(lu *loops.LookupRequest) *loops.LookupRespo
 
 	i.lock.Enqueue(aq)
 	claim := <-aq.RespCh
+	aq.Context = nil
 	aquireCache.Put(aq)
 
-	resp, err := i.resolve(lu.Request)
+	var out api.LookupActorResponse
+	err := i.resolveInto(lu.Request, &out)
 	return &loops.LookupResponse{
 		Context:  claim.Context,
 		Cancel:   claim.Cancel,
-		Response: resp,
+		Response: &out,
 		Error:    err,
 	}
 }
 
 func (i *Inflight) IsActorHostedNoLock(req *api.LookupActorRequest) bool {
-	resp, err := i.resolve(req)
+	var out api.LookupActorResponse
+	err := i.resolveInto(req, &out)
 	if err != nil {
 		return false
 	}
 
-	return resp != nil && resp.Local
+	return out.Local
 }
 
-func (i *Inflight) resolve(req *api.LookupActorRequest) (*api.LookupActorResponse, error) {
+func (i *Inflight) resolveInto(req *api.LookupActorRequest, out *api.LookupActorResponse) error {
 	table, ok := i.hashTable.Entries[req.ActorType]
 	if !ok {
-		return nil, messages.ErrActorNoAddress
+		return messages.ErrActorNoAddress
 	}
 
 	host, err := table.GetHost(req.ActorID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return &api.LookupActorResponse{
-		Address: host.Name,
-		AppID:   host.AppID,
-		Local:   loops.IsActorLocal(host.Name, i.hostname, i.port),
-	}, nil
+	out.Address = host.Name
+	out.AppID = host.AppID
+	out.Local = loops.IsActorLocal(host.Name, i.localAddr, i.portSuffix, i.hostname, i.port)
+	return nil
 }
 
 func (i *Inflight) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration) {

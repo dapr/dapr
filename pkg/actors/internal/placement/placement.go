@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -45,6 +46,13 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.placement")
 
+var (
+	lookupRespChPool = sync.Pool{
+		New: func() any { return make(chan *loops.LookupResponse, 1) },
+	}
+	lookupReqPool = sync.Pool{New: func() any { return new(loops.LookupRequest) }}
+)
+
 type Interface interface {
 	Run(context.Context) error
 	Lock(context.Context) (context.Context, context.CancelCauseFunc, error)
@@ -69,11 +77,14 @@ type Options struct {
 }
 
 type placement struct {
-	hostname string
-	port     string
-	table    table.Interface
-	ready    *atomic.Bool
-	errCh    chan error
+	hostname   string
+	port       string
+	localAddr  string
+	portSuffix string
+
+	table table.Interface
+	ready *atomic.Bool
+	errCh chan error
 
 	loop loop.Interface[loops.Event]
 }
@@ -129,10 +140,12 @@ func New(opts Options) (Interface, error) {
 	errCh := make(chan error, 1)
 
 	return &placement{
-		ready:    &ready,
-		hostname: opts.Hostname,
-		port:     strconv.Itoa(opts.Port),
-		table:    opts.Table,
+		ready:      &ready,
+		hostname:   opts.Hostname,
+		port:       strconv.Itoa(opts.Port),
+		localAddr:  opts.Hostname + ":" + strconv.Itoa(opts.Port),
+		portSuffix: ":" + strconv.Itoa(opts.Port),
+		table:      opts.Table,
 		loop: loopsplacement.New(loopsplacement.Options{
 			Ready:      &ready,
 			ActorTable: opts.Table,
@@ -220,17 +233,44 @@ func (p *placement) Ready() bool {
 }
 
 func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error) {
-	ch := make(chan *loops.LookupResponse, 1)
-	p.loop.Enqueue(&loops.LookupRequest{
-		Context:  ctx,
-		Request:  req,
-		Response: ch,
-	})
+	ch := lookupRespChPool.Get().(chan *loops.LookupResponse)
+	select {
+	case <-ch:
+	default:
+	}
+
+	lreq := lookupReqPool.Get().(*loops.LookupRequest)
+	lreq.Context = ctx
+	lreq.Request = req
+	lreq.Response = ch
+
+	p.loop.Enqueue(lreq)
 
 	select {
 	case <-ctx.Done():
+		// NOTE: We cannot safely return the pooled request to the pool here because
+		// the loop may still be processing it. Best-effort: if the loop has already
+		// produced a response, consume it and then recycle the request.
+		select {
+		case <-ch:
+			lreq.Context = nil
+			lreq.Request = nil
+			lreq.Response = nil
+			lookupReqPool.Put(lreq)
+		default:
+			// Let the request be GC'd if it is still in-flight.
+		}
+		lookupRespChPool.Put(ch)
 		return nil, nil, nil, ctx.Err()
 	case resp := <-ch:
+		// The loop has finished using the request; clear references before
+		// returning it to the pool to avoid retaining objects longer than necessary.
+		lreq.Context = nil
+		lreq.Request = nil
+		lreq.Response = nil
+		lookupReqPool.Put(lreq)
+
+		lookupRespChPool.Put(ch)
 		if resp.Error != nil {
 			return nil, nil, nil, resp.Error
 		}
@@ -252,7 +292,7 @@ func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string
 	}
 	cancel(nil)
 
-	return lar != nil && loops.IsActorLocal(lar.Address, p.hostname, p.port)
+	return lar != nil && loops.IsActorLocal(lar.Address, p.localAddr, p.portSuffix, p.hostname, p.port)
 }
 
 func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration) {

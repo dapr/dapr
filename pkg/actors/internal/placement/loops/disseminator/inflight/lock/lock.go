@@ -34,6 +34,13 @@ var (
 			}
 		},
 	}
+	claimCache = sync.Pool{
+		New: func() any {
+			return &Claim{
+				released: make(chan struct{}, 1),
+			}
+		},
+	}
 )
 
 type Event any
@@ -41,6 +48,11 @@ type Event any
 type Claim struct {
 	Context context.Context
 	Cancel  context.CancelCauseFunc
+
+	// released is signaled (non-blocking) when the claim is released.
+	// This is used by CloseLock to wait for in-flight claims to be released
+	// without relying on context cancellation for completion.
+	released chan struct{}
 }
 
 type Acquire struct {
@@ -113,7 +125,7 @@ func (l *lock) handleClose(closeLock *CloseLock) {
 
 	for _, claim := range l.acquires {
 		select {
-		case <-claim.Context.Done():
+		case <-claim.released:
 		case <-timer.C:
 			log.Errorf("Timed out waiting for actor in-flight lock claims to be released, force cancelling remaining claims")
 			// Force cancel all remaining claims after timeout.
@@ -126,26 +138,42 @@ func (l *lock) handleClose(closeLock *CloseLock) {
 }
 
 func (l *lock) handleRelease(release *releaseClaim) {
+	claim := l.acquires[release.idx]
 	delete(l.acquires, release.idx)
+	if claim == nil {
+		return
+	}
+
+	// Reset and return to pool to reduce per-lookup allocations.
+	claim.Context = nil
+	claim.Cancel = nil
+	// Best-effort drain the released signal.
+	select {
+	case <-claim.released:
+	default:
+	}
+	claimCache.Put(claim)
 }
 
 func (l *lock) handleAcquire(event *Acquire) {
 	idx := l.idx
 	l.idx++
 
-	var done bool
-
 	ctx, cancel := context.WithCancelCause(event.Context)
-	claim := &Claim{
-		Context: ctx,
-		Cancel: func(err error) {
-			if done {
-				return
-			}
-			done = true
+	claim := claimCache.Get().(*Claim)
+	claim.Context = ctx
+
+	var once sync.Once
+	claim.Cancel = func(err error) {
+		once.Do(func() {
 			cancel(err)
+			// Signal release (non-blocking).
+			select {
+			case claim.released <- struct{}{}:
+			default:
+			}
 			l.loop.Enqueue(&releaseClaim{idx: idx})
-		},
+		})
 	}
 
 	l.acquires[idx] = claim
