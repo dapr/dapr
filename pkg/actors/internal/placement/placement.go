@@ -146,6 +146,7 @@ func New(opts Options) (Interface, error) {
 		localAddr:  opts.Hostname + ":" + strconv.Itoa(opts.Port),
 		portSuffix: ":" + strconv.Itoa(opts.Port),
 		table:      opts.Table,
+		errCh:      errCh,
 		loop: loopsplacement.New(loopsplacement.Options{
 			Ready:      &ready,
 			ActorTable: opts.Table,
@@ -260,7 +261,6 @@ func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest
 		default:
 			// Let the request be GC'd if it is still in-flight.
 		}
-		lookupRespChPool.Put(ch)
 		return nil, nil, nil, ctx.Err()
 	case resp := <-ch:
 		// The loop has finished using the request; clear references before
