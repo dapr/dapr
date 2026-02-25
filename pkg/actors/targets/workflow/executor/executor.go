@@ -19,9 +19,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
 
-	"github.com/cenkalti/backoff/v4"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	targeterrors "github.com/dapr/dapr/pkg/actors/targets/errors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
