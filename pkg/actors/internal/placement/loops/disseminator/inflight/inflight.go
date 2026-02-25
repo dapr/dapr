@@ -47,7 +47,6 @@ type Options struct {
 
 type Inflight struct {
 	hostname   string
-	port       string
 	localAddr  string
 	portSuffix string
 
@@ -65,7 +64,6 @@ type Inflight struct {
 func New(opts Options) *Inflight {
 	return &Inflight{
 		hostname:          opts.Hostname,
-		port:              opts.Port,
 		localAddr:         opts.Hostname + ":" + opts.Port,
 		portSuffix:        ":" + opts.Port,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
@@ -211,7 +209,7 @@ func (i *Inflight) resolveInto(req *api.LookupActorRequest, out *api.LookupActor
 
 	out.Address = host.Name
 	out.AppID = host.AppID
-	out.Local = loops.IsActorLocal(host.Name, i.localAddr, i.portSuffix, i.hostname, i.port)
+	out.Local = loops.IsActorLocal(host.Name, i.localAddr, i.portSuffix, i.hostname)
 	return nil
 }
 

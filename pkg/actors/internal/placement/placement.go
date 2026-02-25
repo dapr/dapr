@@ -78,7 +78,6 @@ type Options struct {
 
 type placement struct {
 	hostname   string
-	port       string
 	localAddr  string
 	portSuffix string
 
@@ -142,7 +141,6 @@ func New(opts Options) (Interface, error) {
 	return &placement{
 		ready:      &ready,
 		hostname:   opts.Hostname,
-		port:       strconv.Itoa(opts.Port),
 		localAddr:  opts.Hostname + ":" + strconv.Itoa(opts.Port),
 		portSuffix: ":" + strconv.Itoa(opts.Port),
 		table:      opts.Table,
@@ -292,7 +290,7 @@ func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string
 	}
 	cancel(nil)
 
-	return lar != nil && loops.IsActorLocal(lar.Address, p.localAddr, p.portSuffix, p.hostname, p.port)
+	return lar != nil && loops.IsActorLocal(lar.Address, p.localAddr, p.portSuffix, p.hostname)
 }
 
 func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration) {

@@ -87,7 +87,7 @@ type SetDrainOngoingCallTimeout struct {
 	Timeout *time.Duration
 }
 
-func IsActorLocal(target, localAddr, portSuffix, hostAddress, port string) bool {
+func IsActorLocal(target, localAddr, portSuffix, hostAddress string) bool {
 	if target == localAddr {
 		return true
 	}
