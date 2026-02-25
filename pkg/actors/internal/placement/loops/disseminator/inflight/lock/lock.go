@@ -126,6 +126,7 @@ func (l *lock) handleClose(closeLock *CloseLock) {
 	for _, claim := range l.acquires {
 		select {
 		case <-claim.released:
+		case <-claim.Context.Done():
 		case <-timer.C:
 			log.Errorf("Timed out waiting for actor in-flight lock claims to be released, force cancelling remaining claims")
 			// Force cancel all remaining claims after timeout.

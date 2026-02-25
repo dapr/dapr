@@ -247,18 +247,6 @@ func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest
 
 	select {
 	case <-ctx.Done():
-		// NOTE: We cannot safely return the pooled request to the pool here because
-		// the loop may still be processing it. Best-effort: if the loop has already
-		// produced a response, consume it and then recycle the request.
-		select {
-		case <-ch:
-			lreq.Context = nil
-			lreq.Request = nil
-			lreq.Response = nil
-			lookupReqPool.Put(lreq)
-		default:
-			// Let the request be GC'd if it is still in-flight.
-		}
 		return nil, nil, nil, ctx.Err()
 	case resp := <-ch:
 		// The loop has finished using the request; clear references before
@@ -270,9 +258,15 @@ func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest
 
 		lookupRespChPool.Put(ch)
 		if resp.Error != nil {
+			if resp.Cancel != nil {
+				resp.Cancel(resp.Error)
+			}
 			return nil, nil, nil, resp.Error
 		}
 		if resp.Context.Err() != nil {
+			if resp.Cancel != nil {
+				resp.Cancel(resp.Context.Err())
+			}
 			return nil, nil, nil, resp.Context.Err()
 		}
 		return resp.Response, resp.Context, resp.Cancel, nil
