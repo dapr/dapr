@@ -20,7 +20,7 @@ type ApplicationConfig struct {
 	ActorIdleTimeout string `json:"actorIdleTimeout"`
 	// Duration. example: "30s".
 	DrainOngoingCallTimeout string           `json:"drainOngoingCallTimeout"`
-	DrainRebalancedActors   bool             `json:"drainRebalancedActors"`
+	DrainRebalancedActors   *bool            `json:"drainRebalancedActors"`
 	Reentrancy              ReentrancyConfig `json:"reentrancy,omitempty"`
 
 	// DEPRECATED.
@@ -41,7 +41,7 @@ type EntityConfig struct {
 	ActorIdleTimeout string `json:"actorIdleTimeout"`
 	// Duration. example: "30s".
 	DrainOngoingCallTimeout string           `json:"drainOngoingCallTimeout"`
-	DrainRebalancedActors   bool             `json:"drainRebalancedActors"`
+	DrainRebalancedActors   *bool            `json:"drainRebalancedActors"`
 	Reentrancy              ReentrancyConfig `json:"reentrancy,omitempty"`
 
 	// DEPRECATED.

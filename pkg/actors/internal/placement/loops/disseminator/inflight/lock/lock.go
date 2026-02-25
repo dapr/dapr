@@ -53,7 +53,9 @@ type releaseClaim struct {
 }
 
 type CloseLock struct {
-	Error error
+	Error                 error
+	Timeout               *time.Duration
+	DrainRebalancedActors *bool
 }
 
 type lock struct {
@@ -90,8 +92,23 @@ func (l *lock) handleClose(closeLock *CloseLock) {
 		lockCache.Put(l)
 	}()
 
+	// If drainRebalancedActors is false, immediately cancel all claims without
+	// waiting.
+	// Default to true (drain) if not specified.
+	if closeLock.DrainRebalancedActors != nil && !*closeLock.DrainRebalancedActors {
+		for _, claim := range l.acquires {
+			claim.Cancel(closeLock.Error)
+		}
+		return
+	}
+
 	// Grace period to allow claims to be released.
-	timer := time.NewTimer(time.Second * 2)
+	// Default to 2 seconds if no timeout is provided.
+	timeout := time.Second * 2
+	if closeLock.Timeout != nil {
+		timeout = *closeLock.Timeout
+	}
+	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
 	for _, claim := range l.acquires {

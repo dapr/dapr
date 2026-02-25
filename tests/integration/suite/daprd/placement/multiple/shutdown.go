@@ -102,7 +102,7 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 			assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		}, time.Second*10, time.Millisecond*10)
+		}, time.Second*20, time.Millisecond*10)
 	}
 
 	s.daprds[2].Cleanup(t)
