@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package terminate
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -29,43 +30,46 @@ import (
 )
 
 func init() {
-	suite.Register(new(terminate))
+	suite.Register(new(grpcclient))
 }
 
-type terminate struct {
+type grpcclient struct {
 	workflow *workflow.Workflow
 }
 
-func (e *terminate) Setup(t *testing.T) []framework.Option {
-	e.workflow = workflow.New(t)
+func (g *grpcclient) Setup(t *testing.T) []framework.Option {
+	g.workflow = workflow.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(e.workflow),
+		framework.WithProcesses(g.workflow),
 	}
 }
 
-func (e *terminate) Run(t *testing.T, ctx context.Context) {
-	e.workflow.WaitUntilRunning(t, ctx)
+func (g *grpcclient) Run(t *testing.T, ctx context.Context) {
+	g.workflow.WaitUntilRunning(t, ctx)
 
 	holdCh := make(chan struct{})
 	var inAct atomic.Bool
-	e.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	g.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
-	e.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
+	g.workflow.Registry().AddActivityN("bar", func(ctx task.ActivityContext) (any, error) {
 		inAct.Store(true)
 		<-holdCh
 		return nil, nil
 	})
 
-	cl := e.workflow.BackendClient(t, ctx)
+	cl := g.workflow.BackendClient(t, ctx)
 	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
 
 	assert.Eventually(t, inAct.Load, time.Second*10, time.Millisecond*10)
 
-	require.NoError(t, cl.TerminateOrchestration(ctx, id))
+	_, err = g.workflow.Dapr().GRPCClient(t, ctx).TerminateWorkflowBeta1(ctx, &rtv1.TerminateWorkflowRequest{
+		InstanceId: id.String(),
+	})
+	require.NoError(t, err)
 
 	close(holdCh)
 
