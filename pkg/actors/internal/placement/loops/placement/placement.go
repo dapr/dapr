@@ -117,6 +117,8 @@ func (p *placement) Handle(ctx context.Context, event loops.Event) error {
 		return p.handleCloseStream(ctx, e)
 	case *loops.UpdateTypes:
 		p.handleUpdateTypes(e)
+	case *loops.SetDrainOngoingCallTimeout:
+		p.handleSetDrainOngoingCallTimeout(e)
 	case *loops.Shutdown:
 		p.handleShutdown(e)
 	default:
@@ -259,6 +261,10 @@ func (p *placement) handleShutdown(shutdown *loops.Shutdown) {
 	}
 
 	p.dissLoop.Close(shutdown)
+}
+
+func (p *placement) handleSetDrainOngoingCallTimeout(event *loops.SetDrainOngoingCallTimeout) {
+	p.inflight.SetDrainOngoingCallTimeout(event.Drain, event.Timeout)
 }
 
 func (p *placement) tryConnect(ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, error) {

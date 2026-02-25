@@ -16,6 +16,7 @@ package loops
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -79,6 +80,11 @@ type Shutdown struct {
 
 type DisseminationTimeout struct {
 	Version uint64
+}
+
+type SetDrainOngoingCallTimeout struct {
+	Drain   *bool
+	Timeout *time.Duration
 }
 
 func IsActorLocal(targetActorAddress, hostAddress string, port string) bool {
