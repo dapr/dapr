@@ -25,12 +25,12 @@ type clientbase struct{}
 
 func (*clientbase) isEventClient() {}
 
+// EventStream is the marker interface for events handled by the stream loop.
+type EventStream interface{ isEventStream() }
+
 type streambase struct{}
 
 func (*streambase) isEventStream() {}
-
-// EventStream is the marker interface for events handled by the stream loop.
-type EventStream interface{ isEventStream() }
 
 // ResourceUpdate is an event for a component update from the informer.
 type ResourceUpdate[T meta.Resource] struct {
