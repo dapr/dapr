@@ -89,8 +89,5 @@ func (f *Fake) IsActorHosted(ctx context.Context, actorType, actorID string) boo
 	return f.fnIsActorHosted(ctx, actorType, actorID)
 }
 
-func (f *Fake) SetDrainOngoingCallTimeout(*time.Duration) {
-}
-
-func (f *Fake) SetDrainRebalancedActors(*bool) {
+func (f *Fake) SetDrainOngoingCallTimeout(*bool, *time.Duration) {
 }
