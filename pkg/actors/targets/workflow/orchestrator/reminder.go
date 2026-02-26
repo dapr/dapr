@@ -58,8 +58,8 @@ func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix st
 	}
 
 	if log.IsOutputLevelEnabled(logger.DebugLevel) {
-			log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
-		}
+		log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
+	}
 
 	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: actorType,

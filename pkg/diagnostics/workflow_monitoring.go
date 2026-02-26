@@ -240,12 +240,10 @@ func (w *workflowMetrics) ActivityExecutionEvent(ctx context.Context, activityNa
 		return
 	}
 
-	// Apply any configured metrics rules for this specific metric.
-	// If we're recording latency too, apply both sets of rules so one recording can
-	// serve both measures.
+	// Apply metrics rules once using the count metric's rules.
+	// Both count and latency metrics should have identical rules configured.
 	activityName = diagUtils.SanitizeTagValue(w.activityExecutionCount.Name(), activityNameKey, activityName)
 	if elapsed > 0 {
-		activityName = diagUtils.SanitizeTagValue(w.activityExecutionLatency.Name(), activityNameKey, activityName)
 		stats.RecordWithOptions(w.recordCtx(ctx),
 			stats.WithRecorder(w.meter),
 			stats.WithTags(

@@ -458,7 +458,7 @@ func (s *serviceMetrics) RequestAllowedByAppAction(spiffeID *spiffe.Parsed) {
 	}
 	stats.RecordWithOptions(s.baseCtx,
 		stats.WithRecorder(s.meter),
-		stats.WithTags(tag.Upsert(trustDomainKey, spiffeID.TrustDomain().String())),
+		stats.WithTags(tag.Upsert(trustDomainKey, spiffeID.TrustDomain().String()), tag.Upsert(namespaceKey, spiffeID.Namespace())),
 		stats.WithMeasurements(s.appPolicyActionAllowed.M(1)))
 }
 
@@ -469,7 +469,7 @@ func (s *serviceMetrics) RequestBlockedByAppAction(spiffeID *spiffe.Parsed) {
 	}
 	stats.RecordWithOptions(s.baseCtx,
 		stats.WithRecorder(s.meter),
-		stats.WithTags(tag.Upsert(trustDomainKey, spiffeID.TrustDomain().String())),
+		stats.WithTags(tag.Upsert(trustDomainKey, spiffeID.TrustDomain().String()), tag.Upsert(namespaceKey, spiffeID.Namespace())),
 		stats.WithMeasurements(s.appPolicyActionBlocked.M(1)))
 }
 
@@ -480,7 +480,7 @@ func (s *serviceMetrics) RequestAllowedByGlobalAction(spiffeID *spiffe.Parsed) {
 	}
 	stats.RecordWithOptions(s.baseCtx,
 		stats.WithRecorder(s.meter),
-		stats.WithTags(tag.Upsert(trustDomainKey, spiffeID.TrustDomain().String())),
+		stats.WithTags(tag.Upsert(trustDomainKey, spiffeID.TrustDomain().String()), tag.Upsert(namespaceKey, spiffeID.Namespace())),
 		stats.WithMeasurements(s.globalPolicyActionAllowed.M(1)))
 }
 
@@ -491,7 +491,7 @@ func (s *serviceMetrics) RequestBlockedByGlobalAction(spiffeID *spiffe.Parsed) {
 	}
 	stats.RecordWithOptions(s.baseCtx,
 		stats.WithRecorder(s.meter),
-		stats.WithTags(tag.Upsert(trustDomainKey, spiffeID.TrustDomain().String())),
+		stats.WithTags(tag.Upsert(trustDomainKey, spiffeID.TrustDomain().String()), tag.Upsert(namespaceKey, spiffeID.Namespace())),
 		stats.WithMeasurements(s.globalPolicyActionBlocked.M(1)))
 }
 
