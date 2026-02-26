@@ -167,7 +167,9 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		RetentionActorType: abe.retentionerActorType,
 		RetentionPolicy:    abe.retentionPolicy,
 		Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
-			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+			if log.IsOutputLevelEnabled(logger.DebugLevel) {
+				log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+			}
 			select {
 			case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
 				return ctx.Err()
@@ -184,11 +186,13 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		ActivityActorType: abe.activityActorType,
 		WorkflowActorType: abe.workflowActorType,
 		Scheduler: func(ctx context.Context, wi *backend.ActivityWorkItem) error {
-			log.Debugf(
-				"%s: scheduling [%s#%d] activity execution with durabletask engine",
-				wi.InstanceID,
-				wi.NewEvent.GetTaskScheduled().GetName(),
-				wi.NewEvent.GetEventId())
+			if log.IsOutputLevelEnabled(logger.DebugLevel) {
+				log.Debugf(
+					"%s: scheduling [%s#%d] activity execution with durabletask engine",
+					wi.InstanceID,
+					wi.NewEvent.GetTaskScheduled().GetName(),
+					wi.NewEvent.GetEventId())
+			}
 			select {
 			case <-ctx.Done(): // engine is shutting down
 				return ctx.Err()
@@ -487,7 +491,9 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 }
 
 func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, condition func(*backend.OrchestrationMetadata) bool) error {
-	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
+	}
 
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
@@ -581,7 +587,9 @@ func (abe *Actors) NextOrchestrationWorkItem(ctx context.Context) (*backend.Orch
 	// Wait for the workflow actor to signal us with some work to do
 	select {
 	case wi := <-abe.orchestrationWorkItemChan:
-		log.Debugf("Actor backend received a workflow task for workflow '%s'.", wi.InstanceID)
+		if log.IsOutputLevelEnabled(logger.DebugLevel) {
+			log.Debugf("Actor backend received a workflow task for workflow '%s'.", wi.InstanceID)
+		}
 		return wi, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -593,11 +601,13 @@ func (abe *Actors) NextActivityWorkItem(ctx context.Context) (*backend.ActivityW
 	// Wait for the activity actor to signal us with some work to do
 	select {
 	case wi := <-abe.activityWorkItemChan:
-		log.Debugf(
-			"Actor backend received a [%s#%d] activity task for workflow '%s'.",
-			wi.NewEvent.GetTaskScheduled().GetName(),
-			wi.NewEvent.GetEventId(),
-			wi.InstanceID)
+		if log.IsOutputLevelEnabled(logger.DebugLevel) {
+			log.Debugf(
+				"Actor backend received a [%s#%d] activity task for workflow '%s'.",
+				wi.NewEvent.GetTaskScheduled().GetName(),
+				wi.NewEvent.GetEventId(),
+				wi.InstanceID)
+		}
 		return wi, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()

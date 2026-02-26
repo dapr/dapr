@@ -38,9 +38,9 @@ type resiliencyMetrics struct {
 	circuitbreakerState *stats.Int64Measure
 
 	appID   string
-	ctx     context.Context
 	enabled bool
 	meter   stats.Recorder
+	baseCtx context.Context
 }
 
 func newResiliencyMetrics() *resiliencyMetrics {
@@ -61,8 +61,6 @@ func newResiliencyMetrics() *resiliencyMetrics {
 			"resiliency/cb_state",
 			"A resiliency policy's current CircuitBreakerState state. 0 is closed, 1 is half-open, 2 is open, and -1 is unknown.",
 			stats.UnitDimensionless),
-		// TODO: how to use correct context
-		ctx:     context.Background(),
 		enabled: false,
 	}
 }
@@ -72,6 +70,9 @@ func (m *resiliencyMetrics) Init(meter view.Meter, id string) error {
 	m.enabled = true
 	m.appID = id
 	m.meter = meter
+	// Pre-tag the context with app_id once to reduce repeated tag.Upsert allocations.
+	// Namespace is provided per-call because this Init method does not receive it.
+	m.baseCtx, _ = tag.New(context.Background(), tag.Upsert(appIDKey, id))
 
 	return meter.Register(
 		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
@@ -83,57 +84,52 @@ func (m *resiliencyMetrics) Init(meter view.Meter, id string) error {
 
 // PolicyLoaded records metric when policy is loaded.
 func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
-	if m.enabled {
-		_ = stats.RecordWithOptions(
-			m.ctx,
-			stats.WithRecorder(m.meter),
-			stats.WithTags(diagUtils.WithTags(m.policiesLoadCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, namespaceKey, namespace)...),
-			stats.WithMeasurements(m.policiesLoadCount.M(1)),
-		)
+	if !m.enabled {
+		return
 	}
+	_ = stats.RecordWithOptions(m.baseCtx,
+		stats.WithRecorder(m.meter),
+		stats.WithTags(tag.Upsert(resiliencyNameKey, resiliencyName), tag.Upsert(namespaceKey, namespace)),
+		stats.WithMeasurements(m.policiesLoadCount.M(1)))
 }
 
 // PolicyWithStatusExecuted records metric when policy is executed with added status information (e.g., circuit breaker open).
 func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
-	if m.enabled {
-		// Common tags for all metrics
-		commonTags := []interface{}{
-			appIDKey, m.appID,
-			resiliencyNameKey, resiliencyName,
-			policyKey, string(policy),
-			namespaceKey, namespace,
-			flowDirectionKey, string(flowDirection),
-			targetKey, target,
-			statusKey, // status appened on each recording
-		}
+	if !m.enabled {
+		return
+	}
+	policyStr := string(policy)
+	flowStr := string(flowDirection)
 
-		// Record count metric for all resiliency executions
-		_ = stats.RecordWithOptions(
-			m.ctx,
-			stats.WithRecorder(m.meter),
-			stats.WithTags(diagUtils.WithTags(m.executionCount.Name(), append(commonTags, status)...)...),
-			stats.WithMeasurements(m.executionCount.M(1)),
-		)
+	// Record count metric for all resiliency executions
+	_ = stats.RecordWithOptions(m.baseCtx,
+		stats.WithRecorder(m.meter),
+		stats.WithTags(
+			tag.Upsert(resiliencyNameKey, resiliencyName),
+			tag.Upsert(policyKey, policyStr),
+			tag.Upsert(namespaceKey, namespace),
+			tag.Upsert(flowDirectionKey, flowStr),
+			tag.Upsert(targetKey, target),
+			tag.Upsert(statusKey, status)),
+		stats.WithMeasurements(m.executionCount.M(1)))
 
-		// Record cb gauge, 4 metrics, one for each cb state, with the active state having a value of 1, otherwise 0
-		if policy == CircuitBreakerPolicy {
-			for _, s := range cbStatuses {
-				if s == status {
-					_ = stats.RecordWithOptions(
-						m.ctx,
-						stats.WithRecorder(m.meter),
-						stats.WithTags(diagUtils.WithTags(m.circuitbreakerState.Name(), append(commonTags, s)...)...),
-						stats.WithMeasurements(m.circuitbreakerState.M(1)),
-					)
-				} else {
-					_ = stats.RecordWithOptions(
-						m.ctx,
-						stats.WithRecorder(m.meter),
-						stats.WithTags(diagUtils.WithTags(m.circuitbreakerState.Name(), append(commonTags, s)...)...),
-						stats.WithMeasurements(m.circuitbreakerState.M(0)),
-					)
-				}
+	// Record cb gauge, 4 metrics, one for each cb state, with the active state having a value of 1, otherwise 0
+	if policy == CircuitBreakerPolicy {
+		for _, s := range cbStatuses {
+			val := int64(0)
+			if s == status {
+				val = 1
 			}
+			_ = stats.RecordWithOptions(m.baseCtx,
+				stats.WithRecorder(m.meter),
+				stats.WithTags(
+					tag.Upsert(resiliencyNameKey, resiliencyName),
+					tag.Upsert(policyKey, policyStr),
+					tag.Upsert(namespaceKey, namespace),
+					tag.Upsert(flowDirectionKey, flowStr),
+					tag.Upsert(targetKey, target),
+					tag.Upsert(statusKey, s)),
+				stats.WithMeasurements(m.circuitbreakerState.M(val)))
 		}
 	}
 }
@@ -150,16 +146,19 @@ func (m *resiliencyMetrics) PolicyActivated(resiliencyName, namespace string, po
 
 // PolicyWithStatusActivated records metrics when policy is activated after a failure or in the case of circuit breaker after a state change. with added state/status (e.g., circuit breaker open).
 func (m *resiliencyMetrics) PolicyWithStatusActivated(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
-	if m.enabled {
-		// Record combined activation measure
-		_ = stats.RecordWithOptions(
-			m.ctx,
-			stats.WithRecorder(m.meter),
-			stats.WithTags(diagUtils.WithTags(m.activationsCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
-				namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status)...),
-			stats.WithMeasurements(m.activationsCount.M(1)),
-		)
+	if !m.enabled {
+		return
 	}
+	_ = stats.RecordWithOptions(m.baseCtx,
+		stats.WithRecorder(m.meter),
+		stats.WithTags(
+			tag.Upsert(resiliencyNameKey, resiliencyName),
+			tag.Upsert(policyKey, string(policy)),
+			tag.Upsert(namespaceKey, namespace),
+			tag.Upsert(flowDirectionKey, string(flowDirection)),
+			tag.Upsert(targetKey, target),
+			tag.Upsert(statusKey, status)),
+		stats.WithMeasurements(m.activationsCount.M(1)))
 }
 
 func ResiliencyActorTarget(actorType string) string {

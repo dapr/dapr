@@ -32,6 +32,7 @@ type errorCodeMetrics struct {
 
 	appID   string
 	enabled bool
+	baseCtx context.Context
 
 	meter stats.Recorder
 }
@@ -52,6 +53,7 @@ func (m *errorCodeMetrics) Init(meter view.Meter, id string) error {
 	m.enabled = true
 	m.appID = id
 	m.meter = meter
+	m.baseCtx, _ = tag.New(context.Background(), tag.Upsert(appIDKey, id))
 
 	return meter.Register(
 		diagUtils.NewMeasureView(m.errorCodeTotal, []tag.Key{appIDKey, errorCodeKey, categoryKey}, view.Count()),
@@ -59,18 +61,17 @@ func (m *errorCodeMetrics) Init(meter view.Meter, id string) error {
 }
 
 func (m *errorCodeMetrics) RecordErrorCode(ec errorcodes.ErrorCode) {
-	if m.enabled {
-		if ec.Code == "" || ec.Category == "" {
-			log.Warnf("ErrorCode is malformed: Code = %s, Category = %s", ec.Code, ec.Category)
-			return
-		}
-		_ = stats.RecordWithOptions(
-			context.TODO(),
-			stats.WithRecorder(m.meter),
-			stats.WithTags(diagUtils.WithTags(m.errorCodeTotal.Name(), appIDKey, m.appID, errorCodeKey, ec.Code, categoryKey, string(ec.Category))...),
-			stats.WithMeasurements(m.errorCodeTotal.M(1)),
-		)
+	if !m.enabled {
+		return
 	}
+	if ec.Code == "" || ec.Category == "" {
+		log.Warnf("ErrorCode is malformed: Code = %s, Category = %s", ec.Code, ec.Category)
+		return
+	}
+	_ = stats.RecordWithOptions(m.baseCtx,
+		stats.WithRecorder(m.meter),
+		stats.WithTags(tag.Upsert(errorCodeKey, ec.Code), tag.Upsert(categoryKey, string(ec.Category))),
+		stats.WithMeasurements(m.errorCodeTotal.M(1)))
 }
 
 // RecordErrorCode is called at the end/middleware of HTTP/gRPC calls and will attempt to find the ErrorCode in an error and record it

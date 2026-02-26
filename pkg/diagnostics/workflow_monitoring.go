@@ -64,6 +64,9 @@ type workflowMetrics struct {
 	enabled                   bool
 	namespace                 string
 	meter                     stats.Recorder
+	// baseCtx is a context pre-tagged with app_id and namespace to avoid
+	// repeatedly upserting constant tags on every metrics record call.
+	baseCtx                   context.Context
 }
 
 func newWorkflowMetrics() *workflowMetrics {
@@ -118,6 +121,13 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 	w.namespace = namespace
 	w.meter = meter
 
+	// Pre-tag a base context with constant tags to reduce per-record allocations.
+	// If this fails for any reason (shouldn't, with MustNewKey keys), we fall back
+	// to using the incoming ctx + explicit tags.
+	if base, err := tag.New(context.Background(), tag.Upsert(appIDKey, appID), tag.Upsert(namespaceKey, namespace)); err == nil {
+		w.baseCtx = base
+	}
+
 	return meter.Register(
 		diagUtils.NewMeasureView(w.workflowOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowOperationLatency, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, latencyDistribution),
@@ -130,17 +140,43 @@ func (w *workflowMetrics) Init(meter view.Meter, appID, namespace string, latenc
 		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, latencyDistribution))
 }
 
+func (w *workflowMetrics) recordCtx(ctx context.Context) context.Context {
+	if w.baseCtx != nil {
+		return w.baseCtx
+	}
+	return ctx
+}
+
 // WorkflowOperationEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
 func (w *workflowMetrics) WorkflowOperationEvent(ctx context.Context, operation, status string, elapsed float64) {
 	if !w.IsEnabled() {
 		return
 	}
 
-	stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.workflowOperationCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, operationKey, operation, statusKey, status)...), stats.WithMeasurements(w.workflowOperationCount.M(1)))
-
+	recordCtx := w.recordCtx(ctx)
 	if elapsed > 0 {
-		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.workflowOperationLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, operationKey, operation, statusKey, status)...), stats.WithMeasurements(w.workflowOperationLatency.M(elapsed)))
+		stats.RecordWithOptions(recordCtx,
+			stats.WithRecorder(w.meter),
+			stats.WithTags(
+				tag.Upsert(operationKey, operation),
+				tag.Upsert(statusKey, status),
+			),
+			stats.WithMeasurements(
+				w.workflowOperationCount.M(1),
+				w.workflowOperationLatency.M(elapsed),
+			),
+		)
+		return
 	}
+
+	stats.RecordWithOptions(recordCtx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(
+			tag.Upsert(operationKey, operation),
+			tag.Upsert(statusKey, status),
+		),
+		stats.WithMeasurements(w.workflowOperationCount.M(1)),
+	)
 }
 
 // WorkflowExecutionEvent records total number of Successful/Failed/Recoverable workflow executions.
@@ -150,17 +186,34 @@ func (w *workflowMetrics) WorkflowExecutionEvent(ctx context.Context, workflowNa
 		return
 	}
 
-	stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status)...), stats.WithMeasurements(w.workflowExecutionCount.M(1)))
+	workflowName = diagUtils.SanitizeTagValue(w.workflowExecutionCount.Name(), workflowNameKey, workflowName)
+
+	stats.RecordWithOptions(w.recordCtx(ctx),
+		stats.WithRecorder(w.meter),
+		stats.WithTags(
+			tag.Upsert(workflowNameKey, workflowName),
+			tag.Upsert(statusKey, status),
+		),
+		stats.WithMeasurements(w.workflowExecutionCount.M(1)),
+	)
 }
 
 func (w *workflowMetrics) WorkflowExecutionLatency(ctx context.Context, workflowName, status string, elapsed float64) {
-	if !w.IsEnabled() {
+	if !w.IsEnabled() || elapsed <= 0 {
 		return
 	}
 
-	if elapsed > 0 {
-		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status)...), stats.WithMeasurements(w.workflowExecutionLatency.M(elapsed)))
-	}
+	// Apply any configured metrics rules for this specific metric.
+	workflowName = diagUtils.SanitizeTagValue(w.workflowExecutionLatency.Name(), workflowNameKey, workflowName)
+
+	stats.RecordWithOptions(w.recordCtx(ctx),
+		stats.WithRecorder(w.meter),
+		stats.WithTags(
+			tag.Upsert(workflowNameKey, workflowName),
+			tag.Upsert(statusKey, status),
+		),
+		stats.WithMeasurements(w.workflowExecutionLatency.M(elapsed)),
+	)
 }
 
 func (w *workflowMetrics) WorkflowSchedulingLatency(ctx context.Context, workflowName string, elapsed float64) {
@@ -168,8 +221,16 @@ func (w *workflowMetrics) WorkflowSchedulingLatency(ctx context.Context, workflo
 		return
 	}
 
+	workflowName = diagUtils.SanitizeTagValue(w.workflowSchedulingLatency.Name(), workflowNameKey, workflowName)
+
 	if elapsed > 0 {
-		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.workflowSchedulingLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName)...), stats.WithMeasurements(w.workflowSchedulingLatency.M(elapsed)))
+		stats.RecordWithOptions(w.recordCtx(ctx),
+			stats.WithRecorder(w.meter),
+			stats.WithTags(
+				tag.Upsert(workflowNameKey, workflowName),
+			),
+			stats.WithMeasurements(w.workflowSchedulingLatency.M(elapsed)),
+		)
 	}
 }
 
@@ -179,11 +240,34 @@ func (w *workflowMetrics) ActivityExecutionEvent(ctx context.Context, activityNa
 		return
 	}
 
-	stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.activityExecutionCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status)...), stats.WithMeasurements(w.activityExecutionCount.M(1)))
-
+	// Apply any configured metrics rules for this specific metric.
+	// If we're recording latency too, apply both sets of rules so one recording can
+	// serve both measures.
+	activityName = diagUtils.SanitizeTagValue(w.activityExecutionCount.Name(), activityNameKey, activityName)
 	if elapsed > 0 {
-		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.activityExecutionLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status)...), stats.WithMeasurements(w.activityExecutionLatency.M(elapsed)))
+		activityName = diagUtils.SanitizeTagValue(w.activityExecutionLatency.Name(), activityNameKey, activityName)
+		stats.RecordWithOptions(w.recordCtx(ctx),
+			stats.WithRecorder(w.meter),
+			stats.WithTags(
+				tag.Upsert(activityNameKey, activityName),
+				tag.Upsert(statusKey, status),
+			),
+			stats.WithMeasurements(
+				w.activityExecutionCount.M(1),
+				w.activityExecutionLatency.M(elapsed),
+			),
+		)
+		return
 	}
+
+	stats.RecordWithOptions(w.recordCtx(ctx),
+		stats.WithRecorder(w.meter),
+		stats.WithTags(
+			tag.Upsert(activityNameKey, activityName),
+			tag.Upsert(statusKey, status),
+		),
+		stats.WithMeasurements(w.activityExecutionCount.M(1)),
+	)
 }
 
 // ActivityOperationEvent records total number of Successful/Failed/Recoverable activity requests. It also records latency for these requests.
@@ -192,9 +276,28 @@ func (w *workflowMetrics) ActivityOperationEvent(ctx context.Context, activityNa
 		return
 	}
 
-	stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.activityOperationCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status)...), stats.WithMeasurements(w.activityOperationCount.M(1)))
-
+	recordCtx := w.recordCtx(ctx)
 	if elapsed > 0 {
-		stats.RecordWithOptions(ctx, stats.WithRecorder(w.meter), stats.WithTags(diagUtils.WithTags(w.activityOperationLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status)...), stats.WithMeasurements(w.activityOperationLatency.M(elapsed)))
+		stats.RecordWithOptions(recordCtx,
+			stats.WithRecorder(w.meter),
+			stats.WithTags(
+				tag.Upsert(activityNameKey, activityName),
+				tag.Upsert(statusKey, status),
+			),
+			stats.WithMeasurements(
+				w.activityOperationCount.M(1),
+				w.activityOperationLatency.M(elapsed),
+			),
+		)
+		return
 	}
+
+	stats.RecordWithOptions(recordCtx,
+		stats.WithRecorder(w.meter),
+		stats.WithTags(
+			tag.Upsert(activityNameKey, activityName),
+			tag.Upsert(statusKey, status),
+		),
+		stats.WithMeasurements(w.activityOperationCount.M(1)),
+	)
 }

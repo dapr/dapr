@@ -133,6 +133,7 @@ func New(opts Options) (Interface, error) {
 		hostname: opts.Hostname,
 		port:     strconv.Itoa(opts.Port),
 		table:    opts.Table,
+		errCh:    errCh,
 		loop: loopsplacement.New(loopsplacement.Options{
 			Ready:      &ready,
 			ActorTable: opts.Table,

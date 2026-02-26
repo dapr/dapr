@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/kit/logger"
 )
 
 func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
@@ -69,7 +70,9 @@ func (o *orchestrator) handleInvoke(ctx context.Context, req *internalsv1pb.Inte
 }
 
 func (o *orchestrator) executeMethod(ctx context.Context, methodName string, meta map[string]*internalsv1pb.ListStringValue, request []byte) ([]byte, error) {
-	log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s': invoking method '%s'", o.actorID, methodName)
+	}
 
 	if o.actorState == nil {
 		return nil, messages.ErrActorRuntimeNotFound
@@ -97,7 +100,9 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 }
 
 func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	log.Debugf("Workflow actor '%s': invoking reminder '%s'", o.actorID, reminder.Name)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s': invoking reminder '%s'", o.actorID, reminder.Name)
+	}
 
 	switch {
 	case strings.HasPrefix(reminder.Name, reminderPrefixStart),

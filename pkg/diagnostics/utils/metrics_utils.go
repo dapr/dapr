@@ -135,3 +135,20 @@ func CreateRulesMap(rules []config.MetricsRule) error {
 	metricsRules = newMetricsRules
 	return nil
 }
+
+func SanitizeTagValue(metricName string, key tag.Key, value string) string {
+	if value == "" || len(metricsRules) == 0 {
+		return value
+	}
+	// Most stat names already use '/' separators (e.g. runtime/workflow/...).
+	// Avoid ReplaceAll unless we actually need it.
+	metricKey := metricName
+	if strings.IndexByte(metricKey, '_') >= 0 {
+		metricKey = strings.ReplaceAll(metricKey, "_", "/")
+	}
+	pairs := metricsRules[metricKey+key.Name()]
+	for _, p := range pairs {
+		value = p.regex.ReplaceAllString(value, p.replace)
+	}
+	return value
+}

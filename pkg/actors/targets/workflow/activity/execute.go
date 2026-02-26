@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/logger"
 )
 
 func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *backend.HistoryEvent) error {
@@ -61,7 +62,9 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	//       introduce some kind of heartbeat protocol to help identify such cases.
 	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
-	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
+	}
 	elapsed := float64(0)
 	start := time.Now()
 	err := a.scheduler(ctx, wi)
@@ -101,7 +104,9 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 			return wferrors.NewRecoverable(todo.ErrExecutionAborted) // AbandonActivityWorkItem was called
 		}
 	}
-	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
+	}
 
 	// send completed event to orchestrator wf actor
 	wfActorType := a.workflowActorType

@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
+	"github.com/dapr/kit/logger"
 )
 
 func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byte) error {
@@ -36,7 +37,7 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 	startEvent := createWorkflowInstanceRequest.GetStartEvent()
 	if es := startEvent.GetExecutionStarted(); es == nil {
 		return errors.New("invalid execution start event")
-	} else {
+	} else if log.IsOutputLevelEnabled(logger.DebugLevel) {
 		if es.GetParentInstance() == nil {
 			log.Debugf("Workflow actor '%s': creating workflow '%s' with instanceId '%s'",
 				o.actorID,
@@ -107,8 +108,10 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Orches
 		// successfully but crashed before persisting its own state, causing it to
 		// re-execute and attempt the child creation again.
 		if o.isSameParentCreation(state, startEvent) {
-			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
-				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetOrchestrationInstance().GetInstanceId())
+			if log.IsOutputLevelEnabled(logger.DebugLevel) {
+				log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
+					o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetOrchestrationInstance().GetInstanceId())
+			}
 			return nil
 		}
 		return fmt.Errorf("an active workflow with ID '%s' already exists", o.actorID)

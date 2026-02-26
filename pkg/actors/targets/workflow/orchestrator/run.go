@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
+	"github.com/dapr/kit/logger"
 )
 
 func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (todo.RunCompleted, error) {
@@ -67,7 +68,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	if len(state.Inbox) == 0 {
 		// This can happen after multiple events are processed in batches; there may still be reminders around
 		// for some of those already processed events.
-		log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
+		if log.IsOutputLevelEnabled(logger.DebugLevel) {
+			log.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", o.actorID, reminder.Name)
+		}
 		return todo.RunCompletedTrue, nil
 	}
 
@@ -107,7 +110,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 	workflowName := o.getExecutionStartedEvent(state).GetName()
 	// Request to execute workflow
-	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
+	}
 	// Schedule the workflow execution by signaling the backend
 	// TODO: @joshvanl remove.
 	err = o.scheduler(ctx, wi)
@@ -148,12 +153,16 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	compactPatches(rs)
 
 	runtimeStatus := runtimestate.RuntimeStatus(rs)
-	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", o.actorID, runtimeStatus.String(), wi.InstanceID)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", o.actorID, runtimeStatus.String(), wi.InstanceID)
+	}
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
 	if rs.GetContinuedAsNew() {
-		log.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", o.actorID, wi.InstanceID)
+		if log.IsOutputLevelEnabled(logger.DebugLevel) {
+			log.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", o.actorID, wi.InstanceID)
+		}
 		state.Generation += 1
 	}
 
@@ -288,7 +297,9 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	}
 
 	if dueTime != nil {
-		log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
+		if log.IsOutputLevelEnabled(logger.DebugLevel) {
+			log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
+		}
 		_, err := o.createRetentionReminder(ctx, name, time.Now().Add(*dueTime))
 		return err
 	}

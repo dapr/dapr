@@ -83,7 +83,9 @@ func (c *client) Start(ctx context.Context, req *workflows.StartRequest) (*workf
 		return nil, fmt.Errorf("unable to start workflow: %w", err)
 	}
 
-	c.logger.Debugf("Created new workflow '%s' instance with ID '%s'", req.WorkflowName, workflowID)
+	if c.logger.IsOutputLevelEnabled(logger.DebugLevel) {
+		c.logger.Debugf("Created new workflow '%s' instance with ID '%s'", req.WorkflowName, workflowID)
+	}
 	res := &workflows.StartResponse{
 		InstanceID: string(workflowID),
 	}
@@ -107,7 +109,9 @@ func (c *client) Terminate(ctx context.Context, req *workflows.TerminateRequest)
 		return fmt.Errorf("failed to terminate workflow %s: %w", req.InstanceID, err)
 	}
 
-	c.logger.Debugf("Scheduled termination for workflow instance '%s'", req.InstanceID)
+	if c.logger.IsOutputLevelEnabled(logger.DebugLevel) {
+		c.logger.Debugf("Scheduled termination for workflow instance '%s'", req.InstanceID)
+	}
 	return nil
 }
 
@@ -127,7 +131,9 @@ func (c *client) Purge(ctx context.Context, req *workflows.PurgeRequest) error {
 		}
 		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
 	}
-	c.logger.Debugf("Purging workflow instance '%s'", req.InstanceID)
+	if c.logger.IsOutputLevelEnabled(logger.DebugLevel) {
+		c.logger.Debugf("Purging workflow instance '%s'", req.InstanceID)
+	}
 
 	return nil
 }
@@ -151,7 +157,9 @@ func (c *client) RaiseEvent(ctx context.Context, req *workflows.RaiseEventReques
 		return fmt.Errorf("failed to raise event %s on workflow %s: %w", req.EventName, req.InstanceID, err)
 	}
 
-	c.logger.Debugf("Raised event %s on workflow instance '%s'", req.EventName, req.InstanceID)
+	if c.logger.IsOutputLevelEnabled(logger.DebugLevel) {
+		c.logger.Debugf("Raised event %s on workflow instance '%s'", req.EventName, req.InstanceID)
+	}
 	return nil
 }
 
@@ -213,7 +221,9 @@ func (c *client) Pause(ctx context.Context, req *workflows.PauseRequest) error {
 		return fmt.Errorf("failed to pause workflow %s: %w", req.InstanceID, err)
 	}
 
-	c.logger.Debugf("Pausing workflow instance '%s'", req.InstanceID)
+	if c.logger.IsOutputLevelEnabled(logger.DebugLevel) {
+		c.logger.Debugf("Pausing workflow instance '%s'", req.InstanceID)
+	}
 	return nil
 }
 
@@ -226,7 +236,9 @@ func (c *client) Resume(ctx context.Context, req *workflows.ResumeRequest) error
 		return fmt.Errorf("failed to resume workflow %s: %w", req.InstanceID, err)
 	}
 
-	c.logger.Debugf("Resuming workflow instance '%s'", req.InstanceID)
+	if c.logger.IsOutputLevelEnabled(logger.DebugLevel) {
+		c.logger.Debugf("Resuming workflow instance '%s'", req.InstanceID)
+	}
 	return nil
 }
 
@@ -243,7 +255,9 @@ func (c *client) PurgeWorkflow(ctx context.Context, req *workflows.PurgeRequest)
 		return fmt.Errorf("failed to purge workflow %s: %w", req.InstanceID, err)
 	}
 
-	c.logger.Debugf("Purging workflow instance '%s'", req.InstanceID)
+	if c.logger.IsOutputLevelEnabled(logger.DebugLevel) {
+		c.logger.Debugf("Purging workflow instance '%s'", req.InstanceID)
+	}
 	return nil
 }
 

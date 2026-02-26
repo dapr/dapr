@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"context"
 	"strconv"
+	"sync"
 	"time"
 
 	"go.opencensus.io/stats"
@@ -11,6 +12,47 @@ import (
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
+
+// componentTagCache caches pre-tagged contexts for low-cardinality component names.
+// This avoids repeated tag.Upsert allocations for the same component.
+type componentTagCache struct {
+	mu    sync.RWMutex
+	cache map[string]context.Context
+	base  context.Context
+	max   int
+}
+
+func newComponentTagCache(base context.Context, maxSize int) *componentTagCache {
+	return &componentTagCache{
+		cache: make(map[string]context.Context, maxSize),
+		base:  base,
+		max:   maxSize,
+	}
+}
+
+// get returns a context pre-tagged with the component name, creating one if needed.
+func (c *componentTagCache) get(component string) context.Context {
+	c.mu.RLock()
+	ctx, ok := c.cache[component]
+	c.mu.RUnlock()
+	if ok {
+		return ctx
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Double-check after acquiring write lock
+	if ctx, ok = c.cache[component]; ok {
+		return ctx
+	}
+	// Evict all if at capacity (simple strategy for bounded cache)
+	if len(c.cache) >= c.max {
+		c.cache = make(map[string]context.Context, c.max)
+	}
+	ctx, _ = tag.New(c.base, tag.Upsert(componentKey, component))
+	c.cache[component] = ctx
+	return ctx
+}
 
 var (
 	processStatusKey = tag.MustNewKey("process_status")
@@ -69,10 +111,12 @@ type componentMetrics struct {
 	jobFailureCount *stats.Int64Measure
 	jobLatency      *stats.Float64Measure
 
-	appID     string
-	enabled   bool
-	namespace string
-	meter     stats.Recorder
+	appID          string
+	enabled        bool
+	namespace      string
+	meter          stats.Recorder
+	baseCtx        context.Context
+	componentCache *componentTagCache
 }
 
 // newComponentMetrics returns a componentMetrics instance with default stats.
@@ -198,6 +242,9 @@ func (c *componentMetrics) Init(meter view.Meter, appID, namespace string, laten
 	c.enabled = true
 	c.namespace = namespace
 	c.meter = meter
+	c.baseCtx, _ = tag.New(context.Background(), tag.Upsert(appIDKey, appID), tag.Upsert(namespaceKey, namespace))
+	// Cache up to 64 component contexts to avoid repeated tag allocations
+	c.componentCache = newComponentTagCache(c.baseCtx, 64)
 
 	return meter.Register(
 		diagUtils.NewMeasureView(c.pubsubIngressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey, statusKey}, latencyDistribution),
@@ -231,233 +278,244 @@ func (c *componentMetrics) Init(meter view.Meter, appID, namespace string, laten
 
 // PubsubIngressEvent records the metrics for a pub/sub ingress event.
 func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, processStatus, status, topic string, elapsed float64) {
-	if c.enabled {
-		if status == "" {
-			status = processStatus
-		}
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.pubsubIngressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, statusKey, status, topicKey, topic)...),
-			stats.WithMeasurements(c.pubsubIngressCount.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.pubsubIngressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, statusKey, status, topicKey, topic)...),
-				stats.WithMeasurements(c.pubsubIngressLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	if status == "" {
+		status = processStatus
+	}
+	compCtx := c.componentCache.get(component)
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(processStatusKey, processStatus), tag.Upsert(statusKey, status), tag.Upsert(topicKey, topic)),
+			stats.WithMeasurements(c.pubsubIngressCount.M(1), c.pubsubIngressLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(processStatusKey, processStatus), tag.Upsert(statusKey, status), tag.Upsert(topicKey, topic)),
+		stats.WithMeasurements(c.pubsubIngressCount.M(1)))
 }
 
 // BulkPubsubIngressEvent records the metrics for a bulk pub/sub ingress event.
 func (c *componentMetrics) BulkPubsubIngressEvent(ctx context.Context, component, topic string, elapsed float64) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.bulkPubsubIngressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, topicKey, topic)...),
-			stats.WithMeasurements(c.bulkPubsubIngressCount.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.bulkPubsubIngressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, topicKey, topic)...),
-				stats.WithMeasurements(c.bulkPubsubIngressLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	compCtx := c.componentCache.get(component)
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(topicKey, topic)),
+			stats.WithMeasurements(c.bulkPubsubIngressCount.M(1), c.bulkPubsubIngressLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(topicKey, topic)),
+		stats.WithMeasurements(c.bulkPubsubIngressCount.M(1)))
 }
 
 // BulkPubsubIngressEventEntries records the metrics for entries inside a bulk pub/sub ingress event.
 func (c *componentMetrics) BulkPubsubIngressEventEntries(ctx context.Context, component, topic string, processStatus string, eventCount int64) {
-	if c.enabled && eventCount > 0 {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.bulkPubsubEventIngressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic)...),
-			stats.WithMeasurements(c.bulkPubsubEventIngressCount.M(eventCount)))
+	if !c.enabled || eventCount <= 0 {
+		return
 	}
+	compCtx := c.componentCache.get(component)
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(processStatusKey, processStatus), tag.Upsert(topicKey, topic)),
+		stats.WithMeasurements(c.bulkPubsubEventIngressCount.M(eventCount)))
 }
 
 // BulkPubsubEgressEvent records the metris for a pub/sub egress event.
 // eventCount if greater than zero implies successful publish of few/all events in the bulk publish call
 func (c *componentMetrics) BulkPubsubEgressEvent(ctx context.Context, component, topic string, success bool, eventCount int64, elapsed float64) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
+	if !c.enabled {
+		return
+	}
+	compCtx := c.componentCache.get(component)
+	successStr := strconv.FormatBool(success)
+	// Combine count+latency if we have latency
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
 			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.bulkPubsubEgressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic)...),
+			stats.WithTags(tag.Upsert(successKey, successStr), tag.Upsert(topicKey, topic)),
+			stats.WithMeasurements(c.bulkPubsubEgressCount.M(1), c.bulkPubsubEgressLatency.M(elapsed)))
+	} else {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(successKey, successStr), tag.Upsert(topicKey, topic)),
 			stats.WithMeasurements(c.bulkPubsubEgressCount.M(1)))
-		if eventCount > 0 {
-			// There is at leaset one success in the bulk publish call even if overall success of the call might be a failure
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.bulkPubsubEventEgressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, true, topicKey, topic)...),
-				stats.WithMeasurements(c.bulkPubsubEventEgressCount.M(eventCount)))
-		}
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.bulkPubsubEgressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic)...),
-				stats.WithMeasurements(c.bulkPubsubEgressLatency.M(elapsed)))
-		}
+	}
+	if eventCount > 0 {
+		// There is at least one success in the bulk publish call even if overall success of the call might be a failure
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(successKey, "true"), tag.Upsert(topicKey, topic)),
+			stats.WithMeasurements(c.bulkPubsubEventEgressCount.M(eventCount)))
 	}
 }
 
 // PubsubEgressEvent records the metris for a pub/sub egress event.
 func (c *componentMetrics) PubsubEgressEvent(ctx context.Context, component, topic string, success bool, elapsed float64) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.pubsubEgressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic)...),
-			stats.WithMeasurements(c.pubsubEgressCount.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.pubsubEgressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success), topicKey, topic)...),
-				stats.WithMeasurements(c.pubsubEgressLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	compCtx := c.componentCache.get(component)
+	successStr := strconv.FormatBool(success)
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(successKey, successStr), tag.Upsert(topicKey, topic)),
+			stats.WithMeasurements(c.pubsubEgressCount.M(1), c.pubsubEgressLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(successKey, successStr), tag.Upsert(topicKey, topic)),
+		stats.WithMeasurements(c.pubsubEgressCount.M(1)))
 }
 
 // InputBindingEvent records the metrics for an input binding event.
 func (c *componentMetrics) InputBindingEvent(ctx context.Context, component string, success bool, elapsed float64) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.inputBindingCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success))...),
-			stats.WithMeasurements(c.inputBindingCount.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.inputBindingLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success))...),
-				stats.WithMeasurements(c.inputBindingLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	compCtx := c.componentCache.get(component)
+	successStr := strconv.FormatBool(success)
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(successKey, successStr)),
+			stats.WithMeasurements(c.inputBindingCount.M(1), c.inputBindingLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(successKey, successStr)),
+		stats.WithMeasurements(c.inputBindingCount.M(1)))
 }
 
 // OutputBindingEvent records the metrics for an output binding event.
 func (c *componentMetrics) OutputBindingEvent(ctx context.Context, component, operation string, success bool, elapsed float64) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.outputBindingCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-			stats.WithMeasurements(c.outputBindingCount.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.outputBindingLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-				stats.WithMeasurements(c.outputBindingLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	compCtx := c.componentCache.get(component)
+	successStr := strconv.FormatBool(success)
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, successStr)),
+			stats.WithMeasurements(c.outputBindingCount.M(1), c.outputBindingLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, successStr)),
+		stats.WithMeasurements(c.outputBindingCount.M(1)))
 }
 
 // StateInvoked records the metrics for a state event.
 func (c *componentMetrics) StateInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.stateCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-			stats.WithMeasurements(c.stateCount.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.stateLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-				stats.WithMeasurements(c.stateLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	compCtx := c.componentCache.get(component)
+	successStr := strconv.FormatBool(success)
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, successStr)),
+			stats.WithMeasurements(c.stateCount.M(1), c.stateLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, successStr)),
+		stats.WithMeasurements(c.stateCount.M(1)))
 }
 
 // ConfigurationInvoked records the metrics for a configuration event.
 func (c *componentMetrics) ConfigurationInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.configurationCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-			stats.WithMeasurements(c.configurationCount.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.configurationLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-				stats.WithMeasurements(c.configurationLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	compCtx := c.componentCache.get(component)
+	successStr := strconv.FormatBool(success)
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, successStr)),
+			stats.WithMeasurements(c.configurationCount.M(1), c.configurationLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, successStr)),
+		stats.WithMeasurements(c.configurationCount.M(1)))
 }
 
-// SecretInvoked records the metrics for a secret event.
+// ConversationInvoked records the metrics for a conversation event.
 func (c *componentMetrics) ConversationInvoked(ctx context.Context, component string, success bool, elapsed float64) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.conversationCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success))...),
-			stats.WithMeasurements(c.conversationCount.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.conversationLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, successKey, strconv.FormatBool(success))...),
-				stats.WithMeasurements(c.conversationLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	compCtx := c.componentCache.get(component)
+	successStr := strconv.FormatBool(success)
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(successKey, successStr)),
+			stats.WithMeasurements(c.conversationCount.M(1), c.conversationLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(successKey, successStr)),
+		stats.WithMeasurements(c.conversationCount.M(1)))
 }
 
 // SecretInvoked records the metrics for a secret event.
 func (c *componentMetrics) SecretInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.secretCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-			stats.WithMeasurements(c.secretCount.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.secretLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-				stats.WithMeasurements(c.secretLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	compCtx := c.componentCache.get(component)
+	successStr := strconv.FormatBool(success)
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, successStr)),
+			stats.WithMeasurements(c.secretCount.M(1), c.secretLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, successStr)),
+		stats.WithMeasurements(c.secretCount.M(1)))
 }
 
 // CryptoInvoked records the metrics for a crypto event.
 func (c *componentMetrics) CryptoInvoked(ctx context.Context, component, operation string, success bool, elapsed float64) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(c.cryptoCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-			stats.WithMeasurements(c.cryptoCount.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.cryptoLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-				stats.WithMeasurements(c.cryptoLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	compCtx := c.componentCache.get(component)
+	successStr := strconv.FormatBool(success)
+	if elapsed > 0 {
+		stats.RecordWithOptions(compCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, successStr)),
+			stats.WithMeasurements(c.cryptoCount.M(1), c.cryptoLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(compCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, successStr)),
+		stats.WithMeasurements(c.cryptoCount.M(1)))
 }
 
 // JobTriggeredSuccess records the metrics for a job execution success event.
@@ -471,21 +529,21 @@ func (c *componentMetrics) JobTriggeredFailure(ctx context.Context, operation st
 }
 
 func (c *componentMetrics) jobTriggered(ctx context.Context, operation string, success bool, elapsed float64, countMeasure *stats.Int64Measure) {
-	if c.enabled {
-		stats.RecordWithOptions(
-			ctx,
-			stats.WithRecorder(c.meter),
-			stats.WithTags(diagUtils.WithTags(countMeasure.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation)...),
-			stats.WithMeasurements(countMeasure.M(1)))
-
-		if elapsed > 0 {
-			stats.RecordWithOptions(
-				ctx,
-				stats.WithRecorder(c.meter),
-				stats.WithTags(diagUtils.WithTags(c.jobLatency.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success))...),
-				stats.WithMeasurements(c.jobLatency.M(elapsed)))
-		}
+	if !c.enabled {
+		return
 	}
+	// Job metrics don't have a component tag, use baseCtx directly
+	if elapsed > 0 {
+		stats.RecordWithOptions(c.baseCtx,
+			stats.WithRecorder(c.meter),
+			stats.WithTags(tag.Upsert(operationKey, operation), tag.Upsert(successKey, strconv.FormatBool(success))),
+			stats.WithMeasurements(countMeasure.M(1), c.jobLatency.M(elapsed)))
+		return
+	}
+	stats.RecordWithOptions(c.baseCtx,
+		stats.WithRecorder(c.meter),
+		stats.WithTags(tag.Upsert(operationKey, operation)),
+		stats.WithMeasurements(countMeasure.M(1)))
 }
 
 // ElapsedSince returns the given time in milliseconds.
