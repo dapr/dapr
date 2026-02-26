@@ -26,7 +26,6 @@ import (
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/dapr/dapr/pkg/healthz"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
@@ -43,7 +42,6 @@ var log = logger.NewLogger("dapr.scheduler.server.cron")
 type Options struct {
 	ID      string
 	Host    *schedulerv1pb.Host
-	Healthz healthz.Healthz
 	Etcd    etcd.Interface
 	Workers uint32
 }
