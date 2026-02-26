@@ -49,16 +49,6 @@ func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*b
 	return nil
 }
 
-func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, method string) error {
-	for i, msg := range msgs {
-		if err := o.callStateMessage(ctx, msg, historyEvents[i], targets[i], method); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, historyEvent *backend.HistoryEvent, target string, method string) error {
 	b, err := proto.Marshal(m)
 	if err != nil {

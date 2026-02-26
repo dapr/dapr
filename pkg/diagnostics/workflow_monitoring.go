@@ -64,9 +64,10 @@ type workflowMetrics struct {
 	enabled                   bool
 	namespace                 string
 	meter                     stats.Recorder
+
 	// baseCtx is a context pre-tagged with app_id and namespace to avoid
-	// repeatedly upserting constant tags on every metrics record call.
-	baseCtx                   context.Context
+	// repeonstant tags on every metrics record call.
+	baseCtx context.Context
 }
 
 func newWorkflowMetrics() *workflowMetrics {
