@@ -776,5 +776,6 @@ jobs:
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Trigger GitHub workflow
-        run: gh api repos/dapr/test-infra/actions/workflows/version-update.yml/dispatches \
-             -X POST -f ref="master" -f inputs[rel_version]="${{ env.REL_VERSION }}"
+        run: |
+          gh api repos/dapr/test-infra/actions/workflows/version-update.yml/dispatches \
+            -X POST -f ref="master" -f 'inputs[rel_version]=${{ env.REL_VERSION }}'
