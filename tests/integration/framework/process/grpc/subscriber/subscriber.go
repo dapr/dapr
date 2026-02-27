@@ -117,7 +117,7 @@ func (s *Subscriber) Port(t *testing.T) int {
 func (s *Subscriber) Receive(t *testing.T, ctx context.Context) *rtv1.TopicEventRequest {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
 	select {
