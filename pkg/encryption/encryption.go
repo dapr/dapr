@@ -18,7 +18,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	b64 "encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -27,15 +26,18 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/kit/crypto/aescbcaead"
 )
 
 type Algorithm string
 
 const (
-	primaryEncryptionKey   = "primaryEncryptionKey"
-	secondaryEncryptionKey = "secondaryEncryptionKey"
-	errPrefix              = "failed to extract encryption key"
-	AESGCMAlgorithm        = "AES-GCM"
+	primaryEncryptionKey       = "primaryEncryptionKey"
+	secondaryEncryptionKey     = "secondaryEncryptionKey"
+	errPrefix                  = "failed to extract encryption key"
+	AESGCMAlgorithm            = "AES-GCM"
+	AESCBCAEADAlgorithm        = "AES-CBC-AEAD"
+	AESCBCAEADAlgorithmVersion = 2
 )
 
 // ComponentEncryptionKeys holds the encryption keys set for a component.
@@ -46,13 +48,19 @@ type ComponentEncryptionKeys struct {
 
 // Key holds the key to encrypt an arbitrary object.
 type Key struct {
-	Key       string
-	Name      string
-	cipherObj cipher.AEAD
+	Key         string
+	Name        string
+	cipherObj   cipher.AEAD // v1 AES-GCM encryption scheme
+	cipherObjV2 cipher.AEAD // v2 AES-CBC-AEAD encryption scheme
+}
+
+type ComponentEncryptionKeyOptions struct {
+	// TODO: remove when feature flag is removed
+	StateV2EncryptionEnabled bool
 }
 
 // ComponentEncryptionKey checks if a component definition contains an encryption key and extracts it using the supplied secret store.
-func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstores.SecretStore) (ComponentEncryptionKeys, error) {
+func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstores.SecretStore, opts ComponentEncryptionKeyOptions) (ComponentEncryptionKeys, error) {
 	if secretStore == nil {
 		return ComponentEncryptionKeys{}, nil
 	}
@@ -111,6 +119,15 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 		}
 
 		cek.Primary.cipherObj = cipherObj
+
+		if opts.StateV2EncryptionEnabled {
+			cipherObjV2, err := createCipher(cek.Primary, AESCBCAEADAlgorithm)
+			if err != nil {
+				return ComponentEncryptionKeys{}, err
+			}
+
+			cek.Primary.cipherObjV2 = cipherObjV2
+		}
 	}
 	if cek.Secondary.Key != "" {
 		cipherObj, err := createCipher(cek.Secondary, AESGCMAlgorithm)
@@ -119,6 +136,15 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 		}
 
 		cek.Secondary.cipherObj = cipherObj
+
+		if opts.StateV2EncryptionEnabled {
+			cipherObjV2, err := createCipher(cek.Secondary, AESCBCAEADAlgorithm)
+			if err != nil {
+				return ComponentEncryptionKeys{}, err
+			}
+
+			cek.Secondary.cipherObjV2 = cipherObjV2
+		}
 	}
 
 	return cek, nil
@@ -159,27 +185,22 @@ func tryGetEncryptionKeyFromMetadataItem(namespace string, item commonapi.NameVa
 	return Key{}, nil
 }
 
-// Encrypt takes a byte array and encrypts it using a supplied encryption key.
-func encrypt(value []byte, key Key) ([]byte, error) {
-	nsize := make([]byte, key.cipherObj.NonceSize())
+// Encrypt takes a byte array and encrypts it using a supplied cipher.
+func encrypt(value []byte, additionalData []byte, cipher cipher.AEAD) ([]byte, error) {
+	nsize := make([]byte, cipher.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nsize); err != nil {
 		return value, err
 	}
 
-	return key.cipherObj.Seal(nsize, nsize, value, nil), nil
+	return cipher.Seal(nsize, nsize, value, additionalData), nil
 }
 
-// Decrypt takes a byte array and decrypts it using a supplied encryption key.
-func decrypt(value []byte, key Key) ([]byte, error) {
-	enc, err := b64.StdEncoding.DecodeString(string(value))
-	if err != nil {
-		return value, err
-	}
+// Decrypt takes a byte array and decrypts it using a supplied cipher.
+func decrypt(value []byte, additionalData []byte, cipher cipher.AEAD) ([]byte, error) {
+	nsize := cipher.NonceSize()
+	nonce, ciphertext := value[:nsize], value[nsize:]
 
-	nsize := key.cipherObj.NonceSize()
-	nonce, ciphertext := enc[:nsize], enc[nsize:]
-
-	return key.cipherObj.Open(nil, nonce, ciphertext, nil)
+	return cipher.Open(nil, nonce, ciphertext, additionalData)
 }
 
 func createCipher(key Key, algorithm Algorithm) (cipher.AEAD, error) {
@@ -190,6 +211,8 @@ func createCipher(key Key, algorithm Algorithm) (cipher.AEAD, error) {
 
 	switch algorithm {
 	// Other authenticated ciphers can be added if needed, e.g. golang.org/x/crypto/chacha20poly1305
+	case AESCBCAEADAlgorithm:
+		return newAESCBCAEAD(keyBytes)
 	case AESGCMAlgorithm:
 		block, err := aes.NewCipher(keyBytes)
 		if err != nil {
@@ -199,4 +222,21 @@ func createCipher(key Key, algorithm Algorithm) (cipher.AEAD, error) {
 	}
 
 	return nil, errors.New("unsupported algorithm")
+}
+
+// newAESCBCAEAD returns an AEAD cipher based on AES-CBC, or an error if the key size is not supported.
+// Keys can be 32, 48, or 64 bytes, corresponding to AES-128 with HMAC-SHA-256-128, AES-192 with HMAC-SHA-384-192,
+// or AES-256 with HMAC-SHA-512-256 respectively.
+func newAESCBCAEAD(key []byte) (cipher.AEAD, error) {
+	l := len(key)
+	switch l {
+	case 32:
+		return aescbcaead.NewAESCBC128SHA256(key)
+	case 48:
+		return aescbcaead.NewAESCBC192SHA384(key)
+	case 64:
+		return aescbcaead.NewAESCBC256SHA512(key)
+	default:
+		return nil, errors.New("unsupported key size")
+	}
 }
