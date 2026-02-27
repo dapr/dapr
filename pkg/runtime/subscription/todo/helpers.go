@@ -31,8 +31,7 @@ var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription.todo")
 func ValidateEntryId(entryId string, i int) error { //nolint:stylecheck
 	if entryId == "" {
 		log.Warn("Invalid blank entry id received while processing bulk pub/sub event, won't be able to process it")
-		//nolint:stylecheck
-		return errors.New("Blank entryId supplied - won't be able to process it")
+		return errors.New("blank entryId supplied - won't be able to process it")
 	}
 
 	return nil

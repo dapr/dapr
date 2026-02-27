@@ -211,7 +211,7 @@ func extractMessage(reqID string, body []byte) (string, error) {
 		return "", errors.New("no body")
 	}
 
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	err := json.Unmarshal(body, &m)
 	if err != nil {
 		log.Printf("(%s) Could not unmarshal: %v", reqID, err)

@@ -342,7 +342,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		for _, item := range rawMsgEntries {
 			if !entryRespReceived[item.EntryId] {
 				todo.AddBulkResponseEntry(&bsrr.Entries, item.EntryId,
-					fmt.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId), //nolint:stylecheck
+					fmt.Errorf("response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId),
 				)
 
 				hasAnyError = true
@@ -353,8 +353,7 @@ func (h *http) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 		bscData.BulkSubDiag.Elapsed = elapsed
 
 		if hasAnyError {
-			//nolint:stylecheck
-			return errors.New("Few message(s) have failed during bulk subscribe operation")
+			return errors.New("few message(s) have failed during bulk subscribe operation")
 		} else {
 			return nil
 		}

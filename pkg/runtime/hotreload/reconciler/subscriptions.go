@@ -50,8 +50,6 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) {
 	if s.proc.AddPendingSubscription(ctx, sub) {
 		log.Infof("Subscription updated: %s", sub.Name)
 	}
-
-	return
 }
 
 //nolint:unused

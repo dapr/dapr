@@ -88,7 +88,7 @@ type (
 	}
 
 	SubscribedMessage struct {
-		CloudEvent   map[string]interface{}
+		CloudEvent   map[string]any
 		Data         []byte
 		Topic        string
 		Metadata     map[string]string
@@ -459,7 +459,7 @@ func ExtractCloudEventExtensions(cloudEvent map[string]any) (*structpb.Struct, e
 	return &extensionsStruct, nil
 }
 
-func FetchEntry(rawPayload bool, entry *contribpubsub.BulkMessageEntry, cloudEvent map[string]interface{}) (*runtimev1pb.TopicEventBulkRequestEntry, error) {
+func FetchEntry(rawPayload bool, entry *contribpubsub.BulkMessageEntry, cloudEvent map[string]any) (*runtimev1pb.TopicEventBulkRequestEntry, error) {
 	if rawPayload {
 		return &runtimev1pb.TopicEventBulkRequestEntry{
 			EntryId:     entry.EntryId,
@@ -482,7 +482,7 @@ func FetchEntry(rawPayload bool, entry *contribpubsub.BulkMessageEntry, cloudEve
 	}
 }
 
-func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
+func extractCloudEvent(event map[string]any) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
 	envelope := &runtimev1pb.TopicEventCERequest{
 		Id:              ExtractCloudEventProperty(event, contribpubsub.IDField),
 		Source:          ExtractCloudEventProperty(event, contribpubsub.SourceField),

@@ -71,8 +71,6 @@ func (c *components) update(ctx context.Context, comp compapi.Component) {
 		log.Infof("Component updated: %s", comp.LogName())
 		c.proc.WaitForEmptyComponentQueue()
 	}
-
-	return
 }
 
 //nolint:unused

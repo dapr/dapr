@@ -2895,7 +2895,7 @@ func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body 
 	r, _ := nethttp.NewRequest(method, url, bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("dapr-api-token", token)
-	res, err := f.client.Do(r) //nolint:gosec
+	res, err := f.client.Do(r)
 	if err != nil {
 		panic(fmt.Errorf("failed to request: %v", err))
 	}
@@ -2933,7 +2933,7 @@ func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, 
 		r.Header.Set(headers[i], headers[i+1])
 	}
 
-	res, err := f.client.Do(r) //nolint:gosec
+	res, err := f.client.Do(r)
 	if err != nil {
 		panic(fmt.Errorf("failed to request: %v", err))
 	}

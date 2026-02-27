@@ -148,7 +148,7 @@ func (k *kube) Run(t *testing.T, ctx context.Context) {
 			TokenValidator:            sentrypbv1.SignCertificateRequest_JWKS,
 			Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
 		},
-		"wrong pod name": {
+		"wrong pod name": { //nolint:gosec
 			Id:                        "myappid",
 			Namespace:                 "mynamespace",
 			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),

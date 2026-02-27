@@ -340,7 +340,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	for _, item := range psm.PubSubMessages {
 		if !entryRespReceived[item.Entry.EntryId] {
 			todo.AddBulkResponseEntry(bulkResponses, item.Entry.EntryId,
-				fmt.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.Entry.EntryId), //nolint:stylecheck
+				fmt.Errorf("response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.Entry.EntryId),
 			)
 
 			hasAnyError = true
@@ -351,8 +351,7 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	bscData.BulkSubDiag.Elapsed = elapsed
 
 	if hasAnyError {
-		//nolint:stylecheck
-		return errors.New("Few message(s) have failed during bulk subscribe operation")
+		return errors.New("few message(s) have failed during bulk subscribe operation")
 	} else {
 		return nil
 	}

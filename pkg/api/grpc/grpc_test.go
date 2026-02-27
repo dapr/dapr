@@ -1664,7 +1664,6 @@ func TestSubscribeConfiguration(t *testing.T) {
 					count := 0
 					_, err := resp.Recv()
 					for err == nil {
-
 						if count > retry {
 							break
 						}
@@ -1846,7 +1845,6 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			count := 0
 			var subscribeID string
 			for count <= retry {
-
 				count++
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
@@ -1867,7 +1865,6 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			require.NoError(t, err, "Error should be nil")
 			count = 0
 			for !errors.Is(err, io.EOF) {
-
 				if count > retry {
 					break
 				}
@@ -1891,7 +1888,6 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			count := 0
 			var subscribeID string
 			for count <= retry {
-
 				count++
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
@@ -1912,7 +1908,6 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			require.NoError(t, err, "Error should be nil")
 			count = 0
 			for !errors.Is(err, io.EOF) {
-
 				if count > retry {
 					break
 				}

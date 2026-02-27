@@ -145,7 +145,6 @@ func (h *AppHealth) Enqueue() {
 	default:
 		// Do nothing
 	}
-	return
 }
 
 // ReportHealth is used by the runtime to report a health signal from the app.

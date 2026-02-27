@@ -414,7 +414,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 					},
 				},
 			},
-			Auth: componentsV1alpha1.Auth{
+			Auth: componentsV1alpha1.Auth{ //nolint:gosec
 				SecretStore: "kubernetesMockChild",
 			},
 		})
@@ -435,7 +435,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 					},
 				},
 			},
-			Auth: componentsV1alpha1.Auth{
+			Auth: componentsV1alpha1.Auth{ //nolint:gosec
 				SecretStore: "kubernetesMock",
 			},
 		})

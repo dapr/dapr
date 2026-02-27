@@ -1123,7 +1123,7 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 
 	actualVerb := res.Header.Get("x-dapr-tests-request-method")
 	if httpMethod != actualVerb {
-		return appResp, fmt.Errorf("Expected HTTP verb: %s actual %s", httpMethod, actualVerb) //nolint:stylecheck
+		return appResp, fmt.Errorf("expected HTTP verb: %s actual %s", httpMethod, actualVerb)
 	}
 
 	body, err := io.ReadAll(res.Body)
