@@ -27,3 +27,4 @@ go.work
 
 # Directory reserved for local dev files: config files, scripts, anything for individual local dev.
 .local/
+operator
