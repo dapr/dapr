@@ -109,4 +109,3 @@ func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateReques
 
 	return nil
 }
-
