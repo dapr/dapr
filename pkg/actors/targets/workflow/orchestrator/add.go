@@ -20,6 +20,7 @@ import (
 
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -53,7 +54,9 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
 		o.activityResultAwaited.CompareAndSwap(true, false)
 	}
-	log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s': adding event to the workflow inbox", o.actorID)
+	}
 	state.AddToInbox(&e)
 
 	if err := o.saveInternalState(ctx, state); err != nil {

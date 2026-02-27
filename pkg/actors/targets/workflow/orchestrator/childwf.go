@@ -28,11 +28,14 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
 
 func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent) error {
-	log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
+	}
 
 	for _, e := range es {
 		createSO := e.GetSubOrchestrationInstanceCreated()

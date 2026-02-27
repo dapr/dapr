@@ -27,6 +27,7 @@ import (
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/kit/logger"
 )
 
 func (o *orchestrator) createWorkflowReminder(ctx context.Context, namePrefix string, data proto.Message, start time.Time, targetAppID string) (string, error) {
@@ -39,14 +40,14 @@ func (o *orchestrator) createRetentionReminder(ctx context.Context, namePrefix s
 }
 
 func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix string, data proto.Message, start time.Time, actorType string) (string, error) {
-	b := make([]byte, 6)
-	_, err := io.ReadFull(rand.Reader, b)
+	var b [6]byte
+	_, err := io.ReadFull(rand.Reader, b[:])
 	if err != nil {
 		return "", fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 
 	dueTime := start.UTC().Format(time.RFC3339)
-	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
+	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b[:])
 
 	var adata *anypb.Any
 	if data != nil {
@@ -56,7 +57,9 @@ func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix st
 		}
 	}
 
-	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
+	}
 
 	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: actorType,

@@ -28,11 +28,14 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/logger"
 )
 
 func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent, dueTime time.Time) error {
 	const reminderName = "run-activity"
-	log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", a.actorType, a.actorID, reminderName, dueTime)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Activity actor '%s||%s': creating reminder '%s' with dueTime=%s", a.actorType, a.actorID, reminderName, dueTime)
+	}
 
 	anydata, err := anypb.New(his)
 	if err != nil {
@@ -60,13 +63,13 @@ func (a *activity) createReminder(ctx context.Context, his *backend.HistoryEvent
 }
 
 func (a *activity) createWorkflowResultReminder(ctx context.Context, wfActorType, wfActorID string, result *backend.HistoryEvent) error {
-	b := make([]byte, 6)
-	_, err := io.ReadFull(rand.Reader, b)
+	var b [6]byte
+	_, err := io.ReadFull(rand.Reader, b[:])
 	if err != nil {
 		return fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 
-	reminderName := common.ReminderPrefixActivityResult + base64.RawURLEncoding.EncodeToString(b)
+	reminderName := common.ReminderPrefixActivityResult + base64.RawURLEncoding.EncodeToString(b[:])
 
 	anydata, err := anypb.New(result)
 	if err != nil {

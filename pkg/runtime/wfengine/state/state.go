@@ -279,7 +279,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 			return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 		}
 
-		wfLogger.Debugf("Loaded legacy workflow state metadata: %s", res.Data)
+		if wfLogger.IsOutputLevelEnabled(logger.DebugLevel) {
+			wfLogger.Debugf("Loaded legacy workflow state metadata: %s", res.Data)
+		}
 		metadata.Generation = metadataJSON.Generation
 		metadata.InboxLength = metadataJSON.InboxLength
 		metadata.HistoryLength = metadataJSON.HistoryLength
@@ -365,7 +367,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 	}
 
-	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
+	if wfLogger.IsOutputLevelEnabled(logger.DebugLevel) {
+		wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
+	}
 	return wState, nil
 }
 

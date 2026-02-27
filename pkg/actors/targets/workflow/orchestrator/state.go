@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/logger"
 )
 
 func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.OrchestrationMetadata, error) {
@@ -66,7 +67,9 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 		return err
 	}
 
-	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(req.Operations))
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s': saving %d keys to actor state store", o.actorID, len(req.Operations))
+	}
 
 	if err = o.actorState.TransactionalStateOperation(ctx, true, req, false); err != nil {
 		return err
@@ -201,7 +204,9 @@ func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState,
 func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*internalsv1pb.ListStringValue) error {
 	defer o.factory.deactivate(o)
 
-	log.Debugf("Workflow actor '%s': purging workflow state", o.actorID)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s': purging workflow state", o.actorID)
+	}
 
 	state, _, err := o.loadInternalState(ctx)
 	if err != nil {

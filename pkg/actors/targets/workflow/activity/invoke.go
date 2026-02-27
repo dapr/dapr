@@ -28,6 +28,7 @@ import (
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/logger"
 )
 
 // Activities are scheduled by workflows and can execute for arbitrary lengths of time. Instead of executing
@@ -46,7 +47,9 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 		dueTime = time.UnixMilli(unix)
 	}
 
-	log.Debugf("Activity actor '%s': invoking method '%s'", a.actorID, method)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Activity actor '%s': invoking method '%s'", a.actorID, method)
+	}
 
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
 	if err != nil {
@@ -66,7 +69,9 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 }
 
 func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
+	}
 
 	var state backend.HistoryEvent
 	if err := reminder.Data.UnmarshalTo(&state); err != nil {

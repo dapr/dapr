@@ -24,39 +24,24 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/logger"
 )
 
 func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) error {
-	msgs := make([]proto.Message, len(events))
-	historyEvents := make([]*backend.HistoryEvent, len(events))
-	targets := make([]string, len(events))
-
-	for i, msg := range events {
-		msgs[i] = &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
-		historyEvents[i] = msg.GetHistoryEvent()
-		targets[i] = msg.GetTargetInstanceID()
+	for _, msg := range events {
+		mmsg := &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
+		if err := o.callStateMessage(ctx, mmsg, msg.GetHistoryEvent(), msg.GetTargetInstanceID(), todo.CreateWorkflowInstanceMethod); err != nil {
+			return err
+		}
 	}
 
-	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.CreateWorkflowInstanceMethod)
+	return nil
 }
 
 func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) error {
-	msgs := make([]proto.Message, len(events))
-	historyEvents := make([]*backend.HistoryEvent, len(events))
-	targets := make([]string, len(events))
-
-	for i, msg := range events {
-		msgs[i] = msg.GetHistoryEvent()
-		historyEvents[i] = msg.GetHistoryEvent()
-		targets[i] = msg.GetTargetInstanceID()
-	}
-
-	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.AddWorkflowEventMethod)
-}
-
-func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, method string) error {
-	for i, msg := range msgs {
-		if err := o.callStateMessage(ctx, msg, historyEvents[i], targets[i], method); err != nil {
+	for _, msg := range events {
+		he := msg.GetHistoryEvent()
+		if err := o.callStateMessage(ctx, he, he, msg.GetTargetInstanceID(), todo.AddWorkflowEventMethod); err != nil {
 			return err
 		}
 	}
@@ -73,7 +58,10 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 
 	if historyEvent != nil && historyEvent.GetRouter() != nil {
 		router := historyEvent.GetRouter()
-		log.Debugf("Cross-app suborchestrator call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
+
+		if log.IsOutputLevelEnabled(logger.DebugLevel) {
+			log.Debugf("Cross-app suborchestrator call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
+		}
 
 		switch m := m.(type) {
 		case *backend.CreateWorkflowInstanceRequest:
@@ -99,7 +87,9 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 		}
 	}
 
-	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", o.actorID, method, actorType, target)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", o.actorID, method, actorType, target)
+	}
 
 	if _, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest(method).

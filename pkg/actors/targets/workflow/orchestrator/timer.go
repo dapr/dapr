@@ -20,6 +20,7 @@ import (
 	"strconv"
 
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/logger"
 )
 
 func (o *orchestrator) createTimers(ctx context.Context, es []*backend.HistoryEvent, generation uint64) error {
@@ -42,7 +43,9 @@ func (o *orchestrator) createTimer(ctx context.Context, e *backend.HistoryEvent,
 	reminderPrefix := reminderPrefixTimer + strconv.Itoa(int(e.GetTimerFired().GetTimerId()))
 	data := &backend.DurableTimer{TimerEvent: e, Generation: generation}
 
-	log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer, duetime=%s", o.actorID, reminderPrefix, start)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer, duetime=%s", o.actorID, reminderPrefix, start)
+	}
 
 	if _, err := o.createWorkflowReminder(ctx, reminderPrefix, data, start, o.appID); err != nil {
 		return fmt.Errorf("actor '%s' failed to create reminder for timer: %w", o.actorID, err)

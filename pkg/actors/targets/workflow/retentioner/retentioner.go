@@ -40,6 +40,10 @@ func (r *retentioner) InvokeMethod(context.Context, *internalsv1pb.InternalInvok
 	return nil, errors.New("invoke not implemented")
 }
 
+var purgeRetentionMetadata = map[string][]string{
+	todo.MetadataPurgeRetentionCall: {"true"},
+}
+
 func (r *retentioner) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	unlock, err := r.lock.ContextLock(ctx)
 	if err != nil {
@@ -49,13 +53,13 @@ func (r *retentioner) InvokeReminder(ctx context.Context, reminder *actorapi.Rem
 
 	defer r.Deactivate(ctx)
 
-	log.Debugf("Invoking retention purge reminder for workflow instance %s", r.actorID)
+	if log.IsOutputLevelEnabled(logger.DebugLevel) {
+		log.Debugf("Invoking retention purge reminder for workflow instance %s", r.actorID)
+	}
 
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
-		WithMetadata(map[string][]string{
-			todo.MetadataPurgeRetentionCall: {"true"},
-		}).
+		WithMetadata(purgeRetentionMetadata).
 		WithActor(r.wfActorType, r.actorID)
 
 	start := time.Now()
