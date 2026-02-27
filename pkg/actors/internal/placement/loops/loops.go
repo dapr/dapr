@@ -122,6 +122,7 @@ type DisseminationTimeout struct {
 }
 
 type SetDrainOngoingCallTimeout struct {
+	*placebase
 	Drain   *bool
 	Timeout *time.Duration
 }
