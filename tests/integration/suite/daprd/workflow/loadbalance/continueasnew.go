@@ -74,12 +74,12 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(co *assert.CollectT) {
 		assert.Len(co,
 			c.workflow.DaprN(0).GetMetadata(t, ctx).ActorRuntime.ActiveActors, 4)
-		assert.Equal(co,
-			c.workflow.DaprN(0).GetMetadata(t, ctx).Workflows.ConnectedWorkers, 1)
+		assert.Equal(co, 1,
+			c.workflow.DaprN(0).GetMetadata(t, ctx).Workflows.ConnectedWorkers)
 		assert.Len(co,
 			c.workflow.DaprN(1).GetMetadata(t, ctx).ActorRuntime.ActiveActors, 4)
-		assert.Equal(co,
-			c.workflow.DaprN(1).GetMetadata(t, ctx).Workflows.ConnectedWorkers, 1)
+		assert.Equal(co, 1,
+			c.workflow.DaprN(1).GetMetadata(t, ctx).Workflows.ConnectedWorkers)
 	}, time.Second*20, time.Millisecond*10)
 
 	client := client.NewTaskHubGrpcClient(grpc.LoadBalance(t,
