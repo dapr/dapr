@@ -90,6 +90,7 @@ type operator struct {
 	secHealthz       healthz.Target
 	apiServerHealthz healthz.Target
 	webhookHealthz   healthz.Target
+	cacheHealthz     healthz.Target
 }
 
 // NewOperator returns a new Dapr Operator.
@@ -190,6 +191,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		secHealthz:       opts.Healthz.AddTarget("operator-security"),
 		apiServerHealthz: opts.Healthz.AddTarget("operator-api-server"),
 		webhookHealthz:   opts.Healthz.AddTarget("operator-webhook"),
+		cacheHealthz:     opts.Healthz.AddTarget("operator-cache"),
 		apiServer: api.NewAPIServer(api.Options{
 			Client:        mgr.GetClient(),
 			Cache:         mgr.GetCache(),
@@ -294,6 +296,17 @@ func (o *operator) Start(ctx context.Context) error {
 			if rErr != nil {
 				return fmt.Errorf("failed to start API server: %w", rErr)
 			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			if !o.mgr.GetCache().WaitForCacheSync(ctx) {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return errors.New("cache failed to sync")
+			}
+			o.cacheHealthz.Ready()
+			<-ctx.Done()
 			return nil
 		},
 	)
