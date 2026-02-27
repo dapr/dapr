@@ -113,7 +113,7 @@ func (c *Client[T]) Handle(ctx context.Context, event loops.EventClient) error {
 	case *loops.Shutdown:
 		c.handleShutdown(e)
 	default:
-		panic(fmt.Sprintf("unknown component client event type: %T", e))
+		panic(fmt.Sprintf("unknown client event type: %T", e))
 	}
 
 	return nil

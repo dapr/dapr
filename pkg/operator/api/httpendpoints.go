@@ -166,3 +166,4 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 
 	return nil
 }
+
