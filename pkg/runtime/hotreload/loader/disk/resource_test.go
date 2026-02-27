@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
-	"github.com/dapr/kit/events/batcher"
 )
 
 const (
@@ -142,12 +141,10 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
-		batcher := batcher.New[int, struct{}](batcher.Options{Interval: 0})
 		store := compstore.New()
 
 		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
-			store:   loadercompstore.NewComponents(store),
-			batcher: batcher,
+			store: loadercompstore.NewComponents(store),
 			loader: loaderdisk.NewComponents(loaderdisk.Options{
 				Paths: []string{dir},
 			}),
@@ -163,16 +160,11 @@ func Test_Stream(t *testing.T) {
 			errCh <- r.run(ctx)
 		}()
 
-		select {
-		case <-r.running:
-		case <-time.After(time.Second * 3):
-			assert.Fail(t, "expected to be running")
-		}
-
-		batcher.Batch(0, struct{}{})
-
 		conn, err := r.Stream(t.Context())
 		require.NoError(t, err)
+
+		// Send a trigger event to process the files
+		r.trigger()
 
 		var events []*loader.Event[componentsapi.Component]
 		for range 3 {
@@ -219,7 +211,6 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
-		batcher := batcher.New[int, struct{}](batcher.Options{Interval: 0})
 		store := compstore.New()
 		require.NoError(t, store.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
@@ -229,8 +220,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, store.CommitPendingComponent())
 
 		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
-			store:   loadercompstore.NewComponents(store),
-			batcher: batcher,
+			store: loadercompstore.NewComponents(store),
 			loader: loaderdisk.NewComponents(loaderdisk.Options{
 				Paths: []string{dir},
 			}),
@@ -246,16 +236,11 @@ func Test_Stream(t *testing.T) {
 			errCh <- r.run(ctx)
 		}()
 
-		select {
-		case <-r.running:
-		case <-time.After(time.Second * 3):
-			assert.Fail(t, "expected to be running")
-		}
-
-		batcher.Batch(0, struct{}{})
-
 		conn, err := r.Stream(t.Context())
 		require.NoError(t, err)
+
+		// Send a trigger event to process the files
+		r.trigger()
 
 		var events []*loader.Event[componentsapi.Component]
 		for range 2 {
@@ -294,7 +279,6 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
-		batcher := batcher.New[int, struct{}](batcher.Options{Interval: 0})
 		store := compstore.New()
 		require.NoError(t, store.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
@@ -313,8 +297,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, store.CommitPendingComponent())
 
 		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
-			store:   loadercompstore.NewComponents(store),
-			batcher: batcher,
+			store: loadercompstore.NewComponents(store),
 			loader: loaderdisk.NewComponents(loaderdisk.Options{
 				Paths: []string{dir},
 			}),
@@ -330,16 +313,11 @@ func Test_Stream(t *testing.T) {
 			errCh <- r.run(ctx)
 		}()
 
-		select {
-		case <-r.running:
-		case <-time.After(time.Second * 3):
-			assert.Fail(t, "expected to be running")
-		}
-
-		batcher.Batch(0, struct{}{})
-
 		conn, err := r.Stream(t.Context())
 		require.NoError(t, err)
+
+		// Send a trigger event to process the files
+		r.trigger()
 
 		var events []*loader.Event[componentsapi.Component]
 		for range 3 {
