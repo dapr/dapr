@@ -37,30 +37,31 @@ import (
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
+// ConnFn returns a gRPC connection and a teardown function.
+// The teardown function must be called when the connection is no longer needed,
+// with true to destroy the connection or false to release it back to the pool.
+type ConnFn func() (*grpc.ClientConn, func(bool), error)
+
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
-	appCallbackClient      runtimev1pb.AppCallbackClient
-	appCallbackAlphaClient runtimev1pb.AppCallbackAlphaClient
-	conn                   *grpc.ClientConn
-	baseAddress            string
-	ch                     chan struct{}
-	tracingSpec            config.TracingSpec
-	appMetadataToken       string
-	maxRequestBodySize     int
-	appHealth              *apphealth.AppHealth
+	connFn             ConnFn
+	baseAddress        string
+	ch                 chan struct{}
+	tracingSpec        config.TracingSpec
+	appMetadataToken   string
+	maxRequestBodySize int
+	appHealth          *apphealth.AppHealth
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
-func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress string, appAPIToken string) *Channel {
+func CreateLocalChannel(port, maxConcurrency int, connFn ConnFn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress string, appAPIToken string) *Channel {
 	// readBufferSize is unused
 	c := &Channel{
-		appCallbackClient:      runtimev1pb.NewAppCallbackClient(conn),
-		appCallbackAlphaClient: runtimev1pb.NewAppCallbackAlphaClient(conn),
-		conn:                   conn,
-		baseAddress:            net.JoinHostPort(baseAddress, strconv.Itoa(port)),
-		tracingSpec:            spec,
-		appMetadataToken:       appAPIToken,
-		maxRequestBodySize:     maxRequestBodySize,
+		connFn:             connFn,
+		baseAddress:        net.JoinHostPort(baseAddress, strconv.Itoa(port)),
+		tracingSpec:        spec,
+		appMetadataToken:   appAPIToken,
+		maxRequestBodySize: maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan struct{}, maxConcurrency)
@@ -109,10 +110,16 @@ func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 		}
 	}()
 
+	conn, teardown, err := g.connFn()
+	if err != nil {
+		return nil, fmt.Errorf("error getting app connection: %w", err)
+	}
+	defer teardown(false)
+
 	ctx = g.AddAppTokenToContext(ctx)
 	var header, trailer grpcMetadata.MD
 
-	_, err := g.appCallbackAlphaClient.OnJobEventAlpha1(ctx,
+	_, err = runtimev1pb.NewAppCallbackAlphaClient(conn).OnJobEventAlpha1(ctx,
 		&runtimev1pb.JobEventRequest{
 			Name:          name,
 			Data:          data,
@@ -171,6 +178,12 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	// Prepare gRPC Metadata
 	ctx = grpcMetadata.NewOutgoingContext(context.Background(), md)
 
+	conn, teardown, err := g.connFn()
+	if err != nil {
+		return nil, fmt.Errorf("error getting app connection: %w", err)
+	}
+	defer teardown(false)
+
 	var header, trailer grpcMetadata.MD
 
 	opts := []grpc.CallOption{
@@ -180,7 +193,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize),
 	}
 
-	resp, err := g.appCallbackClient.OnInvoke(ctx, pd.GetMessage(), opts...)
+	resp, err := runtimev1pb.NewAppCallbackClient(conn).OnInvoke(ctx, pd.GetMessage(), opts...)
 
 	if g.ch != nil {
 		<-g.ch
@@ -218,12 +231,19 @@ var emptyPbPool = sync.Pool{
 
 // HealthProbe performs a health probe.
 func (g *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
+	conn, teardown, err := g.connFn()
+	if err != nil {
+		reason := fmt.Sprintf("Health check failed: %v", err)
+		return apphealth.NewStatus(false, &reason), err
+	}
+	defer teardown(false)
+
 	// We use the low-level method here so we can avoid allocating multiple &emptypb.Empty and use the pool
 	in := emptyPbPool.Get()
 	defer emptyPbPool.Put(in)
 	out := emptyPbPool.Get()
 	defer emptyPbPool.Put(out)
-	err := g.conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", in, out)
+	err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", in, out)
 	if err != nil {
 		reason := fmt.Sprintf("Health check failed: %v", err)
 		return apphealth.NewStatus(false, &reason), err

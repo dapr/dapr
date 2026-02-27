@@ -418,7 +418,7 @@ func newDaprRuntime(ctx context.Context,
 				}(comp)
 			}
 
-			errs := make([]error, len(comps)+1)
+			errs := make([]error, len(comps)+2)
 			for i := range comps {
 				errs[i] = <-errCh
 			}
@@ -426,10 +426,13 @@ func newDaprRuntime(ctx context.Context,
 			rt.wg.Wait()
 			log.Info("Dapr runtime stopped")
 			errs[len(comps)] = rt.cleanSockets()
+			// Close gRPC manager after all components are shut down so that
+			// in-flight app gRPC connections are not destroyed while
+			// subscriptions are still draining.
+			errs[len(comps)+1] = rt.grpc.Close()
 			return errors.Join(errs...)
 		},
 		rt.stopTrace,
-		rt.grpc,
 	); err != nil {
 		return nil, err
 	}

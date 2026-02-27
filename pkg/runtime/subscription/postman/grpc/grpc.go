@@ -73,10 +73,11 @@ func (g *grpc) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
 	ctx = g.channel.AddAppTokenToContext(ctx)
 
-	conn, err := g.channel.GetAppClient()
+	conn, teardown, err := g.channel.GetAppClient()
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
+	defer teardown(false)
 	clientV1 := rtv1.NewAppCallbackClient(conn)
 
 	start := time.Now()
@@ -201,10 +202,11 @@ func (g *grpc) DeliverBulk(ctx context.Context, req *postman.DeliverBulkRequest)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.Metadata)
 	ctx = g.channel.AddAppTokenToContext(ctx)
 
-	conn, err := g.channel.GetAppClient()
+	conn, teardown, err := g.channel.GetAppClient()
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
+	defer teardown(false)
 	clientV1 := rtv1.NewAppCallbackClient(conn)
 	clientAlpha := rtv1.NewAppCallbackAlphaClient(conn)
 
