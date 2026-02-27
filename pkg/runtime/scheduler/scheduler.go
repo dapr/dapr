@@ -107,6 +107,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			<-ctx.Done()
 			s.hosts.Close(new(loops.Close))
 			s.connector.Close(new(loops.Close))
+
 			return ctx.Err()
 		},
 	).Run(ctx)

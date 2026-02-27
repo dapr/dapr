@@ -72,7 +72,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		assert.Equal(t, "daprd-test-image", cfg.SidecarImage)
 		assert.Equal(t, "IfNotPresent", cfg.SidecarImagePullPolicy)
 		assert.Equal(t, "test-namespace", cfg.Namespace)
-		assert.NotEqual(t, "", cfg.KubeClusterDomain)
+		assert.NotEmpty(t, cfg.KubeClusterDomain)
 	})
 
 	t.Run("sidecar run options not set", func(t *testing.T) {
@@ -237,7 +237,7 @@ func TestTolerationsParsing(t *testing.T) {
 				IgnoreEntrypointTolerations: tc.input,
 			}
 			c.parseTolerationsJSON()
-			assert.EqualValues(t, tc.expect, c.GetIgnoreEntrypointTolerations())
+			assert.Equal(t, tc.expect, c.GetIgnoreEntrypointTolerations())
 		})
 	}
 }

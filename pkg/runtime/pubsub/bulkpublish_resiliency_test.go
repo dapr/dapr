@@ -64,27 +64,27 @@ func NewMockBulkPublisher(t *testing.T, failCount int, failEvenOnes bool, failAl
 func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
 	m.rwLock.Lock()
 	defer m.rwLock.Unlock()
+
 	if req == nil {
 		return zero, assert.AnError
 	}
+
 	if m.applyTimeout {
 		time.Sleep(m.timeoutSleep)
 		// return some error
 		res := contribPubsub.NewBulkPublishResponse(req.Entries, assert.AnError)
 		res.FailedEntries = res.FailedEntries[1:]
+
 		return res, assert.AnError
 	}
+
 	res := contribPubsub.BulkPublishResponse{
 		FailedEntries: make([]contribPubsub.BulkPublishResponseFailedEntry, 0, len(req.Entries)),
 	}
 
 	for _, entry := range req.Entries {
 		// count the entryId retry times
-		if _, ok := m.entryIDRetryTimes[entry.EntryId]; ok {
-			m.entryIDRetryTimes[entry.EntryId]++
-		} else {
-			m.entryIDRetryTimes[entry.EntryId] = 1
-		}
+		m.entryIDRetryTimes[entry.EntryId]++
 		// assert the data and metadata are correct
 		assert.Equal(m.t, map[string]string{
 			"key" + entry.EntryId: "value" + entry.EntryId,
@@ -94,6 +94,7 @@ func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.
 	// fail events based on the input count
 	if m.failCount > 0 {
 		m.failCount--
+
 		for _, entry := range req.Entries {
 			k, _ := strconv.ParseInt(entry.EntryId, 10, 32)
 			if m.failAllEvents || (k%2 == 0 && m.failEvenOnes) {
@@ -104,8 +105,10 @@ func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.
 					})
 			}
 		}
+
 		return res, assert.AnError
 	}
+
 	return res, nil
 }
 
@@ -559,7 +562,6 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// fail events with even Ids at least 10 times in a row, simulate partial failures
 		// this will also simulate circuitBreaker being triggered
 		// timeout will be triggered here
-
 		bulkPublisher := NewMockBulkPublisher(t, 10, true, false)
 		shortTimeout := "1s"
 		bulkPublisher.applyTimeout = true
@@ -678,6 +680,7 @@ func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, tim
 			},
 		},
 	}
+
 	return resiliency.FromConfigurations(testLogger, r)
 }
 

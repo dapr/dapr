@@ -257,7 +257,6 @@ func (a *Universal) ListActorReminders(ctx context.Context, req *runtimev1pb.Lis
 		return nil, err
 	}
 
-	//nolint:protogetter
 	resp, err := r.List(ctx, &api.ListRemindersRequest{
 		ActorType: req.GetActorType(),
 		ActorID:   req.ActorId,

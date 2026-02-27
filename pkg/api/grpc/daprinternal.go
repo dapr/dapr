@@ -379,7 +379,7 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 		operation := req.Message().GetMethod()
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
-		appProtocolIsHTTP := a.Universal.AppConnectionConfig().Protocol.IsHTTP()
+		appProtocolIsHTTP := a.AppConnectionConfig().Protocol.IsHTTP()
 		if appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {

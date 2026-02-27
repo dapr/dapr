@@ -101,6 +101,7 @@ func (d *disk) Run(ctx context.Context) error {
 			defer d.batcher.Close()
 
 			var i int
+
 			for {
 				select {
 				case <-ctx.Done():

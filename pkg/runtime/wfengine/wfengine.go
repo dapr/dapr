@@ -98,8 +98,11 @@ func New(opts Options) Interface {
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	})
 
-	var getWorkItemsCount atomic.Int32
-	var lock sync.Mutex
+	var (
+		getWorkItemsCount atomic.Int32
+		lock              sync.Mutex
+	)
+
 	executor, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
 			lock.Lock()
@@ -151,6 +154,7 @@ func New(opts Options) Interface {
 			backend.WithMaxParallelism(*opts.Spec.GetMaxConcurrentActivityInvocations()),
 		}
 	}
+
 	aworker := backend.NewActivityTaskWorker(
 		abackend,
 		executor,
@@ -198,6 +202,7 @@ func (wfe *engine) Run(ctx context.Context) error {
 	}
 
 	log.Info("Workflow engine stopped")
+
 	return nil
 }
 

@@ -988,7 +988,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
-		e.Auth.SecretStore = kubernetesSecretStore
+		e.SecretStore = kubernetesSecretStore
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		require.NoError(t, err)
@@ -1016,7 +1016,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
-		e.Auth.SecretStore = ""
+		e.SecretStore = ""
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		require.NoError(t, err)

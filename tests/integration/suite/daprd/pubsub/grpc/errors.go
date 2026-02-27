@@ -179,7 +179,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
 		require.Equal(t, "pubsub", resInfo.GetResourceType())
-		require.Equal(t, "", resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetResourceName())
 		require.Empty(t, resInfo.GetOwner())
 	})
 

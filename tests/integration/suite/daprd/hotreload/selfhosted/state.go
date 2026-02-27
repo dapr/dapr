@@ -166,7 +166,7 @@ spec:
 		s.writeRead(t, ctx, client, "abc")
 		s.writeRead(t, ctx, client, "xyz")
 
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -177,7 +177,7 @@ spec:
  metadata:
  - name: connectionString
    value: %s/db.sqlite
-`, tmpDir)), 0o600))
+`, tmpDir), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)
@@ -208,7 +208,7 @@ spec:
 		s.writeRead(t, ctx, client, "xyz")
 		s.writeExpectError(t, ctx, client, "foo", http.StatusBadRequest)
 
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -228,7 +228,7 @@ spec:
  type: state.in-memory
  version: v1
  metadata: []
-`, s.resDir1)), 0o600))
+`, s.resDir1), 0o600))
 
 		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -323,7 +323,7 @@ spec:
 
 		secPath := filepath.Join(tmpDir, "foo")
 		require.NoError(t, os.WriteFile(secPath, []byte(`{}`), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -334,7 +334,7 @@ spec:
   metadata:
   - name: secretsFile
     value: '%s'
-`, secPath)), 0o600))
+`, secPath), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)

@@ -44,7 +44,7 @@ func TestErrorPublishedNonCloudEvent(t *testing.T) {
 	topic := "topic1"
 
 	testPubSubMessage := &pubsub.SubscribedMessage{
-		CloudEvent: map[string]interface{}{},
+		CloudEvent: map[string]any{},
 		Topic:      topic,
 		Data:       []byte("testing"),
 		Metadata:   map[string]string{"pubsubName": "testpubsub"},
@@ -88,7 +88,7 @@ func TestErrorPublishedNonCloudEvent(t *testing.T) {
 			t.Parallel()
 
 			mockClientConn := channelt.MockClientConn{
-				InvokeFn: func(ctx context.Context, method string, args interface{}, reply interface{}, opts ...googlegrpc.CallOption) error {
+				InvokeFn: func(ctx context.Context, method string, args any, reply any, opts ...googlegrpc.CallOption) error {
 					if tc.Error != nil {
 						return tc.Error
 					}
@@ -126,8 +126,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	envelope["customString"] = "abc"
 	envelope["customBool"] = true
 	envelope["customFloat"] = 1.23
-	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
-	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
+	envelope["customArray"] = []any{"a", "b", 789, 3.1415}
+	envelope["customMap"] = map[string]any{"a": "b", "c": 456}
 	b, err := json.Marshal(envelope)
 	require.NoError(t, err)
 
@@ -146,8 +146,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	envelope["customString"] = "abc"
 	envelope["customBool"] = true
 	envelope["customFloat"] = 1.23
-	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
-	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
+	envelope["customArray"] = []any{"a", "b", 789, 3.1415}
+	envelope["customMap"] = map[string]any{"a": "b", "c": 456}
 	base64, err := json.Marshal(envelope)
 	require.NoError(t, err)
 
@@ -166,7 +166,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		expectedError               error
 		noResponseStatus            bool
 		responseError               error
-		validateCloudEventExtension *map[string]interface{}
+		validateCloudEventExtension *map[string]any
 	}{
 		{
 			name:             "failed to publish message to user app with unimplemented error",
@@ -231,39 +231,39 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			name:           "succeeded to publish message to user app and validated cloud event extension attributes",
 			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
-			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+			validateCloudEventExtension: ptr.Of(map[string]any{
 				"customInt":    float64(123),
 				"customString": "abc",
 				"customBool":   true,
 				"customFloat":  float64(1.23),
-				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
-				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+				"customArray":  []any{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]any{"a": "b", "c": float64(456)},
 			}),
 		},
 		{
 			name:           "succeeded to publish message to user app and validated cloud event extension attributes with base64 encoded data",
 			message:        testPubSubMessageBase64,
 			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
-			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+			validateCloudEventExtension: ptr.Of(map[string]any{
 				"customInt":    float64(123),
 				"customString": "abc",
 				"customBool":   true,
 				"customFloat":  float64(1.23),
-				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
-				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+				"customArray":  []any{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]any{"a": "b", "c": float64(456)},
 			}),
 		},
 		{
 			name:           "succeeded to publish message to user app with traceparent",
 			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
-			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+			validateCloudEventExtension: ptr.Of(map[string]any{
 				"customInt":    float64(123),
 				"customString": "abc",
 				"customBool":   true,
 				"customFloat":  float64(1.23),
-				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
-				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+				"customArray":  []any{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]any{"a": "b", "c": float64(456)},
 				"traceparent":  "00-c24c2deeb837b9b5e7101a1235b479c5-6784475fca41cdff-01",
 			}),
 		},
@@ -277,13 +277,13 @@ func TestOnNewPublishedMessage(t *testing.T) {
 				testPubSubMessage.CloudEvent[contribpubsub.IDField],
 				rterrors.NewRetriable(status.Error(codes.Unknown, "cloud event extension traceparent with value 00-c24c2deeb837b9b5e7101a1235b479c5-6784475fca41cdff-01 is not valid")),
 			),
-			validateCloudEventExtension: ptr.Of(map[string]interface{}{
+			validateCloudEventExtension: ptr.Of(map[string]any{
 				"customInt":    float64(123),
 				"customString": "abc",
 				"customBool":   true,
 				"customFloat":  float64(1.23),
-				"customArray":  []interface{}{"a", "b", float64(789), float64(3.1415)},
-				"customMap":    map[string]interface{}{"a": "b", "c": float64(456)},
+				"customArray":  []any{"a", "b", float64(789), float64(3.1415)},
+				"customMap":    map[string]any{"a": "b", "c": float64(456)},
 				"traceparent":  "00-c24c2deeb837b9b5e7101a1235b479c5-6784475fca41cdff-03",
 			}),
 		},
@@ -293,10 +293,13 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var grpcServer *googlegrpc.Server
-			var port int
+			var (
+				grpcServer *googlegrpc.Server
+				port       int
+			)
 
 			// create mock application server first
+
 			if !tc.noResponseStatus {
 				grpcServer, port = testinggrpc.StartTestAppCallbackGRPCServer(t, &channelt.MockServer{
 					TopicEventResponseStatus:    tc.responseStatus,
@@ -309,6 +312,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 					ValidateCloudEventExtension: tc.validateCloudEventExtension,
 				})
 			}
+
 			if grpcServer != nil {
 				// properly stop the gRPC server
 				defer grpcServer.Stop()

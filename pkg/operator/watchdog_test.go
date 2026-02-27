@@ -186,10 +186,7 @@ func assertExpectedPodsPatched(t *testing.T, ctlClient client.Reader, ctx contex
 func assertExpectedPodsDeleted(t *testing.T, pods []*corev1.Pod, ctlClient client.Reader, ctx context.Context, daprized int, running int, injected int) {
 	for i, pod := range pods {
 		err := ctlClient.Get(ctx, client.ObjectKeyFromObject(pod), &corev1.Pod{})
-		injectedOrRunning := running
-		if injected > injectedOrRunning {
-			injectedOrRunning = injected
-		}
+		injectedOrRunning := max(injected, running)
 		if i < daprized && i >= injectedOrRunning {
 			require.Error(t, err)
 			require.True(t, apierrors.IsNotFound(err))

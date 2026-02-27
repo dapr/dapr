@@ -171,7 +171,7 @@ func (c *countAndLast) MarshalJSON() ([]byte, error) {
 		Count: c.count,
 	}
 	if c.lastTime.Unix() > 0 {
-		obj.Last = ptr.Of(time.Now().Sub(c.lastTime).Milliseconds())
+		obj.Last = ptr.Of(time.Since(c.lastTime).Milliseconds())
 	}
 	return json.Marshal(obj)
 }

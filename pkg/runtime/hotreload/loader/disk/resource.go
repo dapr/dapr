@@ -88,8 +88,10 @@ func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error)
 	r.streamBatcher.Subscribe(ctx, batchCh)
 
 	r.wg.Add(1)
+
 	go func() {
 		defer r.wg.Done()
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -141,6 +143,7 @@ func (r *resource[T]) run(ctx context.Context) error {
 		if r.closed.CompareAndSwap(false, true) {
 			close(r.closeCh)
 		}
+
 		r.streamBatcher.Close()
 		r.wg.Wait()
 	}()
@@ -150,6 +153,7 @@ func (r *resource[T]) run(ctx context.Context) error {
 	close(r.running)
 
 	var i int
+
 	for {
 		select {
 		case <-ctx.Done():

@@ -86,5 +86,5 @@ func TestAnnotationCompletness(t *testing.T) {
 	slices.Sort(annotationsStruct)
 
 	// Check for completeness
-	require.EqualValues(t, annotationsPkg, annotationsStruct)
+	require.Equal(t, annotationsPkg, annotationsStruct)
 }

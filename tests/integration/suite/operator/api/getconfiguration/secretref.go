@@ -79,7 +79,7 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 						{
 							Name: "x-plain-header",
 							Value: commonapi.DynamicValue{
-								JSON: apiextensionsV1.JSON{Raw: []byte(fmt.Sprintf("%q", "plain-value"))},
+								JSON: apiextensionsV1.JSON{Raw: fmt.Appendf(nil, "%q", "plain-value")},
 							},
 						},
 						{

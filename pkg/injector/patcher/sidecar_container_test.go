@@ -249,7 +249,7 @@ func TestParseEnvFromSecret(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ //nolint:gosec
 			testName:     "multi key name secret",
 			envSecretStr: "KEY1=NAME1:SECRETKEY1",
 			expLen:       1,
@@ -268,7 +268,7 @@ func TestParseEnvFromSecret(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ //nolint:gosec
 			testName:     "multi key name value secret",
 			envSecretStr: "KEY1=NAME1:SECRETKEY1,KEY2=NAME2:SECRETKEY2",
 			expLen:       2,
@@ -298,7 +298,7 @@ func TestParseEnvFromSecret(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ //nolint:gosec
 			testName:     "multi key name value secret with spaces",
 			envSecretStr: "KEY1= NAME1 : SECRETKEY1, KEY2= NAME2 : SECRETKEY2",
 			expLen:       2,
@@ -473,7 +473,7 @@ func TestGetReadinessProbeHandler(t *testing.T) {
 		},
 	}
 
-	assert.EqualValues(t, expectedHandler, getReadinessProbeHandler(3500, pathElements...))
+	assert.Equal(t, expectedHandler, getReadinessProbeHandler(3500, pathElements...))
 }
 
 func TestGetLivenessProbeHandler(t *testing.T) {
@@ -483,7 +483,7 @@ func TestGetLivenessProbeHandler(t *testing.T) {
 		},
 	}
 
-	assert.EqualValues(t, expectedHandler, getLivenessProbeHandler(3500))
+	assert.Equal(t, expectedHandler, getLivenessProbeHandler(3500))
 }
 
 func TestFormatProbePath(t *testing.T) {
@@ -620,7 +620,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 
@@ -683,7 +683,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 
@@ -755,7 +755,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_HOST_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 

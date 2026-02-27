@@ -112,6 +112,7 @@ func Test_generic(t *testing.T) {
 		)
 
 		var calls int
+
 		retried := make(chan struct{})
 		streamer.establishFn = func(context.Context, operatorpb.OperatorClient, string, string) error {
 			defer func() { calls++ }()

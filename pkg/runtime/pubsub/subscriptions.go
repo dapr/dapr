@@ -108,6 +108,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 			consts.DaprAppIDHeader: {appID},
 		})
 	}
+
 	defer req.Close()
 
 	policyDef := r.BuiltInPolicy(resiliency.BuiltInInitializationRetries)
@@ -120,6 +121,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		},
 	)
+
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return channel.InvokeMethod(ctx, req, "")
 	})
@@ -139,20 +141,23 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 		if err != nil && !errors.Is(err, io.EOF) {
 			err = fmt.Errorf(deserializeTopicsError, err)
 			log.Error(err)
+
 			return nil, err
 		}
+
 		subscriptions = make([]Subscription, len(subscriptionItems))
 		for i, si := range subscriptionItems {
 			// Look for single route field and append it as a route struct.
 			// This preserves backward compatibility.
-
 			rules := make([]*Rule, len(si.Routes.Rules)+1)
 			n := 0
+
 			for _, r := range si.Routes.Rules {
 				rule, err := CreateRoutingRule(r.Match, r.Path)
 				if err != nil {
 					return nil, err
 				}
+
 				rules[n] = rule
 				n++
 			}
@@ -171,6 +176,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 				}
 				n++
 			}
+
 			bulkSubscribe := &BulkSubscribe{
 				Enabled:            si.BulkSubscribe.Enabled,
 				MaxMessagesCount:   si.BulkSubscribe.MaxMessagesCount,
@@ -195,19 +201,23 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 	}
 
 	log.Debugf("app responded with subscriptions %v", subscriptions)
+
 	return filterSubscriptions(subscriptions, log), nil
 }
 
 func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subscription {
 	i := 0
+
 	for _, s := range subscriptions {
 		if len(s.Rules) == 0 {
 			log.Warnf("topic %s has an empty routes. removing from subscriptions list", s.Topic)
 			continue
 		}
+
 		subscriptions[i] = s
 		i++
 	}
+
 	return subscriptions[:i]
 }
 
@@ -215,9 +225,9 @@ func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackCl
 	policyRunner := resiliency.NewRunner[*runtimev1pb.ListTopicSubscriptionsResponse](ctx,
 		r.BuiltInPolicy(resiliency.BuiltInInitializationRetries),
 	)
+
 	resp, err := policyRunner(func(ctx context.Context) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
 		rResp, rErr := channel.ListTopicSubscriptions(ctx, &emptypb.Empty{})
-
 		if rErr != nil {
 			s, ok := status.FromError(rErr)
 			if ok && s != nil {
@@ -227,6 +237,7 @@ func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackCl
 				}
 			}
 		}
+
 		return rResp, rErr
 	})
 	if err != nil {
@@ -236,6 +247,7 @@ func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackCl
 	}
 
 	var subscriptions []Subscription
+
 	if len(resp.GetSubscriptions()) == 0 {
 		log.Debug(noSubscriptionsError)
 	} else {
@@ -245,6 +257,7 @@ func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackCl
 			if err != nil {
 				return nil, err
 			}
+
 			var bulkSubscribe *BulkSubscribe
 			if s.GetBulkSubscribe() != nil {
 				bulkSubscribe = &BulkSubscribe{
@@ -253,6 +266,7 @@ func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackCl
 					MaxAwaitDurationMs: s.GetBulkSubscribe().GetMaxAwaitDurationMs(),
 				}
 			}
+
 			subscriptions[i] = Subscription{
 				PubsubName:      s.GetPubsubName(),
 				Topic:           s.GetTopic(),
@@ -273,6 +287,7 @@ func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 			Path: "",
 		}}, nil
 	}
+
 	r := make([]*Rule, 0, len(routes.GetRules())+1)
 
 	for _, rule := range routes.GetRules() {
@@ -280,6 +295,7 @@ func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		r = append(r, rr)
 	}
 
@@ -305,10 +321,12 @@ func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 
 func CreateRoutingRule(match, path string) (*Rule, error) {
 	var e *expr.Expr
+
 	matchTrimmed := strings.TrimSpace(match)
 	if matchTrimmed != "" {
 		e = &expr.Expr{}
-		if err := e.DecodeString(matchTrimmed); err != nil {
+		err := e.DecodeString(matchTrimmed)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -367,6 +385,7 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 	}
 
 	var span trace.Span
+
 	iTraceID := cloudEvent[contribpubsub.TraceParentField]
 	if iTraceID == nil {
 		iTraceID = cloudEvent[contribpubsub.TraceIDField]
@@ -393,6 +412,7 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
 		return ctx, nil, nil, extensionsErr
 	}
+
 	envelope.Extensions = extensions
 
 	return ctx, envelope, span, nil
@@ -402,6 +422,7 @@ func ExtractCloudEventProperty(cloudEvent map[string]any, property string) strin
 	if cloudEvent == nil {
 		return ""
 	}
+
 	iValue, ok := cloudEvent[property]
 	if ok {
 		if value, ok := iValue.(string); ok {
@@ -415,14 +436,16 @@ func ExtractCloudEventProperty(cloudEvent map[string]any, property string) strin
 func ExtractCloudEventExtensions(cloudEvent map[string]any) (*structpb.Struct, error) {
 	// Assemble Cloud Event Extensions:
 	// Create copy of the cloud event with duplicated data removed
-
 	extensions := make(map[string]any)
+
 	for key, value := range cloudEvent {
 		if !cloudEventDuplicateKeys.Has(key) {
 			extensions[key] = value
 		}
 	}
+
 	extensionsStruct := structpb.Struct{}
+
 	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
 	if jsonMarshalErr != nil {
 		return &extensionsStruct, fmt.Errorf("error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
@@ -432,6 +455,7 @@ func ExtractCloudEventExtensions(cloudEvent map[string]any) (*structpb.Struct, e
 	if protoUnmarshalErr != nil {
 		return &extensionsStruct, fmt.Errorf("error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", protoUnmarshalErr)
 	}
+
 	return &extensionsStruct, nil
 }
 
@@ -448,6 +472,7 @@ func FetchEntry(rawPayload bool, entry *contribpubsub.BulkMessageEntry, cloudEve
 		if err != nil {
 			return nil, err
 		}
+
 		return &runtimev1pb.TopicEventBulkRequestEntry{
 			EntryId:     entry.EntryId,
 			Event:       &eventLocal,
@@ -482,10 +507,13 @@ func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulk
 			envelope.Data, _ = json.Marshal(data)
 		}
 	}
+
 	extensions, extensionsErr := ExtractCloudEventExtensions(event)
 	if extensionsErr != nil {
 		return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, extensionsErr
 	}
+
 	envelope.Extensions = extensions
+
 	return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{CloudEvent: envelope}, nil //nolint:nosnakecase
 }

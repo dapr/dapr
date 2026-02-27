@@ -65,7 +65,7 @@ func (w *RWRecorder) Result() *http.Response {
 	if trailers, ok := w.h["Trailer"]; ok {
 		res.Trailer = make(http.Header, len(trailers))
 		for _, k := range trailers {
-			for _, k := range strings.Split(k, ",") {
+			for k := range strings.SplitSeq(k, ",") {
 				k = http.CanonicalHeaderKey(textproto.TrimString(k))
 				if !httpguts.ValidTrailerHeader(k) {
 					// Ignore since forbidden by RFC 7230, section 4.1.2.

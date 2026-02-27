@@ -41,6 +41,7 @@ func newTestOutbox(publishFn func(context.Context, *contribPubsub.PublishRequest
 	if publishFn != nil {
 		p.WithPublishFn(publishFn)
 	}
+
 	return NewOutbox(OptionsOutbox{
 		Publisher:             p,
 		CloudEventExtractorFn: extractCloudEventProperty,
@@ -215,7 +216,8 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 func TestPublishInternal(t *testing.T) {
 	t.Run("valid operation, correct default parameters", func(t *testing.T) {
 		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
-			var cloudEvent map[string]interface{}
+			var cloudEvent map[string]any
+
 			err := json.Unmarshal(pr.Data, &cloudEvent)
 			require.NoError(t, err)
 
@@ -267,7 +269,8 @@ func TestPublishInternal(t *testing.T) {
 
 	t.Run("valid operation, correct overridden parameters", func(t *testing.T) {
 		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
-			var cloudEvent map[string]interface{}
+			var cloudEvent map[string]any
+
 			err := json.Unmarshal(pr.Data, &cloudEvent)
 			require.NoError(t, err)
 
@@ -320,7 +323,8 @@ func TestPublishInternal(t *testing.T) {
 
 	t.Run("valid operation, no datacontenttype", func(t *testing.T) {
 		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
-			var cloudEvent map[string]interface{}
+			var cloudEvent map[string]any
+
 			err := json.Unmarshal(pr.Data, &cloudEvent)
 			require.NoError(t, err)
 
@@ -378,7 +382,8 @@ func TestPublishInternal(t *testing.T) {
 
 	t.Run("valid operation, application/json datacontenttype", func(t *testing.T) {
 		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
-			var cloudEvent map[string]interface{}
+			var cloudEvent map[string]any
+
 			err := json.Unmarshal(pr.Data, &cloudEvent)
 			require.NoError(t, err)
 
@@ -444,7 +449,8 @@ func TestPublishInternal(t *testing.T) {
 
 	t.Run("valid operation, application/json contenttype metadata", func(t *testing.T) {
 		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
-			var cloudEvent map[string]interface{}
+			var cloudEvent map[string]any
+
 			err := json.Unmarshal(pr.Data, &cloudEvent)
 			require.NoError(t, err)
 
@@ -509,7 +515,8 @@ func TestPublishInternal(t *testing.T) {
 
 	t.Run("valid operation, application/json contenttype metadata outbox projection", func(t *testing.T) {
 		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
-			var cloudEvent map[string]interface{}
+			var cloudEvent map[string]any
+
 			err := json.Unmarshal(pr.Data, &cloudEvent)
 			require.NoError(t, err)
 
@@ -693,11 +700,13 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		var closed bool
 
 		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
-			if pr.Topic == outboxTopic {
+			switch pr.Topic {
+			case outboxTopic:
 				close(internalCalledCh)
-			} else if pr.Topic == "1" {
+			case "1":
 				if !closed {
 					close(externalCalledCh)
+
 					closed = true
 				}
 			}
@@ -710,6 +719,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			customField := ce["outbox.cloudevent.customfield"]
 			data := ce[contribPubsub.DataField]
 			id := ce[contribPubsub.IDField]
+
 			assert.Equal(t, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", traceID)
 			assert.Equal(t, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", traceState)
 			assert.Equal(t, "a", customField)
@@ -756,10 +766,12 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		})
 
 		const appID = "test"
+
 		err := o.SubscribeToInternalTopics(t.Context(), appID)
 		require.NoError(t, err)
 
 		errCh := make(chan error, 1)
+
 		go func() {
 			trs, pErr := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 				state.SetRequest{
@@ -775,12 +787,14 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				errCh <- pErr
 				return
 			}
+
 			if len(trs) != 1 {
 				errCh <- fmt.Errorf("expected trs to have len(1), but got: %d", len(trs))
 				return
 			}
 
 			errCh <- nil
+
 			stateMock.expectedKey.Store(ptr.Of(trs[0].GetKey()))
 		}()
 
@@ -790,6 +804,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		start := time.Now()
 		doneCh := make(chan error, 2)
 		timeout := time.After(5 * time.Second)
+
 		go func() {
 			select {
 			case <-internalCalledCh:
@@ -806,9 +821,11 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				doneCh <- errors.New("timeout waiting for externalCalledCh")
 			}
 		}()
+
 		for range 2 {
 			require.NoError(t, <-doneCh)
 		}
+
 		require.GreaterOrEqual(t, time.Since(start), d)
 
 		// Publishing should not have errored
@@ -839,6 +856,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		}
 
 		const appID = "test"
+
 		err := o.SubscribeToInternalTopics(t.Context(), appID)
 		require.NoError(t, err)
 
@@ -865,9 +883,10 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		internalCalledCh := make(chan struct{})
 		externalCalledCh := make(chan struct{})
 		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
-			if pr.Topic == outboxTopic {
+			switch pr.Topic {
+			case outboxTopic:
 				close(internalCalledCh)
-			} else if pr.Topic == "1" {
+			case "1":
 				close(externalCalledCh)
 			}
 
@@ -910,10 +929,12 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		})
 
 		const appID = "test"
+
 		err := o.SubscribeToInternalTopics(t.Context(), appID)
 		require.NoError(t, err)
 
 		errCh := make(chan error, 1)
+
 		go func() {
 			trs, pErr := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 				state.SetRequest{
@@ -928,10 +949,12 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				errCh <- pErr
 				return
 			}
+
 			if len(trs) != 1 {
 				errCh <- fmt.Errorf("expected trs to have len(1), but got: %d", len(trs))
 				return
 			}
+
 			errCh <- nil
 		}()
 
@@ -941,6 +964,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		start := time.Now()
 		doneCh := make(chan error, 2)
 		timeout := time.After(2 * time.Second)
+
 		go func() {
 			select {
 			case <-internalCalledCh:
@@ -958,9 +982,11 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				doneCh <- nil
 			}
 		}()
+
 		for range 2 {
 			require.NoError(t, <-doneCh)
 		}
+
 		require.GreaterOrEqual(t, time.Since(start), d)
 
 		// Publishing should not have errored
@@ -983,9 +1009,10 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		externalCalledCh := make(chan struct{})
 
 		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
-			if pr.Topic == outboxTopic {
+			switch pr.Topic {
+			case outboxTopic:
 				close(internalCalledCh)
-			} else if pr.Topic == "1" {
+			case "1":
 				close(externalCalledCh)
 			}
 
@@ -1036,10 +1063,12 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		})
 
 		const appID = "test"
+
 		err := o.SubscribeToInternalTopics(t.Context(), appID)
 		require.NoError(t, err)
 
 		errCh := make(chan error, 1)
+
 		go func() {
 			trs, pErr := o.PublishInternal(t.Context(), "test", []state.TransactionalStateOperation{
 				state.SetRequest{
@@ -1054,10 +1083,12 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				errCh <- pErr
 				return
 			}
+
 			if len(trs) != 1 {
 				errCh <- fmt.Errorf("expected trs to have len(1), but got: %d", len(trs))
 				return
 			}
+
 			errCh <- nil
 		}()
 
@@ -1069,6 +1100,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 
 		// account for max retry time
 		timeout := time.After(11 * time.Second)
+
 		go func() {
 			select {
 			case <-internalCalledCh:
@@ -1086,9 +1118,11 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				doneCh <- nil
 			}
 		}()
+
 		for range 2 {
 			require.NoError(t, <-doneCh)
 		}
+
 		require.GreaterOrEqual(t, time.Since(start), d)
 
 		// Publishing should not have errored
@@ -1133,6 +1167,7 @@ func (o *outboxPubsubMock) Subscribe(ctx context.Context, req contribPubsub.Subs
 	}
 
 	o.handler = handler
+
 	return nil
 }
 
@@ -1220,6 +1255,7 @@ func extractCloudEventProperty(cloudEvent map[string]any, property string) strin
 	if cloudEvent == nil {
 		return ""
 	}
+
 	iValue, ok := cloudEvent[property]
 	if ok {
 		if value, ok := iValue.(string); ok {

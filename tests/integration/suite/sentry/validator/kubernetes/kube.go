@@ -105,7 +105,7 @@ func (k *kube) Run(t *testing.T, ctx context.Context) {
 	csrDer, err := x509.CreateCertificateRequest(rand.Reader, new(x509.CertificateRequest), pk)
 	require.NoError(t, err)
 
-	resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+	resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{ //nolint:gosec
 		Id:                        "myappid",
 		Namespace:                 "mynamespace",
 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
@@ -127,21 +127,21 @@ func (k *kube) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, certs[1].CheckSignatureFrom(trustBundle[0]))
 
 	for _, req := range map[string]*sentrypbv1.SignCertificateRequest{
-		"wrong app id": {
+		"wrong app id": { //nolint:gosec
 			Id:                        "notmyappid",
 			Namespace:                 "mynamespace",
 			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
 			TokenValidator:            sentrypbv1.SignCertificateRequest_KUBERNETES,
 			Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
 		},
-		"wrong namespace": {
+		"wrong namespace": { //nolint:gosec
 			Id:                        "myappid",
 			Namespace:                 "notmynamespace",
 			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
 			TokenValidator:            sentrypbv1.SignCertificateRequest_KUBERNETES,
 			Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
 		},
-		"wrong token validator": {
+		"wrong token validator": { //nolint:gosec
 			Id:                        "myappid",
 			Namespace:                 "mynamespace",
 			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),

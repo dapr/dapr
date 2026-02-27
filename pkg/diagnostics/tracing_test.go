@@ -227,7 +227,7 @@ func runTraces(t *testing.T, testName string, numTraces int, samplingRate string
 			scConfig := trace.SpanContextConfig{
 				TraceID:    traceID,
 				SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-				TraceFlags: trace.TraceFlags(parentTraceFlag),
+				TraceFlags: trace.TraceFlags(parentTraceFlag), //nolint:gosec
 			}
 			parent := trace.NewSpanContext(scConfig)
 			ctx = trace.ContextWithRemoteSpanContext(ctx, parent)

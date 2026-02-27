@@ -40,14 +40,16 @@ func (p *Processor) Init(ctx context.Context, comp componentsapi.Component) erro
 
 	// after performing the initialization, report the result
 	condition := operatorv1.ResourceConditionStatus_STATUS_SUCCESS
+
 	var reason, message *string
+
 	if initerr != nil {
 		condition = operatorv1.ResourceConditionStatus_STATUS_FAILURE
 		reason = ptr.Of("ERROR")
 		message = ptr.Of(initerr.Error())
 	}
 
-	if err := p.reporter(ctx, comp,
+	err := p.reporter(ctx, comp,
 		&operatorv1.ResourceResult{
 			ResourceType:        operatorv1.ResourceType_RESOURCE_COMPONENT,
 			EventType:           operatorv1.EventType_EVENT_INIT,
@@ -57,7 +59,8 @@ func (p *Processor) Init(ctx context.Context, comp componentsapi.Component) erro
 			Message:             message,
 			ObservedGeneration:  comp.GetGeneration(),
 			LastTransactionTime: timestamppb.New(time.Now()),
-		}); err != nil {
+		})
+	if err != nil {
 		return errors.Join(initerr, fmt.Errorf("error reporting component init result: %w", err), p.Close(comp))
 	}
 
@@ -95,7 +98,9 @@ func (p *Processor) Close(comp componentsapi.Component) error {
 
 	// after performing the initialization, report the result
 	condition := operatorv1.ResourceConditionStatus_STATUS_SUCCESS
+
 	var reason, message *string
+
 	if closeErr != nil {
 		condition = operatorv1.ResourceConditionStatus_STATUS_FAILURE
 		reason = ptr.Of("ERROR")
@@ -104,7 +109,8 @@ func (p *Processor) Close(comp componentsapi.Component) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := p.reporter(ctx, comp,
+
+	err := p.reporter(ctx, comp,
 		&operatorv1.ResourceResult{
 			ResourceType:        operatorv1.ResourceType_RESOURCE_COMPONENT,
 			EventType:           operatorv1.EventType_EVENT_CLOSE,
@@ -114,7 +120,8 @@ func (p *Processor) Close(comp componentsapi.Component) error {
 			Message:             message,
 			ObservedGeneration:  comp.GetGeneration(),
 			LastTransactionTime: timestamppb.New(time.Now()),
-		}); err != nil {
+		})
+	if err != nil {
 		return errors.Join(closeErr, fmt.Errorf("error reporting component close result: %w", err))
 	}
 
@@ -175,14 +182,18 @@ func (p *Processor) processComponents(ctx context.Context) error {
 				log.Warnf("Error processing component, daprd will exit gracefully: %s", err)
 				return err
 			}
+
 			log.Errorf("Ignoring error processing component: %s", err)
 		}
+
 		return nil
 	}
 
 	for comp := range p.pendingComponents {
 		err := process(comp)
+
 		p.pendingComponentsWaiting.RUnlock()
+
 		if err != nil {
 			return err
 		}
@@ -199,6 +210,7 @@ func (p *Processor) WaitForEmptyComponentQueue() {
 
 func (p *Processor) processComponentAndDependents(ctx context.Context, comp componentsapi.Component) error {
 	log.Debug("Loading component: " + comp.LogName())
+
 	res := p.preprocessOneComponent(ctx, &comp)
 	if res.unreadyDependency != "" {
 		p.pendingComponentDependents[res.unreadyDependency] = append(p.pendingComponentDependents[res.unreadyDependency], comp)
@@ -222,7 +234,8 @@ func (p *Processor) processComponentAndDependents(ctx context.Context, comp comp
 	err = p.Init(ctx, comp)
 	if err != nil {
 		log.Errorf("Failed to init component %s: %s", comp.LogName(), err)
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
+
 		return rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), err)
 	}
 
@@ -232,8 +245,10 @@ func (p *Processor) processComponentAndDependents(ctx context.Context, comp comp
 	dependency := componentDependency(compCategory, comp.Name)
 	if deps, ok := p.pendingComponentDependents[dependency]; ok {
 		delete(p.pendingComponentDependents, dependency)
+
 		for _, dependent := range deps {
-			if err := p.processComponentAndDependents(ctx, dependent); err != nil {
+			err := p.processComponentAndDependents(ctx, dependent)
+			if err != nil {
 				return err
 			}
 		}
@@ -253,6 +268,7 @@ func (p *Processor) preprocessOneComponent(ctx context.Context, comp *components
 			unreadyDependency: componentDependency(components.CategorySecretStore, unreadySecretsStore),
 		}
 	}
+
 	return componentPreprocessRes{}
 }
 
@@ -262,6 +278,7 @@ func (p *Processor) category(comp componentsapi.Component) components.Category {
 			return category
 		}
 	}
+
 	return ""
 }
 

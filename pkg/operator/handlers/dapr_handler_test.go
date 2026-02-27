@@ -128,9 +128,9 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 	service = testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 	require.NotNil(t, service)
 	assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
-	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/scrape"])
-	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/port"])
-	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/path"])
+	assert.Empty(t, service.ObjectMeta.Annotations["prometheus.io/scrape"])
+	assert.Empty(t, service.ObjectMeta.Annotations["prometheus.io/port"])
+	assert.Empty(t, service.ObjectMeta.Annotations["prometheus.io/path"])
 }
 
 func TestCreateDaprServiceAppIDAndPortsOverride(t *testing.T) {
@@ -381,12 +381,12 @@ func TestWrapper(t *testing.T) {
 	})
 
 	t.Run("get object from wrapper", func(t *testing.T) {
-		assert.Equal(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
-		assert.Equal(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
-		assert.Equal(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeOf(&argov1alpha1.Rollout{}))
-		assert.NotEqual(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
-		assert.NotEqual(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
-		assert.NotEqual(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
+		assert.Equal(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeFor[*appsv1.Deployment]())
+		assert.Equal(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeFor[*appsv1.StatefulSet]())
+		assert.Equal(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeFor[*argov1alpha1.Rollout]())
+		assert.NotEqual(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeFor[*appsv1.Deployment]())
+		assert.NotEqual(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeFor[*appsv1.StatefulSet]())
+		assert.NotEqual(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeFor[*appsv1.Deployment]())
 	})
 }
 
@@ -443,7 +443,7 @@ func TestInit(t *testing.T) {
 
 		assert.NotNil(t, wrapper)
 
-		assert.Equal(t, reflect.TypeOf(&appsv1.Deployment{}), reflect.TypeOf(wrapper.GetObject()))
+		assert.Equal(t, reflect.TypeFor[*appsv1.Deployment](), reflect.TypeOf(wrapper.GetObject()))
 
 		reconciler = reflect.Indirect(reflect.ValueOf(statefulsetCtl)).FieldByName("Do").Interface().(*Reconciler)
 
@@ -451,7 +451,7 @@ func TestInit(t *testing.T) {
 
 		assert.NotNil(t, wrapper)
 
-		assert.Equal(t, reflect.TypeOf(&appsv1.StatefulSet{}), reflect.TypeOf(wrapper.GetObject()))
+		assert.Equal(t, reflect.TypeFor[*appsv1.StatefulSet](), reflect.TypeOf(wrapper.GetObject()))
 
 		reconciler = reflect.Indirect(reflect.ValueOf(rolloutCtl)).FieldByName("Do").Interface().(*Reconciler)
 
@@ -459,7 +459,7 @@ func TestInit(t *testing.T) {
 
 		assert.NotNil(t, wrapper)
 
-		assert.Equal(t, reflect.TypeOf(&argov1alpha1.Rollout{}), reflect.TypeOf(wrapper.GetObject()))
+		assert.Equal(t, reflect.TypeFor[*argov1alpha1.Rollout](), reflect.TypeOf(wrapper.GetObject()))
 	})
 }
 

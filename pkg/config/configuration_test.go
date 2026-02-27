@@ -79,8 +79,8 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
 		require.NoError(t, err, "Unexpected error")
 		assert.NotNil(t, config, "Config not loaded as expected")
-		assert.Equal(t, "secretappconfig", config.ObjectMeta.Name)
-		assert.Equal(t, "Configuration", config.TypeMeta.Kind)
+		assert.Equal(t, "secretappconfig", config.Name)
+		assert.Equal(t, "Configuration", config.Kind)
 	})
 
 	t.Run("metrics spec", func(t *testing.T) {
@@ -460,7 +460,7 @@ func TestFeatureEnabled(t *testing.T) {
 	expect := append([]string{"testEnabled"}, buildinfo.Features()...)
 	slices.Sort(actual)
 	slices.Sort(expect)
-	assert.EqualValues(t, actual, expect)
+	assert.Equal(t, actual, expect)
 }
 
 func TestSetTracingSpecFromEnv(t *testing.T) {

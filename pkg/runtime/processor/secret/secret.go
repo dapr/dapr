@@ -64,25 +64,26 @@ func (s *secret) Init(ctx context.Context, comp compapi.Component) error {
 	defer s.lock.Unlock()
 
 	fName := comp.LogName()
+
 	secretStore, err := s.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	meta, err := s.meta.ToBaseMetadata(comp)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	err = secretStore.Init(ctx, secretstores.Metadata{Base: meta})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
-	s.compStore.AddSecretStore(comp.ObjectMeta.Name, secretStore)
+	s.compStore.AddSecretStore(comp.Name, secretStore)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
 	return nil
@@ -99,7 +100,8 @@ func (s *secret) Close(comp compapi.Component) error {
 
 	defer s.compStore.DeleteSecretStore(comp.Name)
 
-	if err := sec.Close(); err != nil {
+	err := sec.Close()
+	if err != nil {
 		return err
 	}
 
@@ -122,8 +124,10 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 			} else {
 				log.Warnf("%s %s references an env variable that isn't allowed: %s", resource.Kind(), resource.GetName(), m.EnvRef)
 			}
+
 			metadata[i].EnvRef = ""
 			updated = true
+
 			continue
 		}
 
@@ -135,6 +139,7 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 		// Instead, base64 decode the secret values into their real self.
 		if s.operatorClient != nil && secretStoreName == compsecret.BuiltinKubernetesSecretStore {
 			var jsonVal string
+
 			err := json.Unmarshal(m.Value.Raw, &jsonVal)
 			if err != nil {
 				log.Errorf("Error decoding secret: %v", err)
@@ -148,7 +153,9 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 			}
 
 			metadata[i].SetValue(dec)
+
 			updated = true
+
 			continue
 		}
 
@@ -170,6 +177,7 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 				log.Errorf("Error getting secret: %v", err)
 				continue
 			}
+
 			resp = r
 		}
 
@@ -182,11 +190,13 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 		val, ok := resp.Data[secretKeyName]
 		if ok && val != "" {
 			metadata[i].SetValue([]byte(val))
+
 			updated = true
 		}
 
 		cache[m.SecretKeyRef.Name] = resp
 	}
+
 	return updated, ""
 }
 
@@ -217,5 +227,6 @@ func isEnvVarAllowed(key string) bool {
 		(idx == 0 || allowlist[idx-1] == ' ') {
 		return true
 	}
+
 	return false
 }

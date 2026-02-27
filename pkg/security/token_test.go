@@ -39,7 +39,7 @@ func TestAPIToken(t *testing.T) {
 
 	t.Run("non-existent token", func(t *testing.T) {
 		token := GetAPIToken()
-		assert.Equal(t, "", token)
+		assert.Empty(t, token)
 	})
 }
 
@@ -55,7 +55,7 @@ func TestAppToken(t *testing.T) {
 
 	t.Run("non-existent token", func(t *testing.T) {
 		token := GetAppToken()
-		assert.Equal(t, "", token)
+		assert.Empty(t, token)
 	})
 }
 

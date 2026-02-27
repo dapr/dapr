@@ -58,16 +58,16 @@ func TestHandleJWKS(t *testing.T) {
 		require.Equal(t, "public, max-age=3600", rr.Header().Get("Cache-Control"))
 
 		// Parse the response to ensure it's valid JWKS
-		var jwksResp map[string]interface{}
+		var jwksResp map[string]any
 		err = json.Unmarshal(rr.Body.Bytes(), &jwksResp)
 		require.NoError(t, err)
 
 		// Verify the response contains the expected keys
-		keys, ok := jwksResp["keys"].([]interface{})
+		keys, ok := jwksResp["keys"].([]any)
 		require.True(t, ok)
 		require.Len(t, keys, 1)
 
-		key := keys[0].(map[string]interface{})
+		key := keys[0].(map[string]any)
 		require.Equal(t, "EC", key["kty"])
 		require.Equal(t, "sig", key["use"])
 		require.Equal(t, "test-key", key["kid"])
@@ -405,11 +405,11 @@ func TestJWKSResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, resp, "keys")
-	keys, ok := resp["keys"].([]interface{})
+	keys, ok := resp["keys"].([]any)
 	require.True(t, ok)
 	require.Len(t, keys, 1)
 
-	key := keys[0].(map[string]interface{})
+	key := keys[0].(map[string]any)
 	require.Equal(t, "EC", key["kty"])
 	require.Equal(t, "sig", key["use"])
 	require.Equal(t, "test-key", key["kid"])
@@ -584,10 +584,10 @@ func NewOptions(t *testing.T) Options {
 }
 
 // jwksResponse is a test utility to parse the JWKS response for validation
-func jwksResponse(t *testing.T, jwksBytes []byte) (map[string]interface{}, error) {
+func jwksResponse(t *testing.T, jwksBytes []byte) (map[string]any, error) {
 	t.Helper()
 
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(jwksBytes, &response); err != nil {
 		return nil, err
 	}

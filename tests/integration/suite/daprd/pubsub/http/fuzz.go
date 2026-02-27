@@ -149,7 +149,7 @@ func (f *fuzzpubsub) Setup(t *testing.T) []framework.Option {
 		for j := range topics {
 			psTopicFz.Fuzz(&f.pubSubs[i].Topics[j].Name)
 			psRouteFz.Fuzz(&f.pubSubs[i].Topics[j].Route)
-			f.respChan[f.pubSubs[i].Topics[j].Route] = make(chan []byte, 0)
+			f.respChan[f.pubSubs[i].Topics[j].Route] = make(chan []byte)
 			fuzz.New().Fuzz(&f.pubSubs[i].Topics[j].payload)
 		}
 

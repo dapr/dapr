@@ -72,6 +72,7 @@ func (p *publisher) Publish(ctx context.Context, req *contribpubsub.PublishReque
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
 		return nil, pubsub.Component.Publish(ctx, req)
 	})
+
 	return err
 }
 
@@ -92,6 +93,7 @@ func (p *publisher) BulkPublish(ctx context.Context, req *contribpubsub.BulkPubl
 	}
 
 	log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
+
 	defaultBulkPublisher := rtpubsub.NewDefaultBulkPublisher(pubsub.Component)
 
 	return rtpubsub.ApplyBulkPublishResiliency(ctx, req, policyDef, defaultBulkPublisher)

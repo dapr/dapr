@@ -56,7 +56,7 @@ func Test_toInternal(t *testing.T) {
 	assert.Equal(t, "localhost:5052", intc.sentryServiceAddress)
 	assert.Equal(t, 4<<20, intc.maxRequestBodySize)
 	assert.Equal(t, 4<<10, intc.readBufferSize)
-	assert.Equal(t, "", intc.unixDomainSocket)
+	assert.Empty(t, intc.unixDomainSocket)
 	assert.Equal(t, time.Second, intc.gracefulShutdownDuration)
 	assert.Equal(t, nilDuration, intc.blockShutdownDuration)
 	assert.Equal(t, ptr.Of(true), intc.enableAPILogging)

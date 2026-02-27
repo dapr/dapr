@@ -122,7 +122,7 @@ func (tr *TestRunner) Start(m runnable) int {
 		return runnerFailExitCode
 	}
 
-	if tr.secrets != nil && len(tr.secrets) > 0 {
+	if len(tr.secrets) > 0 {
 		if err := tr.Platform.AddSecrets(tr.secrets); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed Platform.addSecrets(), %s", err.Error())
 			return runnerFailExitCode

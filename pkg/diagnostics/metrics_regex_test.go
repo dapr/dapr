@@ -129,9 +129,10 @@ func TestRegexRulesSingle(t *testing.T) {
 		lightsabers := false
 
 		for _, v := range viewData {
-			if v.Tags[0].Value == "/orders/TEST" {
+			switch v.Tags[0].Value {
+			case "/orders/TEST":
 				orders = true
-			} else if v.Tags[0].Value == "/lightsabers/TEST" {
+			case "/lightsabers/TEST":
 				lightsabers = true
 			}
 		}

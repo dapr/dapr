@@ -37,13 +37,16 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) {
 
 	if exists {
 		log.Infof("Closing existing Subscription to reload: %s", *oldSub.Name)
-		if err := s.proc.CloseSubscription(ctx, oldSub.Comp); err != nil {
+
+		err := s.proc.CloseSubscription(ctx, oldSub.Comp)
+		if err != nil {
 			log.Errorf("Failed to close existing Subscription: %s", err)
 			return
 		}
 	}
 
 	log.Infof("Adding Subscription for processing: %s", sub.Name)
+
 	if s.proc.AddPendingSubscription(ctx, sub) {
 		log.Infof("Subscription updated: %s", sub.Name)
 	}
@@ -53,7 +56,8 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) {
 
 //nolint:unused
 func (s *subscriptions) delete(ctx context.Context, sub subapi.Subscription) {
-	if err := s.proc.CloseSubscription(ctx, &sub); err != nil {
+	err := s.proc.CloseSubscription(ctx, &sub)
+	if err != nil {
 		log.Errorf("Failed to close Subscription: %s", err)
 	}
 }

@@ -74,7 +74,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	sched := scheduler.New(t)
 	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
 
-	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
+	daprds := make([]*daprd.Daprd, opts.daprds)
 
 	for i := range daprds {
 		dopts := make([]daprd.Option, 0, len(baseDopts))

@@ -291,42 +291,49 @@ func (a *Universal) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Purg
 }
 
 // GetWorkflowAlpha1 is the API handler for getting workflow details
+//
 // Deprecated: Use GetWorkflow instead.
 func (a *Universal) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
 	return a.GetWorkflow(ctx, in)
 }
 
 // StartWorkflowAlpha1 is the API handler for starting a workflow
+//
 // Deprecated: Use StartWorkflow instead.
 func (a *Universal) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
 	return a.StartWorkflow(ctx, in)
 }
 
 // TerminateWorkflowAlpha1 is the API handler for terminating a workflow
+//
 // Deprecated: Use TerminateWorkflow instead.
 func (a *Universal) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
 	return a.TerminateWorkflow(ctx, in)
 }
 
 // RaiseEventWorkflowAlpha1 is the API handler for raising an event to a workflow
+//
 // Deprecated: Use RaiseEventWorkflow instead.
 func (a *Universal) RaiseEventWorkflowAlpha1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
 	return a.RaiseEventWorkflow(ctx, in)
 }
 
 // PauseWorkflowAlpha1 is the API handler for pausing a workflow
+//
 // Deprecated: Use PauseWorkflow instead.
 func (a *Universal) PauseWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
 	return a.PauseWorkflow(ctx, in)
 }
 
 // ResumeWorkflowAlpha1 is the API handler for resuming a workflow
+//
 // Deprecated: Use ResumeWorkflow instead.
 func (a *Universal) ResumeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
 	return a.ResumeWorkflow(ctx, in)
 }
 
 // PurgeWorkflowAlpha1 is the API handler for purging a workflow
+//
 // Deprecated: Use PurgeWorkflow instead.
 func (a *Universal) PurgeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
 	return a.PurgeWorkflow(ctx, in)

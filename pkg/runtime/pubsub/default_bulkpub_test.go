@@ -78,6 +78,7 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create publish requests for each message in the bulk request.
 			var pubReqs []*contribPubsub.PublishRequest
+
 			for _, entry := range req.Entries {
 				contentType := entry.ContentType
 				pubReqs = append(pubReqs, &contribPubsub.PublishRequest{
@@ -94,6 +95,7 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 			for i, e := range tc.publishErrors {
 				mockPubSub.Mock.On("Publish", pubReqs[i]).Return(e)
 			}
+
 			bulkPublisher := NewDefaultBulkPublisher(mockPubSub)
 
 			res, err := bulkPublisher.BulkPublish(t.Context(), req)

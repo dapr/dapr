@@ -53,7 +53,8 @@ func (c *components) update(ctx context.Context, comp compapi.Component) {
 
 		log.Infof("Closing existing Component to reload: %s", oldComp.LogName())
 		// TODO: change close to accept pointer
-		if err := c.proc.Close(oldComp); err != nil {
+		err := c.proc.Close(oldComp)
+		if err != nil {
 			log.Errorf("error closing old component: %s", err)
 			return
 		}
@@ -65,6 +66,7 @@ func (c *components) update(ctx context.Context, comp compapi.Component) {
 	}
 
 	log.Infof("Adding Component for processing: %s", comp.LogName())
+
 	if c.proc.AddPendingComponent(ctx, comp) {
 		log.Infof("Component updated: %s", comp.LogName())
 		c.proc.WaitForEmptyComponentQueue()
@@ -79,7 +81,8 @@ func (c *components) delete(_ context.Context, comp compapi.Component) {
 		return
 	}
 
-	if err := c.proc.Close(comp); err != nil {
+	err := c.proc.Close(comp)
+	if err != nil {
 		log.Errorf("error closing deleted component: %s", err)
 	}
 }

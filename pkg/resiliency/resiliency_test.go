@@ -241,8 +241,8 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 		getOperatorClient(fmt.Sprintf("localhost:%d", port)))
 	assert.NotNil(t, resiliency)
 	assert.Len(t, resiliency, 1)
-	assert.Equal(t, "Resiliency", resiliency[0].TypeMeta.Kind)
-	assert.Equal(t, "resiliency", resiliency[0].ObjectMeta.Name)
+	assert.Equal(t, "Resiliency", resiliency[0].Kind)
+	assert.Equal(t, "resiliency", resiliency[0].Name)
 }
 
 func TestLoadStandaloneResiliency(t *testing.T) {
@@ -612,11 +612,11 @@ func TestGetDefaultPolicy(t *testing.T) {
 	delete(r.circuitBreakers, "DefaultCircuitBreakerPolicy")
 
 	retryName = r.getDefaultRetryPolicy(&ActorPolicy{})
-	assert.Equal(t, "", retryName)
+	assert.Empty(t, retryName)
 	timeoutName = r.getDefaultTimeoutPolicy(&ComponentPolicy{})
-	assert.Equal(t, "", timeoutName)
+	assert.Empty(t, timeoutName)
 	cbName = r.getDefaultCircuitBreakerPolicy(&EndpointPolicy{})
-	assert.Equal(t, "", cbName)
+	assert.Empty(t, cbName)
 }
 
 func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {

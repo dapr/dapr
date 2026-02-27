@@ -168,6 +168,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		RetentionPolicy:    abe.retentionPolicy,
 		Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+
 			select {
 			case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
 				return ctx.Err()
@@ -189,6 +190,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 				wi.InstanceID,
 				wi.NewEvent.GetTaskScheduled().GetName(),
 				wi.NewEvent.GetEventId())
+
 			select {
 			case <-ctx.Done(): // engine is shutting down
 				return ctx.Err()
@@ -264,6 +266,7 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 		if err != nil {
 			return "", fmt.Errorf("failed to generate instance ID: %w", err)
 		}
+
 		req.NewInstanceID = ptr.Of(u.String())
 	}
 
@@ -301,6 +304,7 @@ func (abe *Actors) RerunWorkflowFromEvent(ctx context.Context, req *backend.Reru
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
 func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
 	var workflowInstanceID string
+
 	if es := e.GetExecutionStarted(); es == nil {
 		return errors.New("the history event must be an ExecutionStartedEvent")
 	} else if oi := es.GetOrchestrationInstance(); oi == nil {
@@ -338,14 +342,17 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 
 	err = backoff.Retry(func() error {
 		_, eerr := router.Call(ctx, req)
+
 		status, ok := status.FromError(eerr)
 		if ok && (status.Code() == codes.FailedPrecondition ||
 			status.Code() == codes.Unavailable) {
 			return eerr
 		}
+
 		if errors.Is(eerr, actorerrors.ErrCreatingActor) {
 			return eerr
 		}
+
 		return backoff.Permanent(eerr)
 	}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), ctx))
 
@@ -357,6 +364,7 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	}
 	// successful request to CREATE workflow, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusSuccess, elapsed)
+
 	return nil
 }
 
@@ -366,6 +374,7 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 	if err != nil {
 		return nil, err
 	}
+
 	if state == nil {
 		return nil, api.ErrInstanceNotFound
 	}
@@ -401,6 +410,7 @@ func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Activity
 	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
 		channel.(chan bool) <- false
 	}
+
 	return nil
 }
 
@@ -414,6 +424,7 @@ func (*Actors) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.Orc
 	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
 		channel.(chan bool) <- false
 	}
+
 	return nil
 }
 
@@ -438,6 +449,7 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 
 	start := time.Now()
 	_, err = router.Call(ctx, req)
+
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to ADD EVENT, record count and latency metrics.
@@ -446,6 +458,7 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 	}
 	// successful request to ADD EVENT, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusSuccess, elapsed)
+
 	return nil
 }
 
@@ -479,10 +492,13 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 	if err != nil {
 		return nil, err
 	}
+
 	if state == nil {
 		return nil, api.ErrInstanceNotFound
 	}
+
 	runtimeState := runtimestate.NewOrchestrationRuntimeState(string(owi.InstanceID), state.CustomStatus, state.History)
+
 	return runtimeState, nil
 }
 
@@ -501,7 +517,8 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 
 	err = router.CallStream(ctx, req, func(resp *internalsv1pb.InternalInvokeResponse) (bool, error) {
 		var meta backend.OrchestrationMetadata
-		if perr := resp.GetMessage().GetData().UnmarshalTo(&meta); perr != nil {
+		perr := resp.GetMessage().GetData().UnmarshalTo(&meta)
+		if perr != nil {
 			log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
 			return false, perr
 		}
@@ -518,6 +535,7 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
 func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID, force bool) error {
 	start := time.Now()
+
 	var err error
 	if force {
 		err = abe.purgeWorkflowForce(ctx, id)
@@ -534,6 +552,7 @@ func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceI
 
 	// successful request to PURGE WORKFLOW, record latency and count metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusSuccess, elapsed)
+
 	return nil
 }
 
@@ -569,10 +588,12 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 	if err != nil {
 		return nil, err
 	}
+
 	if state == nil {
 		// No such state exists in the state store
 		return nil, nil
 	}
+
 	return state, nil
 }
 
@@ -598,6 +619,7 @@ func (abe *Actors) NextActivityWorkItem(ctx context.Context) (*backend.ActivityW
 			wi.NewEvent.GetTaskScheduled().GetName(),
 			wi.NewEvent.GetEventId(),
 			wi.InstanceID)
+
 		return wi, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -678,8 +700,8 @@ func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstance
 		ComponentStore:    abe.compStore,
 		Namespace:         abe.namespace,
 		AppID:             abe.appID,
-		PageSize:          req.PageSize,          //nolint:protogetter
-		ContinuationToken: req.ContinuationToken, //nolint:protogetter
+		PageSize:          req.PageSize,
+		ContinuationToken: req.ContinuationToken,
 	})
 	if err != nil {
 		return nil, err

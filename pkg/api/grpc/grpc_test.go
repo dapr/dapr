@@ -1663,10 +1663,8 @@ func TestSubscribeConfiguration(t *testing.T) {
 					const retry = 3
 					count := 0
 					_, err := resp.Recv()
-					for {
-						if err != nil {
-							break
-						}
+					for err == nil {
+
 						if count > retry {
 							break
 						}
@@ -1716,7 +1714,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			return len(req.Keys) == 1 && req.Keys[0] == goodKey
 		}),
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
-			if !(len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey) {
+			if len(tempReq.Keys) != 1 || tempReq.Keys[0] != goodKey {
 				return true
 			}
 			go func() {
@@ -1750,7 +1748,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			return len(req.Keys) == 2 && req.Keys[0] == goodKey && req.Keys[1] == goodKey2
 		}),
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
-			if !(len(tempReq.Keys) == 2 && tempReq.Keys[0] == goodKey && tempReq.Keys[1] == goodKey2) {
+			if len(tempReq.Keys) != 2 || tempReq.Keys[0] != goodKey || tempReq.Keys[1] != goodKey2 {
 				return true
 			}
 			go func() {
@@ -1847,10 +1845,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			const retry = 3
 			count := 0
 			var subscribeID string
-			for {
-				if count > retry {
-					break
-				}
+			for count <= retry {
+
 				count++
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
@@ -1870,10 +1866,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			})
 			require.NoError(t, err, "Error should be nil")
 			count = 0
-			for {
-				if errors.Is(err, io.EOF) {
-					break
-				}
+			for !errors.Is(err, io.EOF) {
+
 				if count > retry {
 					break
 				}
@@ -1896,10 +1890,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			const retry = 3
 			count := 0
 			var subscribeID string
-			for {
-				if count > retry {
-					break
-				}
+			for count <= retry {
+
 				count++
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
@@ -1919,10 +1911,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			})
 			require.NoError(t, err, "Error should be nil")
 			count = 0
-			for {
-				if errors.Is(err, io.EOF) {
-					break
-				}
+			for !errors.Is(err, io.EOF) {
+
 				if count > retry {
 					break
 				}
@@ -2573,7 +2563,8 @@ func TestBulkPublish(t *testing.T) {
 			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				entries := []pubsub.BulkPublishResponseFailedEntry{}
 				// Construct sample response from the broker.
-				if req.Topic == "error-topic" {
+				switch req.Topic {
+				case "error-topic":
 					for _, e := range req.Entries {
 						entry := pubsub.BulkPublishResponseFailedEntry{
 							EntryId: e.EntryId,
@@ -2581,7 +2572,7 @@ func TestBulkPublish(t *testing.T) {
 						entry.Error = errors.New("error on publish")
 						entries = append(entries, entry)
 					}
-				} else if req.Topic == "even-error-topic" {
+				case "even-error-topic":
 					for i, e := range req.Entries {
 						if i%2 == 0 {
 							entry := pubsub.BulkPublishResponseFailedEntry{

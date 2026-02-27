@@ -136,8 +136,8 @@ func New(opts Options) (*Server, error) {
 	oidcEndpoint := OIDCDiscoveryEndpoint
 	authorizeEndpoint := AuthorizationEndpoint
 	if opts.PathPrefix != nil && *opts.PathPrefix != "/" {
-		if strings.HasSuffix(*opts.PathPrefix, "/") {
-			opts.PathPrefix = ptr.Of(strings.TrimSuffix(*opts.PathPrefix, "/"))
+		if before, ok := strings.CutSuffix(*opts.PathPrefix, "/"); ok {
+			opts.PathPrefix = ptr.Of(before)
 		}
 
 		var err error

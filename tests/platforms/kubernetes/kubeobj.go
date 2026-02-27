@@ -345,7 +345,7 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 				{
 					Protocol: apiv1.ProtocolTCP,
 					Port:     DefaultExternalPort,
-					//nolint:gosec
+
 					TargetPort: intstr.IntOrString{IntVal: int32(targetPort)},
 				},
 			},

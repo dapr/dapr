@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"strconv"
@@ -317,9 +318,7 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 
 	/* #nosec */
 	req, _ := http.NewRequest(http.MethodPost, url, t)
-	for k, v := range headers {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, headers)
 
 	req.Header.Add("Content-Type", jsonContentType)
 	return httpClient.Do(req)
@@ -337,9 +336,7 @@ func invokeServiceWithDaprAppIDHeader(remoteApp, method string, data []byte, hea
 	/* #nosec */
 	req, _ := http.NewRequest(http.MethodPost, url, t)
 	req.Header.Set("dapr-app-id", remoteApp)
-	for k, v := range headers {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, headers)
 
 	req.Header.Set("Content-Type", jsonContentType)
 	return httpClient.Do(req)
@@ -496,9 +493,7 @@ func requestHTTPToHTTP(w http.ResponseWriter, r *http.Request, send func(remoteA
 	}
 
 	respHeaders := map[string][]string{}
-	for k, vals := range resp.Header {
-		respHeaders[k] = vals
-	}
+	maps.Copy(respHeaders, resp.Header)
 	respHeaderString, _ := json.Marshal(respHeaders)
 
 	reqHeadersString, err := io.ReadAll(resp.Body)
@@ -573,9 +568,7 @@ func requestHTTPToHTTPExternal(w http.ResponseWriter, r *http.Request, send func
 	}
 
 	respHeaders := map[string][]string{}
-	for k, vals := range resp.Header {
-		respHeaders[k] = vals
-	}
+	maps.Copy(respHeaders, resp.Header)
 	respHeaderString, _ := json.Marshal(respHeaders)
 
 	reqHeadersString, err := io.ReadAll(resp.Body)
@@ -676,9 +669,7 @@ func testV1RequestHTTPToGRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respHeaders := map[string][]string{}
-	for k, vals := range resp.Header {
-		respHeaders[k] = vals
-	}
+	maps.Copy(respHeaders, resp.Header)
 	respHeaderString, _ := json.Marshal(respHeaders)
 
 	reqHeadersString, err := io.ReadAll(resp.Body)
@@ -771,9 +762,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 
 	respTrailers := map[string][]string{}
 
-	for k, vals := range trailer {
-		respTrailers[k] = vals
-	}
+	maps.Copy(respTrailers, trailer)
 	respTrailerString, _ := json.Marshal(respTrailers)
 
 	respMessage := map[string]string{
@@ -1430,7 +1419,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 
 		if isHTTP {
 			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewReader(jsonBody))
-			result.CallSuccessful = !((resp != nil && resp.StatusCode != http.StatusOK) || err != nil)
+			result.CallSuccessful = resp != nil && resp.StatusCode == http.StatusOK && err == nil
 			if resp != nil {
 				// Drain before closing
 				_, _ = io.Copy(io.Discard, resp.Body)

@@ -34,10 +34,11 @@ func ValidateEntryId(entryId string, i int) error { //nolint:stylecheck
 		//nolint:stylecheck
 		return errors.New("Blank entryId supplied - won't be able to process it")
 	}
+
 	return nil
 }
 
-func PopulateBulkSubcribedMessage(msgE *contribpubsub.BulkMessageEntry, event interface{},
+func PopulateBulkSubcribedMessage(msgE *contribpubsub.BulkMessageEntry, event any,
 	routePathBulkMessageMap *map[string]BulkSubscribedMessage,
 	rPath string, i int, msg *contribpubsub.BulkMessage, isCloudEvent bool, psName string, contentType string, namespacedConsumer bool, namespace string,
 ) {
@@ -47,15 +48,19 @@ func PopulateBulkSubcribedMessage(msgE *contribpubsub.BulkMessageEntry, event in
 		EntryId:     msgE.EntryId,
 		ContentType: contentType,
 	}
-	var cloudEvent map[string]interface{}
-	mapTypeEvent, ok := event.(map[string]interface{})
+
+	var cloudEvent map[string]any
+
+	mapTypeEvent, ok := event.(map[string]any)
 	if ok {
 		cloudEvent = mapTypeEvent
 	}
+
 	if val, ok := (*routePathBulkMessageMap)[rPath]; ok {
 		if isCloudEvent {
 			val.PubSubMessages[val.Length].CloudEvent = mapTypeEvent
 		}
+
 		val.PubSubMessages[val.Length].RawData = &childMessage
 		val.PubSubMessages[val.Length].Entry = &msg.Entries[i]
 		val.Length++
@@ -63,6 +68,7 @@ func PopulateBulkSubcribedMessage(msgE *contribpubsub.BulkMessageEntry, event in
 	} else {
 		pubSubMessages := make([]Message, len(msg.Entries))
 		pubSubMessages[0].RawData = &childMessage
+
 		pubSubMessages[0].Entry = &msg.Entries[i]
 		if isCloudEvent {
 			pubSubMessages[0].CloudEvent = cloudEvent
@@ -125,6 +131,7 @@ func NewBulkSubIngressDiagnostics() BulkSubIngressDiagnostics {
 		Elapsed:        0,
 		RetryReported:  false,
 	}
+
 	return bulkSubDiag
 }
 
@@ -132,7 +139,9 @@ func ReportBulkSubDiagnostics(ctx context.Context, topic string, bulkSubDiag *Bu
 	if bulkSubDiag == nil {
 		return
 	}
+
 	diag.DefaultComponentMonitoring.BulkPubsubIngressEvent(ctx, rtpubsub.MetadataKeyPubSub, topic, bulkSubDiag.Elapsed)
+
 	for status, count := range bulkSubDiag.StatusWiseDiag {
 		diag.DefaultComponentMonitoring.BulkPubsubIngressEventEntries(ctx, rtpubsub.MetadataKeyPubSub, topic, status, count)
 	}

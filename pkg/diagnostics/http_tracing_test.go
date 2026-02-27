@@ -431,7 +431,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		// Verify empty baggage in header
-		assert.Equal(t, "", rr.Header().Get("baggage"))
+		assert.Empty(t, rr.Header().Get("baggage"))
 
 		// Verify no baggage in context
 		baggage := otelbaggage.FromContext(handlerCtx)

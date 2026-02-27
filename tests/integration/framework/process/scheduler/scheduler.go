@@ -395,7 +395,7 @@ func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Clie
 
 func (s *Scheduler) EtcdJobs(t *testing.T, ctx context.Context) []*mvccpb.KeyValue {
 	t.Helper()
-	resp, err := s.ETCDClient(t, ctx).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	resp, err := s.ETCDClient(t, ctx).Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	return resp.Kvs
 }
