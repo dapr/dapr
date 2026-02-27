@@ -1098,6 +1098,8 @@ type HTTPEndpointUpdateEvent struct {
 	unknownFields protoimpl.UnknownFields
 
 	HttpEndpoints []byte `protobuf:"bytes,1,opt,name=http_endpoints,json=httpEndpoints,proto3" json:"http_endpoints,omitempty"`
+	// type is the type of event.
+	Type ResourceEventType `protobuf:"varint,2,opt,name=type,proto3,enum=dapr.proto.operator.v1.ResourceEventType" json:"type,omitempty"`
 }
 
 func (x *HTTPEndpointUpdateEvent) Reset() {
@@ -1137,6 +1139,13 @@ func (x *HTTPEndpointUpdateEvent) GetHttpEndpoints() []byte {
 		return x.HttpEndpoints
 	}
 	return nil
+}
+
+func (x *HTTPEndpointUpdateEvent) GetType() ResourceEventType {
+	if x != nil {
+		return x.Type
+	}
+	return ResourceEventType_UNKNOWN
 }
 
 var File_dapr_proto_operator_v1_operator_proto protoreflect.FileDescriptor
