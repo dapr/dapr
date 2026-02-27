@@ -373,11 +373,6 @@ func buildDaprComponentObject(componentName string, typeName string, scopes []st
 	}
 }
 
-//go:fix inline
-func int32Ptr(i int32) *int32 {
-	return new(i)
-}
-
 func init() {
 	if ns, ok := os.LookupEnv(DaprTestNamespaceEnvVar); ok {
 		DaprTestNamespace = ns

@@ -39,7 +39,7 @@ type Event struct {
 	EventName   string        `json:"eventName,omitempty"`
 	To          []string      `json:"to,omitempty"`
 	Concurrency string        `json:"concurrency,omitempty"`
-	CreatedAt   time.Time     `json:"createdAt,omitempty"`
+	CreatedAt   time.Time     `json:"createdAt,omitzero"`
 	State       []KeyValState `json:"state,omitempty"`
 	Data        any           `json:"data,omitempty"`
 }

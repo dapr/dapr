@@ -74,7 +74,6 @@ func TestAnnotationCompletness(t *testing.T) {
 	p := patcher.SidecarConfig{}
 	pt := reflect.TypeOf(p)
 	for field := range pt.Fields() {
-		field := field
 		an := field.Tag.Get("annotation")
 		if an != "" {
 			annotationsStruct = append(annotationsStruct, an)
