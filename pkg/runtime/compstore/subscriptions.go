@@ -17,7 +17,6 @@ import (
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/dapr/kit/ptr"
 )
 
 type DeclarativeSubscription struct {
@@ -70,7 +69,7 @@ func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, s
 	c.subscriptions.declaratives[comp.Name] = &DeclarativeSubscription{
 		Comp: comp,
 		NamedSubscription: &NamedSubscription{
-			Name:         ptr.Of(comp.Name),
+			Name:         new(comp.Name),
 			Subscription: sub,
 		},
 	}
@@ -86,7 +85,7 @@ func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription, connec
 	sub := &DeclarativeSubscription{
 		Comp: comp,
 		NamedSubscription: &NamedSubscription{
-			Name:         ptr.Of(comp.Name),
+			Name:         new(comp.Name),
 			ConnectionID: connectionID,
 			Subscription: rtpubsub.Subscription{
 				PubsubName:      comp.Spec.Pubsubname,
@@ -206,7 +205,7 @@ func (c *ComponentStore) ListSubscriptionsAppByPubSub(name string) []*NamedSubsc
 		if _, ok := taken[sub.Topic]; !ok {
 			taken[sub.Topic] = len(subs)
 			subs = append(subs, &NamedSubscription{
-				Name:         ptr.Of(subName),
+				Name:         new(subName),
 				Subscription: sub.Subscription,
 			})
 		}

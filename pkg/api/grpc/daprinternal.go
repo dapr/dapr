@@ -136,10 +136,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}()
 
 	// Read the rest of the data in background as we submit the request
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-
+	a.wg.Go(func() {
 		var (
 			expectSeq uint64
 			readSeq   uint64
@@ -186,7 +183,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		}
 
 		pw.Close()
-	}()
+	})
 
 	isSSERequest := sse.IsSSEGrpcRequest(chunk.GetRequest())
 

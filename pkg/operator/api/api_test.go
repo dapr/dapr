@@ -730,7 +730,7 @@ func TestListScopes(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, res.GetComponents(), 2)
-		var exp [][]byte
+		exp := make([][]byte, 0, 2)
 		var b []byte
 		b, err = json.Marshal(comp1)
 		require.NoError(t, err)

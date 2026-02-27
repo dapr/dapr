@@ -205,7 +205,8 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		}
 	}
 
-	containers := []apiv1.Container{{
+	containers := make([]apiv1.Container, 0, 1+len(appDesc.PluggableComponents))
+	containers = append(containers, apiv1.Container{
 		Name:            appDesc.AppName,
 		Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
 		ImagePullPolicy: apiv1.PullAlways,
@@ -218,7 +219,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		},
 		Env:          appEnv,
 		VolumeMounts: appDesc.AppVolumeMounts,
-	}}
+	})
 
 	containers = append(containers, appDesc.PluggableComponents...)
 
@@ -285,7 +286,7 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 			Namespace: namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(appDesc.Replicas),
+			Replicas: new(appDesc.Replicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					TestAppLabelKey: appDesc.AppName,
@@ -372,8 +373,9 @@ func buildDaprComponentObject(componentName string, typeName string, scopes []st
 	}
 }
 
+//go:fix inline
 func int32Ptr(i int32) *int32 {
-	return &i
+	return new(i)
 }
 
 func init() {

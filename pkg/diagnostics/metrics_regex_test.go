@@ -11,7 +11,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestRegexRulesSingle(t *testing.T) {
@@ -20,9 +19,9 @@ func TestRegexRulesSingle(t *testing.T) {
 	testStat := stats.Int64(statName, "Stat used in unit test", stats.UnitDimensionless)
 
 	metricSpec := config.MetricSpec{
-		Enabled: ptr.Of(true),
+		Enabled: new(true),
 		HTTP: &config.MetricHTTP{
-			ExcludeVerbs: ptr.Of(true),
+			ExcludeVerbs: new(true),
 		},
 		Rules: []config.MetricsRule{
 			{

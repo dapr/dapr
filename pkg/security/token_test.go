@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/security/consts"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestAPIToken(t *testing.T) {
@@ -73,20 +72,20 @@ func TestGetKubernetesIdentityToken(t *testing.T) {
 			expErr:     true,
 		},
 		"if only kube token is present, expect error": {
-			kubeToken:  ptr.Of("kube-token"),
+			kubeToken:  new("kube-token"),
 			boundToken: nil,
 			exp:        "",
 			expErr:     true,
 		},
 		"if only boundToken, expect bound token": {
 			kubeToken:  nil,
-			boundToken: ptr.Of("bound-token"),
+			boundToken: new("bound-token"),
 			exp:        "bound-token",
 			expErr:     false,
 		},
 		"if both tokens are present, expect bound token": {
-			kubeToken:  ptr.Of("kube-token"),
-			boundToken: ptr.Of("bound-token"),
+			kubeToken:  new("kube-token"),
+			boundToken: new("bound-token"),
 			exp:        "bound-token",
 			expErr:     false,
 		},

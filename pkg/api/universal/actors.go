@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/kit/ptr"
 )
 
 func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
@@ -202,13 +201,13 @@ func (a *Universal) GetActorReminder(ctx context.Context, in *runtimev1pb.GetAct
 	var period *string
 	var ttl *string
 	if resp.DueTime != "" {
-		dueTime = ptr.Of(resp.DueTime)
+		dueTime = new(resp.DueTime)
 	}
 	if resp.Period.String() != "" {
-		period = ptr.Of(resp.Period.String())
+		period = new(resp.Period.String())
 	}
 	if !resp.ExpirationTime.IsZero() {
-		ttl = ptr.Of(resp.ExpirationTime.Format(time.RFC3339))
+		ttl = new(resp.ExpirationTime.Format(time.RFC3339))
 	}
 
 	return &runtimev1pb.GetActorReminderResponse{
@@ -280,11 +279,11 @@ func (a *Universal) ListActorReminders(ctx context.Context, req *runtimev1pb.Lis
 			dueTime = &r.DueTime
 		}
 		if r.Period.String() != "" {
-			period = ptr.Of(r.Period.String())
+			period = new(r.Period.String())
 		}
 		var expirationTime *string
 		if !r.ExpirationTime.IsZero() {
-			expirationTime = ptr.Of(r.ExpirationTime.Format(time.RFC3339Nano))
+			expirationTime = new(r.ExpirationTime.Format(time.RFC3339Nano))
 		}
 
 		reminders[i] = &runtimev1pb.NamedActorReminder{

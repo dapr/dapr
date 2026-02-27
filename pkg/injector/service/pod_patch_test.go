@@ -21,7 +21,6 @@ import (
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	clientfake "github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
-	"github.com/dapr/kit/ptr"
 )
 
 func Test_mtlsEnabled(t *testing.T) {
@@ -38,7 +37,7 @@ func Test_mtlsEnabled(t *testing.T) {
 					Name:      "daprsystem",
 					Namespace: "test-ns",
 				},
-				Spec: configapi.ConfigurationSpec{MTLSSpec: &configapi.MTLSSpec{Enabled: ptr.Of(false)}},
+				Spec: configapi.ConfigurationSpec{MTLSSpec: &configapi.MTLSSpec{Enabled: new(false)}},
 			},
 		)
 		assert.False(t, mTLSEnabled("test-ns", cl))
@@ -52,7 +51,7 @@ func Test_mtlsEnabled(t *testing.T) {
 					Name:      "daprsystem",
 					Namespace: "test-ns",
 				},
-				Spec: configapi.ConfigurationSpec{MTLSSpec: &configapi.MTLSSpec{Enabled: ptr.Of(true)}},
+				Spec: configapi.ConfigurationSpec{MTLSSpec: &configapi.MTLSSpec{Enabled: new(true)}},
 			},
 		)
 		assert.True(t, mTLSEnabled("test-ns", cl))

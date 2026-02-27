@@ -35,7 +35,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
-	"github.com/dapr/kit/ptr"
 )
 
 type Injector struct {
@@ -85,7 +84,7 @@ func New(t *testing.T, fopts ...Option) *Injector {
 				Name: "dapr-scheduler-server", Namespace: *opts.namespace,
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.Of(int32(1)),
+				Replicas: new(int32(1)),
 			},
 		}),
 	)

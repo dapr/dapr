@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestLoadStandaloneConfiguration(t *testing.T) {
@@ -487,7 +486,7 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	conf = LoadDefaultConfiguration()
 	conf.Spec.TracingSpec.Otel.EndpointAddress = "configfileendpoint:4321"
 	conf.Spec.TracingSpec.Otel.Protocol = "grpc"
-	conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(true)
+	conf.Spec.TracingSpec.Otel.IsSecure = new(true)
 	conf.Spec.TracingSpec.Otel.Headers = []string{"another-key1=value1"}
 
 	// set tracing spec from env
@@ -596,7 +595,7 @@ func TestSortMetrics(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{
-					Enabled: ptr.Of(true),
+					Enabled: new(true),
 					Rules: []MetricsRule{
 						{
 							Name: "rule",
@@ -604,7 +603,7 @@ func TestSortMetrics(t *testing.T) {
 					},
 				},
 				MetricsSpec: &MetricSpec{
-					Enabled: ptr.Of(false),
+					Enabled: new(false),
 				},
 			},
 		}
@@ -618,7 +617,7 @@ func TestSortMetrics(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{
-					Enabled: ptr.Of(false),
+					Enabled: new(false),
 					Rules: []MetricsRule{
 						{
 							Name: "rule",
@@ -626,7 +625,7 @@ func TestSortMetrics(t *testing.T) {
 					},
 				},
 				MetricsSpec: &MetricSpec{
-					Enabled: ptr.Of(true),
+					Enabled: new(true),
 				},
 			},
 		}
@@ -640,7 +639,7 @@ func TestSortMetrics(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{
-					Enabled: ptr.Of(true),
+					Enabled: new(true),
 					Rules: []MetricsRule{
 						{
 							Name: "rule",
@@ -680,7 +679,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 	t.Run("value is set to true", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				IncreasedCardinality: ptr.Of(true),
+				IncreasedCardinality: new(true),
 			},
 		}
 		assert.True(t, m.GetHTTPIncreasedCardinality(log))
@@ -689,7 +688,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 	t.Run("value is set to false", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				IncreasedCardinality: ptr.Of(false),
+				IncreasedCardinality: new(false),
 			},
 		}
 		assert.False(t, m.GetHTTPIncreasedCardinality(log))
@@ -720,7 +719,7 @@ func TestMetricsGetHTTPLatencyDistributionBuckets(t *testing.T) {
 	latencyDistribution = view.Distribution(customLatencyDistribution...)
 	t.Run("value is set to list of integers", func(t *testing.T) {
 		m := MetricSpec{
-			LatencyDistributionBuckets: ptr.Of([]int{1, 2, 3}),
+			LatencyDistributionBuckets: new([]int{1, 2, 3}),
 		}
 		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
 	})
@@ -774,7 +773,7 @@ func TestMetricsGetHTTPExcludeVerbs(t *testing.T) {
 	t.Run("config is enabled", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				ExcludeVerbs: ptr.Of(true),
+				ExcludeVerbs: new(true),
 			},
 		}
 		assert.True(t, m.GetHTTPExcludeVerbs())
@@ -783,7 +782,7 @@ func TestMetricsGetHTTPExcludeVerbs(t *testing.T) {
 	t.Run("config is disabled", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				ExcludeVerbs: ptr.Of(false),
+				ExcludeVerbs: new(false),
 			},
 		}
 		assert.False(t, m.GetHTTPExcludeVerbs())

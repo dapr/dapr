@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -85,7 +84,7 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 
 	_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name: "testJob",
-		Job:  &schedulerv1pb.Job{Schedule: ptr.Of("@daily")},
+		Job:  &schedulerv1pb.Job{Schedule: new("@daily")},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     "myapp",
 			Namespace: "default",
@@ -100,7 +99,7 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name: "testJob",
-		Job:  &schedulerv1pb.Job{Schedule: ptr.Of("@daily")},
+		Job:  &schedulerv1pb.Job{Schedule: new("@daily")},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     "myapp",
 			Namespace: "default",

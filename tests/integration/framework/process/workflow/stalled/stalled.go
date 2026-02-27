@@ -59,10 +59,11 @@ func New(t *testing.T, fopts ...Option) *Stalled {
 	}
 
 	appID := uuid.New().String()
-	wfOpts := []workflow.Option{
+	wfOpts := make([]workflow.Option, 0, 2+len(opts.activities))
+	wfOpts = append(wfOpts,
 		workflow.WithAddOrchestrator(t, "Orchestrator", fw.workflowWrapper),
 		workflow.WithDaprdOptions(0, daprd.WithAppID(appID)),
-	}
+	)
 	for name, activity := range opts.activities {
 		wfOpts = append(wfOpts, workflow.WithAddActivity(t, name, activity))
 	}

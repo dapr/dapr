@@ -38,7 +38,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/otel"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -74,7 +73,7 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 				Otel: &configapi.OtelSpec{
 					EndpointAddress: s.collector.OTLPGRPCAddress(),
 					Protocol:        "grpc",
-					IsSecure:        ptr.Of(false),
+					IsSecure:        new(false),
 					Headers: []commonapi.NameValuePair{
 						{
 							Name: "x-plain-header",

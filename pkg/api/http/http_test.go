@@ -85,7 +85,6 @@ import (
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const bufconnBufSize = 2 << 20 // 2MB
@@ -97,13 +96,13 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  ptr.Of(1),
+					MaxRetries:  new(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
 				"tenRetries": {
-					MaxRetries:  ptr.Of(10),
+					MaxRetries:  new(10),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -445,7 +444,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		apiPath := apiVersionV1alpha1 + "/publish/bulk/errorpubsub/topic"
 		testMethods := []string{"POST", "PUT"}
 
-		errBulkRequest := []bulkPublishMessageEntry{}
+		errBulkRequest := make([]bulkPublishMessageEntry, 0, len(bulkRequest))
 		for _, entry := range bulkRequest {
 			if entry.Metadata == nil {
 				entry.Metadata = map[string]string{}
@@ -494,7 +493,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		apiPath := apiVersionV1alpha1 + "/publish/bulk/errorpubsub/topic"
 		testMethods := []string{"POST", "PUT"}
 
-		errBulkRequest := []bulkPublishMessageEntry{}
+		errBulkRequest := make([]bulkPublishMessageEntry, 0, len(bulkRequest))
 		for _, entry := range bulkRequest {
 			// Fail entries 2 and 3
 			if entry.EntryID == "2" || entry.EntryID == "3" {
@@ -3124,7 +3123,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{{
 			Key:  "error-key",
-			ETag: ptr.Of(""),
+			ETag: new(""),
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -3208,7 +3207,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{
 			{Key: "good-key", ETag: &etag},
-			{Key: "good-key2", ETag: ptr.Of("BAD ETAG")},
+			{Key: "good-key2", ETag: new("BAD ETAG")},
 		}
 		b, _ := json.Marshal(request)
 		// act
@@ -3285,7 +3284,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
-				ETag:  ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+				ETag:  new("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
@@ -3318,7 +3317,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  json.RawMessage("\"bGlmZSBpcyBnb29k\""),
-				ETag:  ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+				ETag:  new("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
@@ -3428,9 +3427,9 @@ func TestV1StateEndpoints(t *testing.T) {
 
 	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
 		// Adding this will make the bulk operation fail
-		failingStore.BulkFailKey.Store(ptr.Of("timeoutBulkGetKeyBulk"))
+		failingStore.BulkFailKey.Store(new("timeoutBulkGetKeyBulk"))
 		t.Cleanup(func() {
-			failingStore.BulkFailKey.Store(ptr.Of(""))
+			failingStore.BulkFailKey.Store(new(""))
 		})
 
 		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", "failStore")
@@ -3679,7 +3678,7 @@ func (c fakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.
 	if req.Key == "good-key" {
 		return &state.GetResponse{
 			Data: []byte("\"bGlmZSBpcyBnb29k\""),
-			ETag: ptr.Of("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
+			ETag: new("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 		}, nil
 	}
 	if req.Key == "error-key" {

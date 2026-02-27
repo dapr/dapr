@@ -35,7 +35,6 @@ import (
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/pubsub"
 	testinggrpc "github.com/dapr/dapr/pkg/testing/grpc"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestErrorPublishedNonCloudEvent(t *testing.T) {
@@ -231,7 +230,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			name:           "succeeded to publish message to user app and validated cloud event extension attributes",
 			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
-			validateCloudEventExtension: ptr.Of(map[string]any{
+			validateCloudEventExtension: new(map[string]any{
 				"customInt":    float64(123),
 				"customString": "abc",
 				"customBool":   true,
@@ -244,7 +243,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			name:           "succeeded to publish message to user app and validated cloud event extension attributes with base64 encoded data",
 			message:        testPubSubMessageBase64,
 			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
-			validateCloudEventExtension: ptr.Of(map[string]any{
+			validateCloudEventExtension: new(map[string]any{
 				"customInt":    float64(123),
 				"customString": "abc",
 				"customBool":   true,
@@ -257,7 +256,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			name:           "succeeded to publish message to user app with traceparent",
 			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
-			validateCloudEventExtension: ptr.Of(map[string]any{
+			validateCloudEventExtension: new(map[string]any{
 				"customInt":    float64(123),
 				"customString": "abc",
 				"customBool":   true,
@@ -277,7 +276,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 				testPubSubMessage.CloudEvent[contribpubsub.IDField],
 				rterrors.NewRetriable(status.Error(codes.Unknown, "cloud event extension traceparent with value 00-c24c2deeb837b9b5e7101a1235b479c5-6784475fca41cdff-01 is not valid")),
 			),
-			validateCloudEventExtension: ptr.Of(map[string]any{
+			validateCloudEventExtension: new(map[string]any{
 				"customInt":    float64(123),
 				"customString": "abc",
 				"customBool":   true,

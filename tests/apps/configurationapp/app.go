@@ -247,7 +247,7 @@ func (r *PostgresUpdater) UpdateKey(items map[string]*Item) error {
 		return errors.New("empty list of items")
 	}
 	for key, item := range items {
-		var params []any
+		params := make([]any, 0, 4)
 		query := "UPDATE " + postgresConfigTable + " SET VALUE = $1, VERSION = $2, METADATA = $3 WHERE KEY = $4"
 		params = append(params, item.Value, item.Version, item.Metadata, key)
 		_, err := r.client.Exec(context.Background(), query, params...)

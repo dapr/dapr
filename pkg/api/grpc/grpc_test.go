@@ -76,7 +76,6 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -95,13 +94,13 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  ptr.Of(1),
+					MaxRetries:  new(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
 				"tenRetries": {
-					MaxRetries:  ptr.Of(10),
+					MaxRetries:  new(10),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -1261,7 +1260,7 @@ func TestGetState(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.Of("test-etag"),
+			ETag: new("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorStoreKey
@@ -1998,7 +1997,7 @@ func TestGetBulkState(t *testing.T) {
 		})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.Of("test-etag"),
+			ETag: new("test-etag"),
 		}, nil)
 	fakeStore.On("Get",
 		mock.MatchedBy(matchContextInterface),
@@ -3397,9 +3396,9 @@ func TestStateAPIWithResiliency(t *testing.T) {
 
 	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
 		// Adding this will make the bulk operation fail
-		failingStore.BulkFailKey.Store(ptr.Of("timeoutBulkGetKeyBulk"))
+		failingStore.BulkFailKey.Store(new("timeoutBulkGetKeyBulk"))
 		t.Cleanup(func() {
-			failingStore.BulkFailKey.Store(ptr.Of(""))
+			failingStore.BulkFailKey.Store(new(""))
 		})
 
 		_, err := client.GetBulkState(t.Context(), &runtimev1pb.GetBulkStateRequest{

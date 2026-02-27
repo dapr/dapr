@@ -77,7 +77,7 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create publish requests for each message in the bulk request.
-			var pubReqs []*contribPubsub.PublishRequest
+			pubReqs := make([]*contribPubsub.PublishRequest, 0, len(req.Entries))
 
 			for _, entry := range req.Entries {
 				contentType := entry.ContentType
@@ -110,7 +110,7 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 				assert.Empty(t, res.FailedEntries)
 			}
 
-			var pubInvocationArgs []*contribPubsub.PublishRequest
+			pubInvocationArgs := make([]*contribPubsub.PublishRequest, 0, len(mockPubSub.Calls))
 
 			// Assert that all Publish requests have the correct topic and pubsub name.
 			for _, call := range mockPubSub.Calls {

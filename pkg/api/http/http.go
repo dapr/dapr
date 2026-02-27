@@ -796,7 +796,7 @@ func (a *api) onSubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Requ
 	metadata := getMetadataFromRequest(r)
 	subscribeKeys := make([]string, 0)
 
-	keys := make([]string, 0)
+	keys := make([]string, 0, len(r.URL.Query()[configurationKeyParam]))
 	keys = append(keys, r.URL.Query()[configurationKeyParam]...)
 
 	if len(keys) > 0 {
@@ -890,7 +890,7 @@ func (a *api) onGetConfiguration(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 	metadata := getMetadataFromRequest(r)
 
-	keys := make([]string, 0)
+	keys := make([]string, 0, len(r.URL.Query()[configurationKeyParam]))
 	keys = append(keys, r.URL.Query()[configurationKeyParam]...)
 	req := &configuration.GetRequest{
 		Keys:     keys,

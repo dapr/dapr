@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/pkg/runtime/pubsub/publisher/fake"
-	"github.com/dapr/kit/ptr"
 )
 
 func newTestOutbox(publishFn func(context.Context, *contribPubsub.PublishRequest) error) outbox.Outbox {
@@ -795,7 +794,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 
 			errCh <- nil
 
-			stateMock.expectedKey.Store(ptr.Of(trs[0].GetKey()))
+			stateMock.expectedKey.Store(new(trs[0].GetKey()))
 		}()
 
 		d, err := time.ParseDuration(stateScan)

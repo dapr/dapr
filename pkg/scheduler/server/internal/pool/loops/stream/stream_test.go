@@ -293,7 +293,7 @@ func Test_Stream(t *testing.T) {
 
 		suite := newSuite(t)
 
-		var called []atomic.Pointer[api.TriggerResponseResult]
+		called := make([]atomic.Pointer[api.TriggerResponseResult], 0, 10)
 		for i := range 10 {
 			called = append(called, atomic.Pointer[api.TriggerResponseResult]{})
 			suite.streamLoop.Enqueue(&loops.TriggerRequest{

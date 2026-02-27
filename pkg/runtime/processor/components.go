@@ -27,7 +27,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
-	"github.com/dapr/kit/ptr"
 )
 
 // Init initializes a component of a category and reports the result.
@@ -45,8 +44,8 @@ func (p *Processor) Init(ctx context.Context, comp componentsapi.Component) erro
 
 	if initerr != nil {
 		condition = operatorv1.ResourceConditionStatus_STATUS_FAILURE
-		reason = ptr.Of("ERROR")
-		message = ptr.Of(initerr.Error())
+		reason = new("ERROR")
+		message = new(initerr.Error())
 	}
 
 	err := p.reporter(ctx, comp,
@@ -103,8 +102,8 @@ func (p *Processor) Close(comp componentsapi.Component) error {
 
 	if closeErr != nil {
 		condition = operatorv1.ResourceConditionStatus_STATUS_FAILURE
-		reason = ptr.Of("ERROR")
-		message = ptr.Of(closeErr.Error())
+		reason = new("ERROR")
+		message = new(closeErr.Error())
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

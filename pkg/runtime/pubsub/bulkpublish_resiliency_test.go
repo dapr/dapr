@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var (
@@ -182,7 +181,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 1, true, true)
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
@@ -214,7 +213,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 3, true, true)
 
 		// set short retry with 2 retries max
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
@@ -248,7 +247,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 1, true, false)
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
@@ -280,7 +279,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 0, false, false)
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
@@ -315,7 +314,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher.timeoutSleep = 5 * time.Second
 
 		// set short retry with 0 retry max
-		shortRetry.MaxRetries = ptr.Of(0)
+		shortRetry.MaxRetries = new(0)
 
 		// timeout will be triggered here
 		// no retries
@@ -346,7 +345,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
@@ -403,7 +402,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		}
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
@@ -461,7 +460,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		}
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
@@ -504,7 +503,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		}
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
@@ -574,7 +573,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 		// set short retry with 2 retries max
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		// timeout will be triggered here
 		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry)
@@ -617,7 +616,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher.timeoutSleep = 5 * time.Second
 
 		// retry time period twice that of timeout sleep and 10 times that of the timeout
-		longRetry.MaxRetries = ptr.Of(2)
+		longRetry.MaxRetries = new(2)
 
 		// set a circuit breaker with 1 consecutive failure
 		cb := resiliencyV1alpha.CircuitBreaker{

@@ -475,7 +475,7 @@ func TestConsumerID(t *testing.T) {
 // 'topics' are the topics for the first pubsub.
 // 'topics2' are the topics for the second pubsub.
 func getSubscriptionsJSONString(topics []string, topics2 []string) string {
-	s := []runtimePubsub.SubscriptionJSON{}
+	s := make([]runtimePubsub.SubscriptionJSON, 0, len(topics)+len(topics2))
 	for _, t := range topics {
 		s = append(s, runtimePubsub.SubscriptionJSON{
 			PubsubName: TestPubsubName,

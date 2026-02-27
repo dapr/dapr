@@ -635,7 +635,7 @@ func TestSetupTracing(t *testing.T) {
 		tracingConfig: config.TracingSpec{
 			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        ptr.Of(false),
+				IsSecure:        new(false),
 				Protocol:        "http",
 				Headers:         []string{"header1=value1", "header2=value2"},
 			},
@@ -646,7 +646,7 @@ func TestSetupTracing(t *testing.T) {
 		tracingConfig: config.TracingSpec{
 			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        ptr.Of(false),
+				IsSecure:        new(false),
 				Protocol:        "tcp",
 			},
 		},
@@ -656,7 +656,7 @@ func TestSetupTracing(t *testing.T) {
 		tracingConfig: config.TracingSpec{
 			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        ptr.Of(false),
+				IsSecure:        new(false),
 				Protocol:        "http",
 				Headers:         []string{"invalidheaders"},
 			},
@@ -673,7 +673,7 @@ func TestSetupTracing(t *testing.T) {
 		tracingConfig: config.TracingSpec{
 			Otel: &config.OtelSpec{
 				EndpointAddress: "http://foo.bar",
-				IsSecure:        ptr.Of(false),
+				IsSecure:        new(false),
 				Protocol:        "http",
 			},
 			Zipkin: &config.ZipkinSpec{
@@ -892,7 +892,7 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 		readBufferSize:               4 << 10,
 		unixDomainSocket:             "",
 		gracefulShutdownDuration:     time.Second,
-		enableAPILogging:             ptr.Of(true),
+		enableAPILogging:             new(true),
 		schedulerStreams:             3,
 		disableBuiltinK8sSecretStore: false,
 		metricsExporter: metrics.New(metrics.Options{
@@ -2272,7 +2272,7 @@ func TestTraceShutdown(t *testing.T) {
 	rt.globalConfig.Spec.TracingSpec = &config.TracingSpec{
 		Otel: &config.OtelSpec{
 			EndpointAddress: "foo.bar",
-			IsSecure:        ptr.Of(false),
+			IsSecure:        new(false),
 			Protocol:        "http",
 		},
 	}

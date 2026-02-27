@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/actors/targets/errors"
-	"github.com/dapr/kit/ptr"
 )
 
 type Stallable struct {
@@ -64,5 +63,5 @@ func (l *Stallable) Stall() context.CancelFunc {
 }
 
 func (l *Stallable) resetStalledChannel() {
-	l.stalledCh.Store(ptr.Of(make(chan struct{})))
+	l.stalledCh.Store(new(make(chan struct{})))
 }

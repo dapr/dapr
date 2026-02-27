@@ -24,7 +24,6 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/runtime/registry"
-	"github.com/dapr/kit/ptr"
 )
 
 func Test_toInternal(t *testing.T) {
@@ -46,7 +45,7 @@ func Test_toInternal(t *testing.T) {
 	assert.Equal(t, 3500, intc.httpPort)
 	assert.Equal(t, 50002, intc.internalGRPCPort)
 	assert.Equal(t, 50001, intc.apiGRPCPort)
-	assert.Equal(t, ptr.Of(3501), intc.publicPort)
+	assert.Equal(t, new(3501), intc.publicPort)
 	assert.Equal(t, "1.2.3.4", intc.apiListenAddresses[0])
 	assert.Equal(t, 8080, intc.appConnectionConfig.Port)
 	assert.Equal(t, 7070, intc.profilePort)
@@ -59,7 +58,7 @@ func Test_toInternal(t *testing.T) {
 	assert.Empty(t, intc.unixDomainSocket)
 	assert.Equal(t, time.Second, intc.gracefulShutdownDuration)
 	assert.Equal(t, nilDuration, intc.blockShutdownDuration)
-	assert.Equal(t, ptr.Of(true), intc.enableAPILogging)
+	assert.Equal(t, new(true), intc.enableAPILogging)
 	assert.True(t, intc.disableBuiltinK8sSecretStore)
 	assert.Equal(t, "1.1.1.1", intc.appConnectionConfig.ChannelAddress)
 }
@@ -200,7 +199,7 @@ func defaultTestConfig() Config {
 		ReadBufferSize:               4 << 10,
 		UnixDomainSocket:             "",
 		DaprGracefulShutdownSeconds:  1,
-		EnableAPILogging:             ptr.Of(true),
+		EnableAPILogging:             new(true),
 		DisableBuiltinK8sSecretStore: true,
 		AppChannelAddress:            "1.1.1.1",
 		DisableInitEndpoints:         []string{},

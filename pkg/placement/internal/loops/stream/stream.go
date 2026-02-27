@@ -83,16 +83,14 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 
 	stream.addr = addr
 
-	stream.wg.Add(1)
-	go func() {
+	stream.wg.Go(func() {
 		err := stream.recvLoop()
 		stream.nsLoop.Enqueue(&loops.ConnCloseStream{
 			StreamIDx: stream.idx,
 			Namespace: stream.ns,
 			Error:     err,
 		})
-		stream.wg.Done()
-	}()
+	})
 
 	return stream.loop
 }

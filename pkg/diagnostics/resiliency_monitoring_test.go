@@ -16,7 +16,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -472,13 +471,14 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				return
 			}
 
-			wantedTags := []tag.Tag{
+			wantedTags := make([]tag.Tag, 0, 5+len(test.wantTags))
+			wantedTags = append(wantedTags,
 				diag.NewTag("app_id", testAppID),
 				diag.NewTag("name", testResiliencyName),
 				diag.NewTag("namespace", testResiliencyNamespace),
 				diag.NewTag(diag.FlowDirectionKey.Name(), string(diag.OutboundPolicyFlowDirection)),
 				diag.NewTag(diag.TargetKey.Name(), diag.ResiliencyAppTarget("fakeApp")),
-			}
+			)
 			wantedTags = append(wantedTags, test.wantTags...)
 			for _, wantTag := range wantedTags {
 				diag.RequireTagExist(t, rows, wantTag)
@@ -558,7 +558,7 @@ func newTestDefaultResiliencyConfig(resiliencyName, resiliencyNamespace string) 
 					"DefaultComponentInboundRetryPolicy": {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: ptr.Of(3),
+						MaxRetries: new(3),
 					},
 				},
 				Timeouts: map[string]string{
@@ -584,7 +584,7 @@ func newTestResiliencyConfig(resiliencyName, resiliencyNamespace, appName, actor
 					"testRetry": {
 						Policy:     "constant",
 						Duration:   "10ms",
-						MaxRetries: ptr.Of(3),
+						MaxRetries: new(3),
 					},
 				},
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{

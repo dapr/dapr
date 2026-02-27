@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/healthz"
-	"github.com/dapr/kit/ptr"
 )
 
 const testHost = "example.com:8443"
@@ -371,9 +370,9 @@ func TestServer_Start(t *testing.T) {
 	certFile, keyFile := createTestCertificate(t)
 
 	s := createTestServer(t, WithJWKS(jwks))
-	s.tlsCertPath = ptr.Of(certFile)
-	s.tlsKeyPath = ptr.Of(keyFile)
-	s.jwksURI = ptr.Of("https://example.com/jwks.json")
+	s.tlsCertPath = new(certFile)
+	s.tlsKeyPath = new(keyFile)
+	s.jwksURI = new("https://example.com/jwks.json")
 
 	// Start the server in a goroutine
 	ctx, cancel := context.WithCancel(t.Context())
@@ -425,7 +424,7 @@ func TestNew(t *testing.T) {
 			ListenAddress:      "0.0.0.0",
 			JWKS:               jwks,
 			Healthz:            healthz.New(),
-			JWKSURI:            ptr.Of("https://example.com/jwks.json"),
+			JWKSURI:            new("https://example.com/jwks.json"),
 			SignatureAlgorithm: jwa.ES256,
 		})
 		require.NoError(t, err)
@@ -433,7 +432,7 @@ func TestNew(t *testing.T) {
 		assert.Equal(t, 8443, s.port)
 		assert.Equal(t, "0.0.0.0", s.listenAddress)
 		assert.Equal(t, jwks, s.jwks)
-		assert.Equal(t, ptr.Of("https://example.com/jwks.json"), s.jwksURI)
+		assert.Equal(t, new("https://example.com/jwks.json"), s.jwksURI)
 		assert.Nil(t, s.pathPrefix)
 	})
 
@@ -443,13 +442,13 @@ func TestNew(t *testing.T) {
 			ListenAddress:      "0.0.0.0",
 			JWKS:               jwks,
 			Healthz:            healthz.New(),
-			JWKSURI:            ptr.Of("https://example.com/jwks.json"),
-			PathPrefix:         ptr.Of("/auth"),
+			JWKSURI:            new("https://example.com/jwks.json"),
+			PathPrefix:         new("/auth"),
 			SignatureAlgorithm: jwa.ES256,
 		})
 		require.NoError(t, err)
 
-		assert.Equal(t, ptr.Of("/auth"), s.pathPrefix)
+		assert.Equal(t, new("/auth"), s.pathPrefix)
 	})
 
 	t.Run("with custom domains", func(t *testing.T) {
@@ -459,7 +458,7 @@ func TestNew(t *testing.T) {
 			ListenAddress:      "0.0.0.0",
 			JWKS:               jwks,
 			Healthz:            healthz.New(),
-			JWKSURI:            ptr.Of("https://example.com/jwks.json"),
+			JWKSURI:            new("https://example.com/jwks.json"),
 			AllowedHosts:       allowedHosts,
 			SignatureAlgorithm: jwa.ES256,
 		})
@@ -474,13 +473,13 @@ func TestNew(t *testing.T) {
 			ListenAddress:      "0.0.0.0",
 			JWKS:               jwks,
 			Healthz:            healthz.New(),
-			JWKSURI:            ptr.Of("https://example.com/jwks.json"),
-			JWTIssuer:          ptr.Of("https://auth.example.com"),
+			JWKSURI:            new("https://example.com/jwks.json"),
+			JWTIssuer:          new("https://auth.example.com"),
 			SignatureAlgorithm: jwa.ES256,
 		})
 		require.NoError(t, err)
 
-		assert.Equal(t, ptr.Of("https://auth.example.com"), s.jwtIssuer)
+		assert.Equal(t, new("https://auth.example.com"), s.jwtIssuer)
 	})
 }
 
@@ -542,26 +541,26 @@ func WithJWKS(jwks []byte) OptionsBuilder {
 
 func WithJWKSURI(jwksURI string) OptionsBuilder {
 	return func(opts *Options) {
-		opts.JWKSURI = ptr.Of(jwksURI)
+		opts.JWKSURI = new(jwksURI)
 	}
 }
 
 func WithPathPrefix(pathPrefix string) OptionsBuilder {
 	return func(opts *Options) {
-		opts.PathPrefix = ptr.Of(pathPrefix)
+		opts.PathPrefix = new(pathPrefix)
 	}
 }
 
 func WithIssuer(issuer string) OptionsBuilder {
 	return func(opts *Options) {
-		opts.JWTIssuer = ptr.Of(issuer)
+		opts.JWTIssuer = new(issuer)
 	}
 }
 
 func WithTLS(certFile, keyFile string) OptionsBuilder {
 	return func(opts *Options) {
-		opts.TLSCertPath = ptr.Of(certFile)
-		opts.TLSKeyPath = ptr.Of(keyFile)
+		opts.TLSCertPath = new(certFile)
+		opts.TLSKeyPath = new(keyFile)
 	}
 }
 

@@ -294,13 +294,11 @@ func (s *proxyTestSuite) TestPingStream_StressTest() {
 func (s *proxyTestSuite) TestPingStream_MultipleThreads() {
 	wg := sync.WaitGroup{}
 	for range 4 {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for range 10 {
 				s.TestPingStream_StressTest()
 			}
-			wg.Done()
-		}()
+		})
 	}
 
 	ch := make(chan struct{})

@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -137,7 +136,7 @@ func New(opts Options) (*Server, error) {
 	authorizeEndpoint := AuthorizationEndpoint
 	if opts.PathPrefix != nil && *opts.PathPrefix != "/" {
 		if before, ok := strings.CutSuffix(*opts.PathPrefix, "/"); ok {
-			opts.PathPrefix = ptr.Of(before)
+			opts.PathPrefix = new(before)
 		}
 
 		var err error

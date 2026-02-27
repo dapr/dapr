@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestParseEnvString(t *testing.T) {
@@ -1236,7 +1235,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
-				assert.Equal(t, ptr.Of(true), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be true")
+				assert.Equal(t, new(true), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be true")
 			},
 		},
 		{
@@ -1246,17 +1245,17 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
-				assert.Equal(t, ptr.Of(false), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be false")
+				assert.Equal(t, new(false), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be false")
 			},
 		},
 		{
 			name: "set run as user 1000",
 			sidecarConfigModifierFn: func(c *SidecarConfig) {
-				c.RunAsUser = ptr.Of(int64(1000))
+				c.RunAsUser = new(int64(1000))
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should not be nil")
-				assert.Equal(t, ptr.Of(int64(1000)), container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be 1000")
+				assert.Equal(t, new(int64(1000)), container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be 1000")
 			},
 		},
 		{
@@ -1268,11 +1267,11 @@ func TestGetSidecarContainer(t *testing.T) {
 		{
 			name: "set run as group 3000",
 			sidecarConfigModifierFn: func(c *SidecarConfig) {
-				c.RunAsGroup = ptr.Of(int64(3000))
+				c.RunAsGroup = new(int64(3000))
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should not be nil")
-				assert.Equal(t, ptr.Of(int64(3000)), container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be 3000")
+				assert.Equal(t, new(int64(3000)), container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be 3000")
 			},
 		},
 		{

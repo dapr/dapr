@@ -43,7 +43,6 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -317,7 +316,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 
 	// API logging can be enabled for this app or for every app, globally in the config
 	if intc.enableAPILogging == nil {
-		intc.enableAPILogging = ptr.Of(globalConfig.GetAPILoggingSpec().Enabled)
+		intc.enableAPILogging = new(globalConfig.GetAPILoggingSpec().Enabled)
 	}
 
 	return newDaprRuntime(ctx, cfg.Security, intc, globalConfig, accessControlList, resiliencyProvider)

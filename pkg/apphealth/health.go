@@ -209,11 +209,9 @@ func (h *AppHealth) setResult(ctx context.Context, status *Status) {
 		if prev >= h.config.Threshold {
 			log.Info("App entered healthy status")
 			if h.changeCb != nil {
-				h.wg.Add(1)
-				go func() {
-					defer h.wg.Done()
+				h.wg.Go(func() {
 					h.changeCb(ctx, status)
-				}()
+				})
 			}
 		}
 		return
@@ -236,11 +234,9 @@ func (h *AppHealth) setResult(ctx context.Context, status *Status) {
 			log.Warn("App entered un-healthy status")
 		}
 		if h.changeCb != nil {
-			h.wg.Add(1)
-			go func() {
-				defer h.wg.Done()
+			h.wg.Go(func() {
 				h.changeCb(ctx, status)
-			}()
+			})
 		}
 	}
 }

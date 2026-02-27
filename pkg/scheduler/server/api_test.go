@@ -22,7 +22,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	"github.com/dapr/kit/ptr"
 )
 
 func Test_schedFPToCron(t *testing.T) {
@@ -57,7 +56,7 @@ func Test_schedFPToCron(t *testing.T) {
 				Policy: &commonv1pb.JobFailurePolicy_Constant{
 					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   durationpb.New(time.Second * 3),
-						MaxRetries: ptr.Of(uint32(123)),
+						MaxRetries: new(uint32(123)),
 					},
 				},
 			},
@@ -65,7 +64,7 @@ func Test_schedFPToCron(t *testing.T) {
 				Policy: &api.FailurePolicy_Constant{
 					Constant: &api.FailurePolicyConstant{
 						Interval:   durationpb.New(time.Second * 3),
-						MaxRetries: ptr.Of(uint32(123)),
+						MaxRetries: new(uint32(123)),
 					},
 				},
 			},
@@ -93,7 +92,7 @@ func Test_schedFPToCron(t *testing.T) {
 				Policy: &commonv1pb.JobFailurePolicy_Constant{
 					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   nil,
-						MaxRetries: ptr.Of(uint32(123)),
+						MaxRetries: new(uint32(123)),
 					},
 				},
 			},
@@ -101,7 +100,7 @@ func Test_schedFPToCron(t *testing.T) {
 				Policy: &api.FailurePolicy_Constant{
 					Constant: &api.FailurePolicyConstant{
 						Interval:   nil,
-						MaxRetries: ptr.Of(uint32(123)),
+						MaxRetries: new(uint32(123)),
 					},
 				},
 			},
@@ -159,7 +158,7 @@ func Test_cronFPToSched(t *testing.T) {
 				Policy: &api.FailurePolicy_Constant{
 					Constant: &api.FailurePolicyConstant{
 						Interval:   durationpb.New(time.Second * 3),
-						MaxRetries: ptr.Of(uint32(123)),
+						MaxRetries: new(uint32(123)),
 					},
 				},
 			},
@@ -167,7 +166,7 @@ func Test_cronFPToSched(t *testing.T) {
 				Policy: &commonv1pb.JobFailurePolicy_Constant{
 					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   durationpb.New(time.Second * 3),
-						MaxRetries: ptr.Of(uint32(123)),
+						MaxRetries: new(uint32(123)),
 					},
 				},
 			},
@@ -195,7 +194,7 @@ func Test_cronFPToSched(t *testing.T) {
 				Policy: &api.FailurePolicy_Constant{
 					Constant: &api.FailurePolicyConstant{
 						Interval:   nil,
-						MaxRetries: ptr.Of(uint32(123)),
+						MaxRetries: new(uint32(123)),
 					},
 				},
 			},
@@ -203,7 +202,7 @@ func Test_cronFPToSched(t *testing.T) {
 				Policy: &commonv1pb.JobFailurePolicy_Constant{
 					Constant: &commonv1pb.JobFailurePolicyConstant{
 						Interval:   nil,
-						MaxRetries: ptr.Of(uint32(123)),
+						MaxRetries: new(uint32(123)),
 					},
 				},
 			},

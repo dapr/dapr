@@ -28,7 +28,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/kit/ptr"
 )
 
 // GetWorkflow is the API handler for getting workflow details
@@ -131,7 +130,7 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 
 	req := &workflows.TerminateRequest{
 		InstanceID: in.GetInstanceId(),
-		Recursive:  ptr.Of(true),
+		Recursive:  new(true),
 	}
 	if err := a.workflowEngine.Client().Terminate(ctx, req); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
@@ -239,7 +238,7 @@ func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWork
 
 	req := workflows.PurgeRequest{
 		InstanceID: in.GetInstanceId(),
-		Recursive:  ptr.Of(true),
+		Recursive:  new(true),
 	}
 
 	if err := a.workflowEngine.Client().Purge(ctx, &req); err != nil {

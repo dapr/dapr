@@ -35,7 +35,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/subscription/postman/http"
 	"github.com/dapr/dapr/pkg/runtime/subscription/todo"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -266,7 +265,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -344,7 +343,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -422,7 +421,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -500,7 +499,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -581,7 +580,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			respInvoke1 := getResponse(args.Get(1).(*invokev1.InvokeMethodRequest), &ts)
 			mockee.ReturnArguments = mock.Arguments{respInvoke1, nil}
 		}
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, shortTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -654,7 +653,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -749,7 +748,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(5)
+		shortRetry.MaxRetries = new(5)
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -844,7 +843,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Timeout:     "1ms",                     // half-open after 1ms. So in test this will be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -930,7 +929,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Timeout:     "4s",                      // half-open after 4s. So in test this will be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -1055,7 +1054,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will NOT be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -1136,7 +1135,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 			Timeout:     "4s",                      // half-open after 4s. So in test this will be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(20)
+		shortRetry.MaxRetries = new(20)
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
@@ -1313,7 +1312,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will NOT be triggered
 		}
 
-		shortRetry.MaxRetries = ptr.Of(7)
+		shortRetry.MaxRetries = new(7)
 
 		policyProvider := createResPolicyProvider(cb, shortTimeout, longRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
