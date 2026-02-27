@@ -164,7 +164,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		// Send a trigger event to process the files
-		r.trigger()
+		r.trigger(t.Context())
 
 		var events []*loader.Event[componentsapi.Component]
 		for range 3 {
@@ -240,7 +240,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		// Send a trigger event to process the files
-		r.trigger()
+		r.trigger(t.Context())
 
 		var events []*loader.Event[componentsapi.Component]
 		for range 2 {
@@ -317,7 +317,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		// Send a trigger event to process the files
-		r.trigger()
+		r.trigger(t.Context())
 
 		var events []*loader.Event[componentsapi.Component]
 		for range 3 {
