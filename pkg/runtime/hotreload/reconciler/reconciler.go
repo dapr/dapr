@@ -29,7 +29,10 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/reconciler/loops"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
 
@@ -92,44 +95,51 @@ func (r *Reconciler[T]) Run(ctx context.Context) error {
 
 	r.htarget.Ready()
 
-	return r.watchForEvents(ctx, conn)
-}
-
-func (r *Reconciler[T]) watchForEvents(ctx context.Context, conn *loader.StreamConn[T]) error {
 	log.Infof("Starting to watch %s updates", r.kind)
 
 	ticker := r.clock.NewTicker(time.Second * 60)
 	defer ticker.Stop()
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	l := loop.New[loops.Event](1024).NewLoop(r)
 
-	for {
-		select {
-		case <-ctx.Done():
+	return concurrency.NewRunnerManager(
+		l.Run,
+		func(ctx context.Context) error {
+			defer l.Close(nil)
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-ticker.C():
+					log.Debugf("Running scheduled %s reconcile", r.kind)
+					l.Enqueue(&loops.Tick{})
+				case <-conn.ReconcileCh:
+					log.Debugf("Reconciling all %s", r.kind)
+					l.Enqueue(&loops.Reconcile{})
+				case event := <-conn.EventCh:
+					l.Enqueue(&loops.Resource{Event: event})
+				}
+			}
+		},
+	).Run(ctx)
+}
+
+// Handle implements loop.Handler[loops.Event] for the reconciler loop.
+func (r *Reconciler[T]) Handle(ctx context.Context, event loops.Event) error {
+	switch e := event.(type) {
+	case *loops.Tick, *loops.Reconcile:
+		resources, err := r.manager.List(ctx)
+		if err != nil {
+			log.Errorf("Error listing %s: %s", r.kind, err)
 			return nil
-		case <-ticker.C():
-			log.Debugf("Running scheduled %s reconcile", r.kind)
-			resources, err := r.manager.List(ctx)
-			if err != nil {
-				log.Errorf("Error listing %s: %s", r.kind, err)
-				continue
-			}
-
-			r.reconcile(ctx, differ.Diff(resources))
-		case <-conn.ReconcileCh:
-			log.Debugf("Reconciling all %s", r.kind)
-			resources, err := r.manager.List(ctx)
-			if err != nil {
-				log.Errorf("Error listing %s: %s", r.kind, err)
-				continue
-			}
-
-			r.reconcile(ctx, differ.Diff(resources))
-		case event := <-conn.EventCh:
-			r.handleEvent(ctx, event)
+		}
+		r.reconcile(ctx, differ.Diff(resources))
+	case *loops.Resource:
+		if le, ok := e.Event.(*loader.Event[T]); ok {
+			r.handleEvent(ctx, le)
 		}
 	}
+	return nil
 }
 
 func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) {

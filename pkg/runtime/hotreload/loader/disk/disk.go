@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/events/batcher"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -44,7 +43,6 @@ type disk struct {
 	components    *resource[compapi.Component]
 	subscriptions *resource[subapi.Subscription]
 	fs            *fswatcher.FSWatcher
-	batcher       *batcher.Batcher[int, struct{}]
 }
 
 func New(opts Options) (loader.Interface, error) {
@@ -58,10 +56,6 @@ func New(opts Options) (loader.Interface, error) {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 
-	batcher := batcher.New[int, struct{}](batcher.Options{
-		Interval: 0,
-	})
-
 	return &disk{
 		fs: fs,
 		components: newResource[compapi.Component](
@@ -70,8 +64,7 @@ func New(opts Options) (loader.Interface, error) {
 					AppID: opts.AppID,
 					Paths: opts.Dirs,
 				}),
-				store:   store.NewComponents(opts.ComponentStore),
-				batcher: batcher,
+				store: store.NewComponents(opts.ComponentStore),
 			},
 		),
 		subscriptions: newResource[subapi.Subscription](
@@ -80,11 +73,9 @@ func New(opts Options) (loader.Interface, error) {
 					AppID: opts.AppID,
 					Paths: opts.Dirs,
 				}),
-				store:   store.NewSubscriptions(opts.ComponentStore),
-				batcher: batcher,
+				store: store.NewSubscriptions(opts.ComponentStore),
 			},
 		),
-		batcher: batcher,
 	}, nil
 }
 
@@ -98,18 +89,13 @@ func (d *disk) Run(ctx context.Context) error {
 			return d.fs.Run(ctx, eventCh)
 		},
 		func(ctx context.Context) error {
-			defer d.batcher.Close()
-
-			var i int
 			for {
 				select {
 				case <-ctx.Done():
 					return nil
 				case <-eventCh:
-					// Use a separate: index every batch to prevent deduplicates of separate
-					// file updates happening at the same time.
-					i++
-					d.batcher.Batch(i, struct{}{})
+					d.components.notify()
+					d.subscriptions.notify()
 				}
 			}
 		},

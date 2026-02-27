@@ -15,8 +15,8 @@ package disk
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	internalloader "github.com/dapr/dapr/pkg/internal/loader"
@@ -24,42 +24,44 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
-	"github.com/dapr/kit/events/batcher"
 )
 
 // resource is a generic implementation of a disk resource loader. resource
 // will watch and load resources from disk.
 type resource[T differ.Resource] struct {
-	sourceBatcher *batcher.Batcher[int, struct{}]
-	streamBatcher *batcher.Batcher[int, struct{}]
-	store         store.Store[T]
-	diskLoader    internalloader.Loader[T]
+	updateCh  chan struct{}               // capacity 1, notified by disk on fs changes
+	streamCh  chan chan *loader.Event[T]  // used to pass eventCh from Stream() to run()
+	store     store.Store[T]
+	diskLoader internalloader.Loader[T]
 
-	lock          sync.RWMutex
-	currentResult *differ.Result[T]
-
-	wg      sync.WaitGroup
 	running chan struct{}
 	closeCh chan struct{}
 	closed  atomic.Bool
 }
 
 type resourceOptions[T differ.Resource] struct {
-	loader  internalloader.Loader[T]
-	store   store.Store[T]
-	batcher *batcher.Batcher[int, struct{}]
+	loader internalloader.Loader[T]
+	store  store.Store[T]
 }
 
 func newResource[T differ.Resource](opts resourceOptions[T]) *resource[T] {
 	return &resource[T]{
-		sourceBatcher: opts.batcher,
-		store:         opts.store,
-		diskLoader:    opts.loader,
-		streamBatcher: batcher.New[int, struct{}](batcher.Options{
-			Interval: 0,
-		}),
-		running: make(chan struct{}),
-		closeCh: make(chan struct{}),
+		updateCh:   make(chan struct{}, 1),
+		streamCh:   make(chan chan *loader.Event[T], 1),
+		store:      opts.store,
+		diskLoader: opts.loader,
+		running:    make(chan struct{}),
+		closeCh:    make(chan struct{}),
+	}
+}
+
+// notify is called by disk to notify this resource that a filesystem change
+// was detected. It is a non-blocking send; if a notification is already
+// pending it is a no-op.
+func (r *resource[T]) notify() {
+	select {
+	case r.updateCh <- struct{}{}:
+	default:
 	}
 }
 
@@ -76,55 +78,91 @@ func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T]
 	}, nil
 }
 
-// Stream returns a channel of events that will be sent when a resource is
+// Stream returns a connection of events that will be sent when a resource is
 // created, updated, or deleted.
 func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error) {
-	conn := &loader.StreamConn[T]{
-		EventCh:     make(chan *loader.Event[T]),
-		ReconcileCh: make(chan struct{}),
+	if r.closed.Load() {
+		return nil, errors.New("stream is closed")
 	}
 
-	batchCh := make(chan struct{})
-	r.streamBatcher.Subscribe(ctx, batchCh)
+	eventCh := make(chan *loader.Event[T])
+	select {
+	case r.streamCh <- eventCh:
+	case <-r.closeCh:
+		return nil, errors.New("stream is closed")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-r.closeCh:
-				return
-			case <-batchCh:
-				r.triggerDiff(ctx, conn)
-			}
+	return &loader.StreamConn[T]{
+		EventCh:     eventCh,
+		ReconcileCh: make(chan struct{}),
+	}, nil
+}
+
+func (r *resource[T]) run(ctx context.Context) error {
+	defer func() {
+		if r.closed.CompareAndSwap(false, true) {
+			close(r.closeCh)
 		}
 	}()
 
-	return conn, nil
+	close(r.running)
+
+	// Wait for Stream() to register the event channel before processing updates.
+	var eventCh chan *loader.Event[T]
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-r.closeCh:
+		return nil
+	case eventCh = <-r.streamCh:
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-r.closeCh:
+			return nil
+		case <-r.updateCh:
+		}
+
+		// List the resources which exist locally (those loaded already), and those
+		// which reside as in a resource file on disk.
+		resources, err := r.List(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to load resources from disk: %s", err)
+		}
+
+		// Reconcile the differences between what we have loaded locally, and what
+		// exists on disk.
+		result := differ.Diff(resources)
+		if result == nil {
+			continue
+		}
+
+		r.sendEvents(ctx, eventCh, result)
+	}
 }
 
-func (r *resource[T]) triggerDiff(ctx context.Context, conn *loader.StreamConn[T]) {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
-
-	// Each group is a list of resources which have been created, updated, or
-	// deleted. It is critical that we send the events in the order of deleted,
-	// updated, and created. This ensures we close before initing a resource
-	// with the same name.
+// sendEvents sends the diff result as individual events to the event channel.
+// It is critical that we send the events in the order of deleted, updated, and
+// created. This ensures we close before initialising a resource with the same
+// name.
+func (r *resource[T]) sendEvents(ctx context.Context, eventCh chan *loader.Event[T], result *differ.Result[T]) {
 	for _, group := range []struct {
 		resources []T
 		eventType operatorpb.ResourceEventType
 	}{
-		{r.currentResult.Deleted, operatorpb.ResourceEventType_DELETED},
-		{r.currentResult.Updated, operatorpb.ResourceEventType_UPDATED},
-		{r.currentResult.Created, operatorpb.ResourceEventType_CREATED},
+		{result.Deleted, operatorpb.ResourceEventType_DELETED},
+		{result.Updated, operatorpb.ResourceEventType_UPDATED},
+		{result.Created, operatorpb.ResourceEventType_CREATED},
 	} {
-		for _, resource := range group.resources {
+		for _, res := range group.resources {
 			select {
-			case conn.EventCh <- &loader.Event[T]{
-				Resource: resource,
+			case eventCh <- &loader.Event[T]{
+				Resource: res,
 				Type:     group.eventType,
 			}:
 			case <-r.closeCh:
@@ -136,51 +174,3 @@ func (r *resource[T]) triggerDiff(ctx context.Context, conn *loader.StreamConn[T
 	}
 }
 
-func (r *resource[T]) run(ctx context.Context) error {
-	defer func() {
-		if r.closed.CompareAndSwap(false, true) {
-			close(r.closeCh)
-		}
-		r.streamBatcher.Close()
-		r.wg.Wait()
-	}()
-
-	updateCh := make(chan struct{})
-	r.sourceBatcher.Subscribe(ctx, updateCh)
-	close(r.running)
-
-	var i int
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-r.closeCh:
-			return nil
-		case <-updateCh:
-		}
-
-		// List the resources which exist locally (those loaded already), and those
-		// which reside as in a resource file on disk.
-		resources, err := r.List(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to load resources from disk: %s", err)
-		}
-
-		// Reconcile the differences between what we have loaded locally, and what
-		// exists on disk.k
-		result := differ.Diff(resources)
-
-		r.lock.Lock()
-		r.currentResult = result
-		r.lock.Unlock()
-
-		if result == nil {
-			continue
-		}
-
-		// Use a separate: index every batch to prevent deduplicates of separate
-		// file updates happening at the same time.
-		i++
-		r.streamBatcher.Batch(i, struct{}{})
-	}
-}
