@@ -95,7 +95,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, inActivity.Load, time.Second*10, time.Millisecond*10)
 
 	cancel()
-	r.workflow.DaprN(0).Cleanup(t)
+	r.workflow.DaprN(0).Kill(t)
 	close(waitCh)
 
 	appID := r.workflow.DaprN(0).AppID()
