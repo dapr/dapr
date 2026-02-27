@@ -76,10 +76,10 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
 
-	close(holdCh)
-
 	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
 	require.Equal(t, "ORCHESTRATION_STATUS_TERMINATED", meta.RuntimeStatus.String())
+
+	close(holdCh)
 }

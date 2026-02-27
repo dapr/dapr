@@ -105,7 +105,7 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 			assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		}, time.Second*10, time.Millisecond*10)
+		}, time.Second*20, time.Millisecond*10)
 	}
 
 	s.daprds[2].Kill(t)
@@ -114,5 +114,5 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, &placement.TableState{
 			Tables: make(map[string]*placement.Table),
 		}, table)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 }

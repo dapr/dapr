@@ -55,6 +55,7 @@ func (f *first) Setup(t *testing.T) []framework.Option {
 		placement.WithEnableTLS(true),
 		placement.WithSentryAddress(f.sentry.Address()),
 		placement.WithTrustAnchorsFile(taFile),
+		placement.WithDisseminateTimeout(time.Hour),
 	)
 
 	return []framework.Option{
