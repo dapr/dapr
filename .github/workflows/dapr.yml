@@ -210,7 +210,6 @@ jobs:
 
   integration-tests:
     name: Integration tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     permissions:
       contents: read
