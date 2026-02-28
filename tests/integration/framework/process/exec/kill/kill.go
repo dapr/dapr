@@ -41,3 +41,15 @@ func Kill(t *testing.T, cmd *exec.Cmd) {
 
 	kill(t, cmd)
 }
+
+func SignalHUP(t *testing.T, cmd *exec.Cmd) {
+	t.Helper()
+
+	if cmd == nil || cmd.ProcessState != nil {
+		return
+	}
+
+	t.Logf("signaling HUP to %s process", cmd.Path)
+
+	signalHUP(t, cmd)
+}

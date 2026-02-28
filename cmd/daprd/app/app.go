@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 
+	"go.opencensus.io/stats/view"
 	"go.uber.org/automaxprocs/maxprocs"
 
 	// Register all components
@@ -100,6 +101,26 @@ func Run() {
 	conversationLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
+	ctx := signals.Context()
+	ctxhupCh := signals.OnHUP(ctx)
+
+	defer log.Info("Daprd shutdown gracefully")
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+
+		select {
+		case hctx := <-ctxhupCh:
+			if err := runWithContext(hctx, opts); err != nil {
+				log.Fatalf("Fatal error from runtime: %s", err)
+			}
+		case <-ctx.Done():
+		}
+	}
+}
+
+func runWithContext(ctx context.Context, opts *options.Options) error {
 	reg := registry.NewOptions().
 		WithSecretStores(secretstoresLoader.DefaultRegistry).
 		WithStateStores(stateLoader.DefaultRegistry).
@@ -112,7 +133,6 @@ func Run() {
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
 		WithConversations(conversationLoader.DefaultRegistry)
 
-	ctx := signals.Context()
 	healthz := healthz.New()
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           opts.SentryAddress,
@@ -126,7 +146,7 @@ func Run() {
 		JwtAudiences:            opts.SentryRequestJwtAudiences,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	err = concurrency.NewRunnerManager(
@@ -137,6 +157,7 @@ func Run() {
 				return serr
 			}
 
+			meter := view.NewMeter()
 			rt, rerr := runtime.FromConfig(ctx, &runtime.Config{
 				AppID:                         opts.AppID,
 				ActorsService:                 opts.ActorsService,
@@ -183,6 +204,7 @@ func Run() {
 					Namespace:     metrics.DefaultMetricNamespace,
 					Healthz:       healthz,
 					ListenAddress: opts.Metrics.ListenAddress(),
+					Meter:         meter,
 				},
 				AppSSL:         opts.AppSSL,
 				ComponentsPath: opts.ComponentsPath,
@@ -198,7 +220,8 @@ func Run() {
 		},
 	).Run(ctx)
 	if err != nil {
-		log.Fatalf("Fatal error from runtime: %s", err)
+		return err
 	}
-	log.Info("Daprd shutdown gracefully")
+
+	return nil
 }
