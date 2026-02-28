@@ -16,6 +16,7 @@ package daprd
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/actors"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/binding"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/config"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/httpendpoints"
@@ -27,6 +28,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/mtls"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/multipleconfigs"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/outbox"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/placement"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pluggable"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resiliency"

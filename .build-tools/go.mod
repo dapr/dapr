@@ -1,6 +1,6 @@
 module build-tools
 
-go 1.24.11
+go 1.24.13
 
 require (
 	github.com/google/go-containerregistry v0.11.1-0.20220802162123-c1f9836a4fa9
@@ -16,7 +16,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/cli v20.10.17+incompatible // indirect
 	github.com/docker/distribution v2.8.2-beta.1+incompatible // indirect
-	github.com/docker/docker v24.0.9+incompatible // indirect
+	github.com/docker/docker v25.0.13+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.6.4 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.15.8 // indirect
@@ -26,7 +26,7 @@ require (
 	github.com/opencontainers/image-spec v1.0.3-0.20220729202839-6ad7100eb087 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/sirupsen/logrus v1.9.0 // indirect
+	github.com/sirupsen/logrus v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/vbatts/tar-split v0.11.2 // indirect
 	golang.org/x/sync v0.3.0 // indirect

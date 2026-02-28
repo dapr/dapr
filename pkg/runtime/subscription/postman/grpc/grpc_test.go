@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	googlegrpc "google.golang.org/grpc"
@@ -294,20 +293,18 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			port, err := freeport.GetFreePort()
-			require.NoError(t, err)
-
 			var grpcServer *googlegrpc.Server
+			var port int
 
 			// create mock application server first
 			if !tc.noResponseStatus {
-				grpcServer = testinggrpc.StartTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+				grpcServer, port = testinggrpc.StartTestAppCallbackGRPCServer(t, &channelt.MockServer{
 					TopicEventResponseStatus:    tc.responseStatus,
 					Error:                       tc.responseError,
 					ValidateCloudEventExtension: tc.validateCloudEventExtension,
 				})
 			} else {
-				grpcServer = testinggrpc.StartTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+				grpcServer, port = testinggrpc.StartTestAppCallbackGRPCServer(t, &channelt.MockServer{
 					Error:                       tc.responseError,
 					ValidateCloudEventExtension: tc.validateCloudEventExtension,
 				})

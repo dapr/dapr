@@ -18,11 +18,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -97,6 +99,21 @@ func (o *orchestrator) executeMethod(ctx context.Context, methodName string, met
 func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	log.Debugf("Workflow actor '%s': invoking reminder '%s'", o.actorID, reminder.Name)
 
+	switch {
+	case strings.HasPrefix(reminder.Name, reminderPrefixStart),
+		strings.HasPrefix(reminder.Name, reminderPrefixNewEvent),
+		strings.HasPrefix(reminder.Name, reminderPrefixTimer):
+		return o.runWorkflowFromReminder(ctx, reminder)
+
+	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
+		return o.addWorkflowEvent(ctx, reminder.Data.GetValue())
+
+	default:
+		return fmt.Errorf("unable to handle reminder '%s' for workflow actor '%s': unknown reminder type", reminder.Name, o.actorID)
+	}
+}
+
+func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	completed, err := o.runWorkflow(ctx, reminder)
 	if completed == todo.RunCompletedTrue {
 		defer o.factory.deactivate(o)

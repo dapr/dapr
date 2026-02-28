@@ -48,6 +48,7 @@ type PlatformInterface interface {
 	AddSecrets(secrets []kube.SecretDescription) error
 	AcquireAppExternalURL(name string) string
 	GetAppHostDetails(name string) (string, string, error)
+	GetAppPodEndpoints(name string) ([]string, error)
 	Restart(name string) error
 	Scale(name string, replicas int32) error
 	PortForwardToApp(appName string, targetPort ...int) ([]int, error)

@@ -195,8 +195,10 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c,
-			len(w.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
-	}, time.Second*10, time.Millisecond*10)
+			len(w.DaprN(index).GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+		assert.GreaterOrEqual(c,
+			w.DaprN(index).GetMetadata(t, ctx).Workflows.ConnectedWorkers, 1)
+	}, time.Second*20, time.Millisecond*10)
 
 	return backendClient
 }

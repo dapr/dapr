@@ -16,6 +16,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -52,6 +53,8 @@ type Scheduler struct {
 	hosts      loop.Interface[loops.Event]
 	watchhosts *watchhosts.WatchHosts
 	client     client.Interface
+
+	currentActorTypes *[]string
 }
 
 func New(opts Options) (*Scheduler, error) {
@@ -110,18 +113,25 @@ func (s *Scheduler) Run(ctx context.Context) error {
 }
 
 func (s *Scheduler) StartApp() {
+	s.currentActorTypes = nil
 	s.connector.Enqueue(&loops.Reconnect{
 		AppTarget: ptr.Of(true),
 	})
 }
 
 func (s *Scheduler) StopApp() {
+	s.currentActorTypes = nil
 	s.connector.Enqueue(&loops.Reconnect{
 		AppTarget: ptr.Of(false),
 	})
 }
 
 func (s *Scheduler) ReloadActorTypes(actorTypes []string) {
+	if s.currentActorTypes != nil && slices.Equal(*s.currentActorTypes, actorTypes) {
+		return
+	}
+
+	s.currentActorTypes = ptr.Of(actorTypes)
 	s.connector.Enqueue(&loops.Reconnect{
 		ActorTypes: ptr.Of(actorTypes),
 	})

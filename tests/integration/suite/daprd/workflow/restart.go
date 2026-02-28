@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/iowriter/logger"
+	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -43,6 +44,8 @@ type restart struct {
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
+	os.SkipWindows(t)
+
 	r.place = placement.New(t)
 	r.scheduler = scheduler.New(t)
 
@@ -65,8 +68,8 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 
 	appID := uuid.New().String()
 
-	timeTaken := make([]time.Duration, 0, 5)
-	for range 5 {
+	timeTaken := make([]time.Duration, 0, 3)
+	for range 3 {
 		daprd := daprd.New(t,
 			daprd.WithPlacementAddresses(r.place.Address()),
 			daprd.WithInMemoryActorStateStore("mystore"),

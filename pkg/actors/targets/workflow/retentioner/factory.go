@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/common/lock"
@@ -68,7 +69,7 @@ func (f *factory) HaltAll(context.Context) error {
 	return nil
 }
 
-func (f *factory) HaltNonHosted(context.Context) error {
+func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
 	return nil
 }
 

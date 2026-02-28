@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -185,7 +186,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 	span := diagUtils.SpanFromContext(ctx)
 	traceID, traceState := diag.TraceIDAndStateFromSpan(span)
-	md := in.GetMetadata()
+	md := maps.Clone(in.GetMetadata())
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.Universal.AppID(),

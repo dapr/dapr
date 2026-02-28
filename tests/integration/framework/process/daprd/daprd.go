@@ -111,6 +111,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--app-health-threshold=" + strconv.Itoa(opts.appHealthProbeThreshold),
 		"--mode=" + opts.mode,
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
+		"--enable-api-logging=true",
 		"--enable-profiling",
 	}
 
@@ -158,6 +159,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 	if opts.allowedOrigins != nil {
 		args = append(args, "--allowed-origins="+*opts.allowedOrigins)
+	}
+	if len(opts.disableInitEndpoints) > 0 {
+		args = append(args, "--disable-init-endpoints="+strings.Join(opts.disableInitEndpoints, ","))
 	}
 
 	ns := "default"
@@ -215,9 +219,11 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	t.Helper()
 
 	client := client.HTTP(t)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
-	require.NoError(t, err)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		cctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(cctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
+		require.NoError(t, err)
 		resp, err := client.Do(req)
 		if assert.NoError(c, err) {
 			defer resp.Body.Close()

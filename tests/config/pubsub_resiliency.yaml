@@ -1,0 +1,21 @@
+apiVersion: dapr.io/v1alpha1
+kind: Resiliency
+metadata:
+  name: pubsubresiliency
+spec:
+
+  policies:
+
+    retries:
+      # Policy for pubsub redelivery tests - allows retries before exhaustion
+      pubsubRetry:
+        policy: constant
+        duration: 1s
+        maxRetries: 60  # 60 seconds retry window for redelivery tests
+
+  targets:
+  
+    components:
+      messagebus:
+        inbound:
+          retry: pubsubRetry

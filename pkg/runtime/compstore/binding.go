@@ -13,7 +13,11 @@ limitations under the License.
 
 package compstore
 
-import "github.com/dapr/components-contrib/bindings"
+import (
+	"maps"
+
+	"github.com/dapr/components-contrib/bindings"
+)
 
 func (c *ComponentStore) AddInputBinding(name string, binding bindings.InputBinding) {
 	c.lock.Lock()
@@ -31,7 +35,7 @@ func (c *ComponentStore) GetInputBinding(name string) (bindings.InputBinding, bo
 func (c *ComponentStore) ListInputBindings() map[string]bindings.InputBinding {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.inputBindings
+	return maps.Clone(c.inputBindings)
 }
 
 func (c *ComponentStore) DeleteInputBinding(name string) {
@@ -56,7 +60,7 @@ func (c *ComponentStore) GetInputBindingRoute(name string) (string, bool) {
 func (c *ComponentStore) ListInputBindingRoutes() map[string]string {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.inputBindingRoutes
+	return maps.Clone(c.inputBindingRoutes)
 }
 
 func (c *ComponentStore) DeleteInputBindingRoute(name string) {
@@ -81,7 +85,7 @@ func (c *ComponentStore) GetOutputBinding(name string) (bindings.OutputBinding, 
 func (c *ComponentStore) ListOutputBindings() map[string]bindings.OutputBinding {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.outputBindings
+	return maps.Clone(c.outputBindings)
 }
 
 func (c *ComponentStore) DeleteOutputBinding(name string) {

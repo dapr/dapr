@@ -69,7 +69,9 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.Eventually(t, inActivity.Load, time.Second*30, time.Millisecond*10)
-	assert.Len(t, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), 3)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), 3)
+	}, time.Second*10, time.Millisecond*10)
 
 	require.NoError(t, client.TerminateOrchestration(ctx, id))
 	require.NoError(t, client.PurgeOrchestrationState(ctx, id))

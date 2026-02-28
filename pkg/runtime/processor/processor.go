@@ -109,6 +109,9 @@ type Options struct {
 
 	// Reporter is the reporter for the operator.
 	Reporter registry.Reporter
+
+	// ProgrammaticSubscriptionEnabled indicates whether programmatic subscriptions are active.
+	ProgrammaticSubscriptionEnabled bool
 }
 
 // Processor manages the lifecycle of all components categories.
@@ -139,16 +142,17 @@ type Processor struct {
 
 func New(opts Options) *Processor {
 	subscriber := subscriber.New(subscriber.Options{
-		AppID:           opts.ID,
-		Namespace:       opts.Namespace,
-		Resiliency:      opts.Resiliency,
-		TracingSpec:     opts.GlobalConfig.Spec.TracingSpec,
-		IsHTTP:          opts.IsHTTP,
-		Channels:        opts.Channels,
-		GRPC:            opts.GRPC,
-		CompStore:       opts.ComponentStore,
-		Adapter:         opts.Adapter,
-		AdapterStreamer: opts.AdapterStreamer,
+		AppID:                           opts.ID,
+		Namespace:                       opts.Namespace,
+		Resiliency:                      opts.Resiliency,
+		TracingSpec:                     opts.GlobalConfig.Spec.TracingSpec,
+		IsHTTP:                          opts.IsHTTP,
+		Channels:                        opts.Channels,
+		GRPC:                            opts.GRPC,
+		CompStore:                       opts.ComponentStore,
+		Adapter:                         opts.Adapter,
+		AdapterStreamer:                 opts.AdapterStreamer,
+		ProgrammaticSubscriptionEnabled: opts.ProgrammaticSubscriptionEnabled,
 	})
 
 	state := state.New(state.Options{

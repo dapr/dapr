@@ -14,6 +14,7 @@ limitations under the License.
 package etcd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -35,7 +36,7 @@ import (
 	"github.com/dapr/kit/crypto/pem"
 )
 
-func config(opts Options) (*embed.Config, error) {
+func config(ctx context.Context, opts Options) (*embed.Config, error) {
 	config := embed.NewConfig()
 
 	config.Name = opts.Name
@@ -47,7 +48,7 @@ func config(opts Options) (*embed.Config, error) {
 		tld := opts.Security.ControlPlaneTrustDomain().String()
 		if opts.Mode == modes.KubernetesMode {
 			var err error
-			tldd, err := utils.GetKubeClusterDomain()
+			tldd, err := utils.GetKubeClusterDomainFromDNS(ctx)
 			if err != nil {
 				log.Errorf("Failed to get cluster domain, falling back to %q: %w", tld, err)
 			} else {
@@ -84,7 +85,9 @@ func config(opts Options) (*embed.Config, error) {
 		}
 
 		if !slices.Contains(certs[0].DNSNames, info.ServerName) {
-			return nil, fmt.Errorf("peer certificate does not contain the expected DNS name %s", info.ServerName)
+			return nil, fmt.Errorf("peer certificate does not contain the expected DNS name %s got %v",
+				info.ServerName, certs[0].DNSNames,
+			)
 		}
 
 		config.ClientTLSInfo = info

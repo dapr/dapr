@@ -20,14 +20,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/placement/raft"
+	"github.com/dapr/dapr/pkg/placement/peers"
 )
 
 func TestAppFlag(t *testing.T) {
 	opts, err := New([]string{})
 	require.NoError(t, err)
 	assert.EqualValues(t, "dapr-placement-0", opts.RaftID)
-	assert.EqualValues(t, []raft.PeerInfo{{ID: "dapr-placement-0", Address: "127.0.0.1:8201"}}, opts.RaftPeers)
+	assert.EqualValues(t, []peers.PeerInfo{{ID: "dapr-placement-0", Address: "127.0.0.1:8201"}}, opts.RaftPeers)
 	assert.True(t, opts.RaftInMemEnabled)
 	assert.EqualValues(t, "", opts.RaftLogStorePath)
 	assert.EqualValues(t, 50005, opts.PlacementPort)
@@ -44,21 +44,21 @@ func TestAppFlag(t *testing.T) {
 	assert.EqualValues(t, "9090", opts.Metrics.Port())
 	assert.EqualValues(t, 2*time.Second, opts.KeepAliveTime)
 	assert.EqualValues(t, 3*time.Second, opts.KeepAliveTimeout)
-	assert.EqualValues(t, 2*time.Second, opts.DisseminateTimeout)
+	assert.EqualValues(t, 8*time.Second, opts.DisseminateTimeout)
 }
 
 func TestInitialCluster(t *testing.T) {
 	peerAddressTests := []struct {
 		name string
 		in   []string
-		out  []raft.PeerInfo
+		out  []peers.PeerInfo
 	}{
 		{
 			"one address",
 			[]string{
 				"--initial-cluster", "node0=127.0.0.1:3030",
 			},
-			[]raft.PeerInfo{
+			[]peers.PeerInfo{
 				{ID: "node0", Address: "127.0.0.1:3030"},
 			},
 		}, {
@@ -67,7 +67,7 @@ func TestInitialCluster(t *testing.T) {
 				"--initial-cluster", "node0=127.0.0.1:3030",
 				"--initial-cluster", "node1=127.0.0.1:3031,node2=127.0.0.1:3032",
 			},
-			[]raft.PeerInfo{
+			[]peers.PeerInfo{
 				{ID: "node0", Address: "127.0.0.1:3030"},
 				{ID: "node1", Address: "127.0.0.1:3031"},
 				{ID: "node2", Address: "127.0.0.1:3032"},
@@ -77,7 +77,7 @@ func TestInitialCluster(t *testing.T) {
 			[]string{
 				"--initial-cluster", "127.0.0.1:3030,node1=127.0.0.1:3031,node2=127.0.0.1:3032",
 			},
-			[]raft.PeerInfo{
+			[]peers.PeerInfo{
 				{ID: "node1", Address: "127.0.0.1:3031"},
 				{ID: "node2", Address: "127.0.0.1:3032"},
 			},
@@ -128,16 +128,6 @@ func TestValidateFlags(t *testing.T) {
 			"keepalive-timeout too high",
 			"keepalive-timeout",
 			"11s",
-		},
-		{
-			"disseminate-timeout too low",
-			"disseminate-timeout",
-			"0.5s",
-		},
-		{
-			"disseminate-timeout too high",
-			"disseminate-timeout",
-			"6s",
 		},
 	}
 	for _, tt := range testCases {

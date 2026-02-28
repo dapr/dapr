@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -213,7 +212,10 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			port, _ := freeport.GetFreePort()
+			grpcServer, port := testinggrpc.StartTestAppCallbackGRPCServer(t, &channelt.MockServer{
+				Error:    tc.responseError,
+				Bindings: tc.responseFromApp,
+			})
 			b := New(Options{
 				IsHTTP:         false,
 				Resiliency:     resiliency.New(log),
@@ -222,10 +224,6 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 				GRPC:           manager.NewManager(sec, modes.StandaloneMode, &manager.AppChannelConfig{Port: port}),
 			})
 			// create mock application server first
-			grpcServer := testinggrpc.StartTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
-				Error:    tc.responseError,
-				Bindings: tc.responseFromApp,
-			})
 			defer grpcServer.Stop()
 			// act
 			resp, _ := b.getSubscribedBindingsGRPC(t.Context())

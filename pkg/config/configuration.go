@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -54,6 +55,14 @@ const (
 
 	// Enables feature to support workflows in a clustered deployment.
 	WorkflowsClusteredDeployment Feature = "WorkflowsClusteredDeployment"
+
+	// Enables a feature to make activities send their results to workflow when
+	// the workflow is running on a different application. Useful when using
+	// cross app workflows. Ensures that activities are not retried forever if
+	// the workflow app is not available, and instead queues the result for when
+	// the workflow app is back online. Strongly recommended to always be enabled
+	// if using the same Dapr version on all daprds.
+	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
 )
 
 // end feature flags section
@@ -276,16 +285,43 @@ type OtelSpec struct {
 	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
 	// Defaults to true
 	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
-	// Headers to add to the request
-	Headers string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	// Timeout for the request in milliseconds
-	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"` // Defaults to 10000
+	// Headers to add to the OTLP trace exporter request
+	Headers []string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP trace exporter request
+	Timeout *time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // GetIsSecure returns true if the connection should be secured.
-func (o OtelSpec) GetIsSecure() bool {
+func (o *OtelSpec) GetIsSecure() bool {
 	// Defaults to true if nil
 	return o.IsSecure == nil || *o.IsSecure
+}
+
+// UnmarshalJSON handles both the internal config format
+// and the Kubernetes CRD format sent by the operator.
+func (o *OtelSpec) UnmarshalJSON(data []byte) error {
+	var crd configapi.OtelSpec
+	if err := json.Unmarshal(data, &crd); err != nil {
+		return err
+	}
+
+	o.Protocol = crd.Protocol
+	o.EndpointAddress = crd.EndpointAddress
+	o.IsSecure = crd.IsSecure
+
+	if crd.Headers != nil {
+		o.Headers = make([]string, 0, len(crd.Headers))
+		for _, p := range crd.Headers {
+			o.Headers = append(o.Headers, p.Name+"="+p.Value.String())
+		}
+	}
+
+	if crd.Timeout != nil {
+		d := crd.Timeout.Duration
+		o.Timeout = &d
+	}
+
+	return nil
 }
 
 // MetricSpec configuration for metrics.
@@ -565,8 +601,7 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 		return nil, fmt.Errorf("configuration %s not found", config)
 	}
 	conf := LoadDefaultConfiguration()
-	err = json.Unmarshal(b, conf)
-	if err != nil {
+	if err = json.Unmarshal(b, conf); err != nil {
 		return nil, err
 	}
 
@@ -582,6 +617,13 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 
 // Update configuration from Otlp Environment Variables, if they exist.
 func SetTracingSpecFromEnv(conf *Configuration) error {
+	if conf.Spec.TracingSpec == nil {
+		conf.Spec.TracingSpec = &TracingSpec{}
+	}
+	if conf.Spec.TracingSpec.Otel == nil {
+		conf.Spec.TracingSpec.Otel = &OtelSpec{}
+	}
+
 	// If Otel Endpoint is already set, then don't override.
 	if conf.Spec.TracingSpec.Otel.EndpointAddress != "" {
 		return nil
@@ -633,7 +675,13 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 	}
 
 	if headers != "" {
-		conf.Spec.TracingSpec.Otel.Headers = headers
+		headersMap, err := StringToHeader(headers)
+		if err != nil {
+			return err
+		}
+		for name, value := range headersMap {
+			conf.Spec.TracingSpec.Otel.Headers = append(conf.Spec.TracingSpec.Otel.Headers, name+"="+value)
+		}
 	}
 
 	var timeoutMs int
@@ -652,7 +700,8 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 	}
 
 	if timeoutMs > 0 {
-		conf.Spec.TracingSpec.Otel.Timeout = timeoutMs
+		timeout := time.Duration(timeoutMs) * time.Millisecond
+		conf.Spec.TracingSpec.Otel.Timeout = &timeout
 	}
 	return nil
 }

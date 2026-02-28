@@ -175,6 +175,7 @@ func Run() {
 				AppChannelAddress:             opts.AppChannelAddress,
 				EnableAPILogging:              opts.EnableAPILogging,
 				Config:                        opts.Config,
+				DisableInitEndpoints:          opts.DisableInitEndpoints,
 				Metrics: metrics.Options{
 					Enabled:       opts.Metrics.Enabled(),
 					Log:           log,

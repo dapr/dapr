@@ -73,7 +73,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		metricsPort:         fp.Port(t),
 		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(port),
 		initialClusterPorts: []int{port},
-		metadataEnabled:     false,
+		metadataEnabled:     true,
 		namespace:           "default",
 	}
 
@@ -111,6 +111,10 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	}
 	if opts.mode != nil {
 		args = append(args, "--mode="+*opts.mode)
+	}
+
+	if opts.disseminateTimeout != nil {
+		args = append(args, "--disseminate-timeout="+opts.disseminateTimeout.String())
 	}
 
 	return &Placement{
@@ -316,6 +320,19 @@ func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, a
 	require.Equalf(t, codes.FailedPrecondition, status.Code(err), "error was: %v", err)
 }
 
+func (p *Placement) Client(t *testing.T, ctx context.Context) placementv1pb.PlacementClient {
+	t.Helper()
+
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, p.Address(),
+		grpc.WithBlock(), //nolint:staticcheck
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+
+	return placementv1pb.NewPlacementClient(conn)
+}
+
 // CheckAPILevelInState Checks the API level reported in the state table matched.
 func (p *Placement) CheckAPILevelInState(t require.TestingT, client *http.Client, expectedAPILevel int) (tableVersion int) {
 	res, err := client.Get(fmt.Sprintf("http://localhost:%d/placement/state", p.HealthzPort()))
@@ -337,4 +354,12 @@ func (p *Placement) CheckAPILevelInState(t require.TestingT, client *http.Client
 func (p *Placement) HasLeader(t *testing.T, ctx context.Context) bool {
 	t.Helper()
 	return len(p.Metrics(t, ctx).MatchMetric("dapr_placement_leader_status")) == 1
+}
+
+func (p *Placement) IsLeader(t *testing.T, ctx context.Context) bool {
+	if m := p.Metrics(t, ctx).MatchMetric("dapr_placement_leader_status"); len(m) == 1 && m[0].Value == 1 {
+		return true
+	}
+
+	return false
 }

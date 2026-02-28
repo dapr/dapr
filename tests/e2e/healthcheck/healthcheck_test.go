@@ -221,16 +221,16 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 		t.Run("retrieve counts after failures", func(t *testing.T) {
 			wg.Add(3)
 			go func() {
+				defer wg.Done()
 				lastInputBinding = getCountAndLast(t, "last-input-binding")
-				wg.Done()
 			}()
 			go func() {
+				defer wg.Done()
 				lastTopicMessage = getCountAndLast(t, "last-topic-message")
-				wg.Done()
 			}()
 			go func() {
+				defer wg.Done()
 				lastHealthCheck = getCountAndLast(t, "last-health-check")
-				wg.Done()
 			}()
 			wg.Wait()
 
@@ -246,29 +246,29 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 			// Get the last values
 			wg.Add(4)
 			go func() {
+				defer wg.Done()
 				obj := getCountAndLast(t, "last-input-binding")
-				require.Greater(t, obj.Count, lastInputBinding.Count)
+				assert.Greater(t, obj.Count, lastInputBinding.Count)
 				lastInputBinding = obj
-				wg.Done()
 			}()
 			go func() {
+				defer wg.Done()
 				obj := getCountAndLast(t, "last-topic-message")
-				require.Greater(t, obj.Count, lastTopicMessage.Count)
+				assert.Greater(t, obj.Count, lastTopicMessage.Count)
 				lastTopicMessage = obj
-				wg.Done()
 			}()
 			go func() {
+				defer wg.Done()
 				obj := getCountAndLast(t, "last-health-check")
-				require.Greater(t, obj.Count, lastHealthCheck.Count)
+				assert.Greater(t, obj.Count, lastHealthCheck.Count)
 				lastHealthCheck = obj
-				wg.Done()
 			}()
 			// Service invocation should fail
 			go func() {
+				defer wg.Done()
 				res, status := invokeFoo(t)
-				require.Contains(t, string(res), "ERR_DIRECT_INVOKE")
-				require.Greater(t, status, 299)
-				wg.Done()
+				assert.Contains(t, string(res), "ERR_DIRECT_INVOKE")
+				assert.Greater(t, status, 299)
 			}()
 			wg.Wait()
 		})
@@ -278,32 +278,32 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 			time.Sleep(5 * time.Second)
 			wg.Add(4)
 			go func() {
+				defer wg.Done()
 				obj := getCountAndLast(t, "last-input-binding")
-				require.Equal(t, lastInputBinding.Count, obj.Count)
-				require.Greater(t, *obj.Last, int64(5000))
+				assert.Equal(t, lastInputBinding.Count, obj.Count)
+				assert.Greater(t, *obj.Last, int64(5000))
 				lastInputBinding = obj
-				wg.Done()
 			}()
 			go func() {
+				defer wg.Done()
 				obj := getCountAndLast(t, "last-topic-message")
-				require.Equal(t, lastTopicMessage.Count, obj.Count)
-				require.Greater(t, *obj.Last, int64(5000))
+				assert.Equal(t, lastTopicMessage.Count, obj.Count)
+				assert.Greater(t, *obj.Last, int64(5000))
 				lastTopicMessage = obj
-				wg.Done()
 			}()
 			go func() {
+				defer wg.Done()
 				obj := getCountAndLast(t, "last-health-check")
-				require.Greater(t, obj.Count, lastHealthCheck.Count)
-				require.Less(t, *obj.Last, int64(3000))
+				assert.Greater(t, obj.Count, lastHealthCheck.Count)
+				assert.Less(t, *obj.Last, int64(3000))
 				lastHealthCheck = obj
-				wg.Done()
 			}()
 			// Service invocation should fail again
 			go func() {
+				defer wg.Done()
 				res, status := invokeFoo(t)
-				require.Greater(t, status, 299)
-				require.Contains(t, string(res), "ERR_DIRECT_INVOKE")
-				wg.Done()
+				assert.Greater(t, status, 299)
+				assert.Contains(t, string(res), "ERR_DIRECT_INVOKE")
 			}()
 			wg.Wait()
 		})
@@ -313,32 +313,32 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 			time.Sleep(12 * time.Second)
 			wg.Add(4)
 			go func() {
+				defer wg.Done()
 				obj := getCountAndLast(t, "last-input-binding")
-				require.Greater(t, obj.Count, lastInputBinding.Count)
-				require.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
+				assert.Greater(t, obj.Count, lastInputBinding.Count)
+				assert.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
 				lastInputBinding = obj
-				wg.Done()
 			}()
 			go func() {
+				defer wg.Done()
 				obj := getCountAndLast(t, "last-topic-message")
-				require.Greater(t, obj.Count, lastTopicMessage.Count)
-				require.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
+				assert.Greater(t, obj.Count, lastTopicMessage.Count)
+				assert.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
 				lastTopicMessage = obj
-				wg.Done()
 			}()
 			go func() {
+				defer wg.Done()
 				obj := getCountAndLast(t, "last-health-check")
-				require.Greater(t, obj.Count, lastHealthCheck.Count)
-				require.Less(t, *obj.Last, int64(3500)) // Adds .5s to reduce flakiness on slow runners
+				assert.Greater(t, obj.Count, lastHealthCheck.Count)
+				assert.Less(t, *obj.Last, int64(3500)) // Adds .5s to reduce flakiness on slow runners
 				lastHealthCheck = obj
-				wg.Done()
 			}()
 			// Service invocation works
 			go func() {
+				defer wg.Done()
 				res, status := invokeFoo(t)
-				require.Equal(t, 200, status)
-				require.Equal(t, "🤗", string(res))
-				wg.Done()
+				assert.Equal(t, 200, status)
+				assert.Equal(t, "🤗", string(res))
 			}()
 			wg.Wait()
 		})

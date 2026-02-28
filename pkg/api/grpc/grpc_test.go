@@ -275,8 +275,8 @@ func startTestServerWithTracing() (*grpc.Server, *string, *bufconn.Listener) {
 		grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
 	)
 
+	internalv1pb.RegisterServiceInvocationServer(server, &mockGRPCAPI{})
 	go func() {
-		internalv1pb.RegisterServiceInvocationServer(server, &mockGRPCAPI{})
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -314,8 +314,8 @@ func startInternalServer(testAPIServer *api) (*grpc.Server, *bufconn.Listener) {
 	lis := bufconn.Listen(bufconnBufSize)
 
 	server := grpc.NewServer()
+	internalv1pb.RegisterServiceInvocationServer(server, testAPIServer)
 	go func() {
-		internalv1pb.RegisterServiceInvocationServer(server, testAPIServer)
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -353,10 +353,22 @@ func startDaprAPIServer(t *testing.T, testAPIServer *api, token string) *bufconn
 			t.Fatalf("timeout waiting for server to stop")
 		}
 	})
+
+	runtimev1pb.RegisterDaprServer(server, testAPIServer)
+
 	go func() {
-		runtimev1pb.RegisterDaprServer(server, testAPIServer)
 		errCh <- server.Serve(lis)
 	}()
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		//nolint:staticcheck
+		conn, err := grpc.DialContext(t.Context(), "bufnet", grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		if assert.NoError(c, err) {
+			conn.Close()
+		}
+	}, time.Second*5, time.Millisecond*10)
 
 	return lis
 }
@@ -3161,22 +3173,25 @@ func TestGetConfigurationAPI(t *testing.T) {
 }
 
 func TestSubscribeConfigurationAPI(t *testing.T) {
-	compStore := compstore.New()
-	compStore.AddConfiguration("store1", &mockConfigStore{})
+	client := func(t *testing.T) runtimev1pb.DaprClient {
+		compStore := compstore.New()
+		compStore.AddConfiguration("store1", &mockConfigStore{})
 
-	lis := startDaprAPIServer(t, &api{
-		logger: logger.NewLogger("grpc.api.test"),
-		Universal: universal.New(universal.Options{
-			AppID:      "fakeAPI",
-			CompStore:  compStore,
-			Resiliency: resiliency.New(nil),
-		}),
-	}, "")
+		lis := startDaprAPIServer(t, &api{
+			logger: logger.NewLogger("grpc.api.test"),
+			Universal: universal.New(universal.Options{
+				AppID:      "fakeAPI",
+				CompStore:  compStore,
+				Resiliency: resiliency.New(nil),
+			}),
+		}, "")
 
-	clientConn := createTestClient(lis)
-	defer clientConn.Close()
-
-	client := runtimev1pb.NewDaprClient(clientConn)
+		clientConn := createTestClient(lis)
+		t.Cleanup(func() {
+			clientConn.Close()
+		})
+		return runtimev1pb.NewDaprClient(clientConn)
+	}
 
 	getConfigurationItemTest := func(subscribeFn subscribeConfigurationFn) func(t *testing.T) {
 		return func(t *testing.T) {
@@ -3212,14 +3227,14 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 		Recv() (*runtimev1pb.SubscribeConfigurationResponse, error)
 	}, error,
 	) {
-		return client.SubscribeConfigurationAlpha1(ctx, in)
+		return client(t).SubscribeConfigurationAlpha1(ctx, in)
 	}))
 
 	t.Run("get configuration item", getConfigurationItemTest(func(ctx context.Context, in *runtimev1pb.SubscribeConfigurationRequest, opts ...grpc.CallOption) (interface {
 		Recv() (*runtimev1pb.SubscribeConfigurationResponse, error)
 	}, error,
 	) {
-		return client.SubscribeConfiguration(ctx, in)
+		return client(t).SubscribeConfiguration(ctx, in)
 	}))
 
 	getAllConfigurationItemTest := func(subscribeFn subscribeConfigurationFn) func(t *testing.T) {
@@ -3255,14 +3270,14 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 		Recv() (*runtimev1pb.SubscribeConfigurationResponse, error)
 	}, error,
 	) {
-		return client.SubscribeConfigurationAlpha1(ctx, in)
+		return client(t).SubscribeConfigurationAlpha1(ctx, in)
 	}))
 
 	t.Run("get all configuration item for empty list", getAllConfigurationItemTest(func(ctx context.Context, in *runtimev1pb.SubscribeConfigurationRequest, opts ...grpc.CallOption) (interface {
 		Recv() (*runtimev1pb.SubscribeConfigurationResponse, error)
 	}, error,
 	) {
-		return client.SubscribeConfiguration(ctx, in)
+		return client(t).SubscribeConfiguration(ctx, in)
 	}))
 }
 

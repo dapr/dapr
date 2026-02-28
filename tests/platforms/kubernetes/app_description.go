@@ -70,6 +70,7 @@ type AppDescription struct {
 	InjectPluggableComponents bool                            `json:",omitempty"`
 	PlacementAddresses        []string                        `json:",omitempty"`
 	SchedulerAddresses        []string                        `json:",omitempty"`
+	DisableInitEndpoints      []string                        `json:",omitempty"`
 	EnableAppHealthCheck      bool                            `json:",omitempty"`
 	AppHealthCheckPath        string                          `json:",omitempty"`
 	AppHealthProbeInterval    int                             `json:",omitempty"` // In seconds

@@ -144,7 +144,7 @@ func (h *http) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) error
 		// https://cloud.google.com/apis/design/errors#handling_errors
 		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[contribpubsub.IDField], body, statusCode)
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), "", msg.Topic, elapsed)
-		return nil
+		return pubsub.ErrMessageDropped
 	}
 
 	// Every error from now on is a retriable error.
