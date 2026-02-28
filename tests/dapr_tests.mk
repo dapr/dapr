@@ -120,6 +120,15 @@ ifeq ($(DAPR_TEST_NAMESPACE),)
 DAPR_TEST_NAMESPACE=$(DAPR_NAMESPACE)
 endif
 
+# Namespace where shared test infrastructure (Redis/Kafka/Postgres/Zipkin, etc) is installed.
+# Defaults to the test namespace for backwards compatibility.
+ifeq ($(DAPR_TEST_ENV_NAMESPACE),)
+DAPR_TEST_ENV_NAMESPACE=$(DAPR_TEST_NAMESPACE)
+endif
+
+export DAPR_TEST_NAMESPACE
+export DAPR_TEST_ENV_NAMESPACE
+
 ifeq ($(DAPR_TEST_REGISTRY),)
 DAPR_TEST_REGISTRY=$(DAPR_REGISTRY)
 endif
@@ -271,7 +280,7 @@ create-test-namespace:
 	kubectl create namespace $(DAPR_TEST_NAMESPACE)
 
 delete-test-namespace:
-	kubectl delete namespace $(DAPR_TEST_NAMESPACE) aa
+	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
 setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres
 
@@ -339,20 +348,21 @@ test-deps:
 	# The desire here is to download this test dependency without polluting go.mod
 	command -v gotestsum || go install gotest.tools/gotestsum@latest
 
+# E2E test parallelism - can be increased since tests are now isolated via DAPR_TEST_ID
+ifeq ($(DAPR_E2E_PARALLELISM),)
+DAPR_E2E_PARALLELISM=4
+endif
+
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
-	# Note: we can set -p 2 to run two tests apps at a time, because today we do not share state between
-	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll
-	# have to be sure and run them after the main test suite, so as not to alter the state of a running
-	# test
-	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
-     ifeq ($(DAPR_E2E_TEST),)
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 2 -count=1 -v -tags=e2e ./tests/e2e/$(DAPR_E2E_TEST)/...
-     else
-	for app in $(DAPR_E2E_TEST); do \
-		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 20m -p 2 -count=1 -v -tags=e2e ./tests/e2e/$$app/...; \
-	done
-     endif
+	# Run e2e test packages in parallel using a namespace-per-package isolation model.
+	# Shared infrastructure (Redis/Kafka/Postgres/Zipkin) is expected to be installed in DAPR_TEST_ENV_NAMESPACE.
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
+	DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) \
+	GOOS=$(TARGET_OS_LOCAL) \
+	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) \
+	DAPR_TEST_ENV_NAMESPACE=$(DAPR_TEST_ENV_NAMESPACE) \
+		./tests/scripts/run-e2e-parallel-namespaces.sh
 
 define genPerfTestRun
 .PHONY: test-perf-$(1)
@@ -454,9 +464,9 @@ endif
 
 # install k6 loadtesting to the cluster
 setup-test-env-k6: controller-gen
-	$(KUBECTL) apply -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/k6_sa_secret.yaml -n $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/k6_sa.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/k6_rolebinding.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/k6_sa_secret.yaml $(DAPR_TEST_NAMESPACE)
 	# definitely not cruft - removing CRDs that have been deprecated
 	export IMG=ghcr.io/grafana/operator:controller-v0.0.8 && \
 	rm -rf /tmp/.k6-operator >/dev/null && \
@@ -553,7 +563,7 @@ delete-test-env-postgres:
 
 # install zipkin to the cluster
 setup-test-env-zipkin:
-	$(KUBECTL) apply -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/zipkin.yaml $(DAPR_TEST_NAMESPACE)
 delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
@@ -570,60 +580,60 @@ save-dapr-control-plane-k8s-logs:
 
 # Apply default config yaml to turn mTLS off for testing (mTLS is enabled by default)
 setup-disable-mtls:
-	$(KUBECTL) apply -f ./tests/config/dapr_mtls_off_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_mtls_off_config.yaml $(DAPR_TEST_NAMESPACE)
 
 # Apply default config yaml to turn tracing off for testing (tracing is enabled by default)
 setup-app-configurations:
-	$(KUBECTL) apply -f ./tests/config/dapr_observability_test_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_observability_test_config.yaml $(DAPR_TEST_NAMESPACE)
 
 # Apply component yaml for state, secrets, pubsub, workflows, and bindings
 setup-test-components: setup-app-configurations
-	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_host_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state_actorstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_query_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_redis_pluggable_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_CONFIG_STORE)_configuration.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/pubsub_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/kafka_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_crypto_$(DAPR_TEST_CRYPTO).yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_kafka_pluggable_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings_custom_route.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_pluggable_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_pubsub_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_grpc_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_query.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badhost.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_vault_secretstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/pipeline_app.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/preview_configurations.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/resiliency_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_tracing_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/external_invocation_http_endpoint.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/grpcproxyserverexternal_service.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/externalinvocationcrd.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/omithealthchecks_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/external_invocation_http_endpoint_tls.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/kubernetes_secret.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/kubernetes_secret_config.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/kubernetes_redis_secret.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/kubernetes_redis_host_config.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state_actorstore.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_query_state.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_redis_pluggable_state.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_tests_cluster_role_binding.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_$(DAPR_TEST_CONFIG_STORE)_configuration.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/pubsub_resiliency.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/kafka_pubsub.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_crypto_$(DAPR_TEST_CRYPTO).yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_kafka_pluggable_bindings.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_kafka_bindings.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_kafka_bindings_custom_route.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_kafka_bindings_grpc.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/app_topic_subscription_pluggable_pubsub.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/app_topic_subscription_pubsub.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/app_topic_subscription_pubsub_grpc.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/kubernetes_allowlists_config.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/kubernetes_allowlists_grpc_config.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_redis_state_query.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_redis_state_badhost.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_redis_state_badpass.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_vault_secretstore.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/uppercase.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/pipeline.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/pipeline_app.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/preview_configurations.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/app_topic_subscription_routing.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/app_topic_subscription_routing_grpc.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/resiliency.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/resiliency_kafka_bindings.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/resiliency_kafka_bindings_grpc.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/resiliency_$(DAPR_TEST_PUBSUB)_pubsub.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_in_memory_pubsub.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_in_memory_state.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_tracing_config.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/dapr_cron_binding.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/external_invocation_http_endpoint.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/grpcproxyserverexternal_service.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/externalinvocationcrd.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/omithealthchecks_config.yaml $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/external_invocation_http_endpoint_tls.yaml $(DAPR_TEST_NAMESPACE)
 	# Don't set namespace as Namespace is defind in the yaml.
 	$(KUBECTL) apply -f ./tests/config/ignore_daprsystem_config.yaml
 
@@ -634,7 +644,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) get configurations --namespace $(DAPR_TEST_NAMESPACE)
 
 setup-components-perf-test:
-	$(KUBECTL) apply -f ./tests/config/pubsub_perf_components.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	./tests/scripts/kubectl_apply_render.sh ./tests/config/pubsub_perf_components.yaml $(DAPR_TEST_NAMESPACE)
 
 # Setup kind
 setup-kind:

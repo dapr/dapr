@@ -20,7 +20,7 @@ spec:
   version: v1
   metadata:
   - name: redisHost
-    value: dapr-redis-master.dapr-tests.svc.cluster.local:6379
+    value: dapr-redis-master.${DAPR_TEST_ENV_NAMESPACE}.svc.cluster.local:6379
   - name: redisPassword
     value: ""
   - name: redisDB

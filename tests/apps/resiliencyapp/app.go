@@ -41,6 +41,11 @@ var (
 	daprHttpPort = 3500
 	daprGrpcPort = 50001
 
+	// Target app names for service invocation (can be overridden via environment variables
+	// to support parallel test isolation with unique app IDs).
+	targetAppHTTP = "resiliencyapp"
+	targetAppGRPC = "resiliencyappgrpc"
+
 	daprClient   runtimev1pb.DaprClient
 	callTracking map[string][]CallRecord
 	httpClient   = utils.NewHTTPClient()
@@ -76,6 +81,13 @@ func init() {
 	p = os.Getenv("PORT")
 	if p != "" && p != "0" {
 		appPort, _ = strconv.Atoi(p)
+	}
+	// Allow overriding target app names for parallel test isolation.
+	if t := os.Getenv("TARGET_APP_HTTP"); t != "" {
+		targetAppHTTP = t
+	}
+	if t := os.Getenv("TARGET_APP_GRPC"); t != "" {
+		targetAppGRPC = t
 	}
 }
 
@@ -350,7 +362,7 @@ func TestGetCallCountGRPC(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Getting call counts for gRPC")
 
 	req := runtimev1pb.InvokeServiceRequest{
-		Id: "resiliencyappgrpc",
+		Id: targetAppGRPC,
 		Message: &commonv1pb.InvokeRequest{
 			Method: "GetCallCount",
 			Data:   &anypb.Any{},
@@ -432,7 +444,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 
 	if protocol == "http" {
 		if targetApp == "" {
-			targetApp = "resiliencyapp"
+			targetApp = targetAppHTTP
 		}
 		if targetMethod == "" {
 			targetMethod = "resiliencyInvocation"
@@ -456,7 +468,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if protocol == "grpc" {
 		if targetApp == "" {
-			targetApp = "resiliencyappgrpc"
+			targetApp = targetAppGRPC
 		}
 		if targetMethod == "" {
 			targetMethod = "grpcInvoke"
@@ -511,7 +523,7 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		client := pb.NewGreeterClient(conn)
 
 		ctx := r.Context()
-		ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", "resiliencyappgrpc")
+		ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", targetAppGRPC)
 		_, err = client.SayHello(ctx, &pb.HelloRequest{Name: string(b)})
 		if err != nil {
 			log.Printf("could not proxy request: %s", err.Error())

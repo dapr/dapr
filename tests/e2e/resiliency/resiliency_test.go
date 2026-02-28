@@ -66,6 +66,11 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
+			// Pass formatted app names to enable parallel test isolation.
+			AppEnv: map[string]string{
+				"TARGET_APP_HTTP": kube.FormatAppID("resiliencyapp"),
+				"TARGET_APP_GRPC": kube.FormatAppID("resiliencyappgrpc"),
+			},
 		},
 		{
 			AppName:        "resiliencyappgrpc",

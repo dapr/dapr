@@ -23,7 +23,7 @@ spec:
   metadata:
   # Kafka broker connection setting
   - name: brokers
-    value: dapr-kafka:9092
+    value: dapr-kafka.${DAPR_TEST_ENV_NAMESPACE}.svc.cluster.local:9092
   - name: authRequired
     value: "false"
   - name: initialOffset
@@ -47,7 +47,7 @@ spec:
   metadata:
   # rabbitmq broker connection setting
   - name: host
-    value: amqp://admin:admin@rabbitmq.dapr-tests.svc.cluster.local:5672
+    value: amqp://admin:admin@rabbitmq.${DAPR_TEST_ENV_NAMESPACE}.svc.cluster.local:5672
 scopes:
   - rabbitmq-test-app-normal
   - rabbitmq-test-app-bulk
@@ -66,7 +66,7 @@ spec:
   metadata:
     - name: url
       #value: "tcp://[username][:password]@host.domain[:port]"
-      value: tcp://perf-test-emqx@perf-test-emqx-0.perf-test-emqx-headless.dapr-tests.svc.cluster.local:1883
+      value: tcp://perf-test-emqx@perf-test-emqx-0.perf-test-emqx-headless.${DAPR_TEST_ENV_NAMESPACE}.svc.cluster.local:1883
 scopes:
   - mqtt-test-app-normal
   - mqtt-test-app-bulk
@@ -84,7 +84,7 @@ spec:
   version: v1
   metadata:
   - name: host
-    value: "perf-test-pulsar-broker.dapr-tests.svc.cluster.local:6650"
+    value: "perf-test-pulsar-broker.${DAPR_TEST_ENV_NAMESPACE}.svc.cluster.local:6650"
 scopes:
   - pulsar-test-app-normal
   - pulsar-test-app-bulk
@@ -101,7 +101,7 @@ spec:
   version: v1
   metadata:
   - name: redisHost
-    value: dapr-redis-master.dapr-tests.svc.cluster.local:6379
+    value: dapr-redis-master.${DAPR_TEST_ENV_NAMESPACE}.svc.cluster.local:6379
   - name: redisPassword
     value: ""
 scopes:

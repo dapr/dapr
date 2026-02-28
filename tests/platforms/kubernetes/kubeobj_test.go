@@ -20,6 +20,40 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 )
 
+func TestFormatAppName(t *testing.T) {
+	originalTestID := TestID
+	defer func() {
+		TestID = originalTestID
+	}()
+
+	t.Run("returns original name when TestID is empty", func(t *testing.T) {
+		TestID = ""
+		assert.Equal(t, "myapp", FormatAppName("myapp"))
+	})
+
+	t.Run("appends TestID when set", func(t *testing.T) {
+		TestID = "abc123"
+		assert.Equal(t, "myapp-abc123", FormatAppName("myapp"))
+	})
+
+	t.Run("FormatAppID behaves same as FormatAppName", func(t *testing.T) {
+		TestID = "xyz789"
+		assert.Equal(t, FormatAppName("testapp"), FormatAppID("testapp"))
+		assert.Equal(t, "testapp-xyz789", FormatAppID("testapp"))
+	})
+}
+
+func TestGenerateTestID(t *testing.T) {
+	// Test that generateTestID returns a non-empty string of expected length
+	id := generateTestID()
+	assert.NotEmpty(t, id)
+	assert.Len(t, id, 8) // 4 bytes = 8 hex characters
+
+	// Test that multiple calls return different IDs (random)
+	id2 := generateTestID()
+	assert.NotEqual(t, id, id2)
+}
+
 func TestBuildDeploymentObject(t *testing.T) {
 	testApp := AppDescription{
 		AppName:        "testapp",
@@ -30,6 +64,25 @@ func TestBuildDeploymentObject(t *testing.T) {
 		IngressEnabled: true,
 		MetricsEnabled: true,
 	}
+
+	t.Run("Dapr app-id uses formatted name when TestID is set", func(t *testing.T) {
+		// Save and restore TestID
+		originalTestID := TestID
+		defer func() { TestID = originalTestID }()
+
+		TestID = "abc12345"
+
+		// act
+		obj := buildDeploymentObject("testNamespace", testApp)
+
+		// assert - Kubernetes resource name should be formatted
+		formattedName := FormatAppName(testApp.AppName)
+		assert.Equal(t, formattedName, obj.ObjectMeta.Name)
+		assert.Equal(t, "testapp-abc12345", obj.ObjectMeta.Name)
+
+		// assert - Dapr app-id should use formatted name to isolate parallel tests
+		assert.Equal(t, "testapp-abc12345", obj.Spec.Template.Annotations["dapr.io/app-id"])
+	})
 
 	t.Run("Unix socket", func(t *testing.T) {
 		testApp.UnixDomainSocketPath = "/var/run"

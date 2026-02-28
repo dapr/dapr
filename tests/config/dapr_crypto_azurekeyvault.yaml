@@ -5,6 +5,7 @@ metadata:
 spec:
   type: crypto.azure.keyvault
   version: v1
+  ignoreErrors: true
   metadata:
     - name: vaultName
       envRef: AZURE_KEY_VAULT_NAME

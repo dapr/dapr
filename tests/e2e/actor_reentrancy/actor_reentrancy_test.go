@@ -31,10 +31,16 @@ import (
 )
 
 const (
-	appName              = "reentrantactor"                         // App name in Dapr.
-	actorInvokeURLFormat = "%s/test/actors/reentrantActor/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
-	actorlogsURLFormat   = "%s/test/logs"                           // URL to fetch logs from test app.
+	appName              = "reentrantactor"              // App name in Dapr.
+	baseActorType        = "reentrantActor"              // Base actor type (will be formatted with TestID).
+	actorInvokeURLFormat = "%s/test/actors/%s/%s/%s/%s"  // URL to invoke a Dapr's actor method in test app (actorType is now a parameter).
+	actorlogsURLFormat   = "%s/test/logs"                // URL to fetch logs from test app.
 )
+
+// formattedActorType returns the actor type with TestID for parallel test isolation.
+func formattedActorType() string {
+	return kube.FormatAppID(baseActorType)
+}
 
 // represents a response for the APIs in this app.
 type actorLogEntry struct {
@@ -91,6 +97,10 @@ func TestMain(m *testing.M) {
 				AppCPULimit:         "2.0",
 				AppCPURequest:       "0.1",
 				AppPort:             22222,
+				// Pass formatted actor type for parallel test isolation
+				AppEnv: map[string]string{
+					"TEST_APP_ACTOR_TYPE": kube.FormatAppID(baseActorType),
+				},
 			},
 		}
 
@@ -121,21 +131,21 @@ func TestActorReentrancy(t *testing.T) {
 	const (
 		firstActorID  = "1"
 		secondActorID = "2"
-		actorType     = "reentrantActor"
 	)
+	actorType := formattedActorType()
 
 	logsURL := fmt.Sprintf(actorlogsURLFormat, reentrantURL)
 
 	// This basic test makes it possible to assert that the actor subsystem is ready
 	t.Run("Readiness", func(t *testing.T) {
 		body, _ := json.Marshal(actorCall{
-			ActorType: "actor1",
+			ActorType: actorType,
 			ActorID:   "hi",
 			Method:    "helloMethod",
 		})
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, "hi", "method", "helloMethod"), body)
+			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, actorType, "hi", "method", "helloMethod"), body)
 			assert.NoError(t, err)
 			assert.Equal(t, 200, status)
 		}, 15*time.Second, 200*time.Millisecond)
@@ -151,7 +161,7 @@ func TestActorReentrancy(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
+		_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, actorType, firstActorID, "method", "reentrantMethod"), reqBody)
 		require.NoError(t, err)
 
 		resp, httpErr := utils.HTTPGet(logsURL)
@@ -188,7 +198,7 @@ func TestActorReentrancy(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
+		_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, actorType, firstActorID, "method", "reentrantMethod"), reqBody)
 		require.NoError(t, err)
 
 		resp, httpErr := utils.HTTPGet(logsURL)
@@ -230,7 +240,7 @@ func TestActorReentrancy(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
+		_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, actorType, firstActorID, "method", "reentrantMethod"), reqBody)
 		require.NoError(t, err)
 
 		resp, err := utils.HTTPGet(logsURL)

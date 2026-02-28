@@ -55,7 +55,7 @@ metadata:
   labels:
     app: dapr-zipkin
   name: dapr-zipkin
-  namespace: dapr-tests
+  namespace: ${DAPR_TEST_ENV_NAMESPACE}
 spec:
   ports:
     - port: 9411

@@ -37,25 +37,31 @@ import (
 )
 
 const (
-	appName                               = "actorfeatures"                      // App name in Dapr.
-	reminderName                          = "myReminder"                         // Reminder name.
-	timerName                             = "myTimer"                            // Timer name.
-	numHealthChecks                       = 60                                   // Number of get calls before starting tests.
-	secondsToCheckTimerAndReminderResult  = 20                                   // How much time to wait to make sure the result is in logs.
-	secondsToCheckGetMetadata             = 40                                   // How much time to wait to check metadata.
-	secondsBetweenChecksForActorFailover  = 5                                    // How much time to wait to make sure the result is in logs.
-	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
-	actorsToCheckRebalance                = 30                                   // How many actors to create in the rebalance check test.
-	appScaleToCheckRebalance              = 2                                    // How many instances of the app to create to validate rebalance.
-	actorsToCheckMetadata                 = 5                                    // How many actors to create in get metdata test.
-	appScaleToCheckMetadata               = 1                                    // How many instances of the app to test get metadata.
-	actorInvokeURLFormat                  = "%s/test/testactorfeatures/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
-	actorDeleteURLFormat                  = "%s/actors/testactorfeatures/%s"     // URL to deactivate an actor in test app.
-	actorlogsURLFormat                    = "%s/test/logs"                       // URL to fetch logs from test app.
-	actorMetadataURLFormat                = "%s/test/metadata"                   // URL to fetch metadata from test app.
-	shutdownURLFormat                     = "%s/test/shutdown"                   // URL to shutdown sidecar and app.
-	actorInvokeRetriesAfterRestart        = 10                                   // Number of retried to invoke actor after restart.
+	appName                               = "actorfeatures"       // App name in Dapr.
+	baseActorType                         = "testactorfeatures"   // Base actor type name (will be formatted with TestID).
+	reminderName                          = "myReminder"          // Reminder name.
+	timerName                             = "myTimer"             // Timer name.
+	numHealthChecks                       = 60                    // Number of get calls before starting tests.
+	secondsToCheckTimerAndReminderResult  = 20                    // How much time to wait to make sure the result is in logs.
+	secondsToCheckGetMetadata             = 40                    // How much time to wait to check metadata.
+	secondsBetweenChecksForActorFailover  = 5                     // How much time to wait to make sure the result is in logs.
+	minimumCallsForTimerAndReminderResult = 10                    // How many calls to timer or reminder should be at minimum.
+	actorsToCheckRebalance                = 30                    // How many actors to create in the rebalance check test.
+	appScaleToCheckRebalance              = 2                     // How many instances of the app to create to validate rebalance.
+	actorsToCheckMetadata                 = 5                     // How many actors to create in get metdata test.
+	appScaleToCheckMetadata               = 1                     // How many instances of the app to test get metadata.
+	actorInvokeURLFormat                  = "%s/test/%s/%s/%s/%s" // URL to invoke a Dapr's actor method in test app (actorType is now a parameter).
+	actorDeleteURLFormat                  = "%s/actors/%s/%s"     // URL to deactivate an actor in test app (actorType is now a parameter).
+	actorlogsURLFormat                    = "%s/test/logs"        // URL to fetch logs from test app.
+	actorMetadataURLFormat                = "%s/test/metadata"    // URL to fetch metadata from test app.
+	shutdownURLFormat                     = "%s/test/shutdown"    // URL to shutdown sidecar and app.
+	actorInvokeRetriesAfterRestart        = 10                    // Number of retried to invoke actor after restart.
 )
+
+// actorType returns the formatted actor type with TestID for parallel test isolation.
+func actorType() string {
+	return kube.FormatAppID(baseActorType)
+}
 
 // represents a response for the APIs in this app.
 type actorLogEntry struct {
@@ -148,6 +154,10 @@ func TestMain(m *testing.M) {
 			DaprCPURequest:      "0.1",
 			AppCPULimit:         "2.0",
 			AppCPURequest:       "0.1",
+			// Pass formatted actor type for parallel test isolation
+			AppEnv: map[string]string{
+				"TEST_APP_ACTOR_TYPE": kube.FormatAppID(baseActorType),
+			},
 		},
 		{
 			AppName:             "actortestclient",
@@ -180,7 +190,7 @@ func TestActorInvocation(t *testing.T) {
 	t.Run("Actor remote invocation", func(t *testing.T) {
 		actorID := guuid.New().String()
 
-		res, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "testmethod"), []byte{})
+		res, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "testmethod"), []byte{})
 		if err != nil {
 			log.Printf("failed to invoke method testmethod. Error='%v' Response='%s'", err, string(res))
 		}
@@ -256,25 +266,25 @@ func TestActorFeatures(t *testing.T) {
 		// Each test needs to have a different actorID
 		actorID := guuid.New().String()
 
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "savestatetest"), []byte{})
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "savestatetest"), []byte{})
 		if err != nil {
 			log.Printf("failed to invoke method savestatetest. Error='%v' Response='%s'", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke method savestatetest")
 
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "getstatetest"), []byte{})
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "getstatetest"), []byte{})
 		if err != nil {
 			log.Printf("failed to invoke method getstatetest. Error='%v' Response='%s'", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke method getstatetest")
 
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "savestatetest2"), []byte{})
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "savestatetest2"), []byte{})
 		if err != nil {
 			log.Printf("failed to invoke method savestatetest2. Error='%v' Response='%s'", err, string(res))
 		}
 		require.NoError(t, err, "failed to invoke method savestatetest2")
 
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "getstatetest2"), []byte{})
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "getstatetest2"), []byte{})
 		if err != nil {
 			log.Printf("failed to invoke method getstatetest2. Error='%v' Response='%s'", err, string(res))
 		}
@@ -286,7 +296,7 @@ func TestActorFeatures(t *testing.T) {
 		actorID := "1001"
 
 		// Reset reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -301,7 +311,7 @@ func TestActorFeatures(t *testing.T) {
 		var reqBody []byte
 		reqBody, err = json.Marshal(req)
 		require.NoError(t, err, "failed to marshal JSON")
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName), reqBody)
 		if err != nil {
 			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -310,7 +320,7 @@ func TestActorFeatures(t *testing.T) {
 		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
 
 		// Reset reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -331,7 +341,7 @@ func TestActorFeatures(t *testing.T) {
 		actorID := "1001a"
 
 		// Reset reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -343,7 +353,7 @@ func TestActorFeatures(t *testing.T) {
 			DueTime: "1s",
 		}
 		reqBody, _ := json.Marshal(req)
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName), reqBody)
 		if err != nil {
 			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -352,7 +362,7 @@ func TestActorFeatures(t *testing.T) {
 		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
 
 		// Reset reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -371,7 +381,7 @@ func TestActorFeatures(t *testing.T) {
 		actorID := "1001b"
 
 		// Reset reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -384,7 +394,7 @@ func TestActorFeatures(t *testing.T) {
 			Period:  "10s",
 		}
 		reqBody, _ := json.Marshal(req)
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName), reqBody)
 		if err != nil {
 			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -395,7 +405,7 @@ func TestActorFeatures(t *testing.T) {
 		// Reset reminder (before first period trigger)
 		req.DueTime = "20s"
 		reqBody, _ = json.Marshal(req)
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName), reqBody)
 		if err != nil {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -404,7 +414,7 @@ func TestActorFeatures(t *testing.T) {
 		time.Sleep(10 * time.Second)
 
 		// Delete reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to delete reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -423,7 +433,7 @@ func TestActorFeatures(t *testing.T) {
 		actorID := "1001c"
 
 		// Reset reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -436,7 +446,7 @@ func TestActorFeatures(t *testing.T) {
 			Period:  "1s",
 		}
 		reqBody, _ := json.Marshal(req)
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName), reqBody)
 		if err != nil {
 			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -455,12 +465,12 @@ func TestActorFeatures(t *testing.T) {
 		// Min call is based off of having a 1s period/due time, the amount of seconds we've waited, and a bit of room for timing.
 		require.GreaterOrEqual(t, firstCount, 9, "condition failed")
 
-		_, _ = httpDelete(fmt.Sprintf(actorDeleteURLFormat, externalURL, actorID))
+		_, _ = httpDelete(fmt.Sprintf(actorDeleteURLFormat, externalURL, actorType(), actorID))
 
 		time.Sleep(sleepTime)
 
 		// Reset reminder
-		_, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		_, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -480,7 +490,7 @@ func TestActorFeatures(t *testing.T) {
 		actorID := "1001d"
 
 		// Reset reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -493,7 +503,7 @@ func TestActorFeatures(t *testing.T) {
 			Period:  "1s",
 		}
 		reqBody, _ := json.Marshal(req)
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName), reqBody)
 		if err != nil {
 			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -541,7 +551,7 @@ func TestActorFeatures(t *testing.T) {
 		require.NoError(t, err)
 
 		// Reset reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -553,7 +563,7 @@ func TestActorFeatures(t *testing.T) {
 		actorID := "1001e"
 
 		// Reset reminder
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to reset reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -568,7 +578,7 @@ func TestActorFeatures(t *testing.T) {
 		var reqBody []byte
 		reqBody, err = json.Marshal(req)
 		require.NoError(t, err, "failed to marshal JSON")
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName), reqBody)
 		if err != nil {
 			log.Printf("failed to set reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -577,7 +587,7 @@ func TestActorFeatures(t *testing.T) {
 		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
 
 		// get reminder
-		res, err = httpGet(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		res, err = httpGet(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "reminders", reminderName))
 		if err != nil {
 			log.Printf("failed to get reminder. Error='%v' Response='%s'", err, string(res))
 		}
@@ -598,13 +608,13 @@ func TestActorFeatures(t *testing.T) {
 		actorID := "1002"
 
 		// Activate actor.
-		res, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "justToActivate"), []byte{})
+		res, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "justToActivate"), []byte{})
 		if err != nil {
 			log.Printf("warn: failed to activate actor. Error='%v' Response='%s'", err, string(res))
 		}
 
 		// Reset timer
-		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName))
+		res, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "timers", timerName))
 		if err != nil {
 			log.Printf("failed to reset timer. Error='%v' Response='%s'", err, string(res))
 		}
@@ -617,7 +627,7 @@ func TestActorFeatures(t *testing.T) {
 			Period:  "1s",
 		}
 		reqBody, _ := json.Marshal(req)
-		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName), reqBody)
+		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "timers", timerName), reqBody)
 		if err != nil {
 			log.Printf("failed to set timer. Error='%v' Response='%s'", err, string(res))
 		}
@@ -626,7 +636,7 @@ func TestActorFeatures(t *testing.T) {
 		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
 
 		// Reset timer
-		_, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName))
+		_, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "timers", timerName))
 		require.NoError(t, err)
 
 		res, err = httpGet(logsURL)
@@ -643,9 +653,9 @@ func TestActorFeatures(t *testing.T) {
 		actorID := "1002a"
 
 		// Activate actor.
-		httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "justToActivate"), []byte{})
+		httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "justToActivate"), []byte{})
 		// Reset timer
-		_, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName))
+		_, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "timers", timerName))
 		require.NoError(t, err)
 		// Set timer
 		req := actorReminderOrTimer{
@@ -654,7 +664,7 @@ func TestActorFeatures(t *testing.T) {
 			Period:  "5s",
 		}
 		reqBody, _ := json.Marshal(req)
-		_, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName), reqBody)
+		_, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "timers", timerName), reqBody)
 		require.NoError(t, err)
 
 		time.Sleep(3 * time.Second)
@@ -662,12 +672,12 @@ func TestActorFeatures(t *testing.T) {
 		// Reset timer (before first period trigger)
 		req.DueTime = "20s"
 		reqBody, _ = json.Marshal(req)
-		_, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName), reqBody)
+		_, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "timers", timerName), reqBody)
 
 		time.Sleep(10 * time.Second)
 
 		// Delete timer
-		_, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName))
+		_, err = httpDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "timers", timerName))
 		require.NoError(t, err)
 
 		res, err = httpGet(logsURL)
@@ -687,11 +697,11 @@ func TestActorFeatures(t *testing.T) {
 		err2 := make(chan error, 1)
 
 		go func() {
-			_, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "concurrency"), []byte{})
+			_, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "concurrency"), []byte{})
 			err1 <- err
 		}()
 		go func() {
-			_, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "concurrency"), []byte{})
+			_, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "concurrency"), []byte{})
 			err2 <- err
 		}()
 
@@ -729,11 +739,11 @@ func TestActorFeatures(t *testing.T) {
 		defer close(err2)
 
 		go func() {
-			_, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDOne, "method", "concurrency"), []byte{})
+			_, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorIDOne, "method", "concurrency"), []byte{})
 			err1 <- err
 		}()
 		go func() {
-			_, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDTwo, "method", "concurrency"), []byte{})
+			_, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorIDTwo, "method", "concurrency"), []byte{})
 			err2 <- err
 		}()
 
@@ -783,13 +793,13 @@ func TestActorFeatures(t *testing.T) {
 					return
 				case <-timer.C:
 					// Ignore errors as this is just to keep the actor alive
-					_, _ = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
+					_, _ = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "hostname"), []byte{})
 				}
 			}
 		}()
 
 		// In Kubernetes, hostname should be the POD name. Single-node Kubernetes cluster should still be able to reproduce this test.
-		firstHostname, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
+		firstHostname, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "hostname"), []byte{})
 		require.NoError(t, err, "error getting first hostname")
 
 		tr.Platform.Restart(appName)
@@ -806,7 +816,7 @@ func TestActorFeatures(t *testing.T) {
 			// wait until actors are redistributed.
 			time.Sleep(30 * time.Second)
 
-			newHostname, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
+			newHostname, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorID, "method", "hostname"), []byte{})
 			if i == actorInvokeRetriesAfterRestart {
 				require.NoError(t, err, "error getting hostname")
 			}
@@ -829,7 +839,7 @@ func TestActorFeatures(t *testing.T) {
 		// In Kubernetes, hostname should be the POD name.
 		// Records all hostnames from pods and compare them with the hostnames from new pods after scaling
 		for index := 0; index < actorsToCheckRebalance; index++ {
-			hostname, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
+			hostname, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
 			require.NoError(t, err)
 			hostnameForActor[index] = string(hostname)
 		}
@@ -841,7 +851,7 @@ func TestActorFeatures(t *testing.T) {
 
 		anyActorMoved := false
 		for index := 0; index < actorsToCheckRebalance; index++ {
-			hostname, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
+			hostname, err := httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
 			require.NoError(t, err, "error getting hostname for actor %d", index)
 
 			if hostnameForActor[index] != string(hostname) {
@@ -869,7 +879,7 @@ func TestActorFeatures(t *testing.T) {
 		actorIDBase := "1008Instance"
 
 		for index := 0; index < actorsToCheckMetadata; index++ {
-			res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
+			res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType(), actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
 			if err != nil {
 				log.Printf("failed to check metadata for actor %d. Error='%v' Response='%s'", index, err, string(res))
 			}
@@ -885,12 +895,12 @@ func TestActorFeatures(t *testing.T) {
 		require.NoError(t, err, "error unmarshalling JSON")
 		assert.NotNil(t, currentMetadata, "metadata object is nil")
 
-		assert.Equal(t, appName, currentMetadata.ID)
-		assert.Equal(t, appName, previousMetadata.ID)
+		assert.Equal(t, kube.FormatAppID(appName), currentMetadata.ID)
+		assert.Equal(t, kube.FormatAppID(appName), previousMetadata.ID)
 		assert.Greater(t, len(previousMetadata.Actors), 0)
 		assert.Greater(t, len(currentMetadata.Actors), 0)
-		assert.Equal(t, "testactorfeatures", currentMetadata.Actors[0].Type)
-		assert.Equal(t, "testactorfeatures", previousMetadata.Actors[0].Type)
+		assert.Equal(t, actorType(), currentMetadata.Actors[0].Type)
+		assert.Equal(t, actorType(), previousMetadata.Actors[0].Type)
 		assert.Greater(t, currentMetadata.Actors[0].Count, previousMetadata.Actors[0].Count)
 	})
 }

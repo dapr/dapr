@@ -292,13 +292,13 @@ func (c *KubeTestPlatform) GetOrCreateNamespace(parentCtx context.Context, names
 
 // AcquireAppExternalURL returns the external url for 'name'.
 func (c *KubeTestPlatform) AcquireAppExternalURL(name string) string {
-	app := c.AppResources.FindActiveResource(name)
+	app := c.AppResources.FindActiveResourceByOriginalName(name)
 	return app.(*kube.AppManager).AcquireExternalURL()
 }
 
 // GetAppHostDetails returns the name and IP address of the host(pod) running 'name'.
 func (c *KubeTestPlatform) GetAppHostDetails(name string) (string, string, error) {
-	app := c.AppResources.FindActiveResource(name)
+	app := c.AppResources.FindActiveResourceByOriginalName(name)
 	pods, err := app.(*kube.AppManager).GetHostDetails()
 	if err != nil {
 		return "", "", err
@@ -314,7 +314,7 @@ func (c *KubeTestPlatform) GetAppHostDetails(name string) (string, string, error
 // GetAppPodEndpoints returns "ip:port" for each pod of the app.
 // Port matches cluster service targetPort: IngressPort if set, else AppPort if set, else DefaultContainerPort.
 func (c *KubeTestPlatform) GetAppPodEndpoints(name string) ([]string, error) {
-	app := c.AppResources.FindActiveResource(name)
+	app := c.AppResources.FindActiveResourceByOriginalName(name)
 	appManager := app.(*kube.AppManager)
 	pods, err := appManager.GetHostDetails()
 	if err != nil {
@@ -336,7 +336,7 @@ func (c *KubeTestPlatform) GetAppPodEndpoints(name string) ([]string, error) {
 
 // Scale changes the number of replicas of the app.
 func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
-	app := c.AppResources.FindActiveResource(name)
+	app := c.AppResources.FindActiveResourceByOriginalName(name)
 	appManager := app.(*kube.AppManager)
 
 	if err := appManager.ScaleDeploymentReplica(replicas); err != nil {
@@ -350,7 +350,7 @@ func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
 
 // SetAppEnv sets the container environment variable.
 func (c *KubeTestPlatform) SetAppEnv(name, key, value string) error {
-	app := c.AppResources.FindActiveResource(name)
+	app := c.AppResources.FindActiveResourceByOriginalName(name)
 	appManager := app.(*kube.AppManager)
 
 	if err := appManager.SetAppEnv(key, value); err != nil {
@@ -369,7 +369,7 @@ func (c *KubeTestPlatform) SetAppEnv(name, key, value string) error {
 // Restart restarts all instances for the app.
 func (c *KubeTestPlatform) Restart(name string) error {
 	// To minic the restart behavior, scale to 0 and then scale to the original replicas.
-	app := c.AppResources.FindActiveResource(name)
+	app := c.AppResources.FindActiveResourceByOriginalName(name)
 	m := app.(*kube.AppManager)
 	originalReplicas := m.App().Replicas
 
@@ -388,7 +388,7 @@ func (c *KubeTestPlatform) Restart(name string) error {
 
 // PortForwardToApp opens a new connection to the app on a the target port and returns the local port or error.
 func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) ([]int, error) {
-	app := c.AppResources.FindActiveResource(appName)
+	app := c.AppResources.FindActiveResourceByOriginalName(appName)
 	appManager := app.(*kube.AppManager)
 
 	_, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone)
@@ -404,7 +404,7 @@ func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) 
 
 // GetAppUsage returns the Cpu and Memory usage for the app container for a given app.
 func (c *KubeTestPlatform) GetAppUsage(appName string) (*AppUsage, error) {
-	app := c.AppResources.FindActiveResource(appName)
+	app := c.AppResources.FindActiveResourceByOriginalName(appName)
 	appManager := app.(*kube.AppManager)
 
 	cpu, mem, err := appManager.GetCPUAndMemory(false)
@@ -419,7 +419,7 @@ func (c *KubeTestPlatform) GetAppUsage(appName string) (*AppUsage, error) {
 
 // GetTotalRestarts returns the total of restarts across all pods and containers for an app.
 func (c *KubeTestPlatform) GetTotalRestarts(appName string) (int, error) {
-	app := c.AppResources.FindActiveResource(appName)
+	app := c.AppResources.FindActiveResourceByOriginalName(appName)
 	appManager := app.(*kube.AppManager)
 
 	return appManager.GetTotalRestarts()
@@ -427,7 +427,7 @@ func (c *KubeTestPlatform) GetTotalRestarts(appName string) (int, error) {
 
 // GetSidecarUsage returns the Cpu and Memory usage for the dapr container for a given app.
 func (c *KubeTestPlatform) GetSidecarUsage(appName string) (*AppUsage, error) {
-	app := c.AppResources.FindActiveResource(appName)
+	app := c.AppResources.FindActiveResourceByOriginalName(appName)
 	appManager := app.(*kube.AppManager)
 
 	cpu, mem, err := appManager.GetCPUAndMemory(true)

@@ -74,12 +74,14 @@ func TestDeployApp(t *testing.T) {
 
 	// assert
 	deploymentClient := client.Deployments(testNamespace)
-	deployment, _ := deploymentClient.Get(t.Context(), testApp.AppName, metav1.GetOptions{})
+	// Use the formatted name since deployments are created with FormatAppName
+	formattedName := FormatAppName(testApp.AppName)
+	deployment, _ := deploymentClient.Get(t.Context(), formattedName, metav1.GetOptions{})
 	assert.NotNil(t, deployment)
-	assert.Equal(t, testApp.AppName, deployment.ObjectMeta.Name)
+	assert.Equal(t, formattedName, deployment.ObjectMeta.Name)
 	assert.Equal(t, testNamespace, deployment.ObjectMeta.Namespace)
 	assert.Equal(t, int32(1), *deployment.Spec.Replicas)
-	assert.Equal(t, testApp.AppName, deployment.Spec.Selector.MatchLabels["testapp"])
+	assert.Equal(t, formattedName, deployment.Spec.Selector.MatchLabels["testapp"])
 	assert.Equal(t, "true", deployment.Spec.Template.ObjectMeta.Annotations["dapr.io/enabled"])
 	assert.Equal(t, testApp.AppName, deployment.Spec.Template.Spec.Containers[0].Name)
 	assert.Equal(t, "dapriotest/helloworld", deployment.Spec.Template.Spec.Containers[0].Image)
@@ -249,12 +251,13 @@ func TestScaleDeploymentReplica(t *testing.T) {
 
 func TestValidateSidecar(t *testing.T) {
 	testApp := testAppDescription()
+	formattedName := FormatAppName(testApp.AppName)
 
 	objMeta := metav1.ObjectMeta{
-		Name:      testApp.AppName,
+		Name:      formattedName,
 		Namespace: testNamespace,
 		Labels: map[string]string{
-			TestAppLabelKey: testApp.AppName,
+			TestAppLabelKey: formattedName,
 		},
 	}
 
@@ -356,6 +359,7 @@ func TestValidateSidecar(t *testing.T) {
 
 func TestCreateIngressService(t *testing.T) {
 	testApp := testAppDescription()
+	formattedName := FormatAppName(testApp.AppName)
 
 	t.Run("Ingress is disabled", func(t *testing.T) {
 		client := newDefaultFakeClient()
@@ -366,9 +370,9 @@ func TestCreateIngressService(t *testing.T) {
 		require.NoError(t, err)
 		// assert
 		serviceClient := client.Services(testNamespace)
-		obj, _ := serviceClient.Get(t.Context(), testApp.AppName, metav1.GetOptions{})
+		obj, _ := serviceClient.Get(t.Context(), formattedName, metav1.GetOptions{})
 		assert.NotNil(t, obj)
-		assert.Equal(t, testApp.AppName, obj.ObjectMeta.Name)
+		assert.Equal(t, formattedName, obj.ObjectMeta.Name)
 		assert.Equal(t, testNamespace, obj.ObjectMeta.Namespace)
 		assert.Equal(t, apiv1.ServiceTypeClusterIP, obj.Spec.Type)
 	})
@@ -382,9 +386,9 @@ func TestCreateIngressService(t *testing.T) {
 		require.NoError(t, err)
 		// assert
 		serviceClient := client.Services(testNamespace)
-		obj, _ := serviceClient.Get(t.Context(), testApp.AppName, metav1.GetOptions{})
+		obj, _ := serviceClient.Get(t.Context(), formattedName, metav1.GetOptions{})
 		assert.NotNil(t, obj)
-		assert.Equal(t, testApp.AppName, obj.ObjectMeta.Name)
+		assert.Equal(t, formattedName, obj.ObjectMeta.Name)
 		assert.Equal(t, testNamespace, obj.ObjectMeta.Namespace)
 		assert.Equal(t, apiv1.ServiceTypeLoadBalancer, obj.Spec.Type)
 	})

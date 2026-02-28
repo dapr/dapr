@@ -449,7 +449,7 @@ func TestServiceInvocation(t *testing.T) {
 			for _, tt := range serviceinvocationTests {
 				t.Run(tt.in, func(t *testing.T) {
 					body, err := json.Marshal(testCommandRequest{
-						RemoteApp: tt.remoteApp,
+						RemoteApp: kube.FormatAppID(tt.remoteApp),
 						Method:    tt.appMethod,
 					})
 					require.NoError(t, err)
@@ -470,7 +470,7 @@ func TestServiceInvocation(t *testing.T) {
 			for _, tt := range moreServiceinvocationTests {
 				t.Run(tt.in, func(t *testing.T) {
 					body, err := json.Marshal(testCommandRequest{
-						RemoteApp: tt.remoteApp,
+						RemoteApp: kube.FormatAppID(tt.remoteApp),
 						Method:    tt.appMethod,
 					})
 					require.NoError(t, err)
@@ -497,7 +497,7 @@ func TestServiceInvocation(t *testing.T) {
 			for _, tt := range serviceinvocationPathTests {
 				t.Run(tt.in, func(t *testing.T) {
 					body, err := json.Marshal(testCommandRequest{
-						RemoteApp: tt.remoteApp,
+						RemoteApp: kube.FormatAppID(tt.remoteApp),
 						Method:    tt.appMethod,
 					})
 					require.NoError(t, err)
@@ -522,7 +522,7 @@ func TestServiceInvocation(t *testing.T) {
 			for _, tt := range serviceInvocationRedirectTests {
 				t.Run(tt.in, func(t *testing.T) {
 					body, err := json.Marshal(testCommandRequest{
-						RemoteApp: tt.remoteApp,
+						RemoteApp: kube.FormatAppID(tt.remoteApp),
 						Method:    tt.appMethod,
 					})
 					require.NoError(t, err)
@@ -567,7 +567,7 @@ func TestServiceInvocationExternally(t *testing.T) {
 			if kubePlatform, ok := tr.Platform.(*runner.KubeTestPlatform); ok {
 				// To perform healthchecks, we need to first get the Load Balancer address
 				// Our tests will still use the hostname within the cluster for reliability reasons
-				app := kubePlatform.AppResources.FindActiveResource("serviceinvocation-callee-external").(*kube.AppManager)
+				app := kubePlatform.AppResources.FindActiveResourceByOriginalName("serviceinvocation-callee-external").(*kube.AppManager)
 				svc, err := app.WaitUntilServiceState("service-invocation-external", app.IsServiceIngressReady)
 				require.NoError(t, err)
 
@@ -585,7 +585,7 @@ func TestServiceInvocationExternally(t *testing.T) {
 			// invoke via overwritten URL to non-Daprized service
 			for _, tt := range externalServiceInvocationTests {
 				testCommandReq := testCommandRequest{
-					RemoteApp: tt.remoteApp,
+					RemoteApp: kube.FormatAppID(tt.remoteApp),
 					Method:    tt.appMethod,
 				}
 				switch tt.testType {
@@ -672,7 +672,7 @@ func TestGRPCProxy(t *testing.T) {
 	for _, tt := range grpcProxyTests {
 		t.Run(tt.in, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
-				RemoteApp: tt.remoteApp,
+				RemoteApp: kube.FormatAppID(tt.remoteApp),
 				Method:    tt.appMethod,
 			})
 			require.NoError(t, err)
@@ -749,7 +749,7 @@ func TestHeaders(t *testing.T) {
 
 			t.Run("grpc-to-grpc", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp: "grpcapp",
+					RemoteApp: kube.FormatAppID("grpcapp"),
 					Method:    "grpc-to-grpc",
 				})
 				require.NoError(t, err)
@@ -845,7 +845,7 @@ func TestHeaders(t *testing.T) {
 
 			t.Run("grpc-to-http", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp: "serviceinvocation-callee-0",
+					RemoteApp: kube.FormatAppID("serviceinvocation-callee-0"),
 					Method:    "grpc-to-http",
 				})
 				require.NoError(t, err)
@@ -922,7 +922,7 @@ func TestHeaders(t *testing.T) {
 
 			t.Run("http-to-grpc", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp: "grpcapp",
+					RemoteApp: kube.FormatAppID("grpcapp"),
 					Method:    "http-to-grpc",
 				})
 				require.NoError(t, err)
@@ -1028,7 +1028,7 @@ func TestHeaders(t *testing.T) {
 
 			t.Run("grpc-to-grpc-tracing", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "grpcapp",
+					RemoteApp:        kube.FormatAppID("grpcapp"),
 					Method:           "grpc-to-grpc-tracing",
 					RemoteAppTracing: "true",
 				})
@@ -1096,7 +1096,7 @@ func TestHeaders(t *testing.T) {
 
 			t.Run("http-to-grpc-tracing", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "grpcapp",
+					RemoteApp:        kube.FormatAppID("grpcapp"),
 					Method:           "http-to-grpc-tracing",
 					RemoteAppTracing: "true",
 				})
@@ -1134,7 +1134,7 @@ func TestHeaders(t *testing.T) {
 
 			t.Run("grpc-to-http-tracing", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "serviceinvocation-callee-0",
+					RemoteApp:        kube.FormatAppID("serviceinvocation-callee-0"),
 					Method:           "grpc-to-http-tracing",
 					RemoteAppTracing: "true",
 				})
@@ -1192,7 +1192,7 @@ func TestHeaders(t *testing.T) {
 
 func verifyHTTPToHTTPTracing(t *testing.T, url string, expectedTraceID string, remoteApp string) {
 	body, err := json.Marshal(testCommandRequest{
-		RemoteApp:        remoteApp,
+		RemoteApp:        kube.FormatAppID(remoteApp),
 		Method:           "http-to-http-tracing",
 		RemoteAppTracing: "true",
 	})
@@ -1234,7 +1234,7 @@ func verifyHTTPToHTTPTracing(t *testing.T, url string, expectedTraceID string, r
 
 func verifyHTTPToHTTP(t *testing.T, hostIP string, hostname string, url string, expectedForwarded string, remoteApp string) {
 	body, err := json.Marshal(testCommandRequest{
-		RemoteApp: remoteApp,
+		RemoteApp: kube.FormatAppID(remoteApp),
 		Method:    "http-to-http",
 	})
 	require.NoError(t, err)
@@ -1365,7 +1365,7 @@ func TestUppercaseMiddlewareServiceInvocation(t *testing.T) {
 			t.Run("uppercase middleware should be applied", func(t *testing.T) {
 				testMessage := guuid.New().String()
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp: "serviceinvocation-callee-2",
+					RemoteApp: kube.FormatAppID("serviceinvocation-callee-2"),
 					Method:    "httptohttptest",
 					Message:   &testMessage,
 				})
@@ -1439,7 +1439,7 @@ func TestNegativeCases(t *testing.T) {
 
 			t.Run("missing_method_http", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "serviceinvocation-callee-0",
+					RemoteApp:        kube.FormatAppID("serviceinvocation-callee-0"),
 					Method:           "missing",
 					RemoteAppTracing: "true",
 				})
@@ -1459,7 +1459,7 @@ func TestNegativeCases(t *testing.T) {
 
 			t.Run("missing_method_grpc", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "serviceinvocation-callee-0",
+					RemoteApp:        kube.FormatAppID("serviceinvocation-callee-0"),
 					Method:           "missing",
 					RemoteAppTracing: "true",
 				})
@@ -1523,7 +1523,7 @@ func TestNegativeCases(t *testing.T) {
 
 			t.Run("service_timeout_http", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "serviceinvocation-callee-0",
+					RemoteApp:        kube.FormatAppID("serviceinvocation-callee-0"),
 					Method:           "timeouterror",
 					RemoteAppTracing: "true",
 				})
@@ -1542,7 +1542,7 @@ func TestNegativeCases(t *testing.T) {
 
 			t.Run("service_timeout_grpc", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "serviceinvocation-callee-0",
+					RemoteApp:        kube.FormatAppID("serviceinvocation-callee-0"),
 					Method:           "timeouterror",
 					RemoteAppTracing: "true",
 				})
@@ -1565,7 +1565,7 @@ func TestNegativeCases(t *testing.T) {
 
 			t.Run("service_parse_error_http", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "serviceinvocation-callee-0",
+					RemoteApp:        kube.FormatAppID("serviceinvocation-callee-0"),
 					Method:           "parseerror",
 					RemoteAppTracing: "true",
 				})
@@ -1584,7 +1584,7 @@ func TestNegativeCases(t *testing.T) {
 
 			t.Run("service_parse_error_grpc", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "serviceinvocation-callee-0",
+					RemoteApp:        kube.FormatAppID("serviceinvocation-callee-0"),
 					Method:           "parseerror",
 					RemoteAppTracing: "true",
 				})
@@ -1604,7 +1604,7 @@ func TestNegativeCases(t *testing.T) {
 
 			t.Run("service_large_data_http", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "serviceinvocation-callee-0",
+					RemoteApp:        kube.FormatAppID("serviceinvocation-callee-0"),
 					Method:           "largedatahttp",
 					RemoteAppTracing: "true",
 				})
@@ -1635,7 +1635,7 @@ func TestNegativeCases(t *testing.T) {
 
 			t.Run("service_large_data_grpc", func(t *testing.T) {
 				body, err := json.Marshal(testCommandRequest{
-					RemoteApp:        "serviceinvocation-callee-0",
+					RemoteApp:        kube.FormatAppID("serviceinvocation-callee-0"),
 					Method:           "largedatagrpc",
 					RemoteAppTracing: "true",
 				})
@@ -1750,7 +1750,7 @@ func TestCrossNamespaceCases(t *testing.T) {
 			t.Logf("externalURL is '%s'\n", externalURL)
 
 			for _, tt := range crossNamespaceTests {
-				remoteAppFQ := fmt.Sprintf("%s.%s", tt.remoteApp, secondaryNamespace)
+				remoteAppFQ := fmt.Sprintf("%s.%s", kube.FormatAppID(tt.remoteApp), secondaryNamespace)
 				t.Run(tt.in, func(t *testing.T) {
 					body, err := json.Marshal(testCommandRequest{
 						RemoteApp: remoteAppFQ,
@@ -1801,7 +1801,7 @@ func TestPathURLNormalization(t *testing.T) {
 	} {
 		t.Run(path, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
-				RemoteApp: "serviceinvocation-callee-0",
+				RemoteApp: kube.FormatAppID("serviceinvocation-callee-0"),
 				Method:    "normalization",
 			})
 			require.NoError(t, err)

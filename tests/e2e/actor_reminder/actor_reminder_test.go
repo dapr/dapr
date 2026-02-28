@@ -43,13 +43,23 @@ const (
 	numHealthChecks              = 60                               // Number of get calls before starting tests.
 	numActorsPerThread           = 10                               // Number of get calls before starting tests.
 	secondsToCheckReminderResult = 20                               // How much time to wait to make sure the result is in logs.
-	actorName                    = "testactorreminder"              // Actor name
-	actorNameMis                 = "testactorremindermiss"          // Actor name
+	baseActorName                = "testactorreminder"              // Base actor name (will be formatted with TestID)
+	baseActorNameMis             = "testactorremindermiss"          // Base actor name for misconfigured app
 	actorInvokeURLFormat         = "%s/test/%s/%s/%s/%s"            // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat           = "%s/test/logs"                   // URL to fetch logs from test app.
 	shutdownURLFormat            = "%s/test/shutdown"               // URL to shutdown sidecar and app.
 	misconfiguredAppName         = "actor-reminder-no-state-store"  // Actor-reminder app without a state store (should fail to start)
 )
+
+// formattedActorName returns the actor name with TestID for parallel test isolation.
+func formattedActorName() string {
+	return kube.FormatAppID(baseActorName)
+}
+
+// formattedActorNameMis returns the misconfigured actor name with TestID.
+func formattedActorNameMis() string {
+	return kube.FormatAppID(baseActorNameMis)
+}
 
 // represents a response for the APIs in this app.
 type actorLogEntry struct {
@@ -123,7 +133,7 @@ func TestMain(m *testing.M) {
 			AppCPULimit:         "2.0",
 			AppCPURequest:       "0.1",
 			AppEnv: map[string]string{
-				"TEST_APP_ACTOR_TYPE": actorName,
+				"TEST_APP_ACTOR_TYPE": kube.FormatAppID(baseActorName),
 			},
 		},
 		{
@@ -139,7 +149,7 @@ func TestMain(m *testing.M) {
 			AppCPULimit:         "2.0",
 			AppCPURequest:       "0.1",
 			AppEnv: map[string]string{
-				"TEST_APP_ACTOR_TYPE": actorNameMis,
+				"TEST_APP_ACTOR_TYPE": kube.FormatAppID(baseActorNameMis),
 			},
 		},
 	}
@@ -149,10 +159,10 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorReminder(t *testing.T) {
-	testActorReminder(t, appName, actorName)
-	testActorReminderTTL(t, appName, actorName)
-	testActorReminderNonHostedActor(t, appName, actorName)
-	testActorReminderPeriod(t, appName, actorName)
+	testActorReminder(t, appName, formattedActorName())
+	testActorReminderTTL(t, appName, formattedActorName())
+	testActorReminderNonHostedActor(t, appName, formattedActorName())
+	testActorReminderPeriod(t, appName, formattedActorName())
 }
 
 func testActorReminder(t *testing.T, appName, actorName string) {

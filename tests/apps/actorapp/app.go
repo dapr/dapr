@@ -20,6 +20,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -33,11 +34,19 @@ const (
 	daprV1URL            = "http://localhost:3500/v1.0"
 	actorMethodURLFormat = daprV1URL + "/actors/%s/%s/method/%s"
 
-	registeredActorType     = "testactor" // Actor type must be unique per test app.
+	defaultActorType        = "testactor" // Default actor type (can be overridden via TEST_APP_ACTOR_TYPE env var).
 	actorIdleTimeout        = "5s"        // Short idle timeout.
 	drainOngoingCallTimeout = "1s"
 	drainRebalancedActors   = true
 )
+
+// registeredActorType returns the actor type, supporting env var override for parallel test isolation.
+func getRegisteredActorType() string {
+	if t := os.Getenv("TEST_APP_ACTOR_TYPE"); t != "" {
+		return t
+	}
+	return defaultActorType
+}
 
 type daprActor struct {
 	actorType string
@@ -60,11 +69,13 @@ type daprConfig struct {
 	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }
 
-var daprConfigResponse = daprConfig{
-	[]string{registeredActorType},
-	actorIdleTimeout,
-	drainOngoingCallTimeout,
-	drainRebalancedActors,
+func getDaprConfigResponse() daprConfig {
+	return daprConfig{
+		[]string{getRegisteredActorType()},
+		actorIdleTimeout,
+		drainOngoingCallTimeout,
+		drainRebalancedActors,
+	}
 }
 
 var (
@@ -108,7 +119,7 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(daprConfigResponse)
+	json.NewEncoder(w).Encode(getDaprConfigResponse())
 }
 
 func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +154,7 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
 
-	if actorType != registeredActorType {
+	if actorType != getRegisteredActorType() {
 		log.Printf("Unknown actor type: %s", actorType)
 		w.WriteHeader(http.StatusBadRequest)
 		return

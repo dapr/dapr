@@ -32,11 +32,19 @@ import (
 
 const (
 	actorMethodURLFormat    = "http://localhost:%d/v1.0/actors/%s/%s/method/%s"
-	defaultActorType        = "reentrantActor"
+	baseActorType           = "reentrantActor" // Base actor type (can be overridden via TEST_APP_ACTOR_TYPE env var).
 	actorIdleTimeout        = "1h"
 	drainOngoingCallTimeout = "30s"
 	drainRebalancedActors   = true
 )
+
+// getActorType returns the actor type, supporting env var override for parallel test isolation.
+func getActorType() string {
+	if t := os.Getenv("TEST_APP_ACTOR_TYPE"); t != "" {
+		return t
+	}
+	return baseActorType
+}
 
 var (
 	appPort      = 22222
@@ -92,21 +100,24 @@ var (
 	maxStackDepth  = 5
 )
 
-var daprConfigResponse = daprConfig{
-	Entities:                []string{defaultActorType},
-	ActorIdleTimeout:        actorIdleTimeout,
-	DrainOngoingCallTimeout: drainOngoingCallTimeout,
-	DrainRebalancedActors:   drainRebalancedActors,
-	Reentrancy:              config.ReentrancyConfig{Enabled: false},
-	EntitiesConfig: []config.EntityConfig{
-		{
-			Entities: []string{defaultActorType},
-			Reentrancy: config.ReentrancyConfig{
-				Enabled:       true,
-				MaxStackDepth: &maxStackDepth,
+func getDaprConfigResponse() daprConfig {
+	actorType := getActorType()
+	return daprConfig{
+		Entities:                []string{actorType},
+		ActorIdleTimeout:        actorIdleTimeout,
+		DrainOngoingCallTimeout: drainOngoingCallTimeout,
+		DrainRebalancedActors:   drainRebalancedActors,
+		Reentrancy:              config.ReentrancyConfig{Enabled: false},
+		EntitiesConfig: []config.EntityConfig{
+			{
+				Entities: []string{actorType},
+				Reentrancy: config.ReentrancyConfig{
+					Enabled:       true,
+					MaxStackDepth: &maxStackDepth,
+				},
 			},
 		},
-	},
+	}
 }
 
 func resetLogs() {
@@ -154,11 +165,12 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing dapr request for %s, responding with %v", r.URL.RequestURI(), daprConfigResponse)
+	configResp := getDaprConfigResponse()
+	log.Printf("Processing dapr request for %s, responding with %v", r.URL.RequestURI(), configResp)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(daprConfigResponse)
+	json.NewEncoder(w).Encode(configResp)
 }
 
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
