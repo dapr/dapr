@@ -518,7 +518,7 @@ func TestInvokeMethod(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
-		assert.Equal(t, "", string(body))
+		assert.Empty(t, string(body))
 	})
 }
 
@@ -695,7 +695,7 @@ func TestContentType(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
-		assert.Equal(t, "", resp.ContentType())
+		assert.Empty(t, resp.ContentType())
 		assert.Equal(t, []byte{}, body)
 		testServer.Close()
 	})

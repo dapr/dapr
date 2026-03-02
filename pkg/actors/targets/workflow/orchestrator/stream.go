@@ -54,7 +54,7 @@ func (o *orchestrator) handleStream(ctx context.Context,
 		})
 		if err != nil || ok {
 			if api.OrchestrationMetadataIsComplete(ometa) {
-				o.factory.deactivate(o)
+				o.deactivate(o)
 			}
 			return false, err
 		}

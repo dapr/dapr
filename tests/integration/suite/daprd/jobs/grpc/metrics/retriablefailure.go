@@ -31,7 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -76,13 +75,13 @@ func (r *retriablefailure) Run(t *testing.T, ctx context.Context) {
 		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:    "retriablefailure",
-				DueTime: ptr.Of("0s"),
+				DueTime: new("0s"),
 				Data:    data,
 				FailurePolicy: &corev1pb.JobFailurePolicy{
 					Policy: &corev1pb.JobFailurePolicy_Constant{
 						Constant: &corev1pb.JobFailurePolicyConstant{
 							Interval:   nil,
-							MaxRetries: ptr.Of(uint32(3)),
+							MaxRetries: new(uint32(3)),
 						},
 					},
 				},

@@ -80,7 +80,7 @@ func (d *disk[T]) Load(context.Context) ([]T, error) {
 
 		// Skip manifests which are not in scope
 		scopes := set.ts[i].GetScopes()
-		if !(len(scopes) == 0 || utils.Contains(scopes, d.appID)) {
+		if len(scopes) != 0 && !utils.Contains(scopes, d.appID) {
 			continue
 		}
 

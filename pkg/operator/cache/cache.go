@@ -65,9 +65,9 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 					return i, nil
 				}
 
-				if operatormeta.IsAnnotatedForDapr(obj.ObjectMeta.GetAnnotations()) && !operatormeta.IsSidecarPresent(obj.ObjectMeta.GetLabels()) {
+				if operatormeta.IsAnnotatedForDapr(obj.GetAnnotations()) && !operatormeta.IsSidecarPresent(obj.GetLabels()) {
 					objClone := obj.DeepCopy()
-					objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
+					objClone.ManagedFields = []metav1.ManagedFieldsEntry{}
 					objClone.Status = podEmptyStatus
 					return objClone, nil
 				}
@@ -88,10 +88,10 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 				}
 
 				// slim down dapr deployments and sinkhole non-dapr ones
-				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
+				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.GetAnnotations()) {
 					// keep metadata but remove the rest
 					objClone := obj.DeepCopy()
-					objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
+					objClone.ManagedFields = []metav1.ManagedFieldsEntry{}
 					objClone.Spec.Template.Spec = podEmptySpec
 					objClone.Status = deployEmptyStatus
 					return objClone, nil
@@ -107,10 +107,10 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 					return i, nil
 				}
 
-				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
+				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.GetAnnotations()) {
 					// keep metadata but remove the rest
 					objClone := obj.DeepCopy()
-					objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
+					objClone.ManagedFields = []metav1.ManagedFieldsEntry{}
 					objClone.Spec.Template.Spec = podEmptySpec
 					objClone.Status = stsEmptyStatus
 					return objClone, nil

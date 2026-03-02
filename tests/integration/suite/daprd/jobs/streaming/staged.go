@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/cluster"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -84,9 +83,9 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 	name2 := uuid.New().String()
 	_, err := s.daprdA.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
-			Name: name1, Schedule: ptr.Of("@every 1s"),
-			DueTime: ptr.Of(time.Now().Format(time.RFC3339)),
-			Repeats: ptr.Of(uint32(2)),
+			Name: name1, Schedule: new("@every 1s"),
+			DueTime: new(time.Now().Format(time.RFC3339)),
+			Repeats: new(uint32(2)),
 		},
 	})
 	require.NoError(t, err)
@@ -110,7 +109,7 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 
 	_, err = s.schedulers.Client(t, ctx).ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
 		Name: name2,
-		Job:  &schedulerv1.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
+		Job:  &schedulerv1.Job{DueTime: new(time.Now().Format(time.RFC3339))},
 		Metadata: &schedulerv1.JobMetadata{
 			AppId: s.daprdB.AppID(), Namespace: s.daprdB.Namespace(),
 			Target: &schedulerv1.JobTargetMetadata{

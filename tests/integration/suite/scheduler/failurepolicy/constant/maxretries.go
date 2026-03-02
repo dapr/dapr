@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -54,7 +53,7 @@ func (m *maxretires) Run(t *testing.T, ctx context.Context) {
 		Policy: &corev1.JobFailurePolicy_Constant{
 			Constant: &corev1.JobFailurePolicyConstant{
 				Interval:   nil,
-				MaxRetries: ptr.Of(uint32(4)),
+				MaxRetries: new(uint32(4)),
 			},
 		},
 	}

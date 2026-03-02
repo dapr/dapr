@@ -139,7 +139,7 @@ E2E tests require a running Kubernetes cluster with Dapr installed. See `tests/d
 make lint
 ```
 
-Uses `golangci-lint` **v1.64.6** with build tags `allcomponents,subtlecrypto`. Always use this exact version to avoid false errors. Download from: https://github.com/golangci/golangci-lint/releases/tag/v1.64.6
+Uses `golangci-lint` **v2.10.1** with build tags `allcomponents,subtlecrypto`. Always use this exact version to avoid false errors. Download from: https://github.com/golangci/golangci-lint/releases/tag/v2.10.1
 
 **Auto-fix issues**:
 ```sh
@@ -273,7 +273,7 @@ The main CI workflow (`.github/workflows/dapr.yml`) runs on every PR to `main`/`
 
 **Common CI failure causes and fixes**:
 - `make modtidy check-diff` failure: run `make modtidy` locally and commit the updated `go.mod`/`go.sum`
-- Lint failure: run `make lint-fix` and fix remaining issues; ensure you are using `golangci-lint` v1.64.6
+- Lint failure: run `make lint-fix` and fix remaining issues; ensure you are using `golangci-lint` v2.10.1
 - Missing license header: add the Apache 2.0 header to new files
 - Build tag missing from test file: add `//go:build unit` to unit test files
 

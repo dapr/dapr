@@ -256,9 +256,11 @@ func (p *Processor) Process(ctx context.Context) error {
 			close(p.closedCh)
 			p.chlock.Lock()
 			defer p.chlock.Unlock()
+
 			p.shutdown.Store(true)
 			close(p.pendingComponents)
 			close(p.pendingHTTPEndpoints)
+
 			return nil
 		},
 	).Run(ctx)

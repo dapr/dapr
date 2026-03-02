@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -115,7 +114,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 		_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     strconv.Itoa(i),
-				Schedule: ptr.Of("@every 1s"),
+				Schedule: new("@every 1s"),
 			},
 		})
 		require.NoError(t, err)

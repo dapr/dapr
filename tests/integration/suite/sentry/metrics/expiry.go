@@ -95,7 +95,7 @@ func (e *expiry) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		for _, line := range bytes.Split(respBody, []byte("\n")) {
+		for line := range bytes.SplitSeq(respBody, []byte("\n")) {
 			if len(line) == 0 || line[0] == '#' {
 				continue
 			}

@@ -27,7 +27,6 @@ import (
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 	kittime "github.com/dapr/kit/time"
 )
 
@@ -72,11 +71,11 @@ func New(opts Options) Interface {
 func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequest) error {
 	var dueTime *string
 	if len(reminder.DueTime) > 0 {
-		dueTime = ptr.Of(reminder.DueTime)
+		dueTime = new(reminder.DueTime)
 	}
 	var ttl *string
 	if len(reminder.TTL) > 0 {
-		ttl = ptr.Of(reminder.TTL)
+		ttl = new(reminder.TTL)
 	}
 
 	schedule, repeats, err := scheduleFromPeriod(reminder.Period)
@@ -141,10 +140,10 @@ func scheduleFromPeriod(period string) (*string, *uint32, error) {
 	if repetition > 0 {
 		//TODO: fix types
 		//nolint:gosec
-		repeats = ptr.Of(uint32(repetition))
+		repeats = new(uint32(repetition))
 	}
 
-	return ptr.Of("@every " + duration.String()), repeats, nil
+	return new("@every " + duration.String()), repeats, nil
 }
 
 func (s *scheduler) Close() error {
@@ -232,7 +231,7 @@ func (s *scheduler) Delete(ctx context.Context, req *api.DeleteReminderRequest) 
 
 func (s *scheduler) DeleteByActorID(ctx context.Context, req *api.DeleteRemindersByActorIDRequest) error {
 	_, err := s.client.DeleteByMetadata(ctx, &schedulerv1pb.DeleteByMetadataRequest{
-		IdPrefixMatch: ptr.Of(req.MatchIDAsPrefix),
+		IdPrefixMatch: new(req.MatchIDAsPrefix),
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,
 			Namespace: s.namespace,

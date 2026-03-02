@@ -160,14 +160,12 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 		Authorizer:    d.authorizer,
 	})
 
-	d.wg.Add(1)
-	go func() {
-		defer d.wg.Done()
+	d.wg.Go(func() {
 		derr := streamLoop.Run(ctx)
 		if derr != nil {
 			log.Errorf("Stream loop for stream %s:%d exited with error: %v", d.namespace, streamIDx, derr)
 		}
-	}()
+	})
 
 	stream := &streamConn{
 		loop:         streamLoop,

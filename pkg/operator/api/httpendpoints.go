@@ -201,11 +201,9 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 			if !ok {
 				return nil
 			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				updateHTTPEndpointFunc(srv.Context(), c)
-			}()
+			})
 		}
 	}
 }

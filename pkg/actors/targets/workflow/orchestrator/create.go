@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"google.golang.org/protobuf/proto"
 
@@ -157,10 +158,5 @@ func (o *orchestrator) isSameParentCreation(state *wfenginestate.State, startEve
 }
 
 func isStatusMatch(statuses []api.OrchestrationStatus, runtimeStatus api.OrchestrationStatus) bool {
-	for _, status := range statuses {
-		if status == runtimeStatus {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(statuses, runtimeStatus)
 }

@@ -85,8 +85,8 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 		IsCA:                  true,
 	}
 
-	hosts := strings.Split(host, ",")
-	for _, h := range hosts {
+	hosts := strings.SplitSeq(host, ",")
+	for h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
 			certTemplate.IPAddresses = append(certTemplate.IPAddresses, ip)
 		} else {

@@ -128,7 +128,7 @@ func (e *executor) InvokeStream(ctx context.Context,
 
 func (e *executor) watchComplete(ctx context.Context, stream func(*internalsv1pb.InternalInvokeResponse) (bool, error)) error {
 	defer func() {
-		e.factory.deactivateCh <- e
+		e.deactivateCh <- e
 	}()
 
 	select {

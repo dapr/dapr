@@ -36,7 +36,6 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 	"github.com/dapr/kit/strings"
 )
 
@@ -69,7 +68,7 @@ func (a *app) doInvokeMethod(ctx context.Context, req *internalv1pb.InternalInvo
 	}
 	defer cancel()
 
-	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
+	a.idleAt.Store(new(a.clock.Now().Add(a.idleTimeout)))
 	a.idlerQueue.Enqueue(a)
 
 	imReq, err := invokev1.FromInternalInvokeRequest(req)

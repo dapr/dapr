@@ -175,7 +175,7 @@ func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *In
 func (imr *InvokeMethodRequest) WithReplay(enabled bool) *InvokeMethodRequest {
 	// If the object has data in-memory, WithReplay is a nop
 	if !imr.HasMessageData() {
-		imr.replayableRequest.SetReplay(enabled)
+		imr.SetReplay(enabled)
 	}
 	return imr
 }

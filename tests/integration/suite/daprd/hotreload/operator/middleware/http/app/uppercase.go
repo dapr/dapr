@@ -308,10 +308,10 @@ func (u *uppercase) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 		comp3 := comp2.DeepCopy()
-		comp3.ObjectMeta.Name = "uppercase"
-		comp3.ObjectMeta.Namespace = "ns2"
+		comp3.Name = "uppercase"
+		comp3.Namespace = "ns2"
 		comp4 := comp3.DeepCopy()
-		comp4.ObjectMeta.Namespace = "ns3"
+		comp4.Namespace = "ns3"
 
 		u.operator.SetComponents()
 		u.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: comp1, EventType: operatorv1.ResourceEventType_DELETED})

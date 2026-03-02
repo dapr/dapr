@@ -41,7 +41,7 @@ func New() *Store {
 
 func (s *Store) Add(opts Options) context.CancelFunc {
 	// We don't know how many allocations we will have!
-	//nolint:prealloc
+
 	var fns []context.CancelFunc
 
 	if opts.AppID != nil {
