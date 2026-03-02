@@ -43,7 +43,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
-	"github.com/dapr/kit/ptr"
 )
 
 type Sentry struct {
@@ -73,7 +72,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		writeBundle: true,
 		writeConfig: true,
 		oidc: oidcOptions{
-			serverListenPort: ptr.Of(fp.Port(t)),
+			serverListenPort: new(fp.Port(t)),
 		},
 	}
 

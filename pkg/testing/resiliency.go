@@ -15,7 +15,6 @@ package testing
 
 import (
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	"github.com/dapr/kit/ptr"
 )
 
 var TestResiliency = &v1alpha1.Resiliency{
@@ -23,7 +22,7 @@ var TestResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  ptr.Of(1),
+					MaxRetries:  new(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",

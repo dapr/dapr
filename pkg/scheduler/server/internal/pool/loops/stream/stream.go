@@ -84,16 +84,14 @@ func New(ctx context.Context, opts Options) (loop.Interface[loops.Event], error)
 
 	stream.loop = streamLoopFactory.NewLoop(stream)
 
-	stream.wg.Add(1)
-	go func() {
+	stream.wg.Go(func() {
 		stream.recvLoop()
 		log.Debugf("Closed receive stream to %s/%s", stream.ns, stream.appID)
 		stream.nsLoop.Enqueue(&loops.ConnCloseStream{
 			StreamIDx: stream.idx,
 			Namespace: stream.ns,
 		})
-		stream.wg.Done()
-	}()
+	})
 
 	return stream.loop, nil
 }

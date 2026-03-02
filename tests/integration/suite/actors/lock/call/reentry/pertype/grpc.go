@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -53,7 +52,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 			return
 		}
 		if g.rid.Load() == nil {
-			g.rid.Store(ptr.Of(r.Header.Get("Dapr-Reentrancy-Id")))
+			g.rid.Store(new(r.Header.Get("Dapr-Reentrancy-Id")))
 		}
 		g.called.Append(r.URL.Path)
 		<-g.holdCall
@@ -67,11 +66,11 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		actors.WithReentryMaxDepth(2),
 		actors.WithEntityConfig(
 			actors.WithEntityConfigEntities("abc", "efg"),
-			actors.WithEntityConfigReentrancy(true, ptr.Of(uint32(23))),
+			actors.WithEntityConfigReentrancy(true, new(uint32(23))),
 		),
 		actors.WithEntityConfig(
 			actors.WithEntityConfigEntities("xyz"),
-			actors.WithEntityConfigReentrancy(true, ptr.Of(uint32(12))),
+			actors.WithEntityConfigReentrancy(true, new(uint32(12))),
 		),
 	)
 	return []framework.Option{

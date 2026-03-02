@@ -56,6 +56,7 @@ func (s *streaming) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) 
 	if err != nil {
 		return err
 	}
+
 	elapsed := diag.ElapsedSince(start)
 
 	switch resp.GetStatus().GetStatus() {
@@ -71,6 +72,7 @@ func (s *streaming) Deliver(ctx context.Context, msg *pubsub.SubscribedMessage) 
 	case rtv1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", msg.CloudEvent[contribpubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Drop)), "", msg.Topic, elapsed)
+
 		return pubsub.ErrMessageDropped
 	default:
 		// Consider unknown status field as error and retry

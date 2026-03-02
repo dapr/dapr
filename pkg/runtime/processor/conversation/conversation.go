@@ -51,9 +51,10 @@ func New(opts Options) *conversation {
 func (c *conversation) Init(ctx context.Context, comp compapi.Component) error {
 	// create the component
 	fName := comp.LogName()
+
 	conversate, err := c.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
@@ -64,17 +65,17 @@ func (c *conversation) Init(ctx context.Context, comp compapi.Component) error {
 	// initialization
 	meta, err := c.meta.ToBaseMetadata(comp)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	err = conversate.Init(ctx, contribconversation.Metadata{Base: meta})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
-	c.store.AddConversation(comp.ObjectMeta.Name, conversate)
+	c.store.AddConversation(comp.Name, conversate)
 
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
@@ -82,16 +83,17 @@ func (c *conversation) Init(ctx context.Context, comp compapi.Component) error {
 }
 
 func (c *conversation) Close(comp compapi.Component) error {
-	conversate, ok := c.store.GetConversation(comp.ObjectMeta.Name)
+	conversate, ok := c.store.GetConversation(comp.Name)
 	if !ok {
 		return nil
 	}
 
-	defer c.store.DeleteConversation(comp.ObjectMeta.Name)
+	defer c.store.DeleteConversation(comp.Name)
 
 	closer, ok := conversate.(io.Closer)
 	if ok && closer != nil {
-		if err := closer.Close(); err != nil {
+		err := closer.Close()
+		if err != nil {
 			return err
 		}
 	}

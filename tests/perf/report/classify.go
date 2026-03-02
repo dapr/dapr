@@ -76,7 +76,7 @@ func buildTestModes(root string) map[string]string {
 		}
 
 		// map func name to mode
-		for _, line := range strings.Split(src, "\n") {
+		for line := range strings.SplitSeq(src, "\n") {
 			l := strings.TrimSpace(line)
 			if strings.HasPrefix(l, "func Test") && strings.Contains(l, "(t *testing.T)") {
 				name := l[len("func "):]

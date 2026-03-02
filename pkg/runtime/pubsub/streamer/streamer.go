@@ -78,6 +78,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 	if s.subscribers[key] == nil {
 		s.subscribers[key] = make(Connections)
 	}
+
 	s.subscribers[key][connectionID] = connection
 
 	log.Infof("Subscribing to pubsub '%s' topic '%s' ConnectionID %d", req.GetPubsubName(), req.GetTopic(), connectionID)
@@ -90,8 +91,10 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 		default:
 			close(connection.closeCh)
 		}
+
 		if connections, ok := s.subscribers[key]; ok {
 			delete(connections, connectionID)
+
 			if len(connections) == 0 {
 				delete(s.subscribers, key)
 			}
@@ -101,11 +104,13 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 
 	// TODO: @joshvanl: remove after pubsub refactor.
 	errCh := make(chan error, 2)
+
 	go func() {
 		select {
 		case <-s.closeCh:
 			connection.lock.Lock()
 			connection.closed.Store(true)
+
 			if len(connection.publishResponses) == 0 {
 				errCh <- errors.New("stream closed")
 			}
@@ -117,12 +122,14 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 
 	go func() {
 		var err error
+
 		select {
 		case <-connection.closeCh:
 			err = errors.New("stream closed")
 		case <-stream.Context().Done():
 			err = stream.Context().Err()
 		}
+
 		errCh <- err
 	}()
 
@@ -170,6 +177,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	key := s.StreamerKey(msg.PubSub, msg.Topic)
 	connection, ok := s.subscribers[key][msg.SubscriberID]
 	s.lock.RUnlock()
+
 	if !ok {
 		return nil, fmt.Errorf("no streamer subscribed to pubsub %q topic %q", msg.PubSub, msg.Topic)
 	}
@@ -190,6 +198,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	defer cleanup()
 
 	start := time.Now()
+
 	connection.streamLock.Lock()
 	err = connection.stream.Send(&rtv1pb.SubscribeTopicEventsResponseAlpha1{
 		SubscribeTopicEventsResponseType: &rtv1pb.SubscribeTopicEventsResponseAlpha1_EventMessage{
@@ -197,6 +206,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 		},
 	})
 	connection.streamLock.Unlock()
+
 	elapsed := diag.ElapsedSince(start)
 
 	if span != nil {
@@ -210,6 +220,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", msg.CloudEvent[contribpubsub.IDField], rterrors.NewRetriable(err))
 		log.Debug(err)
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
+
 		return nil, err
 	}
 

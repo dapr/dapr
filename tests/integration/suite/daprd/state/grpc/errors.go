@@ -345,7 +345,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	// Covers errutils.StateStoreTooManyTransactionalOps()
 	t.Run("state store too many transactional operations", func(t *testing.T) {
 		stateStoreName := "mystore-pluggable-multimaxsize"
-		ops := make([]*rtv1.TransactionalStateOperation, 0)
+		ops := make([]*rtv1.TransactionalStateOperation, 0, 2)
 		ops = append(ops, &rtv1.TransactionalStateOperation{
 			OperationType: "upsert",
 			Request: &commonv1.StateItem{
@@ -405,7 +405,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	// Covers errutils.StateStoreTransactionsNotSupported()
 	t.Run("state transactions not supported", func(t *testing.T) {
 		stateStoreName := "mystore-non-transactional"
-		ops := make([]*rtv1.TransactionalStateOperation, 0)
+		ops := make([]*rtv1.TransactionalStateOperation, 0, 2)
 		ops = append(ops, &rtv1.TransactionalStateOperation{
 			OperationType: "upsert",
 			Request: &commonv1.StateItem{

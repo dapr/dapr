@@ -118,19 +118,19 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 
 	service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 	require.NotNil(t, service)
-	assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
-	assert.Equal(t, "true", service.ObjectMeta.Annotations["prometheus.io/scrape"])
-	assert.Equal(t, "12345", service.ObjectMeta.Annotations["prometheus.io/port"])
-	assert.Equal(t, "/", service.ObjectMeta.Annotations["prometheus.io/path"])
+	assert.Equal(t, "test", service.Annotations[annotations.KeyAppID])
+	assert.Equal(t, "true", service.Annotations["prometheus.io/scrape"])
+	assert.Equal(t, "12345", service.Annotations["prometheus.io/port"])
+	assert.Equal(t, "/", service.Annotations["prometheus.io/path"])
 
 	deployment.GetTemplateAnnotations()[annotations.KeyEnableMetrics] = "false"
 
 	service = testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 	require.NotNil(t, service)
-	assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
-	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/scrape"])
-	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/port"])
-	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/path"])
+	assert.Equal(t, "test", service.Annotations[annotations.KeyAppID])
+	assert.Empty(t, service.Annotations["prometheus.io/scrape"])
+	assert.Empty(t, service.Annotations["prometheus.io/port"])
+	assert.Empty(t, service.Annotations["prometheus.io/path"])
 }
 
 func TestCreateDaprServiceAppIDAndPortsOverride(t *testing.T) {
@@ -146,7 +146,7 @@ func TestCreateDaprServiceAppIDAndPortsOverride(t *testing.T) {
 
 	service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 	require.NotNil(t, service)
-	assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
+	assert.Equal(t, "test", service.Annotations[annotations.KeyAppID])
 	assert.Equal(t, int32(12345), service.Spec.Ports[1].Port)
 	assert.Equal(t, intstr.FromInt(12345), service.Spec.Ports[1].TargetPort)
 	assert.Equal(t, int32(12346), service.Spec.Ports[2].Port)
@@ -168,10 +168,10 @@ func TestCreateDaprServiceWithCustomAnnotations(t *testing.T) {
 		service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 
 		require.NotNil(t, service)
-		assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
-		assert.Equal(t, "example-app", service.ObjectMeta.Annotations["com.example.policy.app"])
-		assert.Equal(t, "production", service.ObjectMeta.Annotations["com.example.policy.env"])
-		assert.Equal(t, "platform", service.ObjectMeta.Annotations["com.example.policy.team"])
+		assert.Equal(t, "test", service.Annotations[annotations.KeyAppID])
+		assert.Equal(t, "example-app", service.Annotations["com.example.policy.app"])
+		assert.Equal(t, "production", service.Annotations["com.example.policy.env"])
+		assert.Equal(t, "platform", service.Annotations["com.example.policy.team"])
 	})
 
 	t.Run("empty annotation value ignored", func(t *testing.T) {
@@ -181,7 +181,7 @@ func TestCreateDaprServiceWithCustomAnnotations(t *testing.T) {
 		service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 
 		require.NotNil(t, service)
-		assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
+		assert.Equal(t, "test", service.Annotations[annotations.KeyAppID])
 	})
 
 	t.Run("Malformed custom annotations", func(t *testing.T) {
@@ -192,9 +192,9 @@ func TestCreateDaprServiceWithCustomAnnotations(t *testing.T) {
 		service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 		require.NotNil(t, service)
 
-		assert.Equal(t, "true", service.ObjectMeta.Annotations["valid"])
-		assert.Equal(t, "trimmed", service.ObjectMeta.Annotations["spaces"])
-		_, exists := service.ObjectMeta.Annotations["badstring"]
+		assert.Equal(t, "true", service.Annotations["valid"])
+		assert.Equal(t, "trimmed", service.Annotations["spaces"])
+		_, exists := service.Annotations["badstring"]
 		assert.False(t, exists, "Malformed annotation should be ignored")
 	})
 
@@ -206,12 +206,12 @@ func TestCreateDaprServiceWithCustomAnnotations(t *testing.T) {
 		service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
 		require.NotNil(t, service)
 
-		assert.Equal(t, "true", service.ObjectMeta.Annotations["valid"])
-		assert.Equal(t, "yes", service.ObjectMeta.Annotations["custom.io/allowed"])
-		assert.Equal(t, "attack", service.ObjectMeta.Annotations["dapr.io/sneaky"])
-		assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
-		assert.Equal(t, "true", service.ObjectMeta.Annotations["prometheus.io/scrape"], "prometheus.io/scrape should be operator-managed")
-		assert.Equal(t, "ok", service.ObjectMeta.Annotations["prometheus.io/custom-extra"])
+		assert.Equal(t, "true", service.Annotations["valid"])
+		assert.Equal(t, "yes", service.Annotations["custom.io/allowed"])
+		assert.Equal(t, "attack", service.Annotations["dapr.io/sneaky"])
+		assert.Equal(t, "test", service.Annotations[annotations.KeyAppID])
+		assert.Equal(t, "true", service.Annotations["prometheus.io/scrape"], "prometheus.io/scrape should be operator-managed")
+		assert.Equal(t, "ok", service.Annotations["prometheus.io/custom-extra"])
 	})
 }
 
@@ -238,9 +238,9 @@ func TestPatchDaprService(t *testing.T) {
 	var actualService corev1.Service
 	err = cli.Get(ctx, myDaprService, &actualService)
 	require.NoError(t, err)
-	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[annotations.KeyAppID])
-	assert.Equal(t, "true", actualService.ObjectMeta.Annotations["prometheus.io/scrape"])
-	assert.Equal(t, "/", actualService.ObjectMeta.Annotations["prometheus.io/path"])
+	assert.Equal(t, "test", actualService.Annotations[annotations.KeyAppID])
+	assert.Equal(t, "true", actualService.Annotations["prometheus.io/scrape"])
+	assert.Equal(t, "/", actualService.Annotations["prometheus.io/path"])
 	assert.Len(t, actualService.OwnerReferences, 1)
 	assert.Equal(t, "Deployment", actualService.OwnerReferences[0].Kind)
 	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
@@ -249,9 +249,9 @@ func TestPatchDaprService(t *testing.T) {
 	require.NoError(t, err)
 	err = cli.Get(ctx, myDaprService, &actualService)
 	require.NoError(t, err)
-	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[annotations.KeyAppID])
-	assert.Equal(t, "true", actualService.ObjectMeta.Annotations["prometheus.io/scrape"])
-	assert.Equal(t, "/", actualService.ObjectMeta.Annotations["prometheus.io/path"])
+	assert.Equal(t, "test", actualService.Annotations[annotations.KeyAppID])
+	assert.Equal(t, "true", actualService.Annotations["prometheus.io/scrape"])
+	assert.Equal(t, "/", actualService.Annotations["prometheus.io/path"])
 	assert.Len(t, actualService.OwnerReferences, 1)
 	assert.Equal(t, "Deployment", actualService.OwnerReferences[0].Kind)
 	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
@@ -381,12 +381,12 @@ func TestWrapper(t *testing.T) {
 	})
 
 	t.Run("get object from wrapper", func(t *testing.T) {
-		assert.Equal(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
-		assert.Equal(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
-		assert.Equal(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeOf(&argov1alpha1.Rollout{}))
-		assert.NotEqual(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
-		assert.NotEqual(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
-		assert.NotEqual(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
+		assert.Equal(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeFor[*appsv1.Deployment]())
+		assert.Equal(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeFor[*appsv1.StatefulSet]())
+		assert.Equal(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeFor[*argov1alpha1.Rollout]())
+		assert.NotEqual(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeFor[*appsv1.Deployment]())
+		assert.NotEqual(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeFor[*appsv1.StatefulSet]())
+		assert.NotEqual(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeFor[*appsv1.Deployment]())
 	})
 }
 
@@ -443,7 +443,7 @@ func TestInit(t *testing.T) {
 
 		assert.NotNil(t, wrapper)
 
-		assert.Equal(t, reflect.TypeOf(&appsv1.Deployment{}), reflect.TypeOf(wrapper.GetObject()))
+		assert.Equal(t, reflect.TypeFor[*appsv1.Deployment](), reflect.TypeOf(wrapper.GetObject()))
 
 		reconciler = reflect.Indirect(reflect.ValueOf(statefulsetCtl)).FieldByName("Do").Interface().(*Reconciler)
 
@@ -451,7 +451,7 @@ func TestInit(t *testing.T) {
 
 		assert.NotNil(t, wrapper)
 
-		assert.Equal(t, reflect.TypeOf(&appsv1.StatefulSet{}), reflect.TypeOf(wrapper.GetObject()))
+		assert.Equal(t, reflect.TypeFor[*appsv1.StatefulSet](), reflect.TypeOf(wrapper.GetObject()))
 
 		reconciler = reflect.Indirect(reflect.ValueOf(rolloutCtl)).FieldByName("Do").Interface().(*Reconciler)
 
@@ -459,7 +459,7 @@ func TestInit(t *testing.T) {
 
 		assert.NotNil(t, wrapper)
 
-		assert.Equal(t, reflect.TypeOf(&argov1alpha1.Rollout{}), reflect.TypeOf(wrapper.GetObject()))
+		assert.Equal(t, reflect.TypeFor[*argov1alpha1.Rollout](), reflect.TypeOf(wrapper.GetObject()))
 	})
 }
 

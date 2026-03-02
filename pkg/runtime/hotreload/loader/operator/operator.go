@@ -56,6 +56,7 @@ func (o *operator) Run(ctx context.Context) error {
 	}
 
 	<-ctx.Done()
+
 	return errors.Join(o.components.close(), o.subscriptions.close())
 }
 

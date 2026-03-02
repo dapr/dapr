@@ -68,10 +68,12 @@ type WorkflowBackendManager interface {
 
 func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, error) {
 	category := p.category(comp)
+
 	m, ok := p.managers[category]
 	if !ok {
 		return nil, fmt.Errorf("unknown component category: %q", category)
 	}
+
 	return m, nil
 }
 

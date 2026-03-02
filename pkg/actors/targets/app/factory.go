@@ -31,7 +31,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/events/queue"
-	"github.com/dapr/kit/ptr"
 )
 
 type Options struct {
@@ -112,7 +111,7 @@ func (f *factory) initApp(actorID string) *app {
 		}),
 	}
 
-	app.idleAt.Store(ptr.Of(f.clock.Now().Add(f.idleTimeout)))
+	app.idleAt.Store(new(f.clock.Now().Add(f.idleTimeout)))
 
 	f.idlerQueue.Enqueue(app)
 

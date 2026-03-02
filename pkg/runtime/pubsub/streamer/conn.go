@@ -33,18 +33,22 @@ type conn struct {
 
 func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, func()) {
 	ch := make(chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, 1)
+
 	c.lock.Lock()
 
 	if c.publishResponses[id] == nil {
 		c.publishResponses[id] = make(ConnectionChannel)
 	}
+
 	c.publishResponses[id][c.connectionID] = ch
 
 	c.lock.Unlock()
+
 	return ch, func() {
 		c.lock.Lock()
 
 		delete(c.publishResponses[id], c.connectionID)
+
 		if len(c.publishResponses[id]) == 0 {
 			delete(c.publishResponses, id)
 		}
@@ -55,6 +59,7 @@ func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEv
 		case <-ch: // drain if there's a value
 		default:
 		}
+
 		close(ch)
 	}
 }

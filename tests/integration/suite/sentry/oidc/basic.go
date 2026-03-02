@@ -132,7 +132,7 @@ func (o *basicOIDCServer) testOIDCDiscovery(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
-	var discovery map[string]interface{}
+	var discovery map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&discovery)
 	require.NoError(t, err)
 
@@ -155,7 +155,7 @@ func (o *basicOIDCServer) testJWKSEndpoint(t *testing.T) {
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
 	var jwks struct {
-		Keys []map[string]interface{} `json:"keys"`
+		Keys []map[string]any `json:"keys"`
 	}
 	err = json.NewDecoder(resp.Body).Decode(&jwks)
 	require.NoError(t, err)
@@ -211,7 +211,7 @@ func (o *basicOIDCServer) testJWTTokenValidation(t *testing.T) {
 	assert.True(t, idToken.Expiry.After(time.Now()), "Token should not be expired")
 
 	// Verify custom claims
-	var claims map[string]interface{}
+	var claims map[string]any
 	err = idToken.Claims(&claims)
 	require.NoError(t, err)
 	assert.NotEmpty(t, claims["iat"], "Issued at time should be present")

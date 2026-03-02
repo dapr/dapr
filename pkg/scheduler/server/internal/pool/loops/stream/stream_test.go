@@ -240,7 +240,7 @@ func Test_Stream(t *testing.T) {
 			ptr1 := called1.Load()
 			ptr2 := called2.Load()
 			ptr3 := called3.Load()
-			if !(assert.NotNil(c, ptr1) || assert.NotNil(c, ptr2) || assert.NotNil(c, ptr2)) {
+			if !assert.NotNil(c, ptr1) && !assert.NotNil(c, ptr2) && !assert.NotNil(c, ptr2) {
 				return
 			}
 			assert.Equal(c, api.TriggerResponseResult_SUCCESS, *ptr1)
@@ -293,7 +293,7 @@ func Test_Stream(t *testing.T) {
 
 		suite := newSuite(t)
 
-		var called []atomic.Pointer[api.TriggerResponseResult]
+		called := make([]atomic.Pointer[api.TriggerResponseResult], 0, 10)
 		for i := range 10 {
 			called = append(called, atomic.Pointer[api.TriggerResponseResult]{})
 			suite.streamLoop.Enqueue(&loops.TriggerRequest{

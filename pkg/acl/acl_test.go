@@ -206,7 +206,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 
 		// App3
 		assert.Equal(t, app3, accessControlList.PolicySpec[app3Ns1].AppName)
-		assert.Equal(t, "", accessControlList.PolicySpec[app3Ns1].DefaultAction)
+		assert.Empty(t, accessControlList.PolicySpec[app3Ns1].DefaultAction)
 		assert.Equal(t, "domain1", accessControlList.PolicySpec[app3Ns1].TrustDomain)
 		assert.Equal(t, "ns1", accessControlList.PolicySpec[app3Ns1].Namespace)
 

@@ -17,7 +17,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-type Event interface{}
+type Event any
 
 type ReloadClients struct {
 	Addresses []string

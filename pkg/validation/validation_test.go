@@ -24,9 +24,11 @@ import (
 func TestValidateKubernetesAppID(t *testing.T) {
 	t.Run("invalid length", func(t *testing.T) {
 		id := ""
+		var idSb27 strings.Builder
 		for range 64 {
-			id += "a"
+			idSb27.WriteString("a")
 		}
+		id += idSb27.String()
 		err := ValidateKubernetesAppID(id)
 		require.Error(t, err)
 	})

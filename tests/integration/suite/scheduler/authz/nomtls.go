@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -61,7 +60,7 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 	req := &schedulerv1pb.ScheduleJobRequest{
 		Name: "testJob",
 		Job: &schedulerv1pb.Job{
-			Schedule: ptr.Of("@daily"),
+			Schedule: new("@daily"),
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     "test",

@@ -262,7 +262,7 @@ func Test_Namespaces(t *testing.T) {
 		var resp3 atomic.Pointer[api.TriggerResponseResult]
 		suite.connLoop.Enqueue(&loops.TriggerRequest{
 			ResultFn: func(r api.TriggerResponseResult) {
-				resp1.Store(ptr.Of(r))
+				resp1.Store(new(r))
 			},
 			Job: &internalsv1pb.JobEvent{
 				Key:  "app1||ns1||app1||job1",
@@ -280,7 +280,7 @@ func Test_Namespaces(t *testing.T) {
 		})
 		suite.connLoop.Enqueue(&loops.TriggerRequest{
 			ResultFn: func(r api.TriggerResponseResult) {
-				resp2.Store(ptr.Of(r))
+				resp2.Store(new(r))
 			},
 			Job: &internalsv1pb.JobEvent{
 				Key:  "actorreminder||ns1||type1||job1",
@@ -301,7 +301,7 @@ func Test_Namespaces(t *testing.T) {
 		})
 		suite.connLoop.Enqueue(&loops.TriggerRequest{
 			ResultFn: func(r api.TriggerResponseResult) {
-				resp3.Store(ptr.Of(r))
+				resp3.Store(new(r))
 			},
 			Job: &internalsv1pb.JobEvent{
 				Key:  "actorreminder||ns2||type3||job1",

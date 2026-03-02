@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/connections/store"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/stream"
 	"github.com/dapr/kit/events/loop"
-	"github.com/dapr/kit/ptr"
 )
 
 var (
@@ -101,16 +100,14 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		return err
 	}
 
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	c.wg.Go(func() {
 		_ = streamLoop.Run(ctx)
-	}()
+	})
 
 	var appID *string
 	ts := add.Request.GetAcceptJobTypes()
 	if len(ts) == 0 || slices.Contains(add.Request.GetAcceptJobTypes(), schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_JOB) {
-		appID = ptr.Of(add.Request.GetAppId())
+		appID = new(add.Request.GetAppId())
 	}
 
 	c.streams[streamIDx] = c.streamPool.Add(store.Options{
