@@ -37,30 +37,41 @@ func TestNextSubscriberIndex(t *testing.T) {
 
 	t.Run("concurrent calls return unique values", func(t *testing.T) {
 		store := New()
-		const numGoroutines = 100
-		const numCallsPerGoroutine = 10
-		var wg sync.WaitGroup
-		var mu sync.Mutex
+
+		const (
+			numGoroutines        = 100
+			numCallsPerGoroutine = 10
+		)
+
+		var (
+			wg sync.WaitGroup
+			mu sync.Mutex
+		)
+
 		ids := make(map[rtpubsub.ConnectionID]bool)
 
 		wg.Add(numGoroutines)
+
 		for range numGoroutines {
 			go func() {
 				defer wg.Done()
+
 				for range numCallsPerGoroutine {
 					id := store.NextSubscriberIndex()
+
 					mu.Lock()
 					ids[id] = true
 					mu.Unlock()
 				}
 			}()
 		}
+
 		wg.Wait()
 
 		assert.Len(t, ids, numGoroutines*numCallsPerGoroutine, "Expected all IDs to be unique")
 
 		for i := 1; i <= numGoroutines*numCallsPerGoroutine; i++ {
-			assert.True(t, ids[rtpubsub.ConnectionID(i)], "Expected ID %d to be present", i) //nolint:gosec
+			assert.True(t, ids[rtpubsub.ConnectionID(i)], "Expected ID %d to be present", i)
 		}
 	})
 }

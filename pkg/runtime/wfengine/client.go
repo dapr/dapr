@@ -87,6 +87,7 @@ func (c *client) Start(ctx context.Context, req *workflows.StartRequest) (*workf
 	res := &workflows.StartResponse{
 		InstanceID: string(workflowID),
 	}
+
 	return res, nil
 }
 
@@ -99,15 +100,19 @@ func (c *client) Terminate(ctx context.Context, req *workflows.TerminateRequest)
 	if req.Recursive != nil {
 		opts = append(opts, api.WithRecursiveTerminate(*req.Recursive))
 	}
-	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), opts...); err != nil {
+
+	err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), opts...)
+	if err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			c.logger.Infof("No such instance exists: '%s'", req.InstanceID)
 			return err
 		}
+
 		return fmt.Errorf("failed to terminate workflow %s: %w", req.InstanceID, err)
 	}
 
 	c.logger.Debugf("Scheduled termination for workflow instance '%s'", req.InstanceID)
+
 	return nil
 }
 
@@ -120,13 +125,17 @@ func (c *client) Purge(ctx context.Context, req *workflows.PurgeRequest) error {
 	if req.Recursive != nil {
 		opts = append(opts, api.WithRecursivePurge(*req.Recursive))
 	}
-	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID), opts...); err != nil {
+
+	err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID), opts...)
+	if err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			c.logger.Warnf("Unable to purge the instance: '%s', no such instance exists", req.InstanceID)
 			return err
 		}
+
 		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
 	}
+
 	c.logger.Debugf("Purging workflow instance '%s'", req.InstanceID)
 
 	return nil
@@ -147,11 +156,13 @@ func (c *client) RaiseEvent(ctx context.Context, req *workflows.RaiseEventReques
 		opts = append(opts, api.WithRawEventData(req.EventData))
 	}
 
-	if err := c.client.RaiseEvent(ctx, api.InstanceID(req.InstanceID), req.EventName, opts...); err != nil {
+	err := c.client.RaiseEvent(ctx, api.InstanceID(req.InstanceID), req.EventName, opts...)
+	if err != nil {
 		return fmt.Errorf("failed to raise event %s on workflow %s: %w", req.EventName, req.InstanceID, err)
 	}
 
 	c.logger.Debugf("Raised event %s on workflow instance '%s'", req.EventName, req.InstanceID)
+
 	return nil
 }
 
@@ -166,6 +177,7 @@ func (c *client) Get(ctx context.Context, req *workflows.GetRequest) (*workflows
 			c.logger.Errorf("Unable to get data on the instance: %s, no such instance exists", req.InstanceID)
 			return nil, err
 		}
+
 		return nil, fmt.Errorf("failed to get workflow metadata for '%s': %w", req.InstanceID, err)
 	}
 
@@ -195,6 +207,7 @@ func (c *client) Get(ctx context.Context, req *workflows.GetRequest) (*workflows
 	// Status-specific fields
 	if metadata.FailureDetails != nil {
 		res.Workflow.Properties["dapr.workflow.failure.error_type"] = metadata.GetFailureDetails().GetErrorType()
+
 		res.Workflow.Properties["dapr.workflow.failure.error_message"] = metadata.GetFailureDetails().GetErrorMessage()
 		if trace := metadata.GetFailureDetails().GetStackTrace(); trace != nil {
 			res.Workflow.Properties["dapr.workflow.failure.stack_trace"] = trace.GetValue()
@@ -209,11 +222,13 @@ func (c *client) Pause(ctx context.Context, req *workflows.PauseRequest) error {
 		return errors.New("a workflow instance ID is required")
 	}
 
-	if err := c.client.SuspendOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
+	err := c.client.SuspendOrchestration(ctx, api.InstanceID(req.InstanceID), "")
+	if err != nil {
 		return fmt.Errorf("failed to pause workflow %s: %w", req.InstanceID, err)
 	}
 
 	c.logger.Debugf("Pausing workflow instance '%s'", req.InstanceID)
+
 	return nil
 }
 
@@ -222,11 +237,13 @@ func (c *client) Resume(ctx context.Context, req *workflows.ResumeRequest) error
 		return errors.New("a workflow instance ID is required")
 	}
 
-	if err := c.client.ResumeOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
+	err := c.client.ResumeOrchestration(ctx, api.InstanceID(req.InstanceID), "")
+	if err != nil {
 		return fmt.Errorf("failed to resume workflow %s: %w", req.InstanceID, err)
 	}
 
 	c.logger.Debugf("Resuming workflow instance '%s'", req.InstanceID)
+
 	return nil
 }
 
@@ -235,15 +252,18 @@ func (c *client) PurgeWorkflow(ctx context.Context, req *workflows.PurgeRequest)
 		return errors.New("a workflow instance ID is required")
 	}
 
-	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+	err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID))
+	if err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			c.logger.Warnf("The requested instance: '%s' does not exist or has already been purged", req.InstanceID)
 			return err
 		}
+
 		return fmt.Errorf("failed to purge workflow %s: %w", req.InstanceID, err)
 	}
 
 	c.logger.Debugf("Purging workflow instance '%s'", req.InstanceID)
+
 	return nil
 }
 
@@ -251,6 +271,7 @@ func getStatusString(status int32) string {
 	if statusStr, ok := statusMap[status]; ok {
 		return statusStr
 	}
+
 	return "UNKNOWN"
 }
 

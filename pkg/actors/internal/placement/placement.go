@@ -40,7 +40,6 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement")
@@ -179,7 +178,7 @@ func (p *placement) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			p.loop.Enqueue(&loops.PlacementReconnect{
-				ActorTypes: ptr.Of(atypes),
+				ActorTypes: new(atypes),
 			})
 			for {
 				select {

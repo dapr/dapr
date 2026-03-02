@@ -65,7 +65,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, ``, string(b))
+	assert.Empty(t, string(b))
 
 	reqBody := `[{"operation":"upsert","request":{"key":"key1","value":"value1"}}]`
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/state", h.app.Daprd().HTTPAddress())

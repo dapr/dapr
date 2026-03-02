@@ -216,7 +216,7 @@ func (i *Informer) objToGVK(t *testing.T, obj runtime.Object) schema.GroupVersio
 	case *corev1.Namespace:
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "namespaces"}
 	default:
-		require.Fail(t, "unknown type: %T", obj)
+		require.Failf(t, "unknown type", "%T", obj)
 		return schema.GroupVersionKind{}
 	}
 }

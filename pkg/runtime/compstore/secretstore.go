@@ -22,30 +22,36 @@ import (
 func (c *ComponentStore) AddSecretStore(name string, store secretstores.SecretStore) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.secrets[name] = store
 }
 
 func (c *ComponentStore) GetSecretStore(name string) (secretstores.SecretStore, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	store, ok := c.secrets[name]
+
 	return store, ok
 }
 
 func (c *ComponentStore) ListSecretStores() map[string]secretstores.SecretStore {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return maps.Clone(c.secrets)
 }
 
 func (c *ComponentStore) DeleteSecretStore(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	delete(c.secrets, name)
 }
 
 func (c *ComponentStore) SecretStoresLen() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return len(c.secrets)
 }

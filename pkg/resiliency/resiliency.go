@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -79,7 +80,9 @@ const (
 	ActorCircuitBreakerScopeID
 	// ActorCircuitBreakerScopeBoth indicates both type and type+id are used for scope.
 	ActorCircuitBreakerScopeBoth // Usage is TODO.
+)
 
+const (
 	resiliencyKind = "Resiliency"
 )
 
@@ -293,7 +296,7 @@ func FromConfigurations(log logger.Logger, c ...*resiliencyV1alpha.Resiliency) *
 		log.Infof("Loading Resiliency configuration: %s", config.Name)
 		log.Debugf("Resiliency configuration (%s): %+v", config.Name, config)
 		if err := r.DecodeConfiguration(config); err != nil {
-			log.Errorf("Could not read resiliency policy %s: %v", config.ObjectMeta.Name, err)
+			log.Errorf("Could not read resiliency policy %s: %v", config.Name, err)
 			continue
 		}
 		diag.DefaultResiliencyMonitoring.PolicyLoaded(config.Name, config.Namespace)
@@ -993,12 +996,12 @@ func (e *circuitBreakerInstances) Remove(name string) {
 	e.Unlock()
 }
 
-func toMap(val interface{}) (interface{}, error) {
+func toMap(val any) (any, error) {
 	jsonBytes, err := json.Marshal(val)
 	if err != nil {
 		return nil, err
 	}
-	var v interface{}
+	var v any
 	err = json.Unmarshal(jsonBytes, &v)
 
 	return v, err
@@ -1043,11 +1046,8 @@ func filterResiliencyConfigs(resiliences []*resiliencyV1alpha.Resiliency, runtim
 			continue
 		}
 
-		for _, scope := range resiliency.Scopes {
-			if scope == runtimeID {
-				filteredResiliencies = append(filteredResiliencies, resiliency)
-				break
-			}
+		if slices.Contains(resiliency.Scopes, runtimeID) {
+			filteredResiliencies = append(filteredResiliencies, resiliency)
 		}
 	}
 

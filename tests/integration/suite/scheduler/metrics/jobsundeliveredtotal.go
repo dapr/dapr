@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -59,7 +58,7 @@ func (j *jobsundeliveredtotal) Run(t *testing.T, ctx context.Context) {
 	for i := range 5 {
 		_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 			Name: strconv.Itoa(i),
-			Job:  &schedulerv1pb.Job{DueTime: ptr.Of("0s")},
+			Job:  &schedulerv1pb.Job{DueTime: new("0s")},
 			Metadata: &schedulerv1pb.JobMetadata{
 				AppId:     "foo",
 				Namespace: "default",
@@ -74,7 +73,7 @@ func (j *jobsundeliveredtotal) Run(t *testing.T, ctx context.Context) {
 	for i := range 3 {
 		_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 			Name: strconv.Itoa(i),
-			Job:  &schedulerv1pb.Job{DueTime: ptr.Of("0s")},
+			Job:  &schedulerv1pb.Job{DueTime: new("0s")},
 			Metadata: &schedulerv1pb.JobMetadata{
 				AppId:     "foo",
 				Namespace: "default",

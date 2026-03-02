@@ -264,7 +264,7 @@ func TestGetNamespaceOrDefault(t *testing.T) {
 
 func BenchmarkFilter(b *testing.B) {
 	vals := make([]int, 100)
-	for i := 0; i < len(vals); i++ {
+	for i := range vals {
 		vals[i] = i
 	}
 
@@ -298,7 +298,7 @@ func TestParseServiceAddr(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.addr, func(t *testing.T) {
-			assert.EqualValues(t, tc.out, ParseServiceAddr(tc.addr))
+			assert.Equal(t, tc.out, ParseServiceAddr(tc.addr))
 		})
 	}
 }

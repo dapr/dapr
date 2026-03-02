@@ -82,7 +82,11 @@ func genCrt(t *testing.T,
 }
 
 func joinPEM(crts ...[]byte) []byte {
-	var b []byte
+	totalLen := 0
+	for _, crt := range crts {
+		totalLen += len(crt)
+	}
+	b := make([]byte, 0, totalLen)
 	for _, crt := range crts {
 		b = append(b, crt...)
 	}

@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -61,8 +60,8 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 
 		_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
 			Name:     jobName,
-			Schedule: ptr.Of("@daily"),
-			Repeats:  ptr.Of(uint32(1)),
+			Schedule: new("@daily"),
+			Repeats:  new(uint32(1)),
 		}})
 		require.NoError(t, err)
 
@@ -72,8 +71,8 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 
 		_, err = client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
 			Name:     jobName,
-			Schedule: ptr.Of("@weekly"),
-			Repeats:  ptr.Of(uint32(1)),
+			Schedule: new("@weekly"),
+			Repeats:  new(uint32(1)),
 		}, Overwrite: true})
 		require.NoError(t, err)
 
@@ -86,8 +85,8 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 	t.Run("do not overwrite if exists", func(t *testing.T) {
 		r := &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
 			Name:     "overwrite2",
-			Schedule: ptr.Of("@daily"),
-			Repeats:  ptr.Of(uint32(1)),
+			Schedule: new("@daily"),
+			Repeats:  new(uint32(1)),
 		}}
 		_, err := client.ScheduleJobAlpha1(ctx, r)
 		require.NoError(t, err)
@@ -95,8 +94,8 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 		for _, req := range []*rtv1.ScheduleJobRequest{
 			{Job: &rtv1.Job{
 				Name:     "overwrite2",
-				Schedule: ptr.Of("@weekly"),
-				Repeats:  ptr.Of(uint32(1)),
+				Schedule: new("@weekly"),
+				Repeats:  new(uint32(1)),
 			}, Overwrite: false},
 		} {
 			_, err := client.ScheduleJobAlpha1(ctx, req)

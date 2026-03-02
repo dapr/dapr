@@ -77,8 +77,8 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 		_, err := g.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     strconv.Itoa(i),
-				DueTime:  ptr.Of("0s"),
-				Schedule: ptr.Of("@every 0s"),
+				DueTime:  new("0s"),
+				Schedule: new("@every 0s"),
 				Repeats:  ptr.Of(uint32(rep)),
 			},
 		})

@@ -21,6 +21,8 @@ import (
 )
 
 func Test_Fake(t *testing.T) {
-	var _ loader.Interface = New()
-	var _ loader.Loader[componentsapi.Component] = NewFake[componentsapi.Component]()
+	var (
+		_ loader.Interface                       = New()
+		_ loader.Loader[componentsapi.Component] = NewFake[componentsapi.Component]()
+	)
 }
