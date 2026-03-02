@@ -26,10 +26,12 @@ type componentDenyList struct {
 func newComponentDenyList(raw []string) componentDenyList {
 	list := make([]componentDenyListItem, len(raw))
 	i := 0
+
 	for _, comp := range raw {
 		if comp == "" {
 			continue
 		}
+
 		v := strings.Split(comp, "/")
 		switch len(v) {
 		case 1:
@@ -45,7 +47,9 @@ func newComponentDenyList(raw []string) componentDenyList {
 			i++
 		}
 	}
+
 	list = list[:i]
+
 	return componentDenyList{list}
 }
 
@@ -53,12 +57,14 @@ func (dl componentDenyList) IsAllowed(component componentsV1alpha1.Component) bo
 	if component.Spec.Type == "" || component.Spec.Version == "" {
 		return false
 	}
+
 	for _, li := range dl.list {
 		if li.typ == component.Spec.Type && (li.version == "" || li.version == component.Spec.Version) {
 			log.Warnf("component '%s' cannot be loaded because components of type '%s' are not allowed", component.Name, component.LogName())
 			return false
 		}
 	}
+
 	return true
 }
 

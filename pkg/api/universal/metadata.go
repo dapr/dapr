@@ -15,6 +15,7 @@ package universal
 
 import (
 	"context"
+	"maps"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -30,9 +31,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	// Extended metadata
 	extendedMetadata := make(map[string]string, len(a.extendedMetadata)+1)
 	a.extendedMetadataLock.RLock()
-	for k, v := range a.extendedMetadata {
-		extendedMetadata[k] = v
-	}
+	maps.Copy(extendedMetadata, a.extendedMetadata)
 	a.extendedMetadataLock.RUnlock()
 
 	// This is deprecated, but we still need to support it for backward compatibility.

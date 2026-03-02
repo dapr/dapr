@@ -174,10 +174,10 @@ type metadataResponse struct {
 	Extended                map[string]string                       `json:"extended,omitempty"`
 	Subscriptions           []metadataResponsePubsubSubscription    `json:"subscriptions,omitempty"`
 	HTTPEndpoints           []*runtimev1pb.MetadataHTTPEndpoint     `json:"httpEndpoints,omitempty"`
-	AppConnectionProperties metadataResponseAppConnectionProperties `json:"appConnectionProperties,omitempty"`
-	ActorRuntime            metadataActorRuntime                    `json:"actorRuntime,omitempty"`
+	AppConnectionProperties metadataResponseAppConnectionProperties `json:"appConnectionProperties,omitzero"`
+	ActorRuntime            metadataActorRuntime                    `json:"actorRuntime,omitzero"`
 	Scheduler               *runtimev1pb.MetadataScheduler          `json:"scheduler,omitempty"`
-	Workflows               metadataWorkflows                       `json:"workflows,omitempty"`
+	Workflows               metadataWorkflows                       `json:"workflows,omitzero"`
 }
 
 type metadataWorkflows struct {

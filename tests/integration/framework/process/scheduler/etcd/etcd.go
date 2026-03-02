@@ -157,16 +157,16 @@ func (e *Etcd) setupUserPass(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	defer client.Close()
 
-	_, err = client.Auth.UserAdd(ctx, *e.username, *e.password)
+	_, err = client.UserAdd(ctx, *e.username, *e.password)
 	require.NoError(t, err)
 
-	_, err = client.Auth.RoleAdd(ctx, "root")
+	_, err = client.RoleAdd(ctx, "root")
 	require.NoError(t, err)
 
-	_, err = client.Auth.UserGrantRole(ctx, *e.username, "root")
+	_, err = client.UserGrantRole(ctx, *e.username, "root")
 	require.NoError(t, err)
 
-	_, err = client.Auth.RoleGrantPermission(ctx, "root", "", "", clientv3.PermissionType(clientv3.PermReadWrite))
+	_, err = client.RoleGrantPermission(ctx, "root", "", "", clientv3.PermissionType(clientv3.PermReadWrite))
 	require.NoError(t, err)
 
 	_, err = client.AuthEnable(ctx)

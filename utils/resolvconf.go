@@ -89,11 +89,11 @@ func getResolvSearchDomains(resolvConf []byte) []string {
 	scanner := bufio.NewScanner(bytes.NewReader(resolvConf))
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		commentIndex := bytes.Index(line, []byte(commentMarker))
-		if commentIndex == -1 {
+		before, _, ok := bytes.Cut(line, []byte(commentMarker))
+		if !ok {
 			lines = append(lines, line)
 		} else {
-			lines = append(lines, line[:commentIndex])
+			lines = append(lines, before)
 		}
 	}
 

@@ -28,12 +28,12 @@ func TestGetDialAddress(t *testing.T) {
 		if runtime.GOOS != "windows" {
 			assert.Equal(t, "dns:///", m)
 		} else {
-			assert.Equal(t, "", m)
+			assert.Empty(t, m)
 		}
 	})
 
 	t.Run("self hosted mode", func(t *testing.T) {
 		m := GetDialAddressPrefix(modes.StandaloneMode)
-		assert.Equal(t, "", m)
+		assert.Empty(t, m)
 	})
 }

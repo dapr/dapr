@@ -187,8 +187,8 @@ func TestData(t *testing.T) {
 		contentType := req.ContentType()
 		bData, err := io.ReadAll(req.RawData())
 		require.NoError(t, err)
-		assert.Equal(t, "", req.r.GetMessage().GetContentType())
-		assert.Equal(t, "", contentType)
+		assert.Empty(t, req.r.GetMessage().GetContentType())
+		assert.Empty(t, contentType)
 		assert.Equal(t, "test", string(bData))
 	})
 

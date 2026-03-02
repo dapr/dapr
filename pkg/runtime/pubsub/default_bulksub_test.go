@@ -65,10 +65,13 @@ func TestFlushMessages(t *testing.T) {
 					[]contribPubsub.BulkSubscribeResponseEntry, error,
 				) {
 					handlerInvoked = true
-					assert.Equal(t, len(tc.messages), len(msg.Entries))
+
+					assert.Len(t, msg.Entries, len(tc.messages))
+
 					for _, entry := range msg.Entries {
 						assert.Contains(t, tc.messages, entry)
 					}
+
 					return nil, nil
 				}
 

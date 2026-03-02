@@ -65,7 +65,7 @@ func NewMeasureView(measure stats.Measure, keys []tag.Key, aggregation *view.Agg
 // WithTags converts tag key and value pairs to tag.Mutator array.
 // WithTags(key1, value1, key2, value2) returns
 // []tag.Mutator{tag.Upsert(key1, value1), tag.Upsert(key2, value2)}.
-func WithTags(name string, opts ...interface{}) []tag.Mutator {
+func WithTags(name string, opts ...any) []tag.Mutator {
 	tagMutators := make([]tag.Mutator, 0, len(opts)/2)
 	for i := 0; i < len(opts)-1; i += 2 {
 		key, ok := opts[i].(tag.Key)

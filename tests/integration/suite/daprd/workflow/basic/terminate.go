@@ -105,7 +105,7 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 		var executedActivity atomic.Bool
 		r := task.NewTaskRegistry()
 		r.AddOrchestratorN("Root", func(ctx *task.OrchestrationContext) (any, error) {
-			tasks := []task.Task{}
+			tasks := make([]task.Task, 0, 3)
 			for i := range 3 {
 				task := ctx.CallSubOrchestrator("L1", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L1_"+strconv.Itoa(i)))
 				tasks = append(tasks, task)
@@ -138,7 +138,8 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 		// Wait long enough to ensure all orchestrations have started (but not longer than the timer delay)
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			// List of all orchestrations created
-			orchestrationIDs := []string{string(id)}
+			orchestrationIDs := make([]string, 0, 7)
+			orchestrationIDs = append(orchestrationIDs, string(id))
 			for i := range 3 {
 				orchestrationIDs = append(orchestrationIDs, string(id)+"_L1_"+strconv.Itoa(i), string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
 			}
@@ -159,7 +160,7 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.GetRuntimeStatus())
 
 		// Wait for all L2 suborchestrations to complete
-		orchIDs := []string{}
+		orchIDs := make([]string, 0, 3)
 		for i := range 3 {
 			orchIDs = append(orchIDs, string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
 		}

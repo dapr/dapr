@@ -80,7 +80,7 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 
 	if c.Trip != nil {
 		tripFn = func(counts gobreaker.Counts) bool {
-			result, err := c.Trip.Eval(map[string]interface{}{
+			result, err := c.Trip.Eval(map[string]any{
 				"requests":             int64(counts.Requests),
 				"totalSuccesses":       int64(counts.TotalSuccesses),
 				"totalFailures":        int64(counts.TotalFailures),

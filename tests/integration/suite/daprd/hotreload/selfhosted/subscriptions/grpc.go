@@ -60,7 +60,7 @@ spec:
 	g.resDir1, g.resDir2 = t.TempDir(), t.TempDir()
 
 	for i, dir := range []string{g.resDir1, g.resDir2} {
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "pubsub.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "pubsub.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -68,7 +68,7 @@ metadata:
 spec:
  type: pubsub.in-memory
  version: v1
-`, i)), 0o600))
+`, i), 0o600))
 	}
 
 	g.daprd = daprd.New(t,

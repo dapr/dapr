@@ -14,6 +14,7 @@ limitations under the License.
 package pluggable
 
 import (
+	"maps"
 	"strconv"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -44,9 +45,7 @@ type MethodErrorConverter map[codes.Code]ErrorConverter
 func (m MethodErrorConverter) Merge(other MethodErrorConverter) MethodErrorConverter {
 	n := MethodErrorConverter{}
 
-	for k, v := range m {
-		n[k] = v
-	}
+	maps.Copy(n, m)
 
 	for k, v := range other {
 		converter, ok := n[k]

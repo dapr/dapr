@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -132,7 +131,7 @@ func (d *delete) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client.UnregisterActorRemindersByType(ctx, &rtv1.UnregisterActorRemindersByTypeRequest{
 		ActorType: "foo",
-		ActorId:   ptr.Of("helloworld"),
+		ActorId:   new("helloworld"),
 	})
 	require.NoError(t, err)
 	resp, err = client.ListActorReminders(ctx, &rtv1.ListActorRemindersRequest{

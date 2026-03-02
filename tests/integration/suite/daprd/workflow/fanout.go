@@ -56,7 +56,7 @@ func (f *fanout) Run(t *testing.T, ctx context.Context) {
 			tasks[i] = ctx.CallActivity("bar", task.WithActivityInput(i))
 		}
 
-		var errs []error
+		errs := make([]error, 0, len(tasks))
 		for _, task := range tasks {
 			errs = append(errs, task.Await(nil))
 		}

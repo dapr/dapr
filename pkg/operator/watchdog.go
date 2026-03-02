@@ -205,7 +205,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 		logName := pod.Namespace + "/" + pod.Name
 
 		// Filter for pods with the dapr.io/enabled annotation
-		if daprEnabled, ok := pod.Annotations[daprEnabledAnnotationKey]; !(ok && strings.IsTruthy(daprEnabled)) {
+		if daprEnabled, ok := pod.Annotations[daprEnabledAnnotationKey]; !ok || !strings.IsTruthy(daprEnabled) {
 			log.Debugf("Skipping pod %s: %s is not true", logName, daprEnabledAnnotationKey)
 			continue
 		}
@@ -257,6 +257,6 @@ func patchPodLabel(ctx context.Context, cl client.Client, pod *corev1.Pod) error
 	if _, ok := pod.GetLabels()[operatorConsts.WatchdogPatchedLabel]; ok {
 		return nil
 	}
-	mergePatch := []byte(fmt.Sprintf(`{"metadata":{"labels":{"%s":"true"}}}`, operatorConsts.WatchdogPatchedLabel))
+	mergePatch := fmt.Appendf(nil, `{"metadata":{"labels":{"%s":"true"}}}`, operatorConsts.WatchdogPatchedLabel)
 	return cl.Patch(ctx, pod, client.RawPatch(types.MergePatchType, mergePatch))
 }

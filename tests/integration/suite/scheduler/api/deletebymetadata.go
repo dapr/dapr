@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -54,7 +53,7 @@ func (d *deletebymetadata) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
+					Schedule: new("@every 20s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid",
@@ -72,7 +71,7 @@ func (d *deletebymetadata) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
+					Schedule: new("@every 20s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid2",
@@ -133,7 +132,7 @@ func (d *deletebymetadata) Run(t *testing.T, ctx context.Context) {
 		assert.Len(t, resp.GetJobs(), 10)
 
 		_, err = client.DeleteByMetadata(ctx, &schedulerv1.DeleteByMetadataRequest{
-			IdPrefixMatch: ptr.Of(true),
+			IdPrefixMatch: new(true),
 			Metadata: &schedulerv1.JobMetadata{
 				AppId:     "appid",
 				Namespace: "namespace",
@@ -161,7 +160,7 @@ func (d *deletebymetadata) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
+					Schedule: new("@every 20s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid",
@@ -184,7 +183,7 @@ func (d *deletebymetadata) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
+					Schedule: new("@every 20s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid",
@@ -270,7 +269,7 @@ func (d *deletebymetadata) Run(t *testing.T, ctx context.Context) {
 		assert.Len(t, resp.GetJobs(), 10)
 
 		_, err = client.DeleteByMetadata(ctx, &schedulerv1.DeleteByMetadataRequest{
-			IdPrefixMatch: ptr.Of(true),
+			IdPrefixMatch: new(true),
 			Metadata: &schedulerv1.JobMetadata{
 				AppId:     "appid",
 				Namespace: "namespace",
