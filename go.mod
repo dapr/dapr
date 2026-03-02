@@ -14,7 +14,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.17.0
 	github.com/dapr/durabletask-go v0.11.0
-	github.com/dapr/kit v0.17.0
+	github.com/dapr/kit v0.17.1-0.20260302165712-2d1983019aa1
 	github.com/diagridio/go-etcd-cron v0.12.4
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
@@ -525,5 +525,3 @@ replace (
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20260204143827-0d983cb00d38
