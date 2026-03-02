@@ -26,25 +26,25 @@ import (
 func TestAppFlag(t *testing.T) {
 	opts, err := New([]string{})
 	require.NoError(t, err)
-	assert.EqualValues(t, "dapr-placement-0", opts.RaftID)
-	assert.EqualValues(t, []peers.PeerInfo{{ID: "dapr-placement-0", Address: "127.0.0.1:8201"}}, opts.RaftPeers)
+	assert.Equal(t, "dapr-placement-0", opts.RaftID)
+	assert.Equal(t, []peers.PeerInfo{{ID: "dapr-placement-0", Address: "127.0.0.1:8201"}}, opts.RaftPeers)
 	assert.True(t, opts.RaftInMemEnabled)
-	assert.EqualValues(t, "", opts.RaftLogStorePath)
-	assert.EqualValues(t, 50005, opts.PlacementPort)
-	assert.EqualValues(t, 8080, opts.HealthzPort)
+	assert.Empty(t, opts.RaftLogStorePath)
+	assert.Equal(t, 50005, opts.PlacementPort)
+	assert.Equal(t, 8080, opts.HealthzPort)
 	assert.False(t, opts.TLSEnabled)
 	assert.False(t, opts.MetadataEnabled)
-	assert.EqualValues(t, 100, opts.ReplicationFactor)
-	assert.EqualValues(t, "localhost", opts.TrustDomain)
-	assert.EqualValues(t, "/var/run/secrets/dapr.io/tls/ca.crt", opts.TrustAnchorsFile)
-	assert.EqualValues(t, "dapr-sentry.default.svc:443", opts.SentryAddress)
-	assert.EqualValues(t, "info", opts.Logger.OutputLevel)
+	assert.Equal(t, 100, opts.ReplicationFactor)
+	assert.Equal(t, "localhost", opts.TrustDomain)
+	assert.Equal(t, "/var/run/secrets/dapr.io/tls/ca.crt", opts.TrustAnchorsFile)
+	assert.Equal(t, "dapr-sentry.default.svc:443", opts.SentryAddress)
+	assert.Equal(t, "info", opts.Logger.OutputLevel)
 	assert.False(t, opts.Logger.JSONFormatEnabled)
 	assert.True(t, opts.Metrics.Enabled())
-	assert.EqualValues(t, "9090", opts.Metrics.Port())
-	assert.EqualValues(t, 2*time.Second, opts.KeepAliveTime)
-	assert.EqualValues(t, 3*time.Second, opts.KeepAliveTimeout)
-	assert.EqualValues(t, 8*time.Second, opts.DisseminateTimeout)
+	assert.Equal(t, "9090", opts.Metrics.Port())
+	assert.Equal(t, 2*time.Second, opts.KeepAliveTime)
+	assert.Equal(t, 3*time.Second, opts.KeepAliveTimeout)
+	assert.Equal(t, 8*time.Second, opts.DisseminateTimeout)
 }
 
 func TestInitialCluster(t *testing.T) {
@@ -88,7 +88,7 @@ func TestInitialCluster(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			opts, err := New(tt.in)
 			require.NoError(t, err)
-			assert.EqualValues(t, tt.out, opts.RaftPeers)
+			assert.Equal(t, tt.out, opts.RaftPeers)
 		})
 	}
 }

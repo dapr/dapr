@@ -136,7 +136,7 @@ spec:
 }
 `), 0o600))
 
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -147,7 +147,7 @@ spec:
  metadata:
  - name: secretsFile
    value: '%s'
-`, filepath.Join(s.resDir2, "2-sec.json"))), 0o600))
+`, filepath.Join(s.resDir2, "2-sec.json")), 0o600))
 
 		require.NoError(t, os.WriteFile(filepath.Join(s.resDir3, "3.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -227,7 +227,7 @@ spec:
 }
 `), 0o600))
 
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -249,9 +249,9 @@ spec:
  metadata:
  - name: prefix
    value: BAZ_
-`, filepath.Join(s.resDir1, "1-sec.json"))), 0o600))
+`, filepath.Join(s.resDir1, "1-sec.json")), 0o600))
 
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -262,7 +262,7 @@ spec:
  metadata:
  - name: secretsFile
    value: '%s'
-`, filepath.Join(s.resDir2, "2-sec.json"))), 0o600))
+`, filepath.Join(s.resDir2, "2-sec.json")), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.daprd.GetMetaRegisteredComponents(t, ctx)
@@ -289,7 +289,7 @@ spec:
 	})
 
 	t.Run("renaming a component should close the old name, and open the new one", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -300,7 +300,7 @@ spec:
  metadata:
  - name: secretsFile
    value: '%s'
- `, filepath.Join(s.resDir2, "2-sec.json"))), 0o600))
+ `, filepath.Join(s.resDir2, "2-sec.json")), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.daprd.GetMetaRegisteredComponents(t, ctx)

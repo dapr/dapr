@@ -76,7 +76,6 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -95,13 +94,13 @@ var testResiliency = &v1alpha1.Resiliency{
 		Policies: v1alpha1.Policies{
 			Retries: map[string]v1alpha1.Retry{
 				"singleRetry": {
-					MaxRetries:  ptr.Of(1),
+					MaxRetries:  new(1),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
 				},
 				"tenRetries": {
-					MaxRetries:  ptr.Of(10),
+					MaxRetries:  new(10),
 					MaxInterval: "100ms",
 					Policy:      "constant",
 					Duration:    "10ms",
@@ -1261,7 +1260,7 @@ func TestGetState(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.Of("test-etag"),
+			ETag: new("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == errorStoreKey
@@ -1663,10 +1662,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 					const retry = 3
 					count := 0
 					_, err := resp.Recv()
-					for {
-						if err != nil {
-							break
-						}
+					for err == nil {
 						if count > retry {
 							break
 						}
@@ -1716,7 +1712,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			return len(req.Keys) == 1 && req.Keys[0] == goodKey
 		}),
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
-			if !(len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey) {
+			if len(tempReq.Keys) != 1 || tempReq.Keys[0] != goodKey {
 				return true
 			}
 			go func() {
@@ -1750,7 +1746,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			return len(req.Keys) == 2 && req.Keys[0] == goodKey && req.Keys[1] == goodKey2
 		}),
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
-			if !(len(tempReq.Keys) == 2 && tempReq.Keys[0] == goodKey && tempReq.Keys[1] == goodKey2) {
+			if len(tempReq.Keys) != 2 || tempReq.Keys[0] != goodKey || tempReq.Keys[1] != goodKey2 {
 				return true
 			}
 			go func() {
@@ -1847,10 +1843,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			const retry = 3
 			count := 0
 			var subscribeID string
-			for {
-				if count > retry {
-					break
-				}
+			for count <= retry {
 				count++
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
@@ -1870,10 +1863,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			})
 			require.NoError(t, err, "Error should be nil")
 			count = 0
-			for {
-				if errors.Is(err, io.EOF) {
-					break
-				}
+			for !errors.Is(err, io.EOF) {
 				if count > retry {
 					break
 				}
@@ -1896,10 +1886,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			const retry = 3
 			count := 0
 			var subscribeID string
-			for {
-				if count > retry {
-					break
-				}
+			for count <= retry {
 				count++
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
@@ -1919,10 +1906,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			})
 			require.NoError(t, err, "Error should be nil")
 			count = 0
-			for {
-				if errors.Is(err, io.EOF) {
-					break
-				}
+			for !errors.Is(err, io.EOF) {
 				if count > retry {
 					break
 				}
@@ -2013,7 +1997,7 @@ func TestGetBulkState(t *testing.T) {
 		})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: ptr.Of("test-etag"),
+			ETag: new("test-etag"),
 		}, nil)
 	fakeStore.On("Get",
 		mock.MatchedBy(matchContextInterface),
@@ -2573,7 +2557,8 @@ func TestBulkPublish(t *testing.T) {
 			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				entries := []pubsub.BulkPublishResponseFailedEntry{}
 				// Construct sample response from the broker.
-				if req.Topic == "error-topic" {
+				switch req.Topic {
+				case "error-topic":
 					for _, e := range req.Entries {
 						entry := pubsub.BulkPublishResponseFailedEntry{
 							EntryId: e.EntryId,
@@ -2581,7 +2566,7 @@ func TestBulkPublish(t *testing.T) {
 						entry.Error = errors.New("error on publish")
 						entries = append(entries, entry)
 					}
-				} else if req.Topic == "even-error-topic" {
+				case "even-error-topic":
 					for i, e := range req.Entries {
 						if i%2 == 0 {
 							entry := pubsub.BulkPublishResponseFailedEntry{
@@ -3411,9 +3396,9 @@ func TestStateAPIWithResiliency(t *testing.T) {
 
 	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
 		// Adding this will make the bulk operation fail
-		failingStore.BulkFailKey.Store(ptr.Of("timeoutBulkGetKeyBulk"))
+		failingStore.BulkFailKey.Store(new("timeoutBulkGetKeyBulk"))
 		t.Cleanup(func() {
-			failingStore.BulkFailKey.Store(ptr.Of(""))
+			failingStore.BulkFailKey.Store(new(""))
 		})
 
 		_, err := client.GetBulkState(t.Context(), &runtimev1pb.GetBulkStateRequest{

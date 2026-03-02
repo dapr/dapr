@@ -133,17 +133,20 @@ func (c *connector) maybeClientConnect(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	doneCh := make(chan struct{})
+
 	go func() {
 		err := cluster.Run(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Error(err, "failed to run scheduler cluster clients")
 		}
+
 		close(doneCh)
 	}()
 
 	c.closeCluster = func() {
 		cancel()
 		<-doneCh
+
 		c.closeCluster = nil
 	}
 }

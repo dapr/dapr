@@ -80,8 +80,8 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("adding a component should become available", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"), []byte(
-			fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"),
+			fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -92,7 +92,7 @@ spec:
  metadata:
  - name: rootPath
    value: '%s'
-`, o.bindingDir1)), 0o600))
+`, o.bindingDir1), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)
@@ -103,8 +103,8 @@ spec:
 	})
 
 	t.Run("adding another component should become available", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"), []byte(
-			fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"),
+			fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -126,7 +126,7 @@ spec:
  metadata:
  - name: rootPath
    value: '%s'
-`, o.bindingDir1, o.bindingDir2)), 0o600))
+`, o.bindingDir1, o.bindingDir2), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 2)
 		}, time.Second*5, time.Millisecond*10)
@@ -138,8 +138,8 @@ spec:
 	})
 
 	t.Run("adding 3rd component should become available", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "2.yaml"), []byte(
-			fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "2.yaml"),
+			fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -150,7 +150,7 @@ spec:
  metadata:
  - name: rootPath
    value: '%s'
-`, o.bindingDir3)), 0o600))
+`, o.bindingDir3), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 3)
 		}, time.Second*5, time.Millisecond*10)
@@ -163,8 +163,8 @@ spec:
 	})
 
 	t.Run("deleting component makes it no longer available", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"), []byte(
-			fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "1.yaml"),
+			fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -175,7 +175,7 @@ spec:
  metadata:
  - name: rootPath
    value: '%s'
-`, o.bindingDir2)), 0o600))
+`, o.bindingDir2), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 2)
 		}, time.Second*5, time.Millisecond*10)
@@ -199,8 +199,8 @@ spec:
 	})
 
 	t.Run("recreating binding component should make it available again", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "2.yaml"), []byte(
-			fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(o.resDir, "2.yaml"),
+			fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -211,7 +211,7 @@ spec:
  metadata:
  - name: rootPath
    value: '%s'
-`, o.bindingDir2)), 0o600))
+`, o.bindingDir2), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)

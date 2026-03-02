@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	netUrl "net/url"
 	"os"
@@ -50,7 +51,7 @@ const (
 
 type bulkPublishMessageEntry struct {
 	EntryId     string            `json:"entryId,omitempty"` //nolint:stylecheck
-	Event       interface{}       `json:"event"`
+	Event       any               `json:"event"`
 	ContentType string            `json:"ContentType"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
@@ -70,7 +71,7 @@ type publishCommand struct {
 	ReqID       string            `json:"reqID"`
 	ContentType string            `json:"contentType"`
 	Topic       string            `json:"topic"`
-	Data        interface{}       `json:"data"`
+	Data        any               `json:"data"`
 	Protocol    string            `json:"protocol"`
 	Metadata    map[string]string `json:"metadata"`
 }
@@ -139,8 +140,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func getBulkRequestMetadata(r *http.Request) map[string]string {
 	metadata := map[string]string{}
 	for k, v := range r.URL.Query() {
-		if strings.HasPrefix(k, metadataPrefix) {
-			m := strings.TrimPrefix(k, metadataPrefix)
+		if after, ok := strings.CutPrefix(k, metadataPrefix); ok {
+			m := after
 			metadata[m] = v[len(v)-1] // get only last occurring value?
 			log.Printf("found metadata %s = %s\n", m, v[len(v)-1])
 		}
@@ -235,9 +236,7 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 
 		if command.Metadata != nil {
 			bulkPublishMessage[i].Metadata = map[string]string{}
-			for k, v := range command.Metadata {
-				bulkPublishMessage[i].Metadata[k] = v
-			}
+			maps.Copy(bulkPublishMessage[i].Metadata, command.Metadata)
 		}
 	}
 	jsonValue, err := json.Marshal(bulkPublishMessage)
@@ -250,7 +249,8 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// publish to dapr
-	if protocol == "http" {
+	switch protocol {
+	case "http":
 		bulkRes, status, err := performBulkPublishHTTP(reqID, pubsubToPublish, topic, jsonValue, reqMetadata)
 		if err != nil {
 			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
@@ -276,7 +276,7 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 
 		json.NewEncoder(w).Encode(bulkRes)
 		return
-	} else if protocol == "grpc" {
+	case "grpc":
 		// Build runtimev1pb.BulkPublishRequestEntry objects
 		entries := make([]*runtimev1pb.BulkPublishRequestEntry, 0, len(bulkPublishMessage))
 		for _, entry := range bulkPublishMessage {
@@ -618,7 +618,7 @@ func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
 
 	w.Write(resp)
 
-	duration := time.Now().Sub(startTime)
+	duration := time.Since(startTime)
 	log.Printf("(%s) responded in %v via %s", reqID, formatDuration(duration), req.Protocol)
 }
 

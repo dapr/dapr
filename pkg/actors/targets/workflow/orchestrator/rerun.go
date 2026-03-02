@@ -46,7 +46,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 	}
 
 	if state == nil {
-		defer o.factory.deactivate(o)
+		defer o.deactivate(o)
 		return status.Errorf(codes.NotFound, "workflow instance does not exist with ID '%s'", o.actorID)
 	}
 
@@ -58,7 +58,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 		return status.Errorf(codes.InvalidArgument, "'%s': cannot rerun from child-workflows", o.actorID)
 	}
 
-	defer o.factory.deactivate(o)
+	defer o.deactivate(o)
 
 	fork := fork.New(fork.Options{
 		InstanceID:                 o.actorID,

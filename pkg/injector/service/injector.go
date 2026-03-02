@@ -213,7 +213,7 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 		found := false
 		for _, sa := range serviceaccounts.Items {
 			if sa.Namespace == serviceAccountInfo[0] && sa.Name == serviceAccountInfo[1] {
-				allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
+				allowedUids = append(allowedUids, string(sa.UID))
 				found = true
 				break
 			}

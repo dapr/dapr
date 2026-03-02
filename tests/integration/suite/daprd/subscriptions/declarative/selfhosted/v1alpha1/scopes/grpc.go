@@ -57,7 +57,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 	)
 
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "sub.yaml"),
-		[]byte(fmt.Sprintf(`
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -118,7 +118,7 @@ spec:
 scopes:
 - %[1]s
 - %[2]s
-`, g.daprd1.AppID(), g.daprd2.AppID())), 0o600))
+`, g.daprd1.AppID(), g.daprd2.AppID()), 0o600))
 
 	return []framework.Option{
 		framework.WithProcesses(g.sub, g.daprd1, g.daprd2),

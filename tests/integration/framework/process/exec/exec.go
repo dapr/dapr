@@ -122,12 +122,10 @@ func (e *Exec) Run(t *testing.T, ctx context.Context) {
 
 		pipe := tee.WriteCloser(iow, pipe.procPipe)
 
-		e.wg.Add(1)
-		go func() {
-			defer e.wg.Done()
+		e.wg.Go(func() {
 			io.Copy(pipe, cmdPipe)
 			pipe.Close()
-		}()
+		})
 	}
 
 	for k, v := range e.envs {

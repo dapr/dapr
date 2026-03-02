@@ -45,7 +45,7 @@ type jobData struct {
 }
 
 type job struct {
-	Data     jobData `json:"data,omitempty"`
+	Data     jobData `json:"data,omitzero"`
 	Schedule string  `json:"schedule,omitempty"`
 	Repeats  int     `json:"repeats,omitempty"`
 	DueTime  string  `json:"dueTime,omitempty"`

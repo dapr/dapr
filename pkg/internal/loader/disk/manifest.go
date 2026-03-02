@@ -120,7 +120,7 @@ func (m *manifestSet[T]) decodeYaml(f io.Reader) error {
 		scannerBytes := scanner.Bytes()
 		var ti struct {
 			metav1.TypeMeta   `json:",inline"`
-			metav1.ObjectMeta `json:"metadata,omitempty"`
+			metav1.ObjectMeta `json:"metadata,omitzero"`
 		}
 		if err := yaml.Unmarshal(scannerBytes, &ti); err != nil {
 			errs = append(errs, err)

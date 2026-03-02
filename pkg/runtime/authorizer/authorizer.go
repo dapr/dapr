@@ -53,6 +53,7 @@ func New(opts Options) *Authorizer {
 	}
 
 	r.componentAuthorizers = []ComponentAuthorizer{r.namespaceComponentAuthorizer}
+
 	if opts.GlobalConfig != nil && opts.GlobalConfig.Spec.ComponentsSpec != nil && len(opts.GlobalConfig.Spec.ComponentsSpec.Deny) > 0 {
 		dl := newComponentDenyList(opts.GlobalConfig.Spec.ComponentsSpec.Deny)
 		r.componentAuthorizers = append(r.componentAuthorizers, dl.IsAllowed)
@@ -65,6 +66,7 @@ func New(opts Options) *Authorizer {
 
 func (a *Authorizer) GetAuthorizedObjects(objects any, authorizer func(any) bool) any {
 	reflectValue := reflect.ValueOf(objects)
+
 	authorized := reflect.MakeSlice(reflectValue.Type(), 0, reflectValue.Len())
 	for i := range reflectValue.Len() {
 		object := reflectValue.Index(i).Interface()
@@ -72,6 +74,7 @@ func (a *Authorizer) GetAuthorizedObjects(objects any, authorizer func(any) bool
 			authorized = reflect.Append(authorized, reflect.ValueOf(object))
 		}
 	}
+
 	return authorized.Interface()
 }
 
@@ -90,14 +93,15 @@ func (a *Authorizer) IsObjectAuthorized(object any) bool {
 			}
 		}
 	}
+
 	return true
 }
 
 func (a *Authorizer) namespaceHTTPEndpointAuthorizer(endpoint httpendpointsapi.HTTPEndpoint) bool {
 	switch {
 	case a.namespace == "",
-		endpoint.ObjectMeta.Namespace == "",
-		(a.namespace != "" && endpoint.ObjectMeta.Namespace == a.namespace):
+		endpoint.Namespace == "",
+		(a.namespace != "" && endpoint.Namespace == a.namespace):
 		return endpoint.IsAppScoped(a.id)
 	default:
 		return false
@@ -105,7 +109,7 @@ func (a *Authorizer) namespaceHTTPEndpointAuthorizer(endpoint httpendpointsapi.H
 }
 
 func (a *Authorizer) namespaceComponentAuthorizer(comp componentsapi.Component) bool {
-	if a.namespace == "" || comp.ObjectMeta.Namespace == "" || (a.namespace != "" && comp.ObjectMeta.Namespace == a.namespace) {
+	if a.namespace == "" || comp.Namespace == "" || (a.namespace != "" && comp.Namespace == a.namespace) {
 		return comp.IsAppScoped(a.id)
 	}
 

@@ -21,7 +21,7 @@ type ApplicationConfig struct {
 	// Duration. example: "30s".
 	DrainOngoingCallTimeout string           `json:"drainOngoingCallTimeout"`
 	DrainRebalancedActors   *bool            `json:"drainRebalancedActors"`
-	Reentrancy              ReentrancyConfig `json:"reentrancy,omitempty"`
+	Reentrancy              ReentrancyConfig `json:"reentrancy,omitzero"`
 
 	// DEPRECATED.
 	RemindersStoragePartitions int `json:"remindersStoragePartitions"`
@@ -42,7 +42,7 @@ type EntityConfig struct {
 	// Duration. example: "30s".
 	DrainOngoingCallTimeout string           `json:"drainOngoingCallTimeout"`
 	DrainRebalancedActors   *bool            `json:"drainRebalancedActors"`
-	Reentrancy              ReentrancyConfig `json:"reentrancy,omitempty"`
+	Reentrancy              ReentrancyConfig `json:"reentrancy,omitzero"`
 
 	// DEPRECATED.
 	RemindersStoragePartitions int `json:"remindersStoragePartitions"`

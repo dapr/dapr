@@ -26,9 +26,8 @@ import (
 )
 
 func newClusteredDeployment(t *testing.T, daprds int) *workflow.Workflow {
-	wopts := []workflow.Option{
-		workflow.WithDaprds(daprds),
-	}
+	wopts := make([]workflow.Option, 0, 1+daprds)
+	wopts = append(wopts, workflow.WithDaprds(daprds))
 	config := `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration

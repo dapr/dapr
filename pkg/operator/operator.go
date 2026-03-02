@@ -206,8 +206,8 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}, nil
 }
 
-func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
-	return func(obj interface{}) {
+func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj any) {
+	return func(obj any) {
 		e, ok := obj.(*httpendpointsapi.HTTPEndpoint)
 		if ok {
 			log.Debugf("Observed http endpoint to be synced: %s/%s", e.Namespace, e.Name)
@@ -216,8 +216,8 @@ func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
 	}
 }
 
-func (o *operator) syncSubscription(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
-	return func(obj interface{}) {
+func (o *operator) syncSubscription(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj any) {
+	return func(obj any) {
 		var s *subapi.Subscription
 		switch o := obj.(type) {
 		case *subapi.Subscription:
@@ -340,7 +340,7 @@ func (o *operator) Start(ctx context.Context) error {
 
 			_, rErr = httpEndpointInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 				AddFunc: o.syncHTTPEndpoint(ctx),
-				UpdateFunc: func(_, newObj interface{}) {
+				UpdateFunc: func(_, newObj any) {
 					o.syncHTTPEndpoint(ctx)(newObj)
 				},
 			})
@@ -361,7 +361,7 @@ func (o *operator) Start(ctx context.Context) error {
 			}
 			_, rErr = subscriptionInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 				AddFunc: o.syncSubscription(ctx, operatorv1pb.ResourceEventType_CREATED),
-				UpdateFunc: func(_, newObj interface{}) {
+				UpdateFunc: func(_, newObj any) {
 					o.syncSubscription(ctx, operatorv1pb.ResourceEventType_UPDATED)(newObj)
 				},
 				DeleteFunc: o.syncSubscription(ctx, operatorv1pb.ResourceEventType_DELETED),
@@ -412,9 +412,9 @@ func (o *operator) patchConversionWebhooksInCRDs(ctx context.Context, caBundle [
 		// This code mimics:
 		// kubectl patch crd "subscriptions.dapr.io" --type='json' -p [{'op': 'replace', 'path': '/spec/conversion/webhook/clientConfig/service/namespace', 'value':'${namespace}'},{'op': 'add', 'path': '/spec/conversion/webhook/clientConfig/caBundle', 'value':'${caBundle}'}]"
 		type patchValue struct {
-			Op    string      `json:"op"`
-			Path  string      `json:"path"`
-			Value interface{} `json:"value"`
+			Op    string `json:"op"`
+			Path  string `json:"path"`
+			Value any    `json:"value"`
 		}
 		payload := []patchValue{{
 			Op:    "replace",

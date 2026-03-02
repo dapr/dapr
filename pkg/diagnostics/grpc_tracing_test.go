@@ -100,7 +100,7 @@ func TestSpanContextToGRPCMetadata(t *testing.T) {
 }
 
 // runBaggageHeaderPropagationTest runs the same baggage tests across both types of interceptors
-func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
+func runBaggageHeaderPropagationTest(t *testing.T, interceptor any) {
 	// handle both types of interceptors
 	var runInterceptor func(ctx context.Context) (context.Context, error)
 
@@ -133,7 +133,7 @@ func runBaggageHeaderPropagationTest(t *testing.T, interceptor interface{}) {
 			var handlerCtx context.Context
 			fakeStream := &fakeStream{ctx: ctx}
 
-			streamHandler := func(srv interface{}, stream grpc.ServerStream) error {
+			streamHandler := func(srv any, stream grpc.ServerStream) error {
 				handlerCtx = stream.Context()
 				return nil
 			}

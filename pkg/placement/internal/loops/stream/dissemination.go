@@ -15,7 +15,6 @@ package stream
 
 import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -32,7 +31,7 @@ func (s *stream) handleLock(version uint64) error {
 		return nil
 	}
 
-	s.currentVersion = ptr.Of(version)
+	s.currentVersion = new(version)
 
 	log.Debugf("Sending LOCK for version %d to stream %s:%d", version, s.ns, s.idx)
 

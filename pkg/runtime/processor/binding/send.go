@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -59,25 +60,29 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	// Clean any previous state
 	var wg sync.WaitGroup
 	wg.Add(len(b.activeInputs))
+
 	for _, inp := range b.activeInputs {
 		go func(input *input.Input) {
 			input.Stop()
 			wg.Done()
 		}(inp)
 	}
+
 	wg.Wait()
 	clear(b.activeInputs)
 
 	comps := b.compStore.ListComponents()
 	bindings := make(map[string]componentsV1alpha1.Component)
+
 	for i, c := range comps {
 		if strings.HasPrefix(c.Spec.Type, string(components.CategoryBindings)) {
-			bindings[c.ObjectMeta.Name] = comps[i]
+			bindings[c.Name] = comps[i]
 		}
 	}
 
 	for name, bind := range b.compStore.ListInputBindings() {
-		if err := b.startInputBinding(bindings[name], bind); err != nil {
+		err := b.startInputBinding(bindings[name], bind)
+		if err != nil {
 			return err
 		}
 	}
@@ -100,6 +105,7 @@ func (b *binding) startInputBinding(comp componentsV1alpha1.Component, binding b
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 		defer cancel()
+
 		isSubscribed, err = b.isAppSubscribedToBinding(ctx, comp.Name)
 		if err != nil {
 			return err
@@ -139,18 +145,21 @@ func (b *binding) StopReadingFromBindings(forever bool) {
 
 	var wg sync.WaitGroup
 	wg.Add(len(b.activeInputs))
+
 	for _, inp := range b.activeInputs {
 		go func(input *input.Input) {
 			input.Stop()
 			wg.Done()
 		}(inp)
 	}
+
 	wg.Wait()
 	clear(b.activeInputs)
 }
 
 func (b *binding) sendBatchOutputBindingsParallel(ctx context.Context, to []string, data []byte) {
 	b.wg.Add(len(to))
+
 	for _, dst := range to {
 		go func(name string) {
 			defer b.wg.Done()
@@ -176,6 +185,7 @@ func (b *binding) sendBatchOutputBindingsSequential(ctx context.Context, to []st
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -186,28 +196,31 @@ func (b *binding) SendToOutputBinding(ctx context.Context, name string, req *bin
 
 	if binding, ok := b.compStore.GetOutputBinding(name); ok {
 		ops := binding.Operations()
-		for _, o := range ops {
-			if o == req.Operation {
-				policyRunner := resiliency.NewRunner[*bindings.InvokeResponse](ctx,
-					b.resiliency.ComponentOutboundPolicy(name, resiliency.Binding),
-				)
-				return policyRunner(func(ctx context.Context) (*bindings.InvokeResponse, error) {
-					return binding.Invoke(ctx, req)
-				})
-			}
+		if slices.Contains(ops, req.Operation) {
+			policyRunner := resiliency.NewRunner[*bindings.InvokeResponse](ctx,
+				b.resiliency.ComponentOutboundPolicy(name, resiliency.Binding),
+			)
+
+			return policyRunner(func(ctx context.Context) (*bindings.InvokeResponse, error) {
+				return binding.Invoke(ctx, req)
+			})
 		}
+
 		supported := make([]string, 0, len(ops))
 		for _, o := range ops {
 			supported = append(supported, string(o))
 		}
+
 		return nil, fmt.Errorf("binding %s does not support operation %s. supported operations:%s", name, req.Operation, strings.Join(supported, " "))
 	}
+
 	return nil, fmt.Errorf("couldn't find output binding %s", name)
 }
 
 func (b *binding) onAppResponse(ctx context.Context, response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		b.wg.Add(1)
+
 		go func(reqs []state.SetRequest) {
 			defer b.wg.Done()
 
@@ -246,11 +259,13 @@ func (b *binding) onAppResponse(ctx context.Context, response *bindings.AppRespo
 
 func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
+
 	spanName := "bindings/" + bindingName
 	spanContext := trace.SpanContext{}
 
 	// Check the grpc-trace-bin with fallback to traceparent.
 	validTraceparent := false
+
 	if val, ok := metadata[diagConsts.GRPCTraceContextKey]; ok {
 		if sc, ok := diagUtils.SpanContextFromBinary([]byte(val)); ok {
 			spanContext = sc
@@ -270,6 +285,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 	ctx, span := diag.StartInternalCallbackSpan(ctx, spanName, spanContext, b.tracingSpec)
 
 	var appResponseBody []byte
+
 	path, _ := b.compStore.GetInputBindingRoute(bindingName)
 	if path == "" {
 		path = bindingName
@@ -286,19 +302,23 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 		// TODO: Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827.
 		if validTraceparent && span != nil {
 			spanContextHeaders := make(map[string]string, 2)
+
 			diag.SpanContextToHTTPHeaders(span.SpanContext(), func(key string, val string) {
 				spanContextHeaders[key] = val
 			})
+
 			for key, val := range spanContextHeaders {
 				ctx = md.AppendToOutgoingContext(ctx, key, val)
 			}
 		}
 
 		ctx = b.grpc.AddAppTokenToContext(ctx)
+
 		conn, err := b.grpc.GetAppClient()
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
+
 		client := runtimev1pb.NewAppCallbackClient(conn)
 		req := &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
@@ -322,6 +342,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			diag.UpdateSpanStatusFromGRPCError(span, err)
 			span.End()
 		}
+
 		if diag.DefaultGRPCMonitoring.IsEnabled() {
 			diag.DefaultGRPCMonitoring.ServerRequestSent(ctx,
 				"/dapr.proto.runtime.v1.AppCallback/OnBindingEvent",
@@ -333,6 +354,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 		if err != nil {
 			return nil, fmt.Errorf("error invoking app: %w", err)
 		}
+
 		if resp != nil {
 			if resp.GetConcurrency() == runtimev1pb.BindingEventResponse_PARALLEL { //nolint:nosnakecase
 				response.Concurrency = ConcurrencyParallel
@@ -345,7 +367,8 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			if resp.GetData() != nil {
 				appResponseBody = resp.GetData()
 
-				var d interface{}
+				var d any
+
 				err := json.Unmarshal(resp.GetData(), &d)
 				if err == nil {
 					response.Data = d
@@ -369,6 +392,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 		if policyDef != nil {
 			req.WithReplay(policyDef.HasRetries())
 		}
+
 		defer req.Close()
 
 		respErr := errors.New("error sending binding event to application")
@@ -377,14 +401,17 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 				Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 			},
 		)
+
 		resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 			rResp, rErr := b.channels.AppChannel().InvokeMethod(ctx, req, "")
 			if rErr != nil {
 				return rResp, rErr
 			}
+
 			if rResp != nil && rResp.Status().GetCode() != http.StatusOK {
 				return rResp, resiliency.NewCodeError(rResp.Status().GetCode(), fmt.Errorf("%w, status %d", respErr, rResp.Status().GetCode()))
 			}
+
 			return rResp, nil
 		})
 		if err != nil && !errors.Is(err, respErr) {
@@ -419,7 +446,8 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 	}
 
 	if len(response.State) > 0 || len(response.To) > 0 {
-		if err := b.onAppResponse(ctx, &response); err != nil {
+		err := b.onAppResponse(ctx, &response)
+		if err != nil {
 			log.Errorf("error executing app response: %s", err)
 		}
 	}
@@ -432,6 +460,7 @@ func (b *binding) getSubscribedBindingsGRPC(ctx context.Context) ([]string, erro
 	if err != nil {
 		return nil, fmt.Errorf("error while getting app client: %w", err)
 	}
+
 	client := runtimev1pb.NewAppCallbackClient(conn)
 	resp, err := client.ListInputBindings(ctx, &emptypb.Empty{})
 	bindings := []string{}
@@ -439,6 +468,7 @@ func (b *binding) getSubscribedBindingsGRPC(ctx context.Context) ([]string, erro
 	if err == nil && resp != nil {
 		bindings = resp.GetBindings()
 	}
+
 	return bindings, nil
 }
 
@@ -450,16 +480,17 @@ func (b *binding) isAppSubscribedToBinding(ctx context.Context, binding string) 
 			if err != nil {
 				return false, err
 			}
+
 			b.subscribeBindingList = list
 		}
-		for _, b := range b.subscribeBindingList {
-			if b == binding {
-				return true, nil
-			}
+
+		if slices.Contains(b.subscribeBindingList, binding) {
+			return true, nil
 		}
 	} else {
 		// if HTTP, check if there's an endpoint listening for that binding
 		path, _ := b.compStore.GetInputBindingRoute(binding)
+
 		req := invokev1.NewInvokeMethodRequest(path).
 			WithHTTPExtension(http.MethodOptions, "").
 			WithContentType(invokev1.JSONContentType)
@@ -470,18 +501,20 @@ func (b *binding) isAppSubscribedToBinding(ctx context.Context, binding string) 
 			return false, fmt.Errorf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
 		}
 		defer resp.Close()
+
 		code := resp.Status().GetCode()
 
 		return code/100 == 2 || code == http.StatusMethodNotAllowed, nil
 	}
+
 	return false, nil
 }
 
 func isBindingOfExplicitDirection(direction string, metadata map[string]string) bool {
 	for k, v := range metadata {
 		if strings.EqualFold(k, ComponentDirection) {
-			directions := strings.Split(v, ",")
-			for _, d := range directions {
+			directions := strings.SplitSeq(v, ",")
+			for d := range directions {
 				if strings.TrimSpace(strings.ToLower(d)) == direction {
 					return true
 				}

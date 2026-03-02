@@ -46,7 +46,7 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 }
 
 func (d *Duration) UnmarshalJSON(b []byte) error {
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}
@@ -82,14 +82,14 @@ func toTimeDurationHookFunc() mapstructure.DecodeHookFunc {
 	return func(
 		f reflect.Type,
 		t reflect.Type,
-		data interface{},
-	) (interface{}, error) {
-		if t != reflect.TypeOf(Duration{}) && t != reflect.TypeOf(time.Duration(0)) {
+		data any,
+	) (any, error) {
+		if t != reflect.TypeFor[Duration]() && t != reflect.TypeFor[time.Duration]() {
 			return data, nil
 		}
 
 		switch f.Kind() {
-		case reflect.TypeOf(time.Duration(0)).Kind():
+		case reflect.TypeFor[time.Duration]().Kind():
 			return data.(time.Duration), nil
 		case reflect.String:
 			var val time.Duration
@@ -105,19 +105,19 @@ func toTimeDurationHookFunc() mapstructure.DecodeHookFunc {
 					val = time.Duration(seconds * int64(time.Second))
 				}
 			}
-			if t != reflect.TypeOf(Duration{}) {
+			if t != reflect.TypeFor[Duration]() {
 				return val, nil
 			}
 			return Duration{Duration: val}, nil
 		case reflect.Float64:
 			val := time.Duration(data.(float64))
-			if t != reflect.TypeOf(Duration{}) {
+			if t != reflect.TypeFor[Duration]() {
 				return val, nil
 			}
 			return Duration{Duration: val}, nil
 		case reflect.Int64:
 			val := time.Duration(data.(int64))
-			if t != reflect.TypeOf(Duration{}) {
+			if t != reflect.TypeFor[Duration]() {
 				return val, nil
 			}
 			return Duration{Duration: val}, nil

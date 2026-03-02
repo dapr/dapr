@@ -25,6 +25,7 @@ func TestComponentDenyList(t *testing.T) {
 	type args struct {
 		raw []string
 	}
+
 	tests := []struct {
 		name    string
 		args    args
@@ -115,10 +116,12 @@ func TestComponentDenyList(t *testing.T) {
 			for compStr, wantAllowed := range tt.allowed {
 				parts := strings.Split(compStr, "/")
 				typ := parts[0]
+
 				var ver string
 				if len(parts) > 1 {
 					ver = parts[1]
 				}
+
 				comp := componentsV1alpha1.Component{
 					Spec: componentsV1alpha1.ComponentSpec{
 						Type:    typ,

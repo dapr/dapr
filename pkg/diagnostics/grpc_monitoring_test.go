@@ -53,11 +53,11 @@ func (f *fakeProxyStream) SendHeader(grpcMetadata.MD) error {
 func (f *fakeProxyStream) SetTrailer(grpcMetadata.MD) {
 }
 
-func (f *fakeProxyStream) SendMsg(m interface{}) error {
+func (f *fakeProxyStream) SendMsg(m any) error {
 	return nil
 }
 
-func (f *fakeProxyStream) RecvMsg(m interface{}) error {
+func (f *fakeProxyStream) RecvMsg(m any) error {
 	return nil
 }
 
@@ -73,7 +73,7 @@ func TestStreamingServerInterceptor(t *testing.T) {
 
 		i := m.StreamingServerInterceptor()
 		s := &fakeProxyStream{}
-		f := func(srv interface{}, stream grpc.ServerStream) error {
+		f := func(srv any, stream grpc.ServerStream) error {
 			return nil
 		}
 
@@ -102,7 +102,7 @@ func TestStreamingServerInterceptor(t *testing.T) {
 		s := &fakeProxyStream{
 			appID: "test",
 		}
-		f := func(srv interface{}, stream grpc.ServerStream) error {
+		f := func(srv any, stream grpc.ServerStream) error {
 			return nil
 		}
 
@@ -137,7 +137,7 @@ func TestStreamingClientInterceptor(t *testing.T) {
 
 		i := m.StreamingClientInterceptor()
 		s := &fakeProxyStream{}
-		f := func(srv interface{}, stream grpc.ServerStream) error {
+		f := func(srv any, stream grpc.ServerStream) error {
 			return nil
 		}
 
@@ -166,7 +166,7 @@ func TestStreamingClientInterceptor(t *testing.T) {
 		s := &fakeProxyStream{
 			appID: "test",
 		}
-		f := func(srv interface{}, stream grpc.ServerStream) error {
+		f := func(srv any, stream grpc.ServerStream) error {
 			return nil
 		}
 

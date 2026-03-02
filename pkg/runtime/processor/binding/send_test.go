@@ -189,7 +189,9 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 		Healthz: healthz.New(),
 	})
 	require.NoError(t, err)
+
 	go secP.Run(t.Context())
+
 	sec, err := secP.Handler(t.Context())
 	require.NoError(t, err)
 
@@ -235,8 +237,10 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 }
 
 func TestReadInputBindings(t *testing.T) {
-	const testInputBindingName = "inputbinding"
-	const testInputBindingMethod = "inputbinding"
+	const (
+		testInputBindingName   = "inputbinding"
+		testInputBindingMethod = "inputbinding"
+	)
 
 	t.Run("app acknowledge, no retry", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -586,7 +590,7 @@ func TestBindingResiliency(t *testing.T) {
 	)
 
 	output := componentsV1alpha1.Component{}
-	output.ObjectMeta.Name = "failOutput"
+	output.Name = "failOutput"
 	output.Spec.Type = "bindings.failingoutput"
 	err := b.Init(t.Context(), output)
 	require.NoError(t, err)
@@ -639,6 +643,7 @@ func matchDaprRequestMethod(method string) any {
 		if req == nil || req.Message() == nil || req.Message().GetMethod() != method {
 			return false
 		}
+
 		return true
 	})
 }

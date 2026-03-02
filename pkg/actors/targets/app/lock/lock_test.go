@@ -24,7 +24,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/config"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/dapr/kit/ptr"
 )
 
 func Test_requestid(t *testing.T) {
@@ -75,7 +74,7 @@ func Test_requestidcustom(t *testing.T) {
 	store := reentrancystore.New()
 	store.Store("foobar", config.ReentrancyConfig{
 		Enabled:       true,
-		MaxStackDepth: ptr.Of(10),
+		MaxStackDepth: new(10),
 	})
 	l := New(Options{
 		ConfigStore: store,
@@ -120,7 +119,7 @@ func Test_ringid(t *testing.T) {
 	store := reentrancystore.New()
 	store.Store("foobar", config.ReentrancyConfig{
 		Enabled:       true,
-		MaxStackDepth: ptr.Of(10),
+		MaxStackDepth: new(10),
 	})
 	l := New(Options{
 		ConfigStore: store,
@@ -186,7 +185,7 @@ func Test_header(t *testing.T) {
 		store := reentrancystore.New()
 		store.Store("foobar", config.ReentrancyConfig{
 			Enabled:       true,
-			MaxStackDepth: ptr.Of(10),
+			MaxStackDepth: new(10),
 		})
 		l := New(Options{
 			ConfigStore: store,
@@ -204,7 +203,7 @@ func Test_header(t *testing.T) {
 		store := reentrancystore.New()
 		store.Store("foobar", config.ReentrancyConfig{
 			Enabled:       false,
-			MaxStackDepth: ptr.Of(10),
+			MaxStackDepth: new(10),
 		})
 		l := New(Options{
 			ConfigStore: store,

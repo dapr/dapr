@@ -70,7 +70,7 @@ func (c *closing) Setup(t *testing.T) []framework.Option {
 
 	c.broker = broker.New(t)
 
-	require.NoError(t, os.WriteFile(filepath.Join(c.dir, "comp.yaml"), []byte(fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(c.dir, "comp.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -78,7 +78,7 @@ metadata:
 spec:
  type: pubsub.%s
  version: v1
-`, c.broker.PubSub().SocketName())), 0o600))
+`, c.broker.PubSub().SocketName()), 0o600))
 
 	c.daprd = daprd.New(t,
 		daprd.WithSocket(t, c.broker.Socket()),

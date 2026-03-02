@@ -74,7 +74,7 @@ type TestResult struct {
 			Percent float64 `json:"Percent"`
 			Count   int     `json:"Count"`
 		} `json:"Data"`
-		Percentiles interface{} `json:"Percentiles"`
+		Percentiles any `json:"Percentiles"`
 	} `json:"Sizes"`
 	HeaderSizes struct {
 		Count  int     `json:"Count"`
@@ -89,7 +89,7 @@ type TestResult struct {
 			Percent float64 `json:"Percent"`
 			Count   int     `json:"Count"`
 		} `json:"Data"`
-		Percentiles interface{} `json:"Percentiles"`
+		Percentiles any `json:"Percentiles"`
 	} `json:"HeaderSizes"`
 	URL         string `json:"URL"`
 	SocketCount int    `json:"SocketCount"`
@@ -97,13 +97,13 @@ type TestResult struct {
 }
 
 type TestReport struct {
-	Results     []TestResult           `json:"Results"`
-	TestName    string                 `json:"TestName"`
-	GitHubSHA   string                 `json:"GitHubSHA,omitempty"`
-	GitHubREF   string                 `json:"GitHubREF,omitempty"`
-	GitHubRunID string                 `json:"GitHubRunID,omitempty"`
-	Metrics     resourceMetrics        `json:"Metrics"`
-	TestMetrics map[string]interface{} `json:"TestMetrics"`
+	Results     []TestResult    `json:"Results"`
+	TestName    string          `json:"TestName"`
+	GitHubSHA   string          `json:"GitHubSHA,omitempty"`
+	GitHubREF   string          `json:"GitHubREF,omitempty"`
+	GitHubRunID string          `json:"GitHubRunID,omitempty"`
+	Metrics     resourceMetrics `json:"Metrics"`
+	TestMetrics map[string]any  `json:"TestMetrics"`
 }
 
 type resourceMetrics struct {
@@ -126,7 +126,7 @@ func NewTestReport(results []TestResult, name string, sidecarUsage, appUsage *ru
 			AppConsumedCPUm:      appUsage.CPUm,
 			AppConsumedMemoryMb:  appUsage.MemoryMb,
 		},
-		TestMetrics: map[string]interface{}{},
+		TestMetrics: map[string]any{},
 	}
 }
 

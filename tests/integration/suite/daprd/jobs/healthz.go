@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -85,7 +84,7 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 	_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     "test",
-			Schedule: ptr.Of("@every 1s"),
+			Schedule: new("@every 1s"),
 		},
 	})
 	require.NoError(t, err)

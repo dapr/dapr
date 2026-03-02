@@ -9,10 +9,10 @@ import (
 // MockClientConn is a mock implementation of grpc.ClientConnInterface.
 type MockClientConn struct {
 	grpc.ClientConnInterface
-	InvokeFn func(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error
+	InvokeFn func(ctx context.Context, method string, args any, reply any, opts ...grpc.CallOption) error
 }
 
-func (m *MockClientConn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
+func (m *MockClientConn) Invoke(ctx context.Context, method string, args any, reply any, opts ...grpc.CallOption) error {
 	return m.InvokeFn(ctx, method, args, reply, opts...)
 }
 

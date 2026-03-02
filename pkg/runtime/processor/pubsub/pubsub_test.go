@@ -136,6 +136,7 @@ func TestInitPubSub(t *testing.T) {
 			[]string{"topic0", "topic1"}, // first pubsub
 			[]string{"topic0"},           // second pubsub
 		)
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataString(subs).
 			WithContentType("application/json")
@@ -167,6 +168,7 @@ func TestInitPubSub(t *testing.T) {
 			[]string{"topic0", "topic1"}, // first pubsub
 			[]string{"topic0"},           // second pubsub
 		)
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataString(subs).
 			WithContentType("application/json")
@@ -197,6 +199,7 @@ func TestInitPubSub(t *testing.T) {
 			[]string{"topic0", "topic1"}, // first pubsub
 			[]string{"topic0"},           // second pubsub
 		)
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataString(subs).
 			WithContentType("application/json")
@@ -230,6 +233,7 @@ func TestInitPubSub(t *testing.T) {
 			[]string{"topic0", "topic1"}, // first pubsub
 			[]string{"topic0"},           // second pubsub
 		)
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataString(subs).
 			WithContentType("application/json")
@@ -262,6 +266,7 @@ func TestInitPubSub(t *testing.T) {
 			[]string{"topic0", "topic1"}, // first pubsub
 			[]string{"topic0"},           // second pubsub
 		)
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataString(subs).
 			WithContentType("application/json")
@@ -291,6 +296,7 @@ func TestInitPubSub(t *testing.T) {
 			[]string{"topic0", "topic1"}, // first pubsub
 			[]string{"topic0"},           // second pubsub
 		)
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataString(subs).
 			WithContentType("application/json")
@@ -324,6 +330,7 @@ func TestInitPubSub(t *testing.T) {
 			[]string{"topic0", "topic1"}, // first pubsub
 			[]string{"topic0"},           // second pubsub
 		)
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataString(subs).
 			WithContentType("application/json")
@@ -353,6 +360,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes to a topic via http app channel
 		sub := getSubscriptionCustom("topic0", "customroute/topic0")
+
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataString(sub).
 			WithContentType("application/json")
@@ -467,7 +475,7 @@ func TestConsumerID(t *testing.T) {
 // 'topics' are the topics for the first pubsub.
 // 'topics2' are the topics for the second pubsub.
 func getSubscriptionsJSONString(topics []string, topics2 []string) string {
-	s := []runtimePubsub.SubscriptionJSON{}
+	s := make([]runtimePubsub.SubscriptionJSON, 0, len(topics)+len(topics2))
 	for _, t := range topics {
 		s = append(s, runtimePubsub.SubscriptionJSON{
 			PubsubName: TestPubsubName,
@@ -487,6 +495,7 @@ func getSubscriptionsJSONString(topics []string, topics2 []string) string {
 			},
 		})
 	}
+
 	b, _ := json.Marshal(&s)
 
 	return string(b)
@@ -503,6 +512,7 @@ func getSubscriptionCustom(topic, path string) string {
 		},
 	}
 	b, _ := json.Marshal(&s)
+
 	return string(b)
 }
 
@@ -516,6 +526,7 @@ func matchDaprRequestMethod(method string) any {
 		if req == nil || req.Message() == nil || req.Message().GetMethod() != method {
 			return false
 		}
+
 		return true
 	})
 }
