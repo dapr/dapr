@@ -48,7 +48,7 @@ const (
 var testModes map[string]string
 
 // used for local debugging when tweaking and adding charts
-func debugf(format string, args ...interface{}) {
+func debugf(format string, args ...any) {
 	if debugEnabled {
 		log.Printf("[charts] "+format+"\n", args...)
 	}
@@ -232,10 +232,11 @@ func main() {
 					ru = &ResourceUsage{}
 					resourceByTest[currentTest] = ru
 				}
-				if usage.resource == "app" {
+				switch usage.resource {
+				case "app":
 					ru.AppCPUm = usage.cpuMilli
 					ru.AppMemMB = usage.memMB
-				} else if usage.resource == "sidecar" {
+				case "sidecar":
 					ru.SidecarCPUm = usage.cpuMilli
 					ru.SidecarMemMB = usage.memMB
 				}
@@ -245,9 +246,10 @@ func main() {
 					ru = &ResourceUsage{}
 					resourceByTest[currentTest] = ru
 				}
-				if rs.resource == "target" {
+				switch rs.resource {
+				case "target":
 					ru.TargetRestarts = rs.count
-				} else if rs.resource == "tester" {
+				case "tester":
 					ru.TesterRestarts = rs.count
 				}
 			}

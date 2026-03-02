@@ -40,7 +40,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -68,7 +67,7 @@ type jobData struct {
 
 type job struct {
 	Name     string  `json:"name,omitempty"`
-	Data     jobData `json:"data,omitempty"`
+	Data     jobData `json:"data,omitzero"`
 	Schedule string  `json:"schedule,omitempty"`
 	Repeats  uint32  `json:"repeats,omitempty"`
 	DueTime  string  `json:"dueTime,omitempty"`
@@ -266,9 +265,9 @@ func scheduleJobGRPC(name string, jobWrapper JobWrapper) error {
 	job := &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     name,
-			Schedule: ptr.Of(jobWrapper.Job.Schedule),
-			Repeats:  ptr.Of(jobWrapper.Job.Repeats),
-			DueTime:  ptr.Of(jobWrapper.Job.DueTime),
+			Schedule: new(jobWrapper.Job.Schedule),
+			Repeats:  new(jobWrapper.Job.Repeats),
+			DueTime:  new(jobWrapper.Job.DueTime),
 			Data:     &anypb.Any{Value: jbytes},
 		},
 	}

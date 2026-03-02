@@ -101,15 +101,13 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 			Namespace:            ns,
 		})
 
-		n.wg.Add(1)
-		go func() {
-			defer n.wg.Done()
+		n.wg.Go(func() {
 			err := loop.Run(ctx)
 			if err != nil && !errors.Is(err, context.Canceled) {
 				log.Errorf("Error running namespaces loop: %v", err)
 				n.cancelPool(err)
 			}
-		}()
+		})
 
 		dissLoop = &disseminatorLoop{
 			loop:        loop,

@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -59,7 +58,7 @@ func (j *jobscreatedtotal) Run(t *testing.T, ctx context.Context) {
 		_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
 			Job: &rtv1.Job{
 				Name:    strconv.Itoa(i),
-				DueTime: ptr.Of("100s"),
+				DueTime: new("100s"),
 			},
 		})
 		require.NoError(t, err)

@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestIssuer_Generate(t *testing.T) {
@@ -120,7 +119,7 @@ func TestIssuer_Generate(t *testing.T) {
 			signingAlgorithm: jwa.ES256,
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
-			issuer:           ptr.Of("https://auth.example.com"),
+			issuer:           new("https://auth.example.com"),
 			request: &Request{
 				TrustDomain: spiffeid.RequireTrustDomainFromString("example.com"),
 				Audiences:   []string{"example.com"},
@@ -356,19 +355,19 @@ func TestCustomIssuerInToken(t *testing.T) {
 		},
 		{
 			name:           "empty issuer configured",
-			issuerValue:    ptr.Of(""),
+			issuerValue:    new(""),
 			expectedIssuer: "",
 			hasIssuer:      true,
 		},
 		{
 			name:           "custom issuer URL",
-			issuerValue:    ptr.Of("https://auth.example.com"),
+			issuerValue:    new("https://auth.example.com"),
 			expectedIssuer: "https://auth.example.com",
 			hasIssuer:      true,
 		},
 		{
 			name:           "custom string issuer",
-			issuerValue:    ptr.Of("dapr-sentry"),
+			issuerValue:    new("dapr-sentry"),
 			expectedIssuer: "dapr-sentry",
 			hasIssuer:      true,
 		},

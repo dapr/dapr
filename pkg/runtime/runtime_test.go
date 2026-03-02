@@ -125,6 +125,7 @@ func TestNewRuntime(t *testing.T) {
 
 func TestDoProcessComponent(t *testing.T) {
 	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+
 	require.NoError(t, err)
 	defer stopRuntime(t, rt)
 
@@ -254,6 +255,7 @@ func TestDoProcessComponent(t *testing.T) {
 			},
 			"mockPubSub",
 		)
+
 		expectedMetadata := pubsub.Metadata{
 			Base: mdata.Base{
 				Name:       TestPubsubName,
@@ -287,14 +289,19 @@ func TestDoProcessComponent(t *testing.T) {
 func TestFlushOutstandingComponent(t *testing.T) {
 	t.Run("We can call flushOustandingComponents more than once", func(t *testing.T) {
 		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+
 		require.NoError(t, err)
 		defer stopRuntime(t, rt)
+
 		wasCalled := false
 		m := rtmock.NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
 			time.Sleep(100 * time.Millisecond)
+
 			wasCalled = true
+
 			return nil
 		})
+
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -303,6 +310,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 		)
 
 		go rt.processor.Process(t.Context())
+
 		rt.processor.AddPendingComponent(t.Context(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
@@ -317,6 +325,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 
 		// Make sure that the goroutine was restarted and can flush a second time
 		wasCalled = false
+
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -338,26 +347,35 @@ func TestFlushOutstandingComponent(t *testing.T) {
 	})
 	t.Run("flushOutstandingComponents blocks for components with outstanding dependanices", func(t *testing.T) {
 		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+
 		require.NoError(t, err)
 		defer stopRuntime(t, rt)
+
 		wasCalled := false
 		wasCalledChild := false
 		wasCalledGrandChild := false
 		m := rtmock.NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
 			time.Sleep(100 * time.Millisecond)
+
 			wasCalled = true
+
 			return nil
 		})
 		mc := rtmock.NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
 			time.Sleep(100 * time.Millisecond)
+
 			wasCalledChild = true
+
 			return nil
 		})
 		mgc := rtmock.NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
 			time.Sleep(100 * time.Millisecond)
+
 			wasCalledGrandChild = true
+
 			return nil
 		})
+
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -378,6 +396,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 		)
 
 		go rt.processor.Process(t.Context())
+
 		rt.processor.AddPendingComponent(t.Context(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMockGrandChild",
@@ -395,7 +414,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 					},
 				},
 			},
-			Auth: componentsV1alpha1.Auth{
+			Auth: componentsV1alpha1.Auth{ //nolint:gosec
 				SecretStore: "kubernetesMockChild",
 			},
 		})
@@ -416,7 +435,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 					},
 				},
 			},
-			Auth: componentsV1alpha1.Auth{
+			Auth: componentsV1alpha1.Auth{ //nolint:gosec
 				SecretStore: "kubernetesMock",
 			},
 		})
@@ -616,7 +635,7 @@ func TestSetupTracing(t *testing.T) {
 		tracingConfig: config.TracingSpec{
 			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        ptr.Of(false),
+				IsSecure:        new(false),
 				Protocol:        "http",
 				Headers:         []string{"header1=value1", "header2=value2"},
 			},
@@ -627,7 +646,7 @@ func TestSetupTracing(t *testing.T) {
 		tracingConfig: config.TracingSpec{
 			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        ptr.Of(false),
+				IsSecure:        new(false),
 				Protocol:        "tcp",
 			},
 		},
@@ -637,7 +656,7 @@ func TestSetupTracing(t *testing.T) {
 		tracingConfig: config.TracingSpec{
 			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        ptr.Of(false),
+				IsSecure:        new(false),
 				Protocol:        "http",
 				Headers:         []string{"invalidheaders"},
 			},
@@ -654,7 +673,7 @@ func TestSetupTracing(t *testing.T) {
 		tracingConfig: config.TracingSpec{
 			Otel: &config.OtelSpec{
 				EndpointAddress: "http://foo.bar",
-				IsSecure:        ptr.Of(false),
+				IsSecure:        new(false),
 				Protocol:        "http",
 			},
 			Zipkin: &config.ZipkinSpec{
@@ -668,8 +687,10 @@ func TestSetupTracing(t *testing.T) {
 	for i, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+
 			require.NoError(t, err)
 			defer stopRuntime(t, rt)
+
 			rt.globalConfig.Spec.TracingSpec = &testcases[i].tracingConfig
 			if tc.hostAddress != "" {
 				rt.hostAddress = tc.hostAddress
@@ -677,6 +698,7 @@ func TestSetupTracing(t *testing.T) {
 			// Setup tracing with the fake tracer provider  store to confirm
 			// the right exporter was registered.
 			tpStore := newFakeTracerProviderStore()
+
 			err = rt.setupTracing(t.Context(), rt.hostAddress, tpStore)
 			if tc.expectedErr != "" {
 				require.Error(t, err)
@@ -684,9 +706,11 @@ func TestSetupTracing(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+
 			if len(tc.expectedExporters) > 0 {
 				assert.True(t, tpStore.HasExporter())
 			}
+
 			for i, exporter := range tpStore.exporters {
 				// Exporter types don't expose internals, so we can only validate that
 				// the right type of  exporter was registered.
@@ -706,8 +730,10 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 	t.Run("secret store configuration is populated", func(t *testing.T) {
 		// setup
 		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+
 		require.NoError(t, err)
 		defer stopRuntime(t, rt)
+
 		rt.globalConfig.Spec.Secrets = &config.SecretsSpec{
 			Scopes: []config.SecretsScope{
 				{
@@ -735,6 +761,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
 
 		m := rtmock.NewMockKubernetesStore()
+
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -748,15 +775,19 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 	t.Run("disable built-in secret store flag", func(t *testing.T) {
 		rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
 		defer stopRuntime(t, rt)
+
 		rt.runtimeConfig.disableBuiltinK8sSecretStore = true
 
 		testOk := make(chan struct{})
 		defer close(testOk)
+
 		go func() {
 			// If the test fails, this call blocks forever, eventually causing a timeout
 			rt.appendBuiltinSecretStore(t.Context())
+
 			testOk <- struct{}{}
 		}()
+
 		select {
 		case <-testOk:
 			return
@@ -774,6 +805,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		})
 
 		m := rtmock.NewMockKubernetesStore()
+
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -787,6 +819,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 
 func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
 	go rt.processor.Process(t.Context())
+
 	rt.appendBuiltinSecretStore(t.Context())
 	assert.Eventually(t, func() bool {
 		_, ok := rt.compStore.GetComponent(secretstoresLoader.BuiltinKubernetesSecretStore)
@@ -803,25 +836,31 @@ func NewTestDaprRuntime(t *testing.T, mode modes.DaprMode) (*DaprRuntime, error)
 func NewTestDaprRuntimeWithID(t *testing.T, mode modes.DaprMode, id string) (*DaprRuntime, error) {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, string(protocol.HTTPProtocol), 1024)
 	testRuntimeConfig.id = id
+
 	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	if err != nil {
 		return nil, err
 	}
+
 	rt.runtimeConfig.mode = mode
 	rt.channels.Refresh()
 	rt.wfengine = wfenginefake.New()
+
 	return rt, nil
 }
 
 func NewTestDaprRuntimeWithProtocol(t *testing.T, mode modes.DaprMode, protocol string, appPort int) (*DaprRuntime, error) {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, protocol, appPort)
+
 	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	if err != nil {
 		return nil, err
 	}
+
 	rt.runtimeConfig.mode = mode
 	rt.actors = actorsfake.New()
 	rt.channels.Refresh()
+
 	return rt, nil
 }
 
@@ -853,7 +892,7 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 		readBufferSize:               4 << 10,
 		unixDomainSocket:             "",
 		gracefulShutdownDuration:     time.Second,
-		enableAPILogging:             ptr.Of(true),
+		enableAPILogging:             new(true),
 		schedulerStreams:             3,
 		disableBuiltinK8sSecretStore: false,
 		metricsExporter: metrics.New(metrics.Options{
@@ -895,8 +934,10 @@ func TestPodName(t *testing.T) {
 func TestInitActors(t *testing.T) {
 	t.Run("missing namespace on kubernetes", func(t *testing.T) {
 		r, err := NewTestDaprRuntime(t, modes.KubernetesMode)
+
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
+
 		r.namespace = ""
 		r.runtimeConfig.mTLSEnabled = true
 
@@ -906,8 +947,10 @@ func TestInitActors(t *testing.T) {
 
 	t.Run("actors hosted = true", func(t *testing.T) {
 		r, err := NewTestDaprRuntime(t, modes.KubernetesMode)
+
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
+
 		r.appConfig = config.ApplicationConfig{
 			Entities: []string{"actor1"},
 		}
@@ -918,6 +961,7 @@ func TestInitActors(t *testing.T) {
 
 	t.Run("actors hosted = false", func(t *testing.T) {
 		r, err := NewTestDaprRuntime(t, modes.KubernetesMode)
+
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
 
@@ -937,8 +981,10 @@ func TestInitActors(t *testing.T) {
 			registry: registry.New(registry.NewOptions()),
 			healthz:  healthz.New(),
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
+
 		r.channels.Refresh()
 
 		err = r.initActors(t.Context())
@@ -957,8 +1003,10 @@ func TestInitActors(t *testing.T) {
 			healthz:          healthz.New(),
 			schedulerStreams: 3,
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
+
 		r.channels.Refresh()
 
 		assert.NotNil(t, r.compStore.ListStateStores())
@@ -977,13 +1025,15 @@ func TestInitActors(t *testing.T) {
 			healthz:          healthz.New(),
 			schedulerStreams: 3,
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
+
 		r.channels.Refresh()
 
 		name, ok := r.processor.State().ActorStateStoreName()
 		assert.False(t, ok)
-		assert.Equal(t, "", name)
+		assert.Empty(t, name)
 		err = r.initActors(t.Context())
 		require.NoError(t, err)
 	})
@@ -1071,6 +1121,7 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 type mockPubSub struct {
 	pubsub.PubSub
+
 	closeErr error
 }
 
@@ -1084,6 +1135,7 @@ func (p *mockPubSub) Close() error {
 
 type mockStateStore struct {
 	state.Store
+
 	closeErr error
 }
 
@@ -1196,6 +1248,7 @@ func TestCloseWithErrors(t *testing.T) {
 	}
 
 	errCh := make(chan error)
+
 	go func() {
 		errCh <- rt.Run(t.Context())
 	}()
@@ -1208,6 +1261,7 @@ func TestCloseWithErrors(t *testing.T) {
 	err = rt.runnerCloser.Close()
 	require.Error(t, err)
 	assert.Len(t, strings.Split(err.Error(), "\n"), 4)
+
 	select {
 	case rErr := <-errCh:
 		assert.Equal(t, err, rErr)
@@ -1228,22 +1282,27 @@ func TestComponentsCallback(t *testing.T) {
 
 	u, err := url.Parse(srv.URL)
 	require.NoError(t, err)
+
 	port, _ := strconv.Atoi(u.Port())
 
 	c := make(chan struct{})
+
 	var callbackInvoked atomic.Bool
 
 	cfg := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, "http", port)
 	rt, err := newDaprRuntime(t.Context(), testSecurity(t), cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	require.NoError(t, err)
+
 	rt.runtimeConfig.registry = registry.New(registry.NewOptions().WithComponentsCallback(func(components registry.ComponentRegistry) error {
 		callbackInvoked.Store(true)
 		close(c)
+
 		return nil
 	}))
 
 	errCh := make(chan error)
 	ctx, cancel := context.WithCancel(t.Context())
+
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
@@ -1257,6 +1316,7 @@ func TestComponentsCallback(t *testing.T) {
 	assert.True(t, callbackInvoked.Load(), "component callback was not invoked")
 
 	cancel()
+
 	select {
 	case err := <-errCh:
 		require.NoError(t, err)
@@ -1270,11 +1330,13 @@ func TestGRPCProxy(t *testing.T) {
 	serverPort, _ := freeport.GetFreePort()
 	teardown, err := runGRPCApp(serverPort)
 	require.NoError(t, err)
+
 	defer teardown()
 
 	// setup proxy
 	rt, err := NewTestDaprRuntimeWithProtocol(t, modes.StandaloneMode, "grpc", serverPort)
 	require.NoError(t, err)
+
 	internalPort, _ := freeport.GetFreePort()
 	rt.runtimeConfig.internalGRPCPort = internalPort
 
@@ -1284,6 +1346,7 @@ func TestGRPCProxy(t *testing.T) {
 			// proxy to server anytime
 			mockResolver.On("Init", mock.Anything).Return(nil)
 			mockResolver.On("ResolveID", mock.Anything).Return(fmt.Sprintf("localhost:%d", serverPort), nil)
+
 			return mockResolver
 		},
 		"mdns", // for standalone mode
@@ -1291,12 +1354,14 @@ func TestGRPCProxy(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error)
+
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
 
 	t.Cleanup(func() {
 		cancel()
+
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
@@ -1310,6 +1375,7 @@ func TestGRPCProxy(t *testing.T) {
 	t.Run("proxy single streaming request", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), time.Second*5)
 		defer cancel()
+
 		stream, err := pingStreamClient(ctx, internalPort)
 		require.NoError(t, err)
 
@@ -1324,11 +1390,13 @@ func TestGRPCProxy(t *testing.T) {
 	t.Run("proxy concurrent streaming requests", func(t *testing.T) {
 		ctx1, cancel := context.WithTimeout(t.Context(), time.Second*5)
 		defer cancel()
+
 		stream1, err := pingStreamClient(ctx1, internalPort)
 		require.NoError(t, err)
 
 		ctx2, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
+
 		stream2, err := pingStreamClient(ctx2, internalPort)
 		require.NoError(t, err)
 
@@ -1357,8 +1425,10 @@ func TestShutdownWithWait(t *testing.T) {
 		m := rtmock.NewMockKubernetesStoreWithClose(func() error {
 			close(closeSecretCalled)
 			<-closeSecretClose
+
 			return nil
 		})
+
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -1382,6 +1452,7 @@ spec:
 		// Use a background context since this is not closed by the test.
 		ctx := t.Context()
 		errCh := make(chan error)
+
 		go func() {
 			errCh <- rt.Run(ctx)
 		}()
@@ -1391,6 +1462,7 @@ spec:
 		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for component store to be populated with mock secret")
 
 		shutdownCh := make(chan struct{})
+
 		go func() {
 			rt.ShutdownWithWait()
 			close(shutdownCh)
@@ -1439,14 +1511,17 @@ spec:
 			<-ctx.Done()
 			close(initSecretContextClosed)
 			<-closeSecretInit
+
 			return nil
 		})
+
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
 			},
 			"kubernetesMock",
 		)
+
 		dir := t.TempDir()
 		rt.runtimeConfig.standalone.ResourcesPath = []string{dir}
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
@@ -1463,6 +1538,7 @@ spec:
 		// Use a background context since this is not closed by the test.
 		ctx := t.Context()
 		errCh := make(chan error)
+
 		go func() {
 			errCh <- rt.Run(ctx)
 		}()
@@ -1480,6 +1556,7 @@ spec:
 		}
 
 		shutdownCh := make(chan struct{})
+
 		go func() {
 			rt.ShutdownWithWait()
 			close(shutdownCh)
@@ -1522,6 +1599,7 @@ spec:
 			close(secretClosed)
 			return nil
 		}
+
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -1546,6 +1624,7 @@ spec:
 		// Use a background context since this is not closed by the test.
 		ctx := t.Context()
 		errCh := make(chan error)
+
 		go func() {
 			errCh <- rt.Run(ctx)
 		}()
@@ -1557,6 +1636,7 @@ spec:
 		}
 
 		shutdownCh := make(chan struct{})
+
 		go func() {
 			rt.ShutdownWithWait()
 			close(shutdownCh)
@@ -1594,6 +1674,7 @@ spec:
 			close(secretClosed)
 			return nil
 		}
+
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -1616,6 +1697,7 @@ spec:
 		// Use a background context since this is not closed by the test.
 		ctx := t.Context()
 		errCh := make(chan error)
+
 		go func() {
 			errCh <- rt.Run(ctx)
 		}()
@@ -1636,6 +1718,7 @@ spec:
 		// ShutdownWithWait() can still be called even if the runtime errored, it
 		// will just return immediately.
 		shutdownCh := make(chan struct{})
+
 		go func() {
 			rt.ShutdownWithWait()
 			close(shutdownCh)
@@ -1659,6 +1742,7 @@ spec:
 		rt.runtimeConfig.gracefulShutdownDuration = time.Millisecond * 10
 
 		fatalShutdownCalled := make(chan struct{})
+
 		rt.runnerCloser.WithFatalShutdown(func() {
 			close(fatalShutdownCalled)
 		})
@@ -1685,6 +1769,7 @@ spec:
 		// Use a background context since this is not closed by the test.
 		ctx := t.Context()
 		errCh := make(chan error)
+
 		go func() {
 			errCh <- rt.Run(ctx)
 		}()
@@ -1705,10 +1790,12 @@ spec:
 
 func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+
 	require.NoError(t, err)
 	defer stopRuntime(t, rt)
 
 	mockStateStore := new(daprt.MockStateStore)
+
 	rt.runtimeConfig.registry.StateStores().RegisterComponent(
 		func(_ logger.Logger) state.Store {
 			return mockStateStore
@@ -1716,11 +1803,13 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 		"mockState",
 	)
 	mockStateStore.On("Init", mock.Anything).Return(nil)
+
 	cStateStore := componentsV1alpha1.Component{}
-	cStateStore.ObjectMeta.Name = "testStateStoreName"
+	cStateStore.Name = "testStateStoreName"
 	cStateStore.Spec.Type = "state.mockState"
 
 	mockPubSub := new(daprt.MockPubSub)
+
 	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
@@ -1729,8 +1818,9 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	)
 	mockPubSub.On("Init", mock.Anything).Return(nil)
 	mockPubSub.On("Features").Return([]pubsub.Feature{pubsub.FeatureMessageTTL, pubsub.FeatureSubscribeWildcards})
+
 	cPubSub := componentsV1alpha1.Component{}
-	cPubSub.ObjectMeta.Name = "mockPubSub"
+	cPubSub.Name = "mockPubSub"
 	cPubSub.Spec.Type = "pubsub.mockPubSub"
 
 	rt.runtimeConfig.registry.Bindings().RegisterInputBinding(
@@ -1739,8 +1829,9 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 		},
 		"testInputBinding",
 	)
+
 	cin := componentsV1alpha1.Component{}
-	cin.ObjectMeta.Name = "testInputBinding"
+	cin.Name = "testInputBinding"
 	cin.Spec.Type = "bindings.testInputBinding"
 
 	rt.runtimeConfig.registry.Bindings().RegisterOutputBinding(
@@ -1749,20 +1840,23 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 		},
 		"testOutputBinding",
 	)
+
 	cout := componentsV1alpha1.Component{}
-	cout.ObjectMeta.Name = "testOutputBinding"
+	cout.Name = "testOutputBinding"
 	cout.Spec.Type = "bindings.testOutputBinding"
 
 	mockSecretStoreName := "mockSecretStore"
 	mockSecretStore := new(daprt.FakeSecretStore)
+
 	rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 		func(_ logger.Logger) secretstores.SecretStore {
 			return mockSecretStore
 		},
 		mockSecretStoreName,
 	)
+
 	cSecretStore := componentsV1alpha1.Component{}
-	cSecretStore.ObjectMeta.Name = mockSecretStoreName
+	cSecretStore.Name = mockSecretStoreName
 	cSecretStore.Spec.Type = "secretstores.mockSecretStore"
 
 	require.NoError(t, rt.processor.Init(t.Context(), cin))
@@ -1792,9 +1886,11 @@ func runGRPCApp(port int) (func(), error) {
 
 	server := grpc.NewServer()
 	pb.RegisterTestServiceServer(server, &pingStreamService{})
+
 	go func() {
 		server.Serve(serverListener)
 	}()
+
 	teardown := func() {
 		server.Stop()
 	}
@@ -1817,6 +1913,7 @@ func pingStreamClient(ctx context.Context, port int) (pb.TestService_PingStreamC
 	testClient := pb.NewTestServiceClient(clientConn)
 
 	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-app-id", "dummy")
+
 	return testClient.PingStream(ctx)
 }
 
@@ -1826,6 +1923,7 @@ type pingStreamService struct {
 
 func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) error {
 	counter := int32(0)
+
 	for {
 		ping, err := stream.Recv()
 		if err == io.EOF {
@@ -1833,12 +1931,15 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 		} else if err != nil {
 			return err
 		}
+
 		pong := &pb.PingResponse{Value: ping.GetValue(), Counter: counter}
 		if err := stream.Send(pong); err != nil {
 			return err
 		}
+
 		counter++
 	}
+
 	return nil
 }
 
@@ -1847,6 +1948,7 @@ func matchDaprRequestMethod(method string) any {
 		if req == nil || req.Message() == nil || req.Message().GetMethod() != method {
 			return false
 		}
+
 		return true
 	})
 }
@@ -1857,6 +1959,7 @@ func TestGracefulShutdownBindings(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error)
+
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
@@ -1868,8 +1971,9 @@ func TestGracefulShutdownBindings(t *testing.T) {
 		},
 		"testInputBinding",
 	)
+
 	cin := componentsV1alpha1.Component{}
-	cin.ObjectMeta.Name = "testInputBinding"
+	cin.Name = "testInputBinding"
 	cin.Spec.Type = "bindings.testInputBinding"
 
 	rt.runtimeConfig.registry.Bindings().RegisterOutputBinding(
@@ -1878,15 +1982,18 @@ func TestGracefulShutdownBindings(t *testing.T) {
 		},
 		"testOutputBinding",
 	)
+
 	cout := componentsV1alpha1.Component{}
-	cout.ObjectMeta.Name = "testOutputBinding"
+	cout.Name = "testOutputBinding"
 	cout.Spec.Type = "bindings.testOutputBinding"
+
 	require.NoError(t, rt.processor.Init(t.Context(), cin))
 	require.NoError(t, rt.processor.Init(t.Context(), cout))
 	assert.Len(t, rt.compStore.ListInputBindings(), 1)
 	assert.Len(t, rt.compStore.ListOutputBindings(), 1)
 
 	cancel()
+
 	select {
 	case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "input bindings shutdown timed out")
@@ -1909,6 +2016,7 @@ func TestBlockShutdownBindings(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(t.Context())
 		errCh := make(chan error)
+
 		go func() {
 			errCh <- rt.Run(ctx)
 		}()
@@ -1944,6 +2052,7 @@ func TestBlockShutdownBindings(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(t.Context())
 		errCh := make(chan error)
+
 		go func() {
 			errCh <- rt.Run(ctx)
 		}()
@@ -1970,7 +2079,9 @@ func TestBlockShutdownBindings(t *testing.T) {
 func TestGracefulShutdownPubSub(t *testing.T) {
 	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 	require.NoError(t, err)
+
 	mockPubSub := new(daprt.MockPubSub)
+
 	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
@@ -1978,12 +2089,13 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		"mockPubSub",
 	)
 	rt.runtimeConfig.gracefulShutdownDuration = 5 * time.Second
+
 	mockPubSub.On("Init", mock.Anything).Return(nil)
 	mockPubSub.On("Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler")).Return(nil)
 	mockPubSub.On("Close").Return(nil)
 
 	cPubSub := componentsV1alpha1.Component{}
-	cPubSub.ObjectMeta.Name = "mockPubSub"
+	cPubSub.Name = "mockPubSub"
 	cPubSub.Spec.Type = "pubsub.mockPubSub"
 
 	subscriptionItems := []runtimePubsub.SubscriptionJSON{
@@ -1991,6 +2103,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	}
 	sub, _ := json.Marshal(subscriptionItems)
 	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
 	fakeResp.WithRawDataBytes(sub).
 		WithContentType("application/json")
 	defer fakeResp.Close()
@@ -2019,6 +2132,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error)
+
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
@@ -2029,6 +2143,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
 
 	cancel()
+
 	select {
 	case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "pubsub shutdown timed out")
@@ -2040,6 +2155,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 func TestGracefulShutdownActors(t *testing.T) {
 	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 	require.NoError(t, err)
+
 	rt.runtimeConfig.gracefulShutdownDuration = 5 * time.Second
 
 	bytes := make([]byte, 32)
@@ -2081,6 +2197,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error)
+
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
@@ -2107,10 +2224,12 @@ func TestGracefulShutdownActors(t *testing.T) {
 	}
 
 	var activeActCount int32
+
 	runtimeStatus := rt.actors.RuntimeStatus()
 	for _, v := range runtimeStatus.GetActiveActors() {
 		activeActCount += v.GetCount()
 	}
+
 	assert.Equal(t, int32(0), activeActCount)
 }
 
@@ -2148,11 +2267,12 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 func TestTraceShutdown(t *testing.T) {
 	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 	require.NoError(t, err)
+
 	rt.runtimeConfig.gracefulShutdownDuration = 5 * time.Second
 	rt.globalConfig.Spec.TracingSpec = &config.TracingSpec{
 		Otel: &config.OtelSpec{
 			EndpointAddress: "foo.bar",
-			IsSecure:        ptr.Of(false),
+			IsSecure:        new(false),
 			Protocol:        "http",
 		},
 	}
@@ -2163,6 +2283,7 @@ func TestTraceShutdown(t *testing.T) {
 
 	errCh := make(chan error)
 	ctx, cancel := context.WithCancel(t.Context())
+
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
@@ -2194,7 +2315,9 @@ func testSecurity(t *testing.T) security.Handler {
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
+
 	go secP.Run(ctx)
+
 	sec, err := secP.Handler(t.Context())
 	require.NoError(t, err)
 
@@ -2257,6 +2380,7 @@ func TestOtelResourceDetection(t *testing.T) {
 			require.NoError(t, err, "creating OpenTelemetry resource should not error, err: %v", err)
 
 			attrs := r.Attributes()
+
 			attrMap := make(map[string]string)
 			for _, attr := range attrs {
 				attrMap[string(attr.Key)] = attr.Value.AsString()
@@ -2285,6 +2409,7 @@ func TestOtelResourceDetection(t *testing.T) {
 			for key, expectedValue := range tc.expectedAttrs {
 				value, exists := attrMap[key]
 				assert.True(t, exists, "Expected attribute %s to exist", key)
+
 				if exists {
 					assert.Equal(t, expectedValue, value,
 						"Attribute %s should be %s, but got %s", key, expectedValue, value)

@@ -91,12 +91,12 @@ func (n *nostatestore) Run(t *testing.T, ctx context.Context) {
 	details, exists := data["details"]
 	require.True(t, exists)
 
-	detailsArray, ok := details.([]interface{})
+	detailsArray, ok := details.([]any)
 	require.True(t, ok)
 	require.Len(t, detailsArray, 1)
 
 	// Confirm that the first element of the 'details' array has the correct ErrorInfo details
-	detailsObject, ok := detailsArray[0].(map[string]interface{})
+	detailsObject, ok := detailsArray[0].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "dapr.io", detailsObject["domain"])
 	require.Equal(t, "DAPR_STATE_NOT_CONFIGURED", detailsObject["reason"])

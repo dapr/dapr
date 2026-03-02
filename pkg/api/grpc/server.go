@@ -230,9 +230,10 @@ func (s *server) StartNonBlocking() error {
 		grpcReflection.Register(server)
 		s.servers = append(s.servers, server)
 
-		if s.kind == internalServer {
+		switch s.kind {
+		case internalServer:
 			internalv1pb.RegisterServiceInvocationServer(server, s.api)
-		} else if s.kind == apiServer {
+		case apiServer:
 			runtimev1pb.RegisterDaprServer(server, s.api)
 			s.logger.Infof("Registering workflow engine for gRPC endpoint: %s", listener.Addr())
 			s.workflowEngine.RegisterGrpcServer(server)
@@ -309,9 +310,10 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		s.logger.Info("Enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 
-		if s.kind == apiServer {
+		switch s.kind {
+		case apiServer:
 			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingServerInterceptor())
-		} else if s.kind == internalServer {
+		case internalServer:
 			intrStream = append(intrStream, diag.DefaultGRPCMonitoring.StreamingClientInterceptor())
 		}
 	}

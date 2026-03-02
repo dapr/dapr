@@ -15,6 +15,7 @@ package pubsub
 
 import (
 	"context"
+	"slices"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	rtv1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -55,12 +56,10 @@ func IsOperationAllowed(topic string, pubSub *PubsubItem, scopedTopics []string)
 
 	// first check if allowedTopics contain it
 	if len(pubSub.AllowedTopics) > 0 {
-		for _, t := range pubSub.AllowedTopics {
-			if t == topic {
-				inAllowedTopics = true
-				break
-			}
+		if slices.Contains(pubSub.AllowedTopics, topic) {
+			inAllowedTopics = true
 		}
+
 		if !inAllowedTopics {
 			return false
 		}
@@ -68,11 +67,8 @@ func IsOperationAllowed(topic string, pubSub *PubsubItem, scopedTopics []string)
 
 	// check if topic is protected
 	if len(pubSub.ProtectedTopics) > 0 {
-		for _, t := range pubSub.ProtectedTopics {
-			if t == topic {
-				inProtectedTopics = true
-				break
-			}
+		if slices.Contains(pubSub.ProtectedTopics, topic) {
+			inProtectedTopics = true
 		}
 	}
 
@@ -82,13 +78,7 @@ func IsOperationAllowed(topic string, pubSub *PubsubItem, scopedTopics []string)
 	}
 
 	// check if a granular scope has been applied
-	allowedScope := false
-	for _, t := range scopedTopics {
-		if t == topic {
-			allowedScope = true
-			break
-		}
-	}
+	allowedScope := slices.Contains(scopedTopics, topic)
 
 	return allowedScope
 }

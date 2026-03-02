@@ -103,7 +103,7 @@ func (e *parallel) Run(t *testing.T, ctx context.Context) {
 	_, err = cl.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
-	executionMap.Range(func(k, v interface{}) bool {
+	executionMap.Range(func(k, v any) bool {
 		_, err = uuid.Parse(k.(string))
 		require.NoError(t, err)
 		require.EqualValues(t, 2, v.(*atomic.Int32).Load())

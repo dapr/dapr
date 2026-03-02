@@ -730,7 +730,7 @@ func TestListScopes(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, res.GetComponents(), 2)
-		var exp [][]byte
+		exp := make([][]byte, 0, 2)
 		var b []byte
 		b, err = json.Marshal(comp1)
 		require.NoError(t, err)
@@ -988,7 +988,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
-		e.Auth.SecretStore = kubernetesSecretStore
+		e.SecretStore = kubernetesSecretStore
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		require.NoError(t, err)
@@ -1016,7 +1016,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
-		e.Auth.SecretStore = ""
+		e.SecretStore = ""
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		require.NoError(t, err)

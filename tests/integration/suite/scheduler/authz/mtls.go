@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -65,8 +64,8 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 			Name:      "testJob",
 			Overwrite: true,
 			Job: &schedulerv1pb.Job{
-				Schedule: ptr.Of("@daily"),
-				DueTime:  ptr.Of("3h"),
+				Schedule: new("@daily"),
+				DueTime:  new("3h"),
 			},
 			Metadata: &schedulerv1pb.JobMetadata{
 				AppId:     "foo",
@@ -90,7 +89,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 			funcGoodAppID: func() error {
 				_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 					Name: "goodTestJob",
-					Job:  &schedulerv1pb.Job{Schedule: ptr.Of("@daily")},
+					Job:  &schedulerv1pb.Job{Schedule: new("@daily")},
 					Metadata: &schedulerv1pb.JobMetadata{
 						AppId:     "foo",
 						Namespace: "default",
@@ -104,7 +103,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 			funcBadAppID: func() error {
 				_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 					Name: "badTestJob",
-					Job:  &schedulerv1pb.Job{Schedule: ptr.Of("@daily")},
+					Job:  &schedulerv1pb.Job{Schedule: new("@daily")},
 					Metadata: &schedulerv1pb.JobMetadata{
 						AppId:     "not-foo",
 						Namespace: "default",

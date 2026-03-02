@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
-	"github.com/dapr/kit/ptr"
 )
 
 func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName string, es []*protos.HistoryEvent) error {
@@ -49,7 +48,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 						TaskScheduledId:       e.EventId,
 						Name:                  wrapperspb.String(startEventName),
 						OrchestrationInstance: &protos.OrchestrationInstance{InstanceId: o.actorID},
-						AppID:                 ptr.Of(o.appID),
+						AppID:                 new(o.appID),
 					},
 					Input: createSO.Input,
 					OrchestrationInstance: &protos.OrchestrationInstance{

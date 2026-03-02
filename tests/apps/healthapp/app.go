@@ -40,7 +40,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 var (
@@ -171,7 +170,7 @@ func (c *countAndLast) MarshalJSON() ([]byte, error) {
 		Count: c.count,
 	}
 	if c.lastTime.Unix() > 0 {
-		obj.Last = ptr.Of(time.Now().Sub(c.lastTime).Milliseconds())
+		obj.Last = new(time.Since(c.lastTime).Milliseconds())
 	}
 	return json.Marshal(obj)
 }

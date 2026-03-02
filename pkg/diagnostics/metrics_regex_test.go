@@ -11,7 +11,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestRegexRulesSingle(t *testing.T) {
@@ -20,9 +19,9 @@ func TestRegexRulesSingle(t *testing.T) {
 	testStat := stats.Int64(statName, "Stat used in unit test", stats.UnitDimensionless)
 
 	metricSpec := config.MetricSpec{
-		Enabled: ptr.Of(true),
+		Enabled: new(true),
 		HTTP: &config.MetricHTTP{
-			ExcludeVerbs: ptr.Of(true),
+			ExcludeVerbs: new(true),
 		},
 		Rules: []config.MetricsRule{
 			{
@@ -129,9 +128,10 @@ func TestRegexRulesSingle(t *testing.T) {
 		lightsabers := false
 
 		for _, v := range viewData {
-			if v.Tags[0].Value == "/orders/TEST" {
+			switch v.Tags[0].Value {
+			case "/orders/TEST":
 				orders = true
-			} else if v.Tags[0].Value == "/lightsabers/TEST" {
+			case "/lightsabers/TEST":
 				lightsabers = true
 			}
 		}

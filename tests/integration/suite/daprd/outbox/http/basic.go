@@ -123,8 +123,8 @@ type stateTransactionRequestBody struct {
 }
 
 type stateTransactionRequestBodyOperation struct {
-	Operation string      `json:"operation"`
-	Request   interface{} `json:"request"`
+	Operation string `json:"operation"`
+	Request   any    `json:"request"`
 }
 
 func (o *basic) Run(t *testing.T, ctx context.Context) {

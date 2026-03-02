@@ -66,12 +66,14 @@ func (s *streamer) receive(ctx context.Context) error {
 		if ctx.Err() != nil || errors.Is(err, io.EOF) {
 			return ctx.Err()
 		}
+
 		if err != nil {
 			return err
 		}
 
 		s.wg.Add(1)
 		s.inflight.Add(1)
+
 		go func() {
 			defer func() {
 				s.wg.Done()
@@ -105,7 +107,8 @@ func (s *streamer) outgoing(ctx context.Context) error {
 	for {
 		select {
 		case result := <-s.resultCh:
-			if err := s.stream.Send(result); err != nil {
+			err := s.stream.Send(result)
+			if err != nil {
 				return err
 			}
 		case <-ctx.Done():
@@ -122,10 +125,12 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
-		if err := s.invokeApp(ctx, job); err != nil {
+		err := s.invokeApp(ctx, job)
+		if err != nil {
 			log.Errorf("failed to invoke schedule app job: %s", err)
 			return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 		}
+
 		return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 
 	case *schedulerv1pb.JobTargetMetadata_Actor:
@@ -150,12 +155,14 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			if st.Code() == codes.FailedPrecondition {
 				return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 			}
+
 			if st.Message() == actorerrors.ErrReminderCanceled.Error() {
 				return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 			}
 		}
 
 		log.Errorf("failed to invoke scheduled actor reminder named: %s due to: %s", job.GetName(), err)
+
 		return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 
 	default:
@@ -177,6 +184,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	if err != nil {
 		return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
 	}
+
 	if response != nil {
 		defer response.Close()
 	}
@@ -191,6 +199,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	case codes.OK:
 		log.Debugf("Sent job %s to app", job.GetName())
 		diag.DefaultComponentMonitoring.JobTriggeredSuccess(ctx, diag.JobTriggerOp, elapsedMs)
+
 		return nil
 	case codes.NotFound:
 		// NotFound treated as SUCCESS to avoid retriggers by the scheduler, but is monitored as a failure
@@ -202,6 +211,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		err := fmt.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
 		log.Error(err.Error())
 		diag.DefaultComponentMonitoring.JobTriggeredFailure(ctx, diag.JobTriggerOp, elapsedMs)
+
 		return err
 	}
 }
@@ -222,8 +232,10 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		SkipLock:  actor.GetType() == s.wfengine.ActivityActorType(),
 	})
 	diag.DefaultMonitoring.ActorReminderFired(actor.GetType(), err == nil)
+
 	if err != nil {
 		return err
 	}
+
 	return nil
 }

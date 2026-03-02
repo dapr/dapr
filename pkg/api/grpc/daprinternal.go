@@ -136,10 +136,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}()
 
 	// Read the rest of the data in background as we submit the request
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-
+	a.wg.Go(func() {
 		var (
 			expectSeq uint64
 			readSeq   uint64
@@ -186,7 +183,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		}
 
 		pw.Close()
-	}()
+	})
 
 	isSSERequest := sse.IsSSEGrpcRequest(chunk.GetRequest())
 
@@ -379,7 +376,7 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 		operation := req.Message().GetMethod()
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
-		appProtocolIsHTTP := a.Universal.AppConnectionConfig().Protocol.IsHTTP()
+		appProtocolIsHTTP := a.AppConnectionConfig().Protocol.IsHTTP()
 		if appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {
