@@ -29,7 +29,7 @@ spec:
     name: grpc
 # Added for backwards compatibility where previous clients will attempt to
 # connect on port 80.
-# TOOD: @joshvanl: remove in v1.14
+# TODO: @joshvanl: consider removing when legacy port 80 support is no longer required
 {{ if (ne (int .Values.ports.port) 80) }}
   - protocol: TCP
     port: 80
