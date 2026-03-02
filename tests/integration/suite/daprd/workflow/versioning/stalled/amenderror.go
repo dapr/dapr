@@ -65,8 +65,8 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	clientCtx, cancelClient := context.WithCancel(ctx)
 	defer cancelClient()
 	client := d.workflow.BackendClient(t, clientCtx)
-	id, err := client.ScheduleNewOrchestration(ctx, "workflow")
-	require.NoError(t, err)
+	id, scheduleErr := client.ScheduleNewOrchestration(ctx, "workflow")
+	require.NoError(t, scheduleErr)
 
 	wf.WaitForOrchestratorStartedEvent(t, ctx, client, id)
 
@@ -87,6 +87,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	client = d.workflow.BackendClient(t, clientCtx)
 
 	require.NoError(t, client.RaiseEvent(ctx, id, "Continue"))
+
 	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_STALLED)
 	lastEvent := wf.GetLastHistoryEventOfType[protos.HistoryEvent_ExecutionStalled](t, ctx, client, id)
 	require.NotNil(t, lastEvent)
@@ -108,5 +109,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
-	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
+	md, completeErr := client.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, completeErr)
+	require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, md.RuntimeStatus)
 }

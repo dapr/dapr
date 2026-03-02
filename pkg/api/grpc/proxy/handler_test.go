@@ -824,7 +824,7 @@ func (s *proxyTestSuite) SetupSuite() {
 		}
 		return outCtx, conn, target, teardown, nil
 	}
-	getPolicyFn := func(appID, methodName string) *resiliency.PolicyDefinition {
+	getPolicyFn := func(_ context.Context, appID, methodName string) *resiliency.PolicyDefinition {
 		return s.policyDef
 	}
 	th := TransparentHandler(director, getPolicyFn,

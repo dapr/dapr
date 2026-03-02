@@ -147,7 +147,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
 
-		require.NoError(t, h.Deliver(t.Context(), testPubSubMessage))
+		assert.Equal(t, runtimePubsub.ErrMessageDropped, h.Deliver(t.Context(), testPubSubMessage))
 	})
 }
 
@@ -398,7 +398,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		err := h.Deliver(t.Context(), testPubSubMessage)
 
-		require.NoError(t, err, "expected error to be nil")
+		assert.Equal(t, runtimePubsub.ErrMessageDropped, err, "expected error to be ErrMessageDropped")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 

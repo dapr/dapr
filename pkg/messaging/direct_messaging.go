@@ -151,7 +151,7 @@ func (d *directMessaging) Close() error {
 
 // Invoke takes a message requests and invokes an app, either local or remote.
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	app, err := d.getRemoteApp(targetAppID)
+	app, err := d.getRemoteApp(ctx, targetAppID)
 	if err != nil {
 		return nil, err
 	}
@@ -580,7 +580,7 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 	addOrCreate("Forwarded", forwardedHeaderValue)
 }
 
-func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) {
+func (d *directMessaging) getRemoteApp(ctx context.Context, appID string) (res remoteApp, err error) {
 	res.id, res.namespace, err = d.requestAppIDAndNamespace(appID)
 	if err != nil {
 		return res, err
@@ -621,7 +621,7 @@ func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) 
 			// If there was nothing in the cache (including the case of the cache disabled)
 			if res.address == "" {
 				// Resolve
-				addresses, err = d.resolverMulti.ResolveIDMulti(context.TODO(), request)
+				addresses, err = d.resolverMulti.ResolveIDMulti(ctx, request)
 				if err != nil {
 					return res, err
 				}
@@ -635,7 +635,22 @@ func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) 
 				}
 			}
 		} else {
-			res.address, err = d.resolver.ResolveID(context.TODO(), request)
+			err = backoff.Retry(func() error {
+				var rerr error
+				res.address, rerr = d.resolver.ResolveID(ctx, request)
+				if rerr != nil {
+					return backoff.Permanent(rerr)
+				}
+				if len(res.address) == 0 {
+					return fmt.Errorf("resolver returned empty address for app id %s/%s", request.Namespace, request.ID)
+				}
+				return nil
+			}, backoff.WithMaxRetries(
+				backoff.WithContext(
+					backoff.NewConstantBackOff(100*time.Millisecond),
+					ctx),
+				5),
+			)
 			if err != nil {
 				return res, err
 			}

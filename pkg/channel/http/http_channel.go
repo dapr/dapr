@@ -397,6 +397,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 			statusOK := clientResp.StatusCode >= 200 && clientResp.StatusCode < 300
 			if isSse && req.HTTPResponseWriter() != nil && statusOK {
 				callerResponseWriter := req.HTTPResponseWriter()
+				copyHeader(callerResponseWriter.Header(), clientResp.Header)
 				reader := bufio.NewReader(clientResp.Body)
 				err = sse.FlushSSEResponse(ctx, callerResponseWriter, reader)
 				if err != nil {

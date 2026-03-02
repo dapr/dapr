@@ -179,6 +179,8 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 		s.setRespondWithEmptyJSON()
 	case "set-respond-invalid-status":
 		s.setRespondWithInvalidStatus()
+	case "set-respond-success":
+		s.setRespondWithSuccess()
 	}
 
 	return &commonv1pb.InvokeResponse{Data: respBody, ContentType: "application/json"}, nil
@@ -208,21 +210,41 @@ func (s *server) getMessages(reqID string) []byte {
 func (s *server) setRespondWithError() {
 	log.Println("setRespondWithError called")
 	respondWithError = true
+	respondWithRetry = false
+	respondWithEmptyJSON = false
+	respondWithInvalidStatus = false
 }
 
 func (s *server) setRespondWithRetry() {
 	log.Println("setRespondWithRetry called")
 	respondWithRetry = true
+	respondWithError = false
+	respondWithEmptyJSON = false
+	respondWithInvalidStatus = false
 }
 
 func (s *server) setRespondWithEmptyJSON() {
 	log.Println("setRespondWithEmptyJSON called")
 	respondWithEmptyJSON = true
+	respondWithError = false
+	respondWithRetry = false
+	respondWithInvalidStatus = false
 }
 
 func (s *server) setRespondWithInvalidStatus() {
 	log.Println("setRespondWithInvalidStatus called")
 	respondWithInvalidStatus = true
+	respondWithError = false
+	respondWithRetry = false
+	respondWithEmptyJSON = false
+}
+
+func (s *server) setRespondWithSuccess() {
+	log.Println("setRespondWithSuccess called")
+	respondWithError = false
+	respondWithRetry = false
+	respondWithEmptyJSON = false
+	respondWithInvalidStatus = false
 }
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr

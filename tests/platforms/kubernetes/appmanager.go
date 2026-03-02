@@ -854,29 +854,40 @@ func (m *AppManager) GetCPUAndMemory(sidecar bool) (int64, float64, error) {
 	var maxMemory float64 = -1
 	for _, pod := range pods {
 		podName := pod.Name
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-		metrics, err := m.client.MetricsClient.MetricsV1beta1().PodMetricses(m.namespace).Get(ctx, podName, metav1.GetOptions{})
-		cancel()
-		if err != nil {
-			return -1, -1, err
-		}
-
-		for _, c := range metrics.Containers {
-			isSidecar := c.Name == DaprSideCarName
-			if isSidecar == sidecar {
-				mi, _ := c.Usage.Memory().AsInt64()
-				mb := float64((mi / 1024)) * 0.001024
-
-				cpu := c.Usage.Cpu().ScaledValue(resource.Milli)
-
-				if cpu > maxCPU {
-					maxCPU = cpu
+		// The metrics-server scrapes on a ~60s interval and may not yet have data
+		// for a recently started or restarted pod. Retry on NotFound for up to 60s
+		metricsCtx, metricsCancel := context.WithTimeout(m.ctx, 60*time.Second)
+		waitErr := wait.PollUntilContextCancel(metricsCtx, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+			podMetrics, getErr := m.client.MetricsClient.MetricsV1beta1().PodMetricses(m.namespace).Get(ctx, podName, metav1.GetOptions{})
+			if getErr != nil {
+				if apierrors.IsNotFound(getErr) {
+					log.Printf("Pod metrics for %s not yet available, retrying...", podName)
+					return false, nil
 				}
+				return false, getErr
+			}
+			for _, c := range podMetrics.Containers {
+				isSidecar := c.Name == DaprSideCarName
+				if isSidecar == sidecar {
+					mi, _ := c.Usage.Memory().AsInt64()
+					mb := float64((mi / 1024)) * 0.001024
 
-				if mb > maxMemory {
-					maxMemory = mb
+					cpu := c.Usage.Cpu().ScaledValue(resource.Milli)
+
+					if cpu > maxCPU {
+						maxCPU = cpu
+					}
+
+					if mb > maxMemory {
+						maxMemory = mb
+					}
 				}
 			}
+			return true, nil
+		})
+		metricsCancel()
+		if waitErr != nil {
+			return -1, -1, waitErr
 		}
 	}
 	if (maxCPU < 0) || (maxMemory < 0) {

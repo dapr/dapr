@@ -48,6 +48,7 @@ Remaining P0s:
 - [ ] Certifications/conformance passing for components
 - [ ] Update certification tests in components-contrib release branch (prior to merge back into master) to use the RC (and Go SDK RC/release if possible)
 - [ ] Verify infrastructure resources
+- [ ] [0 critical/high vulnerabilities](https://github.com/dapr/components-contrib/security/dependabot)
 - [ ] Cut RC and update dapr/dapr to use it
 
 ### dapr/dapr (runtime)
@@ -57,11 +58,13 @@ Remaining P0s:
 - [ ] Performance tests are passing
 - [ ] Longhaul tests are passing
 - [ ] Version skew tests are passing
+- [ ] [0 critical/high vulnerabilities](https://github.com/dapr/dapr/security/dependabot)
 - [ ] Cut RC and update components-contrib to use it
 
 ### dapr/cli
 
 - [ ] Tests are passing
+- [ ] [0 critical/high vulnerabilities](https://github.com/dapr/cli/security/dependabot)
 - [ ] Cut RC
 
 ---
@@ -93,6 +96,15 @@ Remaining P0s:
   - [ ] JS (as applicable) @approvers-js-sdk @maintainers-js-sdk
   - [ ] Rust (as applicable) @approvers-rust-sdk @maintainers-rust-sdk
   - [ ] C++ (as applicable) @approvers-cpp-sdk @maintainers-cpp-sdk
+
+- [ ] 0 critical/high vulnerabilities
+  - [ ] [.NET](https://github.com/dapr/dotnet-sdk/security/dependabot)
+  - [ ] [Java](https://github.com/dapr/java-sdk/security/dependabot)
+  - [ ] [Go](https://github.com/dapr/go-sdk/security/dependabot)
+  - [ ] [Python](https://github.com/dapr/python-sdk/security/dependabot)
+  - [ ] [JS](https://github.com/dapr/js-sdk/security/dependabot)
+  - [ ] [Rust](https://github.com/dapr/rust-sdk/security/dependabot)
+  - [ ] [C++](https://github.com/dapr/cpp-sdk/security/dependabot)
 
 ### Quickstarts
 

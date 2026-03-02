@@ -36,6 +36,6 @@ type Factory interface {
 	GetOrCreate(string) Interface
 	Exists(string) bool
 	HaltAll(context.Context) error
-	HaltNonHosted(context.Context) error
+	HaltNonHosted(context.Context, func(*api.LookupActorRequest) bool) error
 	Len() int
 }

@@ -573,8 +573,8 @@ func prepareOutputInfo(pkg, testName, baseOutputDir string) (outputInfo, bool) {
 	return output, true
 }
 
-// storeRunner aggregates the runner into combinedResults & for pubsub the comparison sets
-func storeRunner(r Runner, output outputInfo) {
+// storeRunner aggregates the runner and optional ResourceUsage into combinedResults & for pubsub the comparison sets
+func storeRunner(r Runner, output outputInfo, ru *ResourceUsage) {
 	// combine results per API/transport/groupKey
 	mapKey := output.apiName + "/"
 	if output.transport != "" {
@@ -584,12 +584,16 @@ func storeRunner(r Runner, output outputInfo) {
 	result, exists := combinedResults[mapKey]
 	if !exists {
 		result = combinedTestResult{
-			name:    output.groupKey,
-			outDir:  output.outDir,
-			runners: []Runner{},
+			name:           output.groupKey,
+			outDir:         output.outDir,
+			runners:        []Runner{},
+			resourceUsages: []*ResourceUsage{},
 		}
 	}
 	result.runners = append(result.runners, r)
+	if ru != nil && (ru.AppCPUm > 0 || ru.SidecarCPUm > 0) {
+		result.resourceUsages = append(result.resourceUsages, ru)
+	}
 	combinedResults[mapKey] = result
 	if debugEnabled {
 		debugf("storeRunner result: %+v", result)
