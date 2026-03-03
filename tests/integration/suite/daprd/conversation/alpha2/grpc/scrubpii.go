@@ -85,7 +85,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, resp.GetOutputs(), 1)
 		require.Len(t, resp.GetOutputs()[0].GetChoices(), 1)
 		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetOutputs()[0].GetChoices()[0].GetMessage().GetContent())
-		require.Equal(t, "", resp.GetOutputs()[0].GetModel())
+		require.Empty(t, resp.GetOutputs()[0].GetModel())
 		require.NotNil(t, resp.GetOutputs()[0].GetUsage())
 		require.Equal(t, uint64(8), resp.GetOutputs()[0].GetUsage().GetCompletionTokens())
 		require.Equal(t, uint64(8), resp.GetOutputs()[0].GetUsage().GetPromptTokens())

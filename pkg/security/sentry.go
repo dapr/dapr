@@ -36,7 +36,6 @@ import (
 	cryptopem "github.com/dapr/kit/crypto/pem"
 	"github.com/dapr/kit/crypto/spiffe"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -166,7 +165,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 				return nil, errors.New("JWT audience is empty")
 			}
 
-			jwtVal = ptr.Of(resp.GetJwt().GetValue())
+			jwtVal = new(resp.GetJwt().GetValue())
 		}
 
 		return &spiffe.SVIDResponse{

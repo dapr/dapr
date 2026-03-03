@@ -86,8 +86,8 @@ spec:
 		daprd.WithAppPort(srv2.Port()),
 	)
 
-	require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "res.yaml"), []byte(
-		fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "res.yaml"),
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -112,8 +112,7 @@ spec:
 	  "/helloworld": "/v1.0/invoke/%[1]s/method/barfoo",
 		"/v1.0/invoke/%[1]s/method/foobar": "/v1.0/invoke/%[1]s/method/abc"
 	}'
-`, r.daprd1.AppID()),
-	), 0o600))
+`, r.daprd1.AppID()), 0o600))
 
 	return []framework.Option{
 		framework.WithProcesses(srv1, srv2, r.daprd1, r.daprd2),
@@ -127,8 +126,8 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 	client := client.HTTP(t)
 	r.doReq(t, ctx, client, "helloworld", "daprd1:/abc")
 
-	require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "res.yaml"), []byte(
-		fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "res.yaml"),
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -168,8 +167,7 @@ spec:
    value: '{
 		"/v1.0/invoke/%[1]s/method/barfoo": "/v1.0/invoke/%[1]s/method/xyz"
 	}'
-`, r.daprd1.AppID()),
-	), 0o600))
+`, r.daprd1.AppID()), 0o600))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.doReq(c, ctx, client, "helloworld", "daprd1:/xyz")

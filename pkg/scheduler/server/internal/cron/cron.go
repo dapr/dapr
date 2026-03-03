@@ -34,7 +34,6 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.scheduler.server.cron")
@@ -112,7 +111,7 @@ func (c *cron) Run(ctx context.Context) error {
 		TriggerFn:       c.triggerHandler,
 		ReplicaData:     hostAny,
 		WatchLeadership: watchLeadershipCh,
-		Workers:         ptr.Of(c.workers),
+		Workers:         new(c.workers),
 	})
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)

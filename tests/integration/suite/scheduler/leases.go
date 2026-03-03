@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -72,7 +71,7 @@ func (l *leases) Run(t *testing.T, ctx context.Context) {
 	_, err = l.scheduler.Client(t, ctx).ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name:      "testJob",
 		Overwrite: true,
-		Job:       &schedulerv1pb.Job{DueTime: ptr.Of("3h")},
+		Job:       &schedulerv1pb.Job{DueTime: new("3h")},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     "foo",
 			Namespace: "default",

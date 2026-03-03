@@ -21,7 +21,7 @@ type (
 		Metadata        map[string]string `json:"metadata,omitempty"`
 		Route           string            `json:"route"`  // Single route from v1alpha1
 		Routes          RoutesJSON        `json:"routes"` // Multiple routes from v2alpha1
-		BulkSubscribe   BulkSubscribeJSON `json:"bulkSubscribe,omitempty"`
+		BulkSubscribe   BulkSubscribeJSON `json:"bulkSubscribe,omitzero"`
 	}
 
 	RoutesJSON struct {

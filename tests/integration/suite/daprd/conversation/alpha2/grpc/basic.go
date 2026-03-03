@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -81,7 +80,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			ToolTypes: &rtv1.ConversationTools_Function{
 				Function: &rtv1.ConversationToolsFunction{
 					Name:        "test_function",
-					Description: ptr.Of("A test function"),
+					Description: new("A test function"),
 					Parameters:  toolParameters,
 				},
 			},
@@ -110,7 +109,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		cacheRetention := durationpb.New(24 * time.Hour)
 		resp, err := client.ConverseAlpha2(ctx, &rtv1.ConversationRequestAlpha2{
 			Name:      "test-alpha2-echo",
-			ContextId: ptr.Of(contextID),
+			ContextId: new(contextID),
 			// multiple inputs
 			Inputs: []*rtv1.ConversationInputAlpha2{
 				{
@@ -118,7 +117,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfUser{
 								OfUser: &rtv1.ConversationMessageOfUser{
-									Name: ptr.Of("test-user"),
+									Name: new("test-user"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "well hello there",
@@ -128,14 +127,14 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 							},
 						},
 					},
-					ScrubPii: ptr.Of(false),
+					ScrubPii: new(false),
 				},
 				{
 					Messages: []*rtv1.ConversationMessage{
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfSystem{
 								OfSystem: &rtv1.ConversationMessageOfSystem{
-									Name: ptr.Of("test-system"),
+									Name: new("test-system"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "You are a helpful assistant",
@@ -145,15 +144,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 							},
 						},
 					},
-					ScrubPii: ptr.Of(true),
+					ScrubPii: new(true),
 				},
 			},
 			Parameters:           parameters,
 			Metadata:             metadata,
-			ScrubPii:             ptr.Of(true),
-			Temperature:          ptr.Of(0.7),
+			ScrubPii:             new(true),
+			Temperature:          new(0.7),
 			Tools:                []*rtv1.ConversationTools{tool},
-			ToolChoice:           ptr.Of("auto"),
+			ToolChoice:           new("auto"),
 			ResponseFormat:       responseFormat,
 			PromptCacheRetention: cacheRetention,
 		})
@@ -210,7 +209,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
 								OfAssistant: &rtv1.ConversationMessageOfAssistant{
-									Name: ptr.Of("assistant name"),
+									Name: new("assistant name"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "assistant message",
@@ -218,7 +217,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 									},
 									ToolCalls: []*rtv1.ConversationToolCalls{
 										{
-											Id: ptr.Of("id 123"),
+											Id: new("id 123"),
 											ToolTypes: &rtv1.ConversationToolCalls_Function{
 												Function: &rtv1.ConversationToolCallsOfFunction{
 													Name:      "test_function",
@@ -248,7 +247,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
 								OfAssistant: &rtv1.ConversationMessageOfAssistant{
-									Name: ptr.Of("assistant name"),
+									Name: new("assistant name"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "assistant message",
@@ -256,7 +255,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 									},
 									ToolCalls: []*rtv1.ConversationToolCalls{
 										{
-											Id: ptr.Of("call_123"),
+											Id: new("call_123"),
 											// This should err
 											ToolTypes: nil,
 										},

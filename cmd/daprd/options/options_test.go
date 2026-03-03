@@ -32,9 +32,9 @@ func TestAppFlag(t *testing.T) {
 		"--metrics-port", strconv.Itoa(10000),
 	})
 	require.NoError(t, err)
-	assert.EqualValues(t, "testapp", opts.AppID)
-	assert.EqualValues(t, "80", opts.AppPort)
-	assert.EqualValues(t, "http", opts.AppProtocol)
+	assert.Equal(t, "testapp", opts.AppID)
+	assert.Equal(t, "80", opts.AppPort)
+	assert.Equal(t, "http", opts.AppProtocol)
 }
 
 func TestStandaloneGlobalConfig(t *testing.T) {
@@ -45,8 +45,8 @@ func TestStandaloneGlobalConfig(t *testing.T) {
 		"--metrics-port", strconv.Itoa(10000),
 	})
 	require.NoError(t, err)
-	assert.EqualValues(t, "testapp", opts.AppID)
-	assert.EqualValues(t, string(modes.StandaloneMode), opts.Mode)
+	assert.Equal(t, "testapp", opts.AppID)
+	assert.Equal(t, string(modes.StandaloneMode), opts.Mode)
 	assert.Equal(t, []string{"../../../pkg/config/testdata/metric_disabled.yaml"}, opts.Config)
 }
 
@@ -309,8 +309,8 @@ func TestControlPlaneEnvVar(t *testing.T) {
 		opts, err := New([]string{})
 		require.NoError(t, err)
 
-		assert.EqualValues(t, "localhost", opts.ControlPlaneTrustDomain)
-		assert.EqualValues(t, "default", opts.ControlPlaneNamespace)
+		assert.Equal(t, "localhost", opts.ControlPlaneTrustDomain)
+		assert.Equal(t, "default", opts.ControlPlaneNamespace)
 	})
 
 	t.Run("should use CLI flags if defined", func(t *testing.T) {
@@ -320,8 +320,8 @@ func TestControlPlaneEnvVar(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		assert.EqualValues(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
-		assert.EqualValues(t, "flag-namespace", opts.ControlPlaneNamespace)
+		assert.Equal(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
+		assert.Equal(t, "flag-namespace", opts.ControlPlaneNamespace)
 	})
 
 	t.Run("should use env vars if flags were not defined", func(t *testing.T) {
@@ -331,8 +331,8 @@ func TestControlPlaneEnvVar(t *testing.T) {
 		opts, err := New([]string{})
 		require.NoError(t, err)
 
-		assert.EqualValues(t, "env-trust-domain", opts.ControlPlaneTrustDomain)
-		assert.EqualValues(t, "env-namespace", opts.ControlPlaneNamespace)
+		assert.Equal(t, "env-trust-domain", opts.ControlPlaneTrustDomain)
+		assert.Equal(t, "env-namespace", opts.ControlPlaneNamespace)
 	})
 
 	t.Run("should priorities CLI flags if both flags and env vars are defined", func(t *testing.T) {
@@ -345,8 +345,8 @@ func TestControlPlaneEnvVar(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		assert.EqualValues(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
-		assert.EqualValues(t, "flag-namespace", opts.ControlPlaneNamespace)
+		assert.Equal(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
+		assert.Equal(t, "flag-namespace", opts.ControlPlaneNamespace)
 	})
 }
 

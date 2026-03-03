@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -71,7 +70,7 @@ func (m *maxretries) Run(t *testing.T, ctx context.Context) {
 			Policy: &corev1.JobFailurePolicy_Constant{
 				Constant: &corev1.JobFailurePolicyConstant{
 					Interval:   nil,
-					MaxRetries: ptr.Of(uint32(4)),
+					MaxRetries: new(uint32(4)),
 				},
 			},
 		},

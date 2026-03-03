@@ -120,15 +120,13 @@ func (l *Lock) LockRequest(ctx context.Context, msg *internalv1pb.InternalInvoke
 	case <-flight.startCh:
 		cctx, cancel := context.WithCancelCause(ctx)
 
-		l.wg.Add(1)
-		go func() {
-			defer l.wg.Done()
+		l.wg.Go(func() {
 			select {
 			case <-doneCh:
 			case <-l.closeCh:
 			}
 			cancel(errors.NewClosed(msg.GetMessage().GetMethod()))
-		}()
+		})
 
 		return cctx, release, nil
 	}

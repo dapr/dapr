@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	nethttp "net/http"
 	"strconv"
 	"strings"
@@ -515,9 +516,7 @@ func (a *api) onBulkGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if req.Metadata == nil {
 		req.Metadata = metadata
 	} else {
-		for k, v := range metadata {
-			req.Metadata[k] = v
-		}
+		maps.Copy(req.Metadata, metadata)
 	}
 
 	bulkResp := make([]BulkGetResponse, len(req.Keys))
@@ -797,10 +796,8 @@ func (a *api) onSubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Requ
 	metadata := getMetadataFromRequest(r)
 	subscribeKeys := make([]string, 0)
 
-	keys := make([]string, 0)
-	for _, queryKey := range r.URL.Query()[configurationKeyParam] {
-		keys = append(keys, queryKey)
-	}
+	keys := make([]string, 0, len(r.URL.Query()[configurationKeyParam]))
+	keys = append(keys, r.URL.Query()[configurationKeyParam]...)
 
 	if len(keys) > 0 {
 		subscribeKeys = append(subscribeKeys, keys...)
@@ -893,10 +890,8 @@ func (a *api) onGetConfiguration(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 	metadata := getMetadataFromRequest(r)
 
-	keys := make([]string, 0)
-	for _, key := range r.URL.Query()[configurationKeyParam] {
-		keys = append(keys, key)
-	}
+	keys := make([]string, 0, len(r.URL.Query()[configurationKeyParam]))
+	keys = append(keys, r.URL.Query()[configurationKeyParam]...)
 	req := &configuration.GetRequest{
 		Keys:     keys,
 		Metadata: metadata,
@@ -1029,9 +1024,7 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 		if reqs[i].Metadata == nil {
 			reqs[i].Metadata = metadata
 		} else {
-			for k, v := range metadata {
-				reqs[i].Metadata[k] = v
-			}
+			maps.Copy(reqs[i].Metadata, metadata)
 		}
 
 		reqs[i].Key, err = stateLoader.GetModifiedStateKey(r.Key, storeName, a.universal.AppID())
@@ -1043,7 +1036,7 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 		}
 
 		if encryption.EncryptedStateStore(storeName) {
-			data := []byte(fmt.Sprintf("%v", r.Value))
+			data := fmt.Appendf(nil, "%v", r.Value)
 			val, encErr := encryption.TryEncryptValue(storeName, data)
 			if encErr != nil {
 				statusCode, errMsg := a.stateErrorResponse(encErr)
@@ -1211,7 +1204,7 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 type bulkPublishMessageEntry struct {
 	EntryID     string            `json:"entryId,omitempty"`
-	Event       interface{}       `json:"event"`
+	Event       any               `json:"event"`
 	ContentType string            `json:"contentType"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
@@ -1301,7 +1294,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			// Populate W3C traceparent to cloudevent envelope
 			spanMap[i] = childSpan
 
-			var envelope map[string]interface{}
+			var envelope map[string]any
 			envelope, err = runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 				Source:          a.universal.AppID(),
 				Topic:           topic,
@@ -1479,8 +1472,8 @@ type stateTransactionRequestBody struct {
 }
 
 type stateTransactionRequestBodyOperation struct {
-	Operation string      `json:"operation"`
-	Request   interface{} `json:"request"`
+	Operation string `json:"operation"`
+	Request   any    `json:"request"`
 }
 
 func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -1526,9 +1519,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 	if req.Metadata == nil {
 		req.Metadata = metadata
 	} else {
-		for k, v := range metadata {
-			req.Metadata[k] = v
-		}
+		maps.Copy(req.Metadata, metadata)
 	}
 
 	operations := make([]state.TransactionalStateOperation, 0, len(req.Operations))
@@ -1555,9 +1546,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 				if upsertReq.Metadata == nil {
 					upsertReq.Metadata = metadata
 				} else {
-					for k, v := range metadata {
-						upsertReq.Metadata[k] = v
-					}
+					maps.Copy(upsertReq.Metadata, metadata)
 				}
 			}
 
@@ -1584,9 +1573,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 				if delReq.Metadata == nil {
 					delReq.Metadata = metadata
 				} else {
-					for k, v := range metadata {
-						delReq.Metadata[k] = v
-					}
+					maps.Copy(delReq.Metadata, metadata)
 				}
 			}
 
@@ -1613,7 +1600,7 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 		for i, op := range operations {
 			switch req := op.(type) {
 			case state.SetRequest:
-				data := []byte(fmt.Sprintf("%v", req.Value))
+				data := fmt.Appendf(nil, "%v", req.Value)
 				val, err := encryption.TryEncryptValue(storeName, data)
 				if err != nil {
 					resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()), errorcodes.StateSave, nethttp.StatusBadRequest)

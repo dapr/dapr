@@ -61,8 +61,10 @@ func (h *hosts) Handle(ctx context.Context, event loops.Event) error {
 func (h *hosts) handleReloadClients(ctx context.Context, event *loops.ReloadClients) error {
 	h.handleCloseCons()
 
-	var clients []schedulerv1pb.SchedulerClient
-	var closeConns []context.CancelFunc
+	var (
+		clients    []schedulerv1pb.SchedulerClient
+		closeConns []context.CancelFunc
+	)
 
 	for range h.streamN {
 		for _, addr := range event.Addresses {
@@ -86,5 +88,6 @@ func (h *hosts) handleCloseCons() {
 	for _, closeCon := range h.closeConns {
 		closeCon()
 	}
+
 	h.closeConns = nil
 }

@@ -79,6 +79,7 @@ func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T]
 		if err := json.Unmarshal(c, &obj); err != nil {
 			return nil, fmt.Errorf("error deserializing object: %s", err)
 		}
+
 		remotes[i] = obj
 	}
 
@@ -104,17 +105,22 @@ func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error)
 		ReconcileCh: make(chan struct{}),
 	}
 	ctx, cancel := context.WithCancel(ctx)
+
 	r.wg.Add(2)
+
 	go func() {
 		defer r.wg.Done()
+
 		select {
 		case <-r.closeCh:
 		case <-ctx.Done():
 		}
+
 		cancel()
 	}()
 	go func() {
 		defer r.wg.Done()
+
 		r.stream(ctx, conn)
 	}()
 
@@ -129,6 +135,7 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 				r.streamer.close()
 				// Retry on stream error.
 				log.Errorf("Error from operator stream: %s", err)
+
 				break
 			}
 
@@ -148,6 +155,7 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 			if berr != nil {
 				log.Errorf("Failed to establish stream: %s", berr)
 			}
+
 			return berr
 		}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx)); err != nil {
 			log.Errorf("Stream retry failed: %s", err)
@@ -155,6 +163,7 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 		}
 
 		log.Info("Reconnected to operator")
+
 		select {
 		case <-ctx.Done():
 			return
@@ -165,6 +174,7 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 
 func (r *resource[T]) close() error {
 	defer r.wg.Wait()
+
 	if r.closed.CompareAndSwap(false, true) {
 		close(r.closeCh)
 	}

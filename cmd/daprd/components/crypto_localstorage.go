@@ -1,4 +1,4 @@
-//go:build allcomponents
+//go:build allcomponents || crypto_localstorage
 
 /*
 Copyright 2023 The Dapr Authors

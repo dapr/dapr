@@ -22,74 +22,89 @@ import (
 func (c *ComponentStore) AddInputBinding(name string, binding bindings.InputBinding) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.inputBindings[name] = binding
 }
 
 func (c *ComponentStore) GetInputBinding(name string) (bindings.InputBinding, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	binding, ok := c.inputBindings[name]
+
 	return binding, ok
 }
 
 func (c *ComponentStore) ListInputBindings() map[string]bindings.InputBinding {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return maps.Clone(c.inputBindings)
 }
 
 func (c *ComponentStore) DeleteInputBinding(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	delete(c.inputBindings, name)
 }
 
 func (c *ComponentStore) AddInputBindingRoute(name, route string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.inputBindingRoutes[name] = route
 }
 
 func (c *ComponentStore) GetInputBindingRoute(name string) (string, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	route, ok := c.inputBindingRoutes[name]
+
 	return route, ok
 }
 
 func (c *ComponentStore) ListInputBindingRoutes() map[string]string {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return maps.Clone(c.inputBindingRoutes)
 }
 
 func (c *ComponentStore) DeleteInputBindingRoute(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	delete(c.inputBindingRoutes, name)
 }
 
 func (c *ComponentStore) AddOutputBinding(name string, binding bindings.OutputBinding) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.outputBindings[name] = binding
 }
 
 func (c *ComponentStore) GetOutputBinding(name string) (bindings.OutputBinding, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	binding, ok := c.outputBindings[name]
+
 	return binding, ok
 }
 
 func (c *ComponentStore) ListOutputBindings() map[string]bindings.OutputBinding {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return maps.Clone(c.outputBindings)
 }
 
 func (c *ComponentStore) DeleteOutputBinding(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	delete(c.outputBindings, name)
 }

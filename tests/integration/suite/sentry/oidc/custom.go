@@ -123,7 +123,7 @@ func (o *customOIDCServer) testPathPrefixConfiguration(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
-	var discovery map[string]interface{}
+	var discovery map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&discovery)
 	require.NoError(t, err)
 
@@ -156,7 +156,7 @@ func (o *customOIDCServer) testCustomJWKSURI(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var discovery map[string]interface{}
+	var discovery map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&discovery)
 	require.NoError(t, err)
 
@@ -269,7 +269,7 @@ func (o *customOIDCServer) testHTTPSSchemeDetection(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var discovery map[string]interface{}
+	var discovery map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&discovery)
 	require.NoError(t, err)
 
@@ -317,7 +317,7 @@ func (o *customOIDCServer) testInsecureHTTPMode(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var discovery map[string]interface{}
+	var discovery map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&discovery)
 	require.NoError(t, err)
 

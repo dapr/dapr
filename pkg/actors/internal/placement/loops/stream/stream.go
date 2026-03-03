@@ -57,15 +57,13 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 
 	stream.loop = LoopFactory.NewLoop(stream)
 
-	stream.wg.Add(1)
-	go func() {
-		defer stream.wg.Done()
+	stream.wg.Go(func() {
 		err := stream.recvLoop()
 		stream.placeLoop.Enqueue(&loops.ConnCloseStream{
 			Error: err,
 			IDx:   stream.idx,
 		})
-	}()
+	})
 
 	return stream.loop
 }

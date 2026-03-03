@@ -51,7 +51,7 @@ func (l *loggerAdapter) printLog(msg string, args ...any) {
 	logging.Debug(msg)
 }
 
-func (l *loggerAdapter) Log(level hclog.Level, msg string, args ...interface{}) {
+func (l *loggerAdapter) Log(level hclog.Level, msg string, args ...any) {
 	switch level {
 	case hclog.Debug:
 		l.printLog(msg, args...)
@@ -64,23 +64,23 @@ func (l *loggerAdapter) Log(level hclog.Level, msg string, args ...interface{}) 
 	}
 }
 
-func (l *loggerAdapter) Trace(msg string, args ...interface{}) {
+func (l *loggerAdapter) Trace(msg string, args ...any) {
 	l.printLog(msg, args...)
 }
 
-func (l *loggerAdapter) Debug(msg string, args ...interface{}) {
+func (l *loggerAdapter) Debug(msg string, args ...any) {
 	l.printLog(msg, args...)
 }
 
-func (l *loggerAdapter) Info(msg string, args ...interface{}) {
+func (l *loggerAdapter) Info(msg string, args ...any) {
 	l.printLog(msg, args...)
 }
 
-func (l *loggerAdapter) Warn(msg string, args ...interface{}) {
+func (l *loggerAdapter) Warn(msg string, args ...any) {
 	l.printLog(msg, args...)
 }
 
-func (l *loggerAdapter) Error(msg string, args ...interface{}) {
+func (l *loggerAdapter) Error(msg string, args ...any) {
 	l.printLog(msg, args...)
 }
 
@@ -94,9 +94,9 @@ func (l *loggerAdapter) IsWarn() bool { return false }
 
 func (l *loggerAdapter) IsError() bool { return false }
 
-func (l *loggerAdapter) ImpliedArgs() []interface{} { return []interface{}{} }
+func (l *loggerAdapter) ImpliedArgs() []any { return []any{} }
 
-func (l *loggerAdapter) With(args ...interface{}) hclog.Logger { return l }
+func (l *loggerAdapter) With(args ...any) hclog.Logger { return l }
 
 func (l *loggerAdapter) Name() string { return "dapr" }
 

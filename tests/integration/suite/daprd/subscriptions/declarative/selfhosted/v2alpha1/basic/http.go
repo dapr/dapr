@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/subscriber"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -126,7 +125,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		PubSubName:      "mypub",
 		Topic:           "a",
 		Data:            `{"status": "completed"}`,
-		DataContentType: ptr.Of("application/json"),
+		DataContentType: new("application/json"),
 	})
 	resp = h.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)
@@ -142,7 +141,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		PubSubName:      "mypub",
 		Topic:           "a",
 		Data:            `{"status": "completed"}`,
-		DataContentType: ptr.Of("foo/bar"),
+		DataContentType: new("foo/bar"),
 	})
 	resp = h.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)

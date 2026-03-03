@@ -81,7 +81,7 @@ func (i *idtype) Setup(t *testing.T) []framework.Option {
 	for x := range i.daprdsNum {
 		i.actorDaprds[x].actorTypes = make([]actortype, i.actorTypesNum)
 
-		var appOpts []app.Option
+		appOpts := make([]app.Option, 0, 3*i.actorIDsNum*i.actorTypesNum)
 		for y := range i.actorTypesNum {
 			typeuid, err := uuid.NewUUID()
 			require.NoError(t, err)

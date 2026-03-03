@@ -86,7 +86,7 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 		method := f.methods[i]
 		body := f.bodies[i]
 		query := f.queries[i]
-		var queryString []string
+		queryString := make([]string, 0, len(query))
 		for k, v := range query {
 			queryString = append(queryString, fmt.Sprintf("%s=%s", k, v))
 		}

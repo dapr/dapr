@@ -106,7 +106,7 @@ func TestNewCloudEvent(t *testing.T) {
 	})
 
 	t.Run("custom cloudevent", func(t *testing.T) {
-		m := map[string]interface{}{
+		m := map[string]any{
 			"specversion":     "1.0",
 			"id":              "event",
 			"datacontenttype": "text/plain",
