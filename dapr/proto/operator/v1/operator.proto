@@ -44,6 +44,10 @@ service Operator {
   rpc ListMCPServers (ListMCPServersRequest) returns (ListMCPServersResponse) {}
   // Sends events to Dapr sidecars upon MCP server changes.
   rpc MCPServerUpdate (MCPServerUpdateRequest) returns (stream MCPServerUpdateEvent) {}
+  // Sends events to Dapr sidecars upon configuration changes.
+  rpc ConfigurationUpdate (ConfigurationUpdateRequest) returns (stream ConfigurationUpdateEvent) {}
+  // Sends events to Dapr sidecars upon resiliency changes.
+  rpc ResiliencyUpdate (ResiliencyUpdateRequest) returns (stream ResiliencyUpdateEvent) {}
 }
 
 // ResourceEventType is the type of event to a resource.
@@ -196,6 +200,29 @@ message MCPServerUpdateRequest {
 // MCPServerUpdateEvent includes an updated MCP server event.
 message MCPServerUpdateEvent {
   bytes mcp_server = 1;
+}
+
+// ConfigurationUpdateRequest is the request to get updates about configuration changes for a given namespace.
+message ConfigurationUpdateRequest {
+  string namespace = 1;
+}
+
+// ConfigurationUpdateEvent includes the updated configuration event.
+message ConfigurationUpdateEvent {
+  bytes configuration = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
+}
+
+// ResiliencyUpdateRequest is the request to get updates about resiliency changes for a given namespace.
+message ResiliencyUpdateRequest {
+  string namespace = 1;
+}
+
+// ResiliencyUpdateEvent includes the updated resiliency event.
+message ResiliencyUpdateEvent {
+  bytes resiliency = 1;
 
   // type is the type of event.
   ResourceEventType type = 2;
