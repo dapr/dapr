@@ -17,6 +17,9 @@ import (
 	"context"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -60,6 +63,11 @@ type Reloader struct {
 	loader                  loader.Interface
 	componentsReconciler    *reconciler.Reconciler[compapi.Component]
 	subscriptionsReconciler *reconciler.Reconciler[subapi.Subscription]
+
+	// SIGHUP reconcilers for resources that require runtime restart
+	configurationsReconciler *reconciler.SIGHUPReconciler[configapi.Configuration]
+	httpEndpointsReconciler  *reconciler.SIGHUPReconciler[httpendpointapi.HTTPEndpoint]
+	resilienciesReconciler   *reconciler.SIGHUPReconciler[resiliencyapi.Resiliency]
 }
 
 func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
@@ -127,6 +135,21 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 			Authorizer: opts.Authorizer,
 			Healthz:    opts.Healthz,
 		}),
+		configurationsReconciler: reconciler.NewSIGHUPConfigurations(reconciler.Options[configapi.Configuration]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
+		httpEndpointsReconciler: reconciler.NewSIGHUPHTTPEndpoints(reconciler.Options[httpendpointapi.HTTPEndpoint]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
+		resilienciesReconciler: reconciler.NewSIGHUPResiliencies(reconciler.Options[resiliencyapi.Resiliency]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
 	}
 }
 
@@ -140,9 +163,25 @@ func (r *Reloader) Run(ctx context.Context) error {
 
 	log.Info("Hot reloading enabled. Daprd will reload 'Component' and 'Subscription' resources on change.")
 
-	return concurrency.NewRunnerManager(
+	manager := concurrency.NewRunnerManager(
 		r.loader.Run,
 		r.componentsReconciler.Run,
 		r.subscriptionsReconciler.Run,
-	).Run(ctx)
+	)
+
+	// Add SIGHUP reconcilers if they are configured (operator mode only)
+	if r.configurationsReconciler != nil {
+		log.Info("Configuration changes will trigger SIGHUP restart.")
+		manager.Add(r.configurationsReconciler.Run)
+	}
+	if r.httpEndpointsReconciler != nil {
+		log.Info("HTTPEndpoint changes will trigger SIGHUP restart.")
+		manager.Add(r.httpEndpointsReconciler.Run)
+	}
+	if r.resilienciesReconciler != nil {
+		log.Info("Resiliency changes will trigger SIGHUP restart.")
+		manager.Add(r.resilienciesReconciler.Run)
+	}
+
+	return manager.Run(ctx)
 }

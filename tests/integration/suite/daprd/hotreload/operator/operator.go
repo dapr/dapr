@@ -18,5 +18,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/informer"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/middleware"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/pubsub"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/sighup"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/subscriptions"
 )

@@ -40,6 +40,16 @@ func New(stream any) (Interface, error) {
 			stream: s,
 		}, nil
 
+	case operatorv1pb.Operator_ConfigurationUpdateServer:
+		return &configuration{
+			stream: s,
+		}, nil
+
+	case operatorv1pb.Operator_ResiliencyUpdateServer:
+		return &resiliency{
+			stream: s,
+		}, nil
+
 	default:
 		return nil, errors.New("unsupported stream type")
 	}
@@ -75,5 +85,27 @@ func (h *httpendpoint) Send(data []byte, eventType operatorv1pb.ResourceEventTyp
 	return h.stream.Send(&operatorv1pb.HTTPEndpointUpdateEvent{
 		HttpEndpoints: data,
 		Type:          eventType,
+	})
+}
+
+type configuration struct {
+	stream operatorv1pb.Operator_ConfigurationUpdateServer
+}
+
+func (c *configuration) Send(data []byte, eventType operatorv1pb.ResourceEventType) error {
+	return c.stream.Send(&operatorv1pb.ConfigurationUpdateEvent{
+		Configuration: data,
+		Type:          eventType,
+	})
+}
+
+type resiliency struct {
+	stream operatorv1pb.Operator_ResiliencyUpdateServer
+}
+
+func (r *resiliency) Send(data []byte, eventType operatorv1pb.ResourceEventType) error {
+	return r.stream.Send(&operatorv1pb.ResiliencyUpdateEvent{
+		Resiliency: data,
+		Type:       eventType,
 	})
 }
