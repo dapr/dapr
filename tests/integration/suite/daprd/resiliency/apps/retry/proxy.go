@@ -98,7 +98,6 @@ spec:
 			return successResponse, nil
 		} else {
 			// TODO: Update types to uint32
-			//nolint:gosec
 			return nil, status.Errorf(codes.Code(respStatusCode), "error for key: %s", key)
 		}
 	})

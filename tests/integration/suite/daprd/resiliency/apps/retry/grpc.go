@@ -101,7 +101,6 @@ spec:
 			return successResponse, nil
 		} else {
 			// TODO: Update types to uint32
-			//nolint:gosec
 			return nil, status.Errorf(codes.Code(respStatusCode), "error for key: %s", key)
 		}
 	})
@@ -231,7 +230,7 @@ func (rt *retryGRPC) runGrpcScenario(t *testing.T, ctx context.Context, scenario
 
 		_, err = rtv1.NewAppCallbackClient(conn).OnInvoke(ctxWithMetadata, &commonv1.InvokeRequest{
 			Method: key,
-			Data:   &anypb.Any{Value: []byte(fmt.Sprintf(`{"key": "%s", "statusCode": "%s"}`, key, statusCodeStr))},
+			Data:   &anypb.Any{Value: fmt.Appendf(nil, `{"key": "%s", "statusCode": "%s"}`, key, statusCodeStr)},
 		})
 
 		expectedCount := 1
