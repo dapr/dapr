@@ -16,7 +16,9 @@ package utils
 import (
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -27,12 +29,7 @@ const (
 // Contains reports whether v is present in s.
 // Similar to https://pkg.go.dev/golang.org/x/exp/slices#Contains.
 func Contains[T comparable](s []T, v T) bool {
-	for _, e := range s {
-		if e == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, v)
 }
 
 // ContainsPrefixed reports whether v is prefixed by any of the strings in s.
@@ -87,9 +84,7 @@ func SocketExists(socketPath string) bool {
 
 func PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta map[string]string) map[string]string {
 	resMeta := map[string]string{}
-	for k, v := range entryMeta {
-		resMeta[k] = v
-	}
+	maps.Copy(resMeta, entryMeta)
 	for k, v := range reqMeta {
 		if _, ok := resMeta[k]; !ok {
 			// Populate only metadata key that is already not present in the entry level metadata map

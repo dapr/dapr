@@ -78,9 +78,11 @@ func Test_Disk(t *testing.T) {
 
 	errCh := make(chan error)
 	ctx, cancel := context.WithCancel(t.Context())
+
 	go func() {
 		errCh <- d.Run(ctx)
 	}()
+
 	t.Cleanup(func() {
 		cancel()
 		require.NoError(t, <-errCh)
@@ -95,6 +97,7 @@ func Test_Disk(t *testing.T) {
 	require.NoError(t, err)
 
 	var events []*loader.Event[componentsapi.Component]
+
 	for range 3 {
 		select {
 		case event := <-conn.EventCh:
@@ -159,6 +162,7 @@ func Test_Stream(t *testing.T) {
 			cancel()
 			require.NoError(t, <-errCh)
 		})
+
 		go func() {
 			errCh <- r.run(ctx)
 		}()
@@ -175,6 +179,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
+
 		for range 3 {
 			select {
 			case event := <-conn.EventCh:
@@ -242,6 +247,7 @@ func Test_Stream(t *testing.T) {
 			cancel()
 			require.NoError(t, <-errCh)
 		})
+
 		go func() {
 			errCh <- r.run(ctx)
 		}()
@@ -258,6 +264,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
+
 		for range 2 {
 			select {
 			case event := <-conn.EventCh:
@@ -326,6 +333,7 @@ func Test_Stream(t *testing.T) {
 			cancel()
 			require.NoError(t, <-errCh)
 		})
+
 		go func() {
 			errCh <- r.run(ctx)
 		}()
@@ -342,6 +350,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
+
 		for range 3 {
 			select {
 			case event := <-conn.EventCh:

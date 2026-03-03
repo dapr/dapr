@@ -74,6 +74,7 @@ func (c *Clients) Reload(ctx context.Context, addresses []string) error {
 
 	for _, address := range addresses {
 		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
+
 		client, closeFn, err := client.New(ctx, address, c.security)
 		if err != nil {
 			c.close()
@@ -81,6 +82,7 @@ func (c *Clients) Reload(ctx context.Context, addresses []string) error {
 		}
 
 		log.Infof("Scheduler client initialized for address: %s", address)
+
 		c.clients = append(c.clients, client)
 		c.closeFns = append(c.closeFns, closeFn)
 	}
@@ -125,6 +127,7 @@ func (c *Clients) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, cont
 func (c *Clients) Addresses() []string {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return c.currentAddrs
 }
 
@@ -133,11 +136,13 @@ func (c *Clients) close() {
 
 	var wg sync.WaitGroup
 	wg.Add(len(c.closeFns))
+
 	for _, closeFn := range c.closeFns {
 		go func() {
 			closeFn()
 			wg.Done()
 		}()
 	}
+
 	wg.Wait()
 }

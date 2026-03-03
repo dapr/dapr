@@ -23,7 +23,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -68,7 +67,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfUser{
 								OfUser: &rtv1.ConversationMessageOfUser{
-									Name: ptr.Of("user name"),
+									Name: new("user name"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "user message",
@@ -107,7 +106,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfSystem{
 								OfSystem: &rtv1.ConversationMessageOfSystem{
-									Name: ptr.Of("system name"),
+									Name: new("system name"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "system message",
@@ -146,7 +145,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfDeveloper{
 								OfDeveloper: &rtv1.ConversationMessageOfDeveloper{
-									Name: ptr.Of("dev name"),
+									Name: new("dev name"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "developer message",
@@ -184,7 +183,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
 								OfAssistant: &rtv1.ConversationMessageOfAssistant{
-									Name: ptr.Of("assistant name"),
+									Name: new("assistant name"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "assistant message",
@@ -192,7 +191,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 									},
 									ToolCalls: []*rtv1.ConversationToolCalls{
 										{
-											Id: ptr.Of("call_123"),
+											Id: new("call_123"),
 											ToolTypes: &rtv1.ConversationToolCalls_Function{
 												Function: &rtv1.ConversationToolCallsOfFunction{
 													Name:      "test_function",
@@ -239,7 +238,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfTool{
 								OfTool: &rtv1.ConversationMessageOfTool{
-									ToolId: ptr.Of("tool-123"),
+									ToolId: new("tool-123"),
 									Name:   "tool name",
 									Content: []*rtv1.ConversationMessageContent{
 										{
@@ -278,7 +277,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfUser{
 								OfUser: &rtv1.ConversationMessageOfUser{
-									Name: ptr.Of("user-1"),
+									Name: new("user-1"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "first user message",
@@ -290,7 +289,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfAssistant{
 								OfAssistant: &rtv1.ConversationMessageOfAssistant{
-									Name: ptr.Of("assistant-1"),
+									Name: new("assistant-1"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "first assistant response",
@@ -302,7 +301,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfUser{
 								OfUser: &rtv1.ConversationMessageOfUser{
-									Name: ptr.Of("user-2"),
+									Name: new("user-2"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "second user message",
@@ -314,7 +313,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 						{
 							MessageTypes: &rtv1.ConversationMessage_OfSystem{
 								OfSystem: &rtv1.ConversationMessageOfSystem{
-									Name: ptr.Of("system-1"),
+									Name: new("system-1"),
 									Content: []*rtv1.ConversationMessageContent{
 										{
 											Text: "system instruction",
@@ -324,7 +323,7 @@ func (m *messagetypes) Run(t *testing.T, ctx context.Context) {
 							},
 						},
 					},
-					ScrubPii: ptr.Of(false),
+					ScrubPii: new(false),
 				},
 			},
 		})

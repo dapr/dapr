@@ -63,7 +63,7 @@ type subscription struct {
 	PubsubName string            `json:"pubsubname"`
 	Topic      string            `json:"topic"`
 	Metadata   map[string]string `json:"metadata"`
-	Routes     routes            `json:"routes,omitempty"`
+	Routes     routes            `json:"routes,omitzero"`
 }
 
 type routes struct {
@@ -211,7 +211,7 @@ func extractMessage(reqID string, body []byte) (string, error) {
 		return "", errors.New("no body")
 	}
 
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	err := json.Unmarshal(body, &m)
 	if err != nil {
 		log.Printf("(%s) Could not unmarshal: %v", reqID, err)

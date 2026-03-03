@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -83,7 +82,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 		_, err = client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 			ActorType: "abc", ActorId: "123", Name: "reminder1",
 			DueTime:   "12h",
-			Overwrite: ptr.Of(true),
+			Overwrite: new(true),
 		})
 		require.NoError(t, err)
 
@@ -96,7 +95,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 		_, err = client.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 			ActorType: "abc", ActorId: "123", Name: "reminder1",
 			DueTime:   "48h",
-			Overwrite: ptr.Of(false),
+			Overwrite: new(false),
 		})
 		require.Error(t, err)
 		status, ok := status.FromError(err)

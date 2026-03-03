@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
-	"github.com/dapr/kit/ptr"
 )
 
 func (o *orchestrator) handleStalled(ctx context.Context, state *wfenginestate.State, rs *backend.OrchestrationRuntimeState) error {
@@ -78,7 +77,7 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 			EventType: &protos.HistoryEvent_ExecutionStalled{
 				ExecutionStalled: &protos.ExecutionStalledEvent{
 					Reason:      reason,
-					Description: ptr.Of(description),
+					Description: new(description),
 				},
 			},
 		})

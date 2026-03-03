@@ -179,7 +179,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
 		require.Equal(t, "pubsub", resInfo.GetResourceType())
-		require.Equal(t, "", resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetResourceName())
 		require.Empty(t, resInfo.GetOwner())
 	})
 
@@ -376,7 +376,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("pubsub outbox", func(t *testing.T) {
 		name := "state-outbox"
-		ops := make([]*rtv1.TransactionalStateOperation, 0)
+		ops := make([]*rtv1.TransactionalStateOperation, 0, 2)
 		ops = append(ops, &rtv1.TransactionalStateOperation{
 			OperationType: "upsert",
 			Request: &commonv1.StateItem{

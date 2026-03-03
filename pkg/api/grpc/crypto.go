@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/kit/ptr"
 	encv1 "github.com/dapr/kit/schemes/enc/v1"
 )
 
@@ -82,7 +81,7 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 
 	// Set the cipher if present
 	if reqProto.GetOptions().GetDataEncryptionCipher() != "" {
-		encOpts.Cipher = ptr.Of(encv1.Cipher(strings.ToUpper(reqProto.GetOptions().GetDataEncryptionCipher())))
+		encOpts.Cipher = new(encv1.Cipher(strings.ToUpper(reqProto.GetOptions().GetDataEncryptionCipher())))
 	}
 
 	// Process the request as a stream
@@ -136,9 +135,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 	ctx := stream.Context()
 
 	// Process the data coming from the stream
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
+	a.wg.Go(func() {
 		var (
 			readSeq   uint64
 			expectSeq uint64
@@ -188,7 +185,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 				return
 			}
 		}
-	}()
+	})
 
 	// Start the encryption or decryption
 	// Errors here are synchronous and can be returned to the user right away
@@ -279,14 +276,12 @@ func (a *api) cryptoGetFirstChunk(stream grpc.ServerStream, reqProto any) error 
 	defer cancel()
 
 	firstMsgCh := make(chan error, 1)
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
+	a.wg.Go(func() {
 		select {
 		case firstMsgCh <- stream.RecvMsg(reqProto):
 		case <-firstChunkCtx.Done():
 		}
-	}()
+	})
 
 	select {
 	case <-firstChunkCtx.Done():

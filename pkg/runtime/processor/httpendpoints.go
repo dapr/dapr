@@ -26,6 +26,7 @@ import (
 func (p *Processor) AddPendingEndpoint(ctx context.Context, endpoint httpendpointsapi.HTTPEndpoint) bool {
 	p.chlock.RLock()
 	defer p.chlock.RUnlock()
+
 	if p.shutdown.Load() {
 		return false
 	}
@@ -45,6 +46,7 @@ func (p *Processor) processHTTPEndpoints(ctx context.Context) error {
 		if endpoint.Name == "" {
 			continue
 		}
+
 		p.processHTTPEndpointSecrets(ctx, &endpoint)
 		p.compStore.AddHTTPEndpoint(endpoint)
 	}
@@ -56,9 +58,9 @@ func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *ht
 	_, _ = p.secret.ProcessResource(ctx, endpoint)
 
 	tlsResource := apis.GenericNameValueResource{
-		Name:        endpoint.ObjectMeta.Name,
-		Namespace:   endpoint.ObjectMeta.Namespace,
-		SecretStore: endpoint.Auth.SecretStore,
+		Name:        endpoint.Name,
+		Namespace:   endpoint.Namespace,
+		SecretStore: endpoint.SecretStore,
 		Pairs:       []commonapi.NameValuePair{},
 	}
 
@@ -120,16 +122,19 @@ func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *ht
 				if endpoint.Spec.ClientTLS.RootCA == nil {
 					continue
 				}
+
 				endpoint.Spec.ClientTLS.RootCA.Value = dv
 			case clientCert:
 				if endpoint.Spec.ClientTLS.Certificate == nil {
 					endpoint.Spec.ClientTLS.Certificate = new(commonapi.TLSDocument)
 				}
+
 				endpoint.Spec.ClientTLS.Certificate.Value = dv
 			case clientKey:
 				if endpoint.Spec.ClientTLS.PrivateKey == nil {
 					endpoint.Spec.ClientTLS.PrivateKey = new(commonapi.TLSDocument)
 				}
+
 				endpoint.Spec.ClientTLS.PrivateKey.Value = dv
 			}
 		}

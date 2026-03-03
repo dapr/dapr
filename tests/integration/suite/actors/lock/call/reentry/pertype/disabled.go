@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -47,7 +46,7 @@ func (d *disabled) Setup(t *testing.T) []framework.Option {
 		app.WithConfig(`{"entities":["reentrantActor"],"reentrancy":{"enabled":true},"entitiesConfig":[{"entities":["reentrantActor"],"reentrancy":{"enabled":false}}]}`),
 		app.WithHandlerFunc("/actors/reentrantActor/myactorid", func(_ nethttp.ResponseWriter, r *nethttp.Request) {}),
 		app.WithHandlerFunc("/actors/reentrantActor/myactorid/method/foo", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-			d.rid.Store(ptr.Of(r.Header.Get("Dapr-Reentrancy-Id")))
+			d.rid.Store(new(r.Header.Get("Dapr-Reentrancy-Id")))
 			d.called.Add(1)
 		}),
 	)

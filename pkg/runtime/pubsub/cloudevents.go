@@ -37,7 +37,7 @@ type CloudEvent struct {
 }
 
 // NewCloudEvent encapsulates the creation of a Dapr cloudevent from an existing cloudevent or a raw payload.
-func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]interface{}, error) {
+func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]any, error) {
 	if contribContenttype.IsCloudEventContentType(req.DataContentType) {
 		return contribPubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID, req.TraceState)
 	}
@@ -53,6 +53,7 @@ func NewCloudEvent(req *CloudEvent, metadata map[string]string) (map[string]inte
 	if req.TraceParent != "" {
 		req.TraceID = req.TraceParent
 	}
+
 	return contribPubsub.NewCloudEventsEnvelope(req.ID, req.Source, req.Type,
 		req.Subject, req.Topic, req.Pubsub, req.DataContentType, req.Data, req.TraceID, req.TraceState), nil
 }

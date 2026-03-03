@@ -18,11 +18,13 @@ import httpEndpointv1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1
 func (c *ComponentStore) GetHTTPEndpoint(name string) (httpEndpointv1alpha1.HTTPEndpoint, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	for i, endpoint := range c.httpEndpoints {
-		if endpoint.ObjectMeta.Name == name {
+		if endpoint.Name == name {
 			return c.httpEndpoints[i], true
 		}
 	}
+
 	return httpEndpointv1alpha1.HTTPEndpoint{}, false
 }
 
@@ -31,7 +33,7 @@ func (c *ComponentStore) AddHTTPEndpoint(httpEndpoint httpEndpointv1alpha1.HTTPE
 	defer c.lock.Unlock()
 
 	for i, endpoint := range c.httpEndpoints {
-		if endpoint.ObjectMeta.Name == httpEndpoint.Name {
+		if endpoint.Name == httpEndpoint.Name {
 			c.httpEndpoints[i] = httpEndpoint
 			return
 		}
@@ -43,8 +45,10 @@ func (c *ComponentStore) AddHTTPEndpoint(httpEndpoint httpEndpointv1alpha1.HTTPE
 func (c *ComponentStore) ListHTTPEndpoints() []httpEndpointv1alpha1.HTTPEndpoint {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	endpoints := make([]httpEndpointv1alpha1.HTTPEndpoint, len(c.httpEndpoints))
 	copy(endpoints, c.httpEndpoints)
+
 	return endpoints
 }
 
@@ -53,7 +57,7 @@ func (c *ComponentStore) DeleteHTTPEndpoint(name string) {
 	defer c.lock.Unlock()
 
 	for i, endpoint := range c.httpEndpoints {
-		if endpoint.ObjectMeta.Name == name {
+		if endpoint.Name == name {
 			c.httpEndpoints = append(c.httpEndpoints[:i], c.httpEndpoints[i+1:]...)
 			return
 		}

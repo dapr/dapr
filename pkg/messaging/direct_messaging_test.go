@@ -461,12 +461,12 @@ type serviceInvocationCallLocalStreamServer struct {
 }
 
 func (x *serviceInvocationCallLocalStreamServer) Send(m *internalv1pb.InternalInvokeResponseStream) error {
-	return x.ServerStream.SendMsg(m)
+	return x.SendMsg(m)
 }
 
 func (x *serviceInvocationCallLocalStreamServer) Recv() (*internalv1pb.InternalInvokeRequestStream, error) {
 	m := new(internalv1pb.InternalInvokeRequestStream)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
+	if err := x.RecvMsg(m); err != nil {
 		return nil, err
 	}
 	return m, nil

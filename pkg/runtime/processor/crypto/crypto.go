@@ -52,40 +52,43 @@ func (c *crypto) Init(ctx context.Context, comp compapi.Component) error {
 	defer c.lock.Unlock()
 
 	fName := comp.LogName()
+
 	component, err := c.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	meta, err := c.meta.ToBaseMetadata(comp)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	err = component.Init(ctx, contribcrypto.Metadata{Base: meta})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
-	c.compStore.AddCryptoProvider(comp.ObjectMeta.Name, component)
+	c.compStore.AddCryptoProvider(comp.Name, component)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
+
 	return nil
 }
 
 func (c *crypto) Close(comp compapi.Component) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	defer c.compStore.DeleteCryptoProvider(comp.ObjectMeta.Name)
+	defer c.compStore.DeleteCryptoProvider(comp.Name)
 
-	crypto, ok := c.compStore.GetCryptoProvider(comp.ObjectMeta.Name)
+	crypto, ok := c.compStore.GetCryptoProvider(comp.Name)
 	if !ok {
 		return nil
 	}
 
-	if err := crypto.Close(); err != nil {
+	err := crypto.Close()
+	if err != nil {
 		return err
 	}
 

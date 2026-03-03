@@ -79,7 +79,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		case "typed":
 			return &commonv1.InvokeResponse{
 				Data: &anypb.Any{
-					Value:   []byte(fmt.Sprintf("%s/%s", string(in.GetData().GetValue()), in.GetData().GetTypeUrl())),
+					Value:   fmt.Appendf(nil, "%s/%s", string(in.GetData().GetValue()), in.GetData().GetTypeUrl()),
 					TypeUrl: "mytype",
 				},
 				ContentType: "application/json",

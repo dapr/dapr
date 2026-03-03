@@ -78,16 +78,19 @@ func (p *defaultBulkSubscriber) BulkSubscribe(ctx context.Context, req contribPu
 		}
 
 		done := make(chan struct{})
+
 		msgCbChan <- msgWithCallback{
 			msg: bulkMsgEntry,
 			cb: func(ierr error) {
 				err = ierr
+
 				close(done)
 			},
 		}
 
 		// Wait for the message to be processed.
 		<-done
+
 		return err
 	})
 }
@@ -102,6 +105,7 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 	defer ticker.Stop()
 
 	n := 0
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -110,10 +114,12 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 		case msgCb := <-msgCbChan:
 			messages[n] = msgCb.msg
 			n++
+
 			msgCbMap[msgCb.msg.EntryId] = msgCb.cb
 			if n >= cfg.MaxMessagesCount {
 				flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
 				n = 0
+
 				clear(msgCbMap)
 				// Reset the ticker so the next batch gets the full
 				// awaitDuration window after an early dispatch.
@@ -122,6 +128,7 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 		case <-ticker.C:
 			flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
 			n = 0
+
 			clear(msgCbMap)
 		}
 	}
@@ -138,7 +145,6 @@ func flushMessages(ctx context.Context, topic string, messages []contribPubsub.B
 		Metadata: map[string]string{},
 		Entries:  messages,
 	})
-
 	if err != nil {
 		if responses != nil {
 			// invoke callbacks for each message

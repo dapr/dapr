@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -60,7 +59,7 @@ func (w *workers) Setup(t *testing.T) []framework.Option {
 		scheduler.WithWorkers(nil),
 	)
 	w.custom = scheduler.New(t,
-		scheduler.WithWorkers(ptr.Of(uint32(256))),
+		scheduler.WithWorkers(new(uint32(256))),
 		scheduler.WithLogLineStderr(w.customlogline),
 		scheduler.WithID(uuid2.String()),
 	)

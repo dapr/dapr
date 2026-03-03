@@ -96,7 +96,7 @@ func (k *standalone) Run(t *testing.T, ctx context.Context) {
 	csrDer, err := x509.CreateCertificateRequest(rand.Reader, new(x509.CertificateRequest), pk)
 	require.NoError(t, err)
 
-	resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+	resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{ //nolint:gosec
 		Id:                        "myappid",
 		Namespace:                 "mynamespace",
 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),

@@ -69,6 +69,7 @@ func (i *Input) Stop() {
 	if inflight {
 		time.Sleep(time.Millisecond * 400)
 	}
+
 	i.cancel()
 }
 
@@ -76,6 +77,7 @@ func (i *Input) read(ctx context.Context) error {
 	return i.binding.Read(ctx, func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 		i.wg.Add(1)
 		i.inflight.Add(1)
+
 		defer func() {
 			i.wg.Done()
 			i.inflight.Add(-1)

@@ -35,10 +35,10 @@ type Reminder struct {
 	ActorType      string         `json:"actorType,omitempty"`
 	Name           string         `json:"name,omitempty"`
 	Data           *anypb.Any     `json:"data,omitempty"`
-	Period         ReminderPeriod `json:"period,omitempty"`
-	RegisteredTime time.Time      `json:"registeredTime,omitempty"`
+	Period         ReminderPeriod `json:"period,omitzero"`
+	RegisteredTime time.Time      `json:"registeredTime,omitzero"`
 	DueTime        string         `json:"dueTime,omitempty"` // Exact input value from user
-	ExpirationTime time.Time      `json:"expirationTime,omitempty"`
+	ExpirationTime time.Time      `json:"expirationTime,omitzero"`
 	Callback       string         `json:"callback,omitempty"` // Used by timers only
 	IsTimer        bool           `json:"-"`
 	IsRemote       bool           `json:"-"`

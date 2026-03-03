@@ -74,7 +74,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	sched := scheduler.New(t)
 	baseDopts = append(baseDopts, daprd.WithScheduler(sched))
 
-	daprds := make([]*daprd.Daprd, opts.daprds, opts.daprds)
+	daprds := make([]*daprd.Daprd, opts.daprds)
 
 	for i := range daprds {
 		dopts := make([]daprd.Option, 0, len(baseDopts))
@@ -196,8 +196,10 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int) 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c,
 			len(w.DaprN(index).GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
-		assert.GreaterOrEqual(c,
-			w.DaprN(index).GetMetadata(t, ctx).Workflows.ConnectedWorkers, 1)
+		w := w.DaprN(index).GetMetadata(t, ctx).Workflows
+		if assert.NotNil(c, w) {
+			assert.GreaterOrEqual(c, w.ConnectedWorkers, 1)
+		}
 	}, time.Second*20, time.Millisecond*10)
 
 	return backendClient

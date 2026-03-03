@@ -378,7 +378,7 @@ func (ss *grpcStateStore) MultiMaxSize() int {
 	resp, err := ss.Client.MultiMaxSize(ctx, new(proto.MultiMaxSizeRequest))
 	if err != nil {
 		log.Error("failed to get multi max size from state store", err)
-		ss.multiMaxSize = ptr.Of(-1)
+		ss.multiMaxSize = new(-1)
 		return *ss.multiMaxSize
 	}
 
@@ -392,7 +392,7 @@ func (ss *grpcStateStore) MultiMaxSize() int {
 		return *ss.multiMaxSize
 	}
 
-	ss.multiMaxSize = ptr.Of(int(resp.GetMaxSize()))
+	ss.multiMaxSize = new(int(resp.GetMaxSize()))
 	return *ss.multiMaxSize
 }
 

@@ -63,5 +63,5 @@ func (e *empty) Run(t *testing.T, ctx context.Context) {
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, ``, string(b))
+	assert.Empty(t, string(b))
 }

@@ -43,7 +43,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -131,7 +130,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		TrustAnchors:            j.sentry.CABundle().X509.TrustAnchors,
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
-		SentryTokenFile:         ptr.Of(j.appTokenFile),
+		SentryTokenFile:         new(j.appTokenFile),
 		Healthz:                 healthz.New(),
 	})
 	require.NoError(t, err)

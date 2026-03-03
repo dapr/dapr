@@ -116,7 +116,7 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 func (o *orchestrator) runWorkflowFromReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	completed, err := o.runWorkflow(ctx, reminder)
 	if completed == todo.RunCompletedTrue {
-		defer o.factory.deactivate(o)
+		defer o.deactivate(o)
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.

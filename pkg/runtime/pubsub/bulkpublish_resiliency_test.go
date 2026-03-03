@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var (
@@ -64,27 +63,27 @@ func NewMockBulkPublisher(t *testing.T, failCount int, failEvenOnes bool, failAl
 func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error) {
 	m.rwLock.Lock()
 	defer m.rwLock.Unlock()
+
 	if req == nil {
 		return zero, assert.AnError
 	}
+
 	if m.applyTimeout {
 		time.Sleep(m.timeoutSleep)
 		// return some error
 		res := contribPubsub.NewBulkPublishResponse(req.Entries, assert.AnError)
 		res.FailedEntries = res.FailedEntries[1:]
+
 		return res, assert.AnError
 	}
+
 	res := contribPubsub.BulkPublishResponse{
 		FailedEntries: make([]contribPubsub.BulkPublishResponseFailedEntry, 0, len(req.Entries)),
 	}
 
 	for _, entry := range req.Entries {
 		// count the entryId retry times
-		if _, ok := m.entryIDRetryTimes[entry.EntryId]; ok {
-			m.entryIDRetryTimes[entry.EntryId]++
-		} else {
-			m.entryIDRetryTimes[entry.EntryId] = 1
-		}
+		m.entryIDRetryTimes[entry.EntryId]++
 		// assert the data and metadata are correct
 		assert.Equal(m.t, map[string]string{
 			"key" + entry.EntryId: "value" + entry.EntryId,
@@ -94,6 +93,7 @@ func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.
 	// fail events based on the input count
 	if m.failCount > 0 {
 		m.failCount--
+
 		for _, entry := range req.Entries {
 			k, _ := strconv.ParseInt(entry.EntryId, 10, 32)
 			if m.failAllEvents || (k%2 == 0 && m.failEvenOnes) {
@@ -104,8 +104,10 @@ func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.
 					})
 			}
 		}
+
 		return res, assert.AnError
 	}
+
 	return res, nil
 }
 
@@ -179,7 +181,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 1, true, true)
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
@@ -211,7 +213,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 3, true, true)
 
 		// set short retry with 2 retries max
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
@@ -245,7 +247,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 1, true, false)
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
@@ -277,7 +279,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher := NewMockBulkPublisher(t, 0, false, false)
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
@@ -312,7 +314,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher.timeoutSleep = 5 * time.Second
 
 		// set short retry with 0 retry max
-		shortRetry.MaxRetries = ptr.Of(0)
+		shortRetry.MaxRetries = new(0)
 
 		// timeout will be triggered here
 		// no retries
@@ -343,7 +345,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
@@ -400,7 +402,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		}
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
@@ -458,7 +460,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		}
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
@@ -501,7 +503,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		}
 
 		// set short retry with 3 retries max
-		shortRetry.MaxRetries = ptr.Of(3)
+		shortRetry.MaxRetries = new(3)
 		// timeout will not be triggered here
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentOutboundPolicy(pubsubName, resiliency.Pubsub)
@@ -559,7 +561,6 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		// fail events with even Ids at least 10 times in a row, simulate partial failures
 		// this will also simulate circuitBreaker being triggered
 		// timeout will be triggered here
-
 		bulkPublisher := NewMockBulkPublisher(t, 10, true, false)
 		shortTimeout := "1s"
 		bulkPublisher.applyTimeout = true
@@ -572,7 +573,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 			Timeout:     "30s",                     // half-open after 30s. So in test this will not be triggered
 		}
 		// set short retry with 2 retries max
-		shortRetry.MaxRetries = ptr.Of(2)
+		shortRetry.MaxRetries = new(2)
 
 		// timeout will be triggered here
 		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry)
@@ -615,7 +616,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		bulkPublisher.timeoutSleep = 5 * time.Second
 
 		// retry time period twice that of timeout sleep and 10 times that of the timeout
-		longRetry.MaxRetries = ptr.Of(2)
+		longRetry.MaxRetries = new(2)
 
 		// set a circuit breaker with 1 consecutive failure
 		cb := resiliencyV1alpha.CircuitBreaker{
@@ -678,6 +679,7 @@ func createResPolicyProvider(ciruitBreaker resiliencyV1alpha.CircuitBreaker, tim
 			},
 		},
 	}
+
 	return resiliency.FromConfigurations(testLogger, r)
 }
 

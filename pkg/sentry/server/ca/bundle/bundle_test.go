@@ -103,12 +103,12 @@ func TestGenerateJWTBundle(t *testing.T) {
 		require.NotEmpty(t, bundle.JWKSJson)
 
 		// Parse JWKS to verify it
-		var jwksSet map[string]interface{}
+		var jwksSet map[string]any
 		err = json.Unmarshal(bundle.JWKSJson, &jwksSet)
 		require.NoError(t, err)
 
 		// Verify key has expected attributes
-		keys, ok := jwksSet["keys"].([]interface{})
+		keys, ok := jwksSet["keys"].([]any)
 		require.True(t, ok)
 		require.Len(t, keys, 1)
 
@@ -116,7 +116,7 @@ func TestGenerateJWTBundle(t *testing.T) {
 		require.NoError(t, err)
 		tp, err := k.Thumbprint(DefaultKeyThumbprintAlgorithm)
 		require.NoError(t, err)
-		key := keys[0].(map[string]interface{})
+		key := keys[0].(map[string]any)
 		require.Equal(t, base64.StdEncoding.EncodeToString(tp), key["kid"])
 		require.Equal(t, string(DefaultJWTSignatureAlgorithm), key["alg"])
 	})
