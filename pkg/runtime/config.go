@@ -26,6 +26,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
@@ -217,8 +219,9 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	podName := os.Getenv("POD_NAME")
 
 	var (
-		globalConfig *config.Configuration
-		configErr    error
+		globalConfig      *config.Configuration
+		configAPIResource *configapi.Configuration
+		configErr         error
 	)
 
 	if len(intc.config) > 0 {
@@ -229,7 +232,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 				log.Warnf("Multiple configurations are not supported in Kubernetes mode; only the first one will be loaded")
 			}
 			log.Debug("Loading Kubernetes config resource: " + intc.config[0])
-			globalConfig, configErr = config.LoadKubernetesConfiguration(intc.config[0], namespace, podName, operatorClient)
+			globalConfig, configAPIResource, configErr = config.LoadKubernetesConfiguration(intc.config[0], namespace, podName, operatorClient)
 		case modes.StandaloneMode:
 			log.Debug("Loading config from file(s): " + strings.Join(intc.config, ", "))
 			globalConfig, configErr = config.LoadStandaloneConfiguration(intc.config...)
@@ -280,14 +283,15 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 
 	// Load Resiliency
 	var resiliencyProvider *resiliencyConfig.Resiliency
+	var resiliencyConfigs []*resiliencyapi.Resiliency
 	switch intc.mode {
 	case modes.KubernetesMode:
-		resiliencyConfigs := resiliencyConfig.LoadKubernetesResiliency(log, intc.id, namespace, operatorClient)
+		resiliencyConfigs = resiliencyConfig.LoadKubernetesResiliency(log, intc.id, namespace, operatorClient)
 		log.Debugf("Found %d resiliency configurations from Kubernetes", len(resiliencyConfigs))
 		resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
 	case modes.StandaloneMode:
 		if len(intc.standalone.ResourcesPath) > 0 {
-			resiliencyConfigs := resiliencyConfig.LoadLocalResiliency(log, intc.id, intc.standalone.ResourcesPath...)
+			resiliencyConfigs = resiliencyConfig.LoadLocalResiliency(log, intc.id, intc.standalone.ResourcesPath...)
 			log.Debugf("Found %d resiliency configurations in resources path", len(resiliencyConfigs))
 			resiliencyProvider = resiliencyConfig.FromConfigurations(log, resiliencyConfigs...)
 		} else {
@@ -308,7 +312,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		intc.enableAPILogging = ptr.Of(globalConfig.GetAPILoggingSpec().Enabled)
 	}
 
-	return newDaprRuntime(ctx, cfg.Security, intc, globalConfig, accessControlList, resiliencyProvider)
+	return newDaprRuntime(ctx, cfg.Security, intc, globalConfig, accessControlList, resiliencyProvider, configAPIResource, resiliencyConfigs)
 }
 
 func (c *Config) toInternal() (*internalConfig, error) {

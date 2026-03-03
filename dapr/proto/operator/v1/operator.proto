@@ -40,6 +40,10 @@ service Operator {
   rpc ListHTTPEndpoints (ListHTTPEndpointsRequest) returns (ListHTTPEndpointsResponse) {}
   // Sends events to Dapr sidecars upon http endpoint changes.
   rpc HTTPEndpointUpdate (HTTPEndpointUpdateRequest) returns (stream HTTPEndpointUpdateEvent) {}
+  // Sends events to Dapr sidecars upon configuration changes.
+  rpc ConfigurationUpdate (ConfigurationUpdateRequest) returns (stream ConfigurationUpdateEvent) {}
+  // Sends events to Dapr sidecars upon resiliency changes.
+  rpc ResiliencyUpdate (ResiliencyUpdateRequest) returns (stream ResiliencyUpdateEvent) {}
 }
 
 // ResourceEventType is the type of event to a resource.
@@ -169,6 +173,34 @@ message HTTPEndpointUpdateRequest {
 // HTTPEndpointsUpdateEvent includes the updated http endpoint event.
 message HTTPEndpointUpdateEvent {
   bytes http_endpoints = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
+}
+
+// ConfigurationUpdateRequest is the request to get updates about configuration changes for a given namespace.
+message ConfigurationUpdateRequest {
+  string namespace = 1;
+  string pod_name = 2;
+}
+
+// ConfigurationUpdateEvent includes the updated configuration event.
+message ConfigurationUpdateEvent {
+  bytes configuration = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
+}
+
+// ResiliencyUpdateRequest is the request to get updates about resiliency changes for a given namespace.
+message ResiliencyUpdateRequest {
+  string namespace = 1;
+  string pod_name = 2;
+}
+
+// ResiliencyUpdateEvent includes the updated resiliency event.
+message ResiliencyUpdateEvent {
+  bytes resiliency = 1;
 
   // type is the type of event.
   ResourceEventType type = 2;

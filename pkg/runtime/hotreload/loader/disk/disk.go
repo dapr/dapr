@@ -20,6 +20,9 @@ import (
 	"time"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -112,4 +115,22 @@ func (d *disk) Components() loader.Loader[compapi.Component] {
 
 func (d *disk) Subscriptions() loader.Loader[subapi.Subscription] {
 	return d.subscriptions
+}
+
+// Configurations returns nil as Configuration hot-reloading is not supported
+// in disk mode. Configuration changes require a full restart.
+func (d *disk) Configurations() loader.Loader[configapi.Configuration] {
+	return nil
+}
+
+// HTTPEndpoints returns nil as HTTPEndpoint hot-reloading is not supported
+// in disk mode. HTTPEndpoint changes require a full restart.
+func (d *disk) HTTPEndpoints() loader.Loader[httpendpointapi.HTTPEndpoint] {
+	return nil
+}
+
+// Resiliencies returns nil as Resiliency hot-reloading is not supported
+// in disk mode. Resiliency changes require a full restart.
+func (d *disk) Resiliencies() loader.Loader[resiliencyapi.Resiliency] {
+	return nil
 }

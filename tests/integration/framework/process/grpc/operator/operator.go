@@ -187,6 +187,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		procgrpc.WithRegister(func(s *grpc.Server) {
 			srv := &server{
 				componentUpdateFn:     opts.componentUpdateFn,
+				configurationUpdateFn: opts.configurationUpdateFn,
 				getConfigurationFn:    opts.getConfigurationFn,
 				getResiliencyFn:       opts.getResiliencyFn,
 				httpEndpointUpdateFn:  opts.httpEndpointUpdateFn,
@@ -195,6 +196,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 				listResiliencyFn:      opts.listResiliencyFn,
 				listSubscriptionsFn:   opts.listSubscriptionsFn,
 				listSubscriptionsV2Fn: opts.listSubscriptionsV2Fn,
+				resiliencyUpdateFn:    opts.resiliencyUpdateFn,
 				subscriptionUpdateFn:  opts.subscriptionUpdateFn,
 			}
 

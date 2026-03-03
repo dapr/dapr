@@ -16,6 +16,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -26,6 +27,8 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
+	loopsclient "github.com/dapr/dapr/pkg/operator/api/loops/client"
+	"github.com/dapr/dapr/pkg/operator/api/loops/sender"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
@@ -94,6 +97,46 @@ func processConfigurationSecrets(ctx context.Context, config *configurationapi.C
 			JSON: apiextensionsV1.JSON{Raw: jsonVal},
 		}
 	}
+
+	return nil
+}
+
+// ConfigurationUpdate handles configuration update streaming for a connected client.
+// Each client connection gets its own client loop that watches the informer
+// and sends updates over the gRPC stream.
+func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequest, srv operatorv1pb.Operator_ConfigurationUpdateServer) error { //nolint:nosnakecase
+	if a.closed.Load() {
+		return errors.New("server is closed")
+	}
+
+	log.Info("sidecar connected for configuration updates")
+
+	ctx := srv.Context()
+
+	// Verify authorization via informer's WatchUpdates, which checks SPIFFE ID
+	ch, cancel, err := a.configInformer.WatchUpdates(ctx, in.GetNamespace())
+	if err != nil {
+		return err
+	}
+
+	// Create a client for this connection
+	client := loopsclient.New(ctx, loopsclient.Options[configurationapi.Configuration]{
+		EventCh:        ch,
+		CancelWatch:    cancel,
+		Stream:         sender.New(srv),
+		Namespace:      in.GetNamespace(),
+		PodName:        in.GetPodName(),
+		KubeClient:     a.Client,
+		ProcessSecrets: processConfigurationSecrets,
+	})
+
+	// Run the client - this will block until context is done or event channel closes
+	if err := client.Run(ctx); err != nil {
+		log.Warnf("configuration client loop ended with error: %s", err)
+	}
+
+	// Cache the client loop for reuse
+	client.CacheLoop()
 
 	return nil
 }

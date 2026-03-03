@@ -116,7 +116,7 @@ func TestNewRuntime(t *testing.T) {
 		registry:         registry.New(registry.NewOptions()),
 		healthz:          healthz.New(),
 		schedulerStreams: 3,
-	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 
 	// assert
 	require.NoError(t, err)
@@ -803,7 +803,7 @@ func NewTestDaprRuntime(t *testing.T, mode modes.DaprMode) (*DaprRuntime, error)
 func NewTestDaprRuntimeWithID(t *testing.T, mode modes.DaprMode, id string) (*DaprRuntime, error) {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, string(protocol.HTTPProtocol), 1024)
 	testRuntimeConfig.id = id
-	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -815,7 +815,7 @@ func NewTestDaprRuntimeWithID(t *testing.T, mode modes.DaprMode, id string) (*Da
 
 func NewTestDaprRuntimeWithProtocol(t *testing.T, mode modes.DaprMode, protocol string, appPort int) (*DaprRuntime, error) {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, protocol, appPort)
-	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt, err := newDaprRuntime(t.Context(), testSecurity(t), testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -936,7 +936,7 @@ func TestInitActors(t *testing.T) {
 			mode:     modes.StandaloneMode,
 			registry: registry.New(registry.NewOptions()),
 			healthz:  healthz.New(),
-		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
 		r.channels.Refresh()
@@ -956,7 +956,7 @@ func TestInitActors(t *testing.T) {
 			registry:         registry.New(registry.NewOptions()),
 			healthz:          healthz.New(),
 			schedulerStreams: 3,
-		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
 		r.channels.Refresh()
@@ -976,7 +976,7 @@ func TestInitActors(t *testing.T) {
 			registry:         registry.New(registry.NewOptions()),
 			healthz:          healthz.New(),
 			schedulerStreams: 3,
-		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
 		r.channels.Refresh()
@@ -1234,7 +1234,7 @@ func TestComponentsCallback(t *testing.T) {
 	var callbackInvoked atomic.Bool
 
 	cfg := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, "http", port)
-	rt, err := newDaprRuntime(t.Context(), testSecurity(t), cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt, err := newDaprRuntime(t.Context(), testSecurity(t), cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")), nil, nil)
 	require.NoError(t, err)
 	rt.runtimeConfig.registry = registry.New(registry.NewOptions().WithComponentsCallback(func(components registry.ComponentRegistry) error {
 		callbackInvoked.Store(true)
