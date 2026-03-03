@@ -14,6 +14,8 @@ limitations under the License.
 package sender
 
 import (
+	"errors"
+
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
@@ -21,25 +23,25 @@ type Interface interface {
 	Send([]byte, operatorv1pb.ResourceEventType) error
 }
 
-func New(stream any) Interface {
+func New(stream any) (Interface, error) {
 	switch s := stream.(type) {
 	case operatorv1pb.Operator_ComponentUpdateServer:
 		return &component{
 			stream: s,
-		}
+		}, nil
 
 	case operatorv1pb.Operator_SubscriptionUpdateServer:
 		return &subscription{
 			stream: s,
-		}
+		}, nil
 
 	case operatorv1pb.Operator_HTTPEndpointUpdateServer:
 		return &httpendpoint{
 			stream: s,
-		}
+		}, nil
 
 	default:
-		panic("unsupported resource type")
+		return nil, errors.New("unsupported stream type")
 	}
 }
 

@@ -57,7 +57,7 @@ type Client[T meta.Resource] struct {
 	streamLoop loop.Interface[loops.EventStream]
 }
 
-func New[T meta.Resource](ctx context.Context, opts Options[T]) *Client[T] {
+func New[T meta.Resource](opts Options[T]) *Client[T] {
 	c := &Client[T]{
 		eventCh:        opts.EventCh,
 		cancelWatch:    opts.CancelWatch,
@@ -127,14 +127,14 @@ func (c *Client[T]) handleResourceUpdate(ctx context.Context, e *loops.ResourceU
 
 	if c.processSecrets != nil {
 		if err := c.processSecrets(ctx, &r, c.namespace, c.kubeClient); err != nil {
-			return fmt.Errorf("error processing %s %s secrets from pod %s/%s: %s",
+			return fmt.Errorf("error processing %s %s secrets from pod %s/%s: %w",
 				r.Kind(), r.GetName(), c.namespace, c.podName, err)
 		}
 	}
 
 	b, err := json.Marshal(r)
 	if err != nil {
-		return fmt.Errorf("error serializing %s %s from pod %s/%s: %s",
+		return fmt.Errorf("error serializing %s %s from pod %s/%s: %w",
 			r.Kind(), r.GetName(), c.namespace, c.podName, err)
 	}
 

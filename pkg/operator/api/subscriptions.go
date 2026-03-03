@@ -29,11 +29,6 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
-type SubscriptionUpdateEvent struct {
-	Subscription *subapi.Subscription
-	EventType    operatorv1pb.ResourceEventType
-}
-
 // ListSubscriptions returns a list of Dapr pub/sub subscriptions.
 func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	return a.ListSubscriptionsV2(ctx, &operatorv1pb.ListSubscriptionsRequest{})
@@ -90,11 +85,16 @@ func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateReques
 		return err
 	}
 
+	stream, err := sender.New(srv)
+	if err != nil {
+		return err
+	}
+
 	// Create a client for this connection
-	client := loopsclient.New(ctx, loopsclient.Options[subapi.Subscription]{
+	client := loopsclient.New(loopsclient.Options[subapi.Subscription]{
 		EventCh:     ch,
 		CancelWatch: cancel,
-		Stream:      sender.New(srv),
+		Stream:      stream,
 		Namespace:   in.GetNamespace(),
 		PodName:     in.GetPodName(),
 	})

@@ -145,11 +145,16 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 		return err
 	}
 
+	stream, err := sender.New(srv)
+	if err != nil {
+		return err
+	}
+
 	// Create a client for this connection
-	client := loopsclient.New(ctx, loopsclient.Options[httpendpointsapi.HTTPEndpoint]{
+	client := loopsclient.New(loopsclient.Options[httpendpointsapi.HTTPEndpoint]{
 		EventCh:        ch,
 		CancelWatch:    cancel,
-		Stream:         sender.New(srv),
+		Stream:         stream,
 		Namespace:      in.GetNamespace(),
 		PodName:        in.GetPodName(),
 		KubeClient:     a.Client,

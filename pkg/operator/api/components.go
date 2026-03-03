@@ -58,11 +58,16 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		return err
 	}
 
+	stream, err := sender.New(srv)
+	if err != nil {
+		return err
+	}
+
 	// Create a client for this connection
-	client := loopsclient.New(ctx, loopsclient.Options[componentsapi.Component]{
+	client := loopsclient.New(loopsclient.Options[componentsapi.Component]{
 		EventCh:        ch,
 		CancelWatch:    cancel,
-		Stream:         sender.New(srv),
+		Stream:         stream,
 		Namespace:      in.GetNamespace(),
 		PodName:        in.GetPodName(),
 		KubeClient:     a.Client,
