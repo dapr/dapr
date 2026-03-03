@@ -22,7 +22,7 @@ import (
 )
 
 type Options struct {
-	Loop       loop.Interface[loops.Event]
+	Loop       loop.Interface[loops.EventStream]
 	AppID      *string
 	ActorTypes []string
 }
@@ -63,10 +63,10 @@ func (s *Store) Add(opts Options) context.CancelFunc {
 	}
 }
 
-func (s *Store) AppID(id string) (loop.Interface[loops.Event], bool) {
+func (s *Store) AppID(id string) (loop.Interface[loops.EventStream], bool) {
 	return s.appIDs.get(id)
 }
 
-func (s *Store) ActorType(actorType string) (loop.Interface[loops.Event], bool) {
+func (s *Store) ActorType(actorType string) (loop.Interface[loops.EventStream], bool) {
 	return s.actorTypes.get(actorType)
 }

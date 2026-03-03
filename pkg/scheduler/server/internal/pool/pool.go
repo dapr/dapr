@@ -38,7 +38,7 @@ type Options struct {
 type Pool struct {
 	cron api.Interface
 
-	nsLoop  loop.Interface[loops.Event]
+	nsLoop  loop.Interface[loops.EventNS]
 	readyCh chan struct{}
 }
 
