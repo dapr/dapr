@@ -5,7 +5,7 @@
 This is **dapr/dapr**, the Go implementation of the [Dapr](https://dapr.io) distributed application runtime. Dapr is a graduated CNCF project that provides APIs (state management, pub/sub, service invocation, actors, workflows, bindings, secrets, configuration, distributed lock, cryptography) as a sidecar process alongside applications.
 
 **Go module**: `github.com/dapr/dapr`  
-**Go version**: See `go.mod` (currently 1.24.x)  
+**Go version**: See `go.mod` (currently 1.26.x)  
 **License**: Apache 2.0
 
 ---
