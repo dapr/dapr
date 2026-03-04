@@ -44,11 +44,16 @@ type Operator struct {
 	closech              chan struct{}
 	lock                 sync.RWMutex
 	updateCompCh         chan *api.ComponentUpdateEvent
-	updateSubCh          chan *api.SubscriptionUpdateEvent
+	updateSubCh          chan *SubscriptionUpdateEvent
 	srvCompUpdateCh      []chan *api.ComponentUpdateEvent
-	srvSubUpdateCh       []chan *api.SubscriptionUpdateEvent
+	srvSubUpdateCh       []chan *SubscriptionUpdateEvent
 	currentComponents    []compapi.Component
 	currentSubscriptions []subapi.Subscription
+}
+
+type SubscriptionUpdateEvent struct {
+	Subscription *subapi.Subscription
+	EventType    operatorv1.ResourceEventType
 }
 
 func New(t *testing.T, fopts ...Option) *Operator {
@@ -57,7 +62,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 	o := &Operator{
 		closech:      make(chan struct{}),
 		updateCompCh: make(chan *api.ComponentUpdateEvent),
-		updateSubCh:  make(chan *api.SubscriptionUpdateEvent),
+		updateSubCh:  make(chan *SubscriptionUpdateEvent),
 	}
 
 	opts := options{
@@ -113,7 +118,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		},
 		subscriptionUpdateFn: func(req *operatorv1.SubscriptionUpdateRequest, srv operatorv1.Operator_SubscriptionUpdateServer) error {
 			o.lock.Lock()
-			updateCh := make(chan *api.SubscriptionUpdateEvent)
+			updateCh := make(chan *SubscriptionUpdateEvent)
 			o.srvSubUpdateCh = append(o.srvSubUpdateCh, updateCh)
 			o.lock.Unlock()
 
@@ -257,7 +262,7 @@ func (o *Operator) AddSubscriptions(subs ...subapi.Subscription) {
 	o.currentSubscriptions = append(o.currentSubscriptions, subs...)
 }
 
-func (o *Operator) SubscriptionUpdateEvent(t *testing.T, ctx context.Context, event *api.SubscriptionUpdateEvent) {
+func (o *Operator) SubscriptionUpdateEvent(t *testing.T, ctx context.Context, event *SubscriptionUpdateEvent) {
 	t.Helper()
 	o.lock.Lock()
 	defer o.lock.Unlock()
