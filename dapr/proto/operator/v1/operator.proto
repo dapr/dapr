@@ -169,4 +169,7 @@ message HTTPEndpointUpdateRequest {
 // HTTPEndpointsUpdateEvent includes the updated http endpoint event.
 message HTTPEndpointUpdateEvent {
   bytes http_endpoints = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
 }
