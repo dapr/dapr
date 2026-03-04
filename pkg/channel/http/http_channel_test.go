@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -41,6 +42,66 @@ type testConcurrencyHandler struct {
 	maxCalls     int32
 	currentCalls *atomic.Int32
 	testFailed   bool
+}
+
+func TestConstructRequestReservedCharactersInMethod(t *testing.T) {
+	h := &Channel{
+		baseAddress: "http://localhost:3000",
+	}
+
+	tests := []struct {
+		name             string
+		method           string
+		expectedPath     string
+		expectedRawPath  string
+		expectedRawQuery string
+	}{
+		{
+			name:             "hash in method",
+			method:           "test#stream",
+			expectedPath:     "/test#stream",
+			expectedRawPath:  "/test%23stream",
+			expectedRawQuery: "",
+		},
+		{
+			name:             "question mark in method",
+			method:           "test?stream",
+			expectedPath:     "/test?stream",
+			expectedRawPath:  "/test%3Fstream",
+			expectedRawQuery: "",
+		},
+		{
+			name:             "quote in method",
+			method:           `test"stream`,
+			expectedPath:     `/test"stream`,
+			expectedRawPath:  "/test%22stream",
+			expectedRawQuery: "",
+		},
+		{
+			name:             "percent in method",
+			method:           "test%stream",
+			expectedPath:     "/test%stream",
+			expectedRawPath:  "/test%25stream",
+			expectedRawQuery: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := invokev1.NewInvokeMethodRequest(tt.method)
+			req.WithHTTPExtension("GET", "")
+			defer req.Close()
+
+			httpReq, err := h.constructRequest(context.Background(), req, "")
+			require.NoError(t, err)
+
+			require.Equal(t, tt.expectedPath, httpReq.URL.Path)
+			require.Equal(t, tt.expectedRawPath, httpReq.URL.EscapedPath())
+			require.Equal(t, tt.expectedRawQuery, httpReq.URL.RawQuery)
+			require.NotContains(t, httpReq.URL.String(), "#")
+
+		})
+	}
 }
 
 func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
