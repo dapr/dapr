@@ -113,6 +113,6 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		ids, err := client.ListInstanceIDs(ctx)
 		require.NoError(c, err)
-		assert.Len(c, ids.GetInstanceIds(), 0)
+		assert.Empty(c, ids.GetInstanceIds())
 	}, time.Second*10, 10*time.Millisecond)
 }
