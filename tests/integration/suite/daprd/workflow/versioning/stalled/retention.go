@@ -95,7 +95,7 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 	defer cancelClient()
 	client = r.workflow.BackendClient(t, clientCtx)
 
-	require.EventuallyWithT(t, func(c *require.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		require.NoError(c, client.RaiseEvent(ctx, id, "Continue"))
 	}, 10*time.Second, 10*time.Millisecond)
 
