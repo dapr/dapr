@@ -16,6 +16,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -102,7 +103,7 @@ type goTestEvent struct {
 }
 
 const (
-	inputPath = "./test_report_perf.json"
+	defaultInputPath = "./test_report_perf.json"
 )
 
 // Variant comparison aggregation for pubsub tests & can be expanded on in the
@@ -118,10 +119,17 @@ var pubsubComparisons = make(map[string]variantComparison)
 
 // create charts based on perf json output
 func main() {
-	// TODO: cassie update inputPath once automated & running in CI
-	f, err := os.Open(inputPath)
+	version := flag.String("version", os.Getenv("DAPR_RELEASE_VERSION"), "Release version (e.g., v1.18.0). Defaults to DAPR_RELEASE_VERSION env var")
+	inputPath := flag.String("input-file", defaultInputPath, "Path to test_report_perf.json")
+	flag.Parse()
+
+	if *version == "" {
+		fmt.Fprintln(os.Stderr, "error: --version is required (or set DAPR_RELEASE_VERSION)")
+		os.Exit(1)
+	}
+	f, err := os.Open(*inputPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error opening %s: %v\n", inputPath, err)
+		fmt.Fprintf(os.Stderr, "error opening %s: %v\n", *inputPath, err)
 		os.Exit(1)
 	}
 	defer f.Close()
@@ -129,11 +137,10 @@ func main() {
 	// used for local debugging of charts
 	debugEnabled = strings.TrimSpace(os.Getenv("CHARTS_DEBUG")) != ""
 	if debugEnabled {
-		debugf("reading %s", inputPath)
+		debugf("reading %s for version %s", *inputPath, *version)
 	}
 
-	// TODO: cassie update this once automated based on release version
-	baseOutputDir := filepath.Join("charts", "v1.17.0")
+	baseOutputDir := filepath.Join("charts", *version)
 	if err = os.MkdirAll(baseOutputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error creating charts directory %s: %v\n", baseOutputDir, err)
 		os.Exit(1)
