@@ -22,9 +22,11 @@ import (
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	"github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -32,6 +34,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/fake"
+	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/dapr/pkg/runtime/processor"
 )
 
 func Test_Run(t *testing.T) {
@@ -46,7 +50,7 @@ func Test_Run(t *testing.T) {
 			return nil, nil
 		})
 
-		r := NewComponents(Options[componentsapi.Component]{
+		r, _ := NewComponents(Options[componentsapi.Component]{
 			Loader:    loader,
 			CompStore: compstore.New(),
 			Healthz:   healthz.New(),
@@ -93,7 +97,7 @@ func Test_Run(t *testing.T) {
 			}, nil
 		})
 
-		r := NewComponents(Options[componentsapi.Component]{
+		r, _ := NewComponents(Options[componentsapi.Component]{
 			Loader:    fake.New().WithComponents(compLoader),
 			CompStore: compstore.New(),
 			Healthz:   healthz.New(),
@@ -193,7 +197,7 @@ func Test_Run(t *testing.T) {
 			}, nil
 		})
 
-		r := NewComponents(Options[componentsapi.Component]{
+		r, _ := NewComponents(Options[componentsapi.Component]{
 			Loader:    fake.New().WithComponents(compLoader),
 			CompStore: compstore.New(),
 			Healthz:   healthz.New(),
@@ -451,3 +455,99 @@ func (f *fakeManager) update(ctx context.Context, comp componentsapi.Component) 
 func (f *fakeManager) delete(ctx context.Context, comp componentsapi.Component) {
 	f.deleteFn(ctx, comp)
 }
+
+func Test_Secrets(t *testing.T) {
+	t.Run("should trigger hot reload when secrets change", func(t *testing.T) {
+		compStore := compstore.New()
+		mngr := newFakeManager()
+		updateCh := make(chan componentsapi.Component, 1)
+		mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
+			updateCh <- c
+		}
+
+		// Mock SecretManager
+		secMngr := &mockSecretManager{}
+
+		fakeClock := clocktesting.NewFakeClock(time.Now())
+		s := &Secrets{
+			compStore:     compStore,
+			secretManager: secMngr,
+			manager:       mngr,
+			clock:         fakeClock,
+		}
+
+		comp1 := componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{Name: "foo"},
+			Spec: componentsapi.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{Name: "user", SecretKeyRef: common.SecretKeyRef{Name: "mysecret", Key: "user"}},
+				},
+			},
+		}
+		compStore.AddPendingComponentForCommit(comp1)
+		compStore.CommitPendingComponent()
+
+		// Prepare SecretManager to respond with updated component
+		secMngr.processResourceFn = func(ctx context.Context, res meta.Resource) (bool, string) {
+			if _, ok := res.(*componentsapi.Component); ok {
+				// No change yet
+				return false, ""
+			}
+			return false, ""
+		}
+
+		errCh := make(chan error)
+		ctx, cancel := context.WithCancel(t.Context())
+		go func() {
+			errCh <- s.Run(ctx)
+		}()
+
+		assert.Eventually(t, fakeClock.HasWaiters, time.Second, time.Millisecond*50)
+
+		// Tick!
+		fakeClock.Step(time.Minute)
+
+		// Nothing should happen
+		select {
+		case <-updateCh:
+			t.Fatal("should not have triggered update")
+		case <-time.After(time.Millisecond * 100):
+		}
+
+		// Set mock to return updated component
+		secMngr.processResourceFn = func(ctx context.Context, res meta.Resource) (bool, string) {
+			if c, ok := res.(*componentsapi.Component); ok {
+				c.Spec.Metadata[0].Value = common.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte("\"updated-user\"")}}
+				return true, ""
+			}
+			return true, ""
+		}
+
+		// Tick again!
+		fakeClock.Step(time.Minute)
+
+		// Verify update was triggered!
+		select {
+		case e := <-updateCh:
+			assert.Equal(t, "foo", e.Name)
+			assert.Equal(t, "\"updated-user\"", string(e.Spec.Metadata[0].Value.JSON.Raw))
+		case <-time.After(time.Second * 3):
+			t.Fatal("did not get update in time")
+		}
+
+		cancel()
+		<-errCh
+	})
+}
+
+type mockSecretManager struct {
+	processor.SecretManager
+	processResourceFn func(context.Context, meta.Resource) (bool, string)
+}
+
+func (m *mockSecretManager) ProcessResource(ctx context.Context, res meta.Resource) (bool, string) {
+	return m.processResourceFn(ctx, res)
+}
+
+func (m *mockSecretManager) Init(ctx context.Context, comp componentsapi.Component) error { return nil }
+func (m *mockSecretManager) Close(comp componentsapi.Component) error                     { return nil }

@@ -60,6 +60,7 @@ type Reloader struct {
 	loader                  loader.Interface
 	componentsReconciler    *reconciler.Reconciler[compapi.Component]
 	subscriptionsReconciler *reconciler.Reconciler[subapi.Subscription]
+	secretsReconciler       *reconciler.Secrets
 }
 
 func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
@@ -77,16 +78,19 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 		return nil, err
 	}
 
+	compRec, secRec := reconciler.NewComponents(reconciler.Options[compapi.Component]{
+		Loader:     loader,
+		CompStore:  opts.ComponentStore,
+		Processor:  opts.Processor,
+		Authorizer: opts.Authorizer,
+		Healthz:    opts.Healthz,
+	})
+
 	return &Reloader{
-		isEnabled: isEnabled,
-		loader:    loader,
-		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
-			Loader:     loader,
-			CompStore:  opts.ComponentStore,
-			Processor:  opts.Processor,
-			Authorizer: opts.Authorizer,
-			Healthz:    opts.Healthz,
-		}),
+		isEnabled:            isEnabled,
+		loader:               loader,
+		componentsReconciler: compRec,
+		secretsReconciler:    secRec,
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
@@ -110,16 +114,19 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 		OperatorClient: opts.Client,
 	})
 
+	compRec, secRec := reconciler.NewComponents(reconciler.Options[compapi.Component]{
+		Loader:     loader,
+		CompStore:  opts.ComponentStore,
+		Processor:  opts.Processor,
+		Authorizer: opts.Authorizer,
+		Healthz:    opts.Healthz,
+	})
+
 	return &Reloader{
-		isEnabled: isEnabled,
-		loader:    loader,
-		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
-			Loader:     loader,
-			CompStore:  opts.ComponentStore,
-			Processor:  opts.Processor,
-			Authorizer: opts.Authorizer,
-			Healthz:    opts.Healthz,
-		}),
+		isEnabled:            isEnabled,
+		loader:               loader,
+		componentsReconciler: compRec,
+		secretsReconciler:    secRec,
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
@@ -144,5 +151,6 @@ func (r *Reloader) Run(ctx context.Context) error {
 		r.loader.Run,
 		r.componentsReconciler.Run,
 		r.subscriptionsReconciler.Run,
+		r.secretsReconciler.Run,
 	).Run(ctx)
 }

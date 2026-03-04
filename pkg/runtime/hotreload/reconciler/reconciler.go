@@ -57,18 +57,19 @@ type manager[T differ.Resource] interface {
 	delete(context.Context, T)
 }
 
-func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
+func NewComponents(opts Options[compapi.Component]) (*Reconciler[compapi.Component], *Secrets) {
+	m := &components{
+		Loader: opts.Loader.Components(),
+		store:  opts.CompStore,
+		proc:   opts.Processor,
+		auth:   opts.Authorizer,
+	}
 	return &Reconciler[compapi.Component]{
 		clock:   clock.RealClock{},
 		kind:    compapi.Kind,
 		htarget: opts.Healthz.AddTarget("component-reconciler"),
-		manager: &components{
-			Loader: opts.Loader.Components(),
-			store:  opts.CompStore,
-			proc:   opts.Processor,
-			auth:   opts.Authorizer,
-		},
-	}
+		manager: m,
+	}, NewSecrets(opts, m)
 }
 
 func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subscription] {
