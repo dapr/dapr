@@ -73,14 +73,12 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		KubeClient:     a.Client,
 		ProcessSecrets: processComponentSecrets,
 	})
+	defer client.CacheLoop()
 
 	// Run the client - this will block until context is done or event channel closes
 	if err := client.Run(ctx); err != nil {
 		log.Warnf("component client loop ended with error: %s", err)
 	}
-
-	// Cache the client loop for reuse
-	client.CacheLoop()
 
 	return nil
 }

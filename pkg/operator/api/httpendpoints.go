@@ -160,14 +160,12 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 		KubeClient:     a.Client,
 		ProcessSecrets: processHTTPEndpointSecrets,
 	})
+	defer client.CacheLoop()
 
 	// Run the client - this will block until context is done or event channel closes
 	if err := client.Run(ctx); err != nil {
 		log.Warnf("http endpoint client loop ended with error: %s", err)
 	}
-
-	// Cache the client loop for reuse
-	client.CacheLoop()
 
 	return nil
 }

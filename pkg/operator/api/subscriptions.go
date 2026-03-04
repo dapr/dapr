@@ -98,14 +98,12 @@ func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateReques
 		Namespace:   in.GetNamespace(),
 		PodName:     in.GetPodName(),
 	})
+	defer client.CacheLoop()
 
 	// Run the client - this will block until context is done or event channel closes
 	if err := client.Run(ctx); err != nil {
 		log.Warnf("subscription client loop ended with error: %s", err)
 	}
-
-	// Cache the client loop for reuse
-	client.CacheLoop()
 
 	return nil
 }

@@ -18,12 +18,12 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 )
 
+// EventClient is the marker interface for events handled by the client loop.
+type EventClient interface{ isEventClient() }
+
 type clientbase struct{}
 
 func (*clientbase) isEventClient() {}
-
-// EventClient is the marker interface for events handled by the client loop.
-type EventClient interface{ isEventClient() }
 
 type streambase struct{}
 
