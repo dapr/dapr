@@ -46,7 +46,7 @@ type EqualPrefixNameNamespaceMatcher struct {
 // Note there might be overlap in prefixes, but we are not filtering it for now.
 func CreateFromString(s string) (*EqualPrefixNameNamespaceMatcher, error) {
 	matcher := &EqualPrefixNameNamespaceMatcher{}
-	for _, nameNamespace := range strings.Split(s, ",") {
+	for nameNamespace := range strings.SplitSeq(s, ",") {
 		saNs := strings.Split(nameNamespace, ":")
 		if len(saNs) != 2 {
 			return nil, errors.New("service account namespace pair not following expected format 'namespace:serviceaccountname'")

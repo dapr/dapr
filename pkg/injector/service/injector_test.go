@@ -67,13 +67,13 @@ func TestNewInjectorBadAllowedPrefixedServiceAccountConfig(t *testing.T) {
 func TestGetAppIDFromRequest(t *testing.T) {
 	t.Run("can handle nil", func(t *testing.T) {
 		appID := getAppIDFromRequest(nil)
-		assert.Equal(t, "", appID)
+		assert.Empty(t, appID)
 	})
 
 	t.Run("can handle empty admissionrequest object", func(t *testing.T) {
 		fakeReq := &admissionv1.AdmissionRequest{}
 		appID := getAppIDFromRequest(fakeReq)
-		assert.Equal(t, "", appID)
+		assert.Empty(t, appID)
 	})
 
 	t.Run("get appID from annotations", func(t *testing.T) {

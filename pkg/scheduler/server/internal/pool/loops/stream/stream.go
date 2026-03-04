@@ -30,7 +30,7 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.pool.loops.stream")
 
 var (
-	streamLoopFactory = loop.New[loops.Event](1024)
+	streamLoopFactory = loop.New[loops.EventStream](1024)
 	streamCache       = sync.Pool{New: func() any {
 		return new(stream)
 	}}
@@ -40,7 +40,7 @@ type Options struct {
 	IDx           uint64
 	Add           *loops.ConnAdd
 	Cron          api.Interface
-	NamespaceLoop loop.Interface[loops.Event]
+	NamespaceLoop loop.Interface[loops.EventNS]
 }
 
 // stream is a loop that handles a single stream of a connection. It handles
@@ -48,10 +48,10 @@ type Options struct {
 type stream struct {
 	idx     uint64
 	channel schedulerv1pb.Scheduler_WatchJobsServer
-	nsLoop  loop.Interface[loops.Event]
+	nsLoop  loop.Interface[loops.EventNS]
 	appID   string
 	ns      string
-	loop    loop.Interface[loops.Event]
+	loop    loop.Interface[loops.EventStream]
 	cancel  context.CancelCauseFunc
 
 	// triggerIDx is the uuid of a triggered job. We can use a simple counter as
@@ -64,7 +64,7 @@ type stream struct {
 	wg sync.WaitGroup
 }
 
-func New(ctx context.Context, opts Options) (loop.Interface[loops.Event], error) {
+func New(ctx context.Context, opts Options) (loop.Interface[loops.EventStream], error) {
 	cancel, err := handleAdd(ctx, opts.Cron, opts.Add.Request)
 	if err != nil {
 		return nil, err
@@ -84,21 +84,19 @@ func New(ctx context.Context, opts Options) (loop.Interface[loops.Event], error)
 
 	stream.loop = streamLoopFactory.NewLoop(stream)
 
-	stream.wg.Add(1)
-	go func() {
+	stream.wg.Go(func() {
 		stream.recvLoop()
 		log.Debugf("Closed receive stream to %s/%s", stream.ns, stream.appID)
 		stream.nsLoop.Enqueue(&loops.ConnCloseStream{
 			StreamIDx: stream.idx,
 			Namespace: stream.ns,
 		})
-		stream.wg.Done()
-	}()
+	})
 
 	return stream.loop, nil
 }
 
-func (s *stream) Handle(ctx context.Context, event loops.Event) error {
+func (s *stream) Handle(ctx context.Context, event loops.EventStream) error {
 	switch e := event.(type) {
 	case *loops.TriggerRequest:
 		s.handleTriggerRequest(e)

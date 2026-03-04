@@ -46,8 +46,8 @@ var (
 
 // requestResponse represents a request or response for the APIs in this app.
 type requestResponse struct {
-	StartTime time.Time `json:"start_time,omitempty"`
-	EndTime   time.Time `json:"end_time,omitempty"`
+	StartTime time.Time `json:"start_time,omitzero"`
+	EndTime   time.Time `json:"end_time,omitzero"`
 	Message   string    `json:"message,omitempty"`
 }
 

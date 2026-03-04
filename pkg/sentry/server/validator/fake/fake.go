@@ -1,5 +1,4 @@
 //go:build unit
-// +build unit
 
 /*
 Copyright 2023 The Dapr Authors

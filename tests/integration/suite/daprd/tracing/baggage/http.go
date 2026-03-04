@@ -79,7 +79,7 @@ func (h *httpBaggage) Run(t *testing.T, ctx context.Context) {
 		defer appresp.Body.Close()
 		assert.Equal(t, http.StatusOK, appresp.StatusCode)
 		assert.False(t, h.baggage.Load())
-		assert.Equal(t, "", h.baggageVals.Load())
+		assert.Empty(t, h.baggageVals.Load())
 	})
 
 	t.Run("baggage header provided", func(t *testing.T) {

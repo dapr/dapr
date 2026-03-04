@@ -111,6 +111,7 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 	if len(c.clients) == 0 {
 		log.Debug("No scheduler clients available, not watching jobs")
 		<-ctx.Done()
+
 		return ctx.Err()
 	}
 

@@ -17,7 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -89,7 +89,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 			assert.NotEmpty(c, httpServerLatencyBuckets)
 		}, time.Second*5, time.Millisecond*10)
 
-		sort.Slice(httpServerLatencyBuckets, func(i, j int) bool { return httpServerLatencyBuckets[i] < httpServerLatencyBuckets[j] })
+		slices.Sort(httpServerLatencyBuckets)
 		expected := []float64{5, 50, 500, 5_000}
 
 		// remove last one as that is the upper limit (like math.MaxInt64)

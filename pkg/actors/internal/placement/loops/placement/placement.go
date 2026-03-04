@@ -66,14 +66,14 @@ type placement struct {
 
 	inflight  *inflight.Inflight
 	connector connector.Interface
-	loop      loop.Interface[loops.Event]
+	loop      loop.Interface[loops.EventPlace]
 	htarget   healthz.Target
 
-	lookups []loops.Event
+	lookups []loops.EventLookup
 
 	idx uint64
 
-	dissLoop loop.Interface[loops.Event]
+	dissLoop loop.Interface[loops.EventDiss]
 	host     *v1pb.Host
 
 	dissTimeout time.Duration
@@ -82,7 +82,7 @@ type placement struct {
 	wg sync.WaitGroup
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
+func New(opts Options) loop.Interface[loops.EventPlace] {
 	place := &placement{
 		id:        opts.ID,
 		ready:     opts.Ready,
@@ -99,11 +99,11 @@ func New(opts Options) loop.Interface[loops.Event] {
 		dissTimeout: opts.DisseminationTimeout,
 		cancel:      opts.Cancel,
 	}
-	place.loop = loop.New[loops.Event](8).NewLoop(place)
+	place.loop = loop.New[loops.EventPlace](8).NewLoop(place)
 	return place.loop
 }
 
-func (p *placement) Handle(ctx context.Context, event loops.Event) error {
+func (p *placement) Handle(ctx context.Context, event loops.EventPlace) error {
 	switch e := event.(type) {
 	case *loops.StreamOrder:
 		p.handleOrder(e)
@@ -199,14 +199,12 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		Cancel:               p.cancel,
 	})
 
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.wg.Go(func() {
 		derr := p.dissLoop.Run(ctx)
 		if derr != nil {
 			log.Errorf("Placement dissemination loop exited with error: %s", derr)
 		}
-	}()
+	})
 
 	if recon.ActorTypes != nil {
 		p.host.Entities = *recon.ActorTypes
@@ -218,7 +216,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 	})
 
 	for _, l := range p.lookups {
-		p.dissLoop.Enqueue(l)
+		p.dissLoop.Enqueue(l.(loops.EventDiss))
 	}
 	p.lookups = nil
 

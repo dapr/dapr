@@ -110,6 +110,7 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, conn *loader.StreamC
 			return nil
 		case <-ticker.C():
 			log.Debugf("Running scheduled %s reconcile", r.kind)
+
 			resources, err := r.manager.List(ctx)
 			if err != nil {
 				log.Errorf("Error listing %s: %s", r.kind, err)
@@ -119,6 +120,7 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, conn *loader.StreamC
 			r.reconcile(ctx, differ.Diff(resources))
 		case <-conn.ReconcileCh:
 			log.Debugf("Reconciling all %s", r.kind)
+
 			resources, err := r.manager.List(ctx)
 			if err != nil {
 				log.Errorf("Error listing %s: %s", r.kind, err)
@@ -147,9 +149,11 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 		{result.Created, operatorpb.ResourceEventType_CREATED},
 	} {
 		wg.Add(len(group.resources))
+
 		for _, resource := range group.resources {
 			go func(resource T, eventType operatorpb.ResourceEventType) {
 				defer wg.Done()
+
 				r.handleEvent(ctx, &loader.Event[T]{
 					Type:     eventType,
 					Resource: resource,

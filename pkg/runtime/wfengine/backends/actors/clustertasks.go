@@ -70,6 +70,7 @@ func (be *ClusterTasksBackend) CompleteActivityTask(ctx context.Context, resp *p
 		WithContentType(invokev1.ProtobufContentType)
 
 	_, err = router.Call(ctx, req)
+
 	return err
 }
 
@@ -90,6 +91,7 @@ func (be *ClusterTasksBackend) CancelActivityTask(ctx context.Context, id api.In
 		WithContentType(invokev1.ProtobufContentType)
 
 	_, err = router.Call(ctx, req)
+
 	return err
 }
 
@@ -110,16 +112,21 @@ func (be *ClusterTasksBackend) WaitForActivityCompletion(req *protos.ActivityReq
 			WithContentType(invokev1.ProtobufContentType)
 
 		var resp protos.ActivityResponse
+
 		err = router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
 			if res == nil {
 				return false, errors.New("received nil response from activity completion")
 			}
+
 			if res.GetStatus().GetCode() == int32(codes.Aborted) {
 				return false, api.ErrTaskCancelled
 			}
-			if err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp); err != nil {
+
+			err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp)
+			if err != nil {
 				return false, err
 			}
+
 			return true, nil
 		})
 		if err != nil {
@@ -148,6 +155,7 @@ func (be *ClusterTasksBackend) CompleteOrchestratorTask(ctx context.Context, res
 		WithContentType(invokev1.ProtobufContentType)
 
 	_, err = router.Call(ctx, req)
+
 	return err
 }
 
@@ -163,6 +171,7 @@ func (be *ClusterTasksBackend) CancelOrchestratorTask(ctx context.Context, id ap
 		WithContentType(invokev1.ProtobufContentType)
 
 	_, err = router.Call(ctx, req)
+
 	return err
 }
 
@@ -179,16 +188,21 @@ func (be *ClusterTasksBackend) WaitForOrchestratorCompletion(req *protos.Orchest
 			WithContentType(invokev1.ProtobufContentType)
 
 		var resp protos.OrchestratorResponse
+
 		err = router.CallStream(ctx, sreq, func(res *internalsv1pb.InternalInvokeResponse) (bool, error) {
 			if res == nil {
 				return false, errors.New("received nil response from activity completion")
 			}
+
 			if res.GetStatus().GetCode() == int32(codes.Aborted) {
 				return false, api.ErrTaskCancelled
 			}
-			if err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp); err != nil {
+
+			err = proto.Unmarshal(res.GetMessage().GetData().GetValue(), &resp)
+			if err != nil {
 				return false, err
 			}
+
 			return true, nil
 		})
 		if err != nil {

@@ -81,12 +81,12 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 	)
 
 	methodFuzz := func(s *string, c fuzz.Continue) {
-		n := c.Rand.Intn(100)
+		n := c.Intn(100)
 		var sb strings.Builder
 		sb.Grow(n)
 		firstSegment := true
 		for i := 0; i < n; i++ {
-			c := pathChars[c.Rand.Intn(len(pathChars))]
+			c := pathChars[c.Intn(len(pathChars))]
 			// Prevent the first character being a non alpha-numeric character.
 			if (i == 0 || sb.String()[i-1] == '/') && !strings.ContainsRune(alphaNumeric, c) {
 				i--
@@ -110,27 +110,27 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 		*s = sb.String()
 	}
 	headerFuzz := func(s *header, c fuzz.Continue) {
-		n := c.Rand.Intn(100) + 1
+		n := c.Intn(100) + 1
 		var sb strings.Builder
 		sb.Grow(n)
 		for range n {
-			sb.WriteRune(headerNameChars[c.Rand.Intn(len(headerNameChars))])
+			sb.WriteRune(headerNameChars[c.Intn(len(headerNameChars))])
 		}
 		s.name = sb.String()
 		sb.Reset()
 		sb.Grow(n)
 		for range n {
-			sb.WriteRune(headerValueChars[c.Rand.Intn(len(headerValueChars))])
+			sb.WriteRune(headerValueChars[c.Intn(len(headerValueChars))])
 		}
 		s.value = sb.String()
 	}
 	queryFuzz := func(m map[string]string, c fuzz.Continue) {
-		n := c.Rand.Intn(4) + 1
+		n := c.Intn(4) + 1
 		for range n {
 			var sb strings.Builder
 			sb.Grow(n)
 			for range n {
-				sb.WriteRune(queryChars[c.Rand.Intn(len(queryChars))])
+				sb.WriteRune(queryChars[c.Intn(len(queryChars))])
 			}
 			m[sb.String()] = sb.String()
 		}

@@ -115,7 +115,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 
 	appID := id.AppID()
 	for i := range components.Items {
-		if !(len(components.Items[i].Scopes) == 0 || utils.Contains(components.Items[i].Scopes, appID)) {
+		if len(components.Items[i].Scopes) != 0 && !utils.Contains(components.Items[i].Scopes, appID) {
 			continue
 		}
 
@@ -138,7 +138,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 
 func processComponentSecrets(ctx context.Context, component *componentsapi.Component, namespace string, kubeClient client.Client) error {
 	for i, m := range component.Spec.Metadata {
-		if m.SecretKeyRef.Name != "" && (component.Auth.SecretStore == kubernetesSecretStore || component.Auth.SecretStore == "") {
+		if m.SecretKeyRef.Name != "" && (component.SecretStore == kubernetesSecretStore || component.SecretStore == "") {
 			var secret corev1.Secret
 
 			err := kubeClient.Get(ctx, types.NamespacedName{

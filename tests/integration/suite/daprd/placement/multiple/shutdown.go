@@ -56,10 +56,11 @@ func (s *shutdown) Setup(t *testing.T) []framework.Option {
 		)
 	}
 
-	procs := []process.Interface{
+	procs := make([]process.Interface, 0, 2+len(s.daprds))
+	procs = append(procs,
 		s.place,
 		scheduler,
-	}
+	)
 	for _, d := range s.daprds {
 		procs = append(procs, d)
 	}

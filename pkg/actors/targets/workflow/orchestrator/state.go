@@ -79,8 +79,8 @@ func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginesta
 	o.state = state
 	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
-	if o.factory.eventSink != nil {
-		o.factory.eventSink(o.ometa)
+	if o.eventSink != nil {
+		o.eventSink(o.ometa)
 	}
 
 	if len(o.streamFns) > 0 {
@@ -155,7 +155,7 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 		return err
 	}
 
-	o.factory.deactivate(o)
+	o.deactivate(o)
 
 	return nil
 }
@@ -199,7 +199,7 @@ func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState,
 
 // This method purges all the completed activity data from a workflow associated with the given actorID
 func (o *orchestrator) purgeWorkflowState(ctx context.Context, meta map[string]*internalsv1pb.ListStringValue) error {
-	defer o.factory.deactivate(o)
+	defer o.deactivate(o)
 
 	log.Debugf("Workflow actor '%s': purging workflow state", o.actorID)
 

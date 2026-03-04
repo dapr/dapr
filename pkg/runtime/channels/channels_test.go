@@ -46,6 +46,7 @@ func TestGetHTTPEndpointAppChannel(t *testing.T) {
 
 	testPKBytes, err := x509.MarshalPKCS8PrivateKey(testPK)
 	require.NoError(t, err)
+
 	testPKPEM := pem.EncodeToMemory(&pem.Block{
 		Type: "PRIVATE KEY", Bytes: testPKBytes,
 	})

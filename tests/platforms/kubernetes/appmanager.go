@@ -662,7 +662,7 @@ func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
 	svcFstPort, svcIngress := svcPorts[0], svc.Status.LoadBalancer.Ingress
 	// the default service address is the internal one
 	address, port := svc.Spec.ClusterIP, svcFstPort.Port
-	if svcIngress != nil && len(svcIngress) > 0 {
+	if len(svcIngress) > 0 {
 		if svcIngress[0].Hostname != "" {
 			address = svcIngress[0].Hostname
 		} else {
@@ -684,7 +684,7 @@ func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
 			return ""
 		}
 
-		address, port = host, int32(ports[0]) //nolint:gosec
+		address, port = host, int32(ports[0])
 	}
 	return fmt.Sprintf("%s:%d", address, port)
 }
@@ -695,7 +695,7 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 		return false
 	}
 
-	if svc.Status.LoadBalancer.Ingress != nil && len(svc.Status.LoadBalancer.Ingress) > 0 {
+	if len(svc.Status.LoadBalancer.Ingress) > 0 {
 		return true
 	}
 
