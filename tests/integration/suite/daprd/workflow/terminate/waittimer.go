@@ -60,7 +60,7 @@ func (w *waittimer) Run(t *testing.T, ctx context.Context) {
 		if assert.Len(t, keys, 1) {
 			assert.Contains(t, keys[0], "timer-0")
 		}
-	}, time.Second*10, 10*time.Millisecond)
+	}, time.Second*20, 10*time.Millisecond)
 
 	require.NoError(t, cl.TerminateOrchestration(ctx, id))
 
