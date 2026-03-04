@@ -80,6 +80,11 @@ func (i *informer[T]) Run(ctx context.Context) error {
 	var zero T
 	informer, err := i.cache.GetInformer(ctx, zero.ClientObject())
 	if err != nil {
+		// Ignore errors to prevent fatal shutdown in the case of the operator
+		// shutting down early.
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("unable to get setup %s informer: %w", zero.Kind(), err)
 	}
 
