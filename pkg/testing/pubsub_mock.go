@@ -235,8 +235,8 @@ func (m *InMemoryPubsub) Subscribe(parentCtx context.Context, req pubsub.Subscri
 				m.lock.Lock()
 				close(ch)
 				delete(m.subscribedTopics, req.Topic)
-				m.onSubscribedTopicsChanged()
 				m.MethodCalled("unsubscribed", req.Topic)
+				m.onSubscribedTopicsChanged()
 				m.lock.Unlock()
 				return
 			}

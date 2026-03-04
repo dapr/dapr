@@ -205,7 +205,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 				cnt++
 				return true
 			})
-			assert.Equal(t, 1, cnt)
+			assert.Equal(c, 1, cnt)
 
 			cnt = 0
 			state.ForEachHostInNamespace("ns2", func(host *raft.DaprHostMember) bool {
@@ -225,7 +225,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 				return true
 			})
-			assert.Equal(t, 2, cnt)
+			assert.Equal(c, 2, cnt)
 		}, 10*time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
 
 		// Wait until next table dissemination and check there haven't been any updates
@@ -373,7 +373,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 				cnt++
 				return true
 			})
-			assert.Equal(t, 1, cnt)
+			assert.Equal(c, 1, cnt)
 		}, 10*time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
 
 		// Unregister actors in the actor host
