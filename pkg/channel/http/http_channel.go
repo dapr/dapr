@@ -586,6 +586,9 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		return nil, err
 	}
 
+	uri.RawQuery = ""
+	uri.Fragment = ""
+
 	if len(method) > 0 && method[0] != '/' {
 		method = "/" + method
 	}
