@@ -25,7 +25,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -196,6 +198,13 @@ func (r *race) simulateHost(t *testing.T, ctx context.Context, host *v1pb.Host) 
 		select {
 		case err := <-doneCh:
 			if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
+				// Ignore transient gRPC errors expected during teardown: the
+				// placement server may briefly report "not a leader" around
+				// leader election or while shutting down.
+				if st, ok := status.FromError(err); ok &&
+					(st.Code() == codes.FailedPrecondition || st.Code() == codes.Unavailable) {
+					return
+				}
 				require.NoError(t, err)
 			}
 		case <-time.After(time.Second * 5):
