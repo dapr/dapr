@@ -58,11 +58,10 @@ type streamConn struct {
 	currentState v1pb.HostOperation
 	hasActors    bool
 
-	// receivingTable is set to the version of a one-shot table push sent to
-	// this stream. Responses from the client for this version are ignored by
-	// the disseminator since they are not part of the cluster-wide
-	// dissemination protocol. It is set to nil when no table push is in
-	// progress.
+	// receivingTable is set to the version of a one-shot table push sent to this
+	// stream. Responses from the client for this version are ignored by the
+	// disseminator since they are not part of the namespace-wide dissemination
+	// protocol. It is set to nil when no table push is in progress.
 	receivingTable *uint64
 }
 
