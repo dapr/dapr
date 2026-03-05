@@ -137,19 +137,31 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementClient, firstMessage *v1pb.Host) (v1pb.Placement_ReportDaprStatusClient, error) {
 	t.Helper()
 	var stream v1pb.Placement_ReportDaprStatusClient
-	var err error
+	var recvErr error
 
 	require.Eventually(t, func() bool {
+		var err error
 		stream, err = client.ReportDaprStatus(ctx)
 		if err != nil {
 			return false
 		}
 
-		err = stream.Send(firstMessage)
-		return err == nil
+		if err = stream.Send(firstMessage); err != nil {
+			_ = stream.CloseSend()
+			return false
+		}
+
+		_, recvErr = stream.Recv()
+		if recvErr != nil {
+			_ = stream.CloseSend()
+			// Raft leader election not yet complete - retry
+			if status.Code(recvErr) == codes.FailedPrecondition {
+				recvErr = nil
+				return false
+			}
+		}
+		return true
 	}, 10*time.Second, 10*time.Millisecond)
 
-	_, err = stream.Recv()
-
-	return stream, err
+	return stream, recvErr
 }
