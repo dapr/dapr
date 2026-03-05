@@ -14,7 +14,6 @@ limitations under the License.
 package http
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -92,7 +91,7 @@ func TestConstructRequestReservedCharactersInMethod(t *testing.T) {
 			req.WithHTTPExtension("GET", "")
 			defer req.Close()
 
-			httpReq, err := h.constructRequest(context.Background(), req, "")
+			httpReq, err := h.constructRequest(t.Context(), req, "")
 			require.NoError(t, err)
 
 			require.Equal(t, tt.expectedPath, httpReq.URL.Path)
