@@ -223,4 +223,3 @@ func appendReadmeContent(b *strings.Builder, dir, imagePrefix string) {
 		b.WriteString("\n")
 	}
 }
-

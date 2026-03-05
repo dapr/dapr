@@ -408,10 +408,10 @@ func buildScenarioData(tests []testSummary) string {
 		}
 
 		// Header line with load context from whichever variant has data.
-		buf.WriteString(fmt.Sprintf("Scenario: %s\n", base))
-		buf.WriteString(fmt.Sprintf("Heading: %s\n", humanizeName(base)))
+		fmt.Fprintf(&buf, "Scenario: %s\n", base)
+		fmt.Fprintf(&buf, "Heading: %s\n", humanizeName(base))
 		if ref.MaxVUs > 0 {
-			buf.WriteString(fmt.Sprintf("  Max VUs: %.0f", ref.MaxVUs))
+			fmt.Fprintf(&buf, "  Max VUs: %.0f", ref.MaxVUs)
 		} else if ref.Connections > 0 {
 			buf.WriteString(fmt.Sprintf("  Connections: %d", ref.Connections))
 		}
