@@ -26,7 +26,6 @@ import (
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
-
 )
 
 // processFortioSummary parses Fortio style json perf output & converts them into a Runner
@@ -113,11 +112,11 @@ func convertFortioPerfToRunner(res FortioResult, runType string) Runner {
 			total += v
 			lk := strings.ToLower(strings.TrimSpace(k))
 			switch runTypeLower {
-			case "grpc":
+			case transportGRPC:
 				if lk == "serving" {
 					success += v
 				}
-			case "http":
+			case transportHTTP:
 				if strings.HasPrefix(k, "2") {
 					success += v
 				}

@@ -22,7 +22,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
 )
 
 // Collect all runs of the same test for aggregates when more than 1 iteration is run

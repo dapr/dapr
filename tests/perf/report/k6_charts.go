@@ -23,7 +23,6 @@ import (
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
-
 )
 
 // K6 perf test summary for x iterations. Show success/failure/VUs.

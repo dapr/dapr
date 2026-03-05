@@ -14,9 +14,7 @@ limitations under the License.
 package main
 
 import (
-	"encoding/json"
 	"html"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -155,14 +153,14 @@ func writeReadmes(baseOutputDir string) {
 	for dir := range dirsWithPng {
 		parent := filepath.Dir(dir)
 		base := filepath.Base(dir)
-		if base != "http" && base != "grpc" {
+		if base != transportHTTP && base != transportGRPC {
 			continue
 		}
 		if seenParent[parent] {
 			continue
 		}
-		httpDir := filepath.Join(parent, "http")
-		grpcDir := filepath.Join(parent, "grpc")
+		httpDir := filepath.Join(parent, transportHTTP)
+		grpcDir := filepath.Join(parent, transportGRPC)
 		hasHTTP := dirsWithPng[httpDir]
 		hasGRPC := dirsWithPng[grpcDir]
 		if !hasHTTP && !hasGRPC {
@@ -183,8 +181,8 @@ func writeReadmes(baseOutputDir string) {
 			appendReadmeContent(&b, grpcDir, "grpc/")
 		}
 		// Pubsub exception: also include bulk/http and bulk/grpc when present
-		bulkHTTP := filepath.Join(parent, "bulk", "http")
-		bulkGRPC := filepath.Join(parent, "bulk", "grpc")
+		bulkHTTP := filepath.Join(parent, "bulk", transportHTTP)
+		bulkGRPC := filepath.Join(parent, "bulk", transportGRPC)
 		hasBulkHTTP := dirsWithPng[bulkHTTP]
 		hasBulkGRPC := dirsWithPng[bulkGRPC]
 		if hasBulkHTTP || hasBulkGRPC {
@@ -226,58 +224,3 @@ func appendReadmeContent(b *strings.Builder, dir, imagePrefix string) {
 	}
 }
 
-// readJSONFile reads a JSON file and returns the unmarshalled content
-func readJSONFile(filePath string, v interface{}) error {
-	data, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, v)
-}
-
-// aggregateHighlights aggregates highlights from JSON files in the dir and returns them
-func aggregateHighlights(dir string) ([]Highlight, error) {
-	var allHighlights []Highlight
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if strings.HasSuffix(info.Name(), ".json") {
-			var highlights []Highlight
-			if err := readJSONFile(path, &highlights); err != nil {
-				return err
-			}
-			allHighlights = append(allHighlights, highlights...)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Slice(allHighlights, func(i, j int) bool {
-		return allHighlights[i].Name < allHighlights[j].Name
-	})
-	return allHighlights, nil
-}
-
-// writeHighlightsToReadme writes the aggregated highlights to the README.md in the dir
-func writeHighlightsToReadme(dir string, highlights []Highlight) error {
-	var b strings.Builder
-	b.WriteString("# Highlights\n\n")
-	for _, h := range highlights {
-		b.WriteString("## ")
-		b.WriteString(h.Name)
-		b.WriteString("\n")
-		b.WriteString(h.Description)
-		b.WriteString("\n\n")
-	}
-	return os.WriteFile(filepath.Join(dir, "README.md"), []byte(b.String()), 0o600)
-}
-
-type Highlight struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}

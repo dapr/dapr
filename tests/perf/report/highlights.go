@@ -16,6 +16,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -116,9 +117,9 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 		transport := ""
 		last := parts[len(parts)-1]
 		switch last {
-		case "http":
+		case transportHTTP:
 			transport = "HTTP"
-		case "grpc":
+		case transportGRPC:
 			transport = "gRPC"
 		}
 
@@ -209,7 +210,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 		}
 
 		combined := "## Highlights\n\n" + subContent + "\n\n---\n\n" + chartsContent
-		if err := os.WriteFile(subReadmePath, []byte(combined), 0o644); err != nil {
+		if err := os.WriteFile(subReadmePath, []byte(combined), 0o600); err != nil {
 			log.Printf("warning: could not write %s: %v", subReadmePath, err)
 		} else {
 			log.Printf("Wrote %s", subReadmePath)
@@ -218,7 +219,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 
 	// Assemble root README by copying section content from sectionContent.
 	var rootBuf strings.Builder
-	rootBuf.WriteString(fmt.Sprintf("# Dapr %s Performance Highlights\n\n", version))
+	fmt.Fprintf(&rootBuf, "# Dapr %s Performance Highlights\n\n", version)
 	rootBuf.WriteString(howToReadSection())
 	rootBuf.WriteString("\n---\n\n")
 	for _, api := range apiOrder {
@@ -226,13 +227,13 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 		if !ok {
 			continue
 		}
-		rootBuf.WriteString(fmt.Sprintf("## %s → [charts](./%s/)\n\n", apiDisplay[api], apiDir[api]))
+		fmt.Fprintf(&rootBuf, "## %s → [charts](./%s/)\n\n", apiDisplay[api], apiDir[api])
 		rootBuf.WriteString(content)
 		rootBuf.WriteString("\n\n---\n\n")
 	}
 
 	rootPath := filepath.Join(baseOutputDir, "README.md")
-	if err := os.WriteFile(rootPath, []byte(rootBuf.String()), 0o644); err != nil {
+	if err := os.WriteFile(rootPath, []byte(rootBuf.String()), 0o600); err != nil {
 		log.Printf("warning: could not write root README %s: %v", rootPath, err)
 	} else {
 		log.Printf("Wrote %s", rootPath)
@@ -386,15 +387,15 @@ func buildScenarioData(tests []testSummary) string {
 
 	var buf strings.Builder
 	writeLine := func(label string, s *testSummary) {
-		buf.WriteString(fmt.Sprintf("  %s: p50 %s", label, formatLatency(s.P50ms)))
+		fmt.Fprintf(&buf, "  %s: p50 %s", label, formatLatency(s.P50ms))
 		if s.P90ms > 0 {
-			buf.WriteString(fmt.Sprintf(" | p90 %s", formatLatency(s.P90ms)))
+			buf.WriteString(" | p90 " + formatLatency(s.P90ms))
 		}
 		if s.P95ms > 0 {
-			buf.WriteString(fmt.Sprintf(" | p95 %s", formatLatency(s.P95ms)))
+			buf.WriteString(" | p95 " + formatLatency(s.P95ms))
 		}
 		if s.P99ms > 0 {
-			buf.WriteString(fmt.Sprintf(" | p99 %s", formatLatency(s.P99ms)))
+			buf.WriteString(" | p99 " + formatLatency(s.P99ms))
 		}
 		buf.WriteString("\n")
 	}
@@ -578,7 +579,7 @@ func callOllama(baseURL, model, userContent string) (string, error) {
 	}
 
 	url := strings.TrimRight(baseURL, "/") + "/api/chat"
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body)) //nolint:noctx
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body)) //nolint:noctx,gosec
 	if err != nil {
 		return "", fmt.Errorf("ollama HTTP call failed: %w", err)
 	}
@@ -596,7 +597,7 @@ func callOllama(baseURL, model, userContent string) (string, error) {
 
 	content := strings.TrimSpace(ollamaResp.Message.Content)
 	if content == "" {
-		return "", fmt.Errorf("ollama returned empty content")
+		return "", errors.New("ollama returned empty content")
 	}
 	// Collapse any run of 3+ newlines down to two (one blank line between paragraphs).
 	for strings.Contains(content, "\n\n\n") {
