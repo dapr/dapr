@@ -43,6 +43,13 @@ func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
 		return
 	}
 
+	// Only trigger dissemination if the host was actually in the store (had
+	// actor types). Hosts with no entities were never stored, so there is
+	// nothing to remove from the placement table.
+	if !d.store.Has(closeStream.StreamIDx) {
+		return
+	}
+
 	if d.currentOperation != v1pb.HostOperation_REPORT {
 		d.waitingToDelete = append(d.waitingToDelete, closeStream.StreamIDx)
 		return
@@ -56,6 +63,7 @@ func (d *disseminator) handleCloseStream(closeStream *loops.ConnCloseStream) {
 
 	for _, s := range d.streams {
 		s.currentState = v1pb.HostOperation_REPORT
+		s.receivingTable = nil
 		s.loop.Enqueue(&loops.DisseminateLock{
 			Version: d.currentVersion,
 		})
