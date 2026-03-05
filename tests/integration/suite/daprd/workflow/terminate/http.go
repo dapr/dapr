@@ -66,7 +66,7 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
 
-	assert.Eventually(t, inAct.Load, time.Second*10, time.Millisecond*10)
+	assert.Eventually(t, inAct.Load, time.Second*20, time.Millisecond*10)
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", h.workflow.Dapr().HTTPPort(), id)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)

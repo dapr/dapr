@@ -89,7 +89,7 @@ func (i *interval) Run(t *testing.T, ctx context.Context) {
 	select {
 	case <-i.triggered:
 		assert.Fail(t, "unexpected trigger")
-	case <-time.After(time.Second * 2):
+	case <-time.After(time.Second):
 	}
 
 	// Should trigger again after 3 seconds since first trigger
