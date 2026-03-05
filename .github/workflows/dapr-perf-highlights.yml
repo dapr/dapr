@@ -76,7 +76,7 @@ jobs:
           path: tests/perf/
 
       - name: Setup Ollama
-        uses: ai-action/setup-ollama@v1
+        uses: ai-action/setup-ollama@38a882c88edfb77bb2f04d2b6d56309d5e727565 # v1
 
       - name: Start Ollama server
         run: |
@@ -130,7 +130,7 @@ jobs:
           path: tests/perf/report/charts/${{ needs.resolve-version.outputs.version }}/
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@5f8ff9a71f24a6f47eb932cc044d84268821e224 # v7
         with:
           token: ${{ secrets.DAPR_BOT_TOKEN }}
           commit-message: |
