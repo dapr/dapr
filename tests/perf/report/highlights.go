@@ -430,7 +430,7 @@ func buildScenarioData(tests []testSummary) string {
 		} else {
 			writeLine(ref.Transport, ref)
 		}
-		buf.WriteString(fmt.Sprintf("  Success: %.0f%%\n\n", ref.SuccessPct))
+		fmt.Fprintf(&buf, "  Success: %.0f%%\n\n", ref.SuccessPct)
 	}
 	return buf.String()
 }
@@ -523,7 +523,7 @@ func formatTestsTable(tests []testSummary) string {
 			header += fmt.Sprintf(", %.0f QPS target", math.Round(s.QPS/100)*100)
 		}
 
-		b.WriteString(fmt.Sprintf("**%s**:\n", header))
+		fmt.Fprintf(&b, "**%s**:\n", header)
 
 		if s.P50ms > 0 {
 			parts := fmt.Sprintf("- Median (p50): **%s**", formatLatency(s.P50ms))
@@ -543,7 +543,7 @@ func formatTestsTable(tests []testSummary) string {
 		}
 
 		if s.QPS > 0 {
-			b.WriteString(fmt.Sprintf("- Actual QPS: **%.2f req/s**", s.QPS))
+			fmt.Fprintf(&b, "- Actual QPS: **%.2f req/s**", s.QPS)
 			if s.TotalReqs > 0 {
 				b.WriteString(fmt.Sprintf(" — **%.0f total requests**", s.TotalReqs))
 			}
