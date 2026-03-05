@@ -180,14 +180,21 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 			continue
 		}
 
-		narrative, err := generateSectionNarrative(display, version, tests, model, ollamaURL)
+		fullSection, err := generateSectionNarrative(display, version, tests, model, ollamaURL)
 		if err != nil {
 			log.Printf("warning: narrative generation failed for %s: %v — using fallback", api, err)
-			narrative = defaultNarrative(display, version, tests)
+			fullSection = defaultNarrative(display, version, tests) + "\n\n" + formatTestsTable(tests)
 		}
+		// Strip any trailing horizontal rule Ollama may append.
+		fullSection = strings.TrimRight(fullSection, "\n ")
+		fullSection = strings.TrimSuffix(fullSection, "---")
+		fullSection = strings.TrimRight(fullSection, "\n ")
 
-		sharedContent := narrative + "\n\n" + generateHowToRead(tests) + "\n\n" + formatTestsTable(tests)
-		sectionContent[api] = sharedContent
+		// Root README gets the narrative only — howToReadSection() already covers it at the top.
+		sectionContent[api] = fullSection
+
+		// Sub-dir README appends a How-to-read paragraph for readers landing directly on it.
+		subContent := fullSection + "\n\n" + generateHowToRead(tests)
 
 		// Read existing charts content (images), strip any stale highlights header, prepend fresh one.
 		subReadmePath := filepath.Join(subDir, "README.md")
@@ -201,7 +208,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 			}
 		}
 
-		combined := "## Highlights\n\n" + sharedContent + "\n---\n\n" + chartsContent
+		combined := "## Highlights\n\n" + subContent + "\n\n---\n\n" + chartsContent
 		if err := os.WriteFile(subReadmePath, []byte(combined), 0o644); err != nil {
 			log.Printf("warning: could not write %s: %v", subReadmePath, err)
 		} else {
@@ -221,7 +228,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 		}
 		rootBuf.WriteString(fmt.Sprintf("## %s → [charts](./%s/)\n\n", apiDisplay[api], apiDir[api]))
 		rootBuf.WriteString(content)
-		rootBuf.WriteString("\n---\n\n")
+		rootBuf.WriteString("\n\n---\n\n")
 	}
 
 	rootPath := filepath.Join(baseOutputDir, "README.md")
@@ -303,37 +310,180 @@ func generateHowToRead(tests []testSummary) string {
 		sentences = append(sentences, "**VUs** (virtual users) are concurrent instances active at the same time")
 	}
 
-	return "**How to read these numbers:** " + strings.Join(sentences, ". ") + "."
+	return "<details><summary>How to read these numbers</summary>\n\n" +
+		strings.Join(sentences, ". ") + ".\n\n</details>"
 }
 
-// generateSectionNarrative calls Ollama to produce a short narrative paragraph for one API section.
-func generateSectionNarrative(display, version string, tests []testSummary, model, ollamaURL string) (string, error) {
-	var dataBuf strings.Builder
-	for _, s := range tests {
-		transport := s.Transport
-		if transport == "" {
-			transport = "HTTP"
+// formatLatency converts a millisecond value to a human-readable string.
+// Values >= 1000 ms are shown in seconds; smaller values stay in ms.
+func formatLatency(ms float64) string {
+	if ms >= 1000 {
+		return fmt.Sprintf("%.2f s", ms/1000)
+	}
+	return fmt.Sprintf("%.2f ms", ms)
+}
+
+// stripTransportFromName removes transport keywords from a test name so that
+// gRPC and HTTP variants of the same scenario share a common base key.
+func stripTransportFromName(name string) string {
+	for _, kw := range []string{"GRPC", "Grpc", "grpc", "HTTP", "Http", "http", "HTTPS", "Https"} {
+		name = strings.ReplaceAll(name, kw, "")
+	}
+	for strings.Contains(name, "__") {
+		name = strings.ReplaceAll(name, "__", "_")
+	}
+	return strings.Trim(name, "_")
+}
+
+// humanizeName converts a raw test base name into a readable heading.
+// It strips the "Test" prefix, replaces underscores with spaces, and
+// splits CamelCase words with spaces.
+func humanizeName(base string) string {
+	base = strings.TrimPrefix(base, "Test")
+	base = strings.ReplaceAll(base, "_", " ")
+	runes := []rune(base)
+	var result []rune
+	for i, r := range runes {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			prev := runes[i-1]
+			if prev >= 'a' && prev <= 'z' {
+				result = append(result, ' ')
+			}
 		}
-		dataBuf.WriteString(fmt.Sprintf("- %s (%s): %.0f reqs, %.2f QPS, p50=%.2fms, p90=%.2fms, p99=%.2fms, %.0f%% success\n",
-			s.Name, transport, s.TotalReqs, s.QPS, s.P50ms, s.P90ms, s.P99ms, s.SuccessPct))
-		if s.MaxVUs > 0 {
-			dataBuf.WriteString(fmt.Sprintf("  Max VUs: %.0f, p95=%.2fms\n", s.MaxVUs, s.P95ms))
+		result = append(result, r)
+	}
+	s := strings.TrimSpace(string(result))
+	for strings.Contains(s, "  ") {
+		s = strings.ReplaceAll(s, "  ", " ")
+	}
+	return s
+}
+
+// buildScenarioData formats the test data for the Ollama prompt, grouping gRPC/HTTP
+// transport pairs into a single comparison block so the model sees them together.
+func buildScenarioData(tests []testSummary) string {
+	type pair struct {
+		grpc *testSummary
+		http *testSummary
+	}
+	groups := map[string]*pair{}
+	var order []string
+
+	for i := range tests {
+		s := &tests[i]
+		base := stripTransportFromName(s.Name)
+		if _, ok := groups[base]; !ok {
+			groups[base] = &pair{}
+			order = append(order, base)
+		}
+		switch strings.ToUpper(s.Transport) {
+		case "GRPC":
+			groups[base].grpc = s
+		default:
+			groups[base].http = s
 		}
 	}
 
-	prompt := fmt.Sprintf(`Write 3 to 5 sentences of technical prose summarising the %[2]s performance results below for Dapr %[1]s.
+	var buf strings.Builder
+	writeLine := func(label string, s *testSummary) {
+		buf.WriteString(fmt.Sprintf("  %s: p50 %s", label, formatLatency(s.P50ms)))
+		if s.P90ms > 0 {
+			buf.WriteString(fmt.Sprintf(" | p90 %s", formatLatency(s.P90ms)))
+		}
+		if s.P95ms > 0 {
+			buf.WriteString(fmt.Sprintf(" | p95 %s", formatLatency(s.P95ms)))
+		}
+		if s.P99ms > 0 {
+			buf.WriteString(fmt.Sprintf(" | p99 %s", formatLatency(s.P99ms)))
+		}
+		buf.WriteString("\n")
+	}
 
-Rules:
-- Use only the numbers in the data below — do not add information not present
-- Do not reference any other Dapr API or test not listed here
-- Quote specific ms and QPS values inline
-- Declarative present tense: "delivers", "sustains", "demonstrates"
-- No bullet points, no headers, no labels
-- Do not start with "I" or "Here are"
-- End with a reliability statement (success rate, zero pod restarts)
+	for _, base := range order {
+		g := groups[base]
+		ref := g.grpc
+		if ref == nil {
+			ref = g.http
+		}
+
+		// Header line with load context from whichever variant has data.
+		buf.WriteString(fmt.Sprintf("Scenario: %s\n", base))
+		buf.WriteString(fmt.Sprintf("Heading: %s\n", humanizeName(base)))
+		if ref.MaxVUs > 0 {
+			buf.WriteString(fmt.Sprintf("  Max VUs: %.0f", ref.MaxVUs))
+		} else if ref.Connections > 0 {
+			buf.WriteString(fmt.Sprintf("  Connections: %d", ref.Connections))
+		}
+		if ref.QPS > 0 {
+			buf.WriteString(fmt.Sprintf(" | QPS: %.2f/s", ref.QPS))
+		}
+		if ref.TotalReqs > 0 {
+			buf.WriteString(fmt.Sprintf(" | Total: %.0f", ref.TotalReqs))
+		}
+		buf.WriteString("\n")
+
+		if g.grpc != nil && g.http != nil {
+			// Side-by-side transport comparison.
+			writeLine("gRPC", g.grpc)
+			writeLine("HTTP", g.http)
+		} else {
+			writeLine(ref.Transport, ref)
+		}
+		buf.WriteString(fmt.Sprintf("  Success: %.0f%%\n\n", ref.SuccessPct))
+	}
+	return buf.String()
+}
+
+// generateSectionNarrative calls Ollama to produce the full highlights section for one API:
+// an intro paragraph + per-scenario blocks with human-readable names and explanation sentences.
+func generateSectionNarrative(display, version string, tests []testSummary, model, ollamaURL string) (string, error) {
+	// Pre-compute success summary so the model never has to guess it.
+	minSuccess := 100.0
+	for _, s := range tests {
+		if s.SuccessPct < minSuccess {
+			minSuccess = s.SuccessPct
+		}
+	}
+	var successStr string
+	if minSuccess >= 100 {
+		successStr = "100%"
+	} else {
+		successStr = fmt.Sprintf("%.1f%%", minSuccess)
+	}
+
+	dataBuf := buildScenarioData(tests)
+
+	prompt := fmt.Sprintf(`Write developer-facing performance highlights for the %[2]s API in Dapr %[1]s.
+
+Produce ONLY the highlights markdown. Do not include any instructions, data, or section headings from this prompt in your response.
+
+The output must follow this structure. The example below uses made-up values — do not copy any headings or numbers from it:
+
+Dapr Example API in v1.99 delivers consistent low-latency performance at scale, with **100%%** success rate and zero pod restarts.
+
+**Dual-transport load test** (500 connections | 999.95 req/s):
+- gRPC: Median **1.23 ms** | p90: **2.45 ms** | p95: **3.67 ms**
+- HTTP: Median **1.89 ms** | p90: **3.12 ms** | p95: **4.56 ms**
+- **50000** requests at **999.95 req/s**
+
+Developers can expect sub-2ms median latency through the Dapr sidecar even at 1000 req/s with 500 concurrent connections.
+
+**VU-based concurrency test** (200 VUs | 499.97 req/s):
+- Median **2.28 ms** | p90: **2.97 ms** | p99: **7.57 ms**
+- **30000** requests at **499.97 req/s**
+
+Under 200 concurrent virtual users the system sustains single-digit millisecond tail latency, making it suitable for high-concurrency workloads.
+
+Now write the highlights for the %[2]s API in Dapr %[1]s using only the Data section below:
+- IMPORTANT: use the "Heading" field from each scenario in Data as the bold title — do not use headings from the example above.
+- IMPORTANT: if a scenario shows "Max VUs" in Data, label the load context as "VUs" (not "connections").
+- Begin with: Dapr %[2]s in %[1]s [memorable one-line summary], with **%[4]s** success rate and zero pod restarts.
+- When both gRPC and HTTP rows exist for a scenario, show both in separate lines. For single-transport scenarios, omit the transport label.
+- Bold all metric values. Latencies are already formatted — use them exactly as written.
+- End each scenario block with 1–2 sentences on what the workload demonstrates for a developer.
 
 Data:
-%[3]s`, version, display, dataBuf.String())
+%[3]s`, version, display, dataBuf, successStr)
 
 	return callOllama(ollamaURL, model, prompt)
 }
@@ -345,9 +495,9 @@ func defaultNarrative(display, version string, tests []testSummary) string {
 	}
 	s := tests[0]
 	return fmt.Sprintf(
-		"%s in %s demonstrates reliable performance with a median latency of %.2f ms at %.0f QPS. "+
+		"%s in %s demonstrates reliable performance with a median latency of %s at %.0f QPS. "+
 			"All test runs completed with 100%% success rate and zero pod restarts.",
-		display, version, s.P50ms, s.QPS)
+		display, version, formatLatency(s.P50ms), s.QPS)
 }
 
 // formatTestsTable writes the structured data block for a section's tests.
@@ -375,18 +525,18 @@ func formatTestsTable(tests []testSummary) string {
 		b.WriteString(fmt.Sprintf("**%s**:\n", header))
 
 		if s.P50ms > 0 {
-			parts := fmt.Sprintf("- Median (p50): **%.2f ms**", s.P50ms)
+			parts := fmt.Sprintf("- Median (p50): **%s**", formatLatency(s.P50ms))
 			if s.P90ms > 0 {
-				parts += fmt.Sprintf(" | p90: **%.2f ms**", s.P90ms)
+				parts += fmt.Sprintf(" | p90: **%s**", formatLatency(s.P90ms))
 			}
 			if s.P95ms > 0 && s.IsK6 {
-				parts += fmt.Sprintf(" | p95: **%.2f ms**", s.P95ms)
+				parts += fmt.Sprintf(" | p95: **%s**", formatLatency(s.P95ms))
 			}
 			if s.P99ms > 0 {
-				parts += fmt.Sprintf(" | p99: **%.2f ms**", s.P99ms)
+				parts += fmt.Sprintf(" | p99: **%s**", formatLatency(s.P99ms))
 			}
 			if s.P999ms > 0 {
-				parts += fmt.Sprintf(" | p99.9: **%.2f ms**", s.P999ms)
+				parts += fmt.Sprintf(" | p99.9: **%s**", formatLatency(s.P999ms))
 			}
 			b.WriteString(parts + "\n")
 		}
