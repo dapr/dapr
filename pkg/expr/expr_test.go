@@ -15,11 +15,11 @@ func TestEval(t *testing.T) {
 	err := e.DecodeString(code)
 	require.NoError(t, err)
 	assert.Equal(t, code, e.String())
-	result, err := e.Eval(map[string]interface{}{
-		"input": map[string]interface{}{
+	result, err := e.Eval(map[string]any{
+		"input": map[string]any{
 			"test": 1234,
 		},
-		"result": map[string]interface{}{
+		"result": map[string]any{
 			"test": 5678,
 		},
 	})
@@ -39,27 +39,27 @@ func TestJSONMarshal(t *testing.T) {
 
 func TestEmptyProgramNoPanic(t *testing.T) {
 	var e expr.Expr
-	r, err := e.Eval(map[string]interface{}{})
+	r, err := e.Eval(map[string]any{})
 
 	assert.Nil(t, r)
 	require.Error(t, err)
 }
 
-var result interface{}
+var result any
 
 func BenchmarkEval(b *testing.B) {
 	var e expr.Expr
 	err := e.DecodeString(`(has(input.test) && input.test == 1234) || (has(result.test) && result.test == 5678)`)
 	require.NoError(b, err)
-	data := map[string]interface{}{
-		"input": map[string]interface{}{
+	data := map[string]any{
+		"input": map[string]any{
 			"test": 1234,
 		},
-		"result": map[string]interface{}{
+		"result": map[string]any{
 			"test": 5678,
 		},
 	}
-	var r interface{}
+	var r any
 	for range b.N {
 		r, _ = e.Eval(data)
 	}

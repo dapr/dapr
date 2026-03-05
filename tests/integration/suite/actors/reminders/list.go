@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -78,13 +77,13 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 	assert.Empty(t, resp.GetReminders())
 
 	resp, err = client.ListActorReminders(ctx, &rtv1.ListActorRemindersRequest{
-		ActorType: "foo", ActorId: ptr.Of("abc-"),
+		ActorType: "foo", ActorId: new("abc-"),
 	})
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetReminders())
 
 	resp, err = client.ListActorReminders(ctx, &rtv1.ListActorRemindersRequest{
-		ActorType: "foo", ActorId: ptr.Of("abc-1"),
+		ActorType: "foo", ActorId: new("abc-1"),
 	})
 	require.NoError(t, err)
 	assert.Len(t, resp.GetReminders(), 1)
@@ -100,7 +99,7 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 	}
 
 	resp, err = client.ListActorReminders(ctx, &rtv1.ListActorRemindersRequest{
-		ActorType: "foo", ActorId: ptr.Of("abc-1"),
+		ActorType: "foo", ActorId: new("abc-1"),
 	})
 	require.NoError(t, err)
 	assert.Len(t, resp.GetReminders(), 5)
@@ -113,7 +112,7 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 	resp, err = client.ListActorReminders(ctx, &rtv1.ListActorRemindersRequest{
-		ActorType: "foo", ActorId: ptr.Of("abc-1"),
+		ActorType: "foo", ActorId: new("abc-1"),
 	})
 	require.NoError(t, err)
 	assert.Len(t, resp.GetReminders(), 5)
@@ -125,7 +124,7 @@ func (l *list) Run(t *testing.T, ctx context.Context) {
 	assert.Len(t, resp.GetReminders(), 6)
 
 	resp, err = client.ListActorReminders(ctx, &rtv1.ListActorRemindersRequest{
-		ActorType: "foo", ActorId: ptr.Of("abc-2"),
+		ActorType: "foo", ActorId: new("abc-2"),
 	})
 	require.NoError(t, err)
 	assert.Len(t, resp.GetReminders(), 1)

@@ -156,9 +156,7 @@ func (m *InMemoryPubsub) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.Bul
 		}
 		m.lock.Unlock()
 		bulkMessage.Entries = make([]pubsub.BulkMessageEntry, len(req.Entries))
-		for i, datum := range req.Entries {
-			bulkMessage.Entries[i] = datum
-		}
+		copy(bulkMessage.Entries, req.Entries)
 	}
 	bulkMessage.Metadata = req.Metadata
 	bulkMessage.Topic = req.Topic

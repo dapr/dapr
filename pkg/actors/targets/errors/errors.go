@@ -15,8 +15,6 @@ package errors
 
 import (
 	"errors"
-
-	"github.com/dapr/kit/ptr"
 )
 
 type closed struct {
@@ -33,7 +31,7 @@ func NewStalled() error {
 	return &stalled{}
 }
 
-var cl = ptr.Of(new(closed))
+var cl = new(new(closed))
 
 func IsClosed(err error) bool {
 	return errors.As(err, cl)

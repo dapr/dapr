@@ -234,7 +234,7 @@ func (h *DaprHandler) patchDaprService(ctx context.Context, expectedService type
 		return err
 	}
 
-	service.ObjectMeta.ResourceVersion = daprSvc.ObjectMeta.ResourceVersion
+	service.ResourceVersion = daprSvc.ResourceVersion
 
 	err = h.Update(ctx, service)
 	if err != nil {
@@ -280,8 +280,8 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	}
 
 	if val, ok := wrapper.GetTemplateAnnotations()[annotations.KeySidecarSvcAnnotations]; ok {
-		pairs := stdstrings.Split(val, ",")
-		for _, pair := range pairs {
+		pairs := stdstrings.SplitSeq(val, ",")
+		for pair := range pairs {
 			pair = stdstrings.TrimSpace(pair)
 			key, value, found := stdstrings.Cut(pair, "=")
 			if found && key != "" {

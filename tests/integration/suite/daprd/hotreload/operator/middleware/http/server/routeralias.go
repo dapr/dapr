@@ -106,9 +106,9 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 			Type:    "middleware.http.routeralias",
 			Version: "v1",
 			Metadata: []common.NameValuePair{{Name: "routes", Value: common.DynamicValue{
-				JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(
+				JSON: apiextv1.JSON{Raw: fmt.Appendf(nil,
 					`{"/helloworld":"/v1.0/invoke/%[1]s/method/foobar"}`,
-					r.daprd1.AppID()))},
+					r.daprd1.AppID())},
 			}}},
 		},
 	}, compapi.Component{
@@ -120,12 +120,12 @@ func (r *routeralias) Setup(t *testing.T) []framework.Option {
 			Type:    "middleware.http.routeralias",
 			Version: "v1",
 			Metadata: []common.NameValuePair{{Name: "routes", Value: common.DynamicValue{
-				JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(
+				JSON: apiextv1.JSON{Raw: fmt.Appendf(nil,
 					`{
 						"/helloworld":"/v1.0/invoke/%[1]s/method/barfoo",
 						"/v1.0/invoke/%[1]s/method/foobar": "/v1.0/invoke/%[1]s/method/abc"
 					}`,
-					r.daprd1.AppID()))},
+					r.daprd1.AppID())},
 			}}},
 		},
 	})
@@ -152,10 +152,9 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 			Version: "v1",
 			Metadata: []common.NameValuePair{
 				{Name: "routes", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(`{
+					JSON: apiextv1.JSON{Raw: fmt.Appendf(nil, `{
 							"/v1.0/invoke/%[1]s/method/barfoo": "/v1.0/invoke/%[1]s/method/aaa"
-						}`, r.daprd1.AppID()),
-					)},
+						}`, r.daprd1.AppID())},
 				}},
 			},
 		},
@@ -169,11 +168,10 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 			Type:    "middleware.http.routeralias",
 			Version: "v1",
 			Metadata: []common.NameValuePair{{Name: "routes", Value: common.DynamicValue{
-				JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(`{
+				JSON: apiextv1.JSON{Raw: fmt.Appendf(nil, `{
 	          "/helloworld": "/v1.0/invoke/%[1]s/method/barfoo",
 		        "/v1.0/invoke/%[1]s/method/abc": "/v1.0/invoke/%[1]s/method/aaa"
-						}`, r.daprd1.AppID()),
-				)},
+						}`, r.daprd1.AppID())},
 			}}},
 		},
 	}
@@ -187,10 +185,9 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 			Version: "v1",
 			Metadata: []common.NameValuePair{
 				{Name: "routes", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(`{
+					JSON: apiextv1.JSON{Raw: fmt.Appendf(nil, `{
 		         "/v1.0/invoke/%[1]s/method/barfoo": "/v1.0/invoke/%[1]s/method/xyz"
-						}`, r.daprd1.AppID()),
-					)},
+						}`, r.daprd1.AppID())},
 				}},
 			},
 		},

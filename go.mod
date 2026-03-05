@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.24.13
+go 1.26.0
 
 require (
 	connectrpc.com/connect v1.19.1
@@ -14,7 +14,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.17.0
 	github.com/dapr/durabletask-go v0.11.0
-	github.com/dapr/kit v0.17.0
+	github.com/dapr/kit v0.17.1-0.20260302165712-2d1983019aa1
 	github.com/diagridio/go-etcd-cron v0.12.4
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
@@ -517,11 +517,12 @@ replace (
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 
-// Uncomment for local development for testing with changes in the components-contrib && kit repositories.
+// Uncomment for local development for testing with changes in the components-contrib, kit, and durabletask repositories.
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
+// replace github.com/dapr/durabletask-go => ../durabletask-go
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.

@@ -43,7 +43,6 @@ func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1p
 		return &runtimev1pb.ScheduleJobResponse{}, fmt.Errorf("error creating storable job data from job: %w", err)
 	}
 
-	//nolint:protogetter
 	return a.scheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:          job.GetName(),
@@ -88,7 +87,7 @@ func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.Sch
 			},
 		},
 		Overwrite: jobRequest.GetOverwrite(),
-		//nolint:protogetter
+
 		Job: &schedulerv1pb.Job{
 			Schedule:      job.Schedule,
 			Data:          job.GetData(),
@@ -183,11 +182,11 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 	return &runtimev1pb.GetJobResponse{
 		Job: &runtimev1pb.Job{
 			Name:          inReq.GetName(),
-			Schedule:      resp.GetJob().Schedule, //nolint:protogetter
+			Schedule:      resp.GetJob().Schedule,
 			Data:          resp.GetJob().GetData(),
-			Repeats:       resp.GetJob().Repeats, //nolint:protogetter
-			DueTime:       resp.GetJob().DueTime, //nolint:protogetter
-			Ttl:           resp.GetJob().Ttl,     //nolint:protogetter
+			Repeats:       resp.GetJob().Repeats,
+			DueTime:       resp.GetJob().DueTime,
+			Ttl:           resp.GetJob().Ttl,
 			FailurePolicy: resp.GetJob().GetFailurePolicy(),
 		},
 	}, nil

@@ -99,9 +99,9 @@ func (s *Store) HostChanged(streamIDx uint64, host *v1pb.Host) bool {
 		return true
 	}
 
-	return !(slices.Equal(existing.GetEntities(), host.GetEntities()) &&
-		host.GetId() == existing.GetId() &&
-		host.GetNamespace() == existing.GetNamespace())
+	return !slices.Equal(existing.GetEntities(), host.GetEntities()) ||
+		host.GetId() != existing.GetId() ||
+		host.GetNamespace() != existing.GetNamespace()
 }
 
 func (s *Store) Delete(streamIDx uint64) {

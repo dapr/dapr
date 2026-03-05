@@ -70,6 +70,7 @@ func withReporter(r registry.Reporter) newTestProcOptions {
 
 func newTestProc(setters ...newTestProcOptions) (*Processor, *registry.Registry) {
 	reg := registry.New(registry.NewOptions())
+
 	opts := Options{
 		ID:             "id",
 		Namespace:      "test",
@@ -122,6 +123,7 @@ func TestInitSecretStores(t *testing.T) {
 	t.Run("init with store", func(t *testing.T) {
 		proc, reg := newTestProc()
 		m := rtmock.NewMockKubernetesStore()
+
 		reg.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -144,6 +146,7 @@ func TestInitSecretStores(t *testing.T) {
 	t.Run("secret store is registered", func(t *testing.T) {
 		proc, reg := newTestProc()
 		m := rtmock.NewMockKubernetesStore()
+
 		reg.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -161,6 +164,7 @@ func TestInitSecretStores(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
+
 		store, ok := proc.compStore.GetSecretStore("kubernetesMock")
 		assert.True(t, ok)
 		assert.NotNil(t, store)
@@ -169,6 +173,7 @@ func TestInitSecretStores(t *testing.T) {
 	t.Run("get secret store", func(t *testing.T) {
 		proc, reg := newTestProc()
 		m := rtmock.NewMockKubernetesStore()
+
 		reg.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -268,7 +273,9 @@ func TestMetadataUUID(t *testing.T) {
 	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		metadata := args.Get(0).(pubsub.Metadata)
 		consumerID := metadata.Properties["consumerID"]
+
 		var uuid0, uuid1, uuid2 uuid.UUID
+
 		uuid0, err := uuid.Parse(consumerID)
 		require.NoError(t, err)
 
@@ -395,6 +402,7 @@ func TestMetadataClientID(t *testing.T) {
 	// ClientID should be namespace.AppID for Kubernetes
 	t.Run("Kubernetes Mode AppID", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "test")
+
 		pubsubComponent.Spec.Metadata = append(
 			pubsubComponent.Spec.Metadata,
 			commonapi.NameValuePair{
@@ -417,9 +425,12 @@ func TestMetadataClientID(t *testing.T) {
 		)
 
 		var k8sClientID string
+
 		clientIDChan := make(chan string, 1)
+
 		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 			metadata := args.Get(0).(pubsub.Metadata)
+
 			k8sClientID = metadata.Properties["clientID"]
 			clientIDChan <- k8sClientID
 		})
@@ -459,17 +470,22 @@ func TestMetadataClientID(t *testing.T) {
 		)
 
 		var standAloneClientID string
+
 		clientIDChan := make(chan string, 1)
+
 		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 			metadata := args.Get(0).(pubsub.Metadata)
+
 			standAloneClientID = metadata.Properties["clientID"]
 			clientIDChan <- standAloneClientID
 		})
 
 		err := proc.processComponentAndDependents(t.Context(), pubsubComponent)
 		require.NoError(t, err)
+
 		appIds := strings.Split(standAloneClientID, " ")
 		assert.Len(t, appIds, 2)
+
 		for _, appID := range appIds {
 			assert.Equal(t, daprt.TestRuntimeConfigID, appID)
 		}
@@ -512,6 +528,7 @@ func TestReporter(t *testing.T) {
 				}))
 
 			mockPubSub := new(daprt.MockPubSub)
+
 			reg.PubSubs().RegisterComponent(
 				func(_ logger.Logger) pubsub.PubSub {
 					return mockPubSub
@@ -549,6 +566,7 @@ func TestReporter(t *testing.T) {
 				}))
 
 			mockPubSub := new(daprt.MockPubSub)
+
 			reg.PubSubs().RegisterComponent(
 				func(_ logger.Logger) pubsub.PubSub {
 					return mockPubSub
@@ -585,6 +603,7 @@ func TestReporter(t *testing.T) {
 				}))
 
 			mockPubSub := new(daprt.MockPubSub)
+
 			reg.PubSubs().RegisterComponent(
 				func(_ logger.Logger) pubsub.PubSub {
 					return mockPubSub
@@ -625,6 +644,7 @@ func TestReporter(t *testing.T) {
 				}))
 
 			mockPubSub := new(daprt.MockPubSub)
+
 			reg.PubSubs().RegisterComponent(
 				func(_ logger.Logger) pubsub.PubSub {
 					return mockPubSub
@@ -659,8 +679,10 @@ func TestReporter(t *testing.T) {
 func TestProcessorWaitGroupError(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	errCh := make(chan error)
+
 	t.Cleanup(func() {
 		cancel()
+
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
@@ -668,6 +690,7 @@ func TestProcessorWaitGroupError(t *testing.T) {
 			require.Fail(t, "timeout waiting for processor to return")
 		}
 	})
+
 	proc, _ := newTestProc()
 	// spin up the processor
 	go func() {

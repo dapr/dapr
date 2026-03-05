@@ -231,13 +231,13 @@ func (g *grpcMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		stats.WithMeasurements(g.healthProbeRoundtripLatency.M(elapsed)))
 }
 
-func (g *grpcMetrics) getPayloadSize(payload interface{}) int {
+func (g *grpcMetrics) getPayloadSize(payload any) int {
 	return proto.Size(payload.(proto.Message))
 }
 
 // UnaryServerInterceptor is a gRPC server-side interceptor for Unary RPCs.
-func (g *grpcMetrics) UnaryServerInterceptor() func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func (g *grpcMetrics) UnaryServerInterceptor() func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		start := time.Now()
 		resp, err := handler(ctx, req)
 		size := 0
@@ -254,8 +254,8 @@ func (g *grpcMetrics) UnaryServerInterceptor() func(ctx context.Context, req int
 }
 
 // UnaryClientInterceptor is a gRPC client-side interceptor for Unary RPCs.
-func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		start := time.Now()
 		err := invoker(ctx, method, req, reply, cc, opts...)
 
@@ -279,7 +279,7 @@ func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method 
 
 // StreamingServerInterceptor is a stream interceptor for gRPC proxying calls that arrive from the application to Dapr
 func (g *grpcMetrics) StreamingServerInterceptor() grpc.StreamServerInterceptor {
-	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx := ss.Context()
 		md, _ := metadata.FromIncomingContext(ctx)
 		vals, ok := md[diagConsts.GRPCProxyAppIDKey]
@@ -300,7 +300,7 @@ func (g *grpcMetrics) StreamingServerInterceptor() grpc.StreamServerInterceptor 
 
 // StreamingClientInterceptor is a stream interceptor for gRPC proxying calls that arrive from a remote Dapr sidecar
 func (g *grpcMetrics) StreamingClientInterceptor() grpc.StreamServerInterceptor {
-	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx := ss.Context()
 		md, _ := metadata.FromIncomingContext(ctx)
 		vals, ok := md[diagConsts.GRPCProxyAppIDKey]

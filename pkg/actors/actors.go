@@ -16,6 +16,7 @@ package actors
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -391,12 +392,9 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		config := api.TranslateEntityConfig(entityConfg)
 		for _, entity := range entityConfg.Entities {
 			var found bool
-			for _, hostedType := range cfg.HostedActorTypes {
-				if hostedType == entity {
-					entityConfigs[entity] = config
-					found = true
-					break
-				}
+			if slices.Contains(cfg.HostedActorTypes, entity) {
+				entityConfigs[entity] = config
+				found = true
 			}
 
 			if !found {

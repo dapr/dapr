@@ -556,8 +556,8 @@ func prepareOutputInfo(pkg, testName, baseOutputDir string) (outputInfo, bool) {
 			baseFunc = baseFunc[:i]
 		}
 		var label string
-		if idx := strings.Index(testName, "/"); idx != -1 {
-			label = sanitizeName(testName[idx+1:])
+		if _, after, ok0 := strings.Cut(testName, "/"); ok0 {
+			label = sanitizeName(after)
 		} else {
 			label = sanitizeName(testName)
 		}

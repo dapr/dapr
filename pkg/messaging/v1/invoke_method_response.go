@@ -116,7 +116,7 @@ func (imr *InvokeMethodResponse) WithTrailers(trailer metadata.MD) *InvokeMethod
 func (imr *InvokeMethodResponse) WithReplay(enabled bool) *InvokeMethodResponse {
 	// If the object has data in-memory, WithReplay is a nop
 	if !imr.HasMessageData() {
-		imr.replayableRequest.SetReplay(enabled)
+		imr.SetReplay(enabled)
 	}
 	return imr
 }

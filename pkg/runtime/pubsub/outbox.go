@@ -83,8 +83,10 @@ func NewOutbox(opts OptionsOutbox) outbox.Outbox {
 
 // AddOrUpdateOutbox examines a statestore for outbox properties and saves it for later usage in outbox operations.
 func (o *outboxImpl) AddOrUpdateOutbox(stateStore v1alpha1.Component) {
-	var publishPubSub, publishTopicKey, outboxPubsub string
-	var outboxDiscardWhenMissingState bool
+	var (
+		publishPubSub, publishTopicKey, outboxPubsub string
+		outboxDiscardWhenMissingState                bool
+	)
 
 	for _, v := range stateStore.Spec.Metadata {
 		switch v.Name {
@@ -122,6 +124,7 @@ func (o *outboxImpl) Enabled(stateStore string) bool {
 	defer o.lock.RUnlock()
 
 	_, ok := o.outboxStores[stateStore]
+
 	return ok
 }
 
@@ -156,6 +159,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 			for k, v := range sr.Metadata {
 				if k == "outbox.projection" && kitstrings.IsTruthy(v) {
 					projections[sr.Key] = sr
+
 					operations = append(operations[:i], operations[i+1:]...)
 				}
 			}
@@ -170,8 +174,10 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				return nil, err
 			}
 
-			var payload any
-			var contentType string
+			var (
+				payload     any
+				contentType string
+			)
 
 			if proj, ok := projections[sr.Key]; ok {
 				payload = proj.Value
@@ -192,6 +198,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 			}
 
 			var ceData []byte
+
 			bt, ok := payload.([]byte)
 			if ok {
 				ceData = bt
@@ -203,7 +210,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 
 				ceData = b
 			} else {
-				ceData = []byte(fmt.Sprintf("%v", payload))
+				ceData = fmt.Appendf(nil, "%v", payload)
 			}
 
 			var dataContentType string
@@ -261,7 +268,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 		outboxPubsub.Subscribe(ctx, contribPubsub.SubscribeRequest{
 			Topic: outboxTopic(appID, c.publishTopic, o.namespace),
 		}, func(ctx context.Context, msg *contribPubsub.NewMessage) error {
-			var cloudEvent map[string]interface{}
+			var cloudEvent map[string]any
 
 			err := json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
@@ -308,6 +315,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				}
 
 				outboxLogger.Errorf("failed to publish outbox topic to pubsub %s: %s, rejecting for later processing", c.publishPubSub, err)
+
 				return err
 			}
 
@@ -341,6 +349,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 
 				return nil
 			}, bo)
+
 			return err
 		})
 	}

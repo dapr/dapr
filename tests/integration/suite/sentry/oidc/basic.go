@@ -132,7 +132,7 @@ func (o *basicOIDCServer) testOIDCDiscovery(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
-	var discovery map[string]interface{}
+	var discovery map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&discovery)
 	require.NoError(t, err)
 
@@ -155,7 +155,7 @@ func (o *basicOIDCServer) testJWKSEndpoint(t *testing.T) {
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
 	var jwks struct {
-		Keys []map[string]interface{} `json:"keys"`
+		Keys []map[string]any `json:"keys"`
 	}
 	err = json.NewDecoder(resp.Body).Decode(&jwks)
 	require.NoError(t, err)
@@ -211,7 +211,7 @@ func (o *basicOIDCServer) testJWTTokenValidation(t *testing.T) {
 	assert.True(t, idToken.Expiry.After(time.Now()), "Token should not be expired")
 
 	// Verify custom claims
-	var claims map[string]interface{}
+	var claims map[string]any
 	err = idToken.Claims(&claims)
 	require.NoError(t, err)
 	assert.NotEmpty(t, claims["iat"], "Issued at time should be present")
@@ -396,6 +396,22 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 		assert.Equal(t, o.oidcBaseURL, token.Issuer)
 		assert.Contains(t, token.Audience, serviceAudience)
 		assert.Contains(t, token.Audience, "localhost") // Trust domain always included
+		assert.True(t, token.Expiry.After(time.Now()))
+	}
+
+	perJWTToken := resp.GetPerAudienceJwts()
+	require.Len(t, perJWTToken, len(services)+1, "Should have per-audience JWTs for each service and trust domain")
+	for _, serviceAudience := range append(services, "localhost") {
+		tokenString, exists := perJWTToken[serviceAudience]
+		require.True(t, exists, "Per-audience JWT should exist for %s", serviceAudience)
+
+		verifier := o.oidcProvider.Verifier(&oidc.Config{ClientID: serviceAudience})
+		token, verifyErr := verifier.Verify(t.Context(), tokenString.GetValue())
+		require.NoError(t, verifyErr, "Per-audience JWT for %s should be valid", serviceAudience)
+
+		assert.Equal(t, expectedSubject, token.Subject)
+		assert.Equal(t, o.oidcBaseURL, token.Issuer)
+		assert.Equal(t, []string{serviceAudience}, token.Audience)
 		assert.True(t, token.Expiry.After(time.Now()))
 	}
 

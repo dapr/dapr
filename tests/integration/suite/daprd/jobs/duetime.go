@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -71,8 +70,8 @@ func (d *duetime) Run(t *testing.T, ctx context.Context) {
 	req := &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test",
-			Schedule: ptr.Of("@every 1m"),
-			DueTime:  ptr.Of("0s"),
+			Schedule: new("@every 1m"),
+			DueTime:  new("0s"),
 		},
 	}
 	_, err := client.ScheduleJobAlpha1(ctx, req)
