@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 
 	"google.golang.org/grpc"
 
@@ -62,7 +63,7 @@ func New(opts Options) (connector.Interface, error) {
 	return &dnsLookUpConnector{
 		host:     host,
 		port:     port,
-		gOpts:    opts.GRPCOptions,
+		gOpts:    append(slices.Clone(opts.GRPCOptions), grpc.WithAuthority(host)),
 		resolver: resolver,
 	}, nil
 }
@@ -89,7 +90,8 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 	hostPort := net.JoinHostPort(addr, r.port)
 	r.current = hostPort
 
-	log.Debugf("Attempting to connect to placement %s", hostPort)
+	log.Debugf("Attempting to connect to placement %s (authority %s)",
+		hostPort, r.host)
 
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, hostPort, r.gOpts...)
@@ -97,7 +99,8 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 		return nil, err
 	}
 
-	log.Infof("Connected to placement %s", hostPort)
+	log.Infof("Connected to placement %s (authority %s)",
+		hostPort, r.host)
 
 	return conn, nil
 }
