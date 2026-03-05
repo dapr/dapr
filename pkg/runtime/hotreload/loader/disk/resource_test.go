@@ -168,7 +168,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		// Send a trigger event to process the files
-		r.trigger(t.Context())
+		require.NoError(t, r.trigger(t.Context()))
 
 		var events []*loader.Event[componentsapi.Component]
 
@@ -246,7 +246,8 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		// Send a trigger event to process the files
-		r.trigger(t.Context())
+		err = r.trigger(t.Context())
+		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
 
@@ -325,7 +326,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		// Send a trigger event to process the files
-		r.trigger(t.Context())
+		require.NoError(t, r.trigger(t.Context()))
 
 		var events []*loader.Event[componentsapi.Component]
 
