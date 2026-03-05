@@ -27,10 +27,7 @@ import (
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
 
-	"github.com/dapr/dapr/tests/perf/report/internal/parse"
 )
-
-type FortioResult = parse.FortioResult
 
 // processFortioSummary parses Fortio style json perf output & converts them into a Runner
 // then stores them using the same aggregation mechanism
@@ -46,7 +43,7 @@ func processFortioSummary(objJSON, testName, pkg, baseOutputDir string, resource
 			debugf("invalid JSON: %s", candidate)
 		}
 		s := sanitizePerfJSON(raw)
-		s = parse.RepairJSONClosers(s)
+		s = repairJSONClosers(s)
 		if json.Valid([]byte(s)) {
 			candidate = s
 		} else {
@@ -58,7 +55,7 @@ func processFortioSummary(objJSON, testName, pkg, baseOutputDir string, resource
 	var res FortioResult
 	if err := json.Unmarshal([]byte(candidate), &res); err != nil {
 		s := sanitizePerfJSON(candidate)
-		s = parse.RepairJSONClosers(s)
+		s = repairJSONClosers(s)
 		var retry FortioResult
 		if err = json.Unmarshal([]byte(s), &retry); err != nil {
 			fmt.Fprintf(os.Stderr, "fortio unmarshal error after retry for %s: %v\nJSON: %s\n", testName, err, candidate)

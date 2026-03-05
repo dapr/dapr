@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dapr/dapr/tests/perf/report/internal/parse"
 )
 
 // Collect all runs of the same test for aggregates when more than 1 iteration is run
@@ -57,12 +56,7 @@ func debugf(format string, args ...any) {
 	}
 }
 
-type (
-	Values      = parse.Values
-	Metric      = parse.Metric
-	Runner      = parse.Runner
-	goTestEvent = parse.TestEvent // json file output fields
-)
+type goTestEvent = TestEvent // json file output fields
 
 const (
 	defaultInputPath = "./test_report_perf.json"

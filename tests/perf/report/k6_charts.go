@@ -24,10 +24,7 @@ import (
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
 
-	"github.com/dapr/dapr/tests/perf/report/internal/parse"
 )
-
-type Summary = parse.K6Summary
 
 // K6 perf test summary for x iterations. Show success/failure/VUs.
 func processK6Summary(k6JSON, testName, pkg, baseOutputDir string, resourceByTest map[string]*ResourceUsage) {
@@ -36,7 +33,7 @@ func processK6Summary(k6JSON, testName, pkg, baseOutputDir string, resourceByTes
 		return
 	}
 
-	var summary Summary
+	var summary K6Summary
 	if err := json.Unmarshal([]byte(k6JSON), &summary); err != nil {
 		fmt.Fprintf(os.Stderr, "k6 JSON parse error for %s: %v\nJSON: %s\n", testName, err, k6JSON)
 		return

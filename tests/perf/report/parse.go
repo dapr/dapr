@@ -11,13 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package parse
+package main
 
 import "strings"
-
-// Provide shared types and utilities for reading `go test -json`
-// perf output (Fortio and k6 result formats) used by both the chart generator
-// and the highlights generator.
 
 // TestEvent is one line of `go test -json` output.
 type TestEvent struct {
@@ -69,8 +65,6 @@ type FortioResult struct {
 	IPCountMap         map[string]int     `json:"IPCountMap,omitempty"`
 }
 
-// k6 types
-
 // Values holds the statistical values for a k6 metric.
 type Values struct {
 	Min   float64 `json:"min"`
@@ -120,9 +114,9 @@ type K6Summary struct {
 	RunnersResults []Runner `json:"runnersResults"`
 }
 
-// add missing closing braces/brackets if we detect more openings than closings.
-// fix for logs where the JSON object may be truncated by line buffering
-func RepairJSONClosers(s string) string {
+// repairJSONClosers adds missing closing braces/brackets when the JSON object
+// is truncated by line buffering.
+func repairJSONClosers(s string) string {
 	openCurly := strings.Count(s, "{")
 	closeCurly := strings.Count(s, "}")
 	openSquare := strings.Count(s, "[")
