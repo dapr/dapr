@@ -78,11 +78,9 @@ func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error)
 		ReconcileCh: make(chan struct{}),
 	}
 
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
+	r.wg.Go(func() {
 		r.streamLoop(ctx, conn)
-	}()
+	})
 
 	return conn, nil
 }
