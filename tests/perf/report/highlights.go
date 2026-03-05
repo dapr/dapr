@@ -413,13 +413,13 @@ func buildScenarioData(tests []testSummary) string {
 		if ref.MaxVUs > 0 {
 			fmt.Fprintf(&buf, "  Max VUs: %.0f", ref.MaxVUs)
 		} else if ref.Connections > 0 {
-			buf.WriteString(fmt.Sprintf("  Connections: %d", ref.Connections))
+			fmt.Fprintf(&buf, "  Connections: %d", ref.Connections)
 		}
 		if ref.QPS > 0 {
-			buf.WriteString(fmt.Sprintf(" | QPS: %.2f/s", ref.QPS))
+			fmt.Fprintf(&buf, " | QPS: %.2f/s", ref.QPS)
 		}
 		if ref.TotalReqs > 0 {
-			buf.WriteString(fmt.Sprintf(" | Total: %.0f", ref.TotalReqs))
+			fmt.Fprintf(&buf, " | Total: %.0f", ref.TotalReqs)
 		}
 		buf.WriteString("\n")
 
