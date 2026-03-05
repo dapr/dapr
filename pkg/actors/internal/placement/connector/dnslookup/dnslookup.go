@@ -75,7 +75,10 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 	r.current = hostPort
 	r.dnsEntries = r.dnsEntries[1:]
 
-	log.Debugf("Attempting to connect to placement %s", hostPort)
+	log.Debugf("Attempting to connect to placement @%s, (authority %s)",
+		hostPort, r.host)
+
+	r.gOpts = append(r.gOpts, grpc.WithAuthority(r.host))
 
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, hostPort, r.gOpts...)
@@ -83,7 +86,8 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 		return nil, err
 	}
 
-	log.Infof("Connected to placement %s", hostPort)
+	log.Infof("Connected to placement %s, (authority %s)",
+		hostPort, r.host)
 
 	return conn, nil
 }
