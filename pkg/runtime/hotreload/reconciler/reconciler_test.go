@@ -406,21 +406,21 @@ func Test_handleEvent(t *testing.T) {
 	assert.Equal(t, 0, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(t.Context(), &loader.Event[componentsapi.Component]{
+	r.handleResourceEvent(t.Context(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_CREATED,
 		Resource: comp1,
 	})
 	assert.Equal(t, 1, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(t.Context(), &loader.Event[componentsapi.Component]{
+	r.handleResourceEvent(t.Context(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_UPDATED,
 		Resource: comp1,
 	})
 	assert.Equal(t, 2, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(t.Context(), &loader.Event[componentsapi.Component]{
+	r.handleResourceEvent(t.Context(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_DELETED,
 		Resource: comp1,
 	})
