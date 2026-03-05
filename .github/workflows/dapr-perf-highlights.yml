@@ -95,23 +95,14 @@ jobs:
       - name: Pull Ollama model
         run: ollama pull llama3.2
 
-      - name: Generate Charts
+      - name: Generate Charts and Highlights
         working-directory: tests/perf/report
         run: |
           go build -o _report_bin .
           ./_report_bin --version ${{ needs.resolve-version.outputs.version }} \
-            --input-file ../test_report_perf.json
-          rm -f _report_bin
-
-      - name: Generate Highlights
-        working-directory: tests/perf/report
-        run: |
-          go build -o _highlights_bin ./cmd/highlights/
-          ./_highlights_bin \
-            --version ${{ needs.resolve-version.outputs.version }} \
             --input-file ../test_report_perf.json \
             --model llama3.2
-          rm -f _highlights_bin
+          rm -f _report_bin
 
       - name: Upload highlights as artifact
         uses: actions/upload-artifact@v4

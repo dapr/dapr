@@ -153,14 +153,22 @@ This will be extended to other APIs in the future.
 
 ### How to run locally
 
-Charts are produced by:
+From `tests/perf/report/`, with a `test_report_perf.json` downloaded from CI and placed at `tests/perf/test_report_perf.json`.
 
-- Program (from `tests/perf/report/`): `charts.go`
-- Json input: `./test_report_perf.json` (`gotestsum` JSON from perf CI)
-- Output: `charts/v1.16.3/workflows/*.png`
+**Charts only:**
+```bash
+go build -o _report_bin .
+./_report_bin --version v1.18.0 --input-file ../test_report_perf.json
+rm -f _report_bin
+```
+
+**Charts + AI highlights** (requires [Ollama](https://ollama.ai) running locally):
+```bash
+brew install ollama && ollama pull llama3.2 && ollama serve
+```
 
 ```bash
-cd tests/perf/report
-rm -rf charts/v1.16.3/workflows/*
-go run .
+go build -o _report_bin .
+./_report_bin --version v1.18.0 --input-file ../test_report_perf.json --model llama3.2
+rm -f _report_bin
 ```

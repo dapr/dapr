@@ -26,47 +26,11 @@ import (
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
+
+	"github.com/dapr/dapr/tests/perf/report/internal/parse"
 )
 
-// Fortio perf result with percentiles + histogram
-type percentilePoint struct {
-	Percentile float64 `json:"Percentile"`
-	Value      float64 `json:"Value"`
-}
-
-type durationHistogram struct {
-	Count int     `json:"Count"`
-	Min   float64 `json:"Min"`
-	Max   float64 `json:"Max"`
-	Sum   float64 `json:"Sum"`
-	Avg   float64 `json:"Avg"`
-	Data  []struct {
-		Start   float64 `json:"Start"`
-		End     float64 `json:"End"`
-		Percent float64 `json:"Percent"`
-		Count   int     `json:"Count"`
-	} `json:"Data"`
-	Percentiles []percentilePoint `json:"Percentiles,omitempty"`
-}
-
-type FortioResult struct {
-	RunType            string             `json:"RunType"`
-	RequestedQPS       string             `json:"RequestedQPS"`
-	RequestedDuration  string             `json:"RequestedDuration"`
-	ActualQPS          float64            `json:"ActualQPS"`
-	ActualDuration     float64            `json:"ActualDuration"`
-	NumThreads         int                `json:"NumThreads"`
-	DurationHistogram  durationHistogram  `json:"DurationHistogram"`
-	Percentiles        []percentilePoint  `json:"Percentiles"`
-	ErrorsDurationHist *durationHistogram `json:"ErrorsDurationHistogram,omitempty"`
-	Dapr               string             `json:"Dapr,omitempty"`
-	URL                string             `json:"URL,omitempty"`
-	RetCodes           map[string]int     `json:"RetCodes,omitempty"`
-	Sizes              map[string]any     `json:"Sizes,omitempty"`
-	HeaderSizes        map[string]any     `json:"HeaderSizes,omitempty"`
-	ConnectionStats    map[string]any     `json:"ConnectionStats,omitempty"`
-	IPCountMap         map[string]int     `json:"IPCountMap,omitempty"`
-}
+type FortioResult = parse.FortioResult
 
 // processFortioSummary parses Fortio style json perf output & converts them into a Runner
 // then stores them using the same aggregation mechanism
@@ -82,7 +46,7 @@ func processFortioSummary(objJSON, testName, pkg, baseOutputDir string, resource
 			debugf("invalid JSON: %s", candidate)
 		}
 		s := sanitizePerfJSON(raw)
-		s = repairJSONClosers(s)
+		s = parse.RepairJSONClosers(s)
 		if json.Valid([]byte(s)) {
 			candidate = s
 		} else {
@@ -94,7 +58,7 @@ func processFortioSummary(objJSON, testName, pkg, baseOutputDir string, resource
 	var res FortioResult
 	if err := json.Unmarshal([]byte(candidate), &res); err != nil {
 		s := sanitizePerfJSON(candidate)
-		s = repairJSONClosers(s)
+		s = parse.RepairJSONClosers(s)
 		var retry FortioResult
 		if err = json.Unmarshal([]byte(s), &retry); err != nil {
 			fmt.Fprintf(os.Stderr, "fortio unmarshal error after retry for %s: %v\nJSON: %s\n", testName, err, candidate)

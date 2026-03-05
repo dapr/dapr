@@ -23,12 +23,11 @@ import (
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
+
+	"github.com/dapr/dapr/tests/perf/report/internal/parse"
 )
 
-type Summary struct {
-	Pass           bool     `json:"pass"`
-	RunnersResults []Runner `json:"runnersResults"`
-}
+type Summary = parse.K6Summary
 
 // K6 perf test summary for x iterations. Show success/failure/VUs.
 func processK6Summary(k6JSON, testName, pkg, baseOutputDir string, resourceByTest map[string]*ResourceUsage) {

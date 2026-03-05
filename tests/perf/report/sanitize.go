@@ -66,25 +66,6 @@ func sanitizePerfJSON(s string) string {
 	return s
 }
 
-// add missing closing braces/brackets if we detect more openings than closings.
-// fix for logs where the JSON object may be truncated by line buffering
-func repairJSONClosers(s string) string {
-	openCurly := strings.Count(s, "{")
-	closeCurly := strings.Count(s, "}")
-	openSquare := strings.Count(s, "[")
-	closeSquare := strings.Count(s, "]")
-	var b strings.Builder
-	b.WriteString(s)
-	// Close arrays first, then objects since most blocks are objects containing arrays
-	for range openSquare - closeSquare {
-		b.WriteString("]")
-	}
-	for range openCurly - closeCurly {
-		b.WriteString("}")
-	}
-	return b.String()
-}
-
 // rm per-run ordinal nums from test names. ex:
 // " ... :_#02" or " ... #02", so repeated runs aggregate under one base key
 func stripRunOrdinalSuffix(name string) string {
