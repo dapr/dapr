@@ -75,40 +75,24 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 		s.WaitUntilRunning(t, ctx)
 	}
 
-	hosts := make([]placement.Host, 0, len(s.daprds))
-	for _, s := range s.daprds {
-		hosts = append(hosts, placement.Host{
-			Name:      s.InternalGRPCAddress(),
-			ID:        s.AppID(),
-			APIVLevel: 20,
-			Namespace: "default",
-		})
-	}
-
 	leader := s.place.Leader(t, ctx)
 
+	// Daprds in this test have no actor types, so the placement table should
+	// have no hosts.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		table := leader.PlacementTables(t, ctx)
-		if !assert.NotNil(c, table.Tables["default"]) {
+		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}
-		assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		assert.Equal(c, uint64(3), table.Tables["default"].Version)
+		assert.Nil(c, table.Tables["default"].Hosts)
 	}, time.Second*10, time.Millisecond*10)
 
-	for i := range s.daprds[:2] {
-		s.daprds[i].Kill(t)
-		hosts = hosts[1:]
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			table := leader.PlacementTables(t, ctx)
-			if !assert.Contains(c, table.Tables, "default") {
-				return
-			}
-			assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		}, time.Second*10, time.Millisecond*10)
+	// Kill all daprds.
+	for _, d := range s.daprds {
+		d.Kill(t)
 	}
 
-	s.daprds[2].Kill(t)
+	// After all daprds are killed, the disseminator should be removed.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		table := leader.PlacementTables(t, ctx)
 		assert.Equal(c, &placement.TableState{
