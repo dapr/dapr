@@ -539,26 +539,26 @@ func formatTestsTable(tests []testSummary) string {
 			if s.P999ms > 0 {
 				parts += fmt.Sprintf(" | p99.9: **%s**", formatLatency(s.P999ms))
 			}
-			b.WriteString(parts + "\n")
+			fmt.Fprintf(&b, "%s\n", parts)
 		}
 
 		if s.QPS > 0 {
 			fmt.Fprintf(&b, "- Actual QPS: **%.2f req/s**", s.QPS)
 			if s.TotalReqs > 0 {
-				b.WriteString(fmt.Sprintf(" — **%.0f total requests**", s.TotalReqs))
+				fmt.Fprintf(&b, " — **%.0f total requests**", s.TotalReqs)
 			}
-			b.WriteString("\n")
+			fmt.Fprintf(&b, "\n")
 		} else if s.TotalReqs > 0 {
-			b.WriteString(fmt.Sprintf("- **%.0f** total requests/iterations\n", s.TotalReqs))
+			fmt.Fprintf(&b, "- **%.0f** total requests/iterations\n", s.TotalReqs)
 		}
 
 		if s.MaxVUs > 0 {
-			b.WriteString(fmt.Sprintf("- Max VUs: **%.0f**\n", s.MaxVUs))
+			fmt.Fprintf(&b, "- Max VUs: **%.0f**\n", s.MaxVUs)
 		}
 
 		successStr := fmt.Sprintf("%.0f%%", s.SuccessPct)
-		b.WriteString(fmt.Sprintf("- **%s success rate**, 0 pod restarts\n", successStr))
-		b.WriteString("\n")
+		fmt.Fprintf(&b, "- **%s success rate**, 0 pod restarts\n", successStr)
+		fmt.Fprintf(&b, "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
