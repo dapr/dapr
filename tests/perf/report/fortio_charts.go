@@ -82,6 +82,19 @@ func processFortioSummary(objJSON, testName, pkg, baseOutputDir string, resource
 	}
 	storeRunner(r, info, ru)
 
+	if res.NumThreads > 0 {
+		mapKey := info.apiName + "/"
+		if info.transport != "" {
+			mapKey += info.transport + "/"
+		}
+		mapKey += info.groupKey
+		cr := combinedResults[mapKey]
+		if cr.numThreads == 0 {
+			cr.numThreads = res.NumThreads
+			combinedResults[mapKey] = cr
+		}
+	}
+
 	makeQPSChart(res, filePrefix, info.outDir)
 	makeDurationRequestedVsActualChart(res, filePrefix, info.outDir)
 	makeDurationHistogramCharts(res, filePrefix, info.outDir)

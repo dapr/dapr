@@ -30,6 +30,7 @@ type combinedTestResult struct {
 	outDir         string
 	runners        []Runner
 	resourceUsages []*ResourceUsage
+	numThreads     int // Fortio NumThreads (conns), 0 for k6 tests
 }
 
 var combinedResults = make(map[string]combinedTestResult)

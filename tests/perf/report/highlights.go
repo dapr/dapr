@@ -15,6 +15,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // testSummary holds extracted per-test metrics for the highlights report.
@@ -126,31 +128,34 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 		agg := aggregateRunners(result.runners)
 		isK6 := agg.IterationDuration.Values.Med > 0
 
-		// For workflow/scenario-based k6 tests, IterationDuration is the primary latency
-		// signal. For HTTP-based k6 and Fortio tests, HTTPReqDuration is used.
+		// use HTTPReqDuration when non-zero (HTTP k6 tests and all Fortio tests)
+		// Fall back to IterationDuration only when HTTP metrics are absent (workflow-only k6 tests)
 		durMetric := agg.HTTPReqDuration
-		if isK6 {
+		if agg.HTTPReqDuration.Values.Med == 0 && agg.IterationDuration.Values.Med > 0 {
 			durMetric = agg.IterationDuration
 		}
 
-		successPct := 100.0
+		// Use -1 to indicate "unknown" when no checks or RetCode data is present,
+		// rather than defaulting to 100% which misrepresents Fortio runs without RetCodes
+		successPct := -1.0
 		if agg.Checks.Values.Rate > 0 {
 			successPct = agg.Checks.Values.Rate * 100
 		}
 
 		s := testSummary{
-			Name:       result.name,
-			Transport:  transport,
-			IsK6:       isK6,
-			P50ms:      durMetric.Values.Med * 1000,
-			P90ms:      durMetric.Values.P90 * 1000,
-			P95ms:      durMetric.Values.P95 * 1000,
-			P99ms:      durMetric.Values.P99 * 1000,
-			P999ms:     durMetric.Values.P999 * 1000,
-			QPS:        agg.Iterations.Values.Rate,
-			TotalReqs:  agg.Iterations.Values.Count,
-			MaxVUs:     agg.VUsMax.Values.Max,
-			SuccessPct: successPct,
+			Name:        result.name,
+			Transport:   transport,
+			IsK6:        isK6,
+			P50ms:       durMetric.Values.Med * 1000,
+			P90ms:       durMetric.Values.P90 * 1000,
+			P95ms:       durMetric.Values.P95 * 1000,
+			P99ms:       durMetric.Values.P99 * 1000,
+			P999ms:      durMetric.Values.P999 * 1000,
+			QPS:         agg.Iterations.Values.Rate,
+			TotalReqs:   agg.Iterations.Values.Count,
+			MaxVUs:      agg.VUsMax.Values.Max,
+			SuccessPct:  successPct,
+			Connections: result.numThreads,
 		}
 		grouped[apiKey] = append(grouped[apiKey], s)
 	}
@@ -387,7 +392,11 @@ func buildScenarioData(tests []testSummary) string {
 
 	var buf strings.Builder
 	writeLine := func(label string, s *testSummary) {
-		fmt.Fprintf(&buf, "  %s: p50 %s", label, formatLatency(s.P50ms))
+		if label != "" {
+			fmt.Fprintf(&buf, "  %s: p50 %s", label, formatLatency(s.P50ms))
+		} else {
+			fmt.Fprintf(&buf, "  p50 %s", formatLatency(s.P50ms))
+		}
 		if s.P90ms > 0 {
 			buf.WriteString(" | p90 " + formatLatency(s.P90ms))
 		}
@@ -430,7 +439,10 @@ func buildScenarioData(tests []testSummary) string {
 		} else {
 			writeLine(ref.Transport, ref)
 		}
-		fmt.Fprintf(&buf, "  Success: %.0f%%\n\n", ref.SuccessPct)
+		if ref.SuccessPct >= 0 {
+			fmt.Fprintf(&buf, "  Success: %.0f%%\n", ref.SuccessPct)
+		}
+		buf.WriteString("\n")
 	}
 	return buf.String()
 }
@@ -439,16 +451,23 @@ func buildScenarioData(tests []testSummary) string {
 // an intro paragraph + per-scenario blocks with human-readable names and explanation sentences.
 func generateSectionNarrative(display, version string, tests []testSummary, model, ollamaURL string) (string, error) {
 	// Pre-compute success summary so the model never has to guess it.
-	minSuccess := 100.0
+	// Skip tests where successPct == -1 (unknown / no checks data).
+	minSuccess := -1.0
 	for _, s := range tests {
-		if s.SuccessPct < minSuccess {
+		if s.SuccessPct < 0 {
+			continue
+		}
+		if minSuccess < 0 || s.SuccessPct < minSuccess {
 			minSuccess = s.SuccessPct
 		}
 	}
 	var successStr string
-	if minSuccess >= 100 {
+	switch {
+	case minSuccess < 0:
+		successStr = "N/A"
+	case minSuccess >= 100:
 		successStr = "100%"
-	} else {
+	default:
 		successStr = fmt.Sprintf("%.1f%%", minSuccess)
 	}
 
@@ -520,7 +539,7 @@ func formatTestsTable(tests []testSummary) string {
 			header += fmt.Sprintf(", %d connections", s.Connections)
 		}
 		if s.QPS > 0 && !s.IsK6 {
-			header += fmt.Sprintf(", %.0f QPS target", math.Round(s.QPS/100)*100)
+			header += fmt.Sprintf(", ~%.0f QPS (actual)", math.Round(s.QPS/100)*100)
 		}
 
 		fmt.Fprintf(&b, "**%s**:\n", header)
@@ -556,8 +575,9 @@ func formatTestsTable(tests []testSummary) string {
 			fmt.Fprintf(&b, "- Max VUs: **%.0f**\n", s.MaxVUs)
 		}
 
-		successStr := fmt.Sprintf("%.0f%%", s.SuccessPct)
-		fmt.Fprintf(&b, "- **%s success rate**, 0 pod restarts\n", successStr)
+		if s.SuccessPct >= 0 {
+			fmt.Fprintf(&b, "- **%.0f%% success rate**, 0 pod restarts\n", s.SuccessPct)
+		}
 		fmt.Fprintf(&b, "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -579,14 +599,23 @@ func callOllama(baseURL, model, userContent string) (string, error) {
 	}
 
 	url := strings.TrimRight(baseURL, "/") + "/api/chat"
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body)) //nolint:noctx,gosec
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create ollama request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("ollama HTTP call failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return "", fmt.Errorf("ollama returned %d: %s", resp.StatusCode, raw)
 	}
 
