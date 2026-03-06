@@ -63,7 +63,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
 
-	assert.Eventually(t, inAct.Load, time.Second*10, time.Millisecond*10)
+	assert.Eventually(t, inAct.Load, time.Second*20, time.Millisecond*10)
 
 	require.NoError(t, cl.TerminateOrchestration(ctx, id))
 

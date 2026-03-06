@@ -15,7 +15,6 @@ package orchestrator
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
@@ -101,7 +101,7 @@ func (o *orchestrator) stallWorkflow(ctx context.Context, state *wfenginestate.S
 
 	<-ctx.Done()
 
-	return errors.New("workflow is stalled")
+	return api.ErrStalled
 }
 
 func collectAllPatches(events []*protos.HistoryEvent) []string {
