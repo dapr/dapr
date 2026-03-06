@@ -20,9 +20,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	dactors "github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -31,37 +30,32 @@ func init() {
 }
 
 type basic struct {
-	daprd *daprd.Daprd
-	place *placement.Placement
+	actors *dactors.Actors
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.place = placement.New(t)
-	scheduler := scheduler.New(t)
-
-	b.daprd = daprd.New(t,
-		daprd.WithPlacementAddresses(b.place.Address()),
-		daprd.WithInMemoryActorStateStore("foo"),
-		daprd.WithScheduler(scheduler),
+	b.actors = dactors.New(t,
+		dactors.WithActorTypes("mytype"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(b.place, scheduler, b.daprd),
+		framework.WithProcesses(b.actors),
 	}
 }
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
-	b.daprd.WaitUntilRunning(t, ctx)
+	b.actors.WaitUntilRunning(t, ctx)
 
-	table := b.place.PlacementTables(t, ctx)
+	table := b.actors.Placement().PlacementTables(t, ctx)
 	assert.Equal(t, &placement.TableState{
 		Tables: map[string]*placement.Table{
 			"default": {
 				Version: 1,
 				Hosts: []placement.Host{
 					{
-						Name:      b.daprd.InternalGRPCAddress(),
-						ID:        b.daprd.AppID(),
+						Entities:  []string{"mytype"},
+						Name:      b.actors.Daprd().InternalGRPCAddress(),
+						ID:        b.actors.Daprd().AppID(),
 						APIVLevel: 20,
 						Namespace: "default",
 					},
