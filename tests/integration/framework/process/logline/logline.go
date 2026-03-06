@@ -185,7 +185,7 @@ func (l *LogLine) EventuallyFoundNone(t *testing.T) {
 func (l *LogLine) Contains(substr string) bool {
 	l.lock.Lock()
 	defer l.lock.Unlock()
-	return strings.Contains(l.got.String(), substr)
+	return bytes.Contains(l.got.Bytes(), []byte(substr))
 }
 
 // EventuallyContains waits for the captured log output to contain the given

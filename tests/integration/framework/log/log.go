@@ -14,13 +14,13 @@ limitations under the License.
 package log
 
 import (
-	"strings"
+	"bytes"
 	"sync"
 )
 
 type Log struct {
-	mu   sync.Mutex
-	logs []string
+	mu  sync.Mutex
+	buf bytes.Buffer
 }
 
 func New() *Log {
@@ -30,8 +30,7 @@ func New() *Log {
 func (b *Log) Write(p []byte) (n int, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.logs = append(b.logs, string(p))
-	return len(p), nil
+	return b.buf.Write(p)
 }
 
 func (b *Log) Close() error {
@@ -41,16 +40,11 @@ func (b *Log) Close() error {
 func (b *Log) Contains(substr string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	for _, log := range b.logs {
-		if strings.Contains(log, substr) {
-			return true
-		}
-	}
-	return false
+	return bytes.Contains(b.buf.Bytes(), []byte(substr))
 }
 
 func (b *Log) Reset() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.logs = nil
+	b.buf.Reset()
 }
