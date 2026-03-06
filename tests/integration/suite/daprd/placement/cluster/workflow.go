@@ -85,7 +85,6 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(cancel1)
 	require.NoError(t, client1.StartWorker(cctx1, dworkflow.NewRegistry()))
 
-	//nolint:prealloc
 	expHosts := []placement.Host{
 		{
 			Name:      w.daprd1.InternalGRPCAddress(),
