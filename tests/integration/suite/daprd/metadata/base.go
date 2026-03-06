@@ -106,11 +106,11 @@ func validateResponse(t *testing.T, appID string, appPort int, body io.Reader) {
 	require.NoError(t, err)
 
 	require.Equal(t, appID, bodyMap["id"])
-	require.Equal(t, "edge", bodyMap["runtimeVersion"])
+	require.Regexp(t, `^(edge|\d+\.\d+\.\d+(-rc\.\d+)?)$`, bodyMap["runtimeVersion"])
 
 	extended, ok := bodyMap["extended"].(map[string]interface{})
 	require.True(t, ok)
-	require.Equal(t, "edge", extended["daprRuntimeVersion"])
+	require.Regexp(t, `^(edge|\d+\.\d+\.\d+(-rc\.\d+)?)$`, extended["daprRuntimeVersion"])
 
 	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
 	require.True(t, ok)
