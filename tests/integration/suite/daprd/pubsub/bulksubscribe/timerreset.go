@@ -199,7 +199,7 @@ func (tr *timerReset) publish(t *testing.T, ctx context.Context, data string) {
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := tr.client.Do(req) //nolint:gosec
+	resp, err := tr.client.Do(req)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
