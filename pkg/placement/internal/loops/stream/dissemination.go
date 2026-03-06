@@ -58,6 +58,33 @@ func (s *stream) handleUpdate(version uint64, tables *v1pb.PlacementTables) erro
 	})
 }
 
+// handleTable sends a one-shot LOCK+UPDATE+UNLOCK sequence to the stream.
+// This delivers the current placement table without participating in the
+// cluster-wide dissemination protocol.
+func (s *stream) handleTable(version uint64, tables *v1pb.PlacementTables) error {
+	log.Debugf("Sending initial table for version %d to stream %s:%d", version, s.ns, s.idx)
+
+	if err := s.channel.Send(&v1pb.PlacementOrder{
+		Operation: operationLock,
+		Version:   version,
+	}); err != nil {
+		return err
+	}
+
+	if err := s.channel.Send(&v1pb.PlacementOrder{
+		Operation: operationUpdate,
+		Version:   version,
+		Tables:    tables,
+	}); err != nil {
+		return err
+	}
+
+	return s.channel.Send(&v1pb.PlacementOrder{
+		Operation: operationUnlock,
+		Version:   version,
+	})
+}
+
 // handleUnlock sends the unlock operation to the stream.
 func (s *stream) handleUnlock(version uint64) error {
 	// Ignore unlocks for older versions.

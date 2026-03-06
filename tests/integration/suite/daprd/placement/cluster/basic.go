@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement/cluster"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -75,24 +74,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		d.WaitUntilRunning(t, ctx)
 	}
 
-	hosts := make([]placement.Host, 0, len(b.daprds))
-	for _, d := range b.daprds {
-		hosts = append(hosts, placement.Host{
-			Name:      d.InternalGRPCAddress(),
-			ID:        d.AppID(),
-			APIVLevel: 20,
-			Namespace: "default",
-		})
-	}
-
 	leader := b.place.Leader(t, ctx)
 
+	// Daprds in this test have no actor types, so the placement table should
+	// have no hosts.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		table := leader.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
 			return
 		}
-		assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		assert.GreaterOrEqual(c, table.Tables["default"].Version, uint64(3))
+		assert.Nil(c, table.Tables["default"].Hosts)
 	}, time.Second*30, time.Millisecond*10)
 }

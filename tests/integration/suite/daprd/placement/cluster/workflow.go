@@ -64,71 +64,115 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	w.daprd1.WaitUntilRunning(t, ctx)
 	w.daprd2.WaitUntilRunning(t, ctx)
 
-	expTable := &placement.TableState{
-		Tables: map[string]*placement.Table{
-			"default": {
-				Version: 2,
-				Hosts: []placement.Host{
-					{
-						Name:      w.daprd1.InternalGRPCAddress(),
-						ID:        w.daprd1.AppID(),
-						APIVLevel: 20,
-						Namespace: "default",
-					},
-					{
-						Name:      w.daprd2.InternalGRPCAddress(),
-						ID:        w.daprd2.AppID(),
-						APIVLevel: 20,
-						Namespace: "default",
-					},
-				},
-			},
-		},
-	}
-
 	leader := w.place.Leader(t, ctx)
 
-	assert.Equal(t, expTable, leader.PlacementTables(t, ctx))
+	// Neither daprd has actor types registered, so the placement table should
+	// have no hosts.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		table := leader.PlacementTables(t, ctx)
+		if !assert.Contains(c, table.Tables, "default") {
+			return
+		}
+		assert.Nil(c, table.Tables["default"].Hosts)
+	}, time.Second*10, time.Millisecond*10)
+
+	// Record the version before starting workflow clients.
+	table := leader.PlacementTables(t, ctx)
+	versionBefore := table.Tables["default"].Version
 
 	client1 := dworkflow.NewClient(w.daprd1.GRPCConn(t, ctx))
 	cctx1, cancel1 := context.WithCancel(ctx)
 	t.Cleanup(cancel1)
 	require.NoError(t, client1.StartWorker(cctx1, dworkflow.NewRegistry()))
-	expTable.Tables["default"].Version = 3
-	expTable.Tables["default"].Hosts[0].Entities = []string{
-		"dapr.internal.default." + w.daprd1.AppID() + ".activity",
-		"dapr.internal.default." + w.daprd1.AppID() + ".retentioner",
-		"dapr.internal.default." + w.daprd1.AppID() + ".workflow",
+
+	expHosts := []placement.Host{
+		{
+			Name:      w.daprd1.InternalGRPCAddress(),
+			ID:        w.daprd1.AppID(),
+			APIVLevel: 20,
+			Namespace: "default",
+			Entities: []string{
+				"dapr.internal.default." + w.daprd1.AppID() + ".activity",
+				"dapr.internal.default." + w.daprd1.AppID() + ".retentioner",
+				"dapr.internal.default." + w.daprd1.AppID() + ".workflow",
+			},
+		},
 	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expTable, leader.PlacementTables(t, ctx))
+		table = leader.PlacementTables(t, ctx)
+		if !assert.Contains(c, table.Tables, "default") {
+			return
+		}
+		assert.Greater(c, table.Tables["default"].Version, versionBefore)
+		assert.Equal(c, expHosts, table.Tables["default"].Hosts)
 	}, time.Second*10, time.Millisecond*10)
+
+	versionAfterWf1 := table.Tables["default"].Version
 
 	client2 := dworkflow.NewClient(w.daprd2.GRPCConn(t, ctx))
 	cctx2, cancel2 := context.WithCancel(ctx)
 	t.Cleanup(cancel2)
 	require.NoError(t, client2.StartWorker(cctx2, dworkflow.NewRegistry()))
-	expTable.Tables["default"].Version = 4
-	expTable.Tables["default"].Hosts[1].Entities = []string{
-		"dapr.internal.default." + w.daprd2.AppID() + ".activity",
-		"dapr.internal.default." + w.daprd2.AppID() + ".retentioner",
-		"dapr.internal.default." + w.daprd2.AppID() + ".workflow",
-	}
+
+	expHosts = append(expHosts,
+		placement.Host{
+			Name:      w.daprd2.InternalGRPCAddress(),
+			ID:        w.daprd2.AppID(),
+			APIVLevel: 20,
+			Namespace: "default",
+			Entities: []string{
+				"dapr.internal.default." + w.daprd2.AppID() + ".activity",
+				"dapr.internal.default." + w.daprd2.AppID() + ".retentioner",
+				"dapr.internal.default." + w.daprd2.AppID() + ".workflow",
+			},
+		},
+	)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expTable, leader.PlacementTables(t, ctx))
+		table = leader.PlacementTables(t, ctx)
+		if !assert.Contains(c, table.Tables, "default") {
+			return
+		}
+		assert.Greater(c, table.Tables["default"].Version, versionAfterWf1)
+		assert.Equal(c, expHosts, table.Tables["default"].Hosts)
 	}, time.Second*10, time.Second)
 
+	versionAfterWf2 := table.Tables["default"].Version
+
+	// After workflow1 stops, daprd1 has no entities and is removed from the
+	// placement table.
 	cancel1()
-	expTable.Tables["default"].Version = 5
-	expTable.Tables["default"].Hosts[0].Entities = nil
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expTable, leader.PlacementTables(t, ctx))
-	}, time.Second*10, time.Second)
+		table = leader.PlacementTables(t, ctx)
+		if !assert.Contains(c, table.Tables, "default") {
+			return
+		}
+		assert.Greater(c, table.Tables["default"].Version, versionAfterWf2)
+		assert.Equal(c, []placement.Host{
+			{
+				Name:      w.daprd2.InternalGRPCAddress(),
+				ID:        w.daprd2.AppID(),
+				APIVLevel: 20,
+				Namespace: "default",
+				Entities: []string{
+					"dapr.internal.default." + w.daprd2.AppID() + ".activity",
+					"dapr.internal.default." + w.daprd2.AppID() + ".retentioner",
+					"dapr.internal.default." + w.daprd2.AppID() + ".workflow",
+				},
+			},
+		}, table.Tables["default"].Hosts)
+	}, time.Second*10, time.Millisecond*10)
 
+	versionAfterCancel1 := table.Tables["default"].Version
+
+	// After workflow2 stops, daprd2 has no entities and is removed from the
+	// placement table.
 	cancel2()
-	expTable.Tables["default"].Version = 6
-	expTable.Tables["default"].Hosts[1].Entities = nil
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expTable, leader.PlacementTables(t, ctx))
-	}, time.Second*10, time.Second)
+		table = leader.PlacementTables(t, ctx)
+		if !assert.Contains(c, table.Tables, "default") {
+			return
+		}
+		assert.Greater(c, table.Tables["default"].Version, versionAfterCancel1)
+		assert.Nil(c, table.Tables["default"].Hosts)
+	}, time.Second*10, time.Millisecond*10)
 }

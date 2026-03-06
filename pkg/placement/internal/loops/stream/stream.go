@@ -106,6 +106,8 @@ func (s *stream) Handle(ctx context.Context, event loops.Event) error {
 		err = s.handleUpdate(e.Version, e.Tables)
 	case *loops.DisseminateUnlock:
 		err = s.handleUnlock(e.Version)
+	case *loops.DisseminateTable:
+		err = s.handleTable(e.Version, e.Tables)
 	case *loops.StreamShutdown:
 		s.handleShutdown(e)
 	default:

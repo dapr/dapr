@@ -18,15 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	dactors "github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -35,57 +31,47 @@ func init() {
 }
 
 type basic struct {
-	daprds []*daprd.Daprd
-	place  *placement.Placement
+	actors []*dactors.Actors
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.place = placement.New(t)
-	scheduler := scheduler.New(t)
+	actor1 := dactors.New(t,
+		dactors.WithActorTypes("mytype"),
+	)
+	actor2 := dactors.New(t,
+		dactors.WithActorTypes("mytype"),
+		dactors.WithPeerActor(actor1),
+	)
+	actor3 := dactors.New(t,
+		dactors.WithActorTypes("mytype"),
+		dactors.WithPeerActor(actor1),
+	)
 
-	appID, err := uuid.NewUUID()
-	require.NoError(t, err)
-
-	b.daprds = make([]*daprd.Daprd, 3)
-	for i := range 3 {
-		b.daprds[i] = daprd.New(t,
-			daprd.WithPlacementAddresses(b.place.Address()),
-			daprd.WithInMemoryActorStateStore("foo"),
-			daprd.WithScheduler(scheduler),
-			daprd.WithAppID(appID.String()),
-		)
-	}
-
-	procs := []process.Interface{
-		b.place,
-		scheduler,
-	}
-	for _, d := range b.daprds {
-		procs = append(procs, d)
-	}
+	b.actors = []*dactors.Actors{actor1, actor2, actor3}
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(actor1, actor2, actor3),
 	}
 }
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
-	for _, d := range b.daprds {
-		d.WaitUntilRunning(t, ctx)
+	for _, a := range b.actors {
+		a.WaitUntilRunning(t, ctx)
 	}
 
-	hosts := make([]placement.Host, 0, len(b.daprds))
-	for _, d := range b.daprds {
+	hosts := make([]placement.Host, 0, len(b.actors))
+	for _, a := range b.actors {
 		hosts = append(hosts, placement.Host{
-			Name:      d.InternalGRPCAddress(),
-			ID:        d.AppID(),
+			Entities:  []string{"mytype"},
+			Name:      a.Daprd().InternalGRPCAddress(),
+			ID:        a.Daprd().AppID(),
 			APIVLevel: 20,
 			Namespace: "default",
 		})
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := b.place.PlacementTables(t, ctx)
+		table := b.actors[0].Placement().PlacementTables(t, ctx)
 		if !assert.NotNil(c, table.Tables["default"]) {
 			return
 		}

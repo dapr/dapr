@@ -47,6 +47,15 @@ type DisseminateUnlock struct {
 	Version uint64
 }
 
+// DisseminateTable is a one-shot event that sends the current placement table
+// to a single stream via LOCK+UPDATE+UNLOCK. Unlike the 3-stage dissemination,
+// this does not participate in the cluster-wide lock protocol. It is used to
+// send the current table to newly connected streams that have no actor types.
+type DisseminateTable struct {
+	Tables  *v1pb.PlacementTables
+	Version uint64
+}
+
 // StreamShutdown is the event for shutting down the placement client stream.
 type StreamShutdown struct {
 	Error error
