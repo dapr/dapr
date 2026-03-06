@@ -106,16 +106,26 @@ func Run() {
 
 	defer log.Info("Daprd shutdown gracefully")
 	for {
-		if ctx.Err() != nil {
-			return
-		}
-
 		select {
-		case hctx := <-ctxhupCh:
+		case <-ctx.Done():
+			return
+		case hctx, ok := <-ctxhupCh:
+			if !ok {
+				// Channel is closed, which means the process is shutting down. Return
+				// to exit.
+				return
+			}
+
 			if err := runWithContext(hctx, opts); err != nil {
 				log.Fatalf("Fatal error from runtime: %s", err)
 			}
-		case <-ctx.Done():
+
+			// If hctx was not cancelled, it means the runtime exited on its own
+			// (e.g. via the shutdown API), not because of a SIGHUP or SIGTERM. In
+			// that case, exit the process rather than blocking waiting for a SIGHUP.
+			if hctx.Err() == nil {
+				return
+			}
 		}
 	}
 }
