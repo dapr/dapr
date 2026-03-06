@@ -63,7 +63,7 @@ func generateBaseCert(ttl, skew time.Duration) (*x509.Certificate, error) {
 		SerialNumber: serNum,
 		NotBefore:    notBefore,
 		NotAfter:     notAfter,
-		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}, nil
 }
 
@@ -82,7 +82,7 @@ func generateRootCert(trustDomain string, skew time.Duration, overrideTTL *time.
 	cert.Subject = pkix.Name{Organization: []string{trustDomain}}
 	cert.IsCA = true
 	cert.BasicConstraintsValid = true
-	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
+	cert.SignatureAlgorithm = x509.PureEd25519
 	return cert, nil
 }
 
@@ -111,20 +111,21 @@ func generateIssuerCert(trustDomain string, skew time.Duration, overrideTTL *tim
 	cert.Subject = pkix.Name{Organization: []string{sentryID.URL().String()}}
 	cert.IsCA = true
 	cert.BasicConstraintsValid = true
-	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
+	cert.SignatureAlgorithm = x509.PureEd25519
 
 	return cert, nil
 }
 
-// GenerateWorkloadCert returns a CA issuing x509 Certificate.
-func GenerateWorkloadCert(sig x509.SignatureAlgorithm, ttl, skew time.Duration, id *spiffe.Parsed) (*x509.Certificate, error) {
+// GenerateWorkloadCert returns a workload x509 Certificate template.
+// The SignatureAlgorithm is not set on the template; it is determined by the
+// issuer's signing key when x509.CreateCertificate is called.
+func GenerateWorkloadCert(ttl, skew time.Duration, id *spiffe.Parsed) (*x509.Certificate, error) {
 	cert, err := generateBaseCert(ttl, skew)
 	if err != nil {
 		return nil, err
 	}
 
 	cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth)
-	cert.SignatureAlgorithm = sig
 	cert.URIs = []*url.URL{id.URL()}
 
 	return cert, nil

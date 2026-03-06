@@ -15,8 +15,7 @@ package bundle
 
 import (
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/base64"
@@ -92,7 +91,7 @@ func GenerateX509(opts OptionsX509) (*X509, error) {
 	}
 	trustAnchors := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCertDER})
 
-	issKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, issKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +105,7 @@ func GenerateX509(opts OptionsX509) (*X509, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate issuer cert: %w", err)
 	}
-	issCertDER, err := x509.CreateCertificate(rand.Reader, issCert, rootCert, &issKey.PublicKey, opts.X509RootKey)
+	issCertDER, err := x509.CreateCertificate(rand.Reader, issCert, rootCert, issKey.Public(), opts.X509RootKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign issuer cert: %w", err)
 	}

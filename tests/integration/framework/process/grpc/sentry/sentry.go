@@ -14,8 +14,7 @@ package sentry
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -45,7 +44,7 @@ type Sentry struct {
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, rootKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -63,7 +62,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	})
 	require.NoError(t, err)
 
-	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, leafKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	leafCert := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
@@ -73,7 +72,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 			spiffeid.RequireFromString("spiffe://localhost/ns/default/dapr-sentry").URL(),
 		},
 	}
-	leafCertDer, err := x509.CreateCertificate(rand.Reader, leafCert, x509bundle.IssChain[0], &leafKey.PublicKey, x509bundle.IssKey)
+	leafCertDer, err := x509.CreateCertificate(rand.Reader, leafCert, x509bundle.IssChain[0], leafKey.Public(), x509bundle.IssKey)
 	require.NoError(t, err)
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS13,
