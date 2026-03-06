@@ -22,9 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	dactors "github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
@@ -34,27 +33,21 @@ func init() {
 }
 
 type workflow struct {
-	daprd *daprd.Daprd
-	place *placement.Placement
+	actors *dactors.Actors
 }
 
 func (w *workflow) Setup(t *testing.T) []framework.Option {
-	w.place = placement.New(t)
-	scheduler := scheduler.New(t)
-
-	w.daprd = daprd.New(t,
-		daprd.WithPlacementAddresses(w.place.Address()),
-		daprd.WithInMemoryActorStateStore("foo"),
-		daprd.WithScheduler(scheduler),
+	w.actors = dactors.New(t,
+		dactors.WithActorTypes("mytype"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(w.place, scheduler, w.daprd),
+		framework.WithProcesses(w.actors),
 	}
 }
 
 func (w *workflow) Run(t *testing.T, ctx context.Context) {
-	w.daprd.WaitUntilRunning(t, ctx)
+	w.actors.WaitUntilRunning(t, ctx)
 
 	expTable := &placement.TableState{
 		Tables: map[string]*placement.Table{
@@ -62,8 +55,9 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 				Version: 1,
 				Hosts: []placement.Host{
 					{
-						Name:      w.daprd.InternalGRPCAddress(),
-						ID:        w.daprd.AppID(),
+						Entities:  []string{"mytype"},
+						Name:      w.actors.Daprd().InternalGRPCAddress(),
+						ID:        w.actors.Daprd().AppID(),
 						APIVLevel: 20,
 						Namespace: "default",
 					},
@@ -72,27 +66,28 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	assert.Equal(t, expTable, w.place.PlacementTables(t, ctx))
+	assert.Equal(t, expTable, w.actors.Placement().PlacementTables(t, ctx))
 
-	client := dworkflow.NewClient(w.daprd.GRPCConn(t, ctx))
+	client := dworkflow.NewClient(w.actors.Daprd().GRPCConn(t, ctx))
 	cctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	require.NoError(t, client.StartWorker(cctx, dworkflow.NewRegistry()))
 
 	expTable.Tables["default"].Version = 2
 	expTable.Tables["default"].Hosts[0].Entities = []string{
-		"dapr.internal.default." + w.daprd.AppID() + ".activity",
-		"dapr.internal.default." + w.daprd.AppID() + ".retentioner",
-		"dapr.internal.default." + w.daprd.AppID() + ".workflow",
+		"dapr.internal.default." + w.actors.Daprd().AppID() + ".activity",
+		"dapr.internal.default." + w.actors.Daprd().AppID() + ".retentioner",
+		"dapr.internal.default." + w.actors.Daprd().AppID() + ".workflow",
+		"mytype",
 	}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expTable, w.place.PlacementTables(t, ctx))
+		assert.Equal(c, expTable, w.actors.Placement().PlacementTables(t, ctx))
 	}, time.Second*10, time.Millisecond*10)
 
 	cancel()
 	expTable.Tables["default"].Version = 3
-	expTable.Tables["default"].Hosts[0].Entities = nil
+	expTable.Tables["default"].Hosts[0].Entities = []string{"mytype"}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expTable, w.place.PlacementTables(t, ctx))
+		assert.Equal(c, expTable, w.actors.Placement().PlacementTables(t, ctx))
 	}, time.Second*10, time.Second)
 }
