@@ -173,7 +173,6 @@ func TestProcessBulkMessagesTimerReset(t *testing.T) {
 		// immediately send 1 more message. If the timer is properly reset,
 		// that extra message should NOT be flushed until ~500ms after the
 		// count-based flush. We check at 250ms that it hasn't been flushed.
-
 		maxMessages := 3
 		awaitDurationMs := 500
 
@@ -185,6 +184,7 @@ func TestProcessBulkMessagesTimerReset(t *testing.T) {
 		msgCbChan := make(chan msgWithCallback, maxMessages*2)
 
 		var mu sync.Mutex
+
 		flushTimes := make([]time.Time, 0) // records the time of each flush
 		flushSizes := make([]int, 0)
 
@@ -192,13 +192,17 @@ func TestProcessBulkMessagesTimerReset(t *testing.T) {
 			[]contribPubsub.BulkSubscribeResponseEntry, error,
 		) {
 			mu.Lock()
+
 			flushTimes = append(flushTimes, time.Now())
 			flushSizes = append(flushSizes, len(msg.Entries))
+
 			mu.Unlock()
+
 			return nil, nil
 		}
 
 		ctx, cancel := context.WithCancel(t.Context())
+
 		defer cancel()
 
 		go processBulkMessages(ctx, "test-topic", msgCbChan, cfg, handler)
@@ -206,10 +210,13 @@ func TestProcessBulkMessagesTimerReset(t *testing.T) {
 		// Send maxMessages concurrently so they all buffer before any
 		// callback blocks the sender.
 		var wg sync.WaitGroup
+
 		for i := range maxMessages {
 			wg.Add(1)
+
 			go func(idx int) {
 				defer wg.Done()
+
 				done := make(chan struct{})
 				msgCbChan <- msgWithCallback{
 					msg: contribPubsub.BulkMessageEntry{
@@ -220,9 +227,11 @@ func TestProcessBulkMessagesTimerReset(t *testing.T) {
 						close(done)
 					},
 				}
+
 				<-done
 			}(i)
 		}
+
 		wg.Wait()
 
 		// First flush happened due to maxMessagesCount. Record the time.
@@ -279,7 +288,6 @@ func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
 		// Send 6 messages with maxMessages=3 to trigger two consecutive
 		// count-based flushes, then send 1 more message and verify that
 		// it is NOT flushed prematurely (timer was reset after each flush).
-
 		maxMessages := 3
 		awaitDurationMs := 500
 
@@ -291,6 +299,7 @@ func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
 		msgCbChan := make(chan msgWithCallback, maxMessages*3)
 
 		var mu sync.Mutex
+
 		flushTimes := make([]time.Time, 0)
 		flushSizes := make([]int, 0)
 
@@ -298,13 +307,17 @@ func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
 			[]contribPubsub.BulkSubscribeResponseEntry, error,
 		) {
 			mu.Lock()
+
 			flushTimes = append(flushTimes, time.Now())
 			flushSizes = append(flushSizes, len(msg.Entries))
+
 			mu.Unlock()
+
 			return nil, nil
 		}
 
 		ctx, cancel := context.WithCancel(t.Context())
+
 		defer cancel()
 
 		go processBulkMessages(ctx, "test-topic", msgCbChan, cfg, handler)
@@ -313,10 +326,13 @@ func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
 		// all callbacks.
 		sendBatch := func(offset int) {
 			var wg sync.WaitGroup
+
 			for i := range maxMessages {
 				wg.Add(1)
+
 				go func(idx int) {
 					defer wg.Done()
+
 					done := make(chan struct{})
 					msgCbChan <- msgWithCallback{
 						msg: contribPubsub.BulkMessageEntry{
@@ -327,6 +343,7 @@ func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
 							close(done)
 						},
 					}
+
 					select {
 					case <-done:
 					case <-time.After(time.Duration(awaitDurationMs*2) * time.Millisecond):
@@ -334,11 +351,13 @@ func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
 					}
 				}(offset + i)
 			}
+
 			wg.Wait()
 		}
 
 		// First count-based flush.
 		sendBatch(0)
+
 		mu.Lock()
 		require.Len(t, flushSizes, 1, "expected 1 flush after first batch")
 		assert.Equal(t, maxMessages, flushSizes[0])
@@ -346,6 +365,7 @@ func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
 
 		// Second count-based flush.
 		sendBatch(maxMessages)
+
 		mu.Lock()
 		require.Len(t, flushSizes, 2, "expected 2 flushes after second batch")
 		assert.Equal(t, maxMessages, flushSizes[1])
@@ -365,6 +385,7 @@ func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
 
 		// At 250ms the extra message should still be buffered.
 		time.Sleep(250 * time.Millisecond)
+
 		mu.Lock()
 		assert.Len(t, flushSizes, 2,
 			"expected still only 2 flushes 250ms after second count-based flush")
@@ -380,6 +401,7 @@ func TestProcessBulkMessagesMultipleCountFlushes(t *testing.T) {
 		mu.Lock()
 		require.Len(t, flushSizes, 3, "expected 3 flushes total")
 		assert.Equal(t, 1, flushSizes[2], "third flush should contain the single extra message")
+
 		elapsed := flushTimes[2].Sub(flushTimes[1])
 		assert.Greater(t, elapsed, time.Duration(awaitDurationMs*40/100)*time.Millisecond,
 			"third flush should happen after a significant portion of awaitDuration from second flush")
@@ -393,7 +415,6 @@ func TestProcessBulkMessagesPureTimerFlush(t *testing.T) {
 	t.Run("messages fewer than maxMessages should flush after awaitDuration", func(t *testing.T) {
 		// Baseline test: send fewer messages than maxMessagesCount and
 		// verify they are flushed by the timer (not by a count trigger).
-
 		maxMessages := 5
 		awaitDurationMs := 300
 
@@ -405,8 +426,11 @@ func TestProcessBulkMessagesPureTimerFlush(t *testing.T) {
 		msgCbChan := make(chan msgWithCallback, maxMessages)
 
 		var mu sync.Mutex
+
 		var flushTime time.Time
+
 		var flushSize int
+
 		flushed := make(chan struct{})
 		flushOnce := sync.Once{}
 
@@ -418,16 +442,19 @@ func TestProcessBulkMessagesPureTimerFlush(t *testing.T) {
 			flushSize = len(msg.Entries)
 			mu.Unlock()
 			flushOnce.Do(func() { close(flushed) })
+
 			return nil, nil
 		}
 
 		ctx, cancel := context.WithCancel(t.Context())
+
 		defer cancel()
 
 		go processBulkMessages(ctx, "test-topic", msgCbChan, cfg, handler)
 
 		// Send 2 messages (less than maxMessages=5).
 		sendTime := time.Now()
+
 		for i := range 2 {
 			msgCbChan <- msgWithCallback{
 				msg: contribPubsub.BulkMessageEntry{
@@ -454,6 +481,7 @@ func TestProcessBulkMessagesPureTimerFlush(t *testing.T) {
 
 		mu.Lock()
 		assert.Equal(t, 2, flushSize, "all buffered messages should be flushed together")
+
 		elapsed := flushTime.Sub(sendTime)
 		assert.Greater(t, elapsed, time.Duration(awaitDurationMs*80/100)*time.Millisecond,
 			"flush should happen close to awaitDuration after messages were sent")

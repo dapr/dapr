@@ -63,7 +63,7 @@ func (tr *timerReset) Setup(t *testing.T) []framework.Option {
 	tr.app = app.New(t,
 		app.WithHandlerFunc("/bulk", func(w http.ResponseWriter, r *http.Request) {
 			var env rtpubsub.BulkSubscribeEnvelope
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&env))
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&env))
 
 			tr.mu.Lock()
 			tr.deliveries = append(tr.deliveries, delivery{
@@ -81,17 +81,21 @@ func (tr *timerReset) Setup(t *testing.T) []framework.Option {
 				EntryID string `json:"entryId"`
 				Status  string `json:"status"`
 			}
+
 			type respT struct {
 				Statuses []statusT `json:"statuses"`
 			}
+
 			var resp respT
+
 			for _, entry := range env.Entries {
 				resp.Statuses = append(resp.Statuses, statusT{
 					EntryID: entry.EntryId,
 					Status:  "SUCCESS",
 				})
 			}
-			json.NewEncoder(w).Encode(resp)
+
+			assert.NoError(t, json.NewEncoder(w).Encode(resp))
 		}),
 	)
 
@@ -154,8 +158,10 @@ func (tr *timerReset) Run(t *testing.T, ctx context.Context) {
 	select {
 	case <-tr.deliveryCh:
 		tr.mu.Lock()
+
 		elapsed := tr.deliveries[len(tr.deliveries)-1].time.Sub(firstFlushTime)
 		tr.mu.Unlock()
+
 		if elapsed < 800*time.Millisecond {
 			t.Fatalf("message was flushed prematurely at %v after count-based flush; "+
 				"timer should have been reset to 1500ms", elapsed)
@@ -184,13 +190,16 @@ func (tr *timerReset) Run(t *testing.T, ctx context.Context) {
 
 func (tr *timerReset) publish(t *testing.T, ctx context.Context, data string) {
 	t.Helper()
-	reqURL := fmt.Sprintf("http://%s/v1.0/publish/%s/%s",
-		tr.daprd.HTTPAddress(), "mypub", "timer-test")
+
+	reqURL := "http://" + tr.daprd.HTTPAddress() + "/v1.0/publish/mypub/timer-test"
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL,
 		strings.NewReader(data))
 	require.NoError(t, err)
+
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := tr.client.Do(req)
+
+	resp, err := tr.client.Do(req) //nolint:gosec
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
@@ -198,8 +207,10 @@ func (tr *timerReset) publish(t *testing.T, ctx context.Context, data string) {
 
 func (tr *timerReset) waitForDelivery(t *testing.T, ctx context.Context, desc string) {
 	t.Helper()
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+
 	select {
 	case <-ctx.Done():
 		t.Fatalf("timed out waiting for bulk delivery: %s", desc)
