@@ -183,11 +183,12 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	})
 
 	t.Run("traceparent is not provided and sampling is enabled (but not P=1.00)", func(t *testing.T) {
-		// We use a fixed seed for the RNG so we can use an exact number here
-		const expectSampled = 1000 // we allow for a 10% margin of error to account for randomness
+		// When no parent span context is provided, the otel tracer generates
+		// random trace IDs internally, so we need a wide margin of error.
+		const expectSampled = 1000
 		const numTraces = 100000
 		sampledCount := runTraces(t, "test_trace", numTraces, "0.01", false, 0)
-		require.InEpsilon(t, expectSampled, sampledCount, 0.1, "Expected to sample %d (+/- 10%) traces but sampled %d", expectSampled, sampledCount)
+		require.InEpsilon(t, expectSampled, sampledCount, 0.3, "Expected to sample %d (+/- 30%) traces but sampled %d", expectSampled, sampledCount)
 		require.Less(t, sampledCount, numTraces, "Expected to sample fewer than the total number of traces, but sampled all of them!")
 	})
 
