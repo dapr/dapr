@@ -392,11 +392,7 @@ func buildScenarioData(tests []testSummary) string {
 
 	var buf strings.Builder
 	writeLine := func(label string, s *testSummary) {
-		if label != "" {
-			fmt.Fprintf(&buf, "  %s: p50 %s", label, formatLatency(s.P50ms))
-		} else {
-			fmt.Fprintf(&buf, "  p50 %s", formatLatency(s.P50ms))
-		}
+		fmt.Fprintf(&buf, "  %s: p50 %s", label, formatLatency(s.P50ms))
 		if s.P90ms > 0 {
 			buf.WriteString(" | p90 " + formatLatency(s.P90ms))
 		}
@@ -437,7 +433,11 @@ func buildScenarioData(tests []testSummary) string {
 			writeLine("gRPC", g.grpc)
 			writeLine("HTTP", g.http)
 		} else {
-			writeLine(ref.Transport, ref)
+			label := ref.Transport
+			if label == "" {
+				label = "Latency"
+			}
+			writeLine(label, ref)
 		}
 		if ref.SuccessPct >= 0 {
 			fmt.Fprintf(&buf, "  Success: %.0f%%\n", ref.SuccessPct)
