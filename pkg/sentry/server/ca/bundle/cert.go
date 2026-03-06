@@ -82,7 +82,6 @@ func generateRootCert(trustDomain string, skew time.Duration, overrideTTL *time.
 	cert.Subject = pkix.Name{Organization: []string{trustDomain}}
 	cert.IsCA = true
 	cert.BasicConstraintsValid = true
-	cert.SignatureAlgorithm = x509.PureEd25519
 	return cert, nil
 }
 
@@ -111,7 +110,6 @@ func generateIssuerCert(trustDomain string, skew time.Duration, overrideTTL *tim
 	cert.Subject = pkix.Name{Organization: []string{sentryID.URL().String()}}
 	cert.IsCA = true
 	cert.BasicConstraintsValid = true
-	cert.SignatureAlgorithm = x509.PureEd25519
 
 	return cert, nil
 }
