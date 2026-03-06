@@ -16,6 +16,7 @@ package standalone
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -45,7 +46,7 @@ type standalone struct {
 }
 
 func (k *standalone) Setup(t *testing.T) []framework.Option {
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, rootKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
