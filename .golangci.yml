@@ -63,6 +63,12 @@ linters:
     - wastedassign
     - wrapcheck
     - wsl
+    # TODO Enforce the below new v2 linters later
+    - embeddedstructfieldcheck
+    - funcorder
+    - godoclint
+    - noinlineerr
+    - wsl_v5
   settings:
     depguard:
       rules:
@@ -118,6 +124,12 @@ linters:
               desc: must use github.com/dapr/kit/ptr
     dogsled:
       max-blank-identifiers: 2
+    gosec:
+      excludes:
+        - G703 # Path traversal via taint analysis (false positives)
+        - G704 # SSRF via taint analysis (false positives)
+        - G705 # XSS via taint analysis (false positives)
+        - G706 # Log injection via taint analysis (false positives)
     dupl:
       threshold: 100
     errcheck:
