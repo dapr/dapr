@@ -115,6 +115,9 @@ func processBulkMessages(ctx context.Context, topic string, msgCbChan <-chan msg
 				flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
 				n = 0
 				clear(msgCbMap)
+				// Reset the ticker so the next batch gets the full
+				// awaitDuration window after an early dispatch.
+				ticker.Reset(time.Duration(cfg.MaxAwaitDurationMs) * time.Millisecond)
 			}
 		case <-ticker.C:
 			flushMessages(ctx, topic, messages[:n], msgCbMap, handler)
