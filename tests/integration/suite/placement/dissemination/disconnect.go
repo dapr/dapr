@@ -82,21 +82,28 @@ func (n *disconnect) Run(t *testing.T, ctx context.Context) {
 		t.Cleanup(func() {
 			streamCancel()
 		})
-		stream1 := n.getStream(t, streamCtx)
-
-		err := stream1.Send(host1)
-		require.NoError(t, err)
-
+		var stream1 v1pb.Placement_ReportDaprStatusClient
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			placementTables, errR := stream1.Recv()
-			if !assert.NoError(c, errR) {
-				_ = stream1.CloseSend()
+			s := n.getStream(t, streamCtx)
+			if !assert.NoError(c, s.Send(host1)) {
+				_ = s.CloseSend()
 				return
 			}
-
-			if assert.Equal(c, "update", placementTables.GetOperation()) {
-				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1")
+			// Drain lock/update/unlock messages until "update" is found.
+			// A fresh stream is created each retry so "not a leader" errors
+			// are retried automatically.
+			for {
+				msg, errR := s.Recv()
+				if !assert.NoError(c, errR) {
+					_ = s.CloseSend()
+					return
+				}
+				if msg.GetOperation() == "update" {
+					assert.Len(c, msg.GetTables().GetEntries(), 1)
+					assert.Contains(c, msg.GetTables().GetEntries(), "actor1")
+					stream1 = s
+					return
+				}
 			}
 		}, time.Second*15, time.Millisecond*10)
 
@@ -113,8 +120,7 @@ func (n *disconnect) Run(t *testing.T, ctx context.Context) {
 			Id:        "myapp1",
 			ApiLevel:  uint32(20),
 		}
-		err = stream1.Send(emptyHost1)
-		require.NoError(t, err)
+		require.NoError(t, stream1.Send(emptyHost1))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			placementTables, errR := stream1.Recv()
