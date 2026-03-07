@@ -46,6 +46,9 @@ type LogLine struct {
 	outCheck chan map[string]bool
 	done     atomic.Int32
 	doneCh   chan struct{}
+
+	// captureAll enables continuous log capture mode
+	captureAll bool
 }
 
 func New(t *testing.T, fopts ...Option) *LogLine {
@@ -79,6 +82,7 @@ func New(t *testing.T, fopts ...Option) *LogLine {
 		stderrLinContains:  stderrLineContains,
 		outCheck:           make(chan map[string]bool),
 		doneCh:             make(chan struct{}),
+		captureAll:         opts.captureAll,
 	}
 }
 
@@ -127,7 +131,8 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 
 	breader := bufio.NewReader(reader)
 	for {
-		if len(expLines) == 0 {
+		// If not in captureAll mode and no expected lines remain, discard the rest
+		if !l.captureAll && len(expLines) == 0 {
 			go io.Copy(io.Discard, reader)
 			return expLines
 		}
@@ -173,4 +178,29 @@ func (l *LogLine) EventuallyFoundAll(t *testing.T) {
 
 func (l *LogLine) EventuallyFoundNone(t *testing.T) {
 	assert.Eventually(t, l.FoundNone, time.Second*15, time.Millisecond*10)
+}
+
+// Contains checks if the captured log output contains the given substring.
+// This is useful for dynamic log checking during tests.
+func (l *LogLine) Contains(substr string) bool {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	return bytes.Contains(l.got.Bytes(), []byte(substr))
+}
+
+// EventuallyContains waits for the captured log output to contain the given
+// substring within the specified timeout.
+func (l *LogLine) EventuallyContains(t assert.TestingT, substr string, timeout time.Duration, tick time.Duration) bool {
+	return assert.Eventually(t, func() bool {
+		return l.Contains(substr)
+	}, timeout, tick, "expected log to contain: %s", substr)
+}
+
+// Reset clears the captured log buffer. This is useful when testing
+// configuration reloads where you want to verify new log output after
+// a reload without interference from previous log entries.
+func (l *LogLine) Reset() {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	l.got.Reset()
 }
