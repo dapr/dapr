@@ -19,7 +19,7 @@ import (
 )
 
 type Log struct {
-	mu  sync.Mutex
+	mu  sync.RWMutex
 	buf bytes.Buffer
 }
 
@@ -38,8 +38,8 @@ func (b *Log) Close() error {
 }
 
 func (b *Log) Contains(substr string) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	return bytes.Contains(b.buf.Bytes(), []byte(substr))
 }
 
