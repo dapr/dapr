@@ -194,6 +194,7 @@ func (p *Processor) processComponents(ctx context.Context) error {
 		p.pendingComponentsWaiting.RUnlock()
 
 		if err != nil {
+			p.setProcessError(err)
 			return err
 		}
 	}
