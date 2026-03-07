@@ -20,6 +20,11 @@ import (
 	"strings"
 )
 
+const (
+	transportHTTP = "http"
+	transportGRPC = "grpc"
+)
+
 // buildTestModes scans the tests/perf files to determine which tests use k6 vs fortio
 // map is testName (func name) corresponding to k6 or fortio as vals.
 func buildTestModes(root string) map[string]string {
@@ -156,17 +161,17 @@ func classifyAPIAndTransport(pkg, test string) (string, string, bool) {
 }
 
 func classifyTransport(pkg, test, seg string) string {
-	if strings.Contains(pkg, "http") || strings.Contains(seg, "http") {
-		return "http"
+	if strings.Contains(pkg, transportHTTP) || strings.Contains(seg, transportHTTP) {
+		return transportHTTP
 	}
-	if strings.Contains(pkg, "grpc") || strings.Contains(seg, "grpc") {
-		return "grpc"
+	if strings.Contains(pkg, transportGRPC) || strings.Contains(seg, transportGRPC) {
+		return transportGRPC
 	}
-	if strings.Contains(test, "http") {
-		return "http"
+	if strings.Contains(test, transportHTTP) {
+		return transportHTTP
 	}
-	if strings.Contains(test, "grpc") {
-		return "grpc"
+	if strings.Contains(test, transportGRPC) {
+		return transportGRPC
 	}
 	return ""
 }
