@@ -3,6 +3,7 @@ package oidc
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -383,7 +384,7 @@ func (c *customJWKSTest) testExplicitUserProvidedKID(t *testing.T, ctx context.C
 
 // Helper: generate only X509 portion of bundle
 func (c *customJWKSTest) generateX509Bundle(t *testing.T) bundle.Bundle {
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, rootKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	x509bundle, err := bundle.GenerateX509(bundle.OptionsX509{
 		X509RootKey:      rootKey,

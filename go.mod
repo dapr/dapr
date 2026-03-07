@@ -522,6 +522,8 @@ replace (
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
+replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20260306175137-eb6cc2eaa762
+
 // replace github.com/dapr/durabletask-go => ../durabletask-go
 //
 // Then, run `make modtidy-all` in this repository.
