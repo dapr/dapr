@@ -86,6 +86,10 @@ func (p *publisher) BulkPublish(ctx context.Context, req *contribpubsub.BulkPubl
 		return contribpubsub.BulkPublishResponse{}, rtpubsub.NotAllowedError{Topic: req.Topic, ID: p.appID}
 	}
 
+	if pubsub.NamespaceScoped {
+		req.Topic = p.namespace + req.Topic
+	}
+
 	policyDef := p.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub)
 
 	if contribpubsub.FeatureBulkPublish.IsPresent(pubsub.Component.Features()) {
