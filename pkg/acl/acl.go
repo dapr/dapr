@@ -148,22 +148,35 @@ func isHex(b byte) bool {
 }
 
 func escapeInvalidPercents(s string) string {
-	// Replace any '%' not follwoed by 2 hex digits with '%25'
-	// This prevents URL parsing errors while preserving valid escapes
-	var b strings.Builder
-	b.Grow(len(s))
+	// Fast path: if there are no '%' characters, return as-is
+	if !strings.Contains(s, "%") {
+		return s
+	}
 
+	// Scan for an invalid '%' first; if none, return as-is (no allocation)
 	for i := 0; i < len(s); i++ {
 		if s[i] == '%' {
 			if i+2 >= len(s) || !isHex(s[i+1]) || !isHex(s[i+2]) {
-				b.WriteString("%25")
-				continue
+				// Slow path: replace any '%' not followed by 2 hex digits with '%25'
+				// This prevents URL parsing errors while preserving valid escapes
+				var b strings.Builder
+				b.Grow(len(s) + 2) // small cushion; worst-case may grow more
+
+				for j := 0; j < len(s); j++ {
+					if s[j] == '%' {
+						if j+2 >= len(s) || !isHex(s[j+1]) || !isHex(s[j+2]) {
+							b.WriteString("%25")
+							continue
+						}
+					}
+					b.WriteByte(s[j])
+				}
+				return b.String()
 			}
 		}
-		b.WriteByte(s[i])
 	}
 
-	return b.String()
+	return s
 }
 
 func normalizeOperation(operation string) (string, error) {
