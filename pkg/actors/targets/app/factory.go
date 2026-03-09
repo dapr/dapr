@@ -182,9 +182,6 @@ func (f *factory) handleIdleActor(target *app) {
 		}
 		defer cancel(nil)
 
-		f.lock.Lock()
-		defer f.lock.Unlock()
-
 		log.Debugf("Actor %s is idle, deactivating", target.Key())
 
 		if err := f.halt(ctx, target); err != nil {
