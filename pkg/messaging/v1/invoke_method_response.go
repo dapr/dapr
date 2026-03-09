@@ -178,7 +178,7 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 
 	// Read the data and store it in the object
 	data, err := imr.RawDataFull()
-	if err != nil || len(data) == 0 {
+	if err != nil {
 		return m, err
 	}
 	m.Message.Data = &anypb.Any{
