@@ -667,6 +667,14 @@ func TestNormalizeOperation(t *testing.T) {
 		assert.Equal(t, "pathr", p)
 	})
 
+	t.Run("invalid percent escape", func(t *testing.T) {
+		p := "test%stream"
+		p, err := normalizeOperation(p)
+
+		require.NoError(t, err)
+		assert.Equal(t, "test%25stream", p)
+	})
+
 	t.Run("normal multiple paths", func(t *testing.T) {
 		p := "path1/path2/path3"
 		p, _ = normalizeOperation(p)

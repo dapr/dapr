@@ -141,7 +141,34 @@ func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP 
 	return &accessControlList, nil
 }
 
+func isHex(b byte) bool {
+	return (b >= '0' && b <= '9') ||
+		(b >= 'a' && b <= 'f') ||
+		(b >= 'A' && b <= 'F')
+}
+
+func escapeInvalidPercents(s string) string {
+	// Replace any '%' not follwoed by 2 hex digits with '%25'
+	// This prevents URL parsing errors while preserving valid escapes
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for i := 0; i < len(s); i++ {
+		if s[i] == '%' {
+			if i+2 >= len(s) || !isHex(s[i+1]) || !isHex(s[i+2]) {
+				b.WriteString("%25")
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+	}
+
+	return b.String()
+}
+
 func normalizeOperation(operation string) (string, error) {
+	operation = escapeInvalidPercents(operation)
+
 	s, err := purell.NormalizeURLString(operation, purell.FlagsUsuallySafeGreedy|purell.FlagRemoveDuplicateSlashes)
 	if err != nil {
 		return "", err
