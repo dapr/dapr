@@ -155,6 +155,8 @@ This will be extended to other APIs in the future.
 
 From `tests/perf/report/`, with a `test_report_perf.json` downloaded from CI and placed at `tests/perf/test_report_perf.json`.
 
+NOTE: Make sure to change the version and get relevant data json files for the version you are targeting.
+
 **Charts only:**
 ```bash
 go build -o _report_bin .

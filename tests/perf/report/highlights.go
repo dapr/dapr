@@ -126,7 +126,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 		}
 
 		agg := aggregateRunners(result.runners)
-		isK6 := agg.IterationDuration.Values.Med > 0
+		isK6 := agg.IterationDuration.Values.Med > 0 || agg.VUsMax.Values.Max > 0
 
 		// use HTTPReqDuration when non-zero (HTTP k6 tests and all Fortio tests)
 		// Fall back to IterationDuration only when HTTP metrics are absent (workflow-only k6 tests)
@@ -186,7 +186,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 			continue
 		}
 
-		fullSection, err := generateSectionNarrative(display, version, tests, model, ollamaURL)
+		fullSection, mixedTools, err := generateSectionNarrative(display, version, tests, model, ollamaURL)
 		if err != nil {
 			log.Printf("warning: narrative generation failed for %s: %v — using fallback", api, err)
 			fullSection = defaultNarrative(display, version, tests) + "\n\n" + formatTestsTable(tests)
@@ -195,6 +195,15 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 		fullSection = strings.TrimRight(fullSection, "\n ")
 		fullSection = strings.TrimSuffix(fullSection, "---")
 		fullSection = strings.TrimRight(fullSection, "\n ")
+
+		// add callout when the API mixes Fortio and k6 tests to not confuse users by the data,
+		// since small & free models often drop this instruction from the prompt
+		if mixedTools {
+			fullSection += "\n\n> **Note on test methodology:** This API is tested with two different load generators. " +
+				"Fortio tests (gRPC) run at high throughput with many parallel connections and report p90/p99/p99.9. " +
+				"k6 tests (HTTP) use virtual users with sequential iterations and report p90/p95. " +
+				"These tests use different load profiles and are **not directly comparable** — do not draw conclusions by comparing gRPC and HTTP numbers side by side."
+		}
 
 		// Root README gets the narrative only — howToReadSection() already covers it at the top.
 		sectionContent[api] = fullSection
@@ -264,6 +273,8 @@ func howToReadSection() string {
 **VUs (virtual users)** — used in workflow and scenario-based tests; the number of concurrent users or workflow instances active simultaneously.
 
 **Pod restarts** — if an app or sidecar crashed or was OOM-killed during a test, Kubernetes restarts it. Zero restarts means the system stayed stable under every load scenario tested.
+
+> **Note:** Some APIs are tested with [Fortio](https://fortio.org/) (high-throughput, many parallel connections) and others with [k6](https://k6.io/) (virtual-user based, sequential iterations). These tools use different load profiles and emit different percentile sets (Fortio: p90/p99/p99.9; k6: p90/p95). Only compare results from tests that use the **same load generator** — comparing a Fortio gRPC result against a k6 HTTP result is apples to oranges.
 `
 }
 
@@ -392,7 +403,11 @@ func buildScenarioData(tests []testSummary) string {
 
 	var buf strings.Builder
 	writeLine := func(label string, s *testSummary) {
-		fmt.Fprintf(&buf, "  %s: p50 %s", label, formatLatency(s.P50ms))
+		tool := "Fortio"
+		if s.IsK6 {
+			tool = "k6"
+		}
+		fmt.Fprintf(&buf, "  %s (%s): p50 %s", label, tool, formatLatency(s.P50ms))
 		if s.P90ms > 0 {
 			buf.WriteString(" | p90 " + formatLatency(s.P90ms))
 		}
@@ -405,6 +420,37 @@ func buildScenarioData(tests []testSummary) string {
 		buf.WriteString("\n")
 	}
 
+	// writeBlock emits one scenario block for a single testSummary.
+	writeBlock := func(scenarioKey, heading string, s *testSummary) {
+		fmt.Fprintf(&buf, "Scenario: %s\n", scenarioKey)
+		fmt.Fprintf(&buf, "Heading: %s\n", heading)
+		if s.MaxVUs > 0 {
+			fmt.Fprintf(&buf, "  Max VUs: %.0f", s.MaxVUs)
+		} else if s.Connections > 0 {
+			fmt.Fprintf(&buf, "  Connections: %d", s.Connections)
+		}
+		if s.QPS > 0 {
+			fmt.Fprintf(&buf, " | QPS: %.2f/s", s.QPS)
+		}
+		if s.TotalReqs > 0 {
+			totalLabel := "Total requests"
+			if s.IsK6 {
+				totalLabel = "Total iterations"
+			}
+			fmt.Fprintf(&buf, " | %s: %.0f", totalLabel, s.TotalReqs)
+		}
+		buf.WriteString("\n")
+		label := s.Transport
+		if label == "" {
+			label = "Latency"
+		}
+		writeLine(label, s)
+		if s.SuccessPct >= 0 {
+			fmt.Fprintf(&buf, "  Success: %.0f%%\n", s.SuccessPct)
+		}
+		buf.WriteString("\n")
+	}
+
 	for _, base := range order {
 		g := groups[base]
 		ref := g.grpc
@@ -412,44 +458,48 @@ func buildScenarioData(tests []testSummary) string {
 			ref = g.http
 		}
 
-		// Header line with load context from whichever variant has data.
-		fmt.Fprintf(&buf, "Scenario: %s\n", base)
-		fmt.Fprintf(&buf, "Heading: %s\n", humanizeName(base))
-		if ref.MaxVUs > 0 {
-			fmt.Fprintf(&buf, "  Max VUs: %.0f", ref.MaxVUs)
-		} else if ref.Connections > 0 {
-			fmt.Fprintf(&buf, "  Connections: %d", ref.Connections)
-		}
-		if ref.QPS > 0 {
-			fmt.Fprintf(&buf, " | QPS: %.2f/s", ref.QPS)
-		}
-		if ref.TotalReqs > 0 {
-			fmt.Fprintf(&buf, " | Total: %.0f", ref.TotalReqs)
-		}
-		buf.WriteString("\n")
-
 		if g.grpc != nil && g.http != nil {
-			// Side-by-side transport comparison.
+			if g.grpc.IsK6 != g.http.IsK6 {
+				// emit each transport as its own independent block
+				// so the model never conflates them into a single comparison.
+				writeBlock(base+"_grpc", humanizeName(base)+" (gRPC)", g.grpc)
+				writeBlock(base+"_http", humanizeName(base)+" (HTTP)", g.http)
+				continue
+			}
+			fmt.Fprintf(&buf, "Scenario: %s\n", base)
+			fmt.Fprintf(&buf, "Heading: %s\n", humanizeName(base))
+			if ref.MaxVUs > 0 {
+				fmt.Fprintf(&buf, "  Max VUs: %.0f", ref.MaxVUs)
+			} else if ref.Connections > 0 {
+				fmt.Fprintf(&buf, "  Connections: %d", ref.Connections)
+			}
+			if ref.QPS > 0 {
+				fmt.Fprintf(&buf, " | QPS: %.2f/s", ref.QPS)
+			}
+			if ref.TotalReqs > 0 {
+				totalLabel := "Total requests"
+				if ref.IsK6 {
+					totalLabel = "Total iterations"
+				}
+				fmt.Fprintf(&buf, " | %s: %.0f", totalLabel, ref.TotalReqs)
+			}
+			buf.WriteString("\n")
 			writeLine("gRPC", g.grpc)
 			writeLine("HTTP", g.http)
-		} else {
-			label := ref.Transport
-			if label == "" {
-				label = "Latency"
+			if ref.SuccessPct >= 0 {
+				fmt.Fprintf(&buf, "  Success: %.0f%%\n", ref.SuccessPct)
 			}
-			writeLine(label, ref)
+			buf.WriteString("\n")
+		} else {
+			writeBlock(base, humanizeName(base), ref)
 		}
-		if ref.SuccessPct >= 0 {
-			fmt.Fprintf(&buf, "  Success: %.0f%%\n", ref.SuccessPct)
-		}
-		buf.WriteString("\n")
 	}
 	return buf.String()
 }
 
 // generateSectionNarrative calls Ollama to produce the full highlights section for one API:
 // an intro paragraph + per-scenario blocks with human-readable names and explanation sentences.
-func generateSectionNarrative(display, version string, tests []testSummary, model, ollamaURL string) (string, error) {
+func generateSectionNarrative(display, version string, tests []testSummary, model, ollamaURL string) (string, bool, error) {
 	// Pre-compute success summary so the model never has to guess it.
 	// Skip tests where successPct == -1 (unknown / no checks data).
 	minSuccess := -1.0
@@ -473,26 +523,46 @@ func generateSectionNarrative(display, version string, tests []testSummary, mode
 
 	dataBuf := buildScenarioData(tests)
 
+	// Detect whether this API mixes Fortio and k6 tests so we can conditionally
+	// include the "not directly comparable" note only where it applies.
+	hasK6, hasFortio := false, false
+	for _, t := range tests {
+		if t.IsK6 {
+			hasK6 = true
+		} else {
+			hasFortio = true
+		}
+	}
+	mixedToolsNote := ""
+	if hasK6 && hasFortio {
+		mixedToolsNote = "- IMPORTANT: This API has separate Fortio (gRPC) and k6 (HTTP) scenario blocks. Note briefly in each relevant block that the two tests use different load generators with different load profiles and are not directly comparable. Fortio runs at high throughput with many parallel connections; k6 uses virtual users with sequential iterations. Percentiles also differ: Fortio emits p90/p99/p99.9; k6 emits p90/p95 by default."
+	}
+
 	prompt := fmt.Sprintf(`Write developer-facing performance highlights for the %[2]s API in Dapr %[1]s.
 
 Produce ONLY the highlights markdown. Do not include any instructions, data, or section headings from this prompt in your response.
+IMPORTANT: Do not output the words "Scenario:" or "Heading:" — these are data labels for your reference only, not part of the output.
 
-The output must follow this structure. The example below uses made-up values — do not copy any headings or numbers from it:
+The output must follow this structure. The example below uses made-up values — do not copy any headings, terminology, or numbers from it:
 
 Dapr Example API in v1.99 delivers consistent low-latency performance at scale, with **100%%** success rate and zero pod restarts.
 
 **Dual-transport load test** (500 connections | 999.95 req/s):
-- gRPC: Median **1.23 ms** | p90: **2.45 ms** | p95: **3.67 ms**
-- HTTP: Median **1.89 ms** | p90: **3.12 ms** | p95: **4.56 ms**
+- gRPC (Fortio): Median **1.23 ms** | p90: **2.45 ms**
+- HTTP (k6): Median **1.89 ms** | p90: **3.12 ms** | p95: **4.56 ms**
 - **50000** requests at **999.95 req/s**
 
 Developers can expect sub-2ms median latency through the Dapr sidecar even at 1000 req/s with 500 concurrent connections.
 
 **VU-based concurrency test** (200 VUs | 499.97 req/s):
 - Median **2.28 ms** | p90: **2.97 ms** | p99: **7.57 ms**
-- **30000** requests at **499.97 req/s**
+- **30000** iterations at **499.97 req/s**
 
 Under 200 concurrent virtual users the system sustains single-digit millisecond tail latency, making it suitable for high-concurrency workloads.
+
+**Key takeaways**
+- At 1,000 req/s, each operation completes in under 2ms — fast enough for production workloads requiring consistent low latency.
+- Even at the tail (p99.9), latency stays under 10ms, meaning outlier requests won't cause cascading timeouts in typical retry budgets.
 
 Now write the highlights for the %[2]s API in Dapr %[1]s using only the Data section below:
 - IMPORTANT: use the "Heading" field from each scenario in Data as the bold title — do not use headings from the example above.
@@ -500,12 +570,16 @@ Now write the highlights for the %[2]s API in Dapr %[1]s using only the Data sec
 - Begin with: Dapr %[2]s in %[1]s [memorable one-line summary], with **%[4]s** success rate and zero pod restarts.
 - When both gRPC and HTTP rows exist for a scenario, show both in separate lines. For single-transport scenarios, omit the transport label.
 - Bold all metric values. Latencies are already formatted — use them exactly as written.
-- End each scenario block with 1–2 sentences on what the workload demonstrates for a developer.
+- IMPORTANT: Each metric row in Data starts with a transport+tool label like "gRPC (Fortio):" or "HTTP (k6):". Preserve that label as-is in your output (e.g. "- **gRPC (Fortio)**: Median ...").
+- End each scenario block with a blank line followed by 1–2 sentences on what the workload demonstrates for a developer.
+%[5]s
+- After all scenario blocks, write a "**Key takeaways**" section with 2–4 bullet points written from the perspective of a developer building an application with the %[2]s API. Use terminology specific to this API (e.g. "invocation latency" for Service Invocation, "publish latency" for PubSub, "workflow throughput" or "iterations per second" for Workflows). Lead each point with the practical implication first, backed by a specific number from the data. Do not reference other APIs or use terminology from other APIs.
 
 Data:
-%[3]s`, version, display, dataBuf, successStr)
+%[3]s`, version, display, dataBuf, successStr, mixedToolsNote)
 
-	return callOllama(ollamaURL, model, prompt)
+	content, err := callOllama(ollamaURL, model, prompt)
+	return content, hasK6 && hasFortio, err
 }
 
 // defaultNarrative produces a plain fallback paragraph when Ollama is unavailable.
