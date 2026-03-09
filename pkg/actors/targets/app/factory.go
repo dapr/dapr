@@ -174,22 +174,24 @@ func (f *factory) Len() int {
 }
 
 func (f *factory) handleIdleActor(target *app) {
-	ctx, cancel, err := f.placement.Lock(context.Background())
-	if err != nil {
-		log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
-		return
-	}
-	defer cancel(nil)
+	go func() {
+		ctx, cancel, err := f.placement.Lock(context.Background())
+		if err != nil {
+			log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
+			return
+		}
+		defer cancel(nil)
 
-	f.lock.Lock()
-	defer f.lock.Unlock()
+		f.lock.Lock()
+		defer f.lock.Unlock()
 
-	log.Debugf("Actor %s is idle, deactivating", target.Key())
+		log.Debugf("Actor %s is idle, deactivating", target.Key())
 
-	if err := f.halt(ctx, target); err != nil {
-		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
-		return
-	}
+		if err := f.halt(ctx, target); err != nil {
+			log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
+			return
+		}
+	}()
 }
 
 func (f *factory) halt(ctx context.Context, app *app) error {
