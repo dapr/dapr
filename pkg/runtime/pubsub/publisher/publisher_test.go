@@ -428,7 +428,9 @@ func TestNamespacedBulkPublisher(t *testing.T) {
 
 	pubSub, ok := compStore.GetPubSub(TestPubsubName)
 	require.True(t, ok)
-	assert.Equal(t, "ns1topic0", pubSub.Component.(*mockBulkPublishPubSub).BulkPublishedRequest.Load().Topic)
+	bulkReq := pubSub.Component.(*mockBulkPublishPubSub).BulkPublishedRequest.Load()
+	require.NotNil(t, bulkReq)
+	assert.Equal(t, "ns1topic0", bulkReq.Topic)
 }
 
 type mockBulkPublishPubSub struct {
@@ -465,8 +467,7 @@ func (m *mockBulkPublishPubSub) Features() []contribpubsub.Feature {
 }
 
 type mockPublishPubSub struct {
-	PublishedRequest     atomic.Pointer[contribpubsub.PublishRequest]
-	BulkPublishedRequest atomic.Pointer[contribpubsub.BulkPublishRequest]
+	PublishedRequest atomic.Pointer[contribpubsub.PublishRequest]
 }
 
 // Init is a mock initialization method.
@@ -482,7 +483,6 @@ func (m *mockPublishPubSub) Publish(ctx context.Context, req *contribpubsub.Publ
 
 // BulkPublish is a mock bulk publish method returning a success all the time.
 func (m *mockPublishPubSub) BulkPublish(req *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error) {
-	m.BulkPublishedRequest.Store(req)
 	return contribpubsub.BulkPublishResponse{}, nil
 }
 
