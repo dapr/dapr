@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"strings"
 
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -236,8 +235,19 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 		return imr.r, nil
 	}
 
-	// Clone the object
-	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeRequest)
+	// Create a shallow copy instead of a deep proto.Clone.
+	// We only need a new Message.Data field; headers and metadata are shared
+	// read-only references that callers do not modify.
+	m := &internalv1pb.InternalInvokeRequest{
+		Ver:      imr.r.GetVer(),
+		Actor:    imr.r.GetActor(),
+		Metadata: imr.r.GetMetadata(),
+		Message: &commonv1pb.InvokeRequest{
+			Method:        imr.r.GetMessage().GetMethod(),
+			ContentType:   imr.r.GetMessage().GetContentType(),
+			HttpExtension: imr.r.GetMessage().GetHttpExtension(),
+		},
+	}
 
 	// Read the data and store it in the object
 	data, err := imr.RawDataFull()
