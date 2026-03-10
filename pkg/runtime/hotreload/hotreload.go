@@ -111,6 +111,21 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 			Authorizer: opts.Authorizer,
 			Healthz:    opts.Healthz,
 		}),
+		configurationsReconciler: reconciler.NewSIGHUPConfigurations(reconciler.Options[configapi.Configuration]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
+		httpEndpointsReconciler: reconciler.NewSIGHUPHTTPEndpoints(reconciler.Options[httpendpointapi.HTTPEndpoint]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
+		resilienciesReconciler: reconciler.NewSIGHUPResiliencies(reconciler.Options[resiliencyapi.Resiliency]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Healthz:   opts.Healthz,
+		}),
 	}, nil
 }
 

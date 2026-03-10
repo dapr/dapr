@@ -42,10 +42,13 @@ type Options struct {
 }
 
 type disk struct {
-	components    *resource[compapi.Component]
-	subscriptions *resource[subapi.Subscription]
-	mcpServers    *resource[mcpserverapi.MCPServer]
-	fs            *fswatcher.FSWatcher
+	components     *resource[compapi.Component]
+	subscriptions  *resource[subapi.Subscription]
+	mcpServers     *resource[mcpserverapi.MCPServer]
+	configurations *resource[configapi.Configuration]
+	httpEndpoints  *resource[httpendpointapi.HTTPEndpoint]
+	resiliencies   *resource[resiliencyapi.Resiliency]
+	fs             *fswatcher.FSWatcher
 }
 
 func New(opts Options) (loader.Interface, error) {
@@ -58,24 +61,41 @@ func New(opts Options) (loader.Interface, error) {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 
+	diskOpts := loaderdisk.Options{
+		AppID: opts.AppID,
+		Paths: opts.Dirs,
+	}
+
 	return &disk{
 		fs: fs,
 		components: newResource[compapi.Component](
 			resourceOptions[compapi.Component]{
-				loader: loaderdisk.NewComponents(loaderdisk.Options{
-					AppID: opts.AppID,
-					Paths: opts.Dirs,
-				}),
-				store: store.NewComponents(opts.ComponentStore),
+				loader: loaderdisk.NewComponents(diskOpts),
+				store:  store.NewComponents(opts.ComponentStore),
 			},
 		),
 		subscriptions: newResource[subapi.Subscription](
 			resourceOptions[subapi.Subscription]{
-				loader: loaderdisk.NewSubscriptions(loaderdisk.Options{
-					AppID: opts.AppID,
-					Paths: opts.Dirs,
-				}),
-				store: store.NewSubscriptions(opts.ComponentStore),
+				loader: loaderdisk.NewSubscriptions(diskOpts),
+				store:  store.NewSubscriptions(opts.ComponentStore),
+			},
+		),
+		configurations: newResource[configapi.Configuration](
+			resourceOptions[configapi.Configuration]{
+				loader: loaderdisk.NewConfigurations(diskOpts),
+				store:  store.NewConfigurations(opts.ComponentStore),
+			},
+		),
+		httpEndpoints: newResource[httpendpointapi.HTTPEndpoint](
+			resourceOptions[httpendpointapi.HTTPEndpoint]{
+				loader: loaderdisk.NewHTTPEndpoints(diskOpts),
+				store:  store.NewHTTPEndpoints(opts.ComponentStore),
+			},
+		),
+		resiliencies: newResource[resiliencyapi.Resiliency](
+			resourceOptions[resiliencyapi.Resiliency]{
+				loader: loaderdisk.NewResiliencies(diskOpts),
+				store:  store.NewResiliencies(opts.ComponentStore),
 			},
 		),
 		mcpServers: newResource[mcpserverapi.MCPServer](
@@ -97,6 +117,9 @@ func (d *disk) Run(ctx context.Context) error {
 		d.components.run,
 		d.subscriptions.run,
 		d.mcpServers.run,
+		d.configurations.run,
+		d.httpEndpoints.run,
+		d.resiliencies.run,
 		func(ctx context.Context) error {
 			return d.fs.Run(ctx, eventCh)
 		},
@@ -113,6 +136,15 @@ func (d *disk) Run(ctx context.Context) error {
 						return err
 					}
 					if err := d.mcpServers.trigger(ctx); err != nil {
+						return err
+					}
+					if err := d.configurations.trigger(ctx); err != nil {
+						return err
+					}
+					if err := d.httpEndpoints.trigger(ctx); err != nil {
+						return err
+					}
+					if err := d.resiliencies.trigger(ctx); err != nil {
 						return err
 					}
 				}
@@ -133,20 +165,14 @@ func (d *disk) MCPServers() loader.Loader[mcpserverapi.MCPServer] {
 	return d.mcpServers
 }
 
-// Configurations returns nil as Configuration hot-reloading is not supported
-// in disk mode. Configuration changes require a full restart.
 func (d *disk) Configurations() loader.Loader[configapi.Configuration] {
-	return nil
+	return d.configurations
 }
 
-// HTTPEndpoints returns nil as HTTPEndpoint hot-reloading is not supported
-// in disk mode. HTTPEndpoint changes require a full restart.
 func (d *disk) HTTPEndpoints() loader.Loader[httpendpointapi.HTTPEndpoint] {
-	return nil
+	return d.httpEndpoints
 }
 
-// Resiliencies returns nil as Resiliency hot-reloading is not supported
-// in disk mode. Resiliency changes require a full restart.
 func (d *disk) Resiliencies() loader.Loader[resiliencyapi.Resiliency] {
-	return nil
+	return d.resiliencies
 }
