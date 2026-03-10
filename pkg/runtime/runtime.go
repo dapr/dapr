@@ -395,6 +395,12 @@ func newDaprRuntime(ctx context.Context,
 
 			rerr := rt.initRuntime(ctx)
 			if rerr != nil {
+				// If the context was canceled (e.g. SIGHUP/SIGINT during
+				// init), treat the initialization failure as a clean
+				// shutdown rather than a fatal error.
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				return rerr
 			}
 

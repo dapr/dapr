@@ -150,6 +150,30 @@ func New(t *testing.T, fopts ...Option) *Operator {
 				}
 			}
 		},
+		configurationUpdateFn: func(_ *operatorv1.ConfigurationUpdateRequest, srv operatorv1.Operator_ConfigurationUpdateServer) error {
+			select {
+			case <-srv.Context().Done():
+				return nil
+			case <-o.closech:
+				return errors.New("operator closed")
+			}
+		},
+		httpEndpointUpdateFn: func(_ *operatorv1.HTTPEndpointUpdateRequest, srv operatorv1.Operator_HTTPEndpointUpdateServer) error {
+			select {
+			case <-srv.Context().Done():
+				return nil
+			case <-o.closech:
+				return errors.New("operator closed")
+			}
+		},
+		resiliencyUpdateFn: func(_ *operatorv1.ResiliencyUpdateRequest, srv operatorv1.Operator_ResiliencyUpdateServer) error {
+			select {
+			case <-srv.Context().Done():
+				return nil
+			case <-o.closech:
+				return errors.New("operator closed")
+			}
+		},
 	}
 
 	for _, fopt := range fopts {
