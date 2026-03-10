@@ -93,9 +93,10 @@ func TestConnector(t *testing.T) {
 			},
 		})
 
-		// After processing both Connect events, first conns should be
-		// closed but second should still be open.
-		// Use Close to synchronize and ensure all events are processed.
+		// After processing both Connect events and the final Close event,
+		// both connection sets should have been closed. In particular, the
+		// second Connect should have closed the first connections before
+		// the Close event closes the second connections.
 		l.Close(new(loops.Close))
 
 		assert.True(t, closed1.Load())
