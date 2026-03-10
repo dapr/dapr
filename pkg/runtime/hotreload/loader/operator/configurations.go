@@ -31,7 +31,7 @@ type configurations struct {
 // the generic operator.
 //
 //nolint:unused
-func (c *configurations) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
+func (c *configurations) list(ctx context.Context, opclient operatorpb.OperatorClient, ns string) ([][]byte, error) {
 	// Configuration doesn't have a List RPC, so we return empty list.
 	// The initial configuration is loaded at startup, and updates come via streaming.
 	return nil, nil
@@ -64,10 +64,9 @@ func (c *configurations) recv(context.Context) (*loader.Event[configapi.Configur
 }
 
 //nolint:unused
-func (c *configurations) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
+func (c *configurations) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns string) error {
 	stream, err := opclient.ConfigurationUpdate(ctx, &operatorpb.ConfigurationUpdateRequest{
 		Namespace: ns,
-		PodName:   podName,
 	})
 	if err != nil {
 		return err

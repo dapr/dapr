@@ -107,7 +107,6 @@ func (a *apiServer) ResiliencyUpdate(in *operatorv1pb.ResiliencyUpdateRequest, s
 		CancelWatch: cancel,
 		Stream:      stream,
 		Namespace:   in.GetNamespace(),
-		PodName:     in.GetPodName(),
 	})
 	defer client.CacheLoop()
 

@@ -34,7 +34,6 @@ import (
 var log = logger.NewLogger("dapr.runtime.hotreload.loader.operator")
 
 type Options struct {
-	PodName        string
 	Namespace      string
 	ComponentStore *compstore.ComponentStore
 	OperatorClient operatorpb.OperatorClient

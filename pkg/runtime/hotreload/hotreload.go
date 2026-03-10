@@ -49,7 +49,6 @@ type OptionsReloaderDisk struct {
 }
 
 type OptionsReloaderOperator struct {
-	PodName        string
 	Namespace      string
 	Client         operatorv1.OperatorClient
 	Config         *config.Configuration
@@ -136,7 +135,6 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 	}
 
 	loader := operator.New(operator.Options{
-		PodName:        opts.PodName,
 		Namespace:      opts.Namespace,
 		ComponentStore: opts.ComponentStore,
 		OperatorClient: opts.Client,

@@ -28,7 +28,7 @@ type mcpservers struct {
 }
 
 //nolint:unused
-func (m *mcpservers) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, _ string) ([][]byte, error) {
+func (m *mcpservers) list(ctx context.Context, opclient operatorpb.OperatorClient, ns string) ([][]byte, error) {
 	resp, err := opclient.ListMCPServers(ctx, &operatorpb.ListMCPServersRequest{
 		Namespace: ns,
 	})
@@ -66,7 +66,7 @@ func (m *mcpservers) recv(_ context.Context) (*loader.Event[mcpserverapi.MCPServ
 }
 
 //nolint:unused
-func (m *mcpservers) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, _ string) error {
+func (m *mcpservers) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns string) error {
 	stream, err := opclient.MCPServerUpdate(ctx, &operatorpb.MCPServerUpdateRequest{
 		Namespace: ns,
 	})

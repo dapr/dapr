@@ -31,7 +31,7 @@ type resiliencies struct {
 // the generic operator.
 //
 //nolint:unused
-func (r *resiliencies) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
+func (r *resiliencies) list(ctx context.Context, opclient operatorpb.OperatorClient, ns string) ([][]byte, error) {
 	resp, err := opclient.ListResiliency(ctx, &operatorpb.ListResiliencyRequest{
 		Namespace: ns,
 	})
@@ -69,10 +69,9 @@ func (r *resiliencies) recv(context.Context) (*loader.Event[resiliencyapi.Resili
 }
 
 //nolint:unused
-func (r *resiliencies) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
+func (r *resiliencies) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns string) error {
 	stream, err := opclient.ResiliencyUpdate(ctx, &operatorpb.ResiliencyUpdateRequest{
 		Namespace: ns,
-		PodName:   podName,
 	})
 	if err != nil {
 		return err

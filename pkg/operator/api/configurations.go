@@ -45,7 +45,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	}
 
 	if err := processConfigurationSecrets(ctx, &config, in.GetNamespace(), a.Client); err != nil {
-		log.Warnf("error processing configuration %s secrets from pod %s/%s: %s", config.Name, in.GetNamespace(), in.GetPodName(), err)
+		log.Warnf("error processing configuration %s secrets in namespace %s: %s", config.Name, in.GetNamespace(), err)
 		return nil, fmt.Errorf("error processing configuration secrets: %w", err)
 	}
 
@@ -130,7 +130,6 @@ func (a *apiServer) ConfigurationUpdate(in *operatorv1pb.ConfigurationUpdateRequ
 		CancelWatch:    cancel,
 		Stream:         stream,
 		Namespace:      in.GetNamespace(),
-		PodName:        in.GetPodName(),
 		KubeClient:     a.Client,
 		ProcessSecrets: processConfigurationSecrets,
 	})

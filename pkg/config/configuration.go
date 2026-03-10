@@ -623,11 +623,10 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name.
 // Returns the processed Configuration and the raw configapi.Configuration resource.
-func LoadKubernetesConfiguration(config string, namespace string, podName string, operatorClient operatorv1pb.OperatorClient) (*Configuration, *configapi.Configuration, error) {
+func LoadKubernetesConfiguration(config string, namespace string, operatorClient operatorv1pb.OperatorClient) (*Configuration, *configapi.Configuration, error) {
 	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
-		PodName:   podName,
 	}, grpcRetry.WithMax(operatorMaxRetries), grpcRetry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
 		return nil, nil, err

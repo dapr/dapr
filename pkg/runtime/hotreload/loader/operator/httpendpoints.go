@@ -31,7 +31,7 @@ type httpEndpoints struct {
 // the generic operator.
 //
 //nolint:unused
-func (h *httpEndpoints) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
+func (h *httpEndpoints) list(ctx context.Context, opclient operatorpb.OperatorClient, ns string) ([][]byte, error) {
 	resp, err := opclient.ListHTTPEndpoints(ctx, &operatorpb.ListHTTPEndpointsRequest{
 		Namespace: ns,
 	})
@@ -69,10 +69,9 @@ func (h *httpEndpoints) recv(context.Context) (*loader.Event[httpendpointapi.HTT
 }
 
 //nolint:unused
-func (h *httpEndpoints) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
+func (h *httpEndpoints) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns string) error {
 	stream, err := opclient.HTTPEndpointUpdate(ctx, &operatorpb.HTTPEndpointUpdateRequest{
 		Namespace: ns,
-		PodName:   podName,
 	})
 	if err != nil {
 		return err

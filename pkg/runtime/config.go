@@ -218,7 +218,6 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	}
 
 	namespace := os.Getenv("NAMESPACE")
-	podName := os.Getenv("POD_NAME")
 
 	var (
 		globalConfig      *config.Configuration
@@ -235,7 +234,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 			}
 
 			log.Debug("Loading Kubernetes config resource: " + intc.config[0])
-			globalConfig, configAPIResource, configErr = config.LoadKubernetesConfiguration(intc.config[0], namespace, podName, operatorClient)
+			globalConfig, configAPIResource, configErr = config.LoadKubernetesConfiguration(intc.config[0], namespace, operatorClient)
 		case modes.StandaloneMode:
 			log.Debug("Loading config from file(s): " + strings.Join(intc.config, ", "))
 			globalConfig, configErr = config.LoadStandaloneConfiguration(intc.config...)

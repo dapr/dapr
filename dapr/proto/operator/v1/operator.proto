@@ -32,7 +32,7 @@ service Operator {
   rpc GetResiliency (GetResiliencyRequest) returns (GetResiliencyResponse) {}
   // Returns a list of resiliency configurations
   rpc ListResiliency (ListResiliencyRequest) returns (ListResiliencyResponse) {}
-  // Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
+  // Returns a list of pub/sub subscriptions
   rpc ListSubscriptionsV2 (ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {}
   // Sends events to Dapr sidecars upon subscription changes.
   rpc SubscriptionUpdate (SubscriptionUpdateRequest) returns (stream SubscriptionUpdateEvent) {}
@@ -68,13 +68,15 @@ enum ResourceEventType {
 // ListComponentsRequest is the request to get components for a sidecar in namespace.
 message ListComponentsRequest {
   string namespace = 1;
-  string podName = 2;
+  reserved podName;
+  reserved 2;
 }
 
 // ComponentUpdateRequest is the request to get updates about new components for a given namespace.
 message ComponentUpdateRequest {
   string namespace = 1;
-  string podName = 2;
+  reserved podName;
+  reserved 2;
 }
 
 // ComponentUpdateEvent includes the updated component event.
@@ -94,7 +96,8 @@ message ListComponentResponse {
 message GetConfigurationRequest {
   string name = 1;
   string namespace = 2;
-  string podName = 3;
+  reserved podName;
+  reserved 3;
 }
 
 // GetConfigurationResponse includes the requested configuration.
@@ -111,7 +114,8 @@ message ListSubscriptionsResponse {
 // subscriptions for a given namespace.
 message SubscriptionUpdateRequest {
   string namespace = 1;
-  string podName = 2;
+  reserved podName;
+  reserved 2;
 }
 
 // SubscriptionUpdateEvent includes the updated subscription event.
@@ -144,7 +148,8 @@ message ListResiliencyResponse {
 }
 
 message ListSubscriptionsRequest {
-  string podName = 1;
+  reserved podName;
+  reserved 1;
   string namespace = 2;
 }
 
@@ -171,7 +176,8 @@ message ListHTTPEndpointsRequest {
 // HTTPEndpointsUpdateRequest is the request to get updates about new http endpoints for a given namespace.
 message HTTPEndpointUpdateRequest {
   string namespace = 1;
-  string pod_name = 2;
+  reserved pod_name;
+  reserved 2;
 }
 
 // HTTPEndpointsUpdateEvent includes the updated http endpoint event.
@@ -200,6 +206,9 @@ message MCPServerUpdateRequest {
 // MCPServerUpdateEvent includes an updated MCP server event.
 message MCPServerUpdateEvent {
   bytes mcp_server = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
 }
 
 // ConfigurationUpdateRequest is the request to get updates about configuration changes for a given namespace.
