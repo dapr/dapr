@@ -140,7 +140,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.ListInstanceIDs(ctx)
-		require.NoError(t, err)
+		require.NoError(c, err)
 		assert.Empty(c, resp.InstanceIds)
 	}, time.Second*10, time.Millisecond*10)
 }

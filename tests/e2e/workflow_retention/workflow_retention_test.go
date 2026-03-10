@@ -33,6 +33,8 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 )
 
+const appName = "workflowsapp-retention"
+
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
@@ -41,7 +43,7 @@ func TestMain(m *testing.M) {
 
 	testApps := []kube.AppDescription{
 		{
-			AppName:             "workflowsapp-retention",
+			AppName:             appName,
 			DaprEnabled:         true,
 			ImageName:           "e2e-workflowsapp",
 			Replicas:            1,
@@ -51,7 +53,7 @@ func TestMain(m *testing.M) {
 			DaprMemoryRequest:   "100Mi",
 			AppMemoryLimit:      "200Mi",
 			AppMemoryRequest:    "100Mi",
-			AppPort:             -1,
+			AppPort:             -1, // No app channel; workflow runs via the sidecar gRPC API only.
 			Config:              "workflowretentionconfig",
 			DebugLoggingEnabled: true,
 		},
@@ -66,7 +68,7 @@ func TestMain(m *testing.M) {
 // in Kubernetes mode and that completed workflow instances are automatically
 // purged after the configured retention period.
 func TestWorkflowRetentionPolicy(t *testing.T) {
-	externalURL := tr.Platform.AcquireAppExternalURL("workflowsapp-retention")
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 	require.NoError(t, utils.HealthCheckApps(externalURL))
 
