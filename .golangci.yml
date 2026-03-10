@@ -254,8 +254,7 @@ linters-settings:
     force-case-trailing-whitespace: 1
 
 linters:
-  fast: false
-  enable-all: true
+  default: all
   disable:
     # TODO Enforce the below linters later
     - musttag
