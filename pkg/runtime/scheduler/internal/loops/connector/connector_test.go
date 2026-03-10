@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops"
 	"github.com/dapr/kit/events/loop"
-	"github.com/dapr/kit/ptr"
 )
 
 func newTestLoop(t *testing.T) loop.Interface[loops.EventConn] {
@@ -179,7 +178,7 @@ func TestConnector(t *testing.T) {
 		})
 
 		l.Enqueue(&loops.Reconnect{
-			AppTarget: ptr.Of(true),
+			AppTarget: new(true),
 		})
 
 		// Use a barrier event (another Connect) to ensure Reconnect was
