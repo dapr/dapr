@@ -49,6 +49,7 @@ type connector struct {
 	currentAppRunning bool
 	currentActorTypes []string
 	clients           []schedulerv1pb.SchedulerClient
+	closeConns        []context.CancelFunc
 
 	closeCluster context.CancelFunc
 }
@@ -84,11 +85,13 @@ func (c *connector) handleConnect(ctx context.Context, e *loops.Connect) {
 	c.handleDisconnect()
 
 	c.clients = e.Clients
+	c.closeConns = e.CloseConns
 	c.maybeClientConnect(ctx)
 }
 
 func (c *connector) handleDisconnect() {
 	c.closeClusterConnections()
+	c.closeClientConnections()
 	c.clients = nil
 }
 
@@ -112,6 +115,13 @@ func (c *connector) closeClusterConnections() {
 	}
 
 	c.closeCluster()
+}
+
+func (c *connector) closeClientConnections() {
+	for _, closeCon := range c.closeConns {
+		closeCon()
+	}
+	c.closeConns = nil
 }
 
 func (c *connector) maybeClientConnect(ctx context.Context) {
