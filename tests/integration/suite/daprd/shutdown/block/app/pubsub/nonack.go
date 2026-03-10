@@ -139,7 +139,7 @@ func (n *nonack) Run(t *testing.T, ctx context.Context) {
 	ch = n.broker.PublishHelloWorld("a")
 	select {
 	case req := <-ch:
-		assert.Fail(t, "expected no ack/nack for 2nd message, got: %v", req)
+		assert.Failf(t, "expected no ack/nack for 2nd message, got: %v", req)
 	case <-time.After(time.Second * 1):
 	}
 
