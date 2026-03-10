@@ -210,13 +210,11 @@ func (f *factory) deactivateIdleActors() {
 		var wg sync.WaitGroup
 		for _, target := range batch {
 			log.Debugf("Actor %s is idle, deactivating", target.Key())
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				if err := f.halt(ctx, target); err != nil {
 					log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
 				}
-			}()
+			})
 		}
 		wg.Wait()
 
