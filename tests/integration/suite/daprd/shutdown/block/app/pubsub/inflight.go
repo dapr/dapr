@@ -132,8 +132,8 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 	// ack'd or nack'd— the broker connection will be torn down instead.
 	ch = i.broker.PublishHelloWorld("a")
 	select {
-	case req := <-ch:
-		assert.Failf(t, "expected no ack/nack for message published after subscription closed, got: %v", req)
+	case <-ch:
+		assert.Fail(t, "expected no ack/nack for message published after subscription closed")
 	case <-time.After(time.Second * 3):
 	}
 

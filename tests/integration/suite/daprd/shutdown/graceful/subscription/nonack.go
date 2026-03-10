@@ -125,8 +125,8 @@ func (n *nonack) Run(t *testing.T, ctx context.Context) {
 	// until the subscription context is cancelled, so no ack is returned.
 	ch = n.broker.PublishHelloWorld("a")
 	select {
-	case req := <-ch:
-		assert.Failf(t, "expected no ack/nack for message published after subscription closed, got: %v", req)
+	case <-ch:
+		assert.Fail(t, "expected no ack/nack for message published after subscription closed")
 	case <-time.After(time.Second * 1):
 	}
 }
