@@ -46,6 +46,39 @@ func TestGetClusterDomain(t *testing.T) {
 	}
 }
 
+func TestClusterDomainFromCNAME(t *testing.T) {
+	const apiSvc = "kubernetes.default.svc"
+
+	testCases := map[string]struct {
+		cname    string
+		expected string
+	}{
+		"FQDN with trailing dot": {
+			cname:    "kubernetes.default.svc.cluster.local.",
+			expected: "cluster.local",
+		},
+		"FQDN without trailing dot": {
+			cname:    "kubernetes.default.svc.cluster.local",
+			expected: "cluster.local",
+		},
+		"custom cluster domain with trailing dot": {
+			cname:    "kubernetes.default.svc.my.custom.domain.",
+			expected: "my.custom.domain",
+		},
+		"custom cluster domain without trailing dot": {
+			cname:    "kubernetes.default.svc.my.custom.domain",
+			expected: "my.custom.domain",
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			domain := clusterDomainFromCNAME(apiSvc, tc.cname)
+			assert.Equal(t, tc.expected, domain)
+		})
+	}
+}
+
 func TestGetSearchDomains(t *testing.T) {
 	testCases := []struct {
 		content  string
