@@ -513,3 +513,8 @@ func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
 	d.exec = clone
 	d.exec.Run(t, ctx)
 }
+
+func (d *Daprd) SignalHUP(t *testing.T) {
+	t.Helper()
+	d.exec.SignalHUP(t)
+}
