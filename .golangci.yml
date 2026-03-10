@@ -272,7 +272,6 @@ linters:
     - exhaustive
     - exhaustruct
     - noctx
-    - gci
     - tparallel
     - paralleltest
     - wrapcheck
@@ -299,7 +298,6 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - inamedparam
-    - tagalign
     - mnd
     - canonicalheader
     - err113
