@@ -175,6 +175,36 @@ type WorkflowStateRetentionPolicy struct {
 	Terminated *time.Duration `json:"terminated,omitempty" yaml:"terminated,omitempty"`
 }
 
+// UnmarshalJSON handles the Kubernetes CRD JSON format sent by the operator,
+// where durations are encoded as metav1.Duration strings (for example, "1s" or
+// "168h"). Standalone configuration files parsed via YAML use the YAML
+// unmarshaling path instead, which handles Go duration strings natively.
+func (p *WorkflowStateRetentionPolicy) UnmarshalJSON(data []byte) error {
+	var crd configapi.WorkflowStateRetentionPolicy
+	if err := json.Unmarshal(data, &crd); err != nil {
+		return err
+	}
+
+	if crd.AnyTerminal != nil {
+		d := crd.AnyTerminal.Duration
+		p.AnyTerminal = &d
+	}
+	if crd.Completed != nil {
+		d := crd.Completed.Duration
+		p.Completed = &d
+	}
+	if crd.Failed != nil {
+		d := crd.Failed.Duration
+		p.Failed = &d
+	}
+	if crd.Terminated != nil {
+		d := crd.Terminated.Duration
+		p.Terminated = &d
+	}
+
+	return nil
+}
+
 func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() *int32 {
 	if w == nil || w.MaxConcurrentWorkflowInvocations <= 0 {
 		return nil
