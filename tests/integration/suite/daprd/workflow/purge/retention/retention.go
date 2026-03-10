@@ -15,4 +15,5 @@ package retention
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/purge/retention/config"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/purge/retention/kubernetes"
 )

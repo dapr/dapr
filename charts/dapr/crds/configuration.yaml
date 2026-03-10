@@ -572,26 +572,22 @@ spec:
                         description: |-
                           AnyTerminal is the TTL for purging workflow instances that reach any
                           terminal state.
-                        format: int64
-                        type: integer
+                        type: string
                       completed:
                         description: |-
                           Completed is the TTL for purging workflow instances that reach the
                           Completed terminal state.
-                        format: int64
-                        type: integer
+                        type: string
                       failed:
                         description: |-
                           Failed is the TTL for purging workflow instances that reach the Failed
                           terminal state.
-                        format: int64
-                        type: integer
+                        type: string
                       terminated:
                         description: |-
                           Terminated is the TTL for purging workflow instances that reach the
                           Terminated terminal state.
-                        format: int64
-                        type: integer
+                        type: string
                     type: object
                 type: object
             type: object
