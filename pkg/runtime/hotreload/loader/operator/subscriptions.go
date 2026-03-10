@@ -57,20 +57,22 @@ func (s *subscriptions) list(ctx context.Context, opclient operatorpb.OperatorCl
 //nolint:unused
 func (s *subscriptions) close() error {
 	if s.Operator_SubscriptionUpdateClient != nil {
-		return s.Operator_SubscriptionUpdateClient.CloseSend()
+		return s.CloseSend()
 	}
+
 	return nil
 }
 
 //nolint:unused
 func (s *subscriptions) recv(ctx context.Context) (*loader.Event[subapi.Subscription], error) {
-	event, err := s.Operator_SubscriptionUpdateClient.Recv()
+	event, err := s.Recv()
 
 	// Ignore servers which don't implement the subscription update stream.
 	status, ok := status.FromError(err)
 	if ok && status.Code() == codes.Unimplemented {
 		log.Warn("Subscription HotReloading is not supported by the Dapr control plane. Subscription updates will not be Hot Reloaded.")
 		<-ctx.Done()
+
 		return nil, ctx.Err()
 	}
 
@@ -100,5 +102,6 @@ func (s *subscriptions) establish(ctx context.Context, opclient operatorpb.Opera
 	}
 
 	s.Operator_SubscriptionUpdateClient = stream
+
 	return nil
 }

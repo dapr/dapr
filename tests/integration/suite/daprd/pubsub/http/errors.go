@@ -139,7 +139,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		var data map[string]interface{}
+		var data map[string]any
 		err = json.Unmarshal([]byte(string(body)), &data)
 		require.NoError(t, err)
 
@@ -160,12 +160,12 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		details, exists := data["details"]
 		require.True(t, exists)
 
-		detailsArray, ok := details.([]interface{})
+		detailsArray, ok := details.([]any)
 		require.True(t, ok)
 		require.Len(t, detailsArray, 1)
 
 		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
-		detailsObject, ok := detailsArray[0].(map[string]interface{})
+		detailsObject, ok := detailsArray[0].(map[string]any)
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
 		require.Equal(t, kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, detailsObject["reason"])
@@ -189,7 +189,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		var data map[string]interface{}
+		var data map[string]any
 		err = json.Unmarshal([]byte(string(body)), &data)
 		require.NoError(t, err)
 
@@ -211,16 +211,16 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		details, exists := data["details"]
 		require.True(t, exists)
 
-		detailsArray, ok := details.([]interface{})
+		detailsArray, ok := details.([]any)
 		require.True(t, ok)
 		require.Len(t, detailsArray, 2)
 
 		// Parse the json into go objects
-		var errInfo map[string]interface{}
-		var resInfo map[string]interface{}
+		var errInfo map[string]any
+		var resInfo map[string]any
 
 		for _, detail := range detailsArray {
-			d, ok := detail.(map[string]interface{})
+			d, ok := detail.(map[string]any)
 			require.True(t, ok)
 			switch d["@type"] {
 			case ErrInfoType:
@@ -261,7 +261,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		var data map[string]interface{}
+		var data map[string]any
 		err = json.Unmarshal([]byte(string(body)), &data)
 		require.NoError(t, err)
 
@@ -283,16 +283,16 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		details, exists := data["details"]
 		require.True(t, exists)
 
-		detailsArray, ok := details.([]interface{})
+		detailsArray, ok := details.([]any)
 		require.True(t, ok)
 		require.Len(t, detailsArray, 2)
 
 		// Parse the json into go objects
-		var errInfo map[string]interface{}
-		var resInfo map[string]interface{}
+		var errInfo map[string]any
+		var resInfo map[string]any
 
 		for _, detail := range detailsArray {
-			d, ok := detail.(map[string]interface{})
+			d, ok := detail.(map[string]any)
 			require.True(t, ok)
 			switch d["@type"] {
 			case ErrInfoType:
@@ -335,7 +335,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		var data map[string]interface{}
+		var data map[string]any
 		err = json.Unmarshal([]byte(string(body)), &data)
 		require.NoError(t, err)
 
@@ -356,16 +356,16 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		details, exists := data["details"]
 		require.True(t, exists)
 
-		detailsArray, ok := details.([]interface{})
+		detailsArray, ok := details.([]any)
 		require.True(t, ok)
 		require.Len(t, detailsArray, 2)
 
 		// Parse the json into go objects
-		var errInfo map[string]interface{}
-		var resInfo map[string]interface{}
+		var errInfo map[string]any
+		var resInfo map[string]any
 
 		for _, detail := range detailsArray {
-			d, ok := detail.(map[string]interface{})
+			d, ok := detail.(map[string]any)
 			require.True(t, ok)
 			switch d["@type"] {
 			case ErrInfoType:
@@ -407,7 +407,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		var data map[string]interface{}
+		var data map[string]any
 		err = json.Unmarshal([]byte(string(body)), &data)
 		require.NoError(t, err)
 
@@ -429,16 +429,16 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		details, exists := data["details"]
 		require.True(t, exists)
 
-		detailsArray, ok := details.([]interface{})
+		detailsArray, ok := details.([]any)
 		require.True(t, ok)
 		require.Len(t, detailsArray, 2)
 
 		// Parse the json into go objects
-		var errInfo map[string]interface{}
-		var resInfo map[string]interface{}
+		var errInfo map[string]any
+		var resInfo map[string]any
 
 		for _, detail := range detailsArray {
-			d, ok := detail.(map[string]interface{})
+			d, ok := detail.(map[string]any)
 			require.True(t, ok)
 			switch d["@type"] {
 			case ErrInfoType:
@@ -478,7 +478,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		var data map[string]interface{}
+		var data map[string]any
 		err = json.Unmarshal([]byte(string(body)), &data)
 		require.NoError(t, err)
 
@@ -500,12 +500,12 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		details, exists := data["details"]
 		require.True(t, exists)
 
-		detailsArray, ok := details.([]interface{})
+		detailsArray, ok := details.([]any)
 		require.True(t, ok)
 		require.Len(t, detailsArray, 1)
 
 		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
-		detailsObject, ok := detailsArray[0].(map[string]interface{})
+		detailsObject, ok := detailsArray[0].(map[string]any)
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
 		require.Equal(t, kiterrors.CodePrefixPubSub+"OUTBOX", detailsObject["reason"])

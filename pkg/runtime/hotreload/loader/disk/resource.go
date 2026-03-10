@@ -24,42 +24,36 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
-	"github.com/dapr/kit/events/batcher"
 )
 
 // resource is a generic implementation of a disk resource loader. resource
 // will watch and load resources from disk.
 type resource[T differ.Resource] struct {
-	sourceBatcher *batcher.Batcher[int, struct{}]
-	streamBatcher *batcher.Batcher[int, struct{}]
-	store         store.Store[T]
-	diskLoader    internalloader.Loader[T]
+	store      store.Store[T]
+	diskLoader internalloader.Loader[T]
 
-	lock          sync.RWMutex
-	currentResult *differ.Result[T]
+	triggerCh chan struct{}
+	closeCh   chan struct{}
+	closed    atomic.Bool
+	wg        sync.WaitGroup
 
-	wg      sync.WaitGroup
-	running chan struct{}
-	closeCh chan struct{}
-	closed  atomic.Bool
+	lock       sync.RWMutex
+	diffResult *differ.Result[T]
+	resultCh   chan struct{}
 }
 
 type resourceOptions[T differ.Resource] struct {
-	loader  internalloader.Loader[T]
-	store   store.Store[T]
-	batcher *batcher.Batcher[int, struct{}]
+	loader internalloader.Loader[T]
+	store  store.Store[T]
 }
 
 func newResource[T differ.Resource](opts resourceOptions[T]) *resource[T] {
 	return &resource[T]{
-		sourceBatcher: opts.batcher,
-		store:         opts.store,
-		diskLoader:    opts.loader,
-		streamBatcher: batcher.New[int, struct{}](batcher.Options{
-			Interval: 0,
-		}),
-		running: make(chan struct{}),
-		closeCh: make(chan struct{}),
+		store:      opts.store,
+		diskLoader: opts.loader,
+		triggerCh:  make(chan struct{}, 1),
+		closeCh:    make(chan struct{}),
+		resultCh:   make(chan struct{}, 1),
 	}
 }
 
@@ -84,31 +78,35 @@ func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error)
 		ReconcileCh: make(chan struct{}),
 	}
 
-	batchCh := make(chan struct{})
-	r.streamBatcher.Subscribe(ctx, batchCh)
-
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-r.closeCh:
-				return
-			case <-batchCh:
-				r.triggerDiff(ctx, conn)
-			}
-		}
-	}()
+	r.wg.Go(func() {
+		r.streamLoop(ctx, conn)
+	})
 
 	return conn, nil
 }
 
-func (r *resource[T]) triggerDiff(ctx context.Context, conn *loader.StreamConn[T]) {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
+func (r *resource[T]) streamLoop(ctx context.Context, conn *loader.StreamConn[T]) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-r.closeCh:
+			return
+		case <-r.resultCh:
+		}
 
+		r.lock.Lock()
+		result := r.diffResult
+		r.diffResult = nil
+		r.lock.Unlock()
+
+		if result != nil {
+			r.sendEvents(ctx, conn, result)
+		}
+	}
+}
+
+func (r *resource[T]) sendEvents(ctx context.Context, conn *loader.StreamConn[T], result *differ.Result[T]) {
 	// Each group is a list of resources which have been created, updated, or
 	// deleted. It is critical that we send the events in the order of deleted,
 	// updated, and created. This ensures we close before initing a resource
@@ -117,9 +115,9 @@ func (r *resource[T]) triggerDiff(ctx context.Context, conn *loader.StreamConn[T
 		resources []T
 		eventType operatorpb.ResourceEventType
 	}{
-		{r.currentResult.Deleted, operatorpb.ResourceEventType_DELETED},
-		{r.currentResult.Updated, operatorpb.ResourceEventType_UPDATED},
-		{r.currentResult.Created, operatorpb.ResourceEventType_CREATED},
+		{result.Deleted, operatorpb.ResourceEventType_DELETED},
+		{result.Updated, operatorpb.ResourceEventType_UPDATED},
+		{result.Created, operatorpb.ResourceEventType_CREATED},
 	} {
 		for _, resource := range group.resources {
 			select {
@@ -136,27 +134,31 @@ func (r *resource[T]) triggerDiff(ctx context.Context, conn *loader.StreamConn[T
 	}
 }
 
+// trigger sends a trigger signal to process file changes.
+func (r *resource[T]) trigger(ctx context.Context) error {
+	select {
+	case r.triggerCh <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (r *resource[T]) run(ctx context.Context) error {
 	defer func() {
 		if r.closed.CompareAndSwap(false, true) {
 			close(r.closeCh)
 		}
-		r.streamBatcher.Close()
 		r.wg.Wait()
 	}()
 
-	updateCh := make(chan struct{})
-	r.sourceBatcher.Subscribe(ctx, updateCh)
-	close(r.running)
-
-	var i int
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-r.closeCh:
 			return nil
-		case <-updateCh:
+		case <-r.triggerCh:
 		}
 
 		// List the resources which exist locally (those loaded already), and those
@@ -167,20 +169,20 @@ func (r *resource[T]) run(ctx context.Context) error {
 		}
 
 		// Reconcile the differences between what we have loaded locally, and what
-		// exists on disk.k
+		// exists on disk.
 		result := differ.Diff(resources)
-
-		r.lock.Lock()
-		r.currentResult = result
-		r.lock.Unlock()
-
 		if result == nil {
 			continue
 		}
 
-		// Use a separate: index every batch to prevent deduplicates of separate
-		// file updates happening at the same time.
-		i++
-		r.streamBatcher.Batch(i, struct{}{})
+		r.lock.Lock()
+		r.diffResult = result
+		r.lock.Unlock()
+
+		// Signal that a new result is available
+		select {
+		case r.resultCh <- struct{}{}:
+		default:
+		}
 	}
 }

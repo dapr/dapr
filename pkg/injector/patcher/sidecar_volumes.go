@@ -20,7 +20,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
-	"github.com/dapr/kit/ptr"
 )
 
 // getVolumeMounts returns the list of VolumeMount's for the sidecar container.
@@ -74,11 +73,11 @@ func (c *SidecarConfig) getTokenVolume() corev1.Volume {
 		Name: injectorConsts.TokenVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			Projected: &corev1.ProjectedVolumeSource{
-				DefaultMode: ptr.Of(int32(420)),
+				DefaultMode: new(int32(420)),
 				Sources: []corev1.VolumeProjection{{
 					ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
 						Audience:          c.SentrySPIFFEID,
-						ExpirationSeconds: ptr.Of(int64(7200)),
+						ExpirationSeconds: new(int64(7200)),
 						Path:              "token",
 					},
 				}},

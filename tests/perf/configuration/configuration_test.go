@@ -34,10 +34,11 @@ import (
 var tr *runner.TestRunner
 
 const (
-	numHealthChecks                   = 60 // Number of times to check for endpoint health per app.
-	defaultConfigGetThresholdMs       = 60
-	defaultConfigSubscribeThresholdMs = 350
-	testAppName                       = "configurationapp"
+	numHealthChecks                       = 60 // Number of times to check for endpoint health per app.
+	defaultConfigGetThresholdMs           = 60
+	defaultConfigSubscribeHTTPThresholdMs = 450 // HTTP subscribe makes per-key HTTP round-trips, resulting in higher latency than GRPC streaming
+	defaultConfigSubscribeGRPCThresholdMs = 350 // GRPC subscribe uses streaming
+	testAppName                           = "configurationapp"
 )
 
 type Item struct {
@@ -116,7 +117,15 @@ func subscribeTest(t *testing.T, externalURL string, test string, protocol strin
 	// Update a key and wait for subscriber to receive update
 	targetURL := fmt.Sprintf("http://%s/update/true", externalURL)
 	payload, _ = json.Marshal(items)
-	testResult := runk6test(t, targetURL, payload, defaultConfigSubscribeThresholdMs)
+	var testResult *loadtest.K6RunnerMetricsSummary
+	switch protocol {
+	case "http":
+		testResult = runk6test(t, targetURL, payload, defaultConfigSubscribeHTTPThresholdMs)
+	case "grpc":
+		testResult = runk6test(t, targetURL, payload, defaultConfigSubscribeGRPCThresholdMs)
+	default:
+		require.Fail(t, "unknown protocol")
+	}
 
 	// Unsubscribe from key `key1` in config store
 	unsubscribeURL := fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s", externalURL, test, protocol, string(subscriptionID))

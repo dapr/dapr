@@ -23,7 +23,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,10 +42,10 @@ type routes struct {
 func (r *routes) Setup(t *testing.T) []framework.Option {
 	r.app = app.New(t,
 		app.WithHandlerFunc("/dapr/subscribe", func(w http.ResponseWriter, req *http.Request) {
-			r.daprSubscribeHeaderPresent.Store(ptr.Of(req.Header.Get("Dapr-App-Id")))
+			r.daprSubscribeHeaderPresent.Store(new(req.Header.Get("Dapr-App-Id")))
 		}),
 		app.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, req *http.Request) {
-			r.daprConfigHeaderPresent.Store(ptr.Of(req.Header.Get("Dapr-App-Id")))
+			r.daprConfigHeaderPresent.Store(new(req.Header.Get("Dapr-App-Id")))
 		}),
 	)
 

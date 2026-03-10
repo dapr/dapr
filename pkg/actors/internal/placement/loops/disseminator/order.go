@@ -21,7 +21,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -70,7 +69,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{
 				Operation: v1pb.HostOperation_LOCK,
-				Version:   ptr.Of(d.currentVersion),
+				Version:   new(d.currentVersion),
 				Namespace: d.namespace,
 				Id:        d.id,
 			},
@@ -93,13 +92,10 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			log.Errorf("Error draining non-hosted actors: %s", err)
 		}
 
-		d.timeoutVersion++
-		d.timeoutQ.Enqueue(d.timeoutVersion)
-
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{
 				Operation: v1pb.HostOperation_UPDATE,
-				Version:   ptr.Of(d.currentVersion),
+				Version:   new(d.currentVersion),
 				Namespace: d.namespace,
 				Id:        d.id,
 			},
@@ -120,8 +116,6 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			return nil
 		}
 
-		d.timeoutQ.Dequeue(d.timeoutVersion)
-
 		log.Infof("Dissemination complete for version %d, unlocking disseminator %s/%s",
 			version, d.namespace, d.id,
 		)
@@ -134,7 +128,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		d.streamLoop.Enqueue(&loops.StreamSend{
 			Host: &v1pb.Host{
 				Operation: v1pb.HostOperation_UNLOCK,
-				Version:   ptr.Of(d.currentVersion),
+				Version:   new(d.currentVersion),
 				Namespace: d.namespace,
 				Id:        d.id,
 			},

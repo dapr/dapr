@@ -58,7 +58,7 @@ func (m *MockManager) Elected() <-chan struct{} {
 	return nil
 }
 
-func (m *MockManager) SetFields(interface{}) error {
+func (m *MockManager) SetFields(any) error {
 	return nil
 }
 

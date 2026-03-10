@@ -113,7 +113,7 @@ func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
 	testHTTP.Init(meter, "fakeID", HTTPMonitoringConfig{}, nil)
 	matchedPath, ok := testHTTP.pathMatcher.match("/orders")
 	require.False(t, ok)
-	require.Equal(t, "", matchedPath)
+	require.Empty(t, matchedPath)
 }
 
 func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
@@ -138,7 +138,7 @@ func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
 	// empty path
 	matchedPath, ok := testHTTP.pathMatcher.match("")
 	require.False(t, ok)
-	require.Equal(t, "", matchedPath)
+	require.Empty(t, matchedPath)
 
 	// match "/v1/orders/{orderID}/items/12345"
 	matchedPath, ok = testHTTP.pathMatcher.match("/v1/orders/12345/items/12345")
@@ -191,7 +191,7 @@ func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 	// empty path
 	matchedPath, ok := testHTTP.pathMatcher.match("")
 	require.False(t, ok)
-	require.Equal(t, "", matchedPath)
+	require.Empty(t, matchedPath)
 
 	// match "/v1/orders/{orderID}/items/12345"
 	matchedPath, ok = testHTTP.pathMatcher.match("/v1/orders/12345/items/12345")
@@ -249,7 +249,7 @@ func TestHTTPMetricsPathMatchingLowCardinalityActorPath(t *testing.T) {
 		"getMetricsPath should return matched pattern for actor path when pathMatching is set and increasedCardinality is false")
 
 	got = testHTTP.getMetricsPath("/some/other/path")
-	require.Equal(t, "", got, "non-matched path should map to catch-all (empty string)")
+	require.Empty(t, got, "non-matched path should map to catch-all (empty string)")
 }
 
 func TestHTTPMetricsPathMatchingLowCardinalityRootPathRegister(t *testing.T) {
@@ -266,7 +266,7 @@ func TestHTTPMetricsPathMatchingLowCardinalityRootPathRegister(t *testing.T) {
 	testHTTP.Init(meter, "fakeID", HTTPMonitoringConfig{paths1, false, false}, nil)
 	matchedPath, ok := testHTTP.pathMatcher.match("/thispathdoesnotexist")
 	require.True(t, ok)
-	require.Equal(t, "", matchedPath)
+	require.Empty(t, matchedPath)
 
 	// 2 - Root path registered fallback to "/"
 	paths2 := []string{"/v1/orders/{orderID}", "/"}
@@ -309,16 +309,16 @@ func TestGetMetricsMethodExcludeVerbs(t *testing.T) {
 		meter.Stop()
 	})
 	testHTTP.Init(meter, "fakeID", configHTTP, nil)
-	assert.Equal(t, "", testHTTP.getMetricsMethod("GET"))
-	assert.Equal(t, "", testHTTP.getMetricsMethod("POST"))
-	assert.Equal(t, "", testHTTP.getMetricsMethod("PUT"))
-	assert.Equal(t, "", testHTTP.getMetricsMethod("DELETE"))
-	assert.Equal(t, "", testHTTP.getMetricsMethod("PATCH"))
-	assert.Equal(t, "", testHTTP.getMetricsMethod("HEAD"))
-	assert.Equal(t, "", testHTTP.getMetricsMethod("OPTIONS"))
-	assert.Equal(t, "", testHTTP.getMetricsMethod("CONNECT"))
-	assert.Equal(t, "", testHTTP.getMetricsMethod("TRACE"))
-	assert.Equal(t, "", testHTTP.getMetricsMethod("INVALID"))
+	assert.Empty(t, testHTTP.getMetricsMethod("GET"))
+	assert.Empty(t, testHTTP.getMetricsMethod("POST"))
+	assert.Empty(t, testHTTP.getMetricsMethod("PUT"))
+	assert.Empty(t, testHTTP.getMetricsMethod("DELETE"))
+	assert.Empty(t, testHTTP.getMetricsMethod("PATCH"))
+	assert.Empty(t, testHTTP.getMetricsMethod("HEAD"))
+	assert.Empty(t, testHTTP.getMetricsMethod("OPTIONS"))
+	assert.Empty(t, testHTTP.getMetricsMethod("CONNECT"))
+	assert.Empty(t, testHTTP.getMetricsMethod("TRACE"))
+	assert.Empty(t, testHTTP.getMetricsMethod("INVALID"))
 }
 
 func TestHTTPMetricsPathMatchingWithRedirect(t *testing.T) {
@@ -411,7 +411,7 @@ func TestHTTPMiddleware_Normalization(t *testing.T) {
 				assert.Equal(t, tc.expectedPath, pathTag, "Path tag mismatch")
 			} else if len(rows) > 0 {
 				pathTag := getPathTag(rows[0])
-				assert.Equal(t, "", pathTag, "Expected empty path for unmatched request")
+				assert.Empty(t, pathTag, "Expected empty path for unmatched request")
 			}
 		})
 	}

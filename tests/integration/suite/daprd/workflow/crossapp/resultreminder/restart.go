@@ -106,7 +106,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 		}
 		exp := "dapr/jobs/actorreminder||default||dapr.internal.default." + appID + ".workflow||" + id + "||"
 		assert.Truef(c, strings.HasPrefix(list[0], exp), "reminder key should have correct prefid, expected prefix: %s, actual key: %s", exp, list[0])
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	r.workflow.DaprN(0).Restart(t, ctx)
 

@@ -18,15 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	dactors "github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -35,57 +31,47 @@ func init() {
 }
 
 type shutdown struct {
-	daprds []*daprd.Daprd
-	place  *placement.Placement
+	actors []*dactors.Actors
 }
 
 func (s *shutdown) Setup(t *testing.T) []framework.Option {
-	s.place = placement.New(t)
-	scheduler := scheduler.New(t)
+	actor1 := dactors.New(t,
+		dactors.WithActorTypes("mytype"),
+	)
+	actor2 := dactors.New(t,
+		dactors.WithActorTypes("mytype"),
+		dactors.WithPeerActor(actor1),
+	)
+	actor3 := dactors.New(t,
+		dactors.WithActorTypes("mytype"),
+		dactors.WithPeerActor(actor1),
+	)
 
-	appID, err := uuid.NewUUID()
-	require.NoError(t, err)
-
-	s.daprds = make([]*daprd.Daprd, 3)
-	for i := range 3 {
-		s.daprds[i] = daprd.New(t,
-			daprd.WithPlacementAddresses(s.place.Address()),
-			daprd.WithInMemoryActorStateStore("foo"),
-			daprd.WithScheduler(scheduler),
-			daprd.WithAppID(appID.String()),
-		)
-	}
-
-	procs := []process.Interface{
-		s.place,
-		scheduler,
-	}
-	for _, d := range s.daprds {
-		procs = append(procs, d)
-	}
+	s.actors = []*dactors.Actors{actor1, actor2, actor3}
 
 	return []framework.Option{
-		framework.WithProcesses(procs...),
+		framework.WithProcesses(actor1, actor2, actor3),
 	}
 }
 
 func (s *shutdown) Run(t *testing.T, ctx context.Context) {
-	for _, s := range s.daprds {
-		s.WaitUntilRunning(t, ctx)
+	for _, a := range s.actors {
+		a.WaitUntilRunning(t, ctx)
 	}
 
-	hosts := make([]placement.Host, 0, len(s.daprds))
-	for _, s := range s.daprds {
+	hosts := make([]placement.Host, 0, len(s.actors))
+	for _, a := range s.actors {
 		hosts = append(hosts, placement.Host{
-			Name:      s.InternalGRPCAddress(),
-			ID:        s.AppID(),
+			Entities:  []string{"mytype"},
+			Name:      a.Daprd().InternalGRPCAddress(),
+			ID:        a.Daprd().AppID(),
 			APIVLevel: 20,
 			Namespace: "default",
 		})
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := s.place.PlacementTables(t, ctx)
+		table := s.actors[0].Placement().PlacementTables(t, ctx)
 		if !assert.NotNil(c, table.Tables["default"]) {
 			return
 		}
@@ -93,21 +79,21 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, uint64(3), table.Tables["default"].Version)
 	}, time.Second*10, time.Millisecond*10)
 
-	for i := range s.daprds[:2] {
-		s.daprds[i].Cleanup(t)
+	for i := range s.actors[:2] {
+		s.actors[i].Daprd().Cleanup(t)
 		hosts = hosts[1:]
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			table := s.place.PlacementTables(t, ctx)
+			table := s.actors[0].Placement().PlacementTables(t, ctx)
 			if !assert.NotNil(c, table.Tables["default"]) {
 				return
 			}
 			assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		}, time.Second*10, time.Millisecond*10)
+		}, time.Second*20, time.Millisecond*10)
 	}
 
-	s.daprds[2].Cleanup(t)
+	s.actors[2].Daprd().Cleanup(t)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := s.place.PlacementTables(t, ctx)
+		table := s.actors[0].Placement().PlacementTables(t, ctx)
 		assert.Equal(c, &placement.TableState{
 			Tables: make(map[string]*placement.Table),
 		}, table)

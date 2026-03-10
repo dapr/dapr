@@ -53,8 +53,8 @@ type connector struct {
 	closeCluster context.CancelFunc
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
-	return loop.New[loops.Event](1024).NewLoop(&connector{
+func New(opts Options) loop.Interface[loops.EventConn] {
+	return loop.New[loops.EventConn](1024).NewLoop(&connector{
 		namespace: opts.Namespace,
 		appID:     opts.AppID,
 		actors:    opts.Actors,
@@ -63,7 +63,7 @@ func New(opts Options) loop.Interface[loops.Event] {
 	})
 }
 
-func (c *connector) Handle(ctx context.Context, event loops.Event) error {
+func (c *connector) Handle(ctx context.Context, event loops.EventConn) error {
 	switch e := event.(type) {
 	case *loops.Reconnect:
 		c.handleReconnect(ctx, e)
@@ -133,17 +133,20 @@ func (c *connector) maybeClientConnect(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	doneCh := make(chan struct{})
+
 	go func() {
 		err := cluster.Run(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Error(err, "failed to run scheduler cluster clients")
 		}
+
 		close(doneCh)
 	}()
 
 	c.closeCluster = func() {
 		cancel()
 		<-doneCh
+
 		c.closeCluster = nil
 	}
 }

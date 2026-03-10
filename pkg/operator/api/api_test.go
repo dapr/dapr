@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -596,10 +595,10 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 	client := fake.NewClientBuilder().
 		WithScheme(s).Build()
 
-	mockSidecar := &mockHTTPEndpointUpdateServer{ctx: pki.ClientGRPCCtx(t)}
-	api := NewAPIServer(Options{Client: client}).(*apiServer)
-
 	t.Run("expect error if requesting for different namespace", func(t *testing.T) {
+		mockSidecar := &mockHTTPEndpointUpdateServer{ctx: pki.ClientGRPCCtx(t)}
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+
 		// Start sidecar update loop
 		err := api.HTTPEndpointUpdate(&operatorv1pb.HTTPEndpointUpdateRequest{
 			Namespace: "ns2",
@@ -614,25 +613,29 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 	})
 
 	t.Run("skip sidecar update if namespace doesn't match", func(t *testing.T) {
-		go func() {
-			assert.Eventually(t, func() bool {
-				api.endpointLock.Lock()
-				defer api.endpointLock.Unlock()
-				return len(api.allEndpointsUpdateChan) == 1
-			}, time.Second, 10*time.Millisecond)
+		e := httpendpointapi.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns2",
+			},
+			Spec: httpendpointapi.HTTPEndpointSpec{},
+		}
 
-			api.endpointLock.Lock()
-			defer api.endpointLock.Unlock()
-			for key := range api.allEndpointsUpdateChan {
-				api.allEndpointsUpdateChan[key] <- &httpendpointapi.HTTPEndpoint{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "ns2",
-					},
-					Spec: httpendpointapi.HTTPEndpointSpec{},
-				}
-				close(api.allEndpointsUpdateChan[key])
-			}
-		}()
+		fakeInformer := informerfake.New[httpendpointapi.HTTPEndpoint]().
+			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[httpendpointapi.HTTPEndpoint], context.CancelFunc, error) {
+				ch := make(chan *informer.Event[httpendpointapi.HTTPEndpoint])
+				go func() {
+					ch <- &informer.Event[httpendpointapi.HTTPEndpoint]{
+						Manifest: e,
+						Type:     operatorv1pb.ResourceEventType_CREATED,
+					}
+					close(ch)
+				}()
+				return ch, func() {}, nil
+			})
+
+		mockSidecar := &mockHTTPEndpointUpdateServer{ctx: pki.ClientGRPCCtx(t)}
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+		api.endpointInformer = fakeInformer
 
 		// Start sidecar update loop
 		require.NoError(t, api.HTTPEndpointUpdate(&operatorv1pb.HTTPEndpointUpdateRequest{
@@ -643,25 +646,29 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 	})
 
 	t.Run("sidecar is updated when endpoint namespace is a match", func(t *testing.T) {
-		go func() {
-			assert.Eventually(t, func() bool {
-				api.endpointLock.Lock()
-				defer api.endpointLock.Unlock()
-				return len(api.allEndpointsUpdateChan) == 1
-			}, time.Second, 10*time.Millisecond)
+		e := httpendpointapi.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns1",
+			},
+			Spec: httpendpointapi.HTTPEndpointSpec{},
+		}
 
-			api.endpointLock.Lock()
-			defer api.endpointLock.Unlock()
-			for key := range api.allEndpointsUpdateChan {
-				api.allEndpointsUpdateChan[key] <- &httpendpointapi.HTTPEndpoint{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "ns1",
-					},
-					Spec: httpendpointapi.HTTPEndpointSpec{},
-				}
-				close(api.allEndpointsUpdateChan[key])
-			}
-		}()
+		fakeInformer := informerfake.New[httpendpointapi.HTTPEndpoint]().
+			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[httpendpointapi.HTTPEndpoint], context.CancelFunc, error) {
+				ch := make(chan *informer.Event[httpendpointapi.HTTPEndpoint])
+				go func() {
+					ch <- &informer.Event[httpendpointapi.HTTPEndpoint]{
+						Manifest: e,
+						Type:     operatorv1pb.ResourceEventType_CREATED,
+					}
+					close(ch)
+				}()
+				return ch, func() {}, nil
+			})
+
+		mockSidecar := &mockHTTPEndpointUpdateServer{ctx: pki.ClientGRPCCtx(t)}
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+		api.endpointInformer = fakeInformer
 
 		// Start sidecar update loop
 		require.NoError(t, api.HTTPEndpointUpdate(&operatorv1pb.HTTPEndpointUpdateRequest{
@@ -730,7 +737,7 @@ func TestListScopes(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, res.GetComponents(), 2)
-		var exp [][]byte
+		exp := make([][]byte, 0, 2)
 		var b []byte
 		b, err = json.Marshal(comp1)
 		require.NoError(t, err)
@@ -988,7 +995,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
-		e.Auth.SecretStore = kubernetesSecretStore
+		e.SecretStore = kubernetesSecretStore
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		require.NoError(t, err)
@@ -1016,7 +1023,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
-		e.Auth.SecretStore = ""
+		e.SecretStore = ""
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		require.NoError(t, err)

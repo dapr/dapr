@@ -15,7 +15,6 @@ package stream
 
 import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -32,7 +31,7 @@ func (s *stream) handleLock(version uint64) error {
 		return nil
 	}
 
-	s.currentVersion = ptr.Of(version)
+	s.currentVersion = new(version)
 
 	log.Debugf("Sending LOCK for version %d to stream %s:%d", version, s.ns, s.idx)
 
@@ -55,6 +54,33 @@ func (s *stream) handleUpdate(version uint64, tables *v1pb.PlacementTables) erro
 		Operation: operationUpdate,
 		Version:   version,
 		Tables:    tables,
+	})
+}
+
+// handleTable sends a one-shot LOCK+UPDATE+UNLOCK sequence to the stream.
+// This delivers the current placement table without participating in the
+// cluster-wide dissemination protocol.
+func (s *stream) handleTable(version uint64, tables *v1pb.PlacementTables) error {
+	log.Debugf("Sending initial table for version %d to stream %s:%d", version, s.ns, s.idx)
+
+	if err := s.channel.Send(&v1pb.PlacementOrder{
+		Operation: operationLock,
+		Version:   version,
+	}); err != nil {
+		return err
+	}
+
+	if err := s.channel.Send(&v1pb.PlacementOrder{
+		Operation: operationUpdate,
+		Version:   version,
+		Tables:    tables,
+	}); err != nil {
+		return err
+	}
+
+	return s.channel.Send(&v1pb.PlacementOrder{
+		Operation: operationUnlock,
+		Version:   version,
 	})
 }
 

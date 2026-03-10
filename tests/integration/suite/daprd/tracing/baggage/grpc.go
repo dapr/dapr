@@ -90,7 +90,7 @@ func (g *grpcBaggage) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
 		assert.False(t, g.baggage.Load())
-		assert.Equal(t, "", g.baggageVals.Load())
+		assert.Empty(t, g.baggageVals.Load())
 	})
 
 	t.Run("baggage header provided", func(t *testing.T) {

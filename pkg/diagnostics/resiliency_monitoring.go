@@ -97,7 +97,7 @@ func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
 func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
 	if m.enabled {
 		// Common tags for all metrics
-		commonTags := []interface{}{
+		commonTags := []any{
 			appIDKey, m.appID,
 			resiliencyNameKey, resiliencyName,
 			policyKey, string(policy),

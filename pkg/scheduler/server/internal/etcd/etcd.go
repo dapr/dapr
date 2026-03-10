@@ -200,7 +200,7 @@ func (e *etcd) runDefragLoop(ctx context.Context) error {
 
 func (e *etcd) doDefrag(ctx context.Context) error {
 	log.Debug("Checking if Etcd needs Defragmentation")
-	resp, err := e.client.Maintenance.Status(ctx, e.config.ListenClientUrls[0].Host)
+	resp, err := e.client.Status(ctx, e.config.ListenClientUrls[0].Host)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (e *etcd) doDefrag(ctx context.Context) error {
 
 	log.Infof("Defragmenting Etcd (dbSize: %s, dbSizeInUse: %s)", dbSize, dbSizeInUse)
 	start := time.Now()
-	_, err = e.client.Maintenance.Defragment(ctx, e.config.ListenClientUrls[0].Host)
+	_, err = e.client.Defragment(ctx, e.config.ListenClientUrls[0].Host)
 	if err != nil {
 		return err
 	}

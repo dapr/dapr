@@ -29,6 +29,7 @@ func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPubl
 	// Contains the latest request entries to be sent to the component
 	var requestEntries atomic.Pointer[[]contribPubsub.BulkMessageEntry]
 	requestEntries.Store(&req.Entries)
+
 	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
 		resiliency.RunnerOpts[contribPubsub.BulkPublishResponse]{
 			Accumulator: func(res contribPubsub.BulkPublishResponse) {
@@ -53,6 +54,7 @@ func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPubl
 			Entries:    newEntries,
 			Metadata:   req.Metadata,
 		}
+
 		return bulkPublisher.BulkPublish(ctx, newReq)
 	})
 	// If final error is timeout, CB open or CB too many requests, return the current request entries as failed
@@ -71,5 +73,6 @@ func extractEntryIds(failedEntries []contribPubsub.BulkPublishResponseFailedEntr
 	for _, failedEntry := range failedEntries {
 		entryIds[failedEntry.EntryId] = struct{}{}
 	}
+
 	return entryIds
 }
