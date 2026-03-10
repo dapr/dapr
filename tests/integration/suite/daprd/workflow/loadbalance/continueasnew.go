@@ -15,7 +15,6 @@ package loadbalance
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -51,21 +50,15 @@ func (c *continueasnew) Setup(t *testing.T) []framework.Option {
 func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
-	var cont atomic.Bool
 	require.NoError(t, c.workflow.RegistryN(0).AddOrchestratorN("can", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		require.NoError(t, ctx.GetInput(&input))
-		if cont.Load() {
-			assert.Equal(t, "second call", input)
-		} else {
-			assert.Equal(t, "first call", input)
-		}
 
-		if cont.CompareAndSwap(false, true) {
+		if input == "first call" {
 			ctx.ContinueAsNew("second call")
 		}
 
-		return nil, nil
+		return input, nil
 	}))
 	_ = c.workflow.BackendClientN(t, ctx, 0)
 	// verify executor actor is registered
@@ -80,10 +73,10 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	), logger.New(t))
 
 	for range 10 {
-		cont.Store(false)
 		id, err := client.ScheduleNewOrchestration(ctx, "can", api.WithInput("first call"))
 		require.NoError(t, err)
-		_, err = client.WaitForOrchestrationCompletion(ctx, id)
+		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
+		assert.Equal(t, `"second call"`, metadata.Output.GetValue())
 	}
 }
