@@ -106,14 +106,14 @@ func (h *httpendpoint) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("adding HTTP endpoint file triggers reload and endpoint becomes invocable", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(h.resDir, "endpoint.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(h.resDir, "endpoint.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: HTTPEndpoint
 metadata:
   name: myendpoint
 spec:
   baseUrl: http://localhost:%d
-`, h.backend.Port())), 0o600))
+`, h.backend.Port()), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			endpoints := h.daprd.GetMetaHTTPEndpoints(c, ctx)
@@ -155,14 +155,14 @@ spec:
 	})
 
 	t.Run("re-adding HTTP endpoint makes it invocable again", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(h.resDir, "endpoint.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(h.resDir, "endpoint.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: HTTPEndpoint
 metadata:
   name: myendpoint
 spec:
   baseUrl: http://localhost:%d
-`, h.backend.Port())), 0o600))
+`, h.backend.Port()), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			endpoints := h.daprd.GetMetaHTTPEndpoints(c, ctx)
