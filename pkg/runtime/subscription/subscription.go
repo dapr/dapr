@@ -134,7 +134,14 @@ func New(opts Options) (*Subscription, error) {
 		Topic:    subscribeTopic,
 		Metadata: routeMetadata,
 	}, func(ctx context.Context, msg *contribpubsub.NewMessage) error {
+		s.wg.Add(1)
+		s.inflight.Add(1)
+
 		if s.closed.Load() {
+			// Release the WaitGroup before blocking to avoid deadlocking
+			// with Subscription.Stop() which calls wg.Wait().
+			s.wg.Done()
+			s.inflight.Add(-1)
 			// Block until the handler context is cancelled rather than
 			// returning an error. Returning an error causes the broker to
 			// NACK the message (e.g. routing it to a dead-letter queue),
@@ -148,9 +155,6 @@ func New(opts Options) (*Subscription, error) {
 			<-ctx.Done()
 			return ctx.Err()
 		}
-
-		s.wg.Add(1)
-		s.inflight.Add(1)
 
 		wgReleased := false
 		defer func() {
