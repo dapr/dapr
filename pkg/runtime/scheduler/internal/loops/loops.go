@@ -14,6 +14,8 @@ limitations under the License.
 package loops
 
 import (
+	"context"
+
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
@@ -36,7 +38,8 @@ type ReloadClients struct {
 
 type Connect struct {
 	*connbase
-	Clients []schedulerv1pb.SchedulerClient
+	Clients    []schedulerv1pb.SchedulerClient
+	CloseConns []context.CancelFunc
 }
 
 type Disconnect struct {
