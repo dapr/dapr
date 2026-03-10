@@ -175,9 +175,10 @@ type WorkflowStateRetentionPolicy struct {
 	Terminated *time.Duration `json:"terminated,omitempty" yaml:"terminated,omitempty"`
 }
 
-// UnmarshalJSON handles both the internal config format (time.Duration as
-// int64 nanoseconds) and the Kubernetes CRD format sent by the operator
-// (metav1.Duration as string, e.g. "1s", "168h").
+// UnmarshalJSON handles the Kubernetes CRD JSON format sent by the operator,
+// where durations are encoded as metav1.Duration strings (for example, "1s" or
+// "168h"). Standalone configuration files parsed via YAML use the YAML
+// unmarshaling path instead, which handles Go duration strings natively.
 func (p *WorkflowStateRetentionPolicy) UnmarshalJSON(data []byte) error {
 	var crd configapi.WorkflowStateRetentionPolicy
 	if err := json.Unmarshal(data, &crd); err != nil {
