@@ -100,6 +100,36 @@ func Run() {
 	conversationLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
+	ctx := signals.Context()
+	ctxhupCh := signals.OnHUP(ctx)
+
+	defer log.Info("Daprd shutdown gracefully")
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case hctx, ok := <-ctxhupCh:
+			if !ok {
+				// Channel is closed, which means the process is shutting down. Return
+				// to exit.
+				return
+			}
+
+			if err := runWithContext(hctx, opts); err != nil {
+				log.Fatalf("Fatal error from runtime: %s", err)
+			}
+
+			// If hctx was not cancelled, it means the runtime exited on its own
+			// (e.g. via the shutdown API), not because of a SIGHUP or SIGTERM. In
+			// that case, exit the process rather than blocking waiting for a SIGHUP.
+			if hctx.Err() == nil {
+				return
+			}
+		}
+	}
+}
+
+func runWithContext(ctx context.Context, opts *options.Options) error {
 	reg := registry.NewOptions().
 		WithSecretStores(secretstoresLoader.DefaultRegistry).
 		WithStateStores(stateLoader.DefaultRegistry).
@@ -112,7 +142,6 @@ func Run() {
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
 		WithConversations(conversationLoader.DefaultRegistry)
 
-	ctx := signals.Context()
 	healthz := healthz.New()
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           opts.SentryAddress,
@@ -126,7 +155,7 @@ func Run() {
 		JwtAudiences:            opts.SentryRequestJwtAudiences,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	err = concurrency.NewRunnerManager(
@@ -198,7 +227,8 @@ func Run() {
 		},
 	).Run(ctx)
 	if err != nil {
-		log.Fatalf("Fatal error from runtime: %s", err)
+		return err
 	}
-	log.Info("Daprd shutdown gracefully")
+
+	return nil
 }
