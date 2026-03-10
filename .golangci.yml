@@ -1,3 +1,5 @@
+version: "2"
+
 # options for analysis running
 run:
   # default concurrency is a available CPU number
