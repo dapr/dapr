@@ -235,6 +235,12 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 		return imr.r, nil
 	}
 
+	// Read the data first so we can include it directly in the shallow copy.
+	data, err := imr.RawDataFull()
+	if err != nil {
+		return nil, err
+	}
+
 	// Create a shallow copy instead of a deep proto.Clone.
 	// We only need a new Message.Data field; headers and metadata are shared
 	// read-only references that callers do not modify.
@@ -246,17 +252,11 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 			Method:        imr.r.GetMessage().GetMethod(),
 			ContentType:   imr.r.GetMessage().GetContentType(),
 			HttpExtension: imr.r.GetMessage().GetHttpExtension(),
+			Data: &anypb.Any{
+				Value:   data,
+				TypeUrl: imr.dataTypeURL, // Could be empty
+			},
 		},
-	}
-
-	// Read the data and store it in the object
-	data, err := imr.RawDataFull()
-	if err != nil {
-		return m, err
-	}
-	m.Message.Data = &anypb.Any{
-		Value:   data,
-		TypeUrl: imr.dataTypeURL, // Could be empty
 	}
 
 	return m, nil
