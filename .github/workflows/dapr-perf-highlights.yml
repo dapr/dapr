@@ -93,7 +93,7 @@ jobs:
           exit 1
 
       - name: Pull Ollama model
-        run: ollama pull llama3.2
+        run: ollama pull qwen2.5:7b
 
       - name: Generate Charts and Highlights
         working-directory: tests/perf/report
@@ -101,7 +101,7 @@ jobs:
           go build -o _report_bin .
           ./_report_bin --version ${{ needs.resolve-version.outputs.version }} \
             --input-file ../test_report_perf.json \
-            --model llama3.2
+            --model qwen2.5:7b
           rm -f _report_bin
 
       - name: Upload highlights as artifact
