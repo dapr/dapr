@@ -25,7 +25,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	"github.com/dapr/dapr/pkg/proto/components/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/os"
@@ -129,7 +128,7 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 	ch = i.broker.PublishHelloWorld("a")
 	select {
 	case req := <-ch:
-		assert.Equal(t, &components.AckMessageError{Message: "subscription is closed"}, req.GetAckError())
+		assert.Nil(t, req.GetAckError())
 		assert.Equal(t, "foo", req.GetAckMessageId())
 	case <-time.After(time.Second * 10):
 		assert.Fail(t, "timeout")

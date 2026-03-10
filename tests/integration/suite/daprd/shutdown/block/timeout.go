@@ -184,7 +184,7 @@ func (i *timeout) Run(t *testing.T, ctx context.Context) {
 		close(daprdStopped)
 	}()
 
-	t.Run("daprd APIs should still be available during blocked shutdown, except input bindings and subscriptions", func(t *testing.T) {
+	t.Run("daprd APIs should still be available during blocked shutdown, except input bindings", func(t *testing.T) {
 		time.Sleep(time.Second / 2)
 
 		i.listening.Store(true)
@@ -203,8 +203,8 @@ func (i *timeout) Run(t *testing.T, ctx context.Context) {
 
 		select {
 		case <-i.routeCh:
-			assert.Fail(t, "pubsub message should not have been sent to subscriber")
 		case <-time.After(time.Second / 2):
+			assert.Fail(t, "pubsub message should have been sent to subscriber during block-shutdown")
 		}
 
 		_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{

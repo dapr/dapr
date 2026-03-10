@@ -149,21 +149,22 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 		close(daprdStopped)
 	}()
 
-LOOP:
-	for {
-		_, err := client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
-			PubsubName: "foo",
-			Topic:      "def",
-			Entries: []*rtv1.BulkPublishRequestEntry{
-				{EntryId: "1", Event: []byte(`{"status":"completed"}`), ContentType: "application/json"},
-			},
-		})
-		require.NoError(t, err)
-		select {
-		case <-b.recvRoute2:
-		case <-time.After(time.Second / 2):
-			break LOOP
-		}
+	// Subscriptions should remain active during block-shutdown period.
+	// Wait briefly for SIGTERM to propagate, then verify the "def" subscription is still alive.
+	time.Sleep(time.Second / 2)
+
+	_, err = client.BulkPublishEvent(ctx, &rtv1.BulkPublishRequest{
+		PubsubName: "foo",
+		Topic:      "def",
+		Entries: []*rtv1.BulkPublishRequestEntry{
+			{EntryId: "1", Event: []byte(`{"status":"completed"}`), ContentType: "application/json"},
+		},
+	})
+	require.NoError(t, err)
+	select {
+	case <-b.recvRoute2:
+	case <-time.After(time.Second):
+		assert.Fail(t, "subscription should still be active during block-shutdown period")
 	}
 
 	close(b.returnPublish)

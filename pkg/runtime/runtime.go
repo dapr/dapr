@@ -466,7 +466,6 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 
 			log.Infof("Blocking graceful shutdown for %s or until app reports unhealthy...", *a.runtimeConfig.blockShutdownDuration)
 
-			a.processor.Subscriber().StopAllSubscriptionsForever()
 			a.processor.Binding().StopReadingFromBindings(true)
 
 			select {
@@ -475,6 +474,8 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 			case <-a.isAppHealthy:
 				log.Info("App reported unhealthy, entering shutdown...")
 			}
+
+			a.processor.Subscriber().StopAllSubscriptionsForever()
 
 			return nil
 		})

@@ -143,19 +143,20 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
-LOOP:
-	for {
-		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-			PubsubName: "foo",
-			Topic:      "def",
-			Data:       []byte(`{"status":"completed"}`),
-		})
-		require.NoError(t, err)
-		select {
-		case <-s.recvRoute2:
-		case <-time.After(time.Second / 2):
-			break LOOP
-		}
+	// Subscriptions should remain active during block-shutdown period.
+	// Wait briefly for SIGTERM to propagate, then verify the "def" subscription is still alive.
+	time.Sleep(time.Second / 2)
+
+	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "foo",
+		Topic:      "def",
+		Data:       []byte(`{"status":"completed"}`),
+	})
+	require.NoError(t, err)
+	select {
+	case <-s.recvRoute2:
+	case <-time.After(time.Second):
+		assert.Fail(t, "subscription should still be active during block-shutdown period")
 	}
 
 	close(s.returnPublish)
