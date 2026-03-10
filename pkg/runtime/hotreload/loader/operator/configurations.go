@@ -54,7 +54,7 @@ func (c *configurations) recv(context.Context) (*loader.Event[configapi.Configur
 
 	var config configapi.Configuration
 	if err := json.Unmarshal(event.GetConfiguration(), &config); err != nil {
-		return nil, fmt.Errorf("failed to deserializing configuration: %w", err)
+		return nil, fmt.Errorf("failed to deserialize configuration: %w", err)
 	}
 
 	return &loader.Event[configapi.Configuration]{

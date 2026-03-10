@@ -117,7 +117,7 @@ func TestState(t *testing.T) {
 			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
-		}, 30*time.Second, 10*time.Millisecond)
+		}, 30*time.Second, 500*time.Millisecond)
 
 		url := fmt.Sprintf("%s/test/http/get/hotreloading-state", externalURL)
 		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
@@ -162,7 +162,7 @@ func TestState(t *testing.T) {
 			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgeHl6Cg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
-		}, 30*time.Second, 10*time.Millisecond)
+		}, 30*time.Second, 500*time.Millisecond)
 
 		url := fmt.Sprintf("%s/test/http/get/hotreloading-state", externalURL)
 		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
@@ -184,7 +184,7 @@ func TestState(t *testing.T) {
 			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusInternalServerError, code)
-		}, 30*time.Second, 10*time.Millisecond)
+		}, 30*time.Second, 500*time.Millisecond)
 	})
 }
 
@@ -254,7 +254,7 @@ func TestResiliency(t *testing.T) {
 			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"reskey","value":{"data":"dGVzdA=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
-		}, 60*time.Second, 10*time.Millisecond)
+		}, 60*time.Second, 500*time.Millisecond)
 	})
 
 	t.Run("Create Resiliency and verify app still works after SIGHUP restart", func(t *testing.T) {
@@ -279,7 +279,7 @@ func TestResiliency(t *testing.T) {
 			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"reskey2","value":{"data":"YWZ0ZXI="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
-		}, 60*time.Second, 10*time.Millisecond)
+		}, 60*time.Second, 500*time.Millisecond)
 	})
 
 	t.Run("Update Resiliency and verify app still works after SIGHUP restart", func(t *testing.T) {
@@ -296,7 +296,7 @@ func TestResiliency(t *testing.T) {
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusOK, code)
 			assert.Contains(c, string(resp), `"key":"reskey2"`)
-		}, 60*time.Second, 10*time.Millisecond)
+		}, 60*time.Second, 500*time.Millisecond)
 	})
 
 	t.Run("Delete Resiliency and verify app still works after SIGHUP restart", func(t *testing.T) {
@@ -313,7 +313,7 @@ func TestResiliency(t *testing.T) {
 			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"reskey3","value":{"data":"ZmluYWw="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
-		}, 60*time.Second, 10*time.Millisecond)
+		}, 60*time.Second, 500*time.Millisecond)
 	})
 
 	// Clean up
