@@ -67,7 +67,6 @@ type Subscription struct {
 	adapterStreamer rtpubsub.AdapterStreamer
 	adapter         rtpubsub.Adapter
 
-	ctx      context.Context
 	cancel   func(cause error)
 	closed   atomic.Bool
 	wg       sync.WaitGroup
@@ -102,7 +101,6 @@ func New(opts Options) (*Subscription, error) {
 		route:           opts.Route,
 		tracingSpec:     opts.TraceSpec,
 		grpc:            opts.GRPC,
-		ctx:             ctx,
 		cancel:          cancel,
 		adapter:         opts.Adapter,
 		connectionID:    opts.ConnectionID,
