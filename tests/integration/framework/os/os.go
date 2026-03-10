@@ -32,17 +32,12 @@ func SkipWindows(t *testing.T) {
 
 func WriteFileYaml(t *testing.T, data string) string {
 	t.Helper()
-	return writeFile(t, "yaml", data)
+	f := filepath.Join(t.TempDir(), "test.yaml")
+	require.NoError(t, os.WriteFile(f, []byte(data), 0o600))
+	return f
 }
 
 func WriteFileTo(t *testing.T, name, data string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(name, []byte(data), 0o600))
-}
-
-func writeFile(t *testing.T, fileType, data string) string {
-	t.Helper()
-	f := filepath.Join(t.TempDir(), "test."+fileType)
-	require.NoError(t, os.WriteFile(f, []byte(data), 0o600))
-	return f
 }
