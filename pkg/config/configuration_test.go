@@ -14,6 +14,7 @@ limitations under the License.
 package config
 
 import (
+	"encoding/json"
 	"io"
 	"maps"
 	"reflect"
@@ -786,5 +787,55 @@ func TestMetricsGetHTTPExcludeVerbs(t *testing.T) {
 			},
 		}
 		assert.False(t, m.GetHTTPExcludeVerbs())
+	})
+}
+
+func TestWorkflowStateRetentionPolicyUnmarshalJSON(t *testing.T) {
+	t.Run("all fields with string durations", func(t *testing.T) {
+		data := `{"anyTerminal":"1s","completed":"2h","failed":"30m","terminated":"168h"}`
+		var p WorkflowStateRetentionPolicy
+		require.NoError(t, json.Unmarshal([]byte(data), &p))
+
+		require.NotNil(t, p.AnyTerminal)
+		assert.Equal(t, time.Second, *p.AnyTerminal)
+
+		require.NotNil(t, p.Completed)
+		assert.Equal(t, 2*time.Hour, *p.Completed)
+
+		require.NotNil(t, p.Failed)
+		assert.Equal(t, 30*time.Minute, *p.Failed)
+
+		require.NotNil(t, p.Terminated)
+		assert.Equal(t, 168*time.Hour, *p.Terminated)
+	})
+
+	t.Run("partial fields", func(t *testing.T) {
+		data := `{"anyTerminal":"5s"}`
+		var p WorkflowStateRetentionPolicy
+		require.NoError(t, json.Unmarshal([]byte(data), &p))
+
+		require.NotNil(t, p.AnyTerminal)
+		assert.Equal(t, 5*time.Second, *p.AnyTerminal)
+
+		assert.Nil(t, p.Completed)
+		assert.Nil(t, p.Failed)
+		assert.Nil(t, p.Terminated)
+	})
+
+	t.Run("empty object", func(t *testing.T) {
+		data := `{}`
+		var p WorkflowStateRetentionPolicy
+		require.NoError(t, json.Unmarshal([]byte(data), &p))
+
+		assert.Nil(t, p.AnyTerminal)
+		assert.Nil(t, p.Completed)
+		assert.Nil(t, p.Failed)
+		assert.Nil(t, p.Terminated)
+	})
+
+	t.Run("invalid duration string", func(t *testing.T) {
+		data := `{"anyTerminal":"notaduration"}`
+		var p WorkflowStateRetentionPolicy
+		assert.Error(t, json.Unmarshal([]byte(data), &p))
 	})
 }
