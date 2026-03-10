@@ -40,15 +40,10 @@ issues:
 
 # output configuration options
 output:
-  # colored-line-number|line-number|json|tab|checkstyle, default is "colored-line-number"
   formats:
-  - format: tab
-
-  # print lines of code with issue, default is true
-  print-issued-lines: true
-
-  # print linter name in the end of issue text, default is true
-  print-linter-name: true
+    tab:
+      print-issued-lines: true
+      print-linter-name: true
 
 
 # all available settings of specific linters
