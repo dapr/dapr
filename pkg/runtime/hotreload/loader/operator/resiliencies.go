@@ -45,14 +45,14 @@ func (r *resiliencies) list(ctx context.Context, opclient operatorpb.OperatorCli
 //nolint:unused
 func (r *resiliencies) close() error {
 	if r.Operator_ResiliencyUpdateClient != nil {
-		return r.Operator_ResiliencyUpdateClient.CloseSend()
+		return r.CloseSend()
 	}
 	return nil
 }
 
 //nolint:unused
 func (r *resiliencies) recv(context.Context) (*loader.Event[resiliencyapi.Resiliency], error) {
-	event, err := r.Operator_ResiliencyUpdateClient.Recv()
+	event, err := r.Recv()
 	if err != nil {
 		return nil, err
 	}

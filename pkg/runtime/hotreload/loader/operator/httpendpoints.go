@@ -45,14 +45,14 @@ func (h *httpEndpoints) list(ctx context.Context, opclient operatorpb.OperatorCl
 //nolint:unused
 func (h *httpEndpoints) close() error {
 	if h.Operator_HTTPEndpointUpdateClient != nil {
-		return h.Operator_HTTPEndpointUpdateClient.CloseSend()
+		return h.CloseSend()
 	}
 	return nil
 }
 
 //nolint:unused
 func (h *httpEndpoints) recv(context.Context) (*loader.Event[httpendpointapi.HTTPEndpoint], error) {
-	event, err := h.Operator_HTTPEndpointUpdateClient.Recv()
+	event, err := h.Recv()
 	if err != nil {
 		return nil, err
 	}

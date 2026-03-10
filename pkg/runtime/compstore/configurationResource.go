@@ -19,7 +19,7 @@ func (c *ComponentStore) GetConfigurationResource(name string) (configapi.Config
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	for i, cfg := range c.configurationResources {
-		if cfg.ObjectMeta.Name == name {
+		if cfg.Name == name {
 			return c.configurationResources[i], true
 		}
 	}
@@ -31,7 +31,7 @@ func (c *ComponentStore) AddConfigurationResource(cfg configapi.Configuration) {
 	defer c.lock.Unlock()
 
 	for i, c2 := range c.configurationResources {
-		if c2.ObjectMeta.Name == cfg.Name {
+		if c2.Name == cfg.Name {
 			c.configurationResources[i] = cfg
 			return
 		}
@@ -53,7 +53,7 @@ func (c *ComponentStore) DeleteConfigurationResource(name string) {
 	defer c.lock.Unlock()
 
 	for i, cfg := range c.configurationResources {
-		if cfg.ObjectMeta.Name == name {
+		if cfg.Name == name {
 			c.configurationResources = append(c.configurationResources[:i], c.configurationResources[i+1:]...)
 			return
 		}
