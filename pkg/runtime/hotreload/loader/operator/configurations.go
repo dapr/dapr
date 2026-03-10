@@ -40,14 +40,14 @@ func (c *configurations) list(ctx context.Context, opclient operatorpb.OperatorC
 //nolint:unused
 func (c *configurations) close() error {
 	if c.Operator_ConfigurationUpdateClient != nil {
-		return c.Operator_ConfigurationUpdateClient.CloseSend()
+		return c.CloseSend()
 	}
 	return nil
 }
 
 //nolint:unused
 func (c *configurations) recv(context.Context) (*loader.Event[configapi.Configuration], error) {
-	event, err := c.Operator_ConfigurationUpdateClient.Recv()
+	event, err := c.Recv()
 	if err != nil {
 		return nil, err
 	}

@@ -19,7 +19,7 @@ func (c *ComponentStore) GetResiliencyResource(name string) (resiliencyapi.Resil
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	for i, res := range c.resiliencyResources {
-		if res.ObjectMeta.Name == name {
+		if res.Name == name {
 			return c.resiliencyResources[i], true
 		}
 	}
@@ -31,7 +31,7 @@ func (c *ComponentStore) AddResiliencyResource(res resiliencyapi.Resiliency) {
 	defer c.lock.Unlock()
 
 	for i, r := range c.resiliencyResources {
-		if r.ObjectMeta.Name == res.Name {
+		if r.Name == res.Name {
 			c.resiliencyResources[i] = res
 			return
 		}
@@ -53,7 +53,7 @@ func (c *ComponentStore) DeleteResiliencyResource(name string) {
 	defer c.lock.Unlock()
 
 	for i, res := range c.resiliencyResources {
-		if res.ObjectMeta.Name == name {
+		if res.Name == name {
 			c.resiliencyResources = append(c.resiliencyResources[:i], c.resiliencyResources[i+1:]...)
 			return
 		}
