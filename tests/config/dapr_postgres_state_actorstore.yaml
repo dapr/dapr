@@ -44,5 +44,6 @@ scopes:
 - perf-actor-type
 - workflowsapp
 - workflowsapp-actors
+- workflowsapp-retention
 - perf-workflowsapp
 - perf-workflowsapp-actors
