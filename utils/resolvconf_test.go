@@ -69,6 +69,14 @@ func TestClusterDomainFromCNAME(t *testing.T) {
 			cname:    "kubernetes.default.svc.my.custom.domain",
 			expected: "my.custom.domain",
 		},
+		"CNAME equals apiSvc with trailing dot": {
+			cname:    "kubernetes.default.svc.",
+			expected: "",
+		},
+		"CNAME equals apiSvc without trailing dot": {
+			cname:    "kubernetes.default.svc",
+			expected: "",
+		},
 	}
 
 	for name, tc := range testCases {

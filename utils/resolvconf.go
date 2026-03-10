@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"os"
 	"regexp"
@@ -49,7 +50,12 @@ func GetKubeClusterDomainFromDNS(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	return clusterDomainFromCNAME(apiSvc, cname), nil
+	clusterDomain := clusterDomainFromCNAME(apiSvc, cname)
+	if clusterDomain == "" {
+		return "", errors.New("could not parse cluster domain from CNAME: " + cname)
+	}
+
+	return clusterDomain, nil
 }
 
 // clusterDomainFromCNAME extracts the cluster domain from a CNAME response.
