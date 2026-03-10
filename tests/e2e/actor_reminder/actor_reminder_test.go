@@ -447,6 +447,10 @@ func testActorReminderTTL(t *testing.T, appName, actorName string) {
 		actorID := "ttl-reminder-actor"
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName))
 		require.NoError(t, err)
+		logs, err := utils.HTTPDelete(logsURL)
+		require.NoError(t, err)
+		assert.True(t, len(logs) == 0, "Logs aren't cleared, lingering logs detected: %s", string(logs))
+
 		// Registering reminder
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName), reminderBody)
 		require.NoError(t, err)
