@@ -16,8 +16,6 @@ package reconciler
 import (
 	"context"
 	"fmt"
-	"os"
-	"syscall"
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -163,7 +161,7 @@ func (r *SIGHUPReconciler[T]) handleResourceEvent(event *loader.Event[T]) {
 		r.kind, event.Type, event.Resource.LogName())
 
 	// Send SIGHUP to ourselves to trigger runtime restart
-	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil {
+	if err := sendSIGHUP(); err != nil {
 		log.Errorf("Failed to send SIGHUP signal: %s", err)
 	}
 }

@@ -59,7 +59,7 @@ func (h *httpEndpoints) recv(context.Context) (*loader.Event[httpendpointapi.HTT
 
 	var endpoint httpendpointapi.HTTPEndpoint
 	if err := json.Unmarshal(event.GetHttpEndpoints(), &endpoint); err != nil {
-		return nil, fmt.Errorf("failed to deserializing http endpoint: %w", err)
+		return nil, fmt.Errorf("failed to deserialize http endpoint: %w", err)
 	}
 
 	return &loader.Event[httpendpointapi.HTTPEndpoint]{
