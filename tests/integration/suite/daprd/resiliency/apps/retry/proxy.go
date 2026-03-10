@@ -150,13 +150,13 @@ func (rt *retryGRPCProxy) Run(t *testing.T, ctx context.Context) {
 			expectRetries:   true,
 		},
 		{
-			title:           "Multiple ranges status codes no retries",
+			title:           "Mixed codes and range status codes no retries",
 			statusCodes:     "2,3-5,7",
 			statusCodesTest: []int{0, 1, 6, 10},
 			expectRetries:   false,
 		},
 		{
-			title:           "Multiple ranges status codes with retries",
+			title:           "Mixed codes and range status codes with retries",
 			statusCodes:     "2,3-5,7",
 			statusCodesTest: []int{2, 3, 4, 5, 7},
 			expectRetries:   true,
