@@ -59,7 +59,7 @@ func (r *resiliencies) recv(context.Context) (*loader.Event[resiliencyapi.Resili
 
 	var resiliency resiliencyapi.Resiliency
 	if err := json.Unmarshal(event.GetResiliency(), &resiliency); err != nil {
-		return nil, fmt.Errorf("failed to deserializing resiliency: %w", err)
+		return nil, fmt.Errorf("failed to deserialize resiliency: %w", err)
 	}
 
 	return &loader.Event[resiliencyapi.Resiliency]{
