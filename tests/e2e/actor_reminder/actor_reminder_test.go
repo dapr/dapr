@@ -342,10 +342,13 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 			for i := 0; i < numActorsPerThread; i++ {
 				actorID := fmt.Sprintf(actorIDGetTemplate, i+(1000*iteration))
 
-				resp, err := utils.HTTPGet(
-					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
-				require.NoError(t, err)
-				require.True(t, len(resp) != 0, "Reminder %s does not exist", reminderNameForGet)
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					resp, err := utils.HTTPGet(
+						fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
+					if assert.NoError(c, err) {
+						assert.True(c, len(resp) != 0, "Reminder %s does not exist", reminderNameForGet)
+					}
+				}, 30*time.Second, time.Second, "Reminder %s for actor %s was not found after retries", reminderNameForGet, actorID)
 
 				// cleanup reminders
 				_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
@@ -397,16 +400,17 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName), reminderBody)
 		require.NoError(t, err)
 
-		t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
-		time.Sleep(secondsToCheckReminderResult * time.Second)
-
-		t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURL)
-		resp, err := utils.HTTPGet(logsURL)
-		require.NoError(t, err)
-
-		t.Logf("Checking if all reminders did trigger for app %s...", appName)
-		count := countActorAction(resp, actorID, reminderName)
-		require.Equal(t, 5, count, "Too many reminder triggers for app: %s. response: %s", appName, string(resp))
+		// Poll until all 5 repetitions have fired, with a generous timeout
+		// to handle slow CI environments.
+		t.Logf("Waiting for all reminders to trigger for app %s...", appName)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp, errGet := utils.HTTPGet(logsURL)
+			if !assert.NoError(c, errGet) {
+				return
+			}
+			count := countActorAction(resp, actorID, reminderName)
+			assert.Equal(c, 5, count, "Unexpected reminder trigger count for app: %s. response: %s", appName, string(resp))
+		}, 60*time.Second, 2*time.Second)
 
 		logs, err = utils.HTTPDelete(logsURL)
 		require.NoError(t, err)
@@ -447,17 +451,18 @@ func testActorReminderTTL(t *testing.T, appName, actorName string) {
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName), reminderBody)
 		require.NoError(t, err)
 
-		waitForReminderWithTTLToFinishInSeconds := 60
-		t.Logf("Sleeping for %d seconds ...", waitForReminderWithTTLToFinishInSeconds)
-		time.Sleep(time.Duration(waitForReminderWithTTLToFinishInSeconds) * time.Second)
-
-		t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURL)
-		resp, err := utils.HTTPGet(logsURL)
-		require.NoError(t, err)
-
-		t.Logf("Checking if all reminders did trigger for app %s...", appName)
-		count := countActorAction(resp, actorID, reminderName)
-		require.InDelta(t, 10, count, 2)
+		// The reminder has DueTime=2s, Period=R10/PT5S, TTL=59s.
+		// Expected ~10 triggers over ~52s (2s + 10*5s). Poll with a generous
+		// timeout to tolerate slow CI environments.
+		t.Logf("Waiting for all TTL reminders to trigger for app %s...", appName)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp, errGet := utils.HTTPGet(logsURL)
+			if !assert.NoError(c, errGet) {
+				return
+			}
+			count := countActorAction(resp, actorID, reminderName)
+			assert.InDelta(c, 10, count, 2, "Unexpected TTL reminder trigger count for app: %s. response: %s", appName, string(resp))
+		}, 120*time.Second, 5*time.Second)
 	})
 }
 
