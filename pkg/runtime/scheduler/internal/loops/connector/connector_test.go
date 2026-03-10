@@ -35,7 +35,6 @@ func newTestLoop(t *testing.T) loop.Interface[loops.EventConn] {
 	errCh := make(chan error)
 	go func() { errCh <- l.Run(t.Context()) }()
 	t.Cleanup(func() {
-		l.Close(new(loops.Close))
 		select {
 		case <-time.After(time.Second * 5):
 			require.Fail(t, "timeout waiting for loop to close")
