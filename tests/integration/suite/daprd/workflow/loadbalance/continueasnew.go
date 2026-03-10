@@ -77,6 +77,6 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
-		assert.Equal(t, `"second call"`, metadata.Output.GetValue())
+		assert.Equal(t, `"second call"`, metadata.GetOutput().GetValue())
 	}
 }
