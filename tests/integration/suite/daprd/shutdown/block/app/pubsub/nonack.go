@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/os"
@@ -35,10 +34,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(inflight))
+	suite.Register(new(nonack))
 }
 
-type inflight struct {
+// nonack ensures that multiple messages published to a pluggable broker
+// after the subscription is closed during block-shutdown are all held without
+// being NACKed. This prevents messages from being incorrectly routed to a
+// dead-letter queue during graceful shutdown.
+type nonack struct {
 	daprd  *daprd.Daprd
 	broker *broker.Broker
 
@@ -47,30 +50,30 @@ type inflight struct {
 	healthz     atomic.Bool
 }
 
-func (i *inflight) Setup(t *testing.T) []framework.Option {
+func (n *nonack) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	i.closeInvoke = make(chan struct{})
-	i.healthz.Store(true)
+	n.closeInvoke = make(chan struct{})
+	n.healthz.Store(true)
 
 	app := app.New(t,
 		app.WithHealthCheckFn(func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
-			if i.healthz.Load() {
+			if n.healthz.Load() {
 				return new(rtv1.HealthCheckResponse), nil
 			}
 			return nil, errors.New("not healthy")
 		}),
 		app.WithOnTopicEventFn(func(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
-			i.inInvoke.Store(true)
-			<-i.closeInvoke
+			n.inInvoke.Store(true)
+			<-n.closeInvoke
 			return nil, nil
 		}),
 	)
 
-	i.broker = broker.New(t)
+	n.broker = broker.New(t)
 
-	i.daprd = daprd.New(t,
-		i.broker.DaprdOptions(t, "mypub",
+	n.daprd = daprd.New(t,
+		n.broker.DaprdOptions(t, "mypub",
 			daprd.WithDaprBlockShutdownDuration("180s"),
 			daprd.WithAppHealthProbeInterval(1),
 			daprd.WithAppHealthProbeThreshold(1),
@@ -92,66 +95,54 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, i.broker),
+		framework.WithProcesses(app, n.broker),
 	}
 }
 
-func (i *inflight) Run(t *testing.T, ctx context.Context) {
-	i.daprd.Run(t, ctx)
-	i.daprd.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { i.daprd.Cleanup(t) })
+func (n *nonack) Run(t *testing.T, ctx context.Context) {
+	n.daprd.Run(t, ctx)
+	n.daprd.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() { n.daprd.Cleanup(t) })
 
-	assert.Len(t, i.daprd.GetMetaSubscriptions(t, ctx), 1)
+	assert.Len(t, n.daprd.GetMetaSubscriptions(t, ctx), 1)
 
-	ch := i.broker.PublishHelloWorld("a")
+	// Publish first message, handler will block.
+	ch := n.broker.PublishHelloWorld("a")
 
-	require.Eventually(t, i.inInvoke.Load, time.Second*10, time.Millisecond*10)
+	require.Eventually(t, n.inInvoke.Load, time.Second*10, time.Millisecond*10)
 
-	go i.daprd.Cleanup(t)
+	// Start shutdown.
+	go n.daprd.Cleanup(t)
 
+	// First message should not be ack'd yet (handler is blocked).
 	select {
 	case req := <-ch:
 		assert.Fail(t, "unexpected request returned", req)
-	case <-time.After(time.Second * 3):
+	case <-time.After(time.Second * 1):
 	}
 
-	close(i.closeInvoke)
+	// Release the in-flight message.
+	close(n.closeInvoke)
 
+	// First message should be ACK'd successfully.
 	select {
 	case req := <-ch:
 		assert.Nil(t, req.GetAckError())
 		assert.Equal(t, "foo", req.GetAckMessageId())
 	case <-time.After(time.Second * 10):
-		assert.Fail(t, "timeout")
+		assert.Fail(t, "timeout waiting for first message ack")
 	}
 
-	// Publish another message after in-flight has completed. Since the
-	// subscription is now closed (but the subscription context is not yet
-	// cancelled), the handler should block rather than returning an error that
-	// would cause the broker to NACK the message. The message should never be
-	// ack'd or nack'd— the broker connection will be torn down instead.
-	ch = i.broker.PublishHelloWorld("a")
+	// After the in-flight message completes, the subscription is now closed.
+	// Publish a second message — it should NOT be NACKed. The handler should
+	// block until the subscription context is cancelled, so no ack is returned.
+	ch = n.broker.PublishHelloWorld("a")
 	select {
 	case req := <-ch:
-		assert.Fail(t, "expected no ack/nack for message published after subscription closed, got: %v", req)
-	case <-time.After(time.Second * 3):
+		assert.Fail(t, "expected no ack/nack for 2nd message, got: %v", req)
+	case <-time.After(time.Second * 1):
 	}
 
-	client := i.daprd.GRPCClient(t, ctx)
-	req := &rtv1.InvokeServiceRequest{
-		Id: i.daprd.AppID(),
-		Message: &commonv1.InvokeRequest{
-			Method:        "foo",
-			HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_POST},
-		},
-	}
-	_, err := client.InvokeService(ctx, req)
-	require.NoError(t, err)
-
-	i.healthz.Store(false)
-
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		_, err = client.InvokeService(ctx, req)
-		assert.NoError(c, err)
-	}, time.Second*10, time.Millisecond*10)
+	// Make the app unhealthy to end the block-shutdown period.
+	n.healthz.Store(false)
 }

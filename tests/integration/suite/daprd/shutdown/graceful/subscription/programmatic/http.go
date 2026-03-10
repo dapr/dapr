@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/proto/components/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -99,12 +98,13 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		assert.Fail(t, "timeout")
 	}
 
+	// Publish a second message after the subscription is closed. The handler
+	// should block rather than returning an error which would cause the broker
+	// to NACK the message. The message should never be ack'd or nack'd.
 	ch = h.broker.PublishHelloWorld("a")
 	select {
 	case req := <-ch:
-		assert.Equal(t, &components.AckMessageError{Message: "subscription is closed"}, req.GetAckError())
-		assert.Equal(t, "foo", req.GetAckMessageId())
-	case <-time.After(time.Second * 10):
-		assert.Fail(t, "timeout")
+		assert.Fail(t, "expected no ack/nack for message published after subscription closed, got: %v", req)
+	case <-time.After(time.Second * 3):
 	}
 }
