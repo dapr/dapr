@@ -57,6 +57,10 @@ type factory struct {
 	// idleTimeout is the configured max idle time for actors of this kind.
 	idleTimeout time.Duration
 
+	// idleCh buffers idle actors for batch deactivation under a single
+	// placement lock acquisition.
+	idleCh chan *app
+
 	table sync.Map
 	lock  sync.RWMutex
 }
@@ -75,12 +79,15 @@ func New(opts Options) targets.Factory {
 		idleTimeout:  opts.IdleTimeout,
 		reentrancy:   opts.Reentrancy,
 		entityConfig: opts.EntityConfig,
+		idleCh:       make(chan *app, 128),
 	}
 
 	f.idlerQueue = queue.NewProcessor[string, *app](queue.Options[string, *app]{
 		ExecuteFn: f.handleIdleActor,
 		Clock:     f.clock,
 	})
+
+	go f.deactivateIdleActors()
 
 	return f
 }
@@ -174,21 +181,47 @@ func (f *factory) Len() int {
 }
 
 func (f *factory) handleIdleActor(target *app) {
-	go func() {
+	f.idleCh <- target
+}
+
+// deactivateIdleActors is a long-running goroutine that reads idle actors from
+// the channel and deactivates them in batches under a single placement lock.
+func (f *factory) deactivateIdleActors() {
+	for target := range f.idleCh {
+		batch := []*app{target}
+
+		// Drain any additional pending idle actors to form a batch.
+	drain:
+		for {
+			select {
+			case t := <-f.idleCh:
+				batch = append(batch, t)
+			default:
+				break drain
+			}
+		}
+
 		ctx, cancel, err := f.placement.Lock(context.Background())
 		if err != nil {
 			log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
-			return
+			continue
 		}
-		defer cancel(nil)
 
-		log.Debugf("Actor %s is idle, deactivating", target.Key())
-
-		if err := f.halt(ctx, target); err != nil {
-			log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
-			return
+		var wg sync.WaitGroup
+		for _, target := range batch {
+			log.Debugf("Actor %s is idle, deactivating", target.Key())
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := f.halt(ctx, target); err != nil {
+					log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
+				}
+			}()
 		}
-	}()
+		wg.Wait()
+
+		cancel(nil)
+	}
 }
 
 func (f *factory) halt(ctx context.Context, app *app) error {
