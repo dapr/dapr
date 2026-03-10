@@ -121,6 +121,28 @@ func (n *nonack) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(time.Second * 1):
 	}
 
+	// Make the app unhealthy to end the block-shutdown period. This triggers
+	// subscription closing: Stop() sets s.closed=true then blocks on wg.Wait()
+	// because the 1st message handler is still in-flight.
+	n.healthz.Store(false)
+
+	// Wait for the health probe to detect unhealthy status and for the runtime
+	// to start closing the subscription. The health probe interval is 1s with
+	// threshold 1, so detection takes ~1-2s.
+	time.Sleep(time.Second * 3)
+
+	// The subscription is now closing (s.closed=true) but Stop() is blocked on
+	// wg.Wait() because the 1st message handler hasn't returned yet, so the
+	// broker connection is still alive.
+	// Publish 2nd message — the handler should see s.closed=true and block on
+	// ctx.Done() rather than NACKing.
+	ch2 := n.broker.PublishHelloWorld("a")
+	select {
+	case <-ch2:
+		assert.Fail(t, "expected no ack/nack for 2nd message")
+	case <-time.After(time.Second * 1):
+	}
+
 	// Release the in-flight message.
 	close(n.closeInvoke)
 
@@ -132,17 +154,4 @@ func (n *nonack) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(time.Second * 10):
 		assert.Fail(t, "timeout waiting for first message ack")
 	}
-
-	// After the in-flight message completes, the subscription is now closed.
-	// Publish a second message — it should NOT be NACKed. The handler should
-	// block until the subscription context is cancelled, so no ack is returned.
-	ch = n.broker.PublishHelloWorld("a")
-	select {
-	case <-ch:
-		assert.Fail(t, "expected no ack/nack for 2nd message")
-	case <-time.After(time.Second * 1):
-	}
-
-	// Make the app unhealthy to end the block-shutdown period.
-	n.healthz.Store(false)
 }

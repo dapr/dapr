@@ -116,7 +116,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	ch = g.broker.PublishHelloWorld("a")
 	select {
 	case req := <-ch:
-		assert.Fail(t, "expected no ack/nack for message published after subscription closed, got: %v", req)
+		assert.Failf(t, "expected no ack/nack for message published after subscription closed", "got: %v", req)
 	case <-time.After(time.Second * 1):
 	}
 }
