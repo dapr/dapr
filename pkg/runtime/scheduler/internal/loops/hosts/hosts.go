@@ -34,8 +34,6 @@ type hosts struct {
 	security  security.Handler
 	streamN   uint
 	connector loop.Interface[loops.EventConn]
-
-	closeConns []context.CancelFunc
 }
 
 func New(opts Options) loop.Interface[loops.EventHost] {
@@ -51,7 +49,6 @@ func (h *hosts) Handle(ctx context.Context, event loops.EventHost) error {
 	case *loops.ReloadClients:
 		return h.handleReloadClients(ctx, e)
 	case *loops.Close:
-		h.handleCloseCons()
 		return nil
 	default:
 		return fmt.Errorf("unexpected event type %T", e)
@@ -59,8 +56,6 @@ func (h *hosts) Handle(ctx context.Context, event loops.EventHost) error {
 }
 
 func (h *hosts) handleReloadClients(ctx context.Context, event *loops.ReloadClients) error {
-	h.handleCloseCons()
-
 	var (
 		clients    []schedulerv1pb.SchedulerClient
 		closeConns []context.CancelFunc
@@ -70,6 +65,9 @@ func (h *hosts) handleReloadClients(ctx context.Context, event *loops.ReloadClie
 		for _, addr := range event.Addresses {
 			client, closeCon, err := client.New(ctx, addr, h.security)
 			if err != nil {
+				for _, cc := range closeConns {
+					cc()
+				}
 				return fmt.Errorf("failed to create scheduler client for address %s: %w", addr, err)
 			}
 
@@ -78,16 +76,7 @@ func (h *hosts) handleReloadClients(ctx context.Context, event *loops.ReloadClie
 		}
 	}
 
-	h.closeConns = closeConns
-	h.connector.Enqueue(&loops.Connect{Clients: clients})
+	h.connector.Enqueue(&loops.Connect{Clients: clients, CloseConns: closeConns})
 
 	return nil
-}
-
-func (h *hosts) handleCloseCons() {
-	for _, closeCon := range h.closeConns {
-		closeCon()
-	}
-
-	h.closeConns = nil
 }
