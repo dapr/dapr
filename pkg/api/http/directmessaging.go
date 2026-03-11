@@ -177,6 +177,14 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			if status.Code(rErr) == codes.PermissionDenied {
 				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
+
+			// For streaming requests, wrap transport errors as permanent
+			// to prevent the resiliency policy from retrying with a
+			// consumed (empty) request body.
+			if req.IsStreamingRequest() {
+				return rResp, backoff.Permanent(invokeErr)
+			}
+
 			return rResp, invokeErr
 		}
 
@@ -294,8 +302,17 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	// If success is true, it means that headers have already been sent, so we can't send the error to the user, because:
 	// headers cannot be re-sent, and adding to response body may cause corrupted data to be sent
 	if success.Load() {
-		// Use Warn log here because it's the only way users are notified of the error
-		log.Warnf("HTTP service invocation failed to complete with error: %v", err)
+		// For streaming requests with non-2xx responses, a CodeError is
+		// returned solely for circuit breaker accounting after the
+		// response was already successfully forwarded. Use debug level
+		// since this is expected behavior, not a failure.
+		var resCodeErr resiliency.CodeError
+		if errors.As(err, &resCodeErr) {
+			log.Debugf("HTTP service invocation completed with non-success status: %v", err)
+		} else {
+			// Use Warn log here because it's the only way users are notified of the error
+			log.Warnf("HTTP service invocation failed to complete with error: %v", err)
+		}
 
 		// Do nothing else, as at least some data was already sent to the client
 		return

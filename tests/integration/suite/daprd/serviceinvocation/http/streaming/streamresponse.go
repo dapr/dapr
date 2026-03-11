@@ -35,8 +35,9 @@ func init() {
 	suite.Register(new(streamresponse))
 }
 
-// streamresponse tests that a chunked (streaming) response flows through
-// the sidecar without being fully buffered in memory.
+// streamresponse tests that a streaming request receiving a chunked
+// (streaming) 2xx response gets the full response body forwarded without
+// it being buffered in memory.
 type streamresponse struct {
 	daprdSender   *daprd.Daprd
 	daprdReceiver *daprd.Daprd
@@ -85,10 +86,18 @@ func (c *streamresponse) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := client.HTTP(t)
 
-	// Streamed responses should flow through without buffering
+	// Send a streaming request (pipe body, unknown Content-Length) that
+	// receives a streaming 2xx response. Both directions should flow
+	// through without buffering.
+	pr, pw := io.Pipe()
+	go func() {
+		pw.Write([]byte("streaming request body"))
+		pw.Close()
+	}()
+
 	url := fmt.Sprintf("http://%s/v1.0/invoke/%s/method/stream-response",
 		c.daprdSender.HTTPAddress(), c.daprdReceiver.AppID())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, pr)
 	require.NoError(t, err)
 
 	resp, err := httpClient.Do(req)
