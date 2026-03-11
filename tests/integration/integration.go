@@ -17,6 +17,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"reflect"
 	"regexp"
 	"strings"
@@ -33,6 +34,8 @@ import (
 var (
 	focusF       = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
 	parallelFlag = flag.Bool("integration-parallel", true, "Disable running integration tests in parallel")
+	shardIndex   = flag.Int("shard-index", -1, "Current shard index (0-based). -1 means no sharding.")
+	shardTotal   = flag.Int("shard-total", 1, "Total number of shards.")
 )
 
 func RunIntegrationTests(t *testing.T) {
@@ -51,6 +54,12 @@ func RunIntegrationTests(t *testing.T) {
 	})
 	require.False(t, binFailed, "building binaries must succeed")
 
+	if *shardIndex >= 0 {
+		require.Greater(t, *shardTotal, 0, "shard-total must be positive")
+		require.Less(t, *shardIndex, *shardTotal, "shard-index must be less than shard-total")
+		t.Logf("sharding enabled: shard %d of %d", *shardIndex, *shardTotal)
+	}
+
 	focusedTests := make([]suite.NamedCase, 0)
 	skippedTests := 0
 	for _, tcase := range suite.All(t) {
@@ -58,6 +67,14 @@ func RunIntegrationTests(t *testing.T) {
 		if !focus.MatchString(tcase.Name()) {
 			skippedTests++
 			continue
+		}
+		if *shardIndex >= 0 {
+			h := fnv.New32a()
+			h.Write([]byte(tcase.Name()))
+			if int(h.Sum32())%*shardTotal != *shardIndex {
+				skippedTests++
+				continue
+			}
 		}
 		focusedTests = append(focusedTests, tcase)
 	}
@@ -67,7 +84,7 @@ func RunIntegrationTests(t *testing.T) {
 		executionMessage := fmt.Sprintf("Total integration test execution time for %d test cases: %s", len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100))
 		t.Log(strings.Repeat("-", len(executionMessage)))
 		if skippedTests > 0 {
-			t.Logf("%d test cases were skipped due to focus", skippedTests)
+			t.Logf("%d test cases were skipped due to focus/sharding", skippedTests)
 		}
 		t.Log(executionMessage)
 		t.Log(strings.Repeat("-", len(executionMessage)))

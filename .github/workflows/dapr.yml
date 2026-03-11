@@ -296,7 +296,7 @@ jobs:
           retention-days: 1
 
   integration-tests:
-    name: "Integration tests (${{ matrix.os_config.target_os }}/${{ matrix.shard.name }})"
+    name: "Integration tests (${{ matrix.os_config.target_os }}/shard-${{ matrix.shard_index }})"
     needs: [build-integration-binaries]
     runs-on: "${{ matrix.os_config.os }}"
     permissions:
@@ -315,23 +315,7 @@ jobs:
           - os: macos-14
             target_os: darwin
             target_arch: amd64
-        shard:
-          - name: daprd-workflow
-            focus: "^daprd/workflow"
-          - name: daprd-subs-hotreload-pubsub
-            focus: "^daprd/(subscriptions|hotreload|pubsub)"
-          - name: daprd-state-actors-svcin
-            focus: "^daprd/(state|actors|serviceinvocation|binding|config|metadata|metrics|middleware|secret)"
-          # Catch-all: focus is computed at runtime to pick up any new
-          # daprd sub-suites not claimed by the shards above.
-          - name: daprd-remaining
-            focus: "auto-daprd-remaining"
-          - name: actors-scheduler
-            focus: "^(actors|scheduler)/"
-          # Catch-all: focus is computed at runtime to pick up any new
-          # top-level suites not claimed by the shards above.
-          - name: remaining
-            focus: "auto-remaining"
+        shard_index: [0, 1, 2, 3, 4, 5]
     env:
       GOOS: "${{ matrix.os_config.target_os }}"
       GOARCH: "${{ matrix.os_config.target_arch }}"
@@ -390,48 +374,13 @@ jobs:
         if: matrix.os_config.target_os == 'darwin'
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
-      - name: Compute effective focus pattern
-        id: focus
-        shell: bash
-        run: |
-          SHARD_FOCUS="${{ matrix.shard.focus }}"
-          if [[ "${SHARD_FOCUS}" == "auto-daprd-remaining" ]]; then
-            # Claimed daprd sub-suites by other shards (must stay in sync with matrix above).
-            CLAIMED_RE="^(workflow|subscriptions|hotreload|pubsub|state|actors|serviceinvocation|binding|config|metadata|metrics|middleware|secret)$"
-            REMAINING=$(ls -d tests/integration/suite/daprd/*/ 2>/dev/null \
-              | xargs -I{} basename {} \
-              | grep -vE "${CLAIMED_RE}" \
-              | sort \
-              | paste -sd'|' -)
-            if [[ -z "${REMAINING}" ]]; then
-              echo "focus=^$" >> "$GITHUB_OUTPUT"
-            else
-              echo "focus=^daprd/(${REMAINING})" >> "$GITHUB_OUTPUT"
-            fi
-          elif [[ "${SHARD_FOCUS}" == "auto-remaining" ]]; then
-            # Claimed top-level suites by other shards.
-            CLAIMED_RE="^(daprd|actors|scheduler)$"
-            REMAINING=$(ls -d tests/integration/suite/*/ 2>/dev/null \
-              | xargs -I{} basename {} \
-              | grep -vE "${CLAIMED_RE}" \
-              | sort \
-              | paste -sd'|' -)
-            if [[ -z "${REMAINING}" ]]; then
-              echo "focus=^$" >> "$GITHUB_OUTPUT"
-            else
-              echo "focus=^(${REMAINING})/" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "focus=${SHARD_FOCUS}" >> "$GITHUB_OUTPUT"
-          fi
-          echo "Shard ${{ matrix.shard.name }} focus: $(grep focus "$GITHUB_OUTPUT" | cut -d= -f2-)"
       - name: Run make test-integration-parallel
-        run: make test-integration-parallel ARGS="-focus='${{ steps.focus.outputs.focus }}'"
+        run: make test-integration-parallel ARGS="-shard-index=${{ matrix.shard_index }} -shard-total=6"
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os_config.target_os }}_${{ matrix.os_config.target_arch }}_test_integration_${{ matrix.shard.name }}.json
+          name: ${{ matrix.os_config.target_os }}_${{ matrix.os_config.target_arch }}_test_integration_shard${{ matrix.shard_index }}.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
