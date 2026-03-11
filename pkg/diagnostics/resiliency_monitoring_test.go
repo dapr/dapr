@@ -426,7 +426,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 					})
 				}
 				// let the circuit breaker to go to half open state (5x cb timeout) and then return success to close it
-				time.Sleep(1000 * time.Millisecond)
+				time.Sleep(2 * time.Second)
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 				policyRunner := resiliency.NewRunner[any](t.Context(), policyDef)
 				_, _ = policyRunner(func(ctx context.Context) (any, error) {
@@ -549,7 +549,7 @@ func newTestDefaultResiliencyConfig(resiliencyName, resiliencyNamespace string) 
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
 					"DefaultComponentCircuitBreakerPolicy": {
 						Interval:    "0",
-						Timeout:     "100ms",
+						Timeout:     "1s",
 						Trip:        "consecutiveFailures > 2",
 						MaxRequests: 1,
 					},
@@ -590,7 +590,7 @@ func newTestResiliencyConfig(resiliencyName, resiliencyNamespace, appName, actor
 				CircuitBreakers: map[string]resiliencyV1alpha.CircuitBreaker{
 					"testCB": {
 						Interval:    "0",
-						Timeout:     "100ms",
+						Timeout:     "1s",
 						Trip:        "consecutiveFailures > 4",
 						MaxRequests: 1,
 					},
