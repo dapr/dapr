@@ -137,6 +137,14 @@ func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSu
 			}
 		}
 
+		// If the stream context is done, the stream is being torn down
+		// (e.g. during graceful shutdown) and we should not send an ack
+		// or nack. This prevents messages from being incorrectly NACKed
+		// during shutdown, which could route them to dead-letter queues.
+		if ctx.Err() != nil {
+			return
+		}
+
 		// As per documentation:
 		// When using streams,
 		// one must take care to avoid calling either SendMsg or RecvMsg multiple times against the same Stream from different goroutines.
