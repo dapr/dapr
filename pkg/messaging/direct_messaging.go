@@ -211,8 +211,8 @@ func (d *directMessaging) invokeWithRetry(
 	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
-	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) {
-		// This policy has built-in retries so enable replay in the request
+	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) && !req.IsStreamingRequest() {
+		// Enable body buffering so the request can be replayed on retry.
 		req.WithReplay(true)
 
 		policyRunner := resiliency.NewRunnerWithOptions(ctx,
