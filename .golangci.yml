@@ -159,9 +159,9 @@ linters:
       #          are now unknown so suppression no longer works — disable for the upgrade)
       checks:
         - "all"
-        - "-S1"
-        - "-QF"
-        - "-ST"
+        - "-S1*"
+        - "-QF*"
+        - "-ST1*"
 
     dogsled:
       max-blank-identifiers: 2
