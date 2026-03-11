@@ -211,16 +211,7 @@ func (d *directMessaging) invokeWithRetry(
 	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
-	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) {
-		// Streaming requests cannot be retried since the body has already
-		// been consumed, so invoke once and return immediately.
-		if req.IsStreamingRequest() {
-			log.Debugf("Skipping built-in retries for streaming request to app '%s' as request body cannot be replayed", app.id)
-			resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
-			teardown(false)
-			return resp, err
-		}
-
+	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) && !req.IsStreamingRequest() {
 		// Enable body buffering so the request can be replayed on retry.
 		req.WithReplay(true)
 

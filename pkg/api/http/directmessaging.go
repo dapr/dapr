@@ -193,6 +193,8 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			return nil, nil
 		}
 
+		defer rResp.Close()
+
 		// Construct response if not HTTP
 		resStatus := rResp.Status()
 		if !rResp.IsHTTPResponse() {
@@ -215,26 +217,21 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			} else {
 				resStatus.Code = statusCode
 			}
-		} else if resStatus.GetCode() < 200 || resStatus.GetCode() > 399 {
-			if !req.IsStreamingRequest() {
-				// Non-streaming request: buffer the error response body
-				// for the resiliency policy to evaluate and potentially
-				// retry.
-				msg, _ := rResp.RawDataFull()
-				return rResp, resiliency.NewCodeError(resStatus.GetCode(), codeError{
-					headers:     rResp.Headers(),
-					statusCode:  int(resStatus.GetCode()),
-					msg:         msg,
-					contentType: rResp.ContentType(),
-				})
-			}
-
-			// Streaming request: retries are impossible. Stream the
-			// error response directly to the caller, then return a
-			// permanent CodeError so circuit breakers still count the
-			// failure.
-			// Fall through to the streaming response path below.
+		} else if !req.IsStreamingRequest() && (resStatus.GetCode() < 200 || resStatus.GetCode() > 399) {
+			// Non-streaming request with non-2xx response: buffer the
+			// error response body for the resiliency policy to evaluate
+			// and potentially retry.
+			msg, _ := rResp.RawDataFull()
+			return rResp, resiliency.NewCodeError(resStatus.GetCode(), codeError{
+				headers:     rResp.Headers(),
+				statusCode:  int(resStatus.GetCode()),
+				msg:         msg,
+				contentType: rResp.ContentType(),
+			})
 		}
+		// For streaming requests with non-2xx responses, retries are
+		// impossible so we fall through to stream the response directly
+		// to the caller.
 
 		// If we get to this point, we must consider the operation as successful, so we invoke this only once and we consider all errors returned by this to be permanent (so the policy function doesn't retry)
 		// We still need to be within the policy function because if we return, the context passed to `Invoke` is canceled, so the `Copy` operation below can fail with a ContextCanceled error
@@ -247,8 +244,6 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		if len(headers) > 0 {
 			invokev1.InternalMetadataToHTTPHeader(r.Context(), headers, w.Header().Add)
 		}
-
-		defer rResp.Close()
 
 		if ct := rResp.ContentType(); ct != "" {
 			w.Header().Set("content-type", ct)
