@@ -183,7 +183,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	}
 
 	if connection.closed.Load() {
-		return nil, errors.New("subscription is closed")
+		return nil, rtpubsub.ErrSubscriptionClosed
 	}
 
 	ctx, envelope, span, err := rtpubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, s.tracingSpec)
