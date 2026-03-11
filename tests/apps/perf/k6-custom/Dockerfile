@@ -1,5 +1,5 @@
 # Build the k6 binary with the extension
-FROM golang:1.24.13 AS builder
+FROM golang:1.25.8 AS builder
 
 WORKDIR $GOPATH/src/go.k6.io/k6
 
