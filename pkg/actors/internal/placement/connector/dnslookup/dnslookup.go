@@ -53,7 +53,7 @@ func New(opts Options) (connector.Interface, error) {
 	return &dnsLookUpConnector{
 		host:     host,
 		port:     port,
-		gOpts:    opts.GRPCOptions,
+		gOpts:    append(opts.GRPCOptions, grpc.WithAuthority(host)),
 		resolver: resolver,
 	}, nil
 }
@@ -77,8 +77,6 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 
 	log.Debugf("Attempting to connect to placement @%s, (authority %s)",
 		hostPort, r.host)
-
-	r.gOpts = append(r.gOpts, grpc.WithAuthority(r.host))
 
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, hostPort, r.gOpts...)
