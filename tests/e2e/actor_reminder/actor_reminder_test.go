@@ -456,7 +456,7 @@ func testActorReminderTTL(t *testing.T, appName, actorName string) {
 		require.NoError(t, err)
 
 		// The reminder has DueTime=2s, Period=R10/PT5S, TTL=59s.
-		// Expected ~10 triggers over ~52s (2s + 10*5s). Poll with a generous
+		// Expected ~10 triggers over ~47s (2s + 9*5s), well within the 59s TTL. Poll with a generous
 		// timeout to tolerate slow CI environments.
 		t.Logf("Waiting for all TTL reminders to trigger for app %s...", appName)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
