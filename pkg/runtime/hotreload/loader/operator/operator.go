@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -64,15 +65,22 @@ func (o *operator) Run(ctx context.Context) error {
 		return errors.New("already running")
 	}
 
-	<-ctx.Done()
+	runners := make([]concurrency.Runner, 0, 5)
+	for _, r := range []func() error{
+		o.components.close,
+		o.subscriptions.close,
+		o.configurations.close,
+		o.httpEndpoints.close,
+		o.resiliencies.close,
+	} {
+		cr := r
+		runners = append(runners, func(ctx context.Context) error {
+			<-ctx.Done()
+			return cr()
+		})
+	}
 
-	return errors.Join(
-		o.components.close(),
-		o.subscriptions.close(),
-		o.configurations.close(),
-		o.httpEndpoints.close(),
-		o.resiliencies.close(),
-	)
+	return concurrency.NewRunnerManager(runners...).Run(ctx)
 }
 
 func (o *operator) Components() loader.Loader[componentsapi.Component] {
