@@ -318,6 +318,13 @@ push-e2e-app-all: $(PUSH_E2E_APPS_TARGETS)
 # can be faster because it uses cache and copies images directly
 build-push-e2e-app-all: $(BUILD_PUSH_E2E_APPS_TARGETS)
 
+# Pull all e2e test app images from the cache registry.
+# This is the same as build-push-e2e-app-all but requires DAPR_CACHE_REGISTRY
+# to be set. The build-and-push command tries the cache first and only builds
+# on a cache miss. The prebuild-test-apps workflow keeps the cache warm so
+# this target reliably gets cache hits during CI.
+pull-cache-e2e-app-all: check-e2e-cache $(BUILD_PUSH_E2E_APPS_TARGETS)
+
 # push test app image to kind cluster
 push-kind-e2e-app-all: $(PUSH_KIND_E2E_APPS_TARGETS)
 

@@ -1,0 +1,85 @@
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Pre-build E2E test app images
+
+on:
+  # Push to master when test apps or build tools change
+  push:
+    branches:
+      - master
+    paths:
+      - 'tests/apps/**'
+      - 'tests/e2e/utils/**'
+      - '.build-tools/**'
+  # Nightly schedule to keep cache warm
+  schedule:
+    - cron: "0 4 * * *"
+  # Manual trigger
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+permissions: {}
+
+jobs:
+  prebuild:
+    name: Pre-build e2e test app images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Container registry where to cache e2e test images
+      DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+      # The pre-build pushes images to the cache registry itself,
+      # so dest and cache registries are the same.
+      DAPR_REGISTRY: "dapre2eacr.azurecr.io"
+      DAPR_TAG: "cache"
+      DAPR_NAMESPACE: "dapr-tests"
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v6
+
+    - name: Set up Go
+      id: setup-go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: 'go.mod'
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Login to cache registry
+      run: |
+        az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
+
+    - name: Free disk space
+      run: |
+        df -h
+        docker system prune -af || true
+        docker volume prune -f || true
+        sudo rm -rf /usr/local/lib/android || true
+        sudo rm -rf /opt/ghc || true
+        sudo rm -rf /usr/share/dotnet || true
+        sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/* || true
+        df -h
+
+    - name: Build and push all e2e test app images to cache
+      run: |
+        make build-push-e2e-app-all

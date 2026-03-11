@@ -58,7 +58,11 @@ jobs:
       # TODO: Make this auto-populated based on GitHub's releases.
       DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.16.8"
       DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.15.13"
-      # Container registry where to cache e2e test images
+      # Container registry where to cache e2e test images.
+      # The prebuild-test-apps workflow keeps this cache warm by
+      # pre-building all e2e app images on pushes to master and on a
+      # nightly schedule, so build-push-e2e-app-all gets reliable
+      # cache hits here and avoids redundant image builds.
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent
     strategy:
@@ -103,19 +107,33 @@ jobs:
       #     https://github.com/kubernetes-sigs/kind/issues/1165, using
       #     a local repository speeds up the image pushes into KinD
       #     significantly.
+      # Uses pre-baked node image (ghcr.io/dapr/kind-node) if available,
+      # which has 3rd-party images pre-pulled to skip Helm install pull time.
+      # Falls back to stock kindest/node if the pre-baked image doesn't exist.
       run: |
+        PREBAKED_IMAGE="ghcr.io/dapr/kind-node:${{ matrix.k8s-version }}"
+        STOCK_IMAGE="kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}"
+
+        if docker pull "${PREBAKED_IMAGE}" 2>/dev/null; then
+          echo "Using pre-baked KinD node image: ${PREBAKED_IMAGE}"
+          KIND_IMAGE="${PREBAKED_IMAGE}"
+        else
+          echo "Pre-baked image not available, using stock: ${STOCK_IMAGE}"
+          KIND_IMAGE="${STOCK_IMAGE}"
+        fi
+
         cat > kind.yaml <<EOF
         apiVersion: kind.x-k8s.io/v1alpha4
         kind: Cluster
         nodes:
         - role: control-plane
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+          image: ${KIND_IMAGE}
         - role: worker
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+          image: ${KIND_IMAGE}
         - role: worker
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+          image: ${KIND_IMAGE}
         - role: worker
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+          image: ${KIND_IMAGE}
         containerdConfigPatches:
         - |-
           [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:$REGISTRY_PORT"]
