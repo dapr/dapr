@@ -87,6 +87,9 @@ func NewSIGHUPResiliencies(opts Options[resiliencyapi.Resiliency]) *SIGHUPReconc
 func (r *SIGHUPReconciler[T]) Run(ctx context.Context) error {
 	conn, err := r.loader.Stream(ctx)
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("error running %s stream: %w", r.kind, err)
 	}
 
