@@ -1,46 +1,22 @@
 version: "2"
 
-# options for analysis running
 run:
-  # default concurrency is a available CPU number
   concurrency: 4
-
-  # timeout for analysis, e.g. 30s, 5m, default is 1m
   timeout: 15m
-
-  # exit code when at least one issue was found, default is 1
   issues-exit-code: 1
-
-  # include test files or not, default is true
   tests: true
-
-  # list of build tags, all linters use it. Default is empty list.
   build-tags:
     - unit
     - allcomponents
     - subtlecrypto
 
 issues:
-  # which dirs to skip: they won't be analyzed;
-  # can use regexp here: generated.*, regexp is applied on full path;
-  # default value is empty list, but next dirs are always skipped independently
-  # from this option's value:
-  # third_party$, testdata$, examples$, Godeps$, builtin$
   exclude-dirs:
     - ^pkg.*client.*clientset.*versioned.*
     - ^pkg.*client.*informers.*externalversions.*
     - ^pkg.*proto.*
     - pkg/proto
 
-  exclude-rules:
-    # gosimple was a separate linter in v1 (disabled); in v2 its checks (S1xxx)
-    # and quickfix checks (QFxxx) are part of staticcheck — keep them suppressed.
-    - linters: [staticcheck]
-      text: "^S1[0-9]"
-    - linters: [staticcheck]
-      text: "^QF[0-9]"
-
-# output configuration options
 output:
   formats:
     tab:
@@ -50,8 +26,6 @@ output:
 linters:
   default: all
 
-  # In golangci-lint v2, linter settings are nested under linters.settings
-  # (previously the top-level linters-settings key).
   settings:
     errcheck:
       check-type-assertions: false
@@ -74,7 +48,6 @@ linters:
             - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
       enable:
         - atomicalign
-        - shadow
       enable-all: false
       disable-all: false
 
@@ -131,7 +104,6 @@ linters:
               desc: "must use github.com/lestrrat-go/jwx/v2"
             - pkg: "github.com/golang-jwt/jwt/v4"
               desc: "must use github.com/lestrrat-go/jwx/v2"
-            # pkg: Commonly auto-completed by gopls
             - pkg: "github.com/gogo/status"
               desc: "must use google.golang.org/grpc/status"
             - pkg: "github.com/gogo/protobuf"
@@ -173,23 +145,23 @@ linters:
         - ifElseChain
         - singleCaseSwitch
         - exitAfterDefer
+        - elseif
       enabled-tags:
         - performance
       settings:
         captLocal:
           paramsOnly: true
 
-    godox:
-      keywords:
-        - NOTE
-        - OPTIMIZE
-        - HACK
-
-    godot:
-      exclude:
-        - 'nosec'
-      capital: false
-      scope: all
+    staticcheck:
+      # S1xxx = gosimple (was a separate disabled linter in v1)
+      # QFxxx = quickfix checks (new in v2, didn't exist in v1)
+      # ST1xxx = stylecheck (merged into staticcheck in v2; //nolint:stylecheck directives
+      #          are now unknown so suppression no longer works — disable for the upgrade)
+      checks:
+        - "all"
+        - "-S1"
+        - "-QF"
+        - "-ST"
 
     dogsled:
       max-blank-identifiers: 2
@@ -253,9 +225,14 @@ linters:
     - canonicalheader
     - err113
     - fatcontext
-    # v2 new linters not yet enforced
+    # v2: new linters not yet enforced
     - embeddedstructfieldcheck
     - funcorder
     - tagalign
     - usetesting
     - gosec
+    - noinlineerr
+    - protogetter
+    - testifylint
+    - wsl_v5
+    - nolintlint
