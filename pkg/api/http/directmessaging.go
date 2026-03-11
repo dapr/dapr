@@ -144,6 +144,12 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		// Save headers to internal metadata
 		WithHTTPHeaders(r.Header).
 		WithHTTPResponseWriter(w)
+	// For streaming requests (chunked transfer / unknown content length),
+	// disable replay to prevent buffering the entire body in memory.
+	// ContentLength is -1 when Transfer-Encoding is chunked or Content-Length is absent.
+	if r.ContentLength < 0 {
+		req.SetStreamingRequest()
+	}
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
 	}
@@ -202,14 +208,25 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				resStatus.Code = statusCode
 			}
 		} else if resStatus.GetCode() < 200 || resStatus.GetCode() > 399 {
-			msg, _ := rResp.RawDataFull()
-			// Returning a `codeError` here will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned.
-			return rResp, resiliency.NewCodeError(resStatus.GetCode(), codeError{
-				headers:     rResp.Headers(),
-				statusCode:  int(resStatus.GetCode()),
-				msg:         msg,
-				contentType: rResp.ContentType(),
-			})
+			if !req.IsStreamingRequest() {
+				// For non-streaming requests, buffer the error response body
+				// so the resiliency policy can retry and, if retries are
+				// exhausted, return the error to the caller.
+				msg, _ := rResp.RawDataFull()
+				return rResp, resiliency.NewCodeError(resStatus.GetCode(), codeError{
+					headers:     rResp.Headers(),
+					statusCode:  int(resStatus.GetCode()),
+					msg:         msg,
+					contentType: rResp.ContentType(),
+				})
+			}
+
+			// For streaming requests, we can't buffer the response body
+			// (it may be arbitrarily large) and can't retry (request body
+			// already consumed). Stream the error response directly to
+			// the caller, then return a permanent CodeError so circuit
+			// breakers still count the failure without triggering retries.
+			// Fall through to the streaming response path below.
 		}
 
 		// If we get to this point, we must consider the operation as successful, so we invoke this only once and we consider all errors returned by this to be permanent (so the policy function doesn't retry)
@@ -233,23 +250,35 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		reader := rResp.RawData()
 		isSSE := sse.IsSSEHttpRequest(r)
 
+		statusCode := int(rResp.Status().GetCode())
+
 		if !isSSE {
-			w.WriteHeader(int(rResp.Status().GetCode()))
-			// Use regular io.Copy for non-streaming responses
+			w.WriteHeader(statusCode)
 			_, rErr = io.Copy(w, reader)
 			if rErr != nil {
 				// Do not return rResp here, we already have a deferred `Close` call on it
 				return nil, backoff.Permanent(rErr)
 			}
-
-			return nil, nil
+		} else {
+			sse.AddSSEHeaders(w)
+			w.WriteHeader(statusCode)
+			sseErr := sse.FlushSSEResponse(r.Context(), w, reader)
+			if sseErr != nil {
+				return nil, backoff.Permanent(sseErr)
+			}
 		}
 
-		sse.AddSSEHeaders(w)
-		w.WriteHeader(int(rResp.Status().GetCode()))
-		err := sse.FlushSSEResponse(r.Context(), w, reader)
-		if err != nil {
-			return nil, backoff.Permanent(err)
+		// For streaming requests with non-2xx responses, return a
+		// permanent CodeError so circuit breakers count the failure.
+		// The response has already been written to the caller above.
+		// "Permanent" prevents retries (which are impossible for
+		// streaming requests anyway), and the error handler sees
+		// success==true so it won't try to write the response again.
+		if req.IsStreamingRequest() && (statusCode < 200 || statusCode > 399) {
+			return nil, backoff.Permanent(
+				//nolint:gosec
+				resiliency.NewCodeError(int32(statusCode), errors.New("streaming request received non-2xx response")),
+			)
 		}
 
 		// Do not return rResp here, we already have a deferred `Close` call on it

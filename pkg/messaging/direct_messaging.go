@@ -212,7 +212,16 @@ func (d *directMessaging) invokeWithRetry(
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
 	if !d.resiliency.PolicyDefined(app.id, resiliency.EndpointPolicy{}) {
-		// This policy has built-in retries so enable replay in the request
+		// Streaming requests cannot be retried since the body has already
+		// been consumed, so invoke once and return immediately.
+		if req.IsStreamingRequest() {
+			log.Debugf("Skipping built-in retries for streaming request to app '%s' as request body cannot be replayed", app.id)
+			resp, teardown, err := fn(ctx, app.id, app.namespace, app.address, req)
+			teardown(false)
+			return resp, err
+		}
+
+		// Enable body buffering so the request can be replayed on retry.
 		req.WithReplay(true)
 
 		policyRunner := resiliency.NewRunnerWithOptions(ctx,

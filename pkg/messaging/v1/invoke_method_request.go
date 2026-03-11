@@ -41,6 +41,11 @@ type InvokeMethodRequest struct {
 	dataObject         any
 	dataTypeURL        string
 	httpResponseWriter http.ResponseWriter
+	// streamingRequest is set when the request body is a stream that cannot be
+	// replayed (e.g. chunked-transfer / unknown content-length).
+	// When true, WithReplay becomes a no-op to prevent the entire body
+	// from being buffered into memory for retry purposes.
+	streamingRequest bool
 }
 
 // NewInvokeMethodRequest creates InvokeMethodRequest object for method.
@@ -171,12 +176,31 @@ func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *In
 }
 
 // WithReplay enables replaying for the data stream.
+// If the request is a streaming request, this is a no-op to prevent
+// buffering the entire body in memory.
 func (imr *InvokeMethodRequest) WithReplay(enabled bool) *InvokeMethodRequest {
+	if imr.streamingRequest {
+		return imr
+	}
 	// If the object has data in-memory, WithReplay is a nop
 	if !imr.HasMessageData() {
 		imr.SetReplay(enabled)
 	}
 	return imr
+}
+
+// SetStreamingRequest marks the request body as a stream that cannot be
+// replayed. This prevents WithReplay from buffering the entire body in
+// memory, which is critical for chunked-transfer requests to avoid OOM.
+func (imr *InvokeMethodRequest) SetStreamingRequest() *InvokeMethodRequest {
+	imr.streamingRequest = true
+	return imr
+}
+
+// IsStreamingRequest returns true if the request body is a stream that
+// cannot be replayed.
+func (imr *InvokeMethodRequest) IsStreamingRequest() bool {
+	return imr.streamingRequest
 }
 
 // WithHTTPResponseWriter enables downstream channel implementations to stream data back to the caller.
