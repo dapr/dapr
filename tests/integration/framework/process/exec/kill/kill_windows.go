@@ -33,3 +33,7 @@ func kill(_ *testing.T, cmd *exec.Cmd) {
 	kill.Stderr = os.Stderr
 	kill.Run()
 }
+
+func signalHUP(_ *testing.T, cmd *exec.Cmd) {
+	// no-op on windows
+}
