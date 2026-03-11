@@ -178,9 +178,9 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
 
-			// For streaming requests, wrap transport errors as permanent
-			// to prevent the resiliency policy from retrying with a
-			// consumed (empty) request body.
+			// If this is a streaming request, wrap transport errors as
+			// permanent to prevent the resiliency policy from retrying
+			// with a consumed (empty) request body.
 			if req.IsStreamingRequest() {
 				return rResp, backoff.Permanent(invokeErr)
 			}
@@ -217,9 +217,9 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			}
 		} else if resStatus.GetCode() < 200 || resStatus.GetCode() > 399 {
 			if !req.IsStreamingRequest() {
-				// For non-streaming requests, buffer the error response body
-				// so the resiliency policy can retry and, if retries are
-				// exhausted, return the error to the caller.
+				// Non-streaming request: buffer the error response body
+				// for the resiliency policy to evaluate and potentially
+				// retry.
 				msg, _ := rResp.RawDataFull()
 				return rResp, resiliency.NewCodeError(resStatus.GetCode(), codeError{
 					headers:     rResp.Headers(),
@@ -229,11 +229,10 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 
-			// For streaming requests, we can't buffer the response body
-			// (it may be arbitrarily large) and can't retry (request body
-			// already consumed). Stream the error response directly to
-			// the caller, then return a permanent CodeError so circuit
-			// breakers still count the failure without triggering retries.
+			// Streaming request: retries are impossible. Stream the
+			// error response directly to the caller, then return a
+			// permanent CodeError so circuit breakers still count the
+			// failure.
 			// Fall through to the streaming response path below.
 		}
 

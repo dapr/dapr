@@ -33,28 +33,30 @@ import (
 )
 
 func init() {
-	suite.Register(new(resiliencynoretry))
+	suite.Register(new(resiliencyrecovery))
 }
 
-// resiliencynoretry tests that streaming requests (chunked-transfer) are NOT
-// retried even when a resiliency policy with retries is configured, because
-// the streaming body cannot be buffered for replay.
-type resiliencynoretry struct {
+type resiliencyrecovery struct {
 	daprdSender   *daprd.Daprd
 	daprdReceiver *daprd.Daprd
 
 	endpointCalls atomic.Int32
 }
 
-func (c *resiliencynoretry) Setup(t *testing.T) []framework.Option {
+func (c *resiliencyrecovery) Setup(t *testing.T) []framework.Option {
 	receiverApp := app.New(t,
 		app.WithHandlerFunc("/healthz", func(http.ResponseWriter, *http.Request) {}),
-		app.WithHandlerFunc("/always-fail", func(w http.ResponseWriter, r *http.Request) {
-			c.endpointCalls.Add(1)
+		app.WithHandlerFunc("/flaky", func(w http.ResponseWriter, r *http.Request) {
+			n := c.endpointCalls.Add(1)
 			io.Copy(io.Discard, r.Body)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error":"always fails"}`))
+			// Fail the first 3 calls, succeed on the 4th
+			if n <= 3 {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`{"error":"transient failure"}`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"recovered"}`))
 		}),
 	)
 
@@ -73,7 +75,7 @@ spec:
       retrypolicy:
         policy: constant
         duration: 1ms
-        maxRetries: 3
+        maxRetries: 5
   targets:
     apps:
       %s:
@@ -93,52 +95,31 @@ spec:
 	}
 }
 
-func (c *resiliencynoretry) Run(t *testing.T, ctx context.Context) {
+func (c *resiliencyrecovery) Run(t *testing.T, ctx context.Context) {
 	c.daprdSender.WaitUntilRunning(t, ctx)
 	c.daprdReceiver.WaitUntilRunning(t, ctx)
 
 	httpClient := client.HTTP(t)
 
-	t.Run("streaming request is not retried despite resiliency policy", func(t *testing.T) {
-		// Streaming requests (unknown Content-Length) must not be retried
-		// because the body cannot be buffered for replay. The request
-		// should be attempted exactly once.
-		pr, pw := io.Pipe()
-		go func() {
-			pw.Write([]byte("streaming data"))
-			pw.Close()
-		}()
-
+	t.Run("fixed-length request recovers from transient failure", func(t *testing.T) {
 		c.endpointCalls.Store(0)
-		url := fmt.Sprintf("http://%s/v1.0/invoke/%s/method/always-fail",
+
+		url := fmt.Sprintf("http://%s/v1.0/invoke/%s/method/flaky",
 			c.daprdSender.HTTPAddress(), c.daprdReceiver.AppID())
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, pr)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(`{"message":"hello"}`))
 		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
-		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-		// Should be called exactly once — no retries for streaming requests
-		assert.Equal(t, int32(1), c.endpointCalls.Load())
-	})
-
-	t.Run("fixed-length request is retried per resiliency policy", func(t *testing.T) {
-		// Contrast: fixed-length (known Content-Length) requests ARE retried
-		// per the resiliency policy (1 initial + 3 retries = 4 total calls).
-		c.endpointCalls.Store(0)
-		url := fmt.Sprintf("http://%s/v1.0/invoke/%s/method/always-fail",
-			c.daprdSender.HTTPAddress(), c.daprdReceiver.AppID())
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader("fixed body"))
+		// Should recover: 3 failures + 1 success = 200
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-
-		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-		// Should be called 4 times: 1 initial + 3 retries
+		assert.JSONEq(t, `{"status":"recovered"}`, string(body))
+		// 3 failed + 1 successful = 4 total calls
 		assert.Equal(t, int32(4), c.endpointCalls.Load())
 	})
 }

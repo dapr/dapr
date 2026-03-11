@@ -762,16 +762,26 @@ func TestDataTypeUrl(t *testing.T) {
 func TestStreamingRequest(t *testing.T) {
 	const message = "streaming data that should not be buffered"
 
-	t.Run("streaming request prevents WithReplay from enabling replay", func(t *testing.T) {
+	t.Run("streaming request without WithReplay cannot replay", func(t *testing.T) {
 		req := NewInvokeMethodRequest("test_method").
 			WithRawData(strings.NewReader(message)).
 			SetStreamingRequest()
 		defer req.Close()
 
 		assert.True(t, req.IsStreamingRequest())
+		assert.False(t, req.CanReplay())
+	})
 
-		// WithReplay should be a no-op
-		req.WithReplay(true)
+	t.Run("streaming request prevents WithReplay from enabling replay", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawData(strings.NewReader(message)).
+			SetStreamingRequest().
+			WithReplay(true)
+		defer req.Close()
+
+		assert.True(t, req.IsStreamingRequest())
+		// WithReplay is a no-op when streamingRequest is set,
+		// preventing the body from being buffered in memory.
 		assert.False(t, req.CanReplay())
 	})
 

@@ -176,8 +176,8 @@ func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *In
 }
 
 // WithReplay enables replaying for the data stream.
-// If the request is a streaming request, this is a no-op to prevent
-// buffering the entire body in memory.
+// If the request is streaming, this is a no-op to prevent buffering the
+// entire body in memory.
 func (imr *InvokeMethodRequest) WithReplay(enabled bool) *InvokeMethodRequest {
 	if imr.streamingRequest {
 		return imr
@@ -191,7 +191,7 @@ func (imr *InvokeMethodRequest) WithReplay(enabled bool) *InvokeMethodRequest {
 
 // SetStreamingRequest marks the request body as a stream that cannot be
 // replayed. This prevents WithReplay from buffering the entire body in
-// memory, which is critical for chunked-transfer requests to avoid OOM.
+// memory, and causes built-in and user-configured retries to be skipped.
 func (imr *InvokeMethodRequest) SetStreamingRequest() *InvokeMethodRequest {
 	imr.streamingRequest = true
 	return imr
