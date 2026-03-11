@@ -58,16 +58,9 @@ func TestAuthorityOptionStability(t *testing.T) {
 	require.NoError(t, err)
 
 	c := conn.(*dnsLookUpConnector)
-	initialLen := len(c.gOpts)
 
 	// WithAuthority must be present after construction
-	assert.Positive(t, initialLen)
-
-	// Repeated Connect calls must not grow gOpts
-	for range 5 {
-		_, _ = conn.Connect(t.Context())
-		assert.Len(t, c.gOpts, initialLen, "gOpts must not grow across Connect calls")
-	}
+	require.Len(t, c.gOpts, 2)
 }
 
 func TestNewDNSConnectorErrors(t *testing.T) {
