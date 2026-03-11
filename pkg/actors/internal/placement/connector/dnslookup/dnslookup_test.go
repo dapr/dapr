@@ -61,12 +61,12 @@ func TestAuthorityOptionStability(t *testing.T) {
 	initialLen := len(c.gOpts)
 
 	// WithAuthority must be present after construction
-	assert.Greater(t, initialLen, 0)
+	assert.Positive(t, initialLen)
 
 	// Repeated Connect calls must not grow gOpts
 	for range 5 {
 		_, _ = conn.Connect(t.Context())
-		assert.Equal(t, initialLen, len(c.gOpts), "gOpts must not grow across Connect calls")
+		assert.Len(t, c.gOpts, initialLen, "gOpts must not grow across Connect calls")
 	}
 }
 
