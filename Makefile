@@ -404,7 +404,7 @@ test-integration-parallel: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -timeout=30m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true $(ARGS)
+			./tests/integration -timeout=30m -count=1 -v -parallel=32 -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true $(ARGS)
 
 ################################################################################
 # Target: lint                                                                 #

@@ -208,8 +208,9 @@ jobs:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
 
-  integration-tests:
-    name: Integration tests
+  # Pre-build integration test binaries per OS.
+  build-integration-binaries:
+    name: "Build integration binaries (${{ matrix.target_os }})"
     needs: lint
     runs-on: "${{ matrix.os }}"
     permissions:
@@ -224,7 +225,6 @@ jobs:
           - os: windows-2022
             target_os: windows
             target_arch: amd64
-            windows_version: ltsc2022
           # TODO: @joshvanl Upgrade to latest once dns is fixed.
           - os: macos-14
             target_os: darwin
@@ -232,6 +232,109 @@ jobs:
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
+      GOPROXY: "https://proxy.golang.org"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v6
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+      - name: Cache Go modules and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+            ${{ runner.os == 'Windows' && format('{0}\\go-build', env.LOCALAPPDATA) || '' }}
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Set binary extension for Windows
+        if: matrix.target_os == 'windows'
+        run: echo "BINARY_EXT=.exe" >> $GITHUB_ENV
+        shell: bash
+      - name: Build integration test binaries
+        shell: bash
+        run: |
+          BINARIES="daprd placement sentry operator injector scheduler"
+          TAGS="stablecomponents,state_etcd,crypto_localstorage,middleware_http_routeralias,conversation_echo"
+          EXT="${BINARY_EXT:-}"
+          mkdir -p integration-binaries
+
+          # Build all binaries in parallel
+          PIDS=()
+          for bin in $BINARIES; do
+            echo "Building ${bin}..."
+            CGO_ENABLED=0 go build -tags="${TAGS}" -o "integration-binaries/${bin}${EXT}" "./cmd/${bin}" &
+            PIDS+=($!)
+          done
+
+          # Build helmtemplate helper in parallel too
+          echo "Building helmtemplate..."
+          CGO_ENABLED=0 go build -C tests/integration/framework/binary/helpers/helmtemplate -o "${GITHUB_WORKSPACE}/integration-binaries/helmtemplate${EXT}" . &
+          PIDS+=($!)
+
+          # Wait for all builds and fail if any failed
+          FAILED=false
+          for pid in "${PIDS[@]}"; do
+            if ! wait "$pid"; then
+              FAILED=true
+            fi
+          done
+          if [[ "${FAILED}" == "true" ]]; then
+            echo "One or more binary builds failed"
+            exit 1
+          fi
+      - name: Upload integration binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-binaries-${{ matrix.target_os }}
+          path: integration-binaries/
+          retention-days: 1
+
+  integration-tests:
+    name: "Integration tests (${{ matrix.os_config.target_os }}/${{ matrix.shard.name }})"
+    needs: [build-integration-binaries]
+    runs-on: "${{ matrix.os_config.os }}"
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os_config:
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+          # TODO: @joshvanl Upgrade to latest once dns is fixed.
+          - os: macos-14
+            target_os: darwin
+            target_arch: amd64
+        shard:
+          - name: daprd-workflow
+            focus: "^daprd/workflow"
+          - name: daprd-subs-hotreload-pubsub
+            focus: "^daprd/(subscriptions|hotreload|pubsub)"
+          - name: daprd-state-actors-svcin
+            focus: "^daprd/(state|actors|serviceinvocation|binding|config|metadata|metrics|middleware|secret)"
+          # Catch-all: focus is computed at runtime to pick up any new
+          # daprd sub-suites not claimed by the shards above.
+          - name: daprd-remaining
+            focus: "auto-daprd-remaining"
+          - name: actors-scheduler
+            focus: "^(actors|scheduler)/"
+          # Catch-all: focus is computed at runtime to pick up any new
+          # top-level suites not claimed by the shards above.
+          - name: remaining
+            focus: "auto-remaining"
+    env:
+      GOOS: "${{ matrix.os_config.target_os }}"
+      GOARCH: "${{ matrix.os_config.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
     steps:
@@ -245,12 +348,91 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
+      - name: Cache Go modules and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+            ${{ runner.os == 'Windows' && format('{0}\\go-build', env.LOCALAPPDATA) || '' }}
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Download integration binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: integration-binaries-${{ matrix.os_config.target_os }}
+          path: integration-binaries/
+      - name: Set up integration binary paths (Linux/macOS)
+        if: matrix.os_config.target_os != 'windows'
+        run: |
+          chmod +x integration-binaries/*
+          echo "DAPR_INTEGRATION_DAPRD_PATH=${GITHUB_WORKSPACE}/integration-binaries/daprd" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_PLACEMENT_PATH=${GITHUB_WORKSPACE}/integration-binaries/placement" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_SENTRY_PATH=${GITHUB_WORKSPACE}/integration-binaries/sentry" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_OPERATOR_PATH=${GITHUB_WORKSPACE}/integration-binaries/operator" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_INJECTOR_PATH=${GITHUB_WORKSPACE}/integration-binaries/injector" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_SCHEDULER_PATH=${GITHUB_WORKSPACE}/integration-binaries/scheduler" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_HELMTEMPLATE_PATH=${GITHUB_WORKSPACE}/integration-binaries/helmtemplate" >> $GITHUB_ENV
+      - name: Set up integration binary paths (Windows)
+        if: matrix.os_config.target_os == 'windows'
+        shell: bash
+        run: |
+          echo "DAPR_INTEGRATION_DAPRD_PATH=${GITHUB_WORKSPACE}/integration-binaries/daprd.exe" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_PLACEMENT_PATH=${GITHUB_WORKSPACE}/integration-binaries/placement.exe" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_SENTRY_PATH=${GITHUB_WORKSPACE}/integration-binaries/sentry.exe" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_OPERATOR_PATH=${GITHUB_WORKSPACE}/integration-binaries/operator.exe" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_INJECTOR_PATH=${GITHUB_WORKSPACE}/integration-binaries/injector.exe" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_SCHEDULER_PATH=${GITHUB_WORKSPACE}/integration-binaries/scheduler.exe" >> $GITHUB_ENV
+          echo "DAPR_INTEGRATION_HELMTEMPLATE_PATH=${GITHUB_WORKSPACE}/integration-binaries/helmtemplate.exe" >> $GITHUB_ENV
       - name: Override DAPR_HOST_IP for MacOS
-        if: matrix.target_os == 'darwin'
+        if: matrix.os_config.target_os == 'darwin'
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
+      - name: Compute effective focus pattern
+        id: focus
+        shell: bash
+        run: |
+          SHARD_FOCUS="${{ matrix.shard.focus }}"
+          if [[ "${SHARD_FOCUS}" == "auto-daprd-remaining" ]]; then
+            # Claimed daprd sub-suites by other shards (must stay in sync with matrix above).
+            CLAIMED_RE="^(workflow|subscriptions|hotreload|pubsub|state|actors|serviceinvocation|binding|config|metadata|metrics|middleware|secret)$"
+            REMAINING=$(ls -d tests/integration/suite/daprd/*/ 2>/dev/null \
+              | xargs -I{} basename {} \
+              | grep -vE "${CLAIMED_RE}" \
+              | sort \
+              | paste -sd'|' -)
+            if [[ -z "${REMAINING}" ]]; then
+              echo "focus=^$" >> "$GITHUB_OUTPUT"
+            else
+              echo "focus=^daprd/(${REMAINING})" >> "$GITHUB_OUTPUT"
+            fi
+          elif [[ "${SHARD_FOCUS}" == "auto-remaining" ]]; then
+            # Claimed top-level suites by other shards.
+            CLAIMED_RE="^(daprd|actors|scheduler)$"
+            REMAINING=$(ls -d tests/integration/suite/*/ 2>/dev/null \
+              | xargs -I{} basename {} \
+              | grep -vE "${CLAIMED_RE}" \
+              | sort \
+              | paste -sd'|' -)
+            if [[ -z "${REMAINING}" ]]; then
+              echo "focus=^$" >> "$GITHUB_OUTPUT"
+            else
+              echo "focus=^(${REMAINING})/" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "focus=${SHARD_FOCUS}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Shard ${{ matrix.shard.name }} focus: $(grep focus "$GITHUB_OUTPUT" | cut -d= -f2-)"
       - name: Run make test-integration-parallel
-        run: make test-integration-parallel
+        run: make test-integration-parallel ARGS="-focus='${{ steps.focus.outputs.focus }}'"
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os_config.target_os }}_${{ matrix.os_config.target_arch }}_test_integration_${{ matrix.shard.name }}.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
