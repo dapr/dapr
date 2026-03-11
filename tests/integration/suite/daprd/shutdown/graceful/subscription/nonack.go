@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package declarative
+package subscription
 
 import (
 	"context"
@@ -32,10 +32,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(grpc))
+	suite.Register(new(nonack))
 }
 
-type grpc struct {
+// nonack ensures that messages published to a pluggable broker after a
+// subscription is closed during graceful shutdown (without
+// block-shutdown-duration) are held without being NACKed. This prevents
+// messages from being incorrectly routed to a dead-letter queue.
+type nonack struct {
 	daprd  *daprd.Daprd
 	broker *broker.Broker
 
@@ -43,23 +47,23 @@ type grpc struct {
 	closeInvoke chan struct{}
 }
 
-func (g *grpc) Setup(t *testing.T) []framework.Option {
+func (n *nonack) Setup(t *testing.T) []framework.Option {
 	os.SkipWindows(t)
 
-	g.closeInvoke = make(chan struct{})
+	n.closeInvoke = make(chan struct{})
 
 	app := app.New(t,
 		app.WithOnTopicEventFn(func(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
-			g.inInvoke.Store(true)
-			<-g.closeInvoke
+			n.inInvoke.Store(true)
+			<-n.closeInvoke
 			return nil, nil
 		}),
 	)
 
-	g.broker = broker.New(t)
+	n.broker = broker.New(t)
 
-	g.daprd = daprd.New(t,
-		g.broker.DaprdOptions(t, "mypub",
+	n.daprd = daprd.New(t,
+		n.broker.DaprdOptions(t, "mypub",
 			daprd.WithAppPort(app.Port(t)),
 			daprd.WithAppProtocol("grpc"),
 			daprd.WithResourceFiles(`
@@ -77,46 +81,52 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, g.broker),
+		framework.WithProcesses(app, n.broker),
 	}
 }
 
-func (g *grpc) Run(t *testing.T, ctx context.Context) {
-	g.daprd.Run(t, ctx)
-	g.daprd.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { g.daprd.Cleanup(t) })
+func (n *nonack) Run(t *testing.T, ctx context.Context) {
+	n.daprd.Run(t, ctx)
+	n.daprd.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() { n.daprd.Cleanup(t) })
 
-	assert.Len(t, g.daprd.GetMetaSubscriptions(t, ctx), 1)
+	assert.Len(t, n.daprd.GetMetaSubscriptions(t, ctx), 1)
 
-	ch := g.broker.PublishHelloWorld("a")
+	// Publish first message, handler will block.
+	ch := n.broker.PublishHelloWorld("a")
 
-	require.Eventually(t, g.inInvoke.Load, time.Second*10, time.Millisecond*10)
+	require.Eventually(t, n.inInvoke.Load, time.Second*10, time.Millisecond*10)
 
-	go g.daprd.Cleanup(t)
+	// Start shutdown (no block-shutdown-duration).
+	go n.daprd.Cleanup(t)
 
+	// First message should not be ack'd yet (handler is blocked).
 	select {
 	case req := <-ch:
 		assert.Fail(t, "unexpected request returned", req)
 	case <-time.After(time.Second * 1):
 	}
 
-	close(g.closeInvoke)
+	// Release the in-flight message.
+	close(n.closeInvoke)
 
+	// First message should be ACK'd successfully.
 	select {
 	case req := <-ch:
 		assert.Nil(t, req.GetAckError())
 		assert.Equal(t, "foo", req.GetAckMessageId())
 	case <-time.After(time.Second * 10):
-		assert.Fail(t, "timeout")
+		assert.Fail(t, "timeout waiting for first message ack")
 	}
 
-	// Publish a second message after the subscription is closed. The handler
-	// should block rather than returning an error which would cause the broker
-	// to NACK the message. The message should never be ack'd or nack'd.
-	ch = g.broker.PublishHelloWorld("a")
+	// After the in-flight message completes, the subscription is being closed.
+	// Publish a second message — it should NOT be NACKed (which would cause
+	// the broker to route it to a dead-letter queue). The handler should block
+	// until the subscription context is cancelled, so no ack is returned.
+	ch = n.broker.PublishHelloWorld("a")
 	select {
-	case req := <-ch:
-		assert.Failf(t, "expected no ack/nack for message published after subscription closed", "got: %v", req)
+	case <-ch:
+		assert.Fail(t, "expected no ack/nack for message published after subscription closed")
 	case <-time.After(time.Second * 1):
 	}
 }
