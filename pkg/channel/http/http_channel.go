@@ -296,7 +296,9 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	contentLength := int64(-1)
 	if rw.h != nil {
 		if cl := rw.h.Get("content-length"); cl != "" {
-			contentLength, _ = strconv.ParseInt(cl, 10, 64)
+			if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
+				contentLength = parsed
+			}
 		}
 	}
 
@@ -481,7 +483,9 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	if rw.h != nil {
 		if cl := rw.h.Get("content-length"); cl != "" {
-			contentLength, _ = strconv.ParseInt(cl, 10, 64)
+			if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
+				contentLength = parsed
+			}
 		}
 	}
 
