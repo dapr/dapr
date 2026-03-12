@@ -70,7 +70,9 @@ func (c *chunkedresponse) Setup(t *testing.T) []framework.Option {
 			w.WriteHeader(http.StatusOK)
 
 			// Send first chunk immediately.
-			w.Write([]byte(strings.Repeat("A", chunkSize)))
+			if _, werr := w.Write([]byte(strings.Repeat("A", chunkSize))); werr != nil {
+				return
+			}
 			flusher.Flush()
 
 			// Wait for the test to signal that the first chunk has been
@@ -84,7 +86,9 @@ func (c *chunkedresponse) Setup(t *testing.T) []framework.Option {
 			}
 
 			// Send second chunk.
-			w.Write([]byte(strings.Repeat("B", chunkSize)))
+			if _, werr := w.Write([]byte(strings.Repeat("B", chunkSize))); werr != nil {
+				return
+			}
 			flusher.Flush()
 		}),
 	)

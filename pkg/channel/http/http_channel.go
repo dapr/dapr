@@ -288,9 +288,11 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
-	var contentLength int64
+	contentLength := int64(-1)
 	if rw.h != nil {
-		contentLength, _ = strconv.ParseInt(rw.h.Get("content-length"), 10, 64)
+		if cl := rw.h.Get("content-length"); cl != "" {
+			contentLength, _ = strconv.ParseInt(cl, 10, 64)
+		}
 	}
 
 	if handlerErr != nil {
@@ -452,7 +454,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
-	var contentLength int64
+	contentLength := int64(-1)
 
 	if handlerErr != nil {
 		pr.Close()
@@ -467,7 +469,9 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	if rw.h != nil {
-		contentLength, _ = strconv.ParseInt(rw.h.Get("content-length"), 10, 64)
+		if cl := rw.h.Get("content-length"); cl != "" {
+			contentLength, _ = strconv.ParseInt(cl, 10, 64)
+		}
 	}
 
 	// Construct the http.Response with the pipe reader as the body so data

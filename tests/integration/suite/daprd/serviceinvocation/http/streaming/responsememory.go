@@ -55,7 +55,7 @@ func (c *responsememory) Setup(t *testing.T) []framework.Option {
 		numChunks = totalSize / chunkSize
 	)
 
-	chunk := strings.Repeat("X", chunkSize)
+	chunk := []byte(strings.Repeat("X", chunkSize))
 
 	receiverApp := app.New(t,
 		app.WithHandlerFunc("/healthz", func(http.ResponseWriter, *http.Request) {}),
@@ -68,7 +68,7 @@ func (c *responsememory) Setup(t *testing.T) []framework.Option {
 			w.WriteHeader(http.StatusOK)
 
 			for range numChunks {
-				_, werr := w.Write([]byte(chunk))
+				_, werr := w.Write(chunk)
 				if werr != nil {
 					return
 				}
