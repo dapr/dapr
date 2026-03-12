@@ -284,7 +284,12 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 		execPipeline.ServeHTTP(rw, channelReq)
 	}()
 
-	<-rw.readyCh
+	select {
+	case <-rw.readyCh:
+	case <-ctx.Done():
+		pr.Close()
+		return nil, ctx.Err()
+	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
@@ -449,8 +454,14 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		execPipeline.ServeHTTP(rw, channelReq)
 	}()
 
-	// Wait for response headers to be available (or the handler to finish).
-	<-rw.readyCh
+	// Wait for response headers to be available (or the handler to finish),
+	// but also honor context cancellation to avoid blocking indefinitely.
+	select {
+	case <-rw.readyCh:
+	case <-ctx.Done():
+		pr.Close()
+		return nil, ctx.Err()
+	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 

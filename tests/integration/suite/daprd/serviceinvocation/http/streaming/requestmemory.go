@@ -139,8 +139,8 @@ func (c *requestmemory) Run(t *testing.T, ctx context.Context) {
 		for {
 			select {
 			case <-ticker.C:
-				storePeak(&peakReceiverMi, c.daprdReceiver.MetricResidentMemoryMi(t, ctx))
-				storePeak(&peakSenderMi, c.daprdSender.MetricResidentMemoryMi(t, ctx))
+				storePeak(&peakReceiverMi, c.daprdReceiver.MetricResidentMemoryMi(t, samplerCtx))
+				storePeak(&peakSenderMi, c.daprdSender.MetricResidentMemoryMi(t, samplerCtx))
 			case <-samplerCtx.Done():
 				return
 			}
