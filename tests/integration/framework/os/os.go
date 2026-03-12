@@ -14,8 +14,12 @@ limitations under the License.
 package os
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func SkipWindows(t *testing.T) {
@@ -24,4 +28,16 @@ func SkipWindows(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping test on windows which relies on unix process signals")
 	}
+}
+
+func WriteFileYaml(t *testing.T, data string) string {
+	t.Helper()
+	f := filepath.Join(t.TempDir(), "test.yaml")
+	require.NoError(t, os.WriteFile(f, []byte(data), 0o600))
+	return f
+}
+
+func WriteFileTo(t *testing.T, name, data string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(name, []byte(data), 0o600))
 }
