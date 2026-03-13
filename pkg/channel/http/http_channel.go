@@ -259,8 +259,8 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	var handlerErr error
 
 	go func() {
-		defer pw.Close()
 		defer rw.signalReady()
+		defer pw.Close()
 		defer func() {
 			if h.ch != nil {
 				<-h.ch
@@ -410,8 +410,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	)
 
 	go func() {
-		defer pw.Close()
 		defer rw.signalReady()
+		defer pw.Close()
 		// Release the concurrency limiter slot when the handler goroutine
 		// finishes. Because io.Pipe is synchronous (no buffer), the goroutine
 		// naturally stays alive—and holds the slot—until the caller has

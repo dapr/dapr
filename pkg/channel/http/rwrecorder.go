@@ -7,12 +7,12 @@ import (
 	"sync"
 )
 
-// rwRecorder writes response body data to an io.PipeWriter and signals when
+// rwRecorder writes response body data to an io.Writer and signals when
 // headers and status code are available.
 type rwRecorder struct {
 	statusCode int
 	h          http.Header
-	pw         *io.PipeWriter
+	pw         io.Writer
 	readyCh    chan struct{}
 	readyOnce  sync.Once
 }
