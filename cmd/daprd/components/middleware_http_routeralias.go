@@ -1,4 +1,4 @@
-//go:build allcomponents
+//go:build allcomponents || middleware_http_routeralias
 
 /*
 Copyright 2021 The Dapr Authors

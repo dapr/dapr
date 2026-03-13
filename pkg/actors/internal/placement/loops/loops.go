@@ -16,36 +16,68 @@ package loops
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/utils"
 )
 
-type Event any
+type placebase struct{}
+
+func (*placebase) isEventPlace() {}
+
+type EventPlace interface{ isEventPlace() }
+
+type dissbase struct{}
+
+func (*dissbase) isEventDiss() {}
+
+type EventDiss interface{ isEventDiss() }
+
+type streambase struct{}
+
+func (*streambase) isEventStream() {}
+
+type EventStream interface{ isEventStream() }
+
+type lookupbase struct{}
+
+func (*lookupbase) isEventLookup() {}
+
+type EventLookup interface{ isEventLookup() }
 
 type PlacementReconnect struct {
+	*placebase
 	ActorTypes *[]string
 }
 
 type UpdateTypes struct {
+	*placebase
 	ActorTypes []string
 }
 
 type ReportHost struct {
+	*dissbase
 	Host *v1pb.Host
 }
 
 type StreamOrder struct {
+	*placebase
+	*dissbase
 	Order *v1pb.PlacementOrder
 	IDx   uint64
 }
 
 type StreamSend struct {
+	*streambase
 	Host *v1pb.Host
 }
 
 type LookupRequest struct {
+	*placebase
+	*dissbase
+	*lookupbase
 	Request  *api.LookupActorRequest
 	Context  context.Context
 	Response chan<- *LookupResponse
@@ -59,6 +91,9 @@ type LookupResponse struct {
 }
 
 type LockRequest struct {
+	*placebase
+	*dissbase
+	*lookupbase
 	Context  context.Context
 	Response chan<- *LockResponse
 }
@@ -69,16 +104,27 @@ type LockResponse struct {
 }
 
 type ConnCloseStream struct {
+	*placebase
 	Error error
 	IDx   uint64
 }
 
 type Shutdown struct {
+	*placebase
+	*dissbase
+	*streambase
 	Error error
 }
 
 type DisseminationTimeout struct {
+	*dissbase
 	Version uint64
+}
+
+type SetDrainOngoingCallTimeout struct {
+	*placebase
+	Drain   *bool
+	Timeout *time.Duration
 }
 
 func IsActorLocal(targetActorAddress, hostAddress string, port string) bool {

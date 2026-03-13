@@ -85,7 +85,9 @@ func config(ctx context.Context, opts Options) (*embed.Config, error) {
 		}
 
 		if !slices.Contains(certs[0].DNSNames, info.ServerName) {
-			return nil, fmt.Errorf("peer certificate does not contain the expected DNS name %s", info.ServerName)
+			return nil, fmt.Errorf("peer certificate does not contain the expected DNS name %s got %v",
+				info.ServerName, certs[0].DNSNames,
+			)
 		}
 
 		config.ClientTLSInfo = info

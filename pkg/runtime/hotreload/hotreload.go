@@ -134,6 +134,7 @@ func (r *Reloader) Run(ctx context.Context) error {
 	if !r.isEnabled {
 		log.Debug("Hot reloading disabled")
 		<-ctx.Done()
+
 		return nil
 	}
 

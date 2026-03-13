@@ -94,18 +94,21 @@ func Diff[T Resource](resources *LocalRemoteResources[T]) *Result[T] {
 // true, will skip checking whether that base resource exists in the target.
 func detectDiff[T Resource](base, target []T, skipTarget func(T) bool) map[string]T {
 	notExist := make(map[string]T)
+
 	for i := range target {
 		if skipTarget != nil && skipTarget(target[i]) {
 			continue
 		}
 
 		found := false
+
 		for _, tt := range base {
 			if AreSame(target[i], tt) {
 				found = true
 				break
 			}
 		}
+
 		if !found {
 			notExist[target[i].GetName()] = target[i]
 		}

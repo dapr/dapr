@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -54,7 +53,7 @@ func (d *deletebynameprefix) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
+					Schedule: new("@every 20s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid",
@@ -72,7 +71,7 @@ func (d *deletebynameprefix) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: "abc-" + strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
+					Schedule: new("@every 20s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid2",
@@ -89,7 +88,7 @@ func (d *deletebynameprefix) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: "xyz-" + strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
+					Schedule: new("@every 20s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid2",
@@ -202,7 +201,7 @@ func (d *deletebynameprefix) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
+					Schedule: new("@every 20s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid",
@@ -225,7 +224,7 @@ func (d *deletebynameprefix) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: "abc-" + strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
+					Schedule: new("@every 20s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid",
@@ -247,7 +246,7 @@ func (d *deletebynameprefix) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: "xyz-" + strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
+					Schedule: new("@every 20s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid",

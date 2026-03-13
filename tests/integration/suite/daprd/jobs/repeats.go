@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -72,8 +71,8 @@ func (r *repeats) Run(t *testing.T, ctx context.Context) {
 	_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test1",
-			Schedule: ptr.Of("@every 1s"),
-			Ttl:      ptr.Of("3s"),
+			Schedule: new("@every 1s"),
+			Ttl:      new("3s"),
 		},
 	})
 	require.NoError(t, err)
@@ -81,8 +80,8 @@ func (r *repeats) Run(t *testing.T, ctx context.Context) {
 	_, err = client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test2",
-			Schedule: ptr.Of("@every 1s"),
-			Repeats:  ptr.Of(uint32(2)),
+			Schedule: new("@every 1s"),
+			Repeats:  new(uint32(2)),
 		},
 	})
 	require.NoError(t, err)

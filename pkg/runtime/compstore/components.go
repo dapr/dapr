@@ -23,11 +23,13 @@ import (
 func (c *ComponentStore) GetComponent(name string) (compsv1alpha1.Component, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	for i, comp := range c.components {
-		if comp.ObjectMeta.Name == name {
+		if comp.Name == name {
 			return c.components[i], true
 		}
 	}
+
 	return compsv1alpha1.Component{}, false
 }
 
@@ -85,8 +87,10 @@ func (c *ComponentStore) CommitPendingComponent() error {
 func (c *ComponentStore) ListComponents() []compsv1alpha1.Component {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	comps := make([]compsv1alpha1.Component, len(c.components))
 	copy(comps, c.components)
+
 	return comps
 }
 
@@ -95,7 +99,7 @@ func (c *ComponentStore) DeleteComponent(name string) {
 	defer c.lock.Unlock()
 
 	for i, comp := range c.components {
-		if comp.ObjectMeta.Name == name {
+		if comp.Name == name {
 			c.components = append(c.components[:i], c.components[i+1:]...)
 			return
 		}

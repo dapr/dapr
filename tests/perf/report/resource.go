@@ -39,27 +39,27 @@ type parsedUsage struct {
 func parseResourceUsageLine(line string) (parsedUsage, bool) {
 	l := strings.ToLower(strings.TrimSpace(line))
 	var resource, marker string
-	if idx := strings.Index(l, markers.TargetDaprAppConsumed); idx != -1 || strings.HasPrefix(l, markers.TargetDaprAppConsumed) {
+	if found := strings.Contains(l, markers.TargetDaprAppConsumed); found || strings.HasPrefix(l, markers.TargetDaprAppConsumed) {
 		resource, marker = "app", markers.TargetDaprAppConsumed
-	} else if idx := strings.Index(l, markers.TargetDaprConsumed); idx != -1 || strings.HasPrefix(l, markers.TargetDaprConsumed) {
+	} else if found := strings.Contains(l, markers.TargetDaprConsumed); found || strings.HasPrefix(l, markers.TargetDaprConsumed) {
 		resource, marker = "sidecar", markers.TargetDaprConsumed
 	} else {
 		return parsedUsage{}, false
 	}
 
 	// rest after the marker
-	markerPos := strings.Index(l, marker)
-	if markerPos == -1 {
+	_, after, ok := strings.Cut(l, marker)
+	if !ok {
 		return parsedUsage{}, false
 	}
-	rest := strings.TrimSpace(l[markerPos+len(marker):])
+	rest := strings.TrimSpace(after)
 
 	// parse cpu: "<value>[m] cpu and ..."
 	cpuMilli := 0.0
-	if j := strings.Index(rest, " cpu"); j != -1 {
-		cpuStr := strings.TrimSpace(rest[:j])
-		if strings.HasSuffix(cpuStr, "m") {
-			if v, err := strconv.ParseFloat(strings.TrimSuffix(cpuStr, "m"), 64); err == nil {
+	if before, _, ok := strings.Cut(rest, " cpu"); ok {
+		cpuStr := strings.TrimSpace(before)
+		if before, ok := strings.CutSuffix(cpuStr, "m"); ok {
+			if v, err := strconv.ParseFloat(before, 64); err == nil {
 				cpuMilli = v
 			}
 		}
@@ -67,10 +67,10 @@ func parseResourceUsageLine(line string) (parsedUsage, bool) {
 
 	// parse mem: "... cpu and <value>mb of memory"
 	memMB := 0.0
-	if k := strings.Index(rest, " cpu and "); k != -1 {
-		memPart := rest[k+len(" cpu and "):]
-		if m := strings.Index(memPart, "mb of memory"); m != -1 {
-			if v, err := strconv.ParseFloat(strings.TrimSpace(memPart[:m]), 64); err == nil {
+	if _, after, ok := strings.Cut(rest, " cpu and "); ok {
+		memPart := after
+		if before, _, ok := strings.Cut(memPart, "mb of memory"); ok {
+			if v, err := strconv.ParseFloat(strings.TrimSpace(before), 64); err == nil {
 				memMB = v
 			}
 		}
@@ -104,10 +104,10 @@ func parseRestartLine(line string) (parsedRestarts, bool) {
 
 	// get val btw "restarted " && " times"
 	count := 0
-	if idx := strings.Index(l, "restarted "); idx != -1 {
-		rest := l[idx+len("restarted "):]
-		if j := strings.Index(rest, " times"); j != -1 {
-			numStr := strings.TrimSpace(rest[:j])
+	if _, after, ok := strings.Cut(l, "restarted "); ok {
+		rest := after
+		if before, _, ok := strings.Cut(rest, " times"); ok {
+			numStr := strings.TrimSpace(before)
 			if v, err := strconv.Atoi(numStr); err == nil {
 				count = v
 			}

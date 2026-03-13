@@ -61,7 +61,7 @@ func TestAdd(t *testing.T) {
 
 func TestSetup(t *testing.T) {
 	t.Run("active all resources", func(t *testing.T) {
-		expect := []string{}
+		expect := make([]string, 0, 3)
 		resource := new(TestResources)
 		for i := range 3 {
 			name := fmt.Sprintf("resource - %d", i)
@@ -87,7 +87,7 @@ func TestSetup(t *testing.T) {
 	})
 
 	t.Run("fails to setup resources and stops the process", func(t *testing.T) {
-		expect := []string{}
+		expect := make([]string, 0, 3)
 		resource := new(TestResources)
 		for i := range 3 {
 			name := fmt.Sprintf("resource - %d", i)

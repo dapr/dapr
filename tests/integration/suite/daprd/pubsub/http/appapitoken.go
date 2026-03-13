@@ -47,7 +47,7 @@ func (a *appapitoken) Setup(t *testing.T) []framework.Option {
 	app := app.New(t,
 		app.WithHandlerFunc("/test-topic", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			a.headerCh <- r.Header.Clone()
-			var cloudEvent map[string]interface{}
+			var cloudEvent map[string]any
 			err := json.NewDecoder(r.Body).Decode(&cloudEvent)
 			assert.NoError(t, err)
 
@@ -55,7 +55,7 @@ func (a *appapitoken) Setup(t *testing.T) []framework.Option {
 			json.NewEncoder(w).Encode(map[string]string{"status": "SUCCESS"})
 		}),
 		app.WithHandlerFunc("/dapr/subscribe", func(w nethttp.ResponseWriter, r *nethttp.Request) {
-			subs := []map[string]interface{}{
+			subs := []map[string]any{
 				{
 					"pubsubname": "mypub",
 					"topic":      "test-topic",

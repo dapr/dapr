@@ -29,7 +29,6 @@ import (
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/ptr"
 )
 
 type getSidecarContainerOpts struct {
@@ -228,11 +227,11 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 
 	// Security context
 	securityContext := &corev1.SecurityContext{
-		AllowPrivilegeEscalation: ptr.Of(false),
-		RunAsNonRoot:             ptr.Of(c.RunAsNonRoot),
+		AllowPrivilegeEscalation: new(false),
+		RunAsNonRoot:             new(c.RunAsNonRoot),
 		RunAsUser:                c.RunAsUser,
 		RunAsGroup:               c.RunAsGroup,
-		ReadOnlyRootFilesystem:   ptr.Of(c.ReadOnlyRootFilesystem),
+		ReadOnlyRootFilesystem:   new(c.ReadOnlyRootFilesystem),
 	}
 	if c.SidecarSeccompProfileType != "" {
 		securityContext.SeccompProfile = &corev1.SeccompProfile{
@@ -356,15 +355,15 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	for _, env := range container.Env {
 		if env.Name == "SSL_CERT_DIR" {
 			container.SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{
-				RunAsUserName: ptr.Of("ContainerAdministrator"),
+				RunAsUserName: new("ContainerAdministrator"),
 			}
 
 			// We also need to set RunAsNonRoot and ReadOnlyRootFilesystem to false, which would impact Linux too.
 			// The injector has no way to know if the pod is going to be deployed on Windows or Linux, so we need to err on the side of most compatibility.
 			// On Linux, our containers run with a non-root user, so the net effect shouldn't change: daprd is running as non-root and has no permission to write on the root FS.
 			// However certain security scanner may complain about this.
-			container.SecurityContext.RunAsNonRoot = ptr.Of(false)
-			container.SecurityContext.ReadOnlyRootFilesystem = ptr.Of(false)
+			container.SecurityContext.RunAsNonRoot = new(false)
+			container.SecurityContext.ReadOnlyRootFilesystem = new(false)
 
 			// Set RunAsUser and RunAsGroup to default nil to avoid the error when specific user or group is set previously via helm chart.
 			container.SecurityContext.RunAsUser = nil

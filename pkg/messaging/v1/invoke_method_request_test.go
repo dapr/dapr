@@ -187,8 +187,8 @@ func TestData(t *testing.T) {
 		contentType := req.ContentType()
 		bData, err := io.ReadAll(req.RawData())
 		require.NoError(t, err)
-		assert.Equal(t, "", req.r.GetMessage().GetContentType())
-		assert.Equal(t, "", contentType)
+		assert.Empty(t, req.r.GetMessage().GetContentType())
+		assert.Empty(t, contentType)
 		assert.Equal(t, "test", string(bData))
 	})
 
@@ -756,6 +756,83 @@ func TestDataTypeUrl(t *testing.T) {
 
 		// Content type should be the protobuf one
 		assert.Equal(t, ProtobufContentType, req.ContentType())
+	})
+}
+
+func TestStreamingRequest(t *testing.T) {
+	const message = "streaming data that should not be buffered"
+
+	t.Run("streaming request without WithReplay cannot replay", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawData(strings.NewReader(message)).
+			SetStreamingRequest()
+		defer req.Close()
+
+		assert.True(t, req.IsStreamingRequest())
+		assert.False(t, req.CanReplay())
+	})
+
+	t.Run("streaming request prevents WithReplay from enabling replay", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawData(strings.NewReader(message)).
+			SetStreamingRequest().
+			WithReplay(true)
+		defer req.Close()
+
+		assert.True(t, req.IsStreamingRequest())
+		// WithReplay is a no-op when streamingRequest is set,
+		// preventing the body from being buffered in memory.
+		assert.False(t, req.CanReplay())
+	})
+
+	t.Run("streaming request does not affect in-memory proto data", func(t *testing.T) {
+		pb := &commonv1pb.InvokeRequest{
+			Method: "test_method",
+			Data:   &anypb.Any{Value: []byte(message)},
+		}
+		req := FromInvokeRequestMessage(pb).
+			SetStreamingRequest()
+		defer req.Close()
+
+		assert.True(t, req.IsStreamingRequest())
+		// CanReplay is true because data is in-memory (HasMessageData)
+		assert.True(t, req.CanReplay())
+	})
+
+	t.Run("non-streaming request WithReplay works normally", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawData(strings.NewReader(message)).
+			WithReplay(true)
+		defer req.Close()
+
+		assert.False(t, req.IsStreamingRequest())
+		assert.True(t, req.CanReplay())
+
+		// Data can be read and replayed
+		read, err := io.ReadAll(req.RawData())
+		require.NoError(t, err)
+		assert.Equal(t, message, string(read))
+
+		read, err = io.ReadAll(req.RawData())
+		require.NoError(t, err)
+		assert.Equal(t, message, string(read))
+	})
+
+	t.Run("streaming request data is read once only", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method").
+			WithRawData(strings.NewReader(message)).
+			SetStreamingRequest()
+		defer req.Close()
+
+		// First read succeeds
+		read, err := io.ReadAll(req.RawData())
+		require.NoError(t, err)
+		assert.Equal(t, message, string(read))
+
+		// Second read returns empty (stream consumed, no replay buffer)
+		read, err = io.ReadAll(req.RawData())
+		require.NoError(t, err)
+		assert.Empty(t, read)
 	})
 }
 

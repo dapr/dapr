@@ -20,7 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
-	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/internal/scheduler"
 	"github.com/dapr/dapr/pkg/actors/router"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -44,6 +44,8 @@ type Options struct {
 	Scheduler         todo.ActivityScheduler
 	Actors            actors.Interface
 	ActorTypeBuilder  *common.ActorTypeBuilder
+
+	WorkflowsRemoteActivityReminder bool
 }
 
 type factory struct {
@@ -51,9 +53,12 @@ type factory struct {
 	actorType         string
 	workflowActorType string
 
+	// TODO: @joshvanl: remove in the next version.
+	workflowsRemoteActivityReminder bool
+
 	router           router.Interface
 	state            state.Interface
-	reminders        reminders.Interface
+	reminders        scheduler.Interface
 	placement        placement.Interface
 	actorTypeBuilder *common.ActorTypeBuilder
 
@@ -79,6 +84,11 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		return nil, err
 	}
 
+	sreminders, err := reminders.Scheduler()
+	if err != nil {
+		return nil, err
+	}
+
 	placement, err := opts.Actors.Placement(ctx)
 	if err != nil {
 		return nil, err
@@ -88,12 +98,14 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		appID:             opts.AppID,
 		actorType:         opts.ActivityActorType,
 		router:            router,
-		reminders:         reminders,
+		reminders:         sreminders,
 		scheduler:         opts.Scheduler,
 		placement:         placement,
 		workflowActorType: opts.WorkflowActorType,
 		actorTypeBuilder:  opts.ActorTypeBuilder,
 		state:             state,
+
+		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
 	}, nil
 }
 

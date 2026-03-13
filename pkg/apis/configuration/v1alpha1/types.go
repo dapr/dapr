@@ -15,10 +15,11 @@ package v1alpha1
 
 import (
 	"strconv"
-	"time"
 
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/pkg/apis/common"
 )
 
 // +genclient
@@ -98,22 +99,22 @@ type WorkflowStateRetentionPolicy struct {
 	// AnyTerminal is the TTL for purging workflow instances that reach any
 	// terminal state.
 	// +optional
-	AnyTerminal *time.Duration `json:"anyTerminal,omitempty"`
+	AnyTerminal *metav1.Duration `json:"anyTerminal,omitempty"`
 
 	// Completed is the TTL for purging workflow instances that reach the
 	// Completed terminal state.
 	// +optional
-	Completed *time.Duration `json:"completed,omitempty"`
+	Completed *metav1.Duration `json:"completed,omitempty"`
 
 	// Failed is the TTL for purging workflow instances that reach the Failed
 	// terminal state.
 	// +optional
-	Failed *time.Duration `json:"failed,omitempty"`
+	Failed *metav1.Duration `json:"failed,omitempty"`
 
 	// Terminated is the TTL for purging workflow instances that reach the
 	// Terminated terminal state.
 	// +optional
-	Terminated *time.Duration `json:"terminated,omitempty"`
+	Terminated *metav1.Duration `json:"terminated,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -236,6 +237,13 @@ type OtelSpec struct {
 	Protocol        string `json:"protocol" yaml:"protocol"`
 	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
 	IsSecure        *bool  `json:"isSecure" yaml:"isSecure"`
+	// Headers to add to the OTLP trace exporter request.
+	// Each header can contain plaintext values, reference secrets, or reference environment variables.
+	// +optional
+	Headers []common.NameValuePair `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP trace exporter request.
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.

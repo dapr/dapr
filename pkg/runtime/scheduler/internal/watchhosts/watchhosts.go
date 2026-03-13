@@ -41,7 +41,7 @@ type Options struct {
 	Healthz   healthz.Healthz
 	Security  security.Handler
 	Clients   *clients.Clients
-	HostLoop  loop.Interface[loops.Event]
+	HostLoop  loop.Interface[loops.EventHost]
 }
 
 type WatchHosts struct {
@@ -50,7 +50,7 @@ type WatchHosts struct {
 	security security.Handler
 	clients  *clients.Clients
 
-	loop loop.Interface[loops.Event]
+	loop loop.Interface[loops.EventHost]
 }
 
 func New(opts Options) *WatchHosts {
@@ -70,6 +70,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		log.Warnf("No scheduler host addresses provided. Scheduler disabled")
 		w.htarget.Ready()
 		<-ctx.Done()
+
 		return nil
 	}
 
@@ -77,6 +78,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		stream, closeCon, err := w.connSchedulerHosts(ctx)
 		if err != nil {
 			log.Errorf("Failed to connect to scheduler host: %s", err)
+
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -86,10 +88,12 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		}
 
 		resp, err := stream.Recv()
+
 		code := status.Code(err)
 		switch code {
 		case codes.Unimplemented:
-			if err = w.clients.Reload(ctx, w.allAddrs); err != nil {
+			err = w.clients.Reload(ctx, w.allAddrs)
+			if err != nil {
 				return err
 			}
 
@@ -101,6 +105,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 			closeCon()
 			w.htarget.Ready()
 			<-ctx.Done()
+
 			return nil
 
 		case codes.Canceled:
@@ -122,6 +127,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		if err = w.clients.Reload(ctx, gotAddrs); err != nil {
 			return err
 		}
+
 		w.loop.Enqueue(&loops.ReloadClients{
 			Addresses: gotAddrs,
 		})
@@ -129,6 +135,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 		w.htarget.Ready()
 		stream.Recv()
 		closeCon()
+
 		if err = ctx.Err(); err != nil {
 			return err
 		}

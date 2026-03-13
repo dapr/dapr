@@ -19,7 +19,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/kit/ptr"
 )
 
 // Option is a function that configures the process.
@@ -105,9 +104,9 @@ func WithSentryAddress(sentryAddress string) Option {
 func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 	return func(o *options) {
 		o.tlsEnabled = true
-		o.sentryAddress = ptr.Of(sentry.Address())
-		o.trustAnchorsFile = ptr.Of(sentry.TrustAnchorsFile(t))
-		o.trustDomain = ptr.Of(sentry.TrustDomain(t))
+		o.sentryAddress = new(sentry.Address())
+		o.trustAnchorsFile = new(sentry.TrustAnchorsFile(t))
+		o.trustDomain = new(sentry.TrustDomain(t))
 	}
 }
 

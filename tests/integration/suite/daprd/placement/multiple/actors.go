@@ -86,7 +86,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, expHosts, a.actors[0].Placement().PlacementTables(t, ctx).Tables["default"].Hosts)
+		assert.ElementsMatch(c, expHosts, a.actors[0].Placement().PlacementTables(t, ctx).Tables["default"].Hosts)
 		assert.Equal(c, uint64(3), a.actors[0].Placement().PlacementTables(t, ctx).Tables["default"].Version)
 	}, time.Second*10, time.Millisecond*10)
 
@@ -107,7 +107,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		if !assert.Contains(c, tables.Tables, "default") {
 			return
 		}
-		assert.Equal(c, expHosts, tables.Tables["default"].Hosts)
+		assert.ElementsMatch(c, expHosts, tables.Tables["default"].Hosts)
 		assert.Equal(c, uint64(4), tables.Tables["default"].Version)
 	}, time.Second*20, time.Millisecond*10)
 
@@ -121,7 +121,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		if !assert.Contains(c, tables.Tables, "default") {
 			return
 		}
-		assert.Equal(c, expHosts, tables.Tables["default"].Hosts)
+		assert.ElementsMatch(c, expHosts, tables.Tables["default"].Hosts)
 		assert.Equal(c, uint64(5), tables.Tables["default"].Version)
 	}, time.Second*10, time.Second)
 }

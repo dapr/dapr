@@ -33,12 +33,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 // Feature Flags section
@@ -54,6 +54,14 @@ const (
 
 	// Enables feature to support workflows in a clustered deployment.
 	WorkflowsClusteredDeployment Feature = "WorkflowsClusteredDeployment"
+
+	// Enables a feature to make activities send their results to workflow when
+	// the workflow is running on a different application. Useful when using
+	// cross app workflows. Ensures that activities are not retried forever if
+	// the workflow app is not available, and instead queues the result for when
+	// the workflow app is back online. Strongly recommended to always be enabled
+	// if using the same Dapr version on all daprds.
+	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
 )
 
 // end feature flags section
@@ -77,7 +85,7 @@ var defaultFeatures = make(map[Feature]bool)
 type Configuration struct {
 	metav1.TypeMeta `json:",inline" yaml:",inline"`
 	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
-	metav1.ObjectMeta `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata,omitzero" yaml:"metadata,omitempty"`
 	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
 
@@ -167,18 +175,48 @@ type WorkflowStateRetentionPolicy struct {
 	Terminated *time.Duration `json:"terminated,omitempty" yaml:"terminated,omitempty"`
 }
 
+// UnmarshalJSON handles the Kubernetes CRD JSON format sent by the operator,
+// where durations are encoded as metav1.Duration strings (for example, "1s" or
+// "168h"). Standalone configuration files parsed via YAML use the YAML
+// unmarshaling path instead, which handles Go duration strings natively.
+func (p *WorkflowStateRetentionPolicy) UnmarshalJSON(data []byte) error {
+	var crd configapi.WorkflowStateRetentionPolicy
+	if err := json.Unmarshal(data, &crd); err != nil {
+		return err
+	}
+
+	if crd.AnyTerminal != nil {
+		d := crd.AnyTerminal.Duration
+		p.AnyTerminal = &d
+	}
+	if crd.Completed != nil {
+		d := crd.Completed.Duration
+		p.Completed = &d
+	}
+	if crd.Failed != nil {
+		d := crd.Failed.Duration
+		p.Failed = &d
+	}
+	if crd.Terminated != nil {
+		d := crd.Terminated.Duration
+		p.Terminated = &d
+	}
+
+	return nil
+}
+
 func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() *int32 {
 	if w == nil || w.MaxConcurrentWorkflowInvocations <= 0 {
 		return nil
 	}
-	return ptr.Of(w.MaxConcurrentWorkflowInvocations)
+	return new(w.MaxConcurrentWorkflowInvocations)
 }
 
 func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() *int32 {
 	if w == nil || w.MaxConcurrentActivityInvocations <= 0 {
 		return nil
 	}
-	return ptr.Of(w.MaxConcurrentActivityInvocations)
+	return new(w.MaxConcurrentActivityInvocations)
 }
 
 type SecretsSpec struct {
@@ -241,7 +279,7 @@ type HandlerSpec struct {
 	Name         string       `json:"name,omitempty"     yaml:"name,omitempty"`
 	Type         string       `json:"type,omitempty"     yaml:"type,omitempty"`
 	Version      string       `json:"version,omitempty"  yaml:"version,omitempty"`
-	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
+	SelectorSpec SelectorSpec `json:"selector,omitzero" yaml:"selector,omitempty"`
 }
 
 // LogName returns the name of the handler that can be used in logging.
@@ -276,16 +314,43 @@ type OtelSpec struct {
 	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
 	// Defaults to true
 	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
-	// Headers to add to the request
-	Headers string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	// Timeout for the request in milliseconds
-	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"` // Defaults to 10000
+	// Headers to add to the OTLP trace exporter request
+	Headers []string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Timeout for the OTLP trace exporter request
+	Timeout *time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // GetIsSecure returns true if the connection should be secured.
-func (o OtelSpec) GetIsSecure() bool {
+func (o *OtelSpec) GetIsSecure() bool {
 	// Defaults to true if nil
 	return o.IsSecure == nil || *o.IsSecure
+}
+
+// UnmarshalJSON handles both the internal config format
+// and the Kubernetes CRD format sent by the operator.
+func (o *OtelSpec) UnmarshalJSON(data []byte) error {
+	var crd configapi.OtelSpec
+	if err := json.Unmarshal(data, &crd); err != nil {
+		return err
+	}
+
+	o.Protocol = crd.Protocol
+	o.EndpointAddress = crd.EndpointAddress
+	o.IsSecure = crd.IsSecure
+
+	if crd.Headers != nil {
+		o.Headers = make([]string, 0, len(crd.Headers))
+		for _, p := range crd.Headers {
+			o.Headers = append(o.Headers, p.Name+"="+p.Value.String())
+		}
+	}
+
+	if crd.Timeout != nil {
+		d := crd.Timeout.Duration
+		o.Timeout = &d
+	}
+
+	return nil
 }
 
 // MetricSpec configuration for metrics.
@@ -501,11 +566,11 @@ func LoadDefaultConfiguration() *Configuration {
 		Spec: ConfigurationSpec{
 			TracingSpec: &TracingSpec{
 				Otel: &OtelSpec{
-					IsSecure: ptr.Of(true),
+					IsSecure: new(true),
 				},
 			},
 			MetricSpec: &MetricSpec{
-				Enabled: ptr.Of(true),
+				Enabled: new(true),
 			},
 			AccessControlSpec: &AccessControlSpec{
 				DefaultAction: AllowAccess,
@@ -565,8 +630,7 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 		return nil, fmt.Errorf("configuration %s not found", config)
 	}
 	conf := LoadDefaultConfiguration()
-	err = json.Unmarshal(b, conf)
-	if err != nil {
+	if err = json.Unmarshal(b, conf); err != nil {
 		return nil, err
 	}
 
@@ -582,6 +646,13 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 
 // Update configuration from Otlp Environment Variables, if they exist.
 func SetTracingSpecFromEnv(conf *Configuration) error {
+	if conf.Spec.TracingSpec == nil {
+		conf.Spec.TracingSpec = &TracingSpec{}
+	}
+	if conf.Spec.TracingSpec.Otel == nil {
+		conf.Spec.TracingSpec.Otel = &OtelSpec{}
+	}
+
 	// If Otel Endpoint is already set, then don't override.
 	if conf.Spec.TracingSpec.Otel.EndpointAddress != "" {
 		return nil
@@ -621,7 +692,7 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 		}
 
 		if insecure := os.Getenv(env.OtlpExporterInsecure); insecure == "true" {
-			conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(false)
+			conf.Spec.TracingSpec.Otel.IsSecure = new(false)
 		}
 	}
 
@@ -633,7 +704,13 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 	}
 
 	if headers != "" {
-		conf.Spec.TracingSpec.Otel.Headers = headers
+		headersMap, err := StringToHeader(headers)
+		if err != nil {
+			return err
+		}
+		for name, value := range headersMap {
+			conf.Spec.TracingSpec.Otel.Headers = append(conf.Spec.TracingSpec.Otel.Headers, name+"="+value)
+		}
 	}
 
 	var timeoutMs int
@@ -652,7 +729,8 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 	}
 
 	if timeoutMs > 0 {
-		conf.Spec.TracingSpec.Otel.Timeout = timeoutMs
+		timeout := time.Duration(timeoutMs) * time.Millisecond
+		conf.Spec.TracingSpec.Otel.Timeout = &timeout
 	}
 	return nil
 }

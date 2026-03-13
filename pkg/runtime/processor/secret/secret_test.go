@@ -56,7 +56,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 				Name: "name1",
 			},
 		})
-		mockBinding.Auth.SecretStore = compsecret.BuiltinKubernetesSecretStore
+		mockBinding.SecretStore = compsecret.BuiltinKubernetesSecretStore
 
 		sec := New(Options{
 			Registry:       registry.New(registry.NewOptions()).SecretStores(),
@@ -68,6 +68,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 		})
 
 		m := mock.NewMockKubernetesStore()
+
 		sec.registry.RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -100,7 +101,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 				Name: "name1",
 			},
 		})
-		mockBinding.Auth.SecretStore = "mock"
+		mockBinding.SecretStore = "mock"
 
 		sec := New(Options{
 			Registry:       registry.New(registry.NewOptions()).SecretStores(),
@@ -187,8 +188,8 @@ func TestProcessResourceSecrets(t *testing.T) {
 
 		updated, unready := sec.ProcessResource(t.Context(), mockBinding)
 		assert.True(t, updated)
-		assert.Equal(t, "", mockBinding.Spec.Metadata[0].Value.String())
-		assert.Equal(t, "", mockBinding.Spec.Metadata[1].Value.String())
+		assert.Empty(t, mockBinding.Spec.Metadata[0].Value.String())
+		assert.Empty(t, mockBinding.Spec.Metadata[1].Value.String())
 		assert.Empty(t, unready)
 	})
 }

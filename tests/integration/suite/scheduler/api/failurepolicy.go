@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -61,7 +60,7 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 	_, err := client.ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
 		Name: "test1", Metadata: metadata,
 		Job: &schedulerv1.Job{
-			DueTime:       ptr.Of("100s"),
+			DueTime:       new("100s"),
 			FailurePolicy: nil,
 		},
 	})
@@ -74,7 +73,7 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 		Policy: &corev1.JobFailurePolicy_Constant{
 			Constant: &corev1.JobFailurePolicyConstant{
 				Interval:   durationpb.New(time.Second * 1),
-				MaxRetries: ptr.Of(uint32(3)),
+				MaxRetries: new(uint32(3)),
 			},
 		},
 	}, resp.GetJob().GetFailurePolicy())
@@ -82,12 +81,12 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 	_, err = client.ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
 		Name: "test2", Metadata: metadata,
 		Job: &schedulerv1.Job{
-			DueTime: ptr.Of("100s"),
+			DueTime: new("100s"),
 			FailurePolicy: &corev1.JobFailurePolicy{
 				Policy: &corev1.JobFailurePolicy_Constant{
 					Constant: &corev1.JobFailurePolicyConstant{
 						Interval:   durationpb.New(time.Second * 10),
-						MaxRetries: ptr.Of(uint32(1234)),
+						MaxRetries: new(uint32(1234)),
 					},
 				},
 			},
@@ -102,7 +101,7 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 		Policy: &corev1.JobFailurePolicy_Constant{
 			Constant: &corev1.JobFailurePolicyConstant{
 				Interval:   durationpb.New(time.Second * 10),
-				MaxRetries: ptr.Of(uint32(1234)),
+				MaxRetries: new(uint32(1234)),
 			},
 		},
 	}, resp.GetJob().GetFailurePolicy())
@@ -110,7 +109,7 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 	_, err = client.ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
 		Name: "test3", Metadata: metadata,
 		Job: &schedulerv1.Job{
-			DueTime: ptr.Of("100s"),
+			DueTime: new("100s"),
 			FailurePolicy: &corev1.JobFailurePolicy{
 				Policy: &corev1.JobFailurePolicy_Drop{
 					Drop: new(corev1.JobFailurePolicyDrop),
@@ -140,7 +139,7 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 			Policy: &corev1.JobFailurePolicy_Constant{
 				Constant: &corev1.JobFailurePolicyConstant{
 					Interval:   durationpb.New(time.Second * 10),
-					MaxRetries: ptr.Of(uint32(1234)),
+					MaxRetries: new(uint32(1234)),
 				},
 			},
 		},
@@ -148,7 +147,7 @@ func (f *failurepolicy) Run(t *testing.T, ctx context.Context) {
 			Policy: &corev1.JobFailurePolicy_Constant{
 				Constant: &corev1.JobFailurePolicyConstant{
 					Interval:   durationpb.New(time.Second * 1),
-					MaxRetries: ptr.Of(uint32(3)),
+					MaxRetries: new(uint32(3)),
 				},
 			},
 		},

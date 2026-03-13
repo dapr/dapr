@@ -26,7 +26,6 @@ import (
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/dapr/dapr/pkg/healthz"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
@@ -35,7 +34,6 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.scheduler.server.cron")
@@ -43,7 +41,6 @@ var log = logger.NewLogger("dapr.scheduler.server.cron")
 type Options struct {
 	ID      string
 	Host    *schedulerv1pb.Host
-	Healthz healthz.Healthz
 	Etcd    etcd.Interface
 	Workers uint32
 }
@@ -114,7 +111,7 @@ func (c *cron) Run(ctx context.Context) error {
 		TriggerFn:       c.triggerHandler,
 		ReplicaData:     hostAny,
 		WatchLeadership: watchLeadershipCh,
-		Workers:         ptr.Of(c.workers),
+		Workers:         new(c.workers),
 	})
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)

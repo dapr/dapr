@@ -50,27 +50,27 @@ type durationHistogram struct {
 }
 
 type FortioResult struct {
-	RunType            string                 `json:"RunType"`
-	RequestedQPS       string                 `json:"RequestedQPS"`
-	RequestedDuration  string                 `json:"RequestedDuration"`
-	ActualQPS          float64                `json:"ActualQPS"`
-	ActualDuration     float64                `json:"ActualDuration"`
-	NumThreads         int                    `json:"NumThreads"`
-	DurationHistogram  durationHistogram      `json:"DurationHistogram"`
-	Percentiles        []percentilePoint      `json:"Percentiles"`
-	ErrorsDurationHist *durationHistogram     `json:"ErrorsDurationHistogram,omitempty"`
-	Dapr               string                 `json:"Dapr,omitempty"`
-	URL                string                 `json:"URL,omitempty"`
-	RetCodes           map[string]int         `json:"RetCodes,omitempty"`
-	Sizes              map[string]interface{} `json:"Sizes,omitempty"`
-	HeaderSizes        map[string]interface{} `json:"HeaderSizes,omitempty"`
-	ConnectionStats    map[string]interface{} `json:"ConnectionStats,omitempty"`
-	IPCountMap         map[string]int         `json:"IPCountMap,omitempty"`
+	RunType            string             `json:"RunType"`
+	RequestedQPS       string             `json:"RequestedQPS"`
+	RequestedDuration  string             `json:"RequestedDuration"`
+	ActualQPS          float64            `json:"ActualQPS"`
+	ActualDuration     float64            `json:"ActualDuration"`
+	NumThreads         int                `json:"NumThreads"`
+	DurationHistogram  durationHistogram  `json:"DurationHistogram"`
+	Percentiles        []percentilePoint  `json:"Percentiles"`
+	ErrorsDurationHist *durationHistogram `json:"ErrorsDurationHistogram,omitempty"`
+	Dapr               string             `json:"Dapr,omitempty"`
+	URL                string             `json:"URL,omitempty"`
+	RetCodes           map[string]int     `json:"RetCodes,omitempty"`
+	Sizes              map[string]any     `json:"Sizes,omitempty"`
+	HeaderSizes        map[string]any     `json:"HeaderSizes,omitempty"`
+	ConnectionStats    map[string]any     `json:"ConnectionStats,omitempty"`
+	IPCountMap         map[string]int     `json:"IPCountMap,omitempty"`
 }
 
 // processFortioSummary parses Fortio style json perf output & converts them into a Runner
 // then stores them using the same aggregation mechanism
-func processFortioSummary(objJSON, testName, pkg, baseOutputDir string) {
+func processFortioSummary(objJSON, testName, pkg, baseOutputDir string, resourceByTest map[string]*ResourceUsage) {
 	raw := strings.TrimSpace(objJSON)
 	if raw == "" || !strings.HasPrefix(raw, "{") {
 		return
@@ -116,7 +116,11 @@ func processFortioSummary(objJSON, testName, pkg, baseOutputDir string) {
 		fmt.Fprintf(os.Stderr, "unknown API or transport for %s.\nfortio JSON: %s\n", testName, candidate)
 		return
 	}
-	storeRunner(r, info)
+	var ru *ResourceUsage
+	if resourceByTest != nil {
+		ru = resourceByTest[testName]
+	}
+	storeRunner(r, info, ru)
 
 	makeQPSChart(res, filePrefix, info.outDir)
 	makeDurationRequestedVsActualChart(res, filePrefix, info.outDir)
@@ -147,15 +151,16 @@ func convertFortioPerfToRunner(res FortioResult, runType string) Runner {
 		for k, v := range res.RetCodes {
 			total += v
 			lk := strings.ToLower(strings.TrimSpace(k))
-			if runTypeLower == "grpc" {
+			switch runTypeLower {
+			case "grpc":
 				if lk == "serving" {
 					success += v
 				}
-			} else if runTypeLower == "http" {
+			case "http":
 				if strings.HasPrefix(k, "2") {
 					success += v
 				}
-			} else {
+			default:
 				// Unspecified runType, also valid
 				if strings.HasPrefix(k, "2") || lk == "serving" {
 					success += v
@@ -199,7 +204,7 @@ func convertFortioPerfToRunner(res FortioResult, runType string) Runner {
 	}
 
 	durationSecs := normalizeActualDurationSeconds(res.ActualDuration)
-	getMapNumber := func(m map[string]interface{}, key string) float64 {
+	getMapNumber := func(m map[string]any, key string) float64 {
 		if m == nil {
 			return 0
 		}
@@ -480,8 +485,8 @@ func makeSizesCharts(res FortioResult, prefix, outDir string) {
 		ok            bool
 	}
 	// extract min/avg/max/stddev/count
-	extract := func(m map[string]interface{}) stats {
-		if m == nil || len(m) == 0 {
+	extract := func(m map[string]any) stats {
+		if len(m) == 0 {
 			return stats{}
 		}
 		lowerNum := func(key string) float64 {
