@@ -194,12 +194,51 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 			return
 		}
 
-		// If there are new connections to add while we were disseminating, add
-		// them now in a new dissemination cycle.
+		// Batch all waiting connections: create their streams and update the
+		// store for all of them, then start a single dissemination round if any
+		// store change occurred. This avoids O(n) sequential dissemination
+		// rounds when many replicas connect at once.
 		if len(d.waitingToDisseminate) > 0 {
-			needs := d.waitingToDisseminate[0]
-			d.waitingToDisseminate = d.waitingToDisseminate[1:]
-			d.handleAdd(ctx, needs)
+			waiting := d.waitingToDisseminate
+			d.waitingToDisseminate = nil
+
+			storeChanged := false
+			for _, add := range waiting {
+				streamIDx := d.addStream(ctx, add)
+				if d.store.Set(streamIDx, add.InitialHost) {
+					storeChanged = true
+				}
+			}
+
+			if !storeChanged {
+				// All waiting connections had no actors. Send one-shot table pushes so
+				// they can route actor invocations.
+				for idx, s := range d.streams {
+					if s.receivingTable == nil && !d.store.Has(idx) {
+						version := d.currentVersion
+						s.receivingTable = &version
+						s.loop.Enqueue(&loops.DisseminateTable{
+							Version: d.currentVersion,
+							Tables:  d.store.PlacementTables(d.currentVersion),
+						})
+					}
+				}
+
+				return
+			}
+
+			d.currentVersion++
+			d.timeoutQ.Enqueue(d.currentVersion)
+			d.currentOperation = v1pb.HostOperation_LOCK
+			d.streamsInTargetState = 0
+
+			for _, s := range d.streams {
+				s.currentState = v1pb.HostOperation_REPORT
+				s.receivingTable = nil
+				s.loop.Enqueue(&loops.DisseminateLock{
+					Version: d.currentVersion,
+				})
+			}
 		}
 	}
 }
