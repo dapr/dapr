@@ -190,6 +190,9 @@ spec:
         - "--sentry-address={{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}"
         - "--mode=kubernetes"
         - "--workers={{ .Values.workers }}"
+{{- if .Values.overrideBroadcastHostPort }}
+        - "--override-broadcast-host-port={{ .Values.overrideBroadcastHostPort }}"
+{{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
