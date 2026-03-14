@@ -17,6 +17,9 @@ import (
 	"context"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
@@ -28,6 +31,9 @@ type Interface interface {
 	Run(context.Context) error
 	Components() Loader[compapi.Component]
 	Subscriptions() Loader[subapi.Subscription]
+	Configurations() Loader[configapi.Configuration]
+	HTTPEndpoints() Loader[httpendpointapi.HTTPEndpoint]
+	Resiliencies() Loader[resiliencyapi.Resiliency]
 }
 
 type StreamConn[T differ.Resource] struct {
