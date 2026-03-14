@@ -28,6 +28,9 @@ func New() *Fake {
 }
 
 func (f *Fake) ReloadActorTypes(actorTypes []string) {
+	if actorTypes == nil {
+		actorTypes = []string{}
+	}
 	f.lastTypes.Store(actorTypes)
 }
 

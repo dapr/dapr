@@ -185,15 +185,16 @@ func (b *batchconnect) Run(t *testing.T, ctx context.Context) {
 			"stream %d should receive same batch version", i+2)
 	}
 
-	// Complete the batched round: all streams report to advance through
-	// UPDATE and UNLOCK.
+	// Complete the batched round: all streams report to advance through UPDATE
+	// and UNLOCK.
 	allStreams := append([]v1pb.Placement_ReportDaprStatusClient{stream1}, streams...)
-	for _, s := range allStreams {
+	for i, s := range allStreams {
+		id := "app" + strconv.Itoa(i+1)
 		require.NoError(t, s.Send(&v1pb.Host{
-			Name:      "app1",
-			Port:      1001,
+			Name:      id,
+			Port:      int64(1001 + i),
 			Entities:  []string{"actorA"},
-			Id:        "app1",
+			Id:        id,
 			Namespace: "default",
 		}))
 	}
@@ -205,12 +206,13 @@ func (b *batchconnect) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "update", r.GetOperation())
 	}
 
-	for _, s := range allStreams {
+	for i, s := range allStreams {
+		id := "app" + strconv.Itoa(i+1)
 		require.NoError(t, s.Send(&v1pb.Host{
-			Name:      "app1",
-			Port:      1001,
+			Name:      id,
+			Port:      int64(1001 + i),
 			Entities:  []string{"actorA"},
-			Id:        "app1",
+			Id:        id,
 			Namespace: "default",
 		}))
 	}

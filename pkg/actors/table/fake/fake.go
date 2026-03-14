@@ -57,6 +57,7 @@ func (f *Fake) WithIsActorTypeHosted(fn func(string) bool) *Fake {
 	f.isActorTypeHostedFn = fn
 	return f
 }
+
 func (f *Fake) WithGetOrCreate(fn func(string, string) (targets.Interface, error)) *Fake {
 	f.getOrCreateFn = fn
 	return f
@@ -66,10 +67,12 @@ func (f *Fake) WithRegisterActorTypes(fn func(table.RegisterActorTypeOptions)) *
 	f.registerActorTypesFn = fn
 	return f
 }
+
 func (f *Fake) WithUnRegisterActorTypes(fn func(...string) error) *Fake {
 	f.unRegisterActorTypesFn = fn
 	return f
 }
+
 func (f *Fake) WithSubscribeToTypeUpdates(fn func(context.Context) (<-chan []string, []string)) *Fake {
 	f.subscribeToTypeUpdatesFn = fn
 	return f
@@ -87,6 +90,7 @@ func (f *Fake) IsActorTypeHosted(actorType string) bool { return f.isActorTypeHo
 func (f *Fake) GetOrCreate(actorType, actorID string) (targets.Interface, error) {
 	return f.getOrCreateFn(actorType, actorID)
 }
+
 func (f *Fake) ActorExists(actorType, actorKey string) bool {
 	return f.actorExistsFn(actorType, actorKey)
 }
@@ -94,6 +98,7 @@ func (f *Fake) RegisterActorTypes(opts table.RegisterActorTypeOptions) { f.regis
 func (f *Fake) UnRegisterActorTypes(actorTypes ...string) error {
 	return f.unRegisterActorTypesFn(actorTypes...)
 }
+
 func (f *Fake) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string) {
 	return f.subscribeToTypeUpdatesFn(ctx)
 }

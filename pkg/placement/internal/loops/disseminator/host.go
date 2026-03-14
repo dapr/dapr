@@ -203,25 +203,29 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 			d.waitingToDisseminate = nil
 
 			storeChanged := false
+			newStreamIDxs := make([]uint64, 0, len(waiting))
 			for _, add := range waiting {
 				streamIDx := d.addStream(ctx, add)
+				newStreamIDxs = append(newStreamIDxs, streamIDx)
 				if d.store.Set(streamIDx, add.InitialHost) {
 					storeChanged = true
 				}
 			}
 
 			if !storeChanged {
-				// All waiting connections had no actors. Send one-shot table pushes so
-				// they can route actor invocations.
-				for idx, s := range d.streams {
-					if s.receivingTable == nil && !d.store.Has(idx) {
-						version := d.currentVersion
-						s.receivingTable = &version
-						s.loop.Enqueue(&loops.DisseminateTable{
-							Version: d.currentVersion,
-							Tables:  d.store.PlacementTables(d.currentVersion),
-						})
+				// All waiting connections had no actors. Send one-shot table pushes
+				// only to the newly added streams so they can route actor invocations.
+				for _, idx := range newStreamIDxs {
+					s, ok := d.streams[idx]
+					if !ok || d.store.Has(idx) {
+						continue
 					}
+					version := d.currentVersion
+					s.receivingTable = &version
+					s.loop.Enqueue(&loops.DisseminateTable{
+						Version: d.currentVersion,
+						Tables:  d.store.PlacementTables(d.currentVersion),
+					})
 				}
 
 				return

@@ -135,15 +135,20 @@ func (s *staleunlock) Run(t *testing.T, ctx context.Context) {
 	require.Equal(t, "lock", resp.GetOperation())
 
 	// Complete the second round for both streams: UPDATE then UNLOCK.
-	for _, stream := range []v1pb.Placement_ReportDaprStatusClient{stream1, stream2} {
-		require.NoError(t, stream.Send(&v1pb.Host{
-			Name:      "app1",
-			Port:      1234,
-			Entities:  []string{"actorA"},
-			Id:        "app1",
-			Namespace: "default",
-		}))
-	}
+	require.NoError(t, stream1.Send(&v1pb.Host{
+		Name:      "app1",
+		Port:      1234,
+		Entities:  []string{"actorA"},
+		Id:        "app1",
+		Namespace: "default",
+	}))
+	require.NoError(t, stream2.Send(&v1pb.Host{
+		Name:      "app2",
+		Port:      5678,
+		Entities:  []string{"actorB"},
+		Id:        "app2",
+		Namespace: "default",
+	}))
 
 	// Both should receive UPDATE.
 	resp, err = stream1.Recv()
@@ -153,15 +158,20 @@ func (s *staleunlock) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Equal(t, "update", resp.GetOperation())
 
-	for _, stream := range []v1pb.Placement_ReportDaprStatusClient{stream1, stream2} {
-		require.NoError(t, stream.Send(&v1pb.Host{
-			Name:      "app1",
-			Port:      1234,
-			Entities:  []string{"actorA"},
-			Id:        "app1",
-			Namespace: "default",
-		}))
-	}
+	require.NoError(t, stream1.Send(&v1pb.Host{
+		Name:      "app1",
+		Port:      1234,
+		Entities:  []string{"actorA"},
+		Id:        "app1",
+		Namespace: "default",
+	}))
+	require.NoError(t, stream2.Send(&v1pb.Host{
+		Name:      "app2",
+		Port:      5678,
+		Entities:  []string{"actorB"},
+		Id:        "app2",
+		Namespace: "default",
+	}))
 
 	// Both should receive UNLOCK at version2.
 	resp, err = stream1.Recv()

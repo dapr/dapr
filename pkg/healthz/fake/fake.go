@@ -31,8 +31,8 @@ func New() *Fake {
 func (f *Fake) Ready()    { f.readyCalled.Store(true) }
 func (f *Fake) NotReady() { f.unreadyCalled.Store(true) }
 
-func (f *Fake) ReadyCalled() bool    { return f.readyCalled.Load() }
-func (f *Fake) UnreadyCalled() bool  { return f.unreadyCalled.Load() }
+func (f *Fake) ReadyCalled() bool   { return f.readyCalled.Load() }
+func (f *Fake) UnreadyCalled() bool { return f.unreadyCalled.Load() }
 
 // Compile-time interface check.
 var _ healthz.Target = (*Fake)(nil)
