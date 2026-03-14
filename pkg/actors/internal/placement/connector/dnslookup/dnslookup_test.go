@@ -20,6 +20,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 func lookupHost(addrs []string) lookupFunc {
@@ -46,6 +47,20 @@ func TestNewDNSConnector(t *testing.T) {
 
 	_, _ = conn.Connect(t.Context())
 	assert.Equal(t, "add1:50005", conn.Address())
+}
+
+func TestAuthorityOptionStability(t *testing.T) {
+	conn, err := New(Options{
+		Address:     "dapr-placement-server.dapr-tests.svc.cluster.local:50005",
+		GRPCOptions: []grpc.DialOption{grpc.WithInsecure()}, //nolint:staticcheck
+		resolver:    lookupHost([]string{"add1", "add2", "add3"}),
+	})
+	require.NoError(t, err)
+
+	c := conn.(*dnsLookUpConnector)
+
+	// WithAuthority must be present after construction
+	require.Len(t, c.gOpts, 2)
 }
 
 func TestNewDNSConnectorErrors(t *testing.T) {
