@@ -15,8 +15,7 @@ package sentry
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
@@ -87,7 +86,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 			td = *opts.trustDomain
 		}
 		// Generate key for X.509 certificates
-		x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		_, x509RootKey, err := ed25519.GenerateKey(rand.Reader)
 		require.NoError(t, err)
 
 		// Generate key for JWT signing
