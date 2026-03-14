@@ -149,6 +149,7 @@ func (b *batchconnect) Run(t *testing.T, ctx context.Context) {
 
 	// Collect LOCK from waiting streams.
 	for i, s := range streams {
+		i, s := i, s
 		wg.Go(func() {
 			r, rerr := s.Recv()
 			if rerr != nil {
