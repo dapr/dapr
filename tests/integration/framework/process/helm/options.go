@@ -30,7 +30,8 @@ type OptionFunc func(*options)
 
 // options contains the options for running helm in integration tests.
 type options struct {
-	setValues []string
+	setValues     []string
+	setJSONValues []string
 
 	// list of resources to show only
 	showOnly []string
@@ -97,6 +98,12 @@ func WithShowOnly(chart, tplYamlFileName string) OptionFunc {
 			tplYamlFileName += ".yaml"
 		}
 		o.showOnly = append(o.showOnly, fmt.Sprintf("%s/templates/%s", chart, tplYamlFileName))
+	}
+}
+
+func WithSetJSON(values ...string) OptionFunc {
+	return func(o *options) {
+		o.setJSONValues = append(o.setJSONValues, values...)
 	}
 }
 
