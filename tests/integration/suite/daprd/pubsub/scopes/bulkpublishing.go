@@ -30,15 +30,15 @@ import (
 )
 
 func init() {
-	suite.Register(new(bulkpublishnamespace))
+	suite.Register(new(bulkpublishing))
 }
 
-type bulkpublishnamespace struct {
+type bulkpublishing struct {
 	daprd *daprd.Daprd
 	sub   *subscriber.Subscriber
 }
 
-func (b *bulkpublishnamespace) Setup(t *testing.T) []framework.Option {
+func (b *bulkpublishing) Setup(t *testing.T) []framework.Option {
 	b.sub = subscriber.New(t)
 
 	resDir := t.TempDir()
@@ -80,7 +80,7 @@ spec:
 	return []framework.Option{framework.WithProcesses(b.sub, b.daprd)}
 }
 
-func (b *bulkpublishnamespace) Run(t *testing.T, ctx context.Context) {
+func (b *bulkpublishing) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
 
 	meta, err := b.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
