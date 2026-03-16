@@ -315,7 +315,8 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	// Native sidecar: set RestartPolicy to Always so Kubernetes treats
 	// this init container as a long-running sidecar (KEP-753).
 	if c.EnableNativeSidecar {
-		container.RestartPolicy = ptr.Of(corev1.ContainerRestartPolicyAlways)
+		policy := corev1.ContainerRestartPolicyAlways
+		container.RestartPolicy = &policy
 	}
 
 	// If the pod contains any of the tolerations specified by the configuration,
