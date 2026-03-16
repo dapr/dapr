@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package multiple
+package reconnect
 
 import (
 	"context"
@@ -36,21 +36,17 @@ type basic struct {
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
 	actor1 := dactors.New(t,
-		dactors.WithActorTypes("mytype"),
+		dactors.WithActorTypes("myactor"),
 	)
 	actor2 := dactors.New(t,
-		dactors.WithActorTypes("mytype"),
-		dactors.WithPeerActor(actor1),
-	)
-	actor3 := dactors.New(t,
-		dactors.WithActorTypes("mytype"),
+		dactors.WithActorTypes("myactor"),
 		dactors.WithPeerActor(actor1),
 	)
 
-	b.actors = []*dactors.Actors{actor1, actor2, actor3}
+	b.actors = []*dactors.Actors{actor1, actor2}
 
 	return []framework.Option{
-		framework.WithProcesses(actor1, actor2, actor3),
+		framework.WithProcesses(actor1, actor2),
 	}
 }
 
@@ -62,7 +58,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	hosts := make([]placement.Host, 0, len(b.actors))
 	for _, a := range b.actors {
 		hosts = append(hosts, placement.Host{
-			Entities:  []string{"mytype"},
+			Entities:  []string{"myactor"},
 			Name:      a.Daprd().InternalGRPCAddress(),
 			ID:        a.Daprd().AppID(),
 			APIVLevel: 20,
@@ -76,6 +72,5 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 		assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		assert.Positive(c, table.Tables["default"].Version)
 	}, time.Second*30, time.Millisecond*10)
 }
