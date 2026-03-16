@@ -245,53 +245,83 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	if h.ch != nil {
 		h.ch <- struct{}{}
 	}
-	defer func() {
-		if h.ch != nil {
-			<-h.ch
-		}
-	}()
 
 	// Emit metric when request is sent
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, channelReq.URL.Path, channelReq.ContentLength)
 	startRequest := time.Now()
 
-	rw := &RWRecorder{
-		W: &bytes.Buffer{},
+	pr, pw := io.Pipe()
+	rw := &rwRecorder{
+		pw:      pw,
+		readyCh: make(chan struct{}),
 	}
-	execPipeline := h.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Send request to user application
-		// (Body is closed below, but linter isn't detecting that)
-		//nolint:bodyclose
-		clientResp, clientErr := h.client.Do(r)
-		if clientResp != nil {
-			copyHeader(w.Header(), clientResp.Header)
-			w.WriteHeader(clientResp.StatusCode)
-			_, _ = io.Copy(w, clientResp.Body)
-		}
-		if clientErr != nil {
-			err = clientErr
-		}
-	}))
 
-	execPipeline.ServeHTTP(rw, channelReq)
-	resp := rw.Result() //nolint:bodyclose
+	var handlerErr error
+
+	go func() {
+		defer rw.signalReady()
+		defer pw.Close()
+		defer func() {
+			if h.ch != nil {
+				<-h.ch
+			}
+		}()
+
+		execPipeline := h.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Send request to user application
+			// (Body is closed below, but linter isn't detecting that)
+			clientResp, clientErr := h.client.Do(r)
+			if clientErr != nil {
+				handlerErr = clientErr
+			}
+			if clientResp != nil {
+				defer clientResp.Body.Close()
+				copyHeader(w.Header(), clientResp.Header)
+				w.WriteHeader(clientResp.StatusCode)
+				_, _ = io.Copy(w, clientResp.Body)
+			}
+		}))
+		execPipeline.ServeHTTP(rw, channelReq)
+	}()
+
+	select {
+	case <-rw.readyCh:
+	case <-ctx.Done():
+		pr.Close()
+		return nil, ctx.Err()
+	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
-	var contentLength int64
-	if resp != nil {
-		if resp.Header != nil {
-			contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+	contentLength := int64(-1)
+	if rw.h != nil {
+		if cl := rw.h.Get("content-length"); cl != "" {
+			if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
+				contentLength = parsed
+			}
 		}
 	}
 
-	if err != nil {
+	if handlerErr != nil {
+		pr.Close()
 		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, channelReq.URL.Path, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
-		return nil, err
+		return nil, handlerErr
 	}
+
+	resp := &http.Response{
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		StatusCode:    rw.StatusCode(),
+		Header:        rw.h,
+		ContentLength: contentLength,
+		Body:          pr,
+	}
+	resp.Status = fmt.Sprintf("%03d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 
 	rsp, err := h.parseChannelResponse(resp)
 	if err != nil {
+		pr.Close()
 		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, channelReq.URL.Path, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
@@ -363,80 +393,118 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	if h.ch != nil {
 		h.ch <- struct{}{}
 	}
-	defer func() {
-		if h.ch != nil {
-			<-h.ch
-		}
-	}()
 
 	// Emit metric when request is sent
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().GetMethod(), int64(len(req.Message().GetData().GetValue())))
 	startRequest := time.Now()
 
-	rw := &RWRecorder{
-		W: &bytes.Buffer{},
+	pr, pw := io.Pipe()
+	rw := &rwRecorder{
+		pw:      pw,
+		readyCh: make(chan struct{}),
 	}
 
-	var isSse bool
+	var (
+		isSse      bool
+		handlerErr error
+	)
 
-	execPipeline := h.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		isSse = sse.IsSSEHttpRequest(r)
-		if isSse {
-			r.Header.Set(headerAccept, mimeEventStream)
-		}
-
-		// Send request to user application
-		// (Body is closed below, but linter isn't detecting that)
-		//nolint:bodyclose
-		clientResp, clientErr := h.client.Do(r)
-		if clientErr != nil {
-			err = clientErr
-			return
-		}
-		if clientResp != nil {
-			statusOK := clientResp.StatusCode >= 200 && clientResp.StatusCode < 300
-			if isSse && req.HTTPResponseWriter() != nil && statusOK {
-				callerResponseWriter := req.HTTPResponseWriter()
-				copyHeader(callerResponseWriter.Header(), clientResp.Header)
-				reader := bufio.NewReader(clientResp.Body)
-				err = sse.FlushSSEResponse(ctx, callerResponseWriter, reader)
-				if err != nil {
-					return
-				}
-			} else {
-				copyHeader(w.Header(), clientResp.Header)
-				w.WriteHeader(clientResp.StatusCode)
-				_, _ = io.Copy(w, clientResp.Body)
+	go func() {
+		defer rw.signalReady()
+		defer pw.Close()
+		// Release the concurrency limiter slot when the handler goroutine
+		// finishes. Because io.Pipe is synchronous (no buffer), the goroutine
+		// naturally stays alive—and holds the slot—until the caller has
+		// consumed (or closed) the response body.
+		defer func() {
+			if h.ch != nil {
+				<-h.ch
 			}
-		}
-	}))
-	execPipeline.ServeHTTP(rw, channelReq)
+		}()
+
+		execPipeline := h.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			isSse = sse.IsSSEHttpRequest(r)
+			if isSse {
+				r.Header.Set(headerAccept, mimeEventStream)
+			}
+
+			// Send request to user application
+			// (Body is closed below, but linter isn't detecting that)
+			clientResp, clientErr := h.client.Do(r)
+			if clientErr != nil {
+				handlerErr = clientErr
+				return
+			}
+			if clientResp != nil {
+				defer clientResp.Body.Close()
+				statusOK := clientResp.StatusCode >= 200 && clientResp.StatusCode < 300
+				if isSse && req.HTTPResponseWriter() != nil && statusOK {
+					callerResponseWriter := req.HTTPResponseWriter()
+					copyHeader(callerResponseWriter.Header(), clientResp.Header)
+					reader := bufio.NewReader(clientResp.Body)
+					handlerErr = sse.FlushSSEResponse(ctx, callerResponseWriter, reader)
+					if handlerErr != nil {
+						return
+					}
+				} else {
+					copyHeader(w.Header(), clientResp.Header)
+					w.WriteHeader(clientResp.StatusCode)
+					_, _ = io.Copy(w, clientResp.Body)
+				}
+			}
+		}))
+		execPipeline.ServeHTTP(rw, channelReq)
+	}()
+
+	// Wait for response headers to be available (or the handler to finish),
+	// but also honor context cancellation to avoid blocking indefinitely.
+	select {
+	case <-rw.readyCh:
+	case <-ctx.Done():
+		pr.Close()
+		return nil, ctx.Err()
+	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
-	var contentLength int64
+	contentLength := int64(-1)
 
-	if err != nil {
-		// content-length is omitted in http streaming scenarios
+	if handlerErr != nil {
+		pr.Close()
 		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
-		return nil, err
+		return nil, handlerErr
 	}
 
 	statusOK := rw.StatusCode() >= 200 && rw.StatusCode() < 300
 	if isSse && statusOK {
+		pr.Close()
 		return nil, nil
 	}
 
-	resp := rw.Result() //nolint:bodyclose
-
-	if resp != nil {
-		if resp.Header != nil {
-			contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+	if rw.h != nil {
+		if cl := rw.h.Get("content-length"); cl != "" {
+			if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
+				contentLength = parsed
+			}
 		}
 	}
 
+	// Construct the http.Response with the pipe reader as the body so data
+	// streams through without buffering.
+	resp := &http.Response{
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		StatusCode:    rw.StatusCode(),
+		Header:        rw.h,
+		ContentLength: contentLength,
+		Body:          pr,
+	}
+	resp.Status = fmt.Sprintf("%03d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+
 	rsp, err := h.parseChannelResponse(resp)
 	if err != nil {
+		pr.Close()
 		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
