@@ -107,6 +107,3 @@ func (f *Fake) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorReques
 	return f.haltNonHostedFn(ctx, fn)
 }
 func (f *Fake) Len() map[string]int { return f.lenFn() }
-
-// Compile-time interface check.
-var _ table.Interface = (*Fake)(nil)

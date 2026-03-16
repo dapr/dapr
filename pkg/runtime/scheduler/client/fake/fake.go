@@ -15,8 +15,6 @@ package fake
 
 import (
 	"sync/atomic"
-
-	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 )
 
 type Fake struct {
@@ -41,6 +39,3 @@ func (f *Fake) LastTypes() []string {
 	}
 	return v.([]string)
 }
-
-// Compile-time interface check.
-var _ schedclient.Reloader = (*Fake)(nil)
