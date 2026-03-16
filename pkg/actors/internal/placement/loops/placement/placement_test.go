@@ -40,8 +40,8 @@ func TestHandleCloseStream_NotReady(t *testing.T) {
 		cancel()
 
 		var dissLoopClosed atomic.Bool
-		dissLoop := loopfake.New[loops.EventDiss]().
-			WithClose(func(loops.EventDiss) {
+		dissLoop := loopfake.New[loops.Event]().
+			WithClose(func(loops.Event) {
 				dissLoopClosed.Store(true)
 			})
 
