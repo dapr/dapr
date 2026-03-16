@@ -43,7 +43,7 @@ func newTestDisseminator(t *testing.T) (*disseminator, *healthzfake.Fake, *sched
 		Port:     "3500",
 	})
 
-	streamLoop := loopfake.New[loops.EventStream]()
+	streamLoop := loopfake.New[loops.Event]()
 
 	dissLoop := LoopFactoryCache.NewLoop(nil)
 
