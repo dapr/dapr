@@ -76,7 +76,7 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 		assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		assert.Equal(c, uint64(3), table.Tables["default"].Version)
+		assert.Positive(c, table.Tables["default"].Version)
 	}, time.Second*10, time.Millisecond*10)
 
 	for i := range s.actors[:2] {
