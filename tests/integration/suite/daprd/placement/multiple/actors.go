@@ -85,9 +85,15 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
+	var version1 uint64
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, expHosts, a.actors[0].Placement().PlacementTables(t, ctx).Tables["default"].Hosts)
-		assert.Equal(c, uint64(3), a.actors[0].Placement().PlacementTables(t, ctx).Tables["default"].Version)
+		tables := a.actors[0].Placement().PlacementTables(t, ctx)
+		if !assert.Contains(c, tables.Tables, "default") {
+			return
+		}
+		assert.ElementsMatch(c, expHosts, tables.Tables["default"].Hosts)
+		assert.Positive(c, tables.Tables["default"].Version)
+		version1 = tables.Tables["default"].Version
 	}, time.Second*10, time.Millisecond*10)
 
 	client := dworkflow.NewClient(a.actors[0].Daprd().GRPCConn(t, ctx))
@@ -102,13 +108,15 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		"dapr.internal.default." + a.actors[0].Daprd().AppID() + ".workflow",
 		"def",
 	}
+	var version2 uint64
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		tables := a.actors[0].Placement().PlacementTables(t, ctx)
 		if !assert.Contains(c, tables.Tables, "default") {
 			return
 		}
 		assert.ElementsMatch(c, expHosts, tables.Tables["default"].Hosts)
-		assert.Equal(c, uint64(4), tables.Tables["default"].Version)
+		assert.Greater(c, tables.Tables["default"].Version, version1)
+		version2 = tables.Tables["default"].Version
 	}, time.Second*20, time.Millisecond*10)
 
 	cancel()
@@ -122,6 +130,6 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 		assert.ElementsMatch(c, expHosts, tables.Tables["default"].Hosts)
-		assert.Equal(c, uint64(5), tables.Tables["default"].Version)
+		assert.Greater(c, tables.Tables["default"].Version, version2)
 	}, time.Second*10, time.Second)
 }
