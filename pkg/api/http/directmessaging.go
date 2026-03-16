@@ -256,7 +256,15 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 
 		if !isSSE {
 			w.WriteHeader(statusCode)
-			_, rErr = io.Copy(w, reader)
+			// Use a flushing writer to ensure each chunk is sent to the
+			// client immediately. Without this, Go's HTTP server buffers
+			// the response in a 4KB bufio.Writer, preventing true
+			// streaming for chunked responses.
+			dst := io.Writer(w)
+			if f, ok := w.(http.Flusher); ok {
+				dst = &flushWriter{w: w, f: f}
+			}
+			_, rErr = io.Copy(dst, reader)
 			if rErr != nil {
 				// Do not return rResp here, we already have a deferred `Close` call on it
 				return nil, backoff.Permanent(rErr)
@@ -454,6 +462,22 @@ type invokeError struct {
 
 func (ie invokeError) Error() string {
 	return fmt.Sprintf("invokeError (statusCode='%d') msg='%v'", ie.statusCode, string(ie.msg))
+}
+
+// flushWriter wraps an http.ResponseWriter and flushes after every Write
+// call. This ensures chunked response data is sent to the client
+// immediately rather than being buffered.
+type flushWriter struct {
+	w http.ResponseWriter
+	f http.Flusher
+}
+
+func (fw *flushWriter) Write(p []byte) (n int, err error) {
+	n, err = fw.w.Write(p)
+	if n > 0 {
+		fw.f.Flush()
+	}
+	return
 }
 
 type codeError struct {
