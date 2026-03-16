@@ -88,6 +88,9 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	var version1 uint64
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		tables := a.actors[0].Placement().PlacementTables(t, ctx)
+		if !assert.Contains(c, tables.Tables, "default") {
+			return
+		}
 		assert.ElementsMatch(c, expHosts, tables.Tables["default"].Hosts)
 		assert.Positive(c, tables.Tables["default"].Version)
 		version1 = tables.Tables["default"].Version
