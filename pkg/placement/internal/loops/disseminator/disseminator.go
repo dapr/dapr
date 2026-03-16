@@ -148,14 +148,9 @@ func (d *disseminator) Handle(ctx context.Context, event loops.EventDisseminator
 	return nil
 }
 
-// handleAdd adds a stream to the namespaced disseminator.
-func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
-	// If we are currently disseminating a lock, queue this addition.
-	if d.currentOperation != v1pb.HostOperation_REPORT {
-		d.waitingToDisseminate = append(d.waitingToDisseminate, add)
-		return
-	}
-
+// addStream creates a stream loop for the connection and registers it in the
+// streams map.
+func (d *disseminator) addStream(ctx context.Context, add *loops.ConnAdd) uint64 {
 	streamIDx := d.streamIDx
 	d.streamIDx++
 
@@ -185,6 +180,19 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 	}
 
 	d.streams[streamIDx] = stream
+
+	return streamIDx
+}
+
+// handleAdd adds a stream to the namespaced disseminator.
+func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
+	// If we are currently disseminating a lock, queue this addition.
+	if d.currentOperation != v1pb.HostOperation_REPORT {
+		d.waitingToDisseminate = append(d.waitingToDisseminate, add)
+		return
+	}
+
+	streamIDx := d.addStream(ctx, add)
 	d.handleReportedHost(ctx, &loops.ReportedHost{
 		Host:      add.InitialHost,
 		StreamIDx: streamIDx,
