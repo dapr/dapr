@@ -30,6 +30,14 @@ func SkipWindows(t *testing.T) {
 	}
 }
 
+func SkipMacOS(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS == "darwin" {
+		t.Skip("Skipping test on MacOS")
+	}
+}
+
 func WriteFileYaml(t *testing.T, data string) string {
 	t.Helper()
 	f := filepath.Join(t.TempDir(), "test.yaml")
