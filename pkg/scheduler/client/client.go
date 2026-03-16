@@ -46,7 +46,10 @@ func New(ctx context.Context, address string, sec security.Handler) (schedulerv1
 	}
 
 	opts := []grpc.DialOption{
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(math.MaxInt32),
+			grpc.MaxCallSendMsgSize(math.MaxInt32),
+		),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:    time.Second * 3,
