@@ -47,7 +47,8 @@ func (d *timerfired) Run(t *testing.T, ctx context.Context) {
 	d.workflow.WaitUntilRunning(t, ctx)
 
 	d.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		if err := ctx.WaitForSingleEvent("bar", time.Second).Await(nil); err != nil {
+		//nolint:nilerr
+		if err := ctx.WaitForSingleEvent("bar", time.Second*5).Await(nil); err != nil {
 			// ErrTaskCanceled is expected when the timer fires.
 			return "timed_out", nil
 		}
@@ -55,8 +56,19 @@ func (d *timerfired) Run(t *testing.T, ctx context.Context) {
 	})
 
 	cl := d.workflow.BackendClient(t, ctx)
-	_, err := cl.ScheduleNewOrchestration(ctx, "foo")
+	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		keys := d.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs")
+		if assert.NotEmpty(c, keys) {
+			assert.Contains(c, keys[0], "timer-0")
+		}
+	}, time.Second*20, 10*time.Millisecond)
+
+	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.RuntimeStatus.String())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Empty(c, d.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))

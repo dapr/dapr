@@ -48,8 +48,8 @@ func (o *orchestrator) createTimers(ctx context.Context, es []*backend.HistoryEv
 func hasUnfiredTimers(rs *protos.OrchestrationRuntimeState) bool {
 	var created, fired int
 	for _, events := range [2][]*protos.HistoryEvent{
-		([]*protos.HistoryEvent)(rs.GetOldEvents()),
-		([]*protos.HistoryEvent)(rs.GetNewEvents()),
+		(rs.GetOldEvents()),
+		(rs.GetNewEvents()),
 	} {
 		for _, e := range events {
 			if e.GetTimerCreated() != nil {
@@ -151,15 +151,15 @@ func (o *orchestrator) deleteCancelledEventTimers(ctx context.Context, rs *proto
 	firedTimerIDs := make(map[int32]bool)
 
 	for _, events := range [2][]*protos.HistoryEvent{
-		([]*protos.HistoryEvent)(rs.GetOldEvents()),
-		([]*protos.HistoryEvent)(newEvents),
+		rs.GetOldEvents(),
+		newEvents,
 	} {
 		for _, e := range events {
 			if tc := e.GetTimerCreated(); tc != nil && tc.Name != nil {
-				key := strings.ToUpper(*tc.Name)
-				pendingEventTimers[key] = append(pendingEventTimers[key], e.EventId)
+				key := strings.ToUpper(tc.GetName())
+				pendingEventTimers[key] = append(pendingEventTimers[key], e.GetEventId())
 			} else if tf := e.GetTimerFired(); tf != nil {
-				firedTimerIDs[tf.TimerId] = true
+				firedTimerIDs[tf.GetTimerId()] = true
 			}
 		}
 	}

@@ -92,9 +92,13 @@ func (o *orchestrator) deleteAllReminders(ctx context.Context) error {
 		return fmt.Errorf("actor '%s' failed to delete reminders on completion: %w", o.actorID, err)
 	}
 
-	return o.reminders.DeleteByActorID(ctx, &actorapi.DeleteRemindersByActorIDRequest{
+	if err := o.reminders.DeleteByActorID(ctx, &actorapi.DeleteRemindersByActorIDRequest{
 		ActorType:       o.activityActorType,
 		ActorID:         o.actorID + "::",
 		MatchIDAsPrefix: true,
-	})
+	}); err != nil {
+		return fmt.Errorf("actor '%s' failed to delete activity reminders on completion: %w", o.actorID, err)
+	}
+
+	return nil
 }

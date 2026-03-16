@@ -15,7 +15,7 @@ package orchestrator
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -171,7 +171,7 @@ func Test_deleteAllReminders(t *testing.T) {
 		callCount := 0
 		reminders := remindersfake.New().WithDeleteByActorID(func(_ context.Context, _ *actorapi.DeleteRemindersByActorIDRequest) error {
 			callCount++
-			return fmt.Errorf("scheduler unavailable")
+			return errors.New("scheduler unavailable")
 		})
 		o := newOrchestrator(reminders)
 
@@ -189,7 +189,7 @@ func Test_deleteAllReminders(t *testing.T) {
 			if callCount == 1 {
 				return nil
 			}
-			return fmt.Errorf("activity delete failed")
+			return errors.New("activity delete failed")
 		})
 		o := newOrchestrator(reminders)
 
@@ -519,7 +519,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 	t.Run("non-NotFound error from delete is returned", func(t *testing.T) {
 		t.Parallel()
 		reminders := remindersfake.New().WithDelete(func(_ context.Context, _ *actorapi.DeleteReminderRequest) error {
-			return fmt.Errorf("connection refused")
+			return errors.New("connection refused")
 		})
 		o := newOrchestrator(reminders)
 
@@ -592,7 +592,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		reminders := remindersfake.New().WithDelete(func(_ context.Context, _ *actorapi.DeleteReminderRequest) error {
 			callCount++
 			if callCount == 1 {
-				return fmt.Errorf("connection refused")
+				return errors.New("connection refused")
 			}
 			return nil
 		})
