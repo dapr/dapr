@@ -78,10 +78,11 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 
 	case operationUpdate:
 		if d.currentVersion > version {
-			return fmt.Errorf("version mismatch: expected %d, got %d",
+			d.cancel(fmt.Errorf("version mismatch: expected %d, got %d",
 				d.currentVersion,
 				version,
-			)
+			))
+			return nil
 		}
 
 		d.timeoutQ.Dequeue(d.timeoutVersion)
@@ -108,7 +109,6 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			return nil
 		}
 
-		d.currentVersion = version
 		if d.currentVersion > version {
 			log.Errorf("Version mismatch: expected %d, got %d, ignoring unlock",
 				d.currentVersion,
@@ -116,6 +116,7 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 			)
 			return nil
 		}
+		d.currentVersion = version
 
 		log.Infof("Dissemination complete for version %d, unlocking disseminator %s/%s",
 			version, d.namespace, d.id,
@@ -138,7 +139,8 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		d.healthTarget.Ready()
 
 	default:
-		return fmt.Errorf("unknown operation: %s", order.Order.GetOperation())
+		d.cancel(fmt.Errorf("unknown operation: %s", order.Order.GetOperation()))
+		return nil
 	}
 
 	return nil
