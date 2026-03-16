@@ -1,0 +1,232 @@
+diff --git a/tests/integration/framework/process/workflow/workflow.go b/tests/integration/framework/process/workflow/workflow.go
+index ae9872c5..d6ea2449 100644
+--- a/tests/integration/framework/process/workflow/workflow.go
++++ b/tests/integration/framework/process/workflow/workflow.go
+@@ -196,8 +196,10 @@ func (w *Workflow) BackendClientN(t *testing.T, ctx context.Context, index int)
+ 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+ 		assert.GreaterOrEqual(c,
+ 			len(w.DaprN(index).GetMetadata(t, ctx).ActorRuntime.ActiveActors), 3)
+-		assert.GreaterOrEqual(c,
+-			w.DaprN(index).GetMetadata(t, ctx).Workflows.ConnectedWorkers, 1)
++		w := w.DaprN(index).GetMetadata(t, ctx).Workflows
++		if assert.NotNil(c, w) {
++			assert.GreaterOrEqual(c, w.ConnectedWorkers, 1)
++		}
+ 	}, time.Second*20, time.Millisecond*10)
+ 
+ 	return backendClient
+diff --git a/tests/integration/suite/daprd/hotreload/selfhosted/subscriptions/closing.go b/tests/integration/suite/daprd/hotreload/selfhosted/subscriptions/closing.go
+index dbaaf8bb..38fcf732 100644
+--- a/tests/integration/suite/daprd/hotreload/selfhosted/subscriptions/closing.go
++++ b/tests/integration/suite/daprd/hotreload/selfhosted/subscriptions/closing.go
+@@ -26,7 +26,6 @@ import (
+ 	"github.com/stretchr/testify/require"
+ 	"google.golang.org/protobuf/types/known/emptypb"
+ 
+-	"github.com/dapr/dapr/pkg/proto/components/v1"
+ 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+@@ -127,13 +126,14 @@ func (c *closing) Run(t *testing.T, ctx context.Context) {
+ 		assert.Fail(t, "timeout")
+ 	}
+ 
++	// Publish a second message after the subscription is closed. The handler
++	// should block rather than returning an error which would cause the broker
++	// to NACK the message. The message should never be ack'd or nack'd.
+ 	ch = c.broker.PublishHelloWorld("a")
+ 	select {
+ 	case req := <-ch:
+-		assert.Equal(t, &components.AckMessageError{Message: "subscription is closed"}, req.GetAckError())
+-		assert.Equal(t, "foo", req.GetAckMessageId())
+-	case <-time.After(time.Second * 10):
+-		assert.Fail(t, "timeout")
++		assert.Failf(t, "expected no ack/nack for message published after subscription closed", "got: %v", req)
++	case <-time.After(time.Second * 3):
+ 	}
+ 
+ 	// The Subscription should eventually be completely removed.
+diff --git a/tests/integration/suite/daprd/shutdown/block/app/pubsub/inflight.go b/tests/integration/suite/daprd/shutdown/block/app/pubsub/inflight.go
+index 138ae51f..f73a5483 100644
+--- a/tests/integration/suite/daprd/shutdown/block/app/pubsub/inflight.go
++++ b/tests/integration/suite/daprd/shutdown/block/app/pubsub/inflight.go
+@@ -25,7 +25,6 @@ import (
+ 	"google.golang.org/protobuf/types/known/emptypb"
+ 
+ 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
+-	"github.com/dapr/dapr/pkg/proto/components/v1"
+ 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/os"
+@@ -126,13 +125,16 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
+ 		assert.Fail(t, "timeout")
+ 	}
+ 
++	// Publish another message after in-flight has completed. Since the
++	// subscription is now closed (but the subscription context is not yet
++	// cancelled), the handler should block rather than returning an error that
++	// would cause the broker to NACK the message. The message should never be
++	// ack'd or nack'd— the broker connection will be torn down instead.
+ 	ch = i.broker.PublishHelloWorld("a")
+ 	select {
+-	case req := <-ch:
+-		assert.Equal(t, &components.AckMessageError{Message: "subscription is closed"}, req.GetAckError())
+-		assert.Equal(t, "foo", req.GetAckMessageId())
+-	case <-time.After(time.Second * 10):
+-		assert.Fail(t, "timeout")
++	case <-ch:
++		assert.Fail(t, "expected no ack/nack for message published after subscription closed")
++	case <-time.After(time.Second * 3):
+ 	}
+ 
+ 	client := i.daprd.GRPCClient(t, ctx)
+diff --git a/tests/integration/suite/daprd/shutdown/graceful/subscription/declarative/grpc.go b/tests/integration/suite/daprd/shutdown/graceful/subscription/declarative/grpc.go
+index 0f673dcf..b14a58f0 100644
+--- a/tests/integration/suite/daprd/shutdown/graceful/subscription/declarative/grpc.go
++++ b/tests/integration/suite/daprd/shutdown/graceful/subscription/declarative/grpc.go
+@@ -22,7 +22,6 @@ import (
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ 
+-	"github.com/dapr/dapr/pkg/proto/components/v1"
+ 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/os"
+@@ -111,12 +110,13 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
+ 		assert.Fail(t, "timeout")
+ 	}
+ 
++	// Publish a second message after the subscription is closed. The handler
++	// should block rather than returning an error which would cause the broker
++	// to NACK the message. The message should never be ack'd or nack'd.
+ 	ch = g.broker.PublishHelloWorld("a")
+ 	select {
+ 	case req := <-ch:
+-		assert.Equal(t, &components.AckMessageError{Message: "subscription is closed"}, req.GetAckError())
+-		assert.Equal(t, "foo", req.GetAckMessageId())
+-	case <-time.After(time.Second * 10):
+-		assert.Fail(t, "timeout")
++		assert.Failf(t, "expected no ack/nack for message published after subscription closed", "got: %v", req)
++	case <-time.After(time.Second * 3):
+ 	}
+ }
+diff --git a/tests/integration/suite/daprd/shutdown/graceful/subscription/declarative/http.go b/tests/integration/suite/daprd/shutdown/graceful/subscription/declarative/http.go
+index 7dee780b..129c6f73 100644
+--- a/tests/integration/suite/daprd/shutdown/graceful/subscription/declarative/http.go
++++ b/tests/integration/suite/daprd/shutdown/graceful/subscription/declarative/http.go
+@@ -23,7 +23,6 @@ import (
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ 
+-	"github.com/dapr/dapr/pkg/proto/components/v1"
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/os"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+@@ -110,12 +109,13 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
+ 		assert.Fail(t, "timeout")
+ 	}
+ 
++	// Publish a second message after the subscription is closed. The handler
++	// should block rather than returning an error which would cause the broker
++	// to NACK the message. The message should never be ack'd or nack'd.
+ 	ch = h.broker.PublishHelloWorld("a")
+ 	select {
+ 	case req := <-ch:
+-		assert.Equal(t, &components.AckMessageError{Message: "subscription is closed"}, req.GetAckError())
+-		assert.Equal(t, "foo", req.GetAckMessageId())
+-	case <-time.After(time.Second * 10):
+-		assert.Fail(t, "timeout")
++		assert.Failf(t, "expected no ack/nack for message published after subscription closed", "got: %v", req)
++	case <-time.After(time.Second * 3):
+ 	}
+ }
+diff --git a/tests/integration/suite/daprd/shutdown/graceful/subscription/programmatic/grpc.go b/tests/integration/suite/daprd/shutdown/graceful/subscription/programmatic/grpc.go
+index b89ca12b..2e4e3173 100644
+--- a/tests/integration/suite/daprd/shutdown/graceful/subscription/programmatic/grpc.go
++++ b/tests/integration/suite/daprd/shutdown/graceful/subscription/programmatic/grpc.go
+@@ -23,7 +23,6 @@ import (
+ 	"github.com/stretchr/testify/require"
+ 	"google.golang.org/protobuf/types/known/emptypb"
+ 
+-	"github.com/dapr/dapr/pkg/proto/components/v1"
+ 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/os"
+@@ -117,12 +116,13 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
+ 		assert.Fail(t, "timeout")
+ 	}
+ 
++	// Publish a second message after the subscription is closed. The handler
++	// should block rather than returning an error which would cause the broker
++	// to NACK the message. The message should never be ack'd or nack'd.
+ 	ch = g.broker.PublishHelloWorld("a")
+ 	select {
+ 	case req := <-ch:
+-		assert.Equal(t, &components.AckMessageError{Message: "subscription is closed"}, req.GetAckError())
+-		assert.Equal(t, "foo", req.GetAckMessageId())
+-	case <-time.After(time.Second * 10):
+-		assert.Fail(t, "timeout")
++		assert.Failf(t, "expected no ack/nack for message published after subscription closed", "got: %v", req)
++	case <-time.After(time.Second * 3):
+ 	}
+ }
+diff --git a/tests/integration/suite/daprd/shutdown/graceful/subscription/programmatic/http.go b/tests/integration/suite/daprd/shutdown/graceful/subscription/programmatic/http.go
+index b6219ae4..85a17877 100644
+--- a/tests/integration/suite/daprd/shutdown/graceful/subscription/programmatic/http.go
++++ b/tests/integration/suite/daprd/shutdown/graceful/subscription/programmatic/http.go
+@@ -23,7 +23,6 @@ import (
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ 
+-	"github.com/dapr/dapr/pkg/proto/components/v1"
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/os"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+@@ -99,12 +98,13 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
+ 		assert.Fail(t, "timeout")
+ 	}
+ 
++	// Publish a second message after the subscription is closed. The handler
++	// should block rather than returning an error which would cause the broker
++	// to NACK the message. The message should never be ack'd or nack'd.
+ 	ch = h.broker.PublishHelloWorld("a")
+ 	select {
+ 	case req := <-ch:
+-		assert.Equal(t, &components.AckMessageError{Message: "subscription is closed"}, req.GetAckError())
+-		assert.Equal(t, "foo", req.GetAckMessageId())
+-	case <-time.After(time.Second * 10):
+-		assert.Fail(t, "timeout")
++		assert.Failf(t, "expected no ack/nack for message published after subscription closed", "got: %v", req)
++	case <-time.After(time.Second * 3):
+ 	}
+ }
+diff --git a/tests/integration/suite/daprd/shutdown/graceful/subscription/streaming.go b/tests/integration/suite/daprd/shutdown/graceful/subscription/streaming.go
+index b7772575..002bd845 100644
+--- a/tests/integration/suite/daprd/shutdown/graceful/subscription/streaming.go
++++ b/tests/integration/suite/daprd/shutdown/graceful/subscription/streaming.go
+@@ -21,7 +21,6 @@ import (
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ 
+-	"github.com/dapr/dapr/pkg/proto/components/v1"
+ 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/os"
+@@ -106,12 +105,13 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
+ 		assert.Fail(t, "timeout")
+ 	}
+ 
++	// Publish a second message after the subscription is closed. The handler
++	// should block rather than returning an error which would cause the broker
++	// to NACK the message. The message should never be ack'd or nack'd.
+ 	ch = s.broker.PublishHelloWorld("a")
+ 	select {
+ 	case req := <-ch:
+-		assert.Equal(t, &components.AckMessageError{Message: "subscription is closed"}, req.GetAckError())
+-		assert.Equal(t, "foo", req.GetAckMessageId())
+-	case <-time.After(time.Second * 10):
+-		assert.Fail(t, "timeout")
++		assert.Failf(t, "expected no ack/nack for message published after subscription closed", "got: %v", req)
++	case <-time.After(time.Second * 3):
+ 	}
+ }
