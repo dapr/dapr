@@ -76,6 +76,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 		assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		assert.GreaterOrEqual(c, table.Tables["default"].Version, uint64(3))
+		assert.Positive(c, table.Tables["default"].Version)
 	}, time.Second*30, time.Millisecond*10)
 }

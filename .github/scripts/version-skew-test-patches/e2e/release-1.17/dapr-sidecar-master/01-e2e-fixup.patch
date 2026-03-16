@@ -1,0 +1,27 @@
+diff --git a/tests/apps/resiliencyapp/app.go b/tests/apps/resiliencyapp/app.go
+index 898a8f32..a3a3f598 100644
+--- a/tests/apps/resiliencyapp/app.go
++++ b/tests/apps/resiliencyapp/app.go
+@@ -14,6 +14,7 @@ limitations under the License.
+ package main
+ 
+ import (
++	"bytes"
+ 	"context"
+ 	"encoding/json"
+ 	"fmt"
+@@ -439,8 +440,12 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
+ 		}
+ 		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s", daprHttpPort, targetApp, targetMethod)
+ 
+-		req, _ := http.NewRequest("POST", url, r.Body)
+-		defer r.Body.Close()
++		// Read body into a buffer so the outgoing request has a known
++		// Content-Length, avoiding chunked-transfer which would be
++		// treated as a streaming request by the sidecar.
++		bodyBytes, _ := io.ReadAll(r.Body)
++		r.Body.Close()
++		req, _ := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
+ 
+ 		resp, err := httpClient.Do(req)
+ 		if err != nil {

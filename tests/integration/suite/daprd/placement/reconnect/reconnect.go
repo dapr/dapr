@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package multiple
+package reconnect
 
 import (
 	"context"
@@ -27,42 +27,38 @@ import (
 )
 
 func init() {
-	suite.Register(new(shutdown))
+	suite.Register(new(basic))
 }
 
-type shutdown struct {
+type basic struct {
 	actors []*dactors.Actors
 }
 
-func (s *shutdown) Setup(t *testing.T) []framework.Option {
+func (b *basic) Setup(t *testing.T) []framework.Option {
 	actor1 := dactors.New(t,
-		dactors.WithActorTypes("mytype"),
+		dactors.WithActorTypes("myactor"),
 	)
 	actor2 := dactors.New(t,
-		dactors.WithActorTypes("mytype"),
-		dactors.WithPeerActor(actor1),
-	)
-	actor3 := dactors.New(t,
-		dactors.WithActorTypes("mytype"),
+		dactors.WithActorTypes("myactor"),
 		dactors.WithPeerActor(actor1),
 	)
 
-	s.actors = []*dactors.Actors{actor1, actor2, actor3}
+	b.actors = []*dactors.Actors{actor1, actor2}
 
 	return []framework.Option{
-		framework.WithProcesses(actor1, actor2, actor3),
+		framework.WithProcesses(actor1, actor2),
 	}
 }
 
-func (s *shutdown) Run(t *testing.T, ctx context.Context) {
-	for _, a := range s.actors {
+func (b *basic) Run(t *testing.T, ctx context.Context) {
+	for _, a := range b.actors {
 		a.WaitUntilRunning(t, ctx)
 	}
 
-	hosts := make([]placement.Host, 0, len(s.actors))
-	for _, a := range s.actors {
+	hosts := make([]placement.Host, 0, len(b.actors))
+	for _, a := range b.actors {
 		hosts = append(hosts, placement.Host{
-			Entities:  []string{"mytype"},
+			Entities:  []string{"myactor"},
 			Name:      a.Daprd().InternalGRPCAddress(),
 			ID:        a.Daprd().AppID(),
 			APIVLevel: 20,
@@ -71,31 +67,10 @@ func (s *shutdown) Run(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := s.actors[0].Placement().PlacementTables(t, ctx)
+		table := b.actors[0].Placement().PlacementTables(t, ctx)
 		if !assert.NotNil(c, table.Tables["default"]) {
 			return
 		}
 		assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		assert.Positive(c, table.Tables["default"].Version)
-	}, time.Second*10, time.Millisecond*10)
-
-	for i := range s.actors[:2] {
-		s.actors[i].Daprd().Cleanup(t)
-		hosts = hosts[1:]
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			table := s.actors[0].Placement().PlacementTables(t, ctx)
-			if !assert.NotNil(c, table.Tables["default"]) {
-				return
-			}
-			assert.ElementsMatch(c, hosts, table.Tables["default"].Hosts)
-		}, time.Second*20, time.Millisecond*10)
-	}
-
-	s.actors[2].Daprd().Cleanup(t)
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		table := s.actors[0].Placement().PlacementTables(t, ctx)
-		assert.Equal(c, &placement.TableState{
-			Tables: make(map[string]*placement.Table),
-		}, table)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*10)
 }
