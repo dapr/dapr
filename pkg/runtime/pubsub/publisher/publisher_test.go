@@ -399,6 +399,73 @@ func TestNamespacedPublisher(t *testing.T) {
 	assert.Equal(t, "ns1topic0", pubSub.Component.(*mockPublishPubSub).PublishedRequest.Load().Topic)
 }
 
+func TestNamespacedBulkPublisher(t *testing.T) {
+	compStore := compstore.New()
+	compStore.AddPubSub(TestPubsubName, &rtpubsub.PubsubItem{
+		Component:       &mockBulkPublishPubSub{},
+		NamespaceScoped: true,
+	})
+
+	ps := New(Options{
+		Resiliency:  resiliency.New(logger.NewLogger("test")),
+		GetPubSubFn: compStore.GetPubSub,
+		Namespace:   "ns1",
+	})
+
+	res, err := ps.BulkPublish(t.Context(), &contribpubsub.BulkPublishRequest{
+		PubsubName: TestPubsubName,
+		Topic:      "topic0",
+		Entries: []contribpubsub.BulkMessageEntry{
+			{
+				EntryId:     "1",
+				Event:       []byte("test"),
+				ContentType: "text/plain",
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, res.FailedEntries)
+
+	pubSub, ok := compStore.GetPubSub(TestPubsubName)
+	require.True(t, ok)
+	bulkReq := pubSub.Component.(*mockBulkPublishPubSub).BulkPublishedRequest.Load()
+	require.NotNil(t, bulkReq)
+	assert.Equal(t, "ns1topic0", bulkReq.Topic)
+}
+
+type mockBulkPublishPubSub struct {
+	BulkPublishedRequest atomic.Pointer[contribpubsub.BulkPublishRequest]
+}
+
+func (m *mockBulkPublishPubSub) Init(ctx context.Context, metadata contribpubsub.Metadata) error {
+	return nil
+}
+
+func (m *mockBulkPublishPubSub) Publish(ctx context.Context, req *contribpubsub.PublishRequest) error {
+	return nil
+}
+
+func (m *mockBulkPublishPubSub) BulkPublish(ctx context.Context, req *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error) {
+	m.BulkPublishedRequest.Store(req)
+	return contribpubsub.BulkPublishResponse{}, nil
+}
+
+func (m *mockBulkPublishPubSub) Subscribe(_ context.Context, req contribpubsub.SubscribeRequest, handler contribpubsub.Handler) error {
+	return nil
+}
+
+func (m *mockBulkPublishPubSub) BulkSubscribe(ctx context.Context, req contribpubsub.SubscribeRequest, handler contribpubsub.BulkHandler) (contribpubsub.BulkSubscribeResponse, error) {
+	return contribpubsub.BulkSubscribeResponse{}, nil
+}
+
+func (m *mockBulkPublishPubSub) Close() error {
+	return nil
+}
+
+func (m *mockBulkPublishPubSub) Features() []contribpubsub.Feature {
+	return []contribpubsub.Feature{contribpubsub.FeatureBulkPublish}
+}
+
 type mockPublishPubSub struct {
 	PublishedRequest atomic.Pointer[contribpubsub.PublishRequest]
 }
