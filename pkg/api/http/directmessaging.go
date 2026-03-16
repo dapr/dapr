@@ -144,6 +144,12 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		// Save headers to internal metadata
 		WithHTTPHeaders(r.Header).
 		WithHTTPResponseWriter(w)
+	// For streaming requests (chunked transfer / unknown content length),
+	// disable replay to prevent buffering the entire body in memory.
+	// ContentLength is -1 when Transfer-Encoding is chunked or Content-Length is absent.
+	if r.ContentLength < 0 {
+		req.SetStreamingRequest()
+	}
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
 	}
@@ -171,6 +177,14 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			if status.Code(rErr) == codes.PermissionDenied {
 				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
+
+			// If this is a streaming request, wrap transport errors as
+			// permanent to prevent the resiliency policy from retrying
+			// with a consumed (empty) request body.
+			if req.IsStreamingRequest() {
+				return rResp, backoff.Permanent(invokeErr)
+			}
+
 			return rResp, invokeErr
 		}
 
@@ -178,6 +192,8 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			// Downstream channel handled and finalized the response, don't do anything
 			return nil, nil
 		}
+
+		defer rResp.Close()
 
 		// Construct response if not HTTP
 		resStatus := rResp.Status()
@@ -201,9 +217,11 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			} else {
 				resStatus.Code = statusCode
 			}
-		} else if resStatus.GetCode() < 200 || resStatus.GetCode() > 399 {
+		} else if !req.IsStreamingRequest() && (resStatus.GetCode() < 200 || resStatus.GetCode() > 399) {
+			// Non-streaming request with non-2xx response: buffer the
+			// error response body for the resiliency policy to evaluate
+			// and potentially retry.
 			msg, _ := rResp.RawDataFull()
-			// Returning a `codeError` here will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned.
 			return rResp, resiliency.NewCodeError(resStatus.GetCode(), codeError{
 				headers:     rResp.Headers(),
 				statusCode:  int(resStatus.GetCode()),
@@ -211,6 +229,9 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				contentType: rResp.ContentType(),
 			})
 		}
+		// For streaming requests with non-2xx responses, retries are
+		// impossible so we fall through to stream the response directly
+		// to the caller.
 
 		// If we get to this point, we must consider the operation as successful, so we invoke this only once and we consider all errors returned by this to be permanent (so the policy function doesn't retry)
 		// We still need to be within the policy function because if we return, the context passed to `Invoke` is canceled, so the `Copy` operation below can fail with a ContextCanceled error
@@ -224,8 +245,6 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			invokev1.InternalMetadataToHTTPHeader(r.Context(), headers, w.Header().Add)
 		}
 
-		defer rResp.Close()
-
 		if ct := rResp.ContentType(); ct != "" {
 			w.Header().Set("content-type", ct)
 		}
@@ -233,23 +252,43 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		reader := rResp.RawData()
 		isSSE := sse.IsSSEHttpRequest(r)
 
+		statusCode := int(rResp.Status().GetCode())
+
 		if !isSSE {
-			w.WriteHeader(int(rResp.Status().GetCode()))
-			// Use regular io.Copy for non-streaming responses
-			_, rErr = io.Copy(w, reader)
+			w.WriteHeader(statusCode)
+			// Use a flushing writer to ensure each chunk is sent to the
+			// client immediately. Without this, Go's HTTP server buffers
+			// the response in a 4KB bufio.Writer, preventing true
+			// streaming for chunked responses.
+			dst := io.Writer(w)
+			if f, ok := w.(http.Flusher); ok {
+				dst = &flushWriter{w: w, f: f}
+			}
+			_, rErr = io.Copy(dst, reader)
 			if rErr != nil {
 				// Do not return rResp here, we already have a deferred `Close` call on it
 				return nil, backoff.Permanent(rErr)
 			}
-
-			return nil, nil
+		} else {
+			sse.AddSSEHeaders(w)
+			w.WriteHeader(statusCode)
+			sseErr := sse.FlushSSEResponse(r.Context(), w, reader)
+			if sseErr != nil {
+				return nil, backoff.Permanent(sseErr)
+			}
 		}
 
-		sse.AddSSEHeaders(w)
-		w.WriteHeader(int(rResp.Status().GetCode()))
-		err := sse.FlushSSEResponse(r.Context(), w, reader)
-		if err != nil {
-			return nil, backoff.Permanent(err)
+		// For streaming requests with non-2xx responses, return a
+		// permanent CodeError so circuit breakers count the failure.
+		// The response has already been written to the caller above.
+		// "Permanent" prevents retries (which are impossible for
+		// streaming requests anyway), and the error handler sees
+		// success==true so it won't try to write the response again.
+		if req.IsStreamingRequest() && (statusCode < 200 || statusCode > 399) {
+			return nil, backoff.Permanent(
+				//nolint:gosec
+				resiliency.NewCodeError(int32(statusCode), errors.New("streaming request received non-2xx response")),
+			)
 		}
 
 		// Do not return rResp here, we already have a deferred `Close` call on it
@@ -265,8 +304,17 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	// If success is true, it means that headers have already been sent, so we can't send the error to the user, because:
 	// headers cannot be re-sent, and adding to response body may cause corrupted data to be sent
 	if success.Load() {
-		// Use Warn log here because it's the only way users are notified of the error
-		log.Warnf("HTTP service invocation failed to complete with error: %v", err)
+		// For streaming requests with non-2xx responses, a CodeError is
+		// returned solely for circuit breaker accounting after the
+		// response was already successfully forwarded. Use debug level
+		// since this is expected behavior, not a failure.
+		var resCodeErr resiliency.CodeError
+		if errors.As(err, &resCodeErr) {
+			log.Debugf("HTTP service invocation completed with non-success status: %v", err)
+		} else {
+			// Use Warn log here because it's the only way users are notified of the error
+			log.Warnf("HTTP service invocation failed to complete with error: %v", err)
+		}
 
 		// Do nothing else, as at least some data was already sent to the client
 		return
@@ -414,6 +462,22 @@ type invokeError struct {
 
 func (ie invokeError) Error() string {
 	return fmt.Sprintf("invokeError (statusCode='%d') msg='%v'", ie.statusCode, string(ie.msg))
+}
+
+// flushWriter wraps an http.ResponseWriter and flushes after every Write
+// call. This ensures chunked response data is sent to the client
+// immediately rather than being buffered.
+type flushWriter struct {
+	w http.ResponseWriter
+	f http.Flusher
+}
+
+func (fw *flushWriter) Write(p []byte) (n int, err error) {
+	n, err = fw.w.Write(p)
+	if n > 0 {
+		fw.f.Flush()
+	}
+	return
 }
 
 type codeError struct {
