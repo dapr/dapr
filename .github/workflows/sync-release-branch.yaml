@@ -18,6 +18,9 @@
       push:
         branches:
           - release-*
+
+    permissions:
+      contents: read
     
     jobs:
       sync-branches:
