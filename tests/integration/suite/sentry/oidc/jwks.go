@@ -2,9 +2,7 @@ package oidc
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"crypto/ed25519"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -154,7 +152,7 @@ func (c *customJWKSTest) testIssuedTokenMatchesJWKS(t *testing.T, ctx context.Co
 	client := sentryv1pb.NewCAClient(conn)
 
 	// Create CSR
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{Subject: pkix.Name{CommonName: "custom-app"}}, priv)
 	require.NoError(t, err)
@@ -362,7 +360,7 @@ func (c *customJWKSTest) testExplicitUserProvidedKID(t *testing.T, ctx context.C
 		conn := s.DialGRPC(t, ctx2, "spiffe://localhost/ns/default/dapr-sentry")
 		defer conn.Close()
 		clientGRPC := sentryv1pb.NewCAClient(conn)
-		privEC, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		_, privEC, err := ed25519.GenerateKey(rand.Reader)
 		require.NoError(t, err)
 		csrDER, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{Subject: pkix.Name{CommonName: "explicit-app"}}, privEC)
 		require.NoError(t, err)
@@ -419,24 +417,24 @@ func (c *customJWKSTest) generateJWTKeyAndJWKS(t *testing.T) (*rsa.PrivateKey, j
 
 // TLS server cert for OIDC
 func (c *customJWKSTest) generateTLSServerCert(t *testing.T) ([]byte, []byte) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	tmpl := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{Organization: []string{"Dapr Test"}},
 		NotBefore:    time.Now().Add(-1 * time.Hour),
 		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
 		DNSNames:     []string{"localhost"},
 	}
-	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &key.PublicKey, key)
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, pub, priv)
 	require.NoError(t, err)
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
-	keyDER, err := x509.MarshalECPrivateKey(key)
+	keyDER, err := x509.MarshalPKCS8PrivateKey(priv)
 	require.NoError(t, err)
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 	return certPEM, keyPEM
 }
 
