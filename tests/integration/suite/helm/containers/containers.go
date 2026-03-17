@@ -140,21 +140,34 @@ func (c *containers) Setup(t *testing.T) []framework.Option {
 	}
 }
 
+// findDeployment returns the first Deployment from the helm template output.
+// Some templates (e.g. sentry) emit multiple YAML documents (Secret,
+// ConfigMap, Deployment), so we filter by Kind rather than assuming a single
+// document.
+func findDeployment(t *testing.T, h *helm.Helm) appsv1.Deployment {
+	t.Helper()
+	all := helm.UnmarshalStdout[appsv1.Deployment](t, h)
+	for _, d := range all {
+		if d.Kind == "Deployment" {
+			return d
+		}
+	}
+	t.Fatal("no Deployment found in helm template output")
+	return appsv1.Deployment{}
+}
+
 func (c *containers) Run(t *testing.T, ctx context.Context) {
 	t.Run("default has no initContainers", func(t *testing.T) {
-		deployments := helm.UnmarshalStdout[appsv1.Deployment](t, c.defaultOperator)
-		require.Len(t, deployments, 1)
-		assert.Empty(t, deployments[0].Spec.Template.Spec.InitContainers,
+		dep := findDeployment(t, c.defaultOperator)
+		assert.Empty(t, dep.Spec.Template.Spec.InitContainers,
 			"operator should have no initContainers by default")
 
-		deployments = helm.UnmarshalStdout[appsv1.Deployment](t, c.defaultSentry)
-		require.Len(t, deployments, 1)
-		assert.Empty(t, deployments[0].Spec.Template.Spec.InitContainers,
+		dep = findDeployment(t, c.defaultSentry)
+		assert.Empty(t, dep.Spec.Template.Spec.InitContainers,
 			"sentry should have no initContainers by default")
 
-		deployments = helm.UnmarshalStdout[appsv1.Deployment](t, c.defaultInjector)
-		require.Len(t, deployments, 1)
-		assert.Empty(t, deployments[0].Spec.Template.Spec.InitContainers,
+		dep = findDeployment(t, c.defaultInjector)
+		assert.Empty(t, dep.Spec.Template.Spec.InitContainers,
 			"injector should have no initContainers by default")
 
 		stss := helm.UnmarshalStdout[appsv1.StatefulSet](t, c.defaultPlacement)
@@ -169,19 +182,16 @@ func (c *containers) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("default has only one container per component", func(t *testing.T) {
-		deployments := helm.UnmarshalStdout[appsv1.Deployment](t, c.defaultOperator)
-		require.Len(t, deployments, 1)
-		assert.Len(t, deployments[0].Spec.Template.Spec.Containers, 1,
+		dep := findDeployment(t, c.defaultOperator)
+		assert.Len(t, dep.Spec.Template.Spec.Containers, 1,
 			"operator should have exactly one container by default")
 
-		deployments = helm.UnmarshalStdout[appsv1.Deployment](t, c.defaultSentry)
-		require.Len(t, deployments, 1)
-		assert.Len(t, deployments[0].Spec.Template.Spec.Containers, 1,
+		dep = findDeployment(t, c.defaultSentry)
+		assert.Len(t, dep.Spec.Template.Spec.Containers, 1,
 			"sentry should have exactly one container by default")
 
-		deployments = helm.UnmarshalStdout[appsv1.Deployment](t, c.defaultInjector)
-		require.Len(t, deployments, 1)
-		assert.Len(t, deployments[0].Spec.Template.Spec.Containers, 1,
+		dep = findDeployment(t, c.defaultInjector)
+		assert.Len(t, dep.Spec.Template.Spec.Containers, 1,
 			"injector should have exactly one container by default")
 
 		stss := helm.UnmarshalStdout[appsv1.StatefulSet](t, c.defaultPlacement)
@@ -224,9 +234,8 @@ func (c *containers) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("initContainers on sentry deployment", func(t *testing.T) {
-		deployments := helm.UnmarshalStdout[appsv1.Deployment](t, c.withInitSentry)
-		require.Len(t, deployments, 1)
-		initContainers := deployments[0].Spec.Template.Spec.InitContainers
+		dep := findDeployment(t, c.withInitSentry)
+		initContainers := dep.Spec.Template.Spec.InitContainers
 		require.Len(t, initContainers, 1)
 		assert.Equal(t, "init-pki", initContainers[0].Name)
 		assert.Equal(t, "busybox:1.36", initContainers[0].Image)
@@ -280,17 +289,16 @@ func (c *containers) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("both initContainers and extraContainers on sentry", func(t *testing.T) {
-		deployments := helm.UnmarshalStdout[appsv1.Deployment](t, c.withBothSentry)
-		require.Len(t, deployments, 1)
+		dep := findDeployment(t, c.withBothSentry)
 
 		// Verify initContainers
-		initContainers := deployments[0].Spec.Template.Spec.InitContainers
+		initContainers := dep.Spec.Template.Spec.InitContainers
 		require.Len(t, initContainers, 1)
 		assert.Equal(t, "init-pki", initContainers[0].Name)
 		assert.Equal(t, "busybox:1.36", initContainers[0].Image)
 
 		// Verify extraContainers alongside main container
-		allContainers := deployments[0].Spec.Template.Spec.Containers
+		allContainers := dep.Spec.Template.Spec.Containers
 		require.Len(t, allContainers, 2, "should have main container plus extra container")
 
 		var found bool
