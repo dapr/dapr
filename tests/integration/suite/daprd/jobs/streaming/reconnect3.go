@@ -139,6 +139,12 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 	r.scheduler4.WaitUntilLeadership(t, ctx, 3)
 	t.Cleanup(func() { r.scheduler4.Kill(t) })
 
+	// Wait for daprd to reconnect to all 3 schedulers before expecting
+	// jobs to resume firing.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, r.daprd.GetMetaScheduler(c, ctx).GetConnectedAddresses(), 3)
+	}, time.Second*20, time.Millisecond*10)
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()
 		assert.Len(c, r.jobCalledMap, 5)
