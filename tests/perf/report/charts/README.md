@@ -164,13 +164,15 @@ go build -o _report_bin .
 rm -f _report_bin
 ```
 
-**Charts + AI highlights** (requires [Ollama](https://ollama.ai) running locally):
+**Charts + AI highlights** (requires [Ollama](https://ollama.ai) running locally with any model):
 ```bash
-brew install ollama && ollama pull llama3.2 && ollama serve
+brew install ollama && ollama pull qwen2.5:7b && ollama serve
 ```
 
 ```bash
 go build -o _report_bin .
-./_report_bin --version v1.18.0 --input-file ../test_report_perf.json --model llama3.2
+./_report_bin --version v1.18.0 --input-file ../test_report_perf.json --model qwen2.5:7b
 rm -f _report_bin
 ```
+
+> **Note:** The CI workflow uses `qwen2.5:7b`, but any Ollama model works (e.g. `llama3.2`, `mistral`). Pass the model name via `--model`.

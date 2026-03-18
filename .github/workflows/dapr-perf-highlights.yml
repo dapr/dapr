@@ -65,7 +65,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: '1.26'
 
@@ -154,7 +154,7 @@ jobs:
 
             The highlights match the format and style of the v1.17.0 release, with data updated from the latest perf test run.
 
-            **AI Generation**: Used Ollama (llama3.2) with v1.17.0 README as a reference for structure and style.
+            **AI Generation**: Used Ollama (qwen2.5:7b) with v1.17.0 README as a reference for structure and style.
 
             ### How to Review
 

@@ -45,6 +45,7 @@ type testSummary struct {
 	SuccessPct  float64
 	MaxVUs      float64 // for k6 tests
 	Connections int     // for Fortio: NumThreads
+	Restarts    int     // max(TargetRestarts, TesterRestarts) across runs
 }
 
 // Ollama request/response types.
@@ -142,6 +143,15 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 			successPct = agg.Checks.Values.Rate * 100
 		}
 
+		// Aggregate restart counts from ResourceUsage data.
+		restarts := -1
+		if len(result.resourceUsages) > 0 {
+			aggRU := aggregateResourceUsages(result.resourceUsages)
+			if aggRU != nil {
+				restarts = aggRU.TargetRestarts + aggRU.TesterRestarts
+			}
+		}
+
 		s := testSummary{
 			Name:        result.name,
 			Transport:   transport,
@@ -156,6 +166,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 			MaxVUs:      agg.VUsMax.Values.Max,
 			SuccessPct:  successPct,
 			Connections: result.numThreads,
+			Restarts:    restarts,
 		}
 		grouped[apiKey] = append(grouped[apiKey], s)
 	}
@@ -224,7 +235,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 		}
 
 		combined := "## Highlights\n\n" + subContent + "\n\n---\n\n" + chartsContent
-		if err := os.WriteFile(subReadmePath, []byte(combined), 0o600); err != nil {
+		if err := os.WriteFile(subReadmePath, []byte(combined), 0o644); err != nil {
 			log.Printf("warning: could not write %s: %v", subReadmePath, err)
 		} else {
 			log.Printf("Wrote %s", subReadmePath)
@@ -247,7 +258,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 	}
 
 	rootPath := filepath.Join(baseOutputDir, "README.md")
-	if err := os.WriteFile(rootPath, []byte(rootBuf.String()), 0o600); err != nil {
+	if err := os.WriteFile(rootPath, []byte(rootBuf.String()), 0o644); err != nil {
 		log.Printf("warning: could not write root README %s: %v", rootPath, err)
 	} else {
 		log.Printf("Wrote %s", rootPath)
@@ -521,6 +532,27 @@ func generateSectionNarrative(display, version string, tests []testSummary, mode
 		successStr = fmt.Sprintf("%.1f%%", minSuccess)
 	}
 
+	// Aggregate restart counts across all tests in this API.
+	totalRestarts := -1
+	for _, t := range tests {
+		if t.Restarts < 0 {
+			continue
+		}
+		if totalRestarts < 0 {
+			totalRestarts = 0
+		}
+		totalRestarts += t.Restarts
+	}
+	var restartStr string
+	switch {
+	case totalRestarts < 0:
+		restartStr = ""
+	case totalRestarts == 0:
+		restartStr = " and zero pod restarts"
+	default:
+		restartStr = fmt.Sprintf(" and %d pod restart(s)", totalRestarts)
+	}
+
 	dataBuf := buildScenarioData(tests)
 
 	// Detect whether this API mixes Fortio and k6 tests so we can conditionally
@@ -567,7 +599,7 @@ Under 200 concurrent virtual users the system sustains single-digit millisecond 
 Now write the highlights for the %[2]s API in Dapr %[1]s using only the Data section below:
 - IMPORTANT: use the "Heading" field from each scenario in Data as the bold title — do not use headings from the example above.
 - IMPORTANT: if a scenario shows "Max VUs" in Data, label the load context as "VUs" (not "connections").
-- Begin with: Dapr %[2]s in %[1]s [memorable one-line summary], with **%[4]s** success rate and zero pod restarts.
+- Begin with: Dapr %[2]s in %[1]s [memorable one-line summary], with **%[4]s** success rate%[6]s.
 - When both gRPC and HTTP rows exist for a scenario, show both in separate lines. For single-transport scenarios, omit the transport label.
 - Bold all metric values. Latencies are already formatted — use them exactly as written.
 - IMPORTANT: Each metric row in Data starts with a transport+tool label like "gRPC (Fortio):" or "HTTP (k6):". Preserve that label as-is in your output (e.g. "- **gRPC (Fortio)**: Median ...").
@@ -576,7 +608,7 @@ Now write the highlights for the %[2]s API in Dapr %[1]s using only the Data sec
 - After all scenario blocks, write a "**Key takeaways**" section with 2–4 bullet points written from the perspective of a developer building an application with the %[2]s API. Use terminology specific to this API (e.g. "invocation latency" for Service Invocation, "publish latency" for PubSub, "workflow throughput" or "iterations per second" for Workflows). Lead each point with the practical implication first, backed by a specific number from the data. Do not reference other APIs or use terminology from other APIs.
 
 Data:
-%[3]s`, version, display, dataBuf, successStr, mixedToolsNote)
+%[3]s`, version, display, dataBuf, successStr, mixedToolsNote, restartStr)
 
 	content, err := callOllama(ollamaURL, model, prompt)
 	return content, hasK6 && hasFortio, err
@@ -588,10 +620,50 @@ func defaultNarrative(display, version string, tests []testSummary) string {
 		return fmt.Sprintf("%s performance results for %s — see charts below.", display, version)
 	}
 	s := tests[0]
+
+	minSuccess := -1.0
+	for _, t := range tests {
+		if t.SuccessPct < 0 {
+			continue
+		}
+		if minSuccess < 0 || t.SuccessPct < minSuccess {
+			minSuccess = t.SuccessPct
+		}
+	}
+	var successStr string
+	switch {
+	case minSuccess < 0:
+		successStr = ""
+	case minSuccess >= 100:
+		successStr = " All test runs completed with 100% success rate."
+	default:
+		successStr = fmt.Sprintf(" Minimum success rate across tests: %.1f%%.", minSuccess)
+	}
+
+	// Aggregate restart counts across all tests.
+	totalRestarts := -1
+	for _, t := range tests {
+		if t.Restarts < 0 {
+			continue
+		}
+		if totalRestarts < 0 {
+			totalRestarts = 0
+		}
+		totalRestarts += t.Restarts
+	}
+	var restartStr string
+	switch {
+	case totalRestarts < 0:
+		restartStr = ""
+	case totalRestarts == 0:
+		restartStr = " Zero pod restarts across all tests."
+	default:
+		restartStr = fmt.Sprintf(" %d pod restart(s) observed.", totalRestarts)
+	}
+
 	return fmt.Sprintf(
-		"%s in %s demonstrates reliable performance with a median latency of %s at %.0f QPS. "+
-			"All test runs completed with 100%% success rate and zero pod restarts.",
-		display, version, formatLatency(s.P50ms), s.QPS)
+		"%s in %s demonstrates reliable performance with a median latency of %s at %.0f QPS.%s%s",
+		display, version, formatLatency(s.P50ms), s.QPS, successStr, restartStr)
 }
 
 // formatTestsTable writes the structured data block for a section's tests.
@@ -649,8 +721,15 @@ func formatTestsTable(tests []testSummary) string {
 			fmt.Fprintf(&b, "- Max VUs: **%.0f**\n", s.MaxVUs)
 		}
 
-		if s.SuccessPct >= 0 {
-			fmt.Fprintf(&b, "- **%.0f%% success rate**, 0 pod restarts\n", s.SuccessPct)
+		if s.SuccessPct >= 0 || s.Restarts >= 0 {
+			var parts []string
+			if s.SuccessPct >= 0 {
+				parts = append(parts, fmt.Sprintf("**%.0f%% success rate**", s.SuccessPct))
+			}
+			if s.Restarts >= 0 {
+				parts = append(parts, fmt.Sprintf("%d pod restarts", s.Restarts))
+			}
+			fmt.Fprintf(&b, "- %s\n", strings.Join(parts, ", "))
 		}
 		fmt.Fprintf(&b, "\n")
 	}
