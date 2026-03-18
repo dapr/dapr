@@ -16,8 +16,7 @@ package ca
 import (
 	"context"
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -47,9 +46,6 @@ var log = logger.NewLogger("dapr.sentry.ca")
 type SignRequest struct {
 	// Public key of the certificate request.
 	PublicKey crypto.PublicKey
-
-	// Signature of the certificate request.
-	SignatureAlgorithm x509.SignatureAlgorithm
 
 	// TrustDomain is the trust domain of the client.
 	TrustDomain string
@@ -126,9 +122,9 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 		log.Info("Root and issuer certs not found: generating self signed CA")
 
 		// Generate a key for X.509 certificates
-		x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		_, x509RootKey, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate ECDSA key for X.509 certificates: %w", err)
+			return nil, fmt.Errorf("failed to generate Ed25519 key for X.509 certificates: %w", err)
 		}
 
 		certBundle, err := bundle.GenerateX509(bundle.OptionsX509{
@@ -269,7 +265,7 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 
-	tmpl, err := bundle.GenerateWorkloadCert(req.SignatureAlgorithm, c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
+	tmpl, err := bundle.GenerateWorkloadCert(c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
 	if err != nil {
 		return nil, err
 	}

@@ -210,12 +210,11 @@ func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	}
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
-		PublicKey:          csr.PublicKey,
-		SignatureAlgorithm: csr.SignatureAlgorithm,
-		TrustDomain:        res.TrustDomain.String(),
-		Namespace:          namespace,
-		AppID:              req.GetId(),
-		DNS:                dns,
+		PublicKey:   csr.PublicKey,
+		TrustDomain: res.TrustDomain.String(),
+		Namespace:   namespace,
+		AppID:       req.GetId(),
+		DNS:         dns,
 	})
 	if err != nil {
 		log.Errorf("Error signing identity: %v", err)

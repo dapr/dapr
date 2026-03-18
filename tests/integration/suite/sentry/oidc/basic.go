@@ -15,8 +15,7 @@ package oidc
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
@@ -176,7 +175,7 @@ func (o *basicOIDCServer) testJWTTokenValidation(t *testing.T) {
 	client := sentryv1pb.NewCAClient(conn)
 
 	// Generate certificate request
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	csrTemplate := x509.CertificateRequest{Subject: pkix.Name{CommonName: "test-app"}}
 	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privateKey)
@@ -243,7 +242,7 @@ func (o *basicOIDCServer) testMultipleAudienceValidation(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 		require.NoError(t, err)
 		csrTemplate := x509.CertificateRequest{Subject: pkix.Name{CommonName: tc.appID}}
 		csrDER, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privateKey)
@@ -294,7 +293,7 @@ func (o *basicOIDCServer) testTokenExpiration(t *testing.T) {
 	defer conn.Close()
 	client := sentryv1pb.NewCAClient(conn)
 
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	csrTemplate := x509.CertificateRequest{Subject: pkix.Name{CommonName: "test-app"}}
 	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privateKey)
@@ -361,7 +360,7 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 	defer conn.Close()
 	client := sentryv1pb.NewCAClient(conn)
 
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	csrTemplate := x509.CertificateRequest{Subject: pkix.Name{CommonName: "payment-service"}}
 	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privateKey)
@@ -424,7 +423,7 @@ func (o *basicOIDCServer) testServiceToServiceAuthentication(t *testing.T) {
 func (o *basicOIDCServer) generateTLSCertificate(t *testing.T) ([]byte, []byte) {
 	t.Helper()
 
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	template := x509.Certificate{
@@ -434,20 +433,20 @@ func (o *basicOIDCServer) generateTLSCertificate(t *testing.T) ([]byte, []byte) 
 		},
 		NotBefore:   time.Now(),
 		NotAfter:    time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1)},
 		DNSNames:    []string{"localhost"},
 	}
 
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, pub, priv)
 	require.NoError(t, err)
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
-	keyBytes, err := x509.MarshalECPrivateKey(key)
+	keyBytes, err := x509.MarshalPKCS8PrivateKey(priv)
 	require.NoError(t, err)
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyBytes})
 
 	return certPEM, keyPEM
 }

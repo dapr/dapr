@@ -15,8 +15,7 @@ package jwks
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
 	"testing"
@@ -46,7 +45,7 @@ func (s shared) Run(t *testing.T, parentCtx context.Context) {
 	s.proc.WaitUntilRunning(t, parentCtx)
 
 	// Generate a private privKey that we'll need for tests
-	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err, "failed to generate private key")
 
 	// Get a CSR for the app "myapp"
