@@ -55,7 +55,7 @@ func genCrt(t *testing.T,
 		NotAfter:              time.Now().Add(time.Hour),
 	}
 
-	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, pk, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	if signCrt == nil {

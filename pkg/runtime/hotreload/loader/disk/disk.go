@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -31,7 +30,6 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.hotreload.loader.disk")
@@ -55,8 +53,7 @@ func New(opts Options) (loader.Interface, error) {
 	log.Infof("Watching directories: [%s]", strings.Join(opts.Dirs, ", "))
 
 	fs, err := fswatcher.New(fswatcher.Options{
-		Targets:  opts.Dirs,
-		Interval: ptr.Of(time.Millisecond * 200),
+		Targets: opts.Dirs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)

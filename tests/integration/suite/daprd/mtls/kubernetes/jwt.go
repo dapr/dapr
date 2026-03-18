@@ -15,8 +15,7 @@ package kubernetes
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
@@ -129,7 +128,7 @@ func (j *jwtvalidation) Setup(t *testing.T) []framework.Option {
 
 // generateTLSCertificate generates a TLS certificate and key pair for the OIDC server
 func generateTLSCertificate(t *testing.T) ([]byte, []byte) {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	template := &x509.Certificate{
@@ -138,21 +137,21 @@ func generateTLSCertificate(t *testing.T) ([]byte, []byte) {
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		DNSNames:              []string{"localhost"},
 	}
 
-	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
 	require.NoError(t, err)
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
-	keyBytes, err := x509.MarshalECPrivateKey(privateKey)
+	keyBytes, err := x509.MarshalPKCS8PrivateKey(priv)
 	require.NoError(t, err)
 
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyBytes})
 
 	return certPEM, keyPEM
 }

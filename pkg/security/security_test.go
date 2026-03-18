@@ -16,8 +16,7 @@ package security
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
@@ -41,7 +40,7 @@ import (
 func Test_Start(t *testing.T) {
 	t.Run("trust bundle should be updated when it is changed on file", func(t *testing.T) {
 		genRootCA := func() ([]byte, *x509.Certificate) {
-			pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			_, pk, err := ed25519.GenerateKey(rand.Reader)
 			require.NoError(t, err)
 
 			serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
@@ -52,16 +51,16 @@ func Test_Start(t *testing.T) {
 				NotBefore:             time.Now(),
 				NotAfter:              time.Now().Add(time.Minute),
 				KeyUsage:              x509.KeyUsageDigitalSignature,
-				SignatureAlgorithm:    x509.ECDSAWithSHA256,
+				SignatureAlgorithm:    x509.PureEd25519,
 				ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 				BasicConstraintsValid: true,
 				IsCA:                  true,
 			}
 
-			certDER, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &pk.PublicKey, pk)
+			certDER, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, pk.Public(), pk)
 			require.NoError(t, err)
 
-			wrkloadPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			_, wrkloadPK, err := ed25519.GenerateKey(rand.Reader)
 			require.NoError(t, err)
 
 			serialNumber, err = rand.Int(rand.Reader, serialNumberLimit)
@@ -74,13 +73,13 @@ func Test_Start(t *testing.T) {
 				NotBefore:             time.Now(),
 				NotAfter:              time.Now().Add(time.Minute),
 				KeyUsage:              x509.KeyUsageDigitalSignature,
-				SignatureAlgorithm:    x509.ECDSAWithSHA256,
+				SignatureAlgorithm:    x509.PureEd25519,
 				ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 				URIs:                  []*url.URL{spiffeID.URL()},
 				BasicConstraintsValid: true,
 			}
 
-			workloadCertDER, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &wrkloadPK.PublicKey, pk)
+			workloadCertDER, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, wrkloadPK.Public(), pk)
 			require.NoError(t, err)
 
 			workloadCert, err := x509.ParseCertificate(workloadCertDER)
@@ -241,7 +240,7 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 	mockHealthz := healthz.New()
 
 	genRootCA := func() []byte {
-		pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		_, pk, err := ed25519.GenerateKey(rand.Reader)
 		require.NoError(t, err)
 
 		serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
@@ -252,13 +251,13 @@ func TestNew_OptionsTrustAnchorsAndJWKS(t *testing.T) {
 			NotBefore:             time.Now(),
 			NotAfter:              time.Now().Add(time.Minute),
 			KeyUsage:              x509.KeyUsageDigitalSignature,
-			SignatureAlgorithm:    x509.ECDSAWithSHA256,
+			SignatureAlgorithm:    x509.PureEd25519,
 			ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 			BasicConstraintsValid: true,
 			IsCA:                  true,
 		}
 
-		certDER, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &pk.PublicKey, pk)
+		certDER, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, pk.Public(), pk)
 		require.NoError(t, err)
 
 		return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
