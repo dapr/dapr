@@ -14,8 +14,7 @@ limitations under the License.
 package channels
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -41,7 +40,7 @@ import (
 )
 
 func TestGetHTTPEndpointAppChannel(t *testing.T) {
-	testPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, testPK, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	testPKBytes, err := x509.MarshalPKCS8PrivateKey(testPK)
@@ -60,7 +59,7 @@ func TestGetHTTPEndpointAppChannel(t *testing.T) {
 		NotAfter:  time.Now().Add(time.Hour),
 	}
 
-	testCertBytes, err := x509.CreateCertificate(rand.Reader, cert, cert, &testPK.PublicKey, testPK)
+	testCertBytes, err := x509.CreateCertificate(rand.Reader, cert, cert, testPK.Public(), testPK)
 	require.NoError(t, err)
 
 	testCertPEM := pem.EncodeToMemory(&pem.Block{

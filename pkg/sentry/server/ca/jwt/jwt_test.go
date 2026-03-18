@@ -16,6 +16,7 @@ package jwt
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -259,7 +260,7 @@ func TestIssuer_Generate(t *testing.T) {
 // and included in the CA bundle.
 func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	// Generate a test root key for X.509 certificates
-	x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, x509RootKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	// Generate a test root key for JWT signing
