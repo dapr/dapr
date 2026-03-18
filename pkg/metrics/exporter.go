@@ -80,7 +80,7 @@ func (e *exporter) Start(ctx context.Context) error {
 
 	ocExporter, err := ocprom.NewExporter(ocprom.Options{
 		Namespace: e.namespace,
-		Registry:  prom.DefaultRegisterer.(*prom.Registry),
+		Registry:  prom.NewRegistry(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create Prometheus exporter: %w", err)
