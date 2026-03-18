@@ -467,6 +467,10 @@ func (a *Universal) ConverseAlpha2(ctx context.Context, req *runtimev1pb.Convers
 		request.ToolChoice = &toolChoice
 	}
 
+	if req.GetTools() != nil && len(req.GetTools()) > 10 {
+		a.logger.Warnf("Large tools list passed in with %d tools provided. Consider filtering tools to only those necessary for the conversation to improve performance.", len(req.GetTools()))
+	}
+
 	if tools := req.GetTools(); tools != nil {
 		availableTools := make([]llms.Tool, 0, len(tools))
 		for _, tool := range tools {
