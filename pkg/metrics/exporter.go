@@ -24,6 +24,7 @@ import (
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
 	prom "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/kit/logger"
@@ -78,9 +79,13 @@ func (e *exporter) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to parse metrics port: %w", err)
 	}
 
+	reg := prom.NewRegistry()
+	reg.MustRegister(collectors.NewGoCollector())
+	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+
 	ocExporter, err := ocprom.NewExporter(ocprom.Options{
 		Namespace: e.namespace,
-		Registry:  prom.NewRegistry(),
+		Registry:  reg,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create Prometheus exporter: %w", err)
