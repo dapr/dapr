@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
 )
 
@@ -64,6 +65,11 @@ type Options struct {
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
+	WorkflowSignState               bool
+
+	// Signer provides cryptographic signing and verification. If nil, history
+	// signing is disabled.
+	Signer *signer.Signer
 }
 
 type engine struct {
@@ -85,6 +91,13 @@ func New(opts Options) Interface {
 		retPolicy = opts.Spec.StateRetentionPolicy
 	}
 
+	// Disable history signing if the WorkflowSignState feature flag is not
+	// enabled (it is enabled by default).
+	s := opts.Signer
+	if !opts.WorkflowSignState {
+		s = nil
+	}
+
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend := backendactors.New(backendactors.Options{
 		AppID:           opts.AppID,
@@ -94,6 +107,7 @@ func New(opts Options) Interface {
 		EventSink:       opts.EventSink,
 		ComponentStore:  opts.ComponentStore,
 		RetentionPolicy: retPolicy,
+		Signer:          s,
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,

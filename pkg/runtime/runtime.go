@@ -322,7 +322,9 @@ func newDaprRuntime(ctx context.Context,
 		EventSink:                       runtimeConfig.workflowEventSink,
 		EnableClusteredDeployment:       globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
 		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
+		WorkflowSignState:               globalConfig.IsFeatureEnabled(config.WorkflowSignState),
 		ComponentStore:                  compStore,
+		Signer:                          sec.Signer(),
 	})
 
 	jobsManager, err := scheduler.New(scheduler.Options{
