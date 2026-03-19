@@ -16,8 +16,8 @@ package http
 import (
 	"net/http"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
-	"github.com/dapr/dapr/pkg/messages"
 )
 
 var endpointGroupHealthzV1 = &endpoints.EndpointGroup{
@@ -57,7 +57,7 @@ func (a *api) constructHealthzEndpoints() []endpoints.Endpoint {
 
 func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.healthz.IsReady() {
-		msg := messages.ErrHealthNotReady.WithFormat(a.healthz.GetUnhealthyTargets())
+		msg := apierrors.Health().NotReady(a.healthz.GetUnhealthyTargets(), a.universal.AppID())
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -67,7 +67,7 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	// This is used by some components (e.g. Consul nameresolver) to check if the app was replaced with a different one
 	qs := r.URL.Query()
 	if qs.Has("appid") && qs.Get("appid") != a.universal.AppID() {
-		msg := messages.ErrHealthAppIDNotMatch
+		msg := apierrors.Health().AppIDNotMatch(a.universal.AppID(), qs.Get("appid"))
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -78,7 +78,7 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) onGetOutboundHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.outboundHealthz.IsReady() {
-		msg := messages.ErrOutboundHealthNotReady
+		msg := apierrors.Health().OutboundNotReady(a.universal.AppID())
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
