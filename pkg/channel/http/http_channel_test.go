@@ -83,6 +83,20 @@ func TestConstructRequestReservedCharactersInMethod(t *testing.T) {
 			expectedRawPath:  "/test%25stream",
 			expectedRawQuery: "",
 		},
+		{
+			name:             "asterisk in method",
+			method:           "test*stream",
+			expectedPath:     "/test*stream",
+			expectedRawPath:  "/test%2Astream",
+			expectedRawQuery: "",
+		},
+		{
+			name:             "backslash in method",
+			method:           `test\stream`,
+			expectedPath:     `/test\stream`,
+			expectedRawPath:  "/test%5Cstream",
+			expectedRawQuery: "",
+		},
 	}
 
 	for _, tt := range tests {
