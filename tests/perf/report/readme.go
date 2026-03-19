@@ -91,7 +91,7 @@ func writeFolderReadme(dir string, imagePrefix string) error {
 		}
 		b.WriteString("\n")
 	}
-	return os.WriteFile(filepath.Join(dir, "README.md"), []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o600)
+	return os.WriteFile(filepath.Join(dir, "README.md"), []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o644)
 }
 
 type testGroup struct {
@@ -153,14 +153,14 @@ func writeReadmes(baseOutputDir string) {
 	for dir := range dirsWithPng {
 		parent := filepath.Dir(dir)
 		base := filepath.Base(dir)
-		if base != "http" && base != "grpc" {
+		if base != transportHTTP && base != transportGRPC {
 			continue
 		}
 		if seenParent[parent] {
 			continue
 		}
-		httpDir := filepath.Join(parent, "http")
-		grpcDir := filepath.Join(parent, "grpc")
+		httpDir := filepath.Join(parent, transportHTTP)
+		grpcDir := filepath.Join(parent, transportGRPC)
 		hasHTTP := dirsWithPng[httpDir]
 		hasGRPC := dirsWithPng[grpcDir]
 		if !hasHTTP && !hasGRPC {
@@ -181,8 +181,8 @@ func writeReadmes(baseOutputDir string) {
 			appendReadmeContent(&b, grpcDir, "grpc/")
 		}
 		// Pubsub exception: also include bulk/http and bulk/grpc when present
-		bulkHTTP := filepath.Join(parent, "bulk", "http")
-		bulkGRPC := filepath.Join(parent, "bulk", "grpc")
+		bulkHTTP := filepath.Join(parent, "bulk", transportHTTP)
+		bulkGRPC := filepath.Join(parent, "bulk", transportGRPC)
 		hasBulkHTTP := dirsWithPng[bulkHTTP]
 		hasBulkGRPC := dirsWithPng[bulkGRPC]
 		if hasBulkHTTP || hasBulkGRPC {
@@ -202,7 +202,7 @@ func writeReadmes(baseOutputDir string) {
 		}
 
 		readmePath := filepath.Join(parent, "README.md")
-		if err := os.WriteFile(readmePath, []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o600); err != nil {
+		if err := os.WriteFile(readmePath, []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o644); err != nil {
 			log.Printf("warning: could not write combined README %s: %v", readmePath, err)
 		}
 	}

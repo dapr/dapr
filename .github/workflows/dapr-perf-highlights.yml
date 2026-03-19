@@ -1,0 +1,168 @@
+#
+# Copyright 2026 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Generate Performance Charts and Highlights
+
+on:
+  # Fires on official releases only — RCs (tags containing -rc) are excluded below
+  release:
+    types: [published]
+  # Manual trigger: re-run for a flaked release, or generate highlights for an old version.
+  # Provide the version tag (with v prefix, ex: v1.18.0) — perf tests will be dispatched automatically.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, with v prefix (ex: v1.18.0, v1.17.1)'
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  resolve-version:
+    name: Resolve release version
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' && !contains(github.event.release.tag_name, '-rc'))
+    outputs:
+      version: ${{ steps.get.outputs.VERSION }}
+      ref: ${{ steps.get.outputs.REF }}
+    steps:
+      - name: Get version and ref
+        id: get
+        run: |
+          VERSION="${{ github.event.release.tag_name || inputs.version }}"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "REF=refs/tags/${VERSION}" >> $GITHUB_OUTPUT
+
+  run-perf-tests:
+    name: Run perf tests
+    needs: [resolve-version]
+    uses: ./.github/workflows/dapr-perf.yml
+    with:
+      ref: ${{ needs.resolve-version.outputs.ref }}
+    secrets: inherit
+
+  generate-highlights:
+    name: Generate Performance Highlights
+    runs-on: ubuntu-latest
+    needs: [resolve-version, run-perf-tests]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+
+      - name: Download Performance Test Results
+        uses: actions/download-artifact@v4
+        with:
+          name: test_perf.json
+          path: tests/perf/
+
+      - name: Setup Ollama
+        uses: ai-action/setup-ollama@38a882c88edfb77bb2f04d2b6d56309d5e727565 # v1
+
+      - name: Start Ollama server
+        run: |
+          ollama serve &
+          # Wait for the HTTP API to be ready before pulling/using the model
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:11434 > /dev/null 2>&1; then
+              echo "Ollama is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Ollama failed to start within 60s"
+          exit 1
+
+      - name: Pull Ollama model
+        run: ollama pull qwen2.5:7b
+
+      - name: Generate Charts and Highlights
+        working-directory: tests/perf/report
+        run: |
+          go build -o _report_bin .
+          ./_report_bin --version ${{ needs.resolve-version.outputs.version }} \
+            --input-file ../test_report_perf.json \
+            --model qwen2.5:7b
+          rm -f _report_bin
+
+      - name: Upload highlights as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-highlights-${{ needs.resolve-version.outputs.version }}
+          path: tests/perf/report/charts/${{ needs.resolve-version.outputs.version }}/
+          retention-days: 90
+
+  copy-and-commit:
+    name: Copy artifacts and create PR
+    runs-on: ubuntu-latest
+    needs: [resolve-version, generate-highlights]
+    if: needs.generate-highlights.result == 'success'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download highlights artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: perf-highlights-${{ needs.resolve-version.outputs.version }}
+          path: tests/perf/report/charts/${{ needs.resolve-version.outputs.version }}/
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@5f8ff9a71f24a6f47eb932cc044d84268821e224 # v7
+        with:
+          token: ${{ secrets.DAPR_BOT_TOKEN }}
+          commit-message: |
+            Add performance charts, highlights, and test results for ${{ needs.resolve-version.outputs.version }}
+
+            Signed-off-by: dapr-bot <daprweb@microsoft.com>
+          committer: dapr-bot <daprweb@microsoft.com>
+          author: dapr-bot <daprweb@microsoft.com>
+          branch: perf-highlights-${{ needs.resolve-version.outputs.version }}
+          delete-branch: true
+          title: "Add performance highlights for ${{ needs.resolve-version.outputs.version }}"
+          body: |
+            Auto-generated performance charts, highlights, and test results for release ${{ needs.resolve-version.outputs.version }}.
+
+            ### Generated Artifacts
+
+            - `charts/${{ needs.resolve-version.outputs.version }}/README.md` — AI-generated performance highlights using Ollama
+            - `charts/${{ needs.resolve-version.outputs.version }}/test_report_perf.json` — Raw performance test results
+
+            ### Structure
+
+            The highlights match the format and style of the v1.17.0 release, with data updated from the latest perf test run.
+
+            **AI Generation**: Used Ollama (qwen2.5:7b) with v1.17.0 README as a reference for structure and style.
+
+            ### How to Review
+
+            1. Check `charts/${{ needs.resolve-version.outputs.version }}/README.md` for the generated highlights
+            2. Review `tests/perf/report/charts/${{ needs.resolve-version.outputs.version }}/` for the full charts
+            3. Compare with previous releases to identify improvements or regressions
+
+            Signed-off-by: dapr-bot <daprweb@microsoft.com>
+          labels: |
+            area/test/performance
+          draft: false
