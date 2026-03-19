@@ -15,6 +15,8 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -24,6 +26,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/state/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
@@ -43,20 +46,36 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		AppID:             o.appID,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
+		Signer:            o.signer,
 	})
 	if err != nil {
+		var verifyErr *wferrors.VerificationError
+		if errors.As(err, &verifyErr) {
+			o.failSignatureVerification(ctx)
+		}
 		return nil, nil, err
 	}
 	if state == nil {
 		// No such state exists in the state store
 		return nil, nil, nil
 	}
+
 	// Update cached state
 	o.state = state
 	o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
 
 	return state, o.ometa, nil
+}
+
+// signAndSaveState signs any newly added history events and then persists
+// the state. This is the single entry point for all state persistence —
+// callers must never call saveInternalState directly.
+func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
+	if err := o.signNewEvents(state, state.HistoryAddedCount()); err != nil {
+		return fmt.Errorf("failed to sign new history events: %w", err)
+	}
+	return o.saveInternalState(ctx, state)
 }
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
