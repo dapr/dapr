@@ -104,9 +104,8 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 				return nil, csrErr
 			}
 			certs, csrErr := camngr.SignIdentity(ctx, &ca.SignRequest{
-				PublicKey:          csr.PublicKey.(crypto.PublicKey),
-				SignatureAlgorithm: csr.SignatureAlgorithm,
-				TrustDomain:        opts.Config.TrustDomain,
+				PublicKey:   csr.PublicKey.(crypto.PublicKey),
+				TrustDomain: opts.Config.TrustDomain,
 				Namespace:          ns,
 				AppID:              "dapr-sentry",
 			})

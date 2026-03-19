@@ -48,9 +48,6 @@ type SignRequest struct {
 	// Public key of the certificate request.
 	PublicKey crypto.PublicKey
 
-	// Signature of the certificate request.
-	SignatureAlgorithm x509.SignatureAlgorithm
-
 	// TrustDomain is the trust domain of the client.
 	TrustDomain string
 
@@ -269,7 +266,7 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certif
 		return nil, err
 	}
 
-	tmpl, err := bundle.GenerateWorkloadCert(req.SignatureAlgorithm, c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
+	tmpl, err := bundle.GenerateWorkloadCert(c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
 	if err != nil {
 		return nil, err
 	}
