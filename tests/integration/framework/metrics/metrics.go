@@ -58,10 +58,12 @@ func New(t assert.TestingT, ctx context.Context, url string) *Metrics {
 			metricName := mf.GetName()
 			labels := ""
 			labelMap := make(map[string]string)
+			var labelsSb61 strings.Builder
 			for _, l := range m.GetLabel() {
-				labels += "|" + l.GetName() + ":" + l.GetValue()
+				labelsSb61.WriteString("|" + l.GetName() + ":" + l.GetValue())
 				labelMap[l.GetName()] = l.GetValue()
 			}
+			labels += labelsSb61.String()
 			if counter := m.GetCounter(); counter != nil {
 				metrics[metricName+labels] = counter.GetValue()
 				continue

@@ -16,5 +16,7 @@ package placement
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/placement/cluster"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/placement/multiple"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/placement/notypes"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/placement/reconnect"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/placement/single"
 )

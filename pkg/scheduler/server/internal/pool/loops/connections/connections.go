@@ -27,11 +27,10 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/connections/store"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops/stream"
 	"github.com/dapr/kit/events/loop"
-	"github.com/dapr/kit/ptr"
 )
 
 var (
-	loopFactory = loop.New[loops.Event](1024)
+	loopFactory = loop.New[loops.EventConn](1024)
 	connsCache  = sync.Pool{New: func() any {
 		return &connections{
 			streams:    make(map[uint64]context.CancelFunc),
@@ -42,15 +41,15 @@ var (
 
 type Options struct {
 	Cron          api.Interface
-	NamespaceLoop loop.Interface[loops.Event]
+	NamespaceLoop loop.Interface[loops.EventNS]
 }
 
 // connections is a control loop that creates and manages stream connections,
 // piping trigger requests.
 type connections struct {
 	cron   api.Interface
-	nsLoop loop.Interface[loops.Event]
-	loop   loop.Interface[loops.Event]
+	nsLoop loop.Interface[loops.EventNS]
+	loop   loop.Interface[loops.EventConn]
 
 	streams    map[uint64]context.CancelFunc
 	streamIDx  uint64
@@ -58,7 +57,7 @@ type connections struct {
 	wg         sync.WaitGroup
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
+func New(opts Options) loop.Interface[loops.EventConn] {
 	conns := connsCache.Get().(*connections)
 
 	conns.cron = opts.Cron
@@ -69,7 +68,7 @@ func New(opts Options) loop.Interface[loops.Event] {
 	return conns.loop
 }
 
-func (c *connections) Handle(ctx context.Context, event loops.Event) error {
+func (c *connections) Handle(ctx context.Context, event loops.EventConn) error {
 	switch e := event.(type) {
 	case *loops.ConnAdd:
 		return c.handleAdd(ctx, e)
@@ -101,16 +100,14 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		return err
 	}
 
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	c.wg.Go(func() {
 		_ = streamLoop.Run(ctx)
-	}()
+	})
 
 	var appID *string
 	ts := add.Request.GetAcceptJobTypes()
 	if len(ts) == 0 || slices.Contains(add.Request.GetAcceptJobTypes(), schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_JOB) {
-		appID = ptr.Of(add.Request.GetAppId())
+		appID = new(add.Request.GetAppId())
 	}
 
 	c.streams[streamIDx] = c.streamPool.Add(store.Options{
@@ -161,7 +158,7 @@ func (c *connections) handleShutdown() {
 }
 
 // getStreamLoop returns a stream loop from the pool based on the metadata.
-func (c *connections) getStreamLoop(meta *schedulerv1pb.JobMetadata) (loop.Interface[loops.Event], bool) {
+func (c *connections) getStreamLoop(meta *schedulerv1pb.JobMetadata) (loop.Interface[loops.EventStream], bool) {
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		return c.streamPool.AppID(meta.GetAppId())

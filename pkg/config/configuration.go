@@ -39,7 +39,6 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 // Feature Flags section
@@ -86,7 +85,7 @@ var defaultFeatures = make(map[Feature]bool)
 type Configuration struct {
 	metav1.TypeMeta `json:",inline" yaml:",inline"`
 	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
-	metav1.ObjectMeta `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata,omitzero" yaml:"metadata,omitempty"`
 	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
 
@@ -176,18 +175,48 @@ type WorkflowStateRetentionPolicy struct {
 	Terminated *time.Duration `json:"terminated,omitempty" yaml:"terminated,omitempty"`
 }
 
+// UnmarshalJSON handles the Kubernetes CRD JSON format sent by the operator,
+// where durations are encoded as metav1.Duration strings (for example, "1s" or
+// "168h"). Standalone configuration files parsed via YAML use the YAML
+// unmarshaling path instead, which handles Go duration strings natively.
+func (p *WorkflowStateRetentionPolicy) UnmarshalJSON(data []byte) error {
+	var crd configapi.WorkflowStateRetentionPolicy
+	if err := json.Unmarshal(data, &crd); err != nil {
+		return err
+	}
+
+	if crd.AnyTerminal != nil {
+		d := crd.AnyTerminal.Duration
+		p.AnyTerminal = &d
+	}
+	if crd.Completed != nil {
+		d := crd.Completed.Duration
+		p.Completed = &d
+	}
+	if crd.Failed != nil {
+		d := crd.Failed.Duration
+		p.Failed = &d
+	}
+	if crd.Terminated != nil {
+		d := crd.Terminated.Duration
+		p.Terminated = &d
+	}
+
+	return nil
+}
+
 func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() *int32 {
 	if w == nil || w.MaxConcurrentWorkflowInvocations <= 0 {
 		return nil
 	}
-	return ptr.Of(w.MaxConcurrentWorkflowInvocations)
+	return new(w.MaxConcurrentWorkflowInvocations)
 }
 
 func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() *int32 {
 	if w == nil || w.MaxConcurrentActivityInvocations <= 0 {
 		return nil
 	}
-	return ptr.Of(w.MaxConcurrentActivityInvocations)
+	return new(w.MaxConcurrentActivityInvocations)
 }
 
 type SecretsSpec struct {
@@ -250,7 +279,7 @@ type HandlerSpec struct {
 	Name         string       `json:"name,omitempty"     yaml:"name,omitempty"`
 	Type         string       `json:"type,omitempty"     yaml:"type,omitempty"`
 	Version      string       `json:"version,omitempty"  yaml:"version,omitempty"`
-	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
+	SelectorSpec SelectorSpec `json:"selector,omitzero" yaml:"selector,omitempty"`
 }
 
 // LogName returns the name of the handler that can be used in logging.
@@ -537,11 +566,11 @@ func LoadDefaultConfiguration() *Configuration {
 		Spec: ConfigurationSpec{
 			TracingSpec: &TracingSpec{
 				Otel: &OtelSpec{
-					IsSecure: ptr.Of(true),
+					IsSecure: new(true),
 				},
 			},
 			MetricSpec: &MetricSpec{
-				Enabled: ptr.Of(true),
+				Enabled: new(true),
 			},
 			AccessControlSpec: &AccessControlSpec{
 				DefaultAction: AllowAccess,
@@ -663,7 +692,7 @@ func SetTracingSpecFromEnv(conf *Configuration) error {
 		}
 
 		if insecure := os.Getenv(env.OtlpExporterInsecure); insecure == "true" {
-			conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(false)
+			conf.Spec.TracingSpec.Otel.IsSecure = new(false)
 		}
 	}
 

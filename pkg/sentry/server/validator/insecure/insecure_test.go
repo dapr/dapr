@@ -15,10 +15,8 @@ package insecure
 
 import (
 	"testing"
-
-	"github.com/dapr/dapr/pkg/sentry/server/validator"
 )
 
 func TestInsecure(t *testing.T) {
-	var _ validator.Validator = New()
+	_ = New()
 }

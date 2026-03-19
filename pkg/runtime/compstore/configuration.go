@@ -26,60 +26,72 @@ var log = logger.NewLogger("dapr.runtime.compstore")
 func (c *ComponentStore) AddConfiguration(name string, store configuration.Store) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.configurations[name] = store
 }
 
 func (c *ComponentStore) GetConfiguration(name string) (configuration.Store, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	store, ok := c.configurations[name]
+
 	return store, ok
 }
 
 func (c *ComponentStore) ListConfigurations() map[string]configuration.Store {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return maps.Clone(c.configurations)
 }
 
 func (c *ComponentStore) ConfigurationsLen() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return len(c.configurations)
 }
 
 func (c *ComponentStore) DeleteConfiguration(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	delete(c.configurations, name)
 }
 
 func (c *ComponentStore) AddConfigurationSubscribe(name string, ch chan struct{}) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.configurationSubscribes[name] = ch
 }
 
 func (c *ComponentStore) GetConfigurationSubscribe(name string) (chan struct{}, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	ch, ok := c.configurationSubscribes[name]
+
 	return ch, ok
 }
 
 func (c *ComponentStore) DeleteConfigurationSubscribe(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	stop := c.configurationSubscribes[name]
 	if stop != nil {
 		close(stop)
 	}
+
 	delete(c.configurationSubscribes, name)
 }
 
 func (c *ComponentStore) DeleteAllConfigurationSubscribe() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	for name, stop := range c.configurationSubscribes {
 		close(stop)
 		delete(c.configurationSubscribes, name)
@@ -89,6 +101,7 @@ func (c *ComponentStore) DeleteAllConfigurationSubscribe() {
 func (c *ComponentStore) AddSecretsConfiguration(name string, secretsScope config.SecretsScope) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.secretsConfigurations[name] = secretsScope
 	if _, ok := c.secrets[name]; !ok {
 		// best-effort check since secret store might be added later
@@ -99,12 +112,15 @@ func (c *ComponentStore) AddSecretsConfiguration(name string, secretsScope confi
 func (c *ComponentStore) GetSecretsConfiguration(name string) (config.SecretsScope, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	secretsScope, ok := c.secretsConfigurations[name]
+
 	return secretsScope, ok
 }
 
 func (c *ComponentStore) DeleteSecretsConfiguration(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	delete(c.secretsConfigurations, name)
 }

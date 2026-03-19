@@ -64,7 +64,7 @@ func (c *closing) Setup(t *testing.T) []framework.Option {
 
 	c.binding = binding.New(t)
 
-	require.NoError(t, os.WriteFile(filepath.Join(c.dir, "comp.yaml"), []byte(fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(c.dir, "comp.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -75,7 +75,7 @@ spec:
   metadata:
   - name: direction
     value: "input"
-`, c.binding.SocketName())), 0o600))
+`, c.binding.SocketName()), 0o600))
 
 	c.daprd = daprd.New(t,
 		daprd.WithSocket(t, c.binding.Socket()),

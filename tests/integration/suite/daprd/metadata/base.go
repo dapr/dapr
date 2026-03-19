@@ -101,18 +101,18 @@ func (m *metadata) Run(t *testing.T, parentCtx context.Context) {
 // validateResponse asserts that the response body is valid JSON
 // and contains the expected fields.
 func validateResponse(t *testing.T, appID string, appPort int, body io.Reader) {
-	bodyMap := map[string]interface{}{}
+	bodyMap := map[string]any{}
 	err := json.NewDecoder(body).Decode(&bodyMap)
 	require.NoError(t, err)
 
 	require.Equal(t, appID, bodyMap["id"])
-	require.Equal(t, "edge", bodyMap["runtimeVersion"])
+	require.Regexp(t, `^(edge|\d+\.\d+\.\d+(-rc\.\d+)?)$`, bodyMap["runtimeVersion"])
 
-	extended, ok := bodyMap["extended"].(map[string]interface{})
+	extended, ok := bodyMap["extended"].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, "edge", extended["daprRuntimeVersion"])
+	require.Regexp(t, `^(edge|\d+\.\d+\.\d+(-rc\.\d+)?)$`, extended["daprRuntimeVersion"])
 
-	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
+	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]any)
 	require.True(t, ok)
 	port, ok := appConnectionProperties["port"].(float64)
 	require.True(t, ok)
@@ -122,13 +122,13 @@ func validateResponse(t *testing.T, appID string, appPort int, body io.Reader) {
 
 	// validate that the metadata contains correct format of subscription.
 	// The http response struct is private, so we use assert here.
-	subscriptions, ok := bodyMap["subscriptions"].([]interface{})
+	subscriptions, ok := bodyMap["subscriptions"].([]any)
 	require.True(t, ok)
-	subscription, ok := subscriptions[0].(map[string]interface{})
+	subscription, ok := subscriptions[0].(map[string]any)
 	require.True(t, ok)
-	rules, ok := subscription["rules"].([]interface{})
+	rules, ok := subscription["rules"].([]any)
 	require.True(t, ok)
-	rule, ok := rules[0].(map[string]interface{})
+	rule, ok := rules[0].(map[string]any)
 	require.True(t, ok)
 	require.Empty(t, rule["match"])
 	require.Equal(t, "/B", rule["path"])

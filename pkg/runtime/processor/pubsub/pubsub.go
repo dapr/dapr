@@ -63,32 +63,35 @@ func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
 	defer p.lock.Unlock()
 
 	fName := comp.LogName()
+
 	pubSub, err := p.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
 	baseMetadata, err := p.meta.ToBaseMetadata(comp)
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	properties := baseMetadata.Properties
+
 	consumerID := strings.TrimSpace(properties["consumerID"])
 	if consumerID == "" {
 		consumerID = p.appID
 	}
+
 	properties["consumerID"] = consumerID
 
 	err = pubSub.Init(ctx, contribpubsub.Metadata{Base: baseMetadata})
 	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
-	pubsubName := comp.ObjectMeta.Name
+	pubsubName := comp.Name
 	pubsubItem := &rtpubsub.PubsubItem{
 		Component:           pubSub,
 		ScopedSubscriptions: scopes.GetScopedTopics(scopes.SubscriptionScopes, p.appID, properties),
@@ -99,9 +102,11 @@ func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
 	}
 
 	p.compStore.AddPubSub(pubsubName, pubsubItem)
+
 	if err := p.subscriber.ReloadPubSub(pubsubName); err != nil {
 		p.compStore.DeletePubSub(pubsubName)
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.Name)
+
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
@@ -123,7 +128,8 @@ func (p *pubsub) Close(comp compapi.Component) error {
 
 	defer p.compStore.DeletePubSub(comp.Name)
 
-	if err := ps.Component.Close(); err != nil {
+	err := ps.Component.Close()
+	if err != nil {
 		return err
 	}
 

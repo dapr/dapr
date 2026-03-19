@@ -112,7 +112,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	g.operator.AddSubscriptions(sub1)
-	g.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	g.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub1,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -131,7 +131,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	g.operator.AddSubscriptions(sub2)
-	g.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	g.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub2,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -142,7 +142,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	g.sub.ExpectPublishReceive(t, ctx, g.daprd, newReq("pubsub0", "b"))
 
 	g.operator.SetSubscriptions(sub2)
-	g.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	g.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub1,
 		EventType:    operatorv1.ResourceEventType_DELETED,
 	})
@@ -161,7 +161,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	g.operator.AddSubscriptions(sub3)
-	g.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	g.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub3,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -174,7 +174,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	sub2.Spec.Topic = "d"
 	sub2.Spec.Routes.Default = "/d"
 	g.operator.SetSubscriptions(sub2, sub3)
-	g.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	g.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub2,
 		EventType:    operatorv1.ResourceEventType_UPDATED,
 	})

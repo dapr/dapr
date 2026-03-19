@@ -15,8 +15,7 @@ package insecure
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
@@ -63,7 +62,7 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 	m.proc.WaitUntilRunning(t, parentCtx)
 
 	// Get a CSR for the app "myapp"
-	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, pk, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	csrDer, err := x509.CreateCertificateRequest(rand.Reader, new(x509.CertificateRequest), pk)
 	require.NoError(t, err)

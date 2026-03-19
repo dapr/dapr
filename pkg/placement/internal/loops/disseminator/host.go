@@ -39,6 +39,18 @@ func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.Rep
 	log.Debugf("Received report from stream (idx:%d) (ns=%s) (appID=%s) (op=%s) (ver=%d)",
 		report.StreamIDx, d.namespace, report.Host.GetId(), op.String(), d.currentVersion)
 
+	// If this stream is receiving a one-shot table push, ignore responses from
+	// that push. They are not part of the namespace-wide dissemination.
+	if s, ok := d.streams[report.StreamIDx]; ok && s.receivingTable != nil && op != v1pb.HostOperation_REPORT {
+		//nolint:protogetter
+		if report.Host.Version != nil && *report.Host.Version == *s.receivingTable {
+			if op == v1pb.HostOperation_UNLOCK {
+				s.receivingTable = nil
+			}
+			return
+		}
+	}
+
 	switch op {
 	case v1pb.HostOperation_REPORT:
 		d.doReport(report.StreamIDx, report.Host)
@@ -56,8 +68,24 @@ func (d *disseminator) handleReportedHost(ctx context.Context, report *loops.Rep
 
 func (d *disseminator) doReport(streamIDx uint64, host *v1pb.Host) {
 	if !d.store.Set(streamIDx, host) {
-		log.Debugf("Ignoring report from stream %s:%d - no changes",
+		log.Debugf("No store changes from stream %s:%d",
 			d.namespace, streamIDx)
+
+		// No store changes so skip namespace-wide dissemination. If this stream
+		// has no entities (is not in the store), push the current placement table
+		// directly to this stream only so the daprd can route actor invocations.
+		// Streams which _are_ in the store already have the table from a previous
+		// dissemination. The responses from this one-shot table push are ignored
+		// by the disseminator (see receivingTable flag).
+		if s, ok := d.streams[streamIDx]; ok && !d.store.Has(streamIDx) {
+			version := d.currentVersion
+			s.receivingTable = &version
+			s.loop.Enqueue(&loops.DisseminateTable{
+				Version: d.currentVersion,
+				Tables:  d.store.PlacementTables(d.currentVersion),
+			})
+		}
+
 		return
 	}
 
@@ -69,6 +97,7 @@ func (d *disseminator) doReport(streamIDx uint64, host *v1pb.Host) {
 
 	for _, s := range d.streams {
 		s.currentState = v1pb.HostOperation_REPORT
+		s.receivingTable = nil
 		s.loop.Enqueue(&loops.DisseminateLock{
 			Version: d.currentVersion,
 		})
@@ -156,6 +185,7 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 
 			for _, s := range d.streams {
 				s.currentState = v1pb.HostOperation_REPORT
+				s.receivingTable = nil
 				s.loop.Enqueue(&loops.DisseminateLock{
 					Version: d.currentVersion,
 				})
@@ -164,12 +194,55 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 			return
 		}
 
-		// If there are new connections to add while we were disseminating, add
-		// them now in a new dissemination cycle.
+		// Batch all waiting connections: create their streams and update the
+		// store for all of them, then start a single dissemination round if any
+		// store change occurred. This avoids O(n) sequential dissemination
+		// rounds when many replicas connect at once.
 		if len(d.waitingToDisseminate) > 0 {
-			needs := d.waitingToDisseminate[0]
-			d.waitingToDisseminate = d.waitingToDisseminate[1:]
-			d.handleAdd(ctx, needs)
+			waiting := d.waitingToDisseminate
+			d.waitingToDisseminate = nil
+
+			storeChanged := false
+			newStreamIDxs := make([]uint64, 0, len(waiting))
+			for _, add := range waiting {
+				streamIDx := d.addStream(ctx, add)
+				newStreamIDxs = append(newStreamIDxs, streamIDx)
+				if d.store.Set(streamIDx, add.InitialHost) {
+					storeChanged = true
+				}
+			}
+
+			if !storeChanged {
+				// All waiting connections had no actors. Send one-shot table pushes
+				// only to the newly added streams so they can route actor invocations.
+				for _, idx := range newStreamIDxs {
+					s, ok := d.streams[idx]
+					if !ok || d.store.Has(idx) {
+						continue
+					}
+					version := d.currentVersion
+					s.receivingTable = &version
+					s.loop.Enqueue(&loops.DisseminateTable{
+						Version: d.currentVersion,
+						Tables:  d.store.PlacementTables(d.currentVersion),
+					})
+				}
+
+				return
+			}
+
+			d.currentVersion++
+			d.timeoutQ.Enqueue(d.currentVersion)
+			d.currentOperation = v1pb.HostOperation_LOCK
+			d.streamsInTargetState = 0
+
+			for _, s := range d.streams {
+				s.currentState = v1pb.HostOperation_REPORT
+				s.receivingTable = nil
+				s.loop.Enqueue(&loops.DisseminateLock{
+					Version: d.currentVersion,
+				})
+			}
 		}
 	}
 }

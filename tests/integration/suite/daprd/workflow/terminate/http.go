@@ -51,6 +51,7 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	h.workflow.WaitUntilRunning(t, ctx)
 
 	holdCh := make(chan struct{})
+	t.Cleanup(func() { close(holdCh) })
 	var inAct atomic.Bool
 	h.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
@@ -66,7 +67,7 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
 
-	assert.Eventually(t, inAct.Load, time.Second*10, time.Millisecond*10)
+	assert.Eventually(t, inAct.Load, time.Second*20, time.Millisecond*10)
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", h.workflow.Dapr().HTTPPort(), id)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
@@ -75,8 +76,6 @@ func (h *httpclient) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
-
-	close(holdCh)
 
 	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)

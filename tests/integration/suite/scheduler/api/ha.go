@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/cluster"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -55,10 +54,10 @@ func (h *ha) Run(t *testing.T, ctx context.Context) {
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: strconv.Itoa(i),
 				Job: &schedulerv1.Job{
-					Schedule: ptr.Of("@every 20s"),
-					Repeats:  ptr.Of(uint32(1)),
+					Schedule: new("@every 20s"),
+					Repeats:  new(uint32(1)),
 					Data:     &anypb.Any{Value: []byte(strconv.Itoa(i))},
-					Ttl:      ptr.Of("30s"),
+					Ttl:      new("30s"),
 				},
 				Metadata: &schedulerv1.JobMetadata{
 					AppId:     "appid",

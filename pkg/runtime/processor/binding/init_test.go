@@ -51,7 +51,7 @@ func TestInitBindings(t *testing.T) {
 		})
 
 		c := compapi.Component{}
-		c.ObjectMeta.Name = "testInputBinding"
+		c.Name = "testInputBinding"
 		c.Spec.Type = "bindings.testInputBinding"
 		err := proc.Init(t.Context(), c)
 		require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestInitBindings(t *testing.T) {
 		})
 
 		c := compapi.Component{}
-		c.ObjectMeta.Name = "testOutputBinding"
+		c.Name = "testOutputBinding"
 		c.Spec.Type = "bindings.testOutputBinding"
 		err := proc.Init(t.Context(), c)
 		require.NoError(t, err)
@@ -105,13 +105,13 @@ func TestInitBindings(t *testing.T) {
 		})
 
 		input := compapi.Component{}
-		input.ObjectMeta.Name = "testinput"
+		input.Name = "testinput"
 		input.Spec.Type = "bindings.testinput"
 		err := proc.Init(t.Context(), input)
 		require.NoError(t, err)
 
 		output := compapi.Component{}
-		output.ObjectMeta.Name = "testoutput"
+		output.Name = "testoutput"
 		output.Spec.Type = "bindings.testoutput"
 		err = proc.Init(t.Context(), output)
 		require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestInitBindings(t *testing.T) {
 		})
 
 		c := compapi.Component{}
-		c.ObjectMeta.Name = "testNotExistBinding"
+		c.Name = "testNotExistBinding"
 		c.Spec.Type = "bindings.testNotExistBinding"
 		err := proc.Init(t.Context(), c)
 		require.Error(t, err)

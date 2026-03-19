@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -56,7 +55,7 @@ func (b *noscheduler) Run(t *testing.T, ctx context.Context) {
 	req := &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:     uuid.NewString(),
-			Schedule: ptr.Of("@every 20s"),
+			Schedule: new("@every 20s"),
 			Data: &anypb.Any{
 				Value: []byte(uuid.NewString()),
 			},

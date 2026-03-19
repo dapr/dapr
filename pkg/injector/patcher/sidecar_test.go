@@ -29,7 +29,7 @@ func TestSidecarConfigInit(t *testing.T) {
 
 	// Ensure default values are set (and that those without a default value are zero)
 	// Check properties of supported kinds: bools, strings, ints
-	assert.Equal(t, "", c.Config)
+	assert.Empty(t, c.Config)
 	assert.Equal(t, "info", c.LogLevel)
 	assert.Equal(t, int32(0), c.AppPort)
 	assert.Equal(t, int32(9090), c.SidecarMetricsPort)
@@ -63,7 +63,7 @@ func TestSidecarConfigSetFromAnnotations(t *testing.T) {
 		assert.Equal(t, "myappid", c.AppID)
 		assert.Equal(t, int32(9876), c.AppPort)
 		assert.Equal(t, int32(6789), c.SidecarMetricsPort)
-		assert.Equal(t, "", c.PlacementAddress)
+		assert.Empty(t, c.PlacementAddress)
 
 		// Nullable properties
 		_ = assert.NotNil(t, c.EnableAPILogging) &&
@@ -107,9 +107,9 @@ func TestSidecarConfigSetFromAnnotations(t *testing.T) {
 					annotations.KeySchedulerHostAddresses: tc.value,
 					annotations.KeyPlacementHostAddresses: tc.value,
 				})
-				assert.Equal(t, "", c.PlacementAddress, "PlacementAddress should be empty for input: %q", tc.value)
+				assert.Empty(t, c.PlacementAddress, "PlacementAddress should be empty for input: %q", tc.value)
 				require.NotNil(t, c.SchedulerAddress)
-				assert.Equal(t, "", *c.SchedulerAddress, "SchedulerAddress should be empty for input: %q", tc.value)
+				assert.Empty(t, *c.SchedulerAddress, "SchedulerAddress should be empty for input: %q", tc.value)
 			})
 		}
 	})

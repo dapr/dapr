@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
-	"github.com/dapr/kit/ptr"
 )
 
 type Options struct {
@@ -49,8 +48,8 @@ type Options struct {
 
 // Scheduler manages the connection to the cluster of schedulers.
 type Scheduler struct {
-	connector  loop.Interface[loops.Event]
-	hosts      loop.Interface[loops.Event]
+	connector  loop.Interface[loops.EventConn]
+	hosts      loop.Interface[loops.EventHost]
 	watchhosts *watchhosts.WatchHosts
 	client     client.Interface
 
@@ -107,6 +106,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			<-ctx.Done()
 			s.hosts.Close(new(loops.Close))
 			s.connector.Close(new(loops.Close))
+
 			return ctx.Err()
 		},
 	).Run(ctx)
@@ -115,14 +115,14 @@ func (s *Scheduler) Run(ctx context.Context) error {
 func (s *Scheduler) StartApp() {
 	s.currentActorTypes = nil
 	s.connector.Enqueue(&loops.Reconnect{
-		AppTarget: ptr.Of(true),
+		AppTarget: new(true),
 	})
 }
 
 func (s *Scheduler) StopApp() {
 	s.currentActorTypes = nil
 	s.connector.Enqueue(&loops.Reconnect{
-		AppTarget: ptr.Of(false),
+		AppTarget: new(false),
 	})
 }
 
@@ -131,9 +131,9 @@ func (s *Scheduler) ReloadActorTypes(actorTypes []string) {
 		return
 	}
 
-	s.currentActorTypes = ptr.Of(actorTypes)
+	s.currentActorTypes = new(actorTypes)
 	s.connector.Enqueue(&loops.Reconnect{
-		ActorTypes: ptr.Of(actorTypes),
+		ActorTypes: new(actorTypes),
 	})
 }
 

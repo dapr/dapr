@@ -15,8 +15,7 @@ package quorum
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -43,7 +42,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -131,7 +129,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		TrustAnchors:            j.sentry.CABundle().X509.TrustAnchors,
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
-		SentryTokenFile:         ptr.Of(j.appTokenFile),
+		SentryTokenFile:         new(j.appTokenFile),
 		Healthz:                 healthz.New(),
 	})
 	require.NoError(t, err)
@@ -211,7 +209,7 @@ func (j *jwks) signJWT(t *testing.T, jwkPriv jwk.Key, id string) []byte {
 		Build()
 	require.NoError(t, err)
 
-	signed, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, jwkPriv))
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.EdDSA, jwkPriv))
 	require.NoError(t, err)
 
 	return signed
@@ -221,14 +219,14 @@ func (j *jwks) genPrivateJWK(t *testing.T) (jwk.Key, []byte) {
 	t.Helper()
 
 	// Generate a signing key
-	privK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privK, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	jwtSigningKeyPriv, err := jwk.FromRaw(privK)
 	require.NoError(t, err)
 
 	jwtSigningKeyPriv.Set("kid", "mykey")
-	jwtSigningKeyPriv.Set("alg", "ES256")
+	jwtSigningKeyPriv.Set("alg", "EdDSA")
 	jwtSigningKeyPub, err := jwtSigningKeyPriv.PublicKey()
 	require.NoError(t, err)
 

@@ -31,7 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/cluster"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -67,12 +66,12 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			// Set to 90 so the job doesn't get cleaned up before I check for it in etcd
 			// also so the job doesn't reach daprd to be sent to an app bc there is not app
 			// for this test
-			Schedule: ptr.Of("@every 90s"),
-			Repeats:  ptr.Of(uint32(1)),
+			Schedule: new("@every 90s"),
+			Repeats:  new(uint32(1)),
 			Data: &anypb.Any{
 				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
-			Ttl: ptr.Of("90s"),
+			Ttl: new("90s"),
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     "appid",
