@@ -25,7 +25,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -100,9 +102,7 @@ func NewFromExisting(loadMap map[string]*Host, replicationFactor int64, virtualN
 	}
 
 	// sort hashes in ascending order
-	sort.Slice(newHash.sortedSet, func(i int, j int) bool {
-		return newHash.sortedSet[i] < newHash.sortedSet[j]
-	})
+	slices.Sort(newHash.sortedSet)
 
 	return newHash
 }
@@ -416,9 +416,7 @@ func (c *Consistent) VirtualNodes() map[uint64]string {
 	defer c.RUnlock()
 
 	virtualNodes := make(map[uint64]string, len(c.hosts))
-	for vn, h := range c.hosts {
-		virtualNodes[vn] = h
-	}
+	maps.Copy(virtualNodes, c.hosts)
 	return virtualNodes
 }
 

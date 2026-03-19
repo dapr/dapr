@@ -74,12 +74,14 @@ func regexError(msg string, fmt string, examples ...string) error {
 		return errors.New(msg + " (regex used for validation is '" + fmt + "')")
 	}
 	msg += " (e.g. "
+	var msgSb77 strings.Builder
 	for i := range examples {
 		if i > 0 {
-			msg += " or "
+			msgSb77.WriteString(" or ")
 		}
-		msg += "'" + examples[i] + "', "
+		msgSb77.WriteString("'" + examples[i] + "', ")
 	}
+	msg += msgSb77.String()
 	msg += "regex used for validation is '" + fmt + "')"
 	return errors.New(msg)
 }

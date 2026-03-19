@@ -105,10 +105,10 @@ type BulkMessage struct {
 }
 
 type BulkMessageEntry struct {
-	EntryId     string                 `json:"entryId"` //nolint:stylecheck
-	Event       map[string]interface{} `json:"event"`
-	ContentType string                 `json:"contentType,omitempty"`
-	Metadata    map[string]string      `json:"metadata"`
+	EntryId     string            `json:"entryId"` //nolint:stylecheck
+	Event       map[string]any    `json:"event"`
+	ContentType string            `json:"contentType,omitempty"`
+	Metadata    map[string]string `json:"metadata"`
 }
 
 type AppBulkMessageEntry struct {
@@ -438,7 +438,7 @@ func unique(slice []string) []string {
 func extractMessage(reqID string, body []byte) (string, error) {
 	log.Printf("(%s) extractMessage() called with body=%s", reqID, string(body))
 
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	err := json.Unmarshal(body, &m)
 	if err != nil {
 		log.Printf("(%s) Could not unmarshal: %v", reqID, err)

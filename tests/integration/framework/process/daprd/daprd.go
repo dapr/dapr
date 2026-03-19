@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -273,6 +274,10 @@ func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
 	conn, err := grpc.DialContext(ctx, d.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(math.MaxInt32),
+			grpc.MaxCallSendMsgSize(math.MaxInt32),
+		),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -512,4 +517,9 @@ func (d *Daprd) Restart(t *testing.T, ctx context.Context) {
 	d.exec.Kill(t)
 	d.exec = clone
 	d.exec.Run(t, ctx)
+}
+
+func (d *Daprd) SignalHUP(t *testing.T) {
+	t.Helper()
+	d.exec.SignalHUP(t)
 }

@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestParseEnvString(t *testing.T) {
@@ -249,7 +248,7 @@ func TestParseEnvFromSecret(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ //nolint:gosec
 			testName:     "multi key name secret",
 			envSecretStr: "KEY1=NAME1:SECRETKEY1",
 			expLen:       1,
@@ -268,7 +267,7 @@ func TestParseEnvFromSecret(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ //nolint:gosec
 			testName:     "multi key name value secret",
 			envSecretStr: "KEY1=NAME1:SECRETKEY1,KEY2=NAME2:SECRETKEY2",
 			expLen:       2,
@@ -298,7 +297,7 @@ func TestParseEnvFromSecret(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ //nolint:gosec
 			testName:     "multi key name value secret with spaces",
 			envSecretStr: "KEY1= NAME1 : SECRETKEY1, KEY2= NAME2 : SECRETKEY2",
 			expLen:       2,
@@ -473,7 +472,7 @@ func TestGetReadinessProbeHandler(t *testing.T) {
 		},
 	}
 
-	assert.EqualValues(t, expectedHandler, getReadinessProbeHandler(3500, pathElements...))
+	assert.Equal(t, expectedHandler, getReadinessProbeHandler(3500, pathElements...))
 }
 
 func TestGetLivenessProbeHandler(t *testing.T) {
@@ -483,7 +482,7 @@ func TestGetLivenessProbeHandler(t *testing.T) {
 		},
 	}
 
-	assert.EqualValues(t, expectedHandler, getLivenessProbeHandler(3500))
+	assert.Equal(t, expectedHandler, getLivenessProbeHandler(3500))
 }
 
 func TestFormatProbePath(t *testing.T) {
@@ -620,7 +619,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 
@@ -683,7 +682,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 
@@ -755,7 +754,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_HOST_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 
@@ -1236,7 +1235,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
-				assert.Equal(t, ptr.Of(true), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be true")
+				assert.Equal(t, new(true), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be true")
 			},
 		},
 		{
@@ -1246,17 +1245,17 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
-				assert.Equal(t, ptr.Of(false), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be false")
+				assert.Equal(t, new(false), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be false")
 			},
 		},
 		{
 			name: "set run as user 1000",
 			sidecarConfigModifierFn: func(c *SidecarConfig) {
-				c.RunAsUser = ptr.Of(int64(1000))
+				c.RunAsUser = new(int64(1000))
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should not be nil")
-				assert.Equal(t, ptr.Of(int64(1000)), container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be 1000")
+				assert.Equal(t, new(int64(1000)), container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be 1000")
 			},
 		},
 		{
@@ -1268,11 +1267,11 @@ func TestGetSidecarContainer(t *testing.T) {
 		{
 			name: "set run as group 3000",
 			sidecarConfigModifierFn: func(c *SidecarConfig) {
-				c.RunAsGroup = ptr.Of(int64(3000))
+				c.RunAsGroup = new(int64(3000))
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should not be nil")
-				assert.Equal(t, ptr.Of(int64(3000)), container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be 3000")
+				assert.Equal(t, new(int64(3000)), container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be 3000")
 			},
 		},
 		{

@@ -26,5 +26,5 @@ type Rule struct {
 type Expr interface {
 	fmt.Stringer
 
-	Eval(variables map[string]interface{}) (interface{}, error)
+	Eval(variables map[string]any) (any, error)
 }

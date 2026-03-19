@@ -15,8 +15,7 @@ package standalone
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -45,7 +44,7 @@ type standalone struct {
 }
 
 func (k *standalone) Setup(t *testing.T) []framework.Option {
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, rootKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	jwtKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -91,12 +90,12 @@ func (k *standalone) Run(t *testing.T, ctx context.Context) {
 	conn := k.sentry.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
 	client := sentrypbv1.NewCAClient(conn)
 
-	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, pk, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	csrDer, err := x509.CreateCertificateRequest(rand.Reader, new(x509.CertificateRequest), pk)
 	require.NoError(t, err)
 
-	resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+	resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{ //nolint:gosec
 		Id:                        "myappid",
 		Namespace:                 "mynamespace",
 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),

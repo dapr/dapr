@@ -26,7 +26,6 @@ import (
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
-	"github.com/dapr/dapr/pkg/operator/api"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -110,7 +109,7 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	i.operator.AddSubscriptions(sub)
-	i.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	i.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -134,7 +133,7 @@ func (i *inflight) Run(t *testing.T, ctx context.Context) {
 	}
 
 	i.operator.SetSubscriptions()
-	i.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	i.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub,
 		EventType:    operatorv1.ResourceEventType_DELETED,
 	})

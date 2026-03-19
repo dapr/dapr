@@ -116,7 +116,7 @@ func (r *RedisUpdater) AddKey(items map[string]*Item) error {
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
 	values := getRedisValuesFromItems(items)
-	valuesWithCommand := append([]interface{}{"MSET"}, values...)
+	valuesWithCommand := append([]any{"MSET"}, values...)
 	return r.client.Do(timeoutCtx, valuesWithCommand...).Err()
 }
 
@@ -209,10 +209,10 @@ func (r *PostgresUpdater) Init() error {
 	return nil
 }
 
-func buildAddQuery(items map[string]*Item, configTable string) (string, []interface{}, error) {
+func buildAddQuery(items map[string]*Item, configTable string) (string, []any, error) {
 	query := ""
 	paramWildcard := make([]string, 0, len(items))
-	params := make([]interface{}, 0, 4*len(items))
+	params := make([]any, 0, 4*len(items))
 	if len(items) == 0 {
 		return query, params, errors.New("empty list of items")
 	}
@@ -247,7 +247,7 @@ func (r *PostgresUpdater) UpdateKey(items map[string]*Item) error {
 		return errors.New("empty list of items")
 	}
 	for key, item := range items {
-		var params []interface{}
+		params := make([]any, 0, 4)
 		query := "UPDATE " + postgresConfigTable + " SET VALUE = $1, VERSION = $2, METADATA = $3 WHERE KEY = $4"
 		params = append(params, item.Value, item.Version, item.Metadata, key)
 		_, err := r.client.Exec(context.Background(), query, params...)
@@ -281,8 +281,8 @@ func sendResponse(w http.ResponseWriter, statusCode int, message string) {
 }
 
 // return key-value pairs as a list of strings
-func getRedisValuesFromItems(items map[string]*Item) []interface{} {
-	m := make([]interface{}, 0, 2*len(items)+1)
+func getRedisValuesFromItems(items map[string]*Item) []any {
+	m := make([]any, 0, 2*len(items)+1)
 	for key, item := range items {
 		val := item.Value + separator + item.Version
 		m = append(m, key, val)
@@ -335,11 +335,12 @@ func getKeyValues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var response string
-	if protocol == "http" {
+	switch protocol {
+	case "http":
 		response, err = getHTTP(keys, endpointType, configStore)
-	} else if protocol == "grpc" {
+	case "grpc":
 		response, err = getGRPC(keys, endpointType, configStore)
-	} else {
+	default:
 		err = fmt.Errorf("unknown protocol in Get call: %s", protocol)
 	}
 	if err != nil {
@@ -452,7 +453,7 @@ func subscribeHTTP(keys []string, endpointType string, configStore string, compo
 	}
 	var subscriptionID string
 	if !strings.Contains(string(sub), "errorCode") {
-		var subid map[string]interface{}
+		var subid map[string]any
 		json.Unmarshal(sub, &subid)
 		log.Printf("App subscribed to config changes with subscription id: %s", subid["id"])
 		subscriptionID = subid["id"].(string)
@@ -476,11 +477,12 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var subscriptionID string
-	if protocol == "http" {
+	switch protocol {
+	case "http":
 		subscriptionID, err = subscribeHTTP(keys, endpointType, configStore, component)
-	} else if protocol == "grpc" {
+	case "grpc":
 		subscriptionID, err = subscribeGRPC(keys, endpointType, configStore, component)
-	} else {
+	default:
 		err = fmt.Errorf("unknown protocol in Subscribe call: %s", protocol)
 	}
 
@@ -537,11 +539,12 @@ func stopSubscription(w http.ResponseWriter, r *http.Request) {
 	configStore := vars["configStore"]
 	response := "OK"
 	var err error
-	if protocol == "http" {
+	switch protocol {
+	case "http":
 		response, err = unsubscribeHTTP(subscriptionID, endpointType, configStore)
-	} else if protocol == "grpc" {
+	case "grpc":
 		err = unsubscribeGRPC(subscriptionID)
-	} else {
+	default:
 		err = fmt.Errorf("unknown protocol in unsubscribe call: %s", protocol)
 	}
 	if err != nil {

@@ -40,7 +40,6 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement")
@@ -51,6 +50,7 @@ type Interface interface {
 	LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, context.Context, context.CancelCauseFunc, error)
 	IsActorHosted(ctx context.Context, actorType, actorID string) bool
 	Ready() bool
+	SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration)
 }
 
 type Options struct {
@@ -74,7 +74,7 @@ type placement struct {
 	ready    *atomic.Bool
 	errCh    chan error
 
-	loop loop.Interface[loops.Event]
+	loop loop.Interface[loops.EventPlace]
 }
 
 func New(opts Options) (Interface, error) {
@@ -178,7 +178,7 @@ func (p *placement) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			p.loop.Enqueue(&loops.PlacementReconnect{
-				ActorTypes: ptr.Of(atypes),
+				ActorTypes: new(atypes),
 			})
 			for {
 				select {
@@ -252,4 +252,11 @@ func (p *placement) IsActorHosted(ctx context.Context, actorType, actorID string
 	cancel(nil)
 
 	return lar != nil && loops.IsActorLocal(lar.Address, p.hostname, p.port)
+}
+
+func (p *placement) SetDrainOngoingCallTimeout(drain *bool, timeout *time.Duration) {
+	p.loop.Enqueue(&loops.SetDrainOngoingCallTimeout{
+		Drain:   drain,
+		Timeout: timeout,
+	})
 }

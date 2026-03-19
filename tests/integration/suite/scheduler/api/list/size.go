@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -55,7 +54,7 @@ func (s *size) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	job := &schedulerv1pb.Job{
-		DueTime: ptr.Of("1000s"),
+		DueTime: new("1000s"),
 		Data:    data,
 	}
 	meta := &schedulerv1pb.JobMetadata{

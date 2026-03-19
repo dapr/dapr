@@ -91,13 +91,11 @@ func TestAppHealth_setResult(t *testing.T) {
 	// Only one failure should be sent
 	wg := sync.WaitGroup{}
 	for range 5 {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for range threshold + 5 {
 				h.setResult(t.Context(), NewStatus(false, nil))
 			}
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 

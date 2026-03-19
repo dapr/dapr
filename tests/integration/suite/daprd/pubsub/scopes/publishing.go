@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -63,6 +64,7 @@ func (p *publishing) Setup(t *testing.T) []framework.Option {
 	)
 
 	var subYaml string
+	var subYamlSb66 strings.Builder
 	for i, sub := range []struct {
 		pubsub string
 		topic  string
@@ -78,7 +80,7 @@ func (p *publishing) Setup(t *testing.T) []framework.Option {
 		{"app1-nil-app2-topic910", "topic9"},
 		{"app1-nil-app2-topic910", "topic10"},
 	} {
-		subYaml += fmt.Sprintf(`
+		fmt.Fprintf(&subYamlSb66, `
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Subscription
@@ -90,10 +92,11 @@ spec:
  route: /a
 `, i+1, sub.pubsub, sub.topic)
 	}
+	subYaml += subYamlSb66.String()
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "sub.yaml"), []byte(subYaml), 0o600))
 
 	require.NoError(t, os.WriteFile(filepath.Join(resDir, "pubsub.yaml"),
-		[]byte(fmt.Sprintf(`
+		fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -156,7 +159,7 @@ spec:
  metadata:
  - name: publishingScopes
    value: "%[1]s=;%[2]s=topic9,topic10"
-`, p.daprd1.AppID(), p.daprd2.AppID())), 0o600))
+`, p.daprd1.AppID(), p.daprd2.AppID()), 0o600))
 
 	return []framework.Option{
 		framework.WithProcesses(p.sub, p.daprd1, p.daprd2, p.daprd3),

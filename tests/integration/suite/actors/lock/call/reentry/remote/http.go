@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -54,7 +53,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 			return
 		}
 		if h.rid.Load() == nil {
-			h.rid.Store(ptr.Of(r.Header.Get("Dapr-Reentrancy-Id")))
+			h.rid.Store(new(r.Header.Get("Dapr-Reentrancy-Id")))
 		}
 		h.called.Append(r.URL.Path)
 		<-h.holdCall

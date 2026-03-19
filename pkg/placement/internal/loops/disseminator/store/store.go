@@ -87,7 +87,15 @@ func (s *Store) Set(streamIDx uint64, host *v1pb.Host) bool {
 		return false
 	}
 
-	s.hosts[streamIDx] = host
+	// If the host has no entities, it should not be stored in the placement
+	// table. If it previously had entities (i.e. it exists in the store), delete
+	// it to reflect the removal.
+	if len(host.GetEntities()) == 0 {
+		delete(s.hosts, streamIDx)
+	} else {
+		s.hosts[streamIDx] = host
+	}
+
 	return true
 }
 
@@ -96,12 +104,19 @@ func (s *Store) HostChanged(streamIDx uint64, host *v1pb.Host) bool {
 	sort.Strings(host.Entities)
 	existing, ok := s.hosts[streamIDx]
 	if !ok {
-		return true
+		// A new host with no entities has nothing to contribute to the
+		// placement table, so it is not a change.
+		return len(host.GetEntities()) > 0
 	}
 
-	return !(slices.Equal(existing.GetEntities(), host.GetEntities()) &&
-		host.GetId() == existing.GetId() &&
-		host.GetNamespace() == existing.GetNamespace())
+	return !slices.Equal(existing.GetEntities(), host.GetEntities()) ||
+		host.GetId() != existing.GetId() ||
+		host.GetNamespace() != existing.GetNamespace()
+}
+
+func (s *Store) Has(streamIDx uint64) bool {
+	_, ok := s.hosts[streamIDx]
+	return ok
 }
 
 func (s *Store) Delete(streamIDx uint64) {

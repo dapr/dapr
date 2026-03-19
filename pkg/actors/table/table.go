@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	"k8s.io/utils/clock"
 
@@ -59,9 +58,7 @@ type ActorTypeFactory struct {
 }
 
 type ActorHostOptions struct {
-	EntityConfigs           map[string]api.EntityConfig
-	DrainRebalancedActors   bool
-	DrainOngoingCallTimeout time.Duration
+	EntityConfigs map[string]api.EntityConfig
 }
 
 type RegisterActorTypeOptions struct {
@@ -73,8 +70,7 @@ type table struct {
 	factories   sync.Map
 	typeUpdates *broadcaster.Broadcaster[[]string]
 
-	drainRebalancedActors bool
-	entityConfigs         map[string]api.EntityConfig
+	entityConfigs map[string]api.EntityConfig
 
 	reentrancyStore *reentrancystore.Store
 	clock           clock.Clock
@@ -82,11 +78,10 @@ type table struct {
 
 func New(opts Options) Interface {
 	return &table{
-		drainRebalancedActors: true,
-		entityConfigs:         make(map[string]api.EntityConfig),
-		clock:                 clock.RealClock{},
-		typeUpdates:           broadcaster.New[[]string](),
-		reentrancyStore:       opts.ReentrancyStore,
+		entityConfigs:   make(map[string]api.EntityConfig),
+		clock:           clock.RealClock{},
+		typeUpdates:     broadcaster.New[[]string](),
+		reentrancyStore: opts.ReentrancyStore,
 	}
 }
 
@@ -171,7 +166,6 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 	}
 
 	if opts := opts.HostOptions; opts != nil {
-		t.drainRebalancedActors = opts.DrainRebalancedActors
 		t.entityConfigs = opts.EntityConfigs
 	}
 

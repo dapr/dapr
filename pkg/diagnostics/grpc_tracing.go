@@ -16,6 +16,7 @@ package diagnostics
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -120,9 +121,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			reqSpanAttr = spanAttributesMapFromGRPC(appID, req, info.FullMethod)
 
 			// Populates dapr- prefixed header first
-			for key, value := range reqSpanAttr {
-				prefixedMetadata[key] = value
-			}
+			maps.Copy(prefixedMetadata, reqSpanAttr)
 			AddAttributesToSpan(span, prefixedMetadata)
 
 			// Correct the span name based on API.
@@ -226,9 +225,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 			}
 
 			// Populates dapr- prefixed header first
-			for key, value := range reqSpanAttr {
-				prefixedMetadata[key] = value
-			}
+			maps.Copy(prefixedMetadata, reqSpanAttr)
 			AddAttributesToSpan(span, prefixedMetadata)
 
 			// Correct the span name based on API.

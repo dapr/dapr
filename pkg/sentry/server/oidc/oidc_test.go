@@ -15,8 +15,7 @@ package oidc
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -34,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/healthz"
-	"github.com/dapr/kit/ptr"
 )
 
 const testHost = "example.com:8443"
@@ -58,16 +56,16 @@ func TestHandleJWKS(t *testing.T) {
 		require.Equal(t, "public, max-age=3600", rr.Header().Get("Cache-Control"))
 
 		// Parse the response to ensure it's valid JWKS
-		var jwksResp map[string]interface{}
+		var jwksResp map[string]any
 		err = json.Unmarshal(rr.Body.Bytes(), &jwksResp)
 		require.NoError(t, err)
 
 		// Verify the response contains the expected keys
-		keys, ok := jwksResp["keys"].([]interface{})
+		keys, ok := jwksResp["keys"].([]any)
 		require.True(t, ok)
 		require.Len(t, keys, 1)
 
-		key := keys[0].(map[string]interface{})
+		key := keys[0].(map[string]any)
 		require.Equal(t, "EC", key["kty"])
 		require.Equal(t, "sig", key["use"])
 		require.Equal(t, "test-key", key["kid"])
@@ -371,9 +369,9 @@ func TestServer_Start(t *testing.T) {
 	certFile, keyFile := createTestCertificate(t)
 
 	s := createTestServer(t, WithJWKS(jwks))
-	s.tlsCertPath = ptr.Of(certFile)
-	s.tlsKeyPath = ptr.Of(keyFile)
-	s.jwksURI = ptr.Of("https://example.com/jwks.json")
+	s.tlsCertPath = new(certFile)
+	s.tlsKeyPath = new(keyFile)
+	s.jwksURI = new("https://example.com/jwks.json")
 
 	// Start the server in a goroutine
 	ctx, cancel := context.WithCancel(t.Context())
@@ -405,11 +403,11 @@ func TestJWKSResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, resp, "keys")
-	keys, ok := resp["keys"].([]interface{})
+	keys, ok := resp["keys"].([]any)
 	require.True(t, ok)
 	require.Len(t, keys, 1)
 
-	key := keys[0].(map[string]interface{})
+	key := keys[0].(map[string]any)
 	require.Equal(t, "EC", key["kty"])
 	require.Equal(t, "sig", key["use"])
 	require.Equal(t, "test-key", key["kid"])
@@ -425,7 +423,7 @@ func TestNew(t *testing.T) {
 			ListenAddress:      "0.0.0.0",
 			JWKS:               jwks,
 			Healthz:            healthz.New(),
-			JWKSURI:            ptr.Of("https://example.com/jwks.json"),
+			JWKSURI:            new("https://example.com/jwks.json"),
 			SignatureAlgorithm: jwa.ES256,
 		})
 		require.NoError(t, err)
@@ -433,7 +431,7 @@ func TestNew(t *testing.T) {
 		assert.Equal(t, 8443, s.port)
 		assert.Equal(t, "0.0.0.0", s.listenAddress)
 		assert.Equal(t, jwks, s.jwks)
-		assert.Equal(t, ptr.Of("https://example.com/jwks.json"), s.jwksURI)
+		assert.Equal(t, new("https://example.com/jwks.json"), s.jwksURI)
 		assert.Nil(t, s.pathPrefix)
 	})
 
@@ -443,13 +441,13 @@ func TestNew(t *testing.T) {
 			ListenAddress:      "0.0.0.0",
 			JWKS:               jwks,
 			Healthz:            healthz.New(),
-			JWKSURI:            ptr.Of("https://example.com/jwks.json"),
-			PathPrefix:         ptr.Of("/auth"),
+			JWKSURI:            new("https://example.com/jwks.json"),
+			PathPrefix:         new("/auth"),
 			SignatureAlgorithm: jwa.ES256,
 		})
 		require.NoError(t, err)
 
-		assert.Equal(t, ptr.Of("/auth"), s.pathPrefix)
+		assert.Equal(t, new("/auth"), s.pathPrefix)
 	})
 
 	t.Run("with custom domains", func(t *testing.T) {
@@ -459,7 +457,7 @@ func TestNew(t *testing.T) {
 			ListenAddress:      "0.0.0.0",
 			JWKS:               jwks,
 			Healthz:            healthz.New(),
-			JWKSURI:            ptr.Of("https://example.com/jwks.json"),
+			JWKSURI:            new("https://example.com/jwks.json"),
 			AllowedHosts:       allowedHosts,
 			SignatureAlgorithm: jwa.ES256,
 		})
@@ -474,13 +472,13 @@ func TestNew(t *testing.T) {
 			ListenAddress:      "0.0.0.0",
 			JWKS:               jwks,
 			Healthz:            healthz.New(),
-			JWKSURI:            ptr.Of("https://example.com/jwks.json"),
-			JWTIssuer:          ptr.Of("https://auth.example.com"),
+			JWKSURI:            new("https://example.com/jwks.json"),
+			JWTIssuer:          new("https://auth.example.com"),
 			SignatureAlgorithm: jwa.ES256,
 		})
 		require.NoError(t, err)
 
-		assert.Equal(t, ptr.Of("https://auth.example.com"), s.jwtIssuer)
+		assert.Equal(t, new("https://auth.example.com"), s.jwtIssuer)
 	})
 }
 
@@ -498,7 +496,7 @@ func createTestServer(t *testing.T, opts ...OptionsBuilder) *Server {
 
 // Helper function to create a test TLS certificate.
 func createTestCertificate(t *testing.T) (string, string) {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	// Create a self-signed certificate
@@ -509,13 +507,13 @@ func createTestCertificate(t *testing.T) (string, string) {
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(time.Hour),
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		DNSNames:              []string{"localhost"},
 	}
 
-	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, privateKey.Public(), privateKey)
 	require.NoError(t, err)
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
@@ -542,26 +540,26 @@ func WithJWKS(jwks []byte) OptionsBuilder {
 
 func WithJWKSURI(jwksURI string) OptionsBuilder {
 	return func(opts *Options) {
-		opts.JWKSURI = ptr.Of(jwksURI)
+		opts.JWKSURI = new(jwksURI)
 	}
 }
 
 func WithPathPrefix(pathPrefix string) OptionsBuilder {
 	return func(opts *Options) {
-		opts.PathPrefix = ptr.Of(pathPrefix)
+		opts.PathPrefix = new(pathPrefix)
 	}
 }
 
 func WithIssuer(issuer string) OptionsBuilder {
 	return func(opts *Options) {
-		opts.JWTIssuer = ptr.Of(issuer)
+		opts.JWTIssuer = new(issuer)
 	}
 }
 
 func WithTLS(certFile, keyFile string) OptionsBuilder {
 	return func(opts *Options) {
-		opts.TLSCertPath = ptr.Of(certFile)
-		opts.TLSKeyPath = ptr.Of(keyFile)
+		opts.TLSCertPath = new(certFile)
+		opts.TLSKeyPath = new(keyFile)
 	}
 }
 
@@ -584,10 +582,10 @@ func NewOptions(t *testing.T) Options {
 }
 
 // jwksResponse is a test utility to parse the JWKS response for validation
-func jwksResponse(t *testing.T, jwksBytes []byte) (map[string]interface{}, error) {
+func jwksResponse(t *testing.T, jwksBytes []byte) (map[string]any, error) {
 	t.Helper()
 
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(jwksBytes, &response); err != nil {
 		return nil, err
 	}

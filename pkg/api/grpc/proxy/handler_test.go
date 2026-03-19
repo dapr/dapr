@@ -131,7 +131,6 @@ func (s *assertingService) PingList(ping *pb.PingRequest, stream pb.TestService_
 	// Send user trailers and headers.
 	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	for i := range countListResponses {
-		//nolint:gosec
 		stream.Send(&pb.PingResponse{Value: ping.GetValue(), Counter: int32(i)})
 	}
 	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
@@ -295,13 +294,11 @@ func (s *proxyTestSuite) TestPingStream_StressTest() {
 func (s *proxyTestSuite) TestPingStream_MultipleThreads() {
 	wg := sync.WaitGroup{}
 	for range 4 {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for range 10 {
 				s.TestPingStream_StressTest()
 			}
-			wg.Done()
-		}()
+		})
 	}
 
 	ch := make(chan struct{})
@@ -563,7 +560,7 @@ func assertResponseReceiveMetricsSameCode(t *testing.T, meter view.Meter, reques
 	return rows
 }
 
-func assertRequestSentMetrics(t *testing.T, meter view.Meter, requestType string, requestsSentExpected int64, assertEqualFn func(t assert.TestingT, e1 interface{}, e2 interface{}, msgAndArgs ...interface{}) bool) []*view.Row {
+func assertRequestSentMetrics(t *testing.T, meter view.Meter, requestType string, requestsSentExpected int64, assertEqualFn func(t assert.TestingT, e1 any, e2 any, msgAndArgs ...any) bool) []*view.Row {
 	t.Helper()
 	rows, err := meter.RetrieveData(serviceInvocationRequestSentName)
 	require.NoError(t, err)
@@ -889,62 +886,62 @@ type testingLog struct {
 }
 
 // Info logs to INFO log. Arguments are handled in the manner of fmt.Print.
-func (t testingLog) Info(args ...interface{}) {
+func (t testingLog) Info(args ...any) {
 }
 
 // Infoln logs to INFO log. Arguments are handled in the manner of fmt.Println.
-func (t testingLog) Infoln(args ...interface{}) {
+func (t testingLog) Infoln(args ...any) {
 }
 
 // Infof logs to INFO log. Arguments are handled in the manner of fmt.Printf.
-func (t testingLog) Infof(format string, args ...interface{}) {
+func (t testingLog) Infof(format string, args ...any) {
 }
 
 // Warning logs to WARNING log. Arguments are handled in the manner of fmt.Print.
-func (t testingLog) Warning(args ...interface{}) {
+func (t testingLog) Warning(args ...any) {
 }
 
 // Warningln logs to WARNING log. Arguments are handled in the manner of fmt.Println.
-func (t testingLog) Warningln(args ...interface{}) {
+func (t testingLog) Warningln(args ...any) {
 }
 
 // Warningf logs to WARNING log. Arguments are handled in the manner of fmt.Printf.
-func (t testingLog) Warningf(format string, args ...interface{}) {
+func (t testingLog) Warningf(format string, args ...any) {
 }
 
 // Error logs to ERROR log. Arguments are handled in the manner of fmt.Print.
-func (t testingLog) Error(args ...interface{}) {
+func (t testingLog) Error(args ...any) {
 	t.T.Error(args...)
 }
 
 // Errorln logs to ERROR log. Arguments are handled in the manner of fmt.Println.
-func (t testingLog) Errorln(args ...interface{}) {
+func (t testingLog) Errorln(args ...any) {
 	t.T.Error(args...)
 }
 
 // Errorf logs to ERROR log. Arguments are handled in the manner of fmt.Printf.
-func (t testingLog) Errorf(format string, args ...interface{}) {
+func (t testingLog) Errorf(format string, args ...any) {
 	t.T.Errorf(format, args...)
 }
 
 // Fatal logs to ERROR log. Arguments are handled in the manner of fmt.Print.
 // gRPC ensures that all Fatal logs will exit with os.Exit(1).
 // Implementations may also call os.Exit() with a non-zero exit code.
-func (t testingLog) Fatal(args ...interface{}) {
+func (t testingLog) Fatal(args ...any) {
 	t.T.Fatal(args...)
 }
 
 // Fatalln logs to ERROR log. Arguments are handled in the manner of fmt.Println.
 // gRPC ensures that all Fatal logs will exit with os.Exit(1).
 // Implementations may also call os.Exit() with a non-zero exit code.
-func (t testingLog) Fatalln(args ...interface{}) {
+func (t testingLog) Fatalln(args ...any) {
 	t.T.Fatal(args...)
 }
 
 // Fatalf logs to ERROR log. Arguments are handled in the manner of fmt.Printf.
 // gRPC ensures that all Fatal logs will exit with os.Exit(1).
 // Implementations may also call os.Exit() with a non-zero exit code.
-func (t testingLog) Fatalf(format string, args ...interface{}) {
+func (t testingLog) Fatalf(format string, args ...any) {
 	t.T.Fatalf(format, args...)
 }
 

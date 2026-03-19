@@ -70,7 +70,7 @@ type daprConfig struct {
 	ActorIdleTimeout        string                  `json:"actorIdleTimeout,omitempty"`
 	DrainOngoingCallTimeout string                  `json:"drainOngoingCallTimeout,omitempty"`
 	DrainRebalancedActors   bool                    `json:"drainRebalancedActors,omitempty"`
-	Reentrancy              config.ReentrancyConfig `json:"reentrancy,omitempty"`
+	Reentrancy              config.ReentrancyConfig `json:"reentrancy,omitzero"`
 	EntitiesConfig          []config.EntityConfig   `json:"entitiesConfig,omitempty"`
 }
 

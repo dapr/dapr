@@ -49,12 +49,13 @@ type connector struct {
 	currentAppRunning bool
 	currentActorTypes []string
 	clients           []schedulerv1pb.SchedulerClient
+	closeConns        []context.CancelFunc
 
 	closeCluster context.CancelFunc
 }
 
-func New(opts Options) loop.Interface[loops.Event] {
-	return loop.New[loops.Event](1024).NewLoop(&connector{
+func New(opts Options) loop.Interface[loops.EventConn] {
+	return loop.New[loops.EventConn](1024).NewLoop(&connector{
 		namespace: opts.Namespace,
 		appID:     opts.AppID,
 		actors:    opts.Actors,
@@ -63,7 +64,7 @@ func New(opts Options) loop.Interface[loops.Event] {
 	})
 }
 
-func (c *connector) Handle(ctx context.Context, event loops.Event) error {
+func (c *connector) Handle(ctx context.Context, event loops.EventConn) error {
 	switch e := event.(type) {
 	case *loops.Reconnect:
 		c.handleReconnect(ctx, e)
@@ -84,11 +85,13 @@ func (c *connector) handleConnect(ctx context.Context, e *loops.Connect) {
 	c.handleDisconnect()
 
 	c.clients = e.Clients
+	c.closeConns = e.CloseConns
 	c.maybeClientConnect(ctx)
 }
 
 func (c *connector) handleDisconnect() {
 	c.closeClusterConnections()
+	c.closeClientConnections()
 	c.clients = nil
 }
 
@@ -114,6 +117,13 @@ func (c *connector) closeClusterConnections() {
 	c.closeCluster()
 }
 
+func (c *connector) closeClientConnections() {
+	for _, closeCon := range c.closeConns {
+		closeCon()
+	}
+	c.closeConns = nil
+}
+
 func (c *connector) maybeClientConnect(ctx context.Context) {
 	if len(c.clients) == 0 || (!c.currentAppRunning && len(c.currentActorTypes) == 0) {
 		return
@@ -133,17 +143,20 @@ func (c *connector) maybeClientConnect(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	doneCh := make(chan struct{})
+
 	go func() {
 		err := cluster.Run(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Error(err, "failed to run scheduler cluster clients")
 		}
+
 		close(doneCh)
 	}()
 
 	c.closeCluster = func() {
 		cancel()
 		<-doneCh
+
 		c.closeCluster = nil
 	}
 }

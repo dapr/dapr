@@ -119,7 +119,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	h.operator.AddSubscriptions(sub1)
-	h.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	h.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub1,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -138,7 +138,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	h.operator.AddSubscriptions(sub2)
-	h.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	h.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub2,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -149,7 +149,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd, "pubsub0", "b"))
 
 	h.operator.SetSubscriptions(sub2)
-	h.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	h.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub1,
 		EventType:    operatorv1.ResourceEventType_DELETED,
 	})
@@ -168,7 +168,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	h.operator.AddSubscriptions(sub3)
-	h.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	h.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub3,
 		EventType:    operatorv1.ResourceEventType_CREATED,
 	})
@@ -181,7 +181,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	sub2.Spec.Topic = "d"
 	sub2.Spec.Routes.Default = "/d"
 	h.operator.SetSubscriptions(sub2, sub3)
-	h.operator.SubscriptionUpdateEvent(t, ctx, &api.SubscriptionUpdateEvent{
+	h.operator.SubscriptionUpdateEvent(t, ctx, &operator.SubscriptionUpdateEvent{
 		Subscription: &sub2,
 		EventType:    operatorv1.ResourceEventType_UPDATED,
 	})

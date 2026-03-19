@@ -34,7 +34,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -113,9 +112,9 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 		ActorType: "foo",
 		ActorId:   "1234",
 		Data:      data,
-		DueTime:   ptr.Of("1s"),
-		Ttl:       ptr.Of(time.Date(2552, 1, 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)),
-		Period:    ptr.Of("@every 1s"),
+		DueTime:   new("1s"),
+		Ttl:       new(time.Date(2552, 1, 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)),
+		Period:    new("@every 1s"),
 	}
 	assert.True(t, proto.Equal(exp, gresp), "%v != %v", exp, gresp)
 }

@@ -541,7 +541,7 @@ func bundlesEqual(t *testing.T, expected, actual ca_bundle.Bundle) {
 		assert.Equal(t, expected.X509.TrustAnchors, actual.X509.TrustAnchors)
 		assert.Equal(t, expected.X509.IssChainPEM, actual.X509.IssChainPEM)
 		assert.Equal(t, expected.X509.IssKeyPEM, actual.X509.IssKeyPEM)
-		assert.Equal(t, len(expected.X509.IssChain), len(actual.X509.IssChain))
+		assert.Len(t, actual.X509.IssChain, len(expected.X509.IssChain))
 		for i := range expected.X509.IssChain {
 			assert.Equal(t, expected.X509.IssChain[i].Subject, actual.X509.IssChain[i].Subject)
 		}

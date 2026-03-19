@@ -91,7 +91,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 		}
 		require.NoError(t, os.WriteFile(filepath.Join(c.cryptoDir1, "crypto1"), pk, 0o600))
 		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "1.yaml"),
-			[]byte(fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
+			fmt.Appendf(nil, `apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: crypto1
@@ -101,7 +101,7 @@ spec:
   metadata:
     - name: path
       value: '%s'
-`, c.cryptoDir1)), 0o600))
+`, c.cryptoDir1), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			assert.NoError(c, err)
@@ -120,7 +120,7 @@ spec:
 		}
 		require.NoError(t, os.WriteFile(filepath.Join(c.cryptoDir2, "crypto2"), pk, 0o600))
 		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "2.yaml"),
-			[]byte(fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
+			fmt.Appendf(nil, `apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: crypto2
@@ -130,7 +130,7 @@ spec:
   metadata:
     - name: path
       value: '%s'
-`, c.cryptoDir2)), 0o600))
+`, c.cryptoDir2), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			assert.NoError(c, err)
@@ -149,7 +149,7 @@ spec:
 		}
 		require.NoError(t, os.WriteFile(filepath.Join(c.cryptoDir2, "crypto3"), pk, 0o600))
 		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "2.yaml"),
-			[]byte(fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
+			fmt.Appendf(nil, `apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: crypto3
@@ -170,7 +170,7 @@ spec:
   metadata:
     - name: path
       value: '%[1]s'
-`, c.cryptoDir2)), 0o600))
+`, c.cryptoDir2), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			assert.NoError(c, err)
@@ -183,7 +183,7 @@ spec:
 	})
 
 	t.Run("deleting crypto component (through type update) should make it no longer available", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "2.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "2.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -202,7 +202,7 @@ spec:
   metadata:
     - name: path
       value: '%s'
-`, c.cryptoDir2)), 0o600))
+`, c.cryptoDir2), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
@@ -256,7 +256,7 @@ spec:
 	})
 
 	t.Run("recreating crypto component should make it available again", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "1.yaml"), []byte(fmt.Sprintf(`
+		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "1.yaml"), fmt.Appendf(nil, `
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -267,7 +267,7 @@ spec:
   metadata:
     - name: path
       value: '%s'
-`, c.cryptoDir2)), 0o600))
+`, c.cryptoDir2), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))

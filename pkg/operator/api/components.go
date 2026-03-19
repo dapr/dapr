@@ -29,6 +29,8 @@ import (
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
+	loopsclient "github.com/dapr/dapr/pkg/operator/api/loops/client"
+	"github.com/dapr/dapr/pkg/operator/api/loops/sender"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
 )
@@ -39,8 +41,8 @@ type ComponentUpdateEvent struct {
 }
 
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified.
-// TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
-// the caller.
+// Each client connection gets its own client loop that watches the informer
+// and sends updates over the gRPC stream.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
 	if a.closed.Load() {
 		return errors.New("server is closed")
@@ -48,52 +50,37 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 	log.Info("sidecar connected for component updates")
 
-	ch, cancel, err := a.compInformer.WatchUpdates(srv.Context(), in.GetNamespace())
+	ctx := srv.Context()
+
+	// Verify authorization via informer's WatchUpdates, which checks SPIFFE ID
+	ch, cancel, err := a.compInformer.WatchUpdates(ctx, in.GetNamespace())
 	if err != nil {
 		return err
 	}
-	defer cancel()
 
-	updateComponentFunc := func(ctx context.Context, t operatorv1pb.ResourceEventType, c *componentsapi.Component) {
-		if c.Namespace != in.GetNamespace() {
-			return
-		}
-
-		err := processComponentSecrets(ctx, c, in.GetNamespace(), a.Client)
-		if err != nil {
-			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.GetNamespace(), in.GetPodName(), err)
-			return
-		}
-
-		b, err := json.Marshal(&c)
-		if err != nil {
-			log.Warnf("error serializing component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName(), err)
-			return
-		}
-
-		err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
-			Component: b,
-			Type:      t,
-		})
-		if err != nil {
-			log.Warnf("error updating sidecar with component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName(), err)
-			return
-		}
-
-		log.Debugf("updated sidecar with component %s %s (%s) from pod %s/%s", t.String(), c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName())
+	stream, err := sender.New(srv)
+	if err != nil {
+		return err
 	}
 
-	for {
-		select {
-		case <-srv.Context().Done():
-			return nil
-		case event, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			updateComponentFunc(srv.Context(), event.Type, &event.Manifest)
-		}
+	// Create a client for this connection
+	client := loopsclient.New(loopsclient.Options[componentsapi.Component]{
+		EventCh:        ch,
+		CancelWatch:    cancel,
+		Stream:         stream,
+		Namespace:      in.GetNamespace(),
+		PodName:        in.GetPodName(),
+		KubeClient:     a.Client,
+		ProcessSecrets: processComponentSecrets,
+	})
+	defer client.CacheLoop()
+
+	// Run the client - this will block until context is done or event channel closes
+	if err := client.Run(ctx); err != nil {
+		log.Warnf("component client loop ended with error: %s", err)
 	}
+
+	return nil
 }
 
 // ListComponents returns a list of Dapr components.
@@ -115,7 +102,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 
 	appID := id.AppID()
 	for i := range components.Items {
-		if !(len(components.Items[i].Scopes) == 0 || utils.Contains(components.Items[i].Scopes, appID)) {
+		if len(components.Items[i].Scopes) != 0 && !utils.Contains(components.Items[i].Scopes, appID) {
 			continue
 		}
 
@@ -138,7 +125,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 
 func processComponentSecrets(ctx context.Context, component *componentsapi.Component, namespace string, kubeClient client.Client) error {
 	for i, m := range component.Spec.Metadata {
-		if m.SecretKeyRef.Name != "" && (component.Auth.SecretStore == kubernetesSecretStore || component.Auth.SecretStore == "") {
+		if m.SecretKeyRef.Name != "" && (component.SecretStore == kubernetesSecretStore || component.SecretStore == "") {
 			var secret corev1.Secret
 
 			err := kubeClient.Get(ctx, types.NamespacedName{

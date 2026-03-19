@@ -14,6 +14,7 @@ limitations under the License.
 package config
 
 import (
+	"encoding/json"
 	"io"
 	"maps"
 	"reflect"
@@ -28,7 +29,6 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestLoadStandaloneConfiguration(t *testing.T) {
@@ -79,8 +79,8 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
 		require.NoError(t, err, "Unexpected error")
 		assert.NotNil(t, config, "Config not loaded as expected")
-		assert.Equal(t, "secretappconfig", config.ObjectMeta.Name)
-		assert.Equal(t, "Configuration", config.TypeMeta.Kind)
+		assert.Equal(t, "secretappconfig", config.Name)
+		assert.Equal(t, "Configuration", config.Kind)
 	})
 
 	t.Run("metrics spec", func(t *testing.T) {
@@ -460,7 +460,7 @@ func TestFeatureEnabled(t *testing.T) {
 	expect := append([]string{"testEnabled"}, buildinfo.Features()...)
 	slices.Sort(actual)
 	slices.Sort(expect)
-	assert.EqualValues(t, actual, expect)
+	assert.Equal(t, actual, expect)
 }
 
 func TestSetTracingSpecFromEnv(t *testing.T) {
@@ -487,7 +487,7 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	conf = LoadDefaultConfiguration()
 	conf.Spec.TracingSpec.Otel.EndpointAddress = "configfileendpoint:4321"
 	conf.Spec.TracingSpec.Otel.Protocol = "grpc"
-	conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(true)
+	conf.Spec.TracingSpec.Otel.IsSecure = new(true)
 	conf.Spec.TracingSpec.Otel.Headers = []string{"another-key1=value1"}
 
 	// set tracing spec from env
@@ -596,7 +596,7 @@ func TestSortMetrics(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{
-					Enabled: ptr.Of(true),
+					Enabled: new(true),
 					Rules: []MetricsRule{
 						{
 							Name: "rule",
@@ -604,7 +604,7 @@ func TestSortMetrics(t *testing.T) {
 					},
 				},
 				MetricsSpec: &MetricSpec{
-					Enabled: ptr.Of(false),
+					Enabled: new(false),
 				},
 			},
 		}
@@ -618,7 +618,7 @@ func TestSortMetrics(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{
-					Enabled: ptr.Of(false),
+					Enabled: new(false),
 					Rules: []MetricsRule{
 						{
 							Name: "rule",
@@ -626,7 +626,7 @@ func TestSortMetrics(t *testing.T) {
 					},
 				},
 				MetricsSpec: &MetricSpec{
-					Enabled: ptr.Of(true),
+					Enabled: new(true),
 				},
 			},
 		}
@@ -640,7 +640,7 @@ func TestSortMetrics(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{
-					Enabled: ptr.Of(true),
+					Enabled: new(true),
 					Rules: []MetricsRule{
 						{
 							Name: "rule",
@@ -680,7 +680,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 	t.Run("value is set to true", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				IncreasedCardinality: ptr.Of(true),
+				IncreasedCardinality: new(true),
 			},
 		}
 		assert.True(t, m.GetHTTPIncreasedCardinality(log))
@@ -689,7 +689,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 	t.Run("value is set to false", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				IncreasedCardinality: ptr.Of(false),
+				IncreasedCardinality: new(false),
 			},
 		}
 		assert.False(t, m.GetHTTPIncreasedCardinality(log))
@@ -720,7 +720,7 @@ func TestMetricsGetHTTPLatencyDistributionBuckets(t *testing.T) {
 	latencyDistribution = view.Distribution(customLatencyDistribution...)
 	t.Run("value is set to list of integers", func(t *testing.T) {
 		m := MetricSpec{
-			LatencyDistributionBuckets: ptr.Of([]int{1, 2, 3}),
+			LatencyDistributionBuckets: new([]int{1, 2, 3}),
 		}
 		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
 	})
@@ -774,7 +774,7 @@ func TestMetricsGetHTTPExcludeVerbs(t *testing.T) {
 	t.Run("config is enabled", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				ExcludeVerbs: ptr.Of(true),
+				ExcludeVerbs: new(true),
 			},
 		}
 		assert.True(t, m.GetHTTPExcludeVerbs())
@@ -783,9 +783,59 @@ func TestMetricsGetHTTPExcludeVerbs(t *testing.T) {
 	t.Run("config is disabled", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				ExcludeVerbs: ptr.Of(false),
+				ExcludeVerbs: new(false),
 			},
 		}
 		assert.False(t, m.GetHTTPExcludeVerbs())
+	})
+}
+
+func TestWorkflowStateRetentionPolicyUnmarshalJSON(t *testing.T) {
+	t.Run("all fields with string durations", func(t *testing.T) {
+		data := `{"anyTerminal":"1s","completed":"2h","failed":"30m","terminated":"168h"}`
+		var p WorkflowStateRetentionPolicy
+		require.NoError(t, json.Unmarshal([]byte(data), &p))
+
+		require.NotNil(t, p.AnyTerminal)
+		assert.Equal(t, time.Second, *p.AnyTerminal)
+
+		require.NotNil(t, p.Completed)
+		assert.Equal(t, 2*time.Hour, *p.Completed)
+
+		require.NotNil(t, p.Failed)
+		assert.Equal(t, 30*time.Minute, *p.Failed)
+
+		require.NotNil(t, p.Terminated)
+		assert.Equal(t, 168*time.Hour, *p.Terminated)
+	})
+
+	t.Run("partial fields", func(t *testing.T) {
+		data := `{"anyTerminal":"5s"}`
+		var p WorkflowStateRetentionPolicy
+		require.NoError(t, json.Unmarshal([]byte(data), &p))
+
+		require.NotNil(t, p.AnyTerminal)
+		assert.Equal(t, 5*time.Second, *p.AnyTerminal)
+
+		assert.Nil(t, p.Completed)
+		assert.Nil(t, p.Failed)
+		assert.Nil(t, p.Terminated)
+	})
+
+	t.Run("empty object", func(t *testing.T) {
+		data := `{}`
+		var p WorkflowStateRetentionPolicy
+		require.NoError(t, json.Unmarshal([]byte(data), &p))
+
+		assert.Nil(t, p.AnyTerminal)
+		assert.Nil(t, p.Completed)
+		assert.Nil(t, p.Failed)
+		assert.Nil(t, p.Terminated)
+	})
+
+	t.Run("invalid duration string", func(t *testing.T) {
+		data := `{"anyTerminal":"notaduration"}`
+		var p WorkflowStateRetentionPolicy
+		assert.Error(t, json.Unmarshal([]byte(data), &p))
 	})
 }
