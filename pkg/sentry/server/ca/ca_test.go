@@ -350,9 +350,9 @@ func TestSignIdentity(t *testing.T) {
 		clientCert, err := ca.SignIdentity(t.Context(), &SignRequest{
 			PublicKey:   clientPK.Public(),
 			TrustDomain: "example.test.dapr.io",
-			Namespace:          "my-test-namespace",
-			AppID:              "my-app-id",
-			DNS:                []string{"my-app-id.my-test-namespace.svc.cluster.local", "example.com"},
+			Namespace:   "my-test-namespace",
+			AppID:       "my-app-id",
+			DNS:         []string{"my-app-id.my-test-namespace.svc.cluster.local", "example.com"},
 		})
 		require.NoError(t, err)
 
