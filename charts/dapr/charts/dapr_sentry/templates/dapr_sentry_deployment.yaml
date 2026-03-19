@@ -70,7 +70,14 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
+    {{- with .Values.global.initContainers.sentry }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
       containers:
+    {{- with .Values.global.extraContainers.sentry }}
+        {{- toYaml . | nindent 6 }}
+    {{- end }}
       - name: dapr-sentry
         livenessProbe:
           httpGet:
