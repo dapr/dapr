@@ -314,3 +314,10 @@ When submitting a PR, ensure:
 - **github.com/stretchr/testify** — test assertions
 - **github.com/golang/mock** — mock generation
 - **go.opentelemetry.io/otel** — distributed tracing
+
+---
+
+Keep the top-level review summary to 2-3 sentences maximum.
+- Do not include per-file summary tables.
+- Do not include a "Pull request overview" section.
+- Only comment on actual issues found.
