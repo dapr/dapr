@@ -32,7 +32,7 @@ spec:
       {{- end }}
       resources:
         requests:
-          storage: {{ .Values.cluster.storageSize }}
+          storage: {{ include "dapr_scheduler.storageSize" . }}
   {{- end }}
   template:
     metadata:
