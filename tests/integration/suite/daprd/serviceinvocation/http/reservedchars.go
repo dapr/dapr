@@ -88,6 +88,16 @@ func (r *reservedChars) Run(t *testing.T, ctx context.Context) {
 			methodSuffix: "test%25stream",
 			expectedBody: "/test%stream|",
 		},
+		{
+			name:         "asterisk in method path",
+			methodSuffix: "test%2Astream",
+			expectedBody: "/test*stream|",
+		},
+		{
+			name:         "backslash in method path",
+			methodSuffix: "test%5Cstream",
+			expectedBody: `/test\stream|`,
+		},
 	}
 
 	for _, tt := range tests {
