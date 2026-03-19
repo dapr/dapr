@@ -126,7 +126,7 @@ func (i *childInjection) Run(tt *testing.T, ctx context.Context) {
 	// Send the "continue" event so the parent can complete. The inbox
 	// filtering validates that only legitimate child workflow results
 	// (matching ChildWorkflowInstanceCreated in signed history) are
-	// accepted — fake results would be purged by filterValidInboxEvents.
+	// accepted- fake results would be purged by filterValidInboxEvents.
 	require.NoError(tt, client.RaiseEvent(ctx, id, "continue", dworkflow.WithEventPayload("real-event")))
 
 	meta, err = client.WaitForWorkflowCompletion(ctx, id)

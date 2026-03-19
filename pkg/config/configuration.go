@@ -72,7 +72,7 @@ const (
 	// WorkflowSignState enables cryptographic signing of workflow history
 	// state. When enabled and mTLS is active, each workflow execution's
 	// history events are signed using the app's X.509 SVID identity,
-	// creating a verifiable chain of signatures. Disabled by default.
+	// creating a verifiable chain of signatures. Enabled by default.
 	WorkflowSignState Feature = "WorkflowSignState"
 )
 

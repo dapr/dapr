@@ -34,6 +34,8 @@ func init() {
 // explicitly enabled but mTLS is not configured (no sentry), daprd fails
 // to start with a clear error message.
 type nomtlserror struct {
+	sched   *scheduler.Scheduler
+	place   *placement.Placement
 	logline *logline.LogLine
 }
 
@@ -42,8 +44,8 @@ func (n *nomtlserror) Setup(t *testing.T) []framework.Option {
 		sqlite.WithActorStateStore(true),
 		sqlite.WithCreateStateTables(),
 	)
-	place := placement.New(t)
-	sched := scheduler.New(t)
+	n.place = placement.New(t)
+	n.sched = scheduler.New(t)
 
 	n.logline = logline.New(t,
 		logline.WithStdoutLineContains("WorkflowSignState feature flag is enabled but mTLS is not configured"),
@@ -51,8 +53,8 @@ func (n *nomtlserror) Setup(t *testing.T) []framework.Option {
 
 	daprd := daprd.New(t,
 		// No WithSentry — mTLS is NOT configured.
-		daprd.WithPlacement(place),
-		daprd.WithScheduler(sched),
+		daprd.WithPlacement(n.place),
+		daprd.WithScheduler(n.sched),
 		daprd.WithResourceFiles(db.GetComponent(t)),
 		daprd.WithConfigManifests(t, `apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -68,10 +70,13 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(n.logline, db, place, sched, daprd),
+		framework.WithProcesses(n.logline, db, n.place, n.sched, daprd),
 	}
 }
 
-func (n *nomtlserror) Run(t *testing.T, _ context.Context) {
+func (n *nomtlserror) Run(t *testing.T, ctx context.Context) {
+	n.sched.WaitUntilRunning(t, ctx)
+	n.place.WaitUntilRunning(t, ctx)
+
 	n.logline.EventuallyFoundAll(t)
 }
