@@ -201,8 +201,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedFalse, err
 	}
 
+	newEventCount := len(rs.GetNewEvents())
 	state.ApplyRuntimeStateChanges(rs)
 	state.ClearInbox()
+
+	if err = o.signNewEvents(state, newEventCount); err != nil {
+		return todo.RunCompletedFalse, fmt.Errorf("failed to sign new history events: %w", err)
+	}
 
 	err = o.saveInternalState(ctx, state)
 	if err != nil {

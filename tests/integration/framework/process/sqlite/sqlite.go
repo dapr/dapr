@@ -16,6 +16,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"path/filepath"
 	"runtime"
@@ -159,6 +160,40 @@ func (s *SQLite) GetComponent(t *testing.T) string {
 
 func (s *SQLite) TableName() string {
 	return s.tableName
+}
+
+// ReadStateValues reads base64-encoded state values from the SQLite database
+// matching the given instance ID and key prefix.
+func (s *SQLite) ReadStateValues(t *testing.T, ctx context.Context, instanceID, keyPrefix string) [][]byte {
+	t.Helper()
+
+	pattern := "%||" + instanceID + "||" + keyPrefix + "-%"
+	rows, err := s.GetConnection(t).QueryContext(ctx,
+		"SELECT value FROM "+s.tableName+" WHERE key LIKE ? ORDER BY key", pattern)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var values [][]byte
+	for rows.Next() {
+		var encoded string
+		require.NoError(t, rows.Scan(&encoded))
+		raw, err := base64.StdEncoding.DecodeString(encoded)
+		require.NoError(t, err)
+		values = append(values, raw)
+	}
+	require.NoError(t, rows.Err())
+	return values
+}
+
+// CountStateKeys returns the number of state keys matching the given prefix.
+func (s *SQLite) CountStateKeys(t *testing.T, ctx context.Context, keyPrefix string) int {
+	t.Helper()
+
+	var count int
+	require.NoError(t, s.GetConnection(t).QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM "+s.tableName+" WHERE key LIKE '%||"+keyPrefix+"-%'",
+	).Scan(&count))
+	return count
 }
 
 func toDynamicValue(t *testing.T, val string) commonapi.DynamicValue {

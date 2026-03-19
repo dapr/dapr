@@ -100,6 +100,13 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		fopt(&opts)
 	}
 
+	// When sentry is enabled the scheduler's peer TLS certificate contains
+	// DNS SANs based on the well-known name "dapr-scheduler-server-{N}".
+	// Default the ID to match so etcd peer validation succeeds.
+	if opts.sentry != nil && opts.id == uids {
+		opts.id = "dapr-scheduler-server-0"
+	}
+
 	var dataDir string
 	if opts.dataDir != nil {
 		dataDir = *opts.dataDir
