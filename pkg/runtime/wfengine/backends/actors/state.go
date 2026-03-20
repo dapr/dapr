@@ -78,7 +78,7 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 	lastUpdated, _ := runtimestate.LastUpdatedTime(rstate)
 	input, _ := runtimestate.Input(rstate)
 	output, _ := runtimestate.Output(rstate)
-	failureDetuils, _ := runtimestate.FailureDetails(rstate)
+	failureDetails, _ := runtimestate.FailureDetails(rstate)
 
 	return &backend.OrchestrationMetadata{
 		InstanceId:     string(id),
@@ -89,7 +89,7 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 		Input:          input,
 		Output:         output,
 		CustomStatus:   rstate.GetCustomStatus(),
-		FailureDetails: failureDetuils,
+		FailureDetails: failureDetails,
 	}, nil
 }
 

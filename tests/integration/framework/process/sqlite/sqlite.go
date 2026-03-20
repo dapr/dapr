@@ -191,7 +191,8 @@ func (s *SQLite) CountStateKeys(t *testing.T, ctx context.Context, keyPrefix str
 
 	var count int
 	require.NoError(t, s.GetConnection(t).QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM "+s.tableName+" WHERE key LIKE '%||"+keyPrefix+"-%'",
+		"SELECT COUNT(*) FROM "+s.tableName+" WHERE key LIKE ?",
+		"%||"+keyPrefix+"-%",
 	).Scan(&count))
 	return count
 }
