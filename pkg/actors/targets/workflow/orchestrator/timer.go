@@ -120,7 +120,7 @@ func (o *orchestrator) createTimerReminder(ctx context.Context, name string, dat
 // deleteCancelledEventTimers scans the workflow history to find timer reminders
 // associated with WaitForSingleEvent calls where the event has been received
 // before the timer fired, and deletes those now-unnecessary timer reminders.
-// 1. Find all TimerCreated events with a Name (i.e., event-associated timers)
+// 1. Find all TimerCreated events with an origin.external_event or Name set (i.e., event-associated timers)
 // 2. Remove any that have already fired (matching TimerFired events)
 // 3. For each new EventRaised, consume one matching unfired timer (FIFO order)
 // 4. Delete the timer reminders for consumed timers
@@ -155,8 +155,15 @@ func (o *orchestrator) deleteCancelledEventTimers(ctx context.Context, rs *proto
 		newEvents,
 	} {
 		for _, e := range events {
-			if tc := e.GetTimerCreated(); tc != nil && tc.Name != nil {
-				key := strings.ToUpper(tc.GetName())
+			// TODO: We're doing `Name` matching for backwards compatibility. Make it only match with `origin.external_event` in the future and remove the fallback logic.
+			if tc := e.GetTimerCreated(); tc != nil && (tc.GetExternalEvent() != nil || tc.Name != nil) {
+				var name string
+				if ee := tc.GetExternalEvent(); ee != nil {
+					name = ee.GetName()
+				} else {
+					name = tc.GetName()
+				}
+				key := strings.ToUpper(name)
 				pendingEventTimers[key] = append(pendingEventTimers[key], e.GetEventId())
 			} else if tf := e.GetTimerFired(); tf != nil {
 				firedTimerIDs[tf.GetTimerId()] = true
