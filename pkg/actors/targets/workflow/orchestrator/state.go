@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -43,14 +44,20 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 		AppID:             o.appID,
 		WorkflowActorType: o.actorType,
 		ActivityActorType: o.activityActorType,
+		Signer:            o.signer,
 	})
 	if err != nil {
+		var verifyErr *wfenginestate.VerificationError
+		if errors.As(err, &verifyErr) {
+			o.failSignatureVerification(ctx)
+		}
 		return nil, nil, err
 	}
 	if state == nil {
 		// No such state exists in the state store
 		return nil, nil, nil
 	}
+
 	// Update cached state
 	o.state = state
 	o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)

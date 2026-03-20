@@ -62,6 +62,12 @@ const (
 	// the workflow app is back online. Strongly recommended to always be enabled
 	// if using the same Dapr version on all daprds.
 	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
+
+	// WorkflowSignState enables cryptographic signing of workflow history
+	// state. When enabled and mTLS is active, each workflow execution's
+	// history events are signed using the app's X.509 SVID identity,
+	// creating a verifiable chain of signatures. Enabled by default.
+	WorkflowSignState Feature = "WorkflowSignState"
 )
 
 // end feature flags section
@@ -77,7 +83,9 @@ const (
 	ActionPolicyGlobal  = "global"
 )
 
-var defaultFeatures = make(map[Feature]bool)
+var defaultFeatures = map[Feature]bool{
+	WorkflowSignState: true,
+}
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 //

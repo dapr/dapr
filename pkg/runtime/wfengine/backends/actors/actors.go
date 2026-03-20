@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
@@ -47,15 +46,14 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/state/list"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/local"
-	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 	"github.com/dapr/kit/logger"
 )
 
@@ -92,6 +90,10 @@ type Options struct {
 	WorkflowsRemoteActivityReminder bool
 
 	RetentionPolicy *config.WorkflowStateRetentionPolicy
+
+	// Crypto provides cryptographic signing and verification. If nil, history
+	// signing is disabled.
+	Signer *signer.Signer
 }
 
 type Actors struct {
@@ -108,6 +110,7 @@ type Actors struct {
 	eventSink           orchestrator.EventSink
 	compStore           *compstore.ComponentStore
 	retentionPolicy     *config.WorkflowStateRetentionPolicy
+	signer              *signer.Signer
 
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
@@ -144,6 +147,7 @@ func New(opts Options) *Actors {
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
 		retentionPolicy:           opts.RetentionPolicy,
+		signer:                    opts.Signer,
 
 		enableClusteredDeployment:       opts.EnableClusteredDeployment,
 		workflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -165,6 +169,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Actors:             abe.actors,
 		RetentionActorType: abe.retentionerActorType,
 		RetentionPolicy:    abe.retentionPolicy,
+		Signer:             abe.signer,
 		Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
@@ -367,39 +372,6 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	return nil
 }
 
-// GetOrchestrationMetadata implements backend.Backend
-func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*backend.OrchestrationMetadata, error) {
-	state, err := abe.loadInternalState(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if state == nil {
-		return nil, api.ErrInstanceNotFound
-	}
-
-	rstate := runtimestate.NewOrchestrationRuntimeState(string(id), state.CustomStatus, state.History)
-
-	name, _ := runtimestate.Name(rstate)
-	createdAt, _ := runtimestate.CreatedTime(rstate)
-	lastUpdated, _ := runtimestate.LastUpdatedTime(rstate)
-	input, _ := runtimestate.Input(rstate)
-	output, _ := runtimestate.Output(rstate)
-	failureDetuils, _ := runtimestate.FailureDetails(rstate)
-
-	return &backend.OrchestrationMetadata{
-		InstanceId:     string(id),
-		Name:           name,
-		RuntimeStatus:  runtimestate.RuntimeStatus(rstate),
-		CreatedAt:      timestamppb.New(createdAt),
-		LastUpdatedAt:  timestamppb.New(lastUpdated),
-		Input:          input,
-		Output:         output,
-		CustomStatus:   rstate.GetCustomStatus(),
-		FailureDetails: failureDetuils,
-	}, nil
-}
-
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
 func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
@@ -485,22 +457,6 @@ func (*Actors) DeleteTaskHub(context.Context) error {
 	return errors.New("not supported")
 }
 
-// GetOrchestrationRuntimeState implements backend.Backend
-func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
-	state, err := abe.loadInternalState(ctx, owi.InstanceID)
-	if err != nil {
-		return nil, err
-	}
-
-	if state == nil {
-		return nil, api.ErrInstanceNotFound
-	}
-
-	runtimeState := runtimestate.NewOrchestrationRuntimeState(string(owi.InstanceID), state.CustomStatus, state.History)
-
-	return runtimeState, nil
-}
-
 func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, condition func(*backend.OrchestrationMetadata) bool) error {
 	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
 
@@ -570,30 +526,6 @@ func (abe *Actors) Stop(context.Context) error {
 // String displays the type information
 func (abe *Actors) String() string {
 	return "dapr.actors/v1"
-}
-
-func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*state.State, error) {
-	astate, err := abe.actors.State(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// actor id is workflow instance id
-	state, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
-		AppID:             abe.appID,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if state == nil {
-		// No such state exists in the state store
-		return nil, nil
-	}
-
-	return state, nil
 }
 
 // NextOrchestrationWorkItem implements backend.Backend
@@ -694,46 +626,6 @@ func (abe *Actors) WaitForOrchestratorCompletion(request *protos.OrchestratorReq
 	return abe.pendingTasksBackend.WaitForOrchestratorCompletion(request)
 }
 
-func (abe *Actors) ListInstanceIDs(ctx context.Context, req *protos.ListInstanceIDsRequest) (*protos.ListInstanceIDsResponse, error) {
-	resp, err := list.ListInstanceIDs(ctx, list.ListOptions{
-		ComponentStore:    abe.compStore,
-		Namespace:         abe.namespace,
-		AppID:             abe.appID,
-		PageSize:          req.PageSize,
-		ContinuationToken: req.ContinuationToken,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &protos.ListInstanceIDsResponse{
-		InstanceIds:       resp.Keys,
-		ContinuationToken: resp.ContinuationToken,
-	}, nil
-}
-
-func (abe *Actors) GetInstanceHistory(ctx context.Context, req *protos.GetInstanceHistoryRequest) (*protos.GetInstanceHistoryResponse, error) {
-	ss, err := abe.actors.State(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := state.LoadWorkflowState(ctx, ss, req.GetInstanceId(), state.Options{
-		AppID:             abe.appID,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if resp == nil {
-		return nil, status.Errorf(codes.NotFound, "workflow instance '%s' not found", req.GetInstanceId())
-	}
-
-	return &protos.GetInstanceHistoryResponse{Events: resp.History}, nil
-}
-
 func (abe *Actors) purgeWorkflow(ctx context.Context, id api.InstanceID) error {
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
@@ -764,6 +656,7 @@ func (abe *Actors) purgeWorkflowForce(ctx context.Context, id api.InstanceID) er
 		AppID:             abe.appID,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
+		Signer:            abe.signer,
 	})
 	if err != nil {
 		return err
