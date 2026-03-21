@@ -578,7 +578,15 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 		tpStore.RegisterExporter(diagUtils.NewNullExporter())
 	}
 
-	r := createOtelResource(ctx, a.runtimeConfig.id)
+	r, err := createOtelResource(ctx, a.runtimeConfig.id)
+	if err != nil {
+		log.Warnf("failed to create OpenTelemetry resource, using default, err: %v", err)
+		// Fallback without environment detection
+		r = resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(a.runtimeConfig.id),
+		)
+	}
 	tpStore.RegisterResource(r)
 
 	// Register a trace sampler based on Sampling settings
@@ -609,26 +617,19 @@ func parseOtelHeaders(headerStrings []string) map[string]string {
 // It uses the Dapr app ID as the default service name, which can be overridden
 // by the OTEL_SERVICE_NAME environment variable. Additional resource attributes
 // can be set via OTEL_RESOURCE_ATTRIBUTES.
-func createOtelResource(ctx context.Context, defaultServiceName string) *resource.Resource {
-	r, err := resource.New(ctx,
+func createOtelResource(ctx context.Context, defaultServiceName string) (*resource.Resource, error) {
+	return resource.New(ctx,
 		// Default service name from Dapr app ID
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(defaultServiceName),
 		),
+		resource.WithProcess(),
+		resource.WithTelemetrySDK(),
+		resource.WithHost(),
+		resource.WithOS(),
 		// Read OTEL_RESOURCE_ATTRIBUTES and OTEL_SERVICE_NAME from environment
 		resource.WithFromEnv(),
-		resource.WithSchemaURL(semconv.SchemaURL),
 	)
-	if err != nil {
-		log.Warnf("failed to create OpenTelemetry resource, using default: %v", err)
-		// Fallback without environment detection
-		r = resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(defaultServiceName),
-		)
-	}
-
-	return r
 }
 
 func (a *DaprRuntime) initRuntime(ctx context.Context) error {
