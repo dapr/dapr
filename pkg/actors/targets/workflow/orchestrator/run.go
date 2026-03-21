@@ -158,6 +158,13 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	if !runtimestate.IsCompleted(rs) {
+		// Delete timer reminders for WaitForSingleEvent timers where the event has
+		// been received before the timer fired.
+		if err = o.deleteCancelledEventTimers(ctx, rs); err != nil {
+			executionStatus = diag.StatusRecoverable
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
+		}
+
 		if err = o.createTimers(ctx, rs.GetPendingTimers(), state.Generation); err != nil {
 			executionStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
@@ -220,6 +227,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	if runtimestate.IsCompleted(rs) {
 		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", o.actorID, rstatus, workflowName)
+		if hasUnfiredTimers(rs) {
+			if err = o.deleteAllReminders(ctx); err != nil {
+				return todo.RunCompletedFalse, err
+			}
+		}
 		if err = o.handleRetention(ctx, rstatus); err != nil {
 			return todo.RunCompletedFalse, err
 		}

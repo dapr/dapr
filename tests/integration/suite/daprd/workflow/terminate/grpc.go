@@ -49,6 +49,7 @@ func (g *grpcclient) Run(t *testing.T, ctx context.Context) {
 	g.workflow.WaitUntilRunning(t, ctx)
 
 	holdCh := make(chan struct{})
+	t.Cleanup(func() { close(holdCh) })
 	var inAct atomic.Bool
 	g.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
@@ -70,8 +71,6 @@ func (g *grpcclient) Run(t *testing.T, ctx context.Context) {
 		InstanceId: id.String(),
 	})
 	require.NoError(t, err)
-
-	close(holdCh)
 
 	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
