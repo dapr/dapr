@@ -15,6 +15,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -84,12 +85,12 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 // if the body is nil, unreadable, or empty.
 func readRequestBody(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
-		return nil, fmt.Errorf("empty body")
+		return nil, errors.New("empty body")
 	}
 	defer r.Body.Close()
 	body, err := io.ReadAll(r.Body)
 	if err != nil || len(body) == 0 {
-		return nil, fmt.Errorf("empty body")
+		return nil, errors.New("empty body")
 	}
 	return body, nil
 }
