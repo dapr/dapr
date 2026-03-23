@@ -238,7 +238,7 @@ func TestDelayWorkflowsAtScale(t *testing.T) {
 func TestBurstWorkflowCreation(t *testing.T) {
 	workflowName := "delay_wf"
 	inputs := []string{"1000"}            // delay in milliseconds (1s)
-	scenarios := []string{"t_burst_1200"} // 1200 VUs, 1200 iterations, burst pattern
+	scenarios := []string{"t_1200_1200"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate>=0.95"}}
 	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, false)
 }
