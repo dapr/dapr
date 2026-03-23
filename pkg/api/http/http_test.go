@@ -4125,10 +4125,13 @@ func (l *fakeLockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*l
 
 func TestV1HealthzEndpoint(t *testing.T) {
 	const appID = "fakeAPI"
-	healthz := healthz.New()
-	htarget := healthz.AddTarget("test-target")
+	runtimeHealthz := healthz.New()
+	htarget := runtimeHealthz.AddTarget("test-target")
+	outboundHealthz := healthz.New()
+	outboundTarget := outboundHealthz.AddTarget("test-outbound-target")
 	testAPI := &api{
-		healthz: healthz,
+		healthz:         runtimeHealthz,
+		outboundHealthz: outboundHealthz,
 		universal: universal.New(universal.Options{
 			AppID: appID,
 		}),
@@ -4146,6 +4149,9 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 500, resp.StatusCode, "dapr not ready should return 500")
+		assert.Equal(t, "ERR_HEALTH_NOT_READY", resp.ErrorBody["errorCode"])
+		assert.Contains(t, resp.ErrorBody["message"], "dapr is not ready")
+		assert.Contains(t, string(resp.RawBody), "\"details\"")
 	})
 
 	t.Run("Healthz - 204 No Content", func(t *testing.T) {
@@ -4163,6 +4169,9 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		t.Cleanup(htarget.NotReady)
 		resp := fakeServer(t).DoRequest("GET", apiPath, nil, map[string]string{"appid": "not-test"})
 		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_HEALTH_APPID_NOT_MATCH", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "dapr app-id does not match", resp.ErrorBody["message"])
+		assert.Contains(t, string(resp.RawBody), "\"field_violations\"")
 	})
 
 	t.Run("Healthz - 204 AppId Match", func(t *testing.T) {
@@ -4170,6 +4179,25 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		htarget.Ready()
 		t.Cleanup(htarget.NotReady)
 		resp := fakeServer(t).DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
+		assert.Equal(t, 204, resp.StatusCode)
+	})
+
+	t.Run("Healthz Outbound - 500 ERR_OUTBOUND_HEALTH_NOT_READY", func(t *testing.T) {
+		apiPath := "v1.0/healthz/outbound"
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_OUTBOUND_HEALTH_NOT_READY", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "dapr outbound is not ready", resp.ErrorBody["message"])
+		assert.Contains(t, string(resp.RawBody), "\"details\"")
+	})
+
+	t.Run("Healthz Outbound - 204 No Content", func(t *testing.T) {
+		apiPath := "v1.0/healthz/outbound"
+		outboundTarget.Ready()
+		t.Cleanup(outboundTarget.NotReady)
+		resp := fakeServer(t).DoRequest("GET", apiPath, nil, nil)
+
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 }
