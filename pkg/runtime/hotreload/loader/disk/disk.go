@@ -24,6 +24,7 @@ import (
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
+	"github.com/dapr/dapr/pkg/internal/loader/disk/dirdata"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
@@ -41,6 +42,7 @@ type Options struct {
 }
 
 type disk struct {
+	dirs           []string
 	components     *resource[compapi.Component]
 	subscriptions  *resource[subapi.Subscription]
 	configurations *resource[configapi.Configuration]
@@ -65,7 +67,8 @@ func New(opts Options) (loader.Interface, error) {
 	}
 
 	return &disk{
-		fs: fs,
+		dirs: opts.Dirs,
+		fs:   fs,
 		components: newResource[compapi.Component](
 			resourceOptions[compapi.Component]{
 				loader: loaderdisk.NewComponents(diskOpts),
@@ -117,19 +120,28 @@ func (d *disk) Run(ctx context.Context) error {
 				case <-ctx.Done():
 					return nil
 				case <-eventCh:
-					if err := d.components.trigger(ctx); err != nil {
+					// Read all YAML files from all directories once, then pass
+					// the pre-read data to each resource loader. This avoids
+					// each resource type independently opening and reading the
+					// same files, which causes file handle contention on
+					// Windows.
+					dirData, err := dirdata.ReadDirs(d.dirs)
+					if err != nil {
+						return fmt.Errorf("failed to read resource directories: %w", err)
+					}
+					if err := d.components.trigger(ctx, dirData); err != nil {
 						return err
 					}
-					if err := d.subscriptions.trigger(ctx); err != nil {
+					if err := d.subscriptions.trigger(ctx, dirData); err != nil {
 						return err
 					}
-					if err := d.configurations.trigger(ctx); err != nil {
+					if err := d.configurations.trigger(ctx, dirData); err != nil {
 						return err
 					}
-					if err := d.httpEndpoints.trigger(ctx); err != nil {
+					if err := d.httpEndpoints.trigger(ctx, dirData); err != nil {
 						return err
 					}
-					if err := d.resiliencies.trigger(ctx); err != nil {
+					if err := d.resiliencies.trigger(ctx, dirData); err != nil {
 						return err
 					}
 				}
