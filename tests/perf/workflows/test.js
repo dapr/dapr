@@ -58,6 +58,12 @@ const possibleScenarios = {
         iterations: 10000,
         maxDuration: '3600s',
     },
+    t_burst_1200: {
+        executor: 'shared-iterations',
+        vus: 1200,
+        iterations: 1200,
+        maxDuration: '120s',
+    },
 }
 
 let enabledScenarios = {}

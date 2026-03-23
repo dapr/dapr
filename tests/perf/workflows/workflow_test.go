@@ -35,9 +35,9 @@ import (
 )
 
 var (
-	tr          *runner.TestRunner
+	tr            *runner.TestRunner
 	appNamePrefix = "perf-workflowsapp"
-	appName     string // actual app name including backend suffix
+	appName       string // actual app name including backend suffix
 )
 
 type K6RunConfig struct {
@@ -230,5 +230,15 @@ func TestDelayWorkflowsAtScale(t *testing.T) {
 	inputs := []string{"5000"}           // delay in milliseconds (5s)
 	scenarios := []string{"t_500_10000"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, false)
+}
+
+// TestBurstWorkflowCreation simulates a burst of workflow creations
+// to test scheduler resilience under sudden spikes.
+func TestBurstWorkflowCreation(t *testing.T) {
+	workflowName := "delay_wf"
+	inputs := []string{"1000"}            // delay in milliseconds (1s)
+	scenarios := []string{"t_burst_1200"} // 1200 VUs, 1200 iterations, burst pattern
+	rateChecks := [][]string{{"rate>=0.95"}}
 	testWorkflow(t, workflowName, appName, inputs, scenarios, rateChecks, true, false)
 }
