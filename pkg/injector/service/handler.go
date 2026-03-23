@@ -55,8 +55,10 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ar.Request.Kind.Kind != "Pod" {
-		log.Errorf("invalid kind for review: %s", ar.Kind)
-		i.writeAdmissionResponse(w, ar, gvk, nil, nil)
+		log.Errorf("invalid kind for review: %s", ar.Request.Kind.Kind)
+		diagAppID := getAppIDFromRequest(ar.Request)
+		respondWithAllowed(w, ar, gvk)
+		RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
 		return
 	}
 
@@ -68,7 +70,9 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	if !i.isAuthorizedUser(ar.Request) {
 		log.Errorf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username)
-		i.writeAdmissionResponse(w, ar, gvk, nil, nil)
+		diagAppID := getAppIDFromRequest(ar.Request)
+		respondWithAllowed(w, ar, gvk)
+		RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
 		return
 	}
 
@@ -136,9 +140,6 @@ func (i *injector) writeAdmissionResponse(w http.ResponseWriter, ar admissionv1.
 	case len(patchOps) > 0:
 		log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
 		RecordSuccessfulSidecarInjectionCount(diagAppID)
-	default:
-		log.Errorf("Admission succeeded, but pod was not patched. No sidecar injected for '%s'", diagAppID)
-		RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
 	}
 }
 
@@ -184,7 +185,9 @@ func respondWithAllowed(w http.ResponseWriter, ar admissionv1.AdmissionReview, g
 		return
 	}
 	w.Header().Set("Content-Type", runtime.ContentTypeJSON)
-	w.Write(respBytes)
+	if _, err = w.Write(respBytes); err != nil {
+		log.Errorf("Failed to write response for non-Dapr pod: %v", err)
+	}
 }
 
 // podHasDaprEnabled checks if the pod in the admission request has the
