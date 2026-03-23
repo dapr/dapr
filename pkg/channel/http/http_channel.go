@@ -604,12 +604,15 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	// (to prevent stale values on rebuilt responses), so read it
 	// directly from the internal metadata for outgoing requests.
 	if md := req.Metadata(); md != nil {
-		if clVal, ok := md[invokev1.ContentLengthHeader]; ok && len(clVal.GetValues()) > 0 {
-			v, err := strconv.ParseInt(clVal.GetValues()[0], 10, 64)
-			if err != nil {
-				return nil, err
+		for k, clVal := range md {
+			if strings.EqualFold(k, invokev1.ContentLengthHeader) && len(clVal.GetValues()) > 0 {
+				v, err := strconv.ParseInt(clVal.GetValues()[0], 10, 64)
+				if err != nil {
+					return nil, err
+				}
+				channelReq.ContentLength = v
+				break
 			}
-			channelReq.ContentLength = v
 		}
 	}
 

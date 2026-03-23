@@ -1,7 +1,19 @@
+/*
+Copyright 2026 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package http
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -102,7 +114,7 @@ func TestActorResponseContentLengthBodyMatch(t *testing.T) {
 				clInt, err := strconv.Atoi(cl)
 				require.NoError(t, err)
 				assert.Equal(t, len(body), clInt,
-					fmt.Sprintf("Content-Length header (%d) must match actual body length (%d)", clInt, len(body)))
+					"Content-Length header (%d) must match actual body length (%d)", clInt, len(body))
 			}
 		})
 	}
