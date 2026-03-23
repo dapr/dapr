@@ -164,11 +164,13 @@ func TestState(t *testing.T) {
 			assert.Equal(c, http.StatusNoContent, status)
 		}, 30*time.Second, 500*time.Millisecond)
 
-		url := fmt.Sprintf("%s/test/http/get/hotreloading-state", externalURL)
-		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusOK, code)
-		assert.Contains(t, string(resp), `{"states":[{"key":"foo","value":{"data":"LXcgeHl6Cg=="},`)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			url := fmt.Sprintf("%s/test/http/get/hotreloading-state", externalURL)
+			resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
+			assert.NoError(c, err)
+			assert.Equal(c, http.StatusOK, code)
+			assert.Contains(c, string(resp), `{"states":[{"key":"foo","value":{"data":"LXcgeHl6Cg=="},`)
+		}, 30*time.Second, 500*time.Millisecond)
 	})
 
 	t.Run("Delete state Component and wait until no longer available", func(t *testing.T) {
