@@ -63,9 +63,10 @@ const (
 	// if using the same Dapr version on all daprds.
 	WorkflowsRemoteActivityReminder Feature = "WorkflowsRemoteActivityReminder"
 
-	// Enables support for the MCPServer first-class resource, which provides
-	// durable MCP tool execution via built-in dapr.mcp.<name>.ListTools and
-	// dapr.mcp.<name>.CallTool workflow orchestrations registered in daprd.
+	// Enables support for the MCPServer first-class resource,
+	// which declares connections to MCP (Model Context Protocol) servers.
+	// When enabled, daprd loads MCPServer manifests at startup,
+	// and makes them available for tool execution via workflow orchestrations.
 	MCPServerResource Feature = "MCPServerResource"
 )
 

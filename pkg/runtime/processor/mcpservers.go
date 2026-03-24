@@ -16,8 +16,24 @@ package processor
 import (
 	"context"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 )
+
+// mcpStdioEnvResource is a thin adapter that wraps an MCPServer and overrides
+// NameValuePairs to return Spec.Stdio.Env instead of Spec.Headers.
+// This lets ProcessResource resolve secretKeyRef and envRef entries in stdio.env via the
+// same secret-store infrastructure used for headers.
+type mcpStdioEnvResource struct {
+	*mcpserverapi.MCPServer
+}
+
+func (r mcpStdioEnvResource) NameValuePairs() []commonapi.NameValuePair {
+	if r.MCPServer.Spec.Stdio == nil {
+		return nil
+	}
+	return r.MCPServer.Spec.Stdio.Env
+}
 
 // AddPendingMCPServer enqueues an MCPServer for processing.
 // Returns false if the processor has shut down or the context is done.
@@ -55,10 +71,14 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 	return nil
 }
 
-// processMCPServerSecrets resolves secretKeyRef and envRef entries in spec.headers
-// and stdio.env using the configured secret store.
+// processMCPServerSecrets resolves secretKeyRef and envRef entries in both
+// spec.headers and spec.stdio.env using the configured secret store.
 func (p *Processor) processMCPServerSecrets(ctx context.Context, s *mcpserverapi.MCPServer) {
-	// p.secret.ProcessResource resolves all NameValuePair entries (secretKeyRef + envRef)
-	// in the pairs returned by s.NameValuePairs() — which covers spec.headers.
+	// Resolve spec.headers (envRef + secretKeyRef).
 	_, _ = p.secret.ProcessResource(ctx, s)
+
+	// Resolve spec.stdio.env
+	if s.Spec.Stdio != nil {
+		_, _ = p.secret.ProcessResource(ctx, mcpStdioEnvResource{s})
+	}
 }

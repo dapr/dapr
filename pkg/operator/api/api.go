@@ -124,6 +124,7 @@ func (a *apiServer) Run(ctx context.Context) error {
 		a.compInformer.Run,
 		a.subInformer.Run,
 		a.endpointInformer.Run,
+		a.mcpServerInformer.Run,
 		func(ctx context.Context) error {
 			if err := s.Serve(lis); err != nil {
 				return fmt.Errorf("gRPC server error: %w", err)
