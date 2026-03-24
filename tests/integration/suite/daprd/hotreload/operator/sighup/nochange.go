@@ -208,7 +208,7 @@ func (n *nochange) Run(t *testing.T, ctx context.Context) {
 
 		// Send an update event with the SAME configuration content as loaded
 		// at startup. The SIGHUP reconciler should detect it hasn't changed.
-		unchangedConfig, _ := json.Marshal(map[string]any{
+		unchangedConfig, err := json.Marshal(map[string]any{
 			"kind":       "Configuration",
 			"apiVersion": "dapr.io/v1alpha1",
 			"metadata":   map[string]any{"name": "hotreloading"},
@@ -221,6 +221,7 @@ func (n *nochange) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		})
+		require.NoError(t, err)
 		n.configSendCh <- unchangedConfig
 		n.configDone.Store(true)
 
@@ -235,7 +236,7 @@ func (n *nochange) Run(t *testing.T, ctx context.Context) {
 
 		// Send an update event with the SAME endpoint content as loaded at
 		// startup.
-		unchangedEndpoint, _ := json.Marshal(map[string]any{
+		unchangedEndpoint, err := json.Marshal(map[string]any{
 			"kind":       "HTTPEndpoint",
 			"apiVersion": "dapr.io/v1alpha1",
 			"metadata":   map[string]any{"name": "myendpoint", "namespace": "default"},
@@ -243,6 +244,7 @@ func (n *nochange) Run(t *testing.T, ctx context.Context) {
 				"baseURL": "http://localhost:1234",
 			},
 		})
+		require.NoError(t, err)
 		n.httpEndSendCh <- unchangedEndpoint
 		n.httpEndDone.Store(true)
 
@@ -256,7 +258,7 @@ func (n *nochange) Run(t *testing.T, ctx context.Context) {
 
 		// Send an update event with the SAME resiliency content as loaded at
 		// startup.
-		unchangedRes, _ := json.Marshal(map[string]any{
+		unchangedRes, err := json.Marshal(map[string]any{
 			"kind":       "Resiliency",
 			"apiVersion": "dapr.io/v1alpha1",
 			"metadata":   map[string]any{"name": "myresiliency", "namespace": "default"},
@@ -268,6 +270,7 @@ func (n *nochange) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		})
+		require.NoError(t, err)
 		n.resiliencySendCh <- unchangedRes
 		n.resiliencyDone.Store(true)
 

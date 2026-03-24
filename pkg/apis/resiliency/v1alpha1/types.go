@@ -102,7 +102,7 @@ func (r Resiliency) EmptyMetaDeepCopy() metav1.Object {
 		Kind:       kindResiliency,
 		APIVersion: resiliency.GroupName + "/" + version,
 	}
-	n.ObjectMeta = metav1.ObjectMeta{Name: r.Name}
+	n.ObjectMeta = metav1.ObjectMeta{Name: r.Name, Namespace: r.Namespace}
 	return n
 }
 

@@ -120,7 +120,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 			var gotConfig configapi.Configuration
-			require.NoError(t, json.Unmarshal(event.GetConfiguration(), &gotConfig))
+			if !assert.NoError(c, json.Unmarshal(event.GetConfiguration(), &gotConfig)) {
+				return
+			}
 			assert.Equal(c, config, &gotConfig)
 			assert.JSONEq(c, string(configB), string(event.GetConfiguration()))
 			assert.Equal(c, operatorv1.ResourceEventType_UPDATED, event.GetType())
@@ -141,8 +143,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 			var gotConfig configapi.Configuration
-			require.NoError(t, json.Unmarshal(event.GetConfiguration(), &gotConfig))
-			assert.Equal(t, config, &gotConfig)
+			if !assert.NoError(c, json.Unmarshal(event.GetConfiguration(), &gotConfig)) {
+				return
+			}
+			assert.Equal(c, config, &gotConfig)
 			assert.JSONEq(c, string(configB), string(event.GetConfiguration()))
 			assert.Equal(c, operatorv1.ResourceEventType_DELETED, event.GetType())
 			assert.Equal(c, "DELETED", event.GetType().String())

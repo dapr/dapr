@@ -97,7 +97,7 @@ func (c Configuration) EmptyMetaDeepCopy() metav1.Object {
 		Kind:       kindConfiguration,
 		APIVersion: configuration.GroupName + "/" + version,
 	}
-	n.ObjectMeta = metav1.ObjectMeta{Name: c.Name}
+	n.ObjectMeta = metav1.ObjectMeta{Name: c.Name, Namespace: c.Namespace}
 	return n
 }
 
