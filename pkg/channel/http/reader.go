@@ -36,9 +36,9 @@ func (r *cancelOnCloseReader) Close() error {
 
 // wrapPipeReaderWithCancel wraps a pipe reader so closing it also calls cancel.
 // If cancel is nil, the reader is returned as-is.
-func wrapPipeReaderWithCancel(pr *io.PipeReader, cancel context.CancelFunc) io.ReadCloser {
+func wrapReadCloserWithCancel(rc io.ReadCloser, cancel context.CancelFunc) io.ReadCloser {
 	if cancel == nil {
-		return pr
+		return rc
 	}
-	return &cancelOnCloseReader{ReadCloser: pr, cancel: cancel}
+	return &cancelOnCloseReader{ReadCloser: rc, cancel: cancel}
 }
