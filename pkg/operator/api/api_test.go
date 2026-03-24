@@ -1141,9 +1141,6 @@ func TestProcessMCPServerSecrets(t *testing.T) {
 				},
 			},
 		}
-		if secretStore != nil || true {
-			// auth is always set; secretStore controls store selection
-		}
 		if secretStore != nil {
 			s.Spec.Auth = &mcpserverapi.MCPAuth{SecretStore: secretStore}
 		}

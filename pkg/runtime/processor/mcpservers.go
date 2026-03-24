@@ -29,10 +29,10 @@ type mcpStdioEnvResource struct {
 }
 
 func (r mcpStdioEnvResource) NameValuePairs() []commonapi.NameValuePair {
-	if r.MCPServer.Spec.Stdio == nil {
+	if r.Spec.Stdio == nil {
 		return nil
 	}
-	return r.MCPServer.Spec.Stdio.Env
+	return r.Spec.Stdio.Env
 }
 
 // AddPendingMCPServer enqueues an MCPServer for processing.
