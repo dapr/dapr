@@ -192,13 +192,26 @@ func (r *Reloader) Run(ctx context.Context) error {
 
 	log.Info("Hot reloading enabled. Daprd will reload 'Component', 'Subscription', 'MCPServer', 'Configuration', 'HTTPEndpoint' and 'Resiliency' resources when they are added, updated or deleted.")
 
-	return concurrency.NewRunnerManager(
+	manager := concurrency.NewRunnerManager(
 		r.loader.Run,
 		r.componentsReconciler.Run,
 		r.subscriptionsReconciler.Run,
 		r.mcpServersReconciler.Run,
-		r.configurationsReconciler.Run,
-		r.httpEndpointsReconciler.Run,
-		r.resilienciesReconciler.Run,
-	).Run(ctx)
+	)
+
+	// Add SIGHUP reconcilers if they are configured.
+	if r.configurationsReconciler != nil {
+		log.Info("Configuration changes will trigger SIGHUP restart.")
+		manager.Add(r.configurationsReconciler.Run)
+	}
+	if r.httpEndpointsReconciler != nil {
+		log.Info("HTTPEndpoint changes will trigger SIGHUP restart.")
+		manager.Add(r.httpEndpointsReconciler.Run)
+	}
+	if r.resilienciesReconciler != nil {
+		log.Info("Resiliency changes will trigger SIGHUP restart.")
+		manager.Add(r.resilienciesReconciler.Run)
+	}
+
+	return manager.Run(ctx)
 }
