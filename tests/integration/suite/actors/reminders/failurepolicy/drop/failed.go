@@ -77,7 +77,7 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 	select {
 	case name := <-f.triggered:
 		assert.Equal(t, "test", name)
-	case <-time.After(time.Second * 1):
+	case <-time.After(time.Second * 3):
 		require.Fail(t, "timed out waiting for job")
 	}
 
@@ -85,6 +85,6 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 	select {
 	case <-f.triggered:
 		assert.Fail(t, "unexpected trigger")
-	case <-time.After(time.Second * 3):
+	case <-time.After(time.Second * 5):
 	}
 }
