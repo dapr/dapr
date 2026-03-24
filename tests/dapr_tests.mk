@@ -578,6 +578,8 @@ setup-app-configurations:
 
 # Apply component yaml for state, secrets, pubsub, workflows, and bindings
 setup-test-components: setup-app-configurations
+	@echo "Waiting for webhook TLS certificate to be provisioned..."
+	sleep 10 # dapr-operator provisions its webhook TLS cert async after pod ready
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
