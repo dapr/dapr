@@ -422,7 +422,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	// Wrap the pipe reader so that closing it also cancels the detached
 	// request context (if any), preventing goroutine leaks from h2c
 	// requests that outlive the caller's context.
-	pr := wrapPipeReaderWithCancel(rawPR, reqCancel)
+	pr := wrapReadCloserWithCancel(rawPR, reqCancel)
 	rw := &rwRecorder{
 		pw:      pw,
 		readyCh: make(chan struct{}),
