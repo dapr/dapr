@@ -117,7 +117,7 @@ func (r *Reconciler[T]) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return fmt.Errorf("error running component stream: %w", err)
+		return fmt.Errorf("error running %s stream: %w", r.kind, err)
 	}
 
 	r.htarget.Ready()

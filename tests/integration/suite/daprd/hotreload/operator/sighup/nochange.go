@@ -225,9 +225,10 @@ func (n *nochange) Run(t *testing.T, ctx context.Context) {
 		n.configSendCh <- unchangedConfig
 		n.configDone.Store(true)
 
-		// Wait and verify no SIGHUP occurred.
-		time.Sleep(2 * time.Second)
-		assert.False(t, n.logOut.Contains("Received signal 'hangup'"),
+		// Continuously verify no SIGHUP occurs over a bounded duration.
+		assert.Never(t, func() bool {
+			return n.logOut.Contains("Received signal 'hangup'")
+		}, 2*time.Second, 100*time.Millisecond,
 			"expected no SIGHUP when configuration has not changed")
 	})
 
@@ -248,8 +249,9 @@ func (n *nochange) Run(t *testing.T, ctx context.Context) {
 		n.httpEndSendCh <- unchangedEndpoint
 		n.httpEndDone.Store(true)
 
-		time.Sleep(2 * time.Second)
-		assert.False(t, n.logOut.Contains("Received signal 'hangup'"),
+		assert.Never(t, func() bool {
+			return n.logOut.Contains("Received signal 'hangup'")
+		}, 2*time.Second, 100*time.Millisecond,
 			"expected no SIGHUP when http endpoint has not changed")
 	})
 
@@ -274,8 +276,9 @@ func (n *nochange) Run(t *testing.T, ctx context.Context) {
 		n.resiliencySendCh <- unchangedRes
 		n.resiliencyDone.Store(true)
 
-		time.Sleep(2 * time.Second)
-		assert.False(t, n.logOut.Contains("Received signal 'hangup'"),
+		assert.Never(t, func() bool {
+			return n.logOut.Contains("Received signal 'hangup'")
+		}, 2*time.Second, 100*time.Millisecond,
 			"expected no SIGHUP when resiliency has not changed")
 	})
 }
