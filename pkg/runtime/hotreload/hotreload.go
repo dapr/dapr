@@ -184,7 +184,7 @@ func (r *Reloader) Run(ctx context.Context) error {
 		r.subscriptionsReconciler.Run,
 	)
 
-	// Add SIGHUP reconcilers if they are configured (operator mode only)
+	// Add SIGHUP reconcilers if they are configured.
 	if r.configurationsReconciler != nil {
 		log.Info("Configuration changes will trigger SIGHUP restart.")
 		manager.Add(r.configurationsReconciler.Run)
