@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -386,8 +387,27 @@ func (h *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
 }
 
 func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
-	channelReq, err := h.constructRequest(ctx, req, appID)
+	// For HTTP/2 (h2c) transports, the response body read is tied to the
+	// request context. If the caller's context is cancelled (e.g. resiliency
+	// timeout or placement dissemination) after headers are received but
+	// before the body is fully read through the pipe, the HTTP/2 stream is
+	// reset and io.Copy from the response body fails. This causes the pipe
+	// to receive 0 bytes and callers get 200 OK with empty body.
+	//
+	// To prevent this, we detach the HTTP request context from the caller's
+	// context for h2c, and instead cancel it when the pipe reader is closed.
+	// HTTP/1.1 is unaffected because TCP reads don't check the context.
+	reqCtx := ctx
+	var reqCancel context.CancelFunc
+	if _, ok := h.client.Transport.(*http2.Transport); ok {
+		reqCtx, reqCancel = context.WithCancel(context.WithoutCancel(ctx))
+	}
+
+	channelReq, err := h.constructRequest(reqCtx, req, appID)
 	if err != nil {
+		if reqCancel != nil {
+			reqCancel()
+		}
 		return nil, err
 	}
 
@@ -399,7 +419,11 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().GetMethod(), int64(len(req.Message().GetData().GetValue())))
 	startRequest := time.Now()
 
-	pr, pw := io.Pipe()
+	rawPR, pw := io.Pipe()
+	// Wrap the pipe reader so that closing it also cancels the detached
+	// request context (if any), preventing goroutine leaks from h2c
+	// requests that outlive the caller's context.
+	pr := wrapReadCloserWithCancel(rawPR, reqCancel)
 	rw := &rwRecorder{
 		pw:      pw,
 		readyCh: make(chan struct{}),
@@ -412,7 +436,15 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	go func() {
 		defer rw.signalReady()
-		defer pw.Close()
+		// Track errors from io.Copy so they propagate through the pipe
+		// instead of silently returning empty body data. With HTTP/2 (h2c),
+		// context cancellation resets the stream, causing body reads to fail.
+		// Without error propagation, the pipe closes normally (EOF) with 0
+		// bytes, and callers receive 200 OK with empty body.
+		var pipeErr error
+		defer func() {
+			pw.CloseWithError(pipeErr)
+		}()
 		// Release the concurrency limiter slot when the handler goroutine
 		// finishes. Because io.Pipe is synchronous (no buffer), the goroutine
 		// naturally stays alive—and holds the slot—until the caller has
@@ -450,7 +482,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 				} else {
 					copyHeader(w.Header(), clientResp.Header)
 					w.WriteHeader(clientResp.StatusCode)
-					_, _ = io.Copy(w, clientResp.Body)
+					_, pipeErr = io.Copy(w, clientResp.Body)
 				}
 			}
 		}))
