@@ -677,7 +677,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		}
 		a.flushOutstandingMCPServers(ctx)
 		if len(a.compStore.ListMCPServers()) > 0 {
-			// TODO(@sicoyle): complete this in follow up PR
+			log.Debugf("MCP servers loaded: %d; additional handling to be implemented", len(a.compStore.ListMCPServers()))
 		}
 	}
 
