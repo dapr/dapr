@@ -40,7 +40,6 @@ jobs:
     env:
       GOOS: linux
       GOARCH: amd64
-      DAPR_INSTALL_URL: https://raw.githubusercontent.com/dapr/cli/master/install/install.sh
     steps:
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -56,7 +55,9 @@ jobs:
       # This is a good example where we want to always compare against the latest stable release.
       # Pinning to a given Dapr version does not add any value in this workflow.
       - name: Install latest Dapr CLI
-        run: wget -q ${{ env.DAPR_INSTALL_URL }} -O - | /bin/bash
+        uses: dapr/.github/.github/actions/setup-dapr-cli@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize with latest Dapr runtime
         run: dapr init --slim
       - name: Check out code

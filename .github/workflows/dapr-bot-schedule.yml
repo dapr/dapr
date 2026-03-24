@@ -21,23 +21,6 @@ on:
 permissions: {}
 
 jobs:
-  automerge:
-    if: github.repository_owner == 'dapr'
-    name: Automerge and update PRs.
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v6
-      - name: Install dependencies
-        run: pip install PyGithub
-      - name: Automerge and update
-        env:
-          MAINTAINERS: cicoyle,JoshVanL,yaron2
-          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
-        run: python ./.github/scripts/automerge.py
   prune_stale:
     name: Prune Stale
     runs-on: ubuntu-latest
