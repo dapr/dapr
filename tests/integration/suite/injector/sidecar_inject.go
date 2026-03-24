@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
@@ -80,30 +79,19 @@ func (s *sidecarInject) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		ar := s.injector.SendAdmission(t, ctx, review)
-		if !assert.NotNil(c, ar.Response) {
-			return
-		}
-		assert.True(c, ar.Response.Allowed)
-		if !assert.NotEmpty(c, ar.Response.Patch, "should contain sidecar patch") {
-			return
-		}
-		assert.True(c, patchAddsDaprdContainer(t, ar.Response.Patch),
-			"patch should add daprd container")
-	}, time.Second*10, 100*time.Millisecond)
-}
-
-// patchAddsDaprdContainer checks if the JSON patch adds a container named "daprd".
-func patchAddsDaprdContainer(t *testing.T, patchBytes []byte) bool {
-	t.Helper()
+	ar := s.injector.SendAdmission(t, ctx, review)
+	require.NotNil(t, ar.Response)
+	assert.True(t, ar.Response.Allowed)
+	require.NotEmpty(t, ar.Response.Patch, "should contain sidecar patch")
 	var ops jsonpatch.Patch
-	require.NoError(t, json.Unmarshal(patchBytes, &ops))
+	require.NoError(t, json.Unmarshal(ar.Response.Patch, &ops))
+	found := false
 	for _, op := range ops {
 		b, _ := json.Marshal(op)
 		if bytes.Contains(b, []byte(`"daprd"`)) {
-			return true
+			found = true
+			break
 		}
 	}
-	return false
+	assert.True(t, found, "patch should add daprd container")
 }

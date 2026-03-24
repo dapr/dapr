@@ -16,9 +16,9 @@ package injector
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,11 +75,7 @@ func (r *responseUID) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		ar := r.injector.SendAdmission(t, ctx, review)
-		if !assert.NotNil(c, ar.Response) {
-			return
-		}
-		assert.Equal(c, requestUID, ar.Response.UID, "response UID should match request UID")
-	}, time.Second*10, 100*time.Millisecond)
+	ar := r.injector.SendAdmission(t, ctx, review)
+	require.NotNil(t, ar.Response)
+	assert.Equal(t, requestUID, ar.Response.UID, "response UID should match request UID")
 }

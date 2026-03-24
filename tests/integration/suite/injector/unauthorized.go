@@ -16,9 +16,9 @@ package injector
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,12 +79,8 @@ func (u *unauthorized) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		ar := u.injector.SendAdmission(t, ctx, review)
-		if !assert.NotNil(c, ar.Response) {
-			return
-		}
-		assert.True(c, ar.Response.Allowed, "mutating webhook should allow the request")
-		assert.Empty(c, ar.Response.Patch, "unauthorized request should not inject sidecar")
-	}, time.Second*10, 100*time.Millisecond)
+	ar := u.injector.SendAdmission(t, ctx, review)
+	require.NotNil(t, ar.Response)
+	assert.True(t, ar.Response.Allowed, "mutating webhook should allow the request")
+	assert.Empty(t, ar.Response.Patch, "unauthorized request should not inject sidecar")
 }

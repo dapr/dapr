@@ -16,9 +16,9 @@ package injector
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,12 +75,8 @@ func (n *nonadapr) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		ar := n.injector.SendAdmission(t, ctx, review)
-		if !assert.NotNil(c, ar.Response) {
-			return
-		}
-		assert.True(c, ar.Response.Allowed, "non-Dapr pod should be allowed")
-		assert.Empty(c, ar.Response.Patch, "non-Dapr pod should not be patched")
-	}, time.Second*10, 100*time.Millisecond)
+	ar := n.injector.SendAdmission(t, ctx, review)
+	require.NotNil(t, ar.Response)
+	assert.True(t, ar.Response.Allowed, "non-Dapr pod should be allowed")
+	assert.Empty(t, ar.Response.Patch, "non-Dapr pod should not be patched")
 }
