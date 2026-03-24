@@ -27,6 +27,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/informer"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -64,9 +65,10 @@ type apiServer struct {
 	port          string
 	listenAddress string
 
-	compInformer     informer.Interface[componentsapi.Component]
-	subInformer      informer.Interface[subapi.Subscription]
-	endpointInformer informer.Interface[httpendpointsapi.HTTPEndpoint]
+	compInformer      informer.Interface[componentsapi.Component]
+	subInformer       informer.Interface[subapi.Subscription]
+	endpointInformer  informer.Interface[httpendpointsapi.HTTPEndpoint]
+	mcpServerInformer informer.Interface[mcpserverapi.MCPServer]
 
 	readyCh chan struct{}
 	running atomic.Bool
@@ -84,6 +86,9 @@ func NewAPIServer(opts Options) Server {
 			Cache: opts.Cache,
 		}),
 		endpointInformer: informer.New[httpendpointsapi.HTTPEndpoint](informer.Options{
+			Cache: opts.Cache,
+		}),
+		mcpServerInformer: informer.New[mcpserverapi.MCPServer](informer.Options{
 			Cache: opts.Cache,
 		}),
 		sec:           opts.Security,

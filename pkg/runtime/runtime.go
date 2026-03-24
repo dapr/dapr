@@ -51,6 +51,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
@@ -669,6 +670,17 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingHTTPEndpoints(ctx)
 
+	if a.globalConfig.IsFeatureEnabled(config.MCPServerResource) {
+		err = a.loadMCPServers(ctx)
+		if err != nil {
+			log.Warnf("failed to load MCP servers: %s", err)
+		}
+		a.flushOutstandingMCPServers(ctx)
+		if len(a.compStore.ListMCPServers()) > 0 {
+			// TODO(@sicoyle): complete this in follow up PR
+		}
+	}
+
 	err = a.loadDeclarativeSubscriptions(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load declarative subscriptions: %s", err)
@@ -1265,6 +1277,52 @@ func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	// We know that once the no-op http endpoint is read from the channel, all previous http endpoints will have been fully processed.
 	a.processor.AddPendingEndpoint(ctx, endpointapi.HTTPEndpoint{})
 	log.Info("All outstanding http endpoints processed")
+}
+
+func (a *DaprRuntime) flushOutstandingMCPServers(ctx context.Context) {
+	log.Info("Waiting for all outstanding MCP servers to be processed…")
+	// Send a no-op sentinel so that processMCPServers drains all previously enqueued items first.
+	a.processor.AddPendingMCPServer(ctx, mcpserverapi.MCPServer{})
+	log.Info("All outstanding MCP servers processed")
+}
+
+func (a *DaprRuntime) loadMCPServers(ctx context.Context) error {
+	var l loader.Loader[mcpserverapi.MCPServer]
+
+	switch a.runtimeConfig.mode {
+	case modes.KubernetesMode:
+		l = kubernetes.NewMCPServers(kubernetes.Options{
+			Config:    a.runtimeConfig.kubernetes,
+			Client:    a.operatorClient,
+			Namespace: a.namespace,
+			PodName:   a.podName,
+		})
+	case modes.StandaloneMode:
+		l = disk.NewMCPServers(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
+	default:
+		return nil
+	}
+
+	log.Info("Loading MCP servers…")
+
+	servers, err := l.Load(ctx)
+	if err != nil {
+		return err
+	}
+
+	authorizedServers := a.authz.GetAuthorizedObjects(servers, a.authz.IsObjectAuthorized).([]mcpserverapi.MCPServer)
+
+	for _, s := range authorizedServers {
+		log.Infof("Found MCP server: %s", s.Name)
+		if !a.processor.AddPendingMCPServer(ctx, s) {
+			return nil
+		}
+	}
+
+	return nil
 }
 
 func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
