@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -278,6 +279,7 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 			if clientResp != nil {
 				defer clientResp.Body.Close()
 				copyHeader(w.Header(), clientResp.Header)
+				w.Header().Del("Content-Length")
 				w.WriteHeader(clientResp.StatusCode)
 				_, _ = io.Copy(w, clientResp.Body)
 			}
@@ -480,8 +482,20 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 					}
 				} else {
 					copyHeader(w.Header(), clientResp.Header)
+					// Remove Content-Length from forwarded headers because
+					// the upstream app may have set a stale or incorrect
+					// value. The actual body length will be determined by
+					// the pipe/chunked encoding.
+					w.Header().Del("Content-Length")
 					w.WriteHeader(clientResp.StatusCode)
 					_, pipeErr = io.Copy(w, clientResp.Body)
+					// If the upstream app declared a Content-Length larger
+					// than the actual body, Go's HTTP client body reader
+					// returns io.ErrUnexpectedEOF. The data we received is
+					// still valid, so treat this as a normal completion.
+					if errors.Is(pipeErr, io.ErrUnexpectedEOF) {
+						pipeErr = nil
+					}
 				}
 			}
 		}))
