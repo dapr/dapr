@@ -100,7 +100,7 @@ func (c *configuration) Setup(t *testing.T) []framework.Option {
 				case <-c.configSent:
 				}
 				c.eventSent.Store(true)
-				b, _ := json.Marshal(map[string]any{
+				b, err := json.Marshal(map[string]any{
 					"kind":       "Configuration",
 					"apiVersion": "dapr.io/v1alpha1",
 					"metadata":   map[string]any{"name": "hotreloading"},
@@ -110,6 +110,9 @@ func (c *configuration) Setup(t *testing.T) []framework.Option {
 						},
 					},
 				})
+				if err != nil {
+					return err
+				}
 				if err := srv.Send(&operatorv1.ConfigurationUpdateEvent{
 					Configuration: b,
 					Type:          operatorv1.ResourceEventType_UPDATED,

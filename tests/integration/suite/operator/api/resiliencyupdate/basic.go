@@ -122,7 +122,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 			var gotRes resapi.Resiliency
-			require.NoError(t, json.Unmarshal(event.GetResiliency(), &gotRes))
+			if !assert.NoError(c, json.Unmarshal(event.GetResiliency(), &gotRes)) {
+				return
+			}
 			assert.Equal(c, res, &gotRes)
 			assert.JSONEq(c, string(resB), string(event.GetResiliency()))
 			assert.Equal(c, operatorv1.ResourceEventType_UPDATED, event.GetType())
@@ -143,8 +145,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 			var gotRes resapi.Resiliency
-			require.NoError(t, json.Unmarshal(event.GetResiliency(), &gotRes))
-			assert.Equal(t, res, &gotRes)
+			if !assert.NoError(c, json.Unmarshal(event.GetResiliency(), &gotRes)) {
+				return
+			}
+			assert.Equal(c, res, &gotRes)
 			assert.JSONEq(c, string(resB), string(event.GetResiliency()))
 			assert.Equal(c, operatorv1.ResourceEventType_DELETED, event.GetType())
 			assert.Equal(c, "DELETED", event.GetType().String())

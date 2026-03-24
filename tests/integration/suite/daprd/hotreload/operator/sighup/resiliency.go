@@ -84,7 +84,7 @@ func (r *resiliency) Setup(t *testing.T) []framework.Option {
 				case <-r.resiliencySent:
 				}
 				r.eventSent.Store(true)
-				b, _ := json.Marshal(map[string]any{
+				b, err := json.Marshal(map[string]any{
 					"kind":       "Resiliency",
 					"apiVersion": "dapr.io/v1alpha1",
 					"metadata":   map[string]any{"name": "myresiliency"},
@@ -96,6 +96,9 @@ func (r *resiliency) Setup(t *testing.T) []framework.Option {
 						},
 					},
 				})
+				if err != nil {
+					return err
+				}
 				if err := srv.Send(&operatorv1.ResiliencyUpdateEvent{
 					Resiliency: b,
 					Type:       operatorv1.ResourceEventType_CREATED,

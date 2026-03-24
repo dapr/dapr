@@ -118,7 +118,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 			var gotEndpoint httpendapi.HTTPEndpoint
-			require.NoError(t, json.Unmarshal(event.GetHttpEndpoints(), &gotEndpoint))
+			if !assert.NoError(c, json.Unmarshal(event.GetHttpEndpoints(), &gotEndpoint)) {
+				return
+			}
 			assert.Equal(c, endpoint, &gotEndpoint)
 			assert.JSONEq(c, string(endpointB), string(event.GetHttpEndpoints()))
 			assert.Equal(c, operatorv1.ResourceEventType_UPDATED, event.GetType())
@@ -139,8 +141,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				return
 			}
 			var gotEndpoint httpendapi.HTTPEndpoint
-			require.NoError(t, json.Unmarshal(event.GetHttpEndpoints(), &gotEndpoint))
-			assert.Equal(t, endpoint, &gotEndpoint)
+			if !assert.NoError(c, json.Unmarshal(event.GetHttpEndpoints(), &gotEndpoint)) {
+				return
+			}
+			assert.Equal(c, endpoint, &gotEndpoint)
 			assert.JSONEq(c, string(endpointB), string(event.GetHttpEndpoints()))
 			assert.Equal(c, operatorv1.ResourceEventType_DELETED, event.GetType())
 			assert.Equal(c, "DELETED", event.GetType().String())
