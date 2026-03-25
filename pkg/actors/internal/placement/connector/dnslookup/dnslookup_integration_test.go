@@ -44,13 +44,22 @@ func startGRPCServerOn(t *testing.T, addr string) (actualAddr string, stop func(
 }
 
 func TestIntegration_ReconnectAfterServerRestart(t *testing.T) {
+	// Start server 1 on 127.0.0.1 with a random port.
 	srv1Addr, stopSrv1 := startGRPCServerOn(t, "127.0.0.1:0")
 	_, port, err := net.SplitHostPort(srv1Addr)
 	require.NoError(t, err)
 
+	// Start server 2 on [::1] (IPv6 loopback) with the same port. We use ::1
+	// instead of 127.0.0.2 because macOS only binds 127.0.0.1 to the loopback
+	// interface (Linux routes all of 127.0.0.0/8). IPv6 loopback is available
+	// on both platforms and binds the same port without conflict since it's a
+	// different address family.
+	_, stopSrv2 := startGRPCServerOn(t, net.JoinHostPort("::1", port))
+	defer stopSrv2()
+
 	var resolveCount atomic.Int32
-	var currentAddrs atomic.Value
-	currentAddrs.Store([]string{"127.0.0.1"})
+	var currentAddr atomic.Value
+	currentAddr.Store("127.0.0.1")
 
 	conn, err := New(Options{
 		Address: net.JoinHostPort("placement.local", port),
@@ -59,7 +68,7 @@ func TestIntegration_ReconnectAfterServerRestart(t *testing.T) {
 		},
 		resolver: func(ctx context.Context, host string) ([]string, error) {
 			resolveCount.Add(1)
-			return currentAddrs.Load().([]string), nil
+			return []string{currentAddr.Load().(string)}, nil
 		},
 	})
 	require.NoError(t, err)
@@ -74,13 +83,11 @@ func TestIntegration_ReconnectAfterServerRestart(t *testing.T) {
 	require.NoError(t, err)
 	grpcConn.Close()
 
+	// Simulate server restart: stop server 1 and update DNS to return the new
+	// IP (::1). The connector should re-resolve DNS and connect to server 2
+	// immediately without hanging on the stale 127.0.0.1 address.
 	stopSrv1()
-
-	srv2Addr, stopSrv2 := startGRPCServerOn(t, net.JoinHostPort("127.0.0.2", port))
-	defer stopSrv2()
-	_ = srv2Addr
-
-	currentAddrs.Store([]string{"127.0.0.2"})
+	currentAddr.Store("::1")
 
 	startTime := time.Now()
 	grpcConn, err = conn.Connect(t.Context())
@@ -89,7 +96,7 @@ func TestIntegration_ReconnectAfterServerRestart(t *testing.T) {
 
 	assert.Less(t, elapsed, 2*time.Second,
 		"reconnect should be fast after DNS re-resolve, not hang on stale IP")
-	assert.Equal(t, net.JoinHostPort("127.0.0.2", port), conn.Address())
+	assert.Equal(t, net.JoinHostPort("::1", port), conn.Address())
 
 	healthClient = healthpb.NewHealthClient(grpcConn)
 	ctx2, cancel2 := context.WithTimeout(t.Context(), time.Second)
