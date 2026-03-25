@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -126,7 +127,7 @@ func (s *scaleup) Run(t *testing.T, ctx context.Context) {
 		}
 		_, err := sched.Client(t, ctx).ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 			Name: "load-" + strconv.Itoa(i),
-			Job:  &schedulerv1pb.Job{DueTime: new(time.Now().Format(time.RFC3339))},
+			Job:  &schedulerv1pb.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
 			Metadata: &schedulerv1pb.JobMetadata{
 				AppId: "load-app", Namespace: "default",
 				Target: &schedulerv1pb.JobTargetMetadata{
@@ -172,7 +173,7 @@ func (s *scaleup) Run(t *testing.T, ctx context.Context) {
 	for i := range 30 {
 		_, err := s.scheduler1.Client(t, ctx).ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 			Name: "post-" + strconv.Itoa(i),
-			Job:  &schedulerv1pb.Job{DueTime: new(time.Now().Format(time.RFC3339))},
+			Job:  &schedulerv1pb.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
 			Metadata: &schedulerv1pb.JobMetadata{
 				AppId: "post-scaleup", Namespace: "default",
 				Target: &schedulerv1pb.JobTargetMetadata{
