@@ -91,7 +91,7 @@ func writeFolderReadme(dir string, imagePrefix string) error {
 		}
 		b.WriteString("\n")
 	}
-	return os.WriteFile(filepath.Join(dir, "README.md"), []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o644)
+	return os.WriteFile(filepath.Join(dir, "README.md"), []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o600)
 }
 
 type testGroup struct {

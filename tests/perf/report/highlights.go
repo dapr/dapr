@@ -235,7 +235,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 		}
 
 		combined := "## Highlights\n\n" + subContent + "\n\n---\n\n" + chartsContent
-		if err := os.WriteFile(subReadmePath, []byte(combined), 0o644); err != nil {
+		if err := os.WriteFile(subReadmePath, []byte(combined), 0o600); err != nil {
 			log.Printf("warning: could not write %s: %v", subReadmePath, err)
 		} else {
 			log.Printf("Wrote %s", subReadmePath)
@@ -258,7 +258,7 @@ func generateHighlights(version, baseOutputDir, model, ollamaURL string) {
 	}
 
 	rootPath := filepath.Join(baseOutputDir, "README.md")
-	if err := os.WriteFile(rootPath, []byte(rootBuf.String()), 0o644); err != nil {
+	if err := os.WriteFile(rootPath, []byte(rootBuf.String()), 0o600); err != nil {
 		log.Printf("warning: could not write root README %s: %v", rootPath, err)
 	} else {
 		log.Printf("Wrote %s", rootPath)
