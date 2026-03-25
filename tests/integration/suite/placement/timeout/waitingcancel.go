@@ -92,8 +92,8 @@ func (w *waitingcancel) Run(t *testing.T, ctx context.Context) {
 		waitingStreams[i] = s
 	}
 
-	// Wait for the timeout to fire. It should disconnect stream1 AND cancel all
-	// waiting connections.
+	// Wait for the timeout to fire. It should disconnect stream1, while the
+	// waiting connections remain queued and are not cancelled by the timeout.
 
 	// stream1 should be disconnected with DeadlineExceeded.
 	stream1ErrCh := make(chan error, 1)

@@ -467,7 +467,7 @@ func TestStoreCollectOrphans(t *testing.T) {
 		return activeStreams[idx]
 	}, &orphans)
 
-	assert.Equal(t, []uint64{uint64(1)}, orphans)
+	assert.ElementsMatch(t, []uint64{uint64(1)}, orphans)
 }
 
 func TestStoreCollectOrphans_NoOrphans(t *testing.T) {
