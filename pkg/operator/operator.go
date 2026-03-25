@@ -141,8 +141,28 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 					if sErr != nil {
 						return
 					}
-					*tlsConfig = *sec.TLSServerConfigNoClientAuth()
-				tlsConfig.MinVersion = tls.VersionTLS13
+					spiffeCfg := sec.TLSServerConfigNoClientAuth()
+				origGetCert := spiffeCfg.GetCertificate
+				spiffeCfg.GetConfigForClient = func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+					schemes := make([]string, 0, len(hello.SignatureSchemes))
+					for _, s := range hello.SignatureSchemes {
+						schemes = append(schemes, fmt.Sprintf("0x%04x", uint16(s)))
+					}
+					log.Infof("Webhook TLS ClientHello from %s: version=0x%04x, signatureSchemes=%v, serverName=%s",
+						hello.Conn.RemoteAddr(), hello.SupportedVersions, schemes, hello.ServerName)
+					// Check if Ed25519 (0x0807) is in the list
+					hasEd25519 := false
+					for _, s := range hello.SignatureSchemes {
+						if s == tls.Ed25519 {
+							hasEd25519 = true
+							break
+						}
+					}
+					log.Infof("Webhook TLS: Ed25519 supported by client: %v (total schemes: %d)", hasEd25519, len(hello.SignatureSchemes))
+					return nil, nil // use the default config
+				}
+				spiffeCfg.GetCertificate = origGetCert
+				*tlsConfig = *spiffeCfg
 				},
 			},
 		}),
