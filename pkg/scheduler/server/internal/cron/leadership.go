@@ -58,9 +58,9 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 		close(h.readyCh)
 		log.Info("Cron is ready")
 	}
-	h.lock.Unlock()
 
 	h.hostBroadcaster.Broadcast(hosts)
+	h.lock.Unlock()
 
 	return nil
 }
