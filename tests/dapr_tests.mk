@@ -578,6 +578,17 @@ setup-app-configurations:
 
 # Apply component yaml for state, secrets, pubsub, workflows, and bindings
 setup-test-components: setup-app-configurations
+	@echo "=== DEBUG: K8s version ==="
+	$(KUBECTL) version
+	@echo "=== DEBUG: Operator pod status ==="
+	$(KUBECTL) get pods -n $(DAPR_TEST_NAMESPACE) -l app=dapr-operator -o wide
+	@echo "=== DEBUG: Operator webhook cert (check signature algorithm) ==="
+	$(KUBECTL) get crd subscriptions.dapr.io -o jsonpath='{.spec.conversion.webhook.clientConfig.caBundle}' | base64 -d | openssl x509 -noout -text 2>/dev/null | head -15 || true
+	@echo "=== DEBUG: Dapr operator logs (last 20 lines) ==="
+	$(KUBECTL) logs -n $(DAPR_TEST_NAMESPACE) -l app=dapr-operator --tail=20 || true
+	@echo "=== DEBUG: Testing TLS to webhook directly ==="
+	$(KUBECTL) run tls-debug --rm -i --restart=Never --image=alpine/openssl -- s_client -connect dapr-webhook.$(DAPR_TEST_NAMESPACE).svc:443 -brief 2>&1 | head -10 || true
+	@echo "=== END DEBUG ==="
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
