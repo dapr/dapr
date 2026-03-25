@@ -171,33 +171,25 @@ func (d *disseminator) handleReportedUnlock(ctx context.Context, streamIDx uint6
 		d.timeoutQ.Dequeue(d.currentVersion)
 		log.Debugf("Dissemination of version %d in %s complete", d.currentVersion, d.namespace)
 
-		// If there were connections deleted while we were disseminating, delete
-		// them now in a new dissemination cycle.
+		// Clean up orphaned store entries- store entries whose streams are no
+		// longer in d.streams. This handles the case where a stream's
+		// ConnCloseStream event hasn't propagated to the disseminator yet but the
+		// stream was already removed from d.streams by a prior handleCloseStream
+		// or handleTimeout call.
+		d.store.CollectOrphans(func(idx uint64) bool {
+			_, ok := d.streams[idx]
+			return ok
+		}, &d.waitingToDelete)
+
 		if len(d.waitingToDelete) > 0 {
-			for _, toDelete := range d.waitingToDelete {
-				d.store.Delete(toDelete)
-			}
-
-			d.waitingToDelete = nil
-			d.currentVersion++
-			d.timeoutQ.Enqueue(d.currentVersion)
-			d.currentOperation = v1pb.HostOperation_LOCK
-
-			for _, s := range d.streams {
-				s.currentState = v1pb.HostOperation_REPORT
-				s.receivingTable = nil
-				s.loop.Enqueue(&loops.DisseminateLock{
-					Version: d.currentVersion,
-				})
-			}
-
+			d.processWaitingDeletes()
 			return
 		}
 
-		// Batch all waiting connections: create their streams and update the
-		// store for all of them, then start a single dissemination round if any
-		// store change occurred. This avoids O(n) sequential dissemination
-		// rounds when many replicas connect at once.
+		// Batch all waiting connections: create their streams and update the store
+		// for all of them, then start a single dissemination round if any store
+		// change occurred. This avoids O(n) sequential dissemination rounds when
+		// many replicas connect at once.
 		if len(d.waitingToDisseminate) > 0 {
 			waiting := d.waitingToDisseminate
 			d.waitingToDisseminate = nil
