@@ -72,35 +72,23 @@ func (n *leadershipchurn) Setup(t *testing.T) []framework.Option {
 	)...)
 
 	return []framework.Option{
-		framework.WithProcesses(fp),
+		framework.WithProcesses(fp, n.scheduler1, n.scheduler2, n.scheduler3),
 	}
 }
 
 func (n *leadershipchurn) Run(t *testing.T, ctx context.Context) {
-	n.scheduler1.Run(t, ctx)
-	n.scheduler2.Run(t, ctx)
-	n.scheduler3.Run(t, ctx)
-	t.Cleanup(func() {
-		n.scheduler1.Cleanup(t)
-		n.scheduler2.Cleanup(t)
-		n.scheduler3.Cleanup(t)
-	})
 	n.scheduler1.WaitUntilRunning(t, ctx)
 	n.scheduler2.WaitUntilRunning(t, ctx)
 	n.scheduler3.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		stream, err := n.scheduler1.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-		if !assert.NoError(c, err) {
-			return
 		require.NoError(c, err)
 		defer func() {
 			require.NoError(t, stream.CloseSend())
 		}()
 		resp, err := stream.Recv()
-		if !assert.NoError(c, err) {
-			return
-		}
+		require.NoError(c, err)
 		assert.Len(c, resp.GetHosts(), 3)
 	}, 20*time.Second, 10*time.Millisecond)
 
