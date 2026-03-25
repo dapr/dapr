@@ -16,24 +16,30 @@ package controller
 import (
 	"context"
 
+	"errors"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 )
 
 type namespace struct {
-	cron     cron.Interface
+	ctrl     *Controller
 	nsReader client.Reader
 }
 
 func (n *namespace) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log.Debugf("Reconciling namespace %s", req.Name)
 
-	cronClient, err := n.cron.Client(ctx)
+	cr := n.ctrl.cron.Load()
+	if cr == nil {
+		return ctrl.Result{}, errors.New("controller cron not yet initialized")
+	}
+
+	cronClient, err := (*cr).Client(ctx)
 	if err != nil {
 		log.Errorf("Failed to get etcd cron client: %s", err)
 		return ctrl.Result{}, err
