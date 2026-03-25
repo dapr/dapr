@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -93,7 +93,7 @@ func (n *leadershipchurn) Run(t *testing.T, ctx context.Context) {
 		stream, err := n.scheduler1.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 		if !assert.NoError(c, err) {
 			return
-		}
+		require.NoError(c, err)
 		defer func() {
 			require.NoError(t, stream.CloseSend())
 		}()
