@@ -108,7 +108,7 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 
 	// Close all streams gracefully.
 	for _, s := range streams {
-		s.CloseSend()
+		require.NoError(t, s.CloseSend())
 	}
 	wg.Wait()
 
