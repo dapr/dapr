@@ -80,9 +80,9 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 		return nil, fmt.Errorf("no addresses found for %s", r.host)
 	}
 
-	// Round-robin across the resolved addresses. Use modulo assignment to
-	// keep rrIndex bounded and avoid negative index from int overflow.
-	r.rrIndex = r.rrIndex % len(addrs)
+	// Round-robin across the resolved addresses. The modulo assignment keeps
+	// rrIndex in [0, len(addrs)), so it never grows unbounded.
+	r.rrIndex %= len(addrs)
 	addr := addrs[r.rrIndex]
 	r.rrIndex++
 
