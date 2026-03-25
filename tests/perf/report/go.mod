@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/perf/report
 
-go 1.24.9
+go 1.25.8
 
 require gonum.org/v1/plot v0.16.0
 
