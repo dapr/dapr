@@ -33,16 +33,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(namespacechurn))
+	suite.Register(new(leadershipchurn))
 }
 
-type namespacechurn struct {
+type leadershipchurn struct {
 	scheduler1 *scheduler.Scheduler
 	scheduler2 *scheduler.Scheduler
 	scheduler3 *scheduler.Scheduler
 }
 
-func (n *namespacechurn) Setup(t *testing.T) []framework.Option {
+func (n *leadershipchurn) Setup(t *testing.T) []framework.Option {
 	if runtime.GOOS == "windows" {
 		t.Skip("Cleanup does not work cleanly on windows")
 	}
@@ -76,7 +76,7 @@ func (n *namespacechurn) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (n *namespacechurn) Run(t *testing.T, ctx context.Context) {
+func (n *leadershipchurn) Run(t *testing.T, ctx context.Context) {
 	n.scheduler1.Run(t, ctx)
 	n.scheduler2.Run(t, ctx)
 	n.scheduler3.Run(t, ctx)
