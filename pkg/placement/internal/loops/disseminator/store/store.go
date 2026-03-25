@@ -123,6 +123,16 @@ func (s *Store) Delete(streamIDx uint64) {
 	delete(s.hosts, streamIDx)
 }
 
+// CollectOrphans appends orphaned store entry indices to the given slice. An
+// orphan is a store entry whose streamIDx is not in the active set.
+func (s *Store) CollectOrphans(isActive func(uint64) bool, orphans *[]uint64) {
+	for idx := range s.hosts {
+		if !isActive(idx) {
+			*orphans = append(*orphans, idx)
+		}
+	}
+}
+
 func (s *Store) DeleteAll() {
 	clear(s.hosts)
 }
