@@ -93,7 +93,6 @@ func Run() {
 			if serr != nil {
 				return serr
 			}
-			
 			var ctrl *server.Controller
 			if modes.DaprMode(opts.Mode) == modes.KubernetesMode {
 				var cerr error
