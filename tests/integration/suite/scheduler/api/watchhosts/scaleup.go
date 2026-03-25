@@ -93,6 +93,7 @@ func (s *scaleup) Run(t *testing.T, ctx context.Context) {
 		if !assert.NoError(c, err) {
 			return
 		}
+		defer stream.CloseSend()
 		resp, err := stream.Recv()
 		if !assert.NoError(c, err) {
 			return
@@ -153,6 +154,7 @@ func (s *scaleup) Run(t *testing.T, ctx context.Context) {
 		if !assert.NoError(c, err) {
 			return
 		}
+		defer stream.CloseSend()
 
 		resp, err := stream.Recv()
 		if !assert.NoError(c, err) {

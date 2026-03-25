@@ -62,10 +62,11 @@ func Test_quorum_convergence_after_scaleup(t *testing.T) {
 	}
 
 	errCh := make(chan error, 4)
+	started := 0
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(func() {
 		cancel()
-		for range 4 {
+		for range started {
 			select {
 			case <-time.After(time.Second * 10):
 				t.Fatal("timeout waiting for cron shutdown")
@@ -78,6 +79,7 @@ func Test_quorum_convergence_after_scaleup(t *testing.T) {
 	for i := range 2 {
 		go func() { errCh <- crs[i].Run(ctx) }()
 	}
+	started = 2
 
 	for i := range 2 {
 		_, err := crs[i].Client(ctx)
@@ -91,6 +93,7 @@ func Test_quorum_convergence_after_scaleup(t *testing.T) {
 	}, time.Second*5, time.Millisecond*10)
 
 	go func() { errCh <- crs[2].Run(ctx) }()
+	started++
 
 	_, err := crs[2].Client(ctx)
 	require.NoError(t, err, "instance 2 never became ready")
@@ -103,6 +106,7 @@ func Test_quorum_convergence_after_scaleup(t *testing.T) {
 	}, time.Second*5, time.Millisecond*10)
 
 	go func() { errCh <- crs[3].Run(ctx) }()
+	started++
 
 	_, err = crs[3].Client(ctx)
 	require.NoError(t, err, "instance 3 never became ready")
