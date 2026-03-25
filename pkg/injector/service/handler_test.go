@@ -273,6 +273,35 @@ func TestHandleRequest(t *testing.T) {
 			false,
 		},
 		{
+			"TestSidecarInjectNonDaprPodUnauthorizedServiceAccount",
+			admissionv1.AdmissionReview{
+				Request: &admissionv1.AdmissionRequest{
+					UID:       uuid.NewUUID(),
+					Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+					Name:      "non-dapr-app",
+					Namespace: "test-ns",
+					Operation: "CREATE",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:other-ns:other-sa",
+					},
+					Object: runtime.RawExtension{Raw: func() []byte {
+						var pod corev1.Pod
+						json.Unmarshal(podBytes, &pod)
+						pod.Name = "non-dapr-app"
+						pod.Labels["app"] = "non-dapr-app"
+						delete(pod.Annotations, "dapr.io/enabled")
+						delete(pod.Annotations, "dapr.io/app-id")
+						delete(pod.Annotations, "dapr.io/app-port")
+						b, _ := json.Marshal(pod)
+						return b
+					}()},
+				},
+			},
+			runtime.ContentTypeJSON,
+			http.StatusOK,
+			false,
+		},
+		{
 			"TestSidecarInjectNonDaprPod",
 			admissionv1.AdmissionReview{
 				Request: &admissionv1.AdmissionRequest{
