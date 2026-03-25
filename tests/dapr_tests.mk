@@ -578,24 +578,6 @@ setup-app-configurations:
 
 # Apply component yaml for state, secrets, pubsub, workflows, and bindings
 setup-test-components: setup-app-configurations
-	@echo "=== DEBUG: K8s server version and platform ==="
-	$(KUBECTL) version -o json | grep -E '"gitVersion|goVersion|platform"' || true
-	@echo "=== DEBUG: Konnectivity / tunnel agent ==="
-	$(KUBECTL) get pods -n kube-system -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[0].image' | grep -iE 'konnectivity|tunnel|apiserver-proxy' || echo "No konnectivity/tunnel agent found"
-	@echo "=== DEBUG: API server connectivity mode ==="
-	$(KUBECTL) get configmap -n kube-system extension-apiserver-authentication -o yaml 2>/dev/null | head -5 || true
-	@echo "=== DEBUG: Webhook service exists ==="
-	$(KUBECTL) get svc dapr-webhook -n $(DAPR_TEST_NAMESPACE) -o jsonpath='{.spec.ports[0].port}' 2>/dev/null && echo " (port)" || echo "NOT FOUND"
-	@echo "=== DEBUG: CRD webhook config ==="
-	$(KUBECTL) get crd subscriptions.dapr.io -o jsonpath='{.spec.conversion.webhook.clientConfig}' 2>/dev/null || true
-	@echo ""
-	@echo "=== DEBUG: Operator workload cert (what TLS clients see) ==="
-	$(KUBECTL) get crd subscriptions.dapr.io -o jsonpath='{.spec.conversion.webhook.clientConfig.caBundle}' | base64 -d | openssl x509 -noout -text 2>/dev/null | grep -E 'Signature Algorithm|Public Key Algorithm|Issuer|Subject' || true
-	@echo "=== DEBUG: Full TLS handshake to webhook from inside cluster ==="
-	$(KUBECTL) run tls-debug --rm -i --restart=Never --image=alpine/openssl --overrides='{"spec":{"terminationGracePeriodSeconds":5}}' -- s_client -connect dapr-webhook.$(DAPR_TEST_NAMESPACE).svc:443 -servername dapr-webhook.$(DAPR_TEST_NAMESPACE).svc -state -debug 2>&1 | grep -iE 'Protocol|Cipher|Verification|Server public key|Signature Algorithm|error|SSL|handshake|No peer certificate|alert' | head -20 || true
-	@echo "=== DEBUG: Operator pod logs (TLS errors) ==="
-	$(KUBECTL) logs -n $(DAPR_TEST_NAMESPACE) -l app=dapr-operator --tail=30 2>/dev/null | grep -iE 'TLS|handshake|signature|error|started' || true
-	@echo "=== END DEBUG ==="
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
