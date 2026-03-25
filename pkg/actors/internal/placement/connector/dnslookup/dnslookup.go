@@ -26,18 +26,27 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+var log = logger.NewLogger("dapr.runtime.actors.placement.manager.connector.dnslookup")
+
 type lookupFunc func(ctx context.Context, host string) (addrs []string, err error)
 
 type dnsLookUpConnector struct {
-	dnsEntries []string
-	current    string
-	host       string
-	port       string
-	gOpts      []grpc.DialOption
-	resolver   lookupFunc
+	// rrIndex tracks the round-robin position across DNS lookups so that
+	// successive Connect calls cycle through available placement pods even
+	// when DNS returns the same set.
+	rrIndex  int
+	current  string
+	host     string
+	port     string
+	gOpts    []grpc.DialOption
+	resolver lookupFunc
 }
 
-var log = logger.NewLogger("dapr.runtime.actors.placement.manager.connector.dnslookup")
+type Options struct {
+	GRPCOptions []grpc.DialOption
+	Address     string
+	resolver    lookupFunc
+}
 
 func New(opts Options) (connector.Interface, error) {
 	host, port, err := net.SplitHostPort(opts.Address)
@@ -58,22 +67,25 @@ func New(opts Options) (connector.Interface, error) {
 	}, nil
 }
 
-type Options struct {
-	GRPCOptions []grpc.DialOption
-	Address     string
-	resolver    lookupFunc
-}
-
 func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, error) {
-	if len(r.dnsEntries) == 0 {
-		if err := r.refreshEntries(ctx); err != nil {
-			return nil, fmt.Errorf("failed to refresh DNS addresses: %w", err)
-		}
+	// Re-resolve DNS on every connect attempt. Kubernetes headless services
+	// return the current set of pod IPs. Previously, stale cached IPs from
+	// terminated pods would cause 20-second dial timeouts during placement
+	// pod restarts. DNS lookups are ~1ms and always return fresh IPs.
+	addrs, err := r.resolver(ctx, r.host)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup addresses: %w", err)
+	}
+	if len(addrs) == 0 {
+		return nil, fmt.Errorf("no addresses found for %s", r.host)
 	}
 
-	hostPort := net.JoinHostPort(r.dnsEntries[0], r.port)
+	// Round-robin across the resolved addresses.
+	addr := addrs[r.rrIndex%len(addrs)]
+	r.rrIndex++
+
+	hostPort := net.JoinHostPort(addr, r.port)
 	r.current = hostPort
-	r.dnsEntries = r.dnsEntries[1:]
 
 	log.Debugf("Attempting to connect to placement %s", hostPort)
 
@@ -90,17 +102,4 @@ func (r *dnsLookUpConnector) Connect(ctx context.Context) (*grpc.ClientConn, err
 
 func (r *dnsLookUpConnector) Address() string {
 	return r.current
-}
-
-func (r *dnsLookUpConnector) refreshEntries(ctx context.Context) error {
-	addrs, err := r.resolver(ctx, r.host)
-	if err != nil {
-		return fmt.Errorf("failed to lookup addresses: %w", err)
-	}
-	if len(addrs) == 0 {
-		return fmt.Errorf("no addresses found for %s", r.host)
-	}
-
-	r.dnsEntries = addrs
-	return nil
 }
