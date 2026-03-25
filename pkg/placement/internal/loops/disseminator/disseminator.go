@@ -194,6 +194,31 @@ func (d *disseminator) handleAdd(ctx context.Context, add *loops.ConnAdd) {
 		return
 	}
 
+	// Process any queued deletions before adding the new stream. During a
+	// rolling update, disconnects (queued as waitingToDelete) and new
+	// connections arrive in rapid succession. Processing deletions here lets the
+	// subsequent doReport include both the removal and addition in a single
+	// dissemination round instead of alternating delete-round → add-round
+	// cycles.
+	for _, toDelete := range d.waitingToDelete {
+		d.store.Delete(toDelete)
+	}
+	d.waitingToDelete = nil
+
+	// Also clean up orphaned store entries,  store entries whose streams have
+	// already been removed from d.streams but whose ConnCloseStream event hasn't
+	// arrived at the disseminator loop yet. This happens during rolling updates
+	// where CloseSend + new connection arrive faster than the close event
+	// propagates through the stream -> namespace -> disseminator queues.
+	d.store.CollectOrphans(func(idx uint64) bool {
+		_, ok := d.streams[idx]
+		return ok
+	}, &d.waitingToDelete)
+	for _, toDelete := range d.waitingToDelete {
+		d.store.Delete(toDelete)
+	}
+	d.waitingToDelete = nil
+
 	streamIDx := d.addStream(ctx, add)
 	d.handleReportedHost(ctx, &loops.ReportedHost{
 		Host:      add.InitialHost,
@@ -245,25 +270,72 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 	)
 
 	log.Warnf("Dissemination timeout for version %d", timeout.Version)
+
+	// Only close streams that have NOT reached the current target state. Streams
+	// that responded successfully to the current dissemination phase are healthy
+	// and should not be punished for another stream's slowness.
 	for idx, s := range d.streams {
+		if s.currentState == d.currentOperation {
+			// This stream already responded to the current phase, it's healthy.
+			continue
+		}
+
+		log.Warnf("Closing non-responding stream %s:%d (state=%s, expected=%s)",
+			d.namespace, idx, s.currentState.String(), d.currentOperation.String())
+
 		d.store.Delete(idx)
+		monitoring.RecordRuntimesCount(d.connCount.Add(-1), d.namespace)
+		if s.hasActors {
+			monitoring.RecordActorRuntimesCount(d.actorConnCount.Add(-1), d.namespace)
+		}
 		s.loop.Close(&loops.StreamShutdown{
 			Error: err,
 		})
 		stream.StreamLoopFactory.CacheLoop(s.loop)
+		delete(d.streams, idx)
 	}
 
-	monitoring.RecordRuntimesCount(0, d.namespace)
-	monitoring.RecordActorRuntimesCount(0, d.namespace)
+	// Reset dissemination state. Process any deletions that were queued during
+	// the round (from streams that disconnected while we were disseminating).
+	// These must be applied to the store before starting the next round,
+	// otherwise the deleted hosts remain in the table.
+	for _, toDelete := range d.waitingToDelete {
+		d.store.Delete(toDelete)
+	}
+	d.waitingToDelete = nil
 
-	clear(d.streams)
 	d.currentVersion++
 	d.currentOperation = v1pb.HostOperation_REPORT
+	d.streamsInTargetState = 0
 
-	for _, add := range d.waitingToDisseminate {
-		add.Cancel(err)
+	// Add any waiting connections- they should not be punished for another
+	// stream's slowness. They are added regardless of whether surviving streams
+	// exist, because the waiting connections themselves become the new stream
+	// set.
+	if len(d.waitingToDisseminate) > 0 {
+		waiting := d.waitingToDisseminate
+		d.waitingToDisseminate = nil
+
+		for _, add := range waiting {
+			streamIDx := d.addStream(ctx, add)
+			d.store.Set(streamIDx, add.InitialHost)
+		}
 	}
 
-	d.waitingToDisseminate = nil
-	d.waitingToDelete = nil
+	if len(d.streams) > 0 {
+		// Start a new dissemination round with all remaining + newly added
+		// streams.
+		d.timeoutQ.Enqueue(d.currentVersion)
+		d.currentOperation = v1pb.HostOperation_LOCK
+		for _, s := range d.streams {
+			s.currentState = v1pb.HostOperation_REPORT
+			s.receivingTable = nil
+			s.loop.Enqueue(&loops.DisseminateLock{
+				Version: d.currentVersion,
+			})
+		}
+	} else {
+		monitoring.RecordRuntimesCount(0, d.namespace)
+		monitoring.RecordActorRuntimesCount(0, d.namespace)
+	}
 }
