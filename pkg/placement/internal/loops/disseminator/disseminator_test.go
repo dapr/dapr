@@ -30,10 +30,10 @@ import (
 func newTestDisseminator(t *testing.T) *disseminator {
 	t.Helper()
 
-	dissLoop := fake.New[loops.EventDisseminator]()
+	dissLoop := fake.New[loops.Event]()
 
 	d := &disseminator{
-		nsLoop:           fake.New[loops.EventNamespace](),
+		nsLoop:           fake.New[loops.Event](),
 		loop:             dissLoop,
 		timeout:          5 * time.Second,
 		namespace:        "default",
@@ -52,16 +52,16 @@ func newTestDisseminator(t *testing.T) *disseminator {
 }
 
 type fakeStreamLoop struct {
-	loop     *fake.Fake[loops.EventStream]
+	loop     *fake.Fake[loops.Event]
 	enqueued atomic.Int32
 	closeCh  chan struct{}
 }
 
 func addFakeStream(d *disseminator, idx uint64, entities []string) *fakeStreamLoop {
 	fs := &fakeStreamLoop{closeCh: make(chan struct{}, 1)}
-	fs.loop = fake.New[loops.EventStream]().
-		WithEnqueue(func(loops.EventStream) { fs.enqueued.Add(1) }).
-		WithClose(func(loops.EventStream) {
+	fs.loop = fake.New[loops.Event]().
+		WithEnqueue(func(loops.Event) { fs.enqueued.Add(1) }).
+		WithClose(func(loops.Event) {
 			select {
 			case fs.closeCh <- struct{}{}:
 			default:
