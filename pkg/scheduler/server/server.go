@@ -43,8 +43,10 @@ var log = logger.NewLogger("dapr.scheduler.server")
 
 // Controller is a long-lived k8s controller that must only be created
 // once per process because controller-runtime registers controller names globally in the metrics registry.
-type Controller = controller.Controller
-type ControllerOptions = controller.Options
+type (
+	Controller        = controller.Controller
+	ControllerOptions = controller.Options
+)
 
 func NewController(opts ControllerOptions) (*Controller, error) {
 	return controller.New(opts)
