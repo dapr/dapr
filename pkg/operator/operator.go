@@ -142,6 +142,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 						return
 					}
 					*tlsConfig = *sec.TLSServerConfigNoClientAuth()
+				tlsConfig.MinVersion = tls.VersionTLS13
 				},
 			},
 		}),
