@@ -37,6 +37,10 @@ func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.Sc
 	return a.scheduleJob(ctx, inReq)
 }
 
+func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
+	return a.scheduleJob(ctx, inReq)
+}
+
 func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1pb.JobHTTPRequest) (*runtimev1pb.ScheduleJobResponse, error) {
 	data, err := anypb.New(job.GetData())
 	if err != nil {
@@ -110,7 +114,15 @@ func (a *Universal) scheduleJob(ctx context.Context, jobRequest *runtimev1pb.Sch
 	return &runtimev1pb.ScheduleJobResponse{}, nil
 }
 
+func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobResponse, error) {
+	return a.deleteJob(ctx, inReq)
+}
+
 func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobResponse, error) {
+	return a.deleteJob(ctx, inReq)
+}
+
+func (a *Universal) deleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -146,7 +158,15 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 	return &runtimev1pb.DeleteJobResponse{}, nil
 }
 
+func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
+	return a.getJob(ctx, inReq)
+}
+
 func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
+	return a.getJob(ctx, inReq)
+}
+
+func (a *Universal) getJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -192,7 +212,15 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 	}, nil
 }
 
+func (a *Universal) DeleteJobsByPrefix(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequest) (*runtimev1pb.DeleteJobsByPrefixResponse, error) {
+	return a.deleteJobsByPrefix(ctx, req)
+}
+
 func (a *Universal) DeleteJobsByPrefixAlpha1(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequestAlpha1) (*runtimev1pb.DeleteJobsByPrefixResponseAlpha1, error) {
+	return a.deleteJobsByPrefix(ctx, req)
+}
+
+func (a *Universal) deleteJobsByPrefix(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequest) (*runtimev1pb.DeleteJobsByPrefixResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -219,7 +247,15 @@ func (a *Universal) DeleteJobsByPrefixAlpha1(ctx context.Context, req *runtimev1
 	return nil, nil
 }
 
+func (a *Universal) ListJobs(ctx context.Context, req *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
+	return a.listJobs(ctx, req)
+}
+
 func (a *Universal) ListJobsAlpha1(ctx context.Context, req *runtimev1pb.ListJobsRequestAlpha1) (*runtimev1pb.ListJobsResponseAlpha1, error) {
+	return a.listJobs(ctx, req)
+}
+
+func (a *Universal) listJobs(ctx context.Context, req *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),

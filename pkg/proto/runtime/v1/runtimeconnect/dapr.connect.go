@@ -193,15 +193,25 @@ const (
 	DaprShutdownProcedure = "/dapr.proto.runtime.v1.Dapr/Shutdown"
 	// DaprScheduleJobAlpha1Procedure is the fully-qualified name of the Dapr's ScheduleJobAlpha1 RPC.
 	DaprScheduleJobAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/ScheduleJobAlpha1"
+	// DaprScheduleJobProcedure is the fully-qualified name of the Dapr's ScheduleJob RPC.
+	DaprScheduleJobProcedure = "/dapr.proto.runtime.v1.Dapr/ScheduleJob"
 	// DaprGetJobAlpha1Procedure is the fully-qualified name of the Dapr's GetJobAlpha1 RPC.
 	DaprGetJobAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/GetJobAlpha1"
+	// DaprGetJobProcedure is the fully-qualified name of the Dapr's GetJob RPC.
+	DaprGetJobProcedure = "/dapr.proto.runtime.v1.Dapr/GetJob"
 	// DaprDeleteJobAlpha1Procedure is the fully-qualified name of the Dapr's DeleteJobAlpha1 RPC.
 	DaprDeleteJobAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/DeleteJobAlpha1"
+	// DaprDeleteJobProcedure is the fully-qualified name of the Dapr's DeleteJob RPC.
+	DaprDeleteJobProcedure = "/dapr.proto.runtime.v1.Dapr/DeleteJob"
 	// DaprDeleteJobsByPrefixAlpha1Procedure is the fully-qualified name of the Dapr's
 	// DeleteJobsByPrefixAlpha1 RPC.
 	DaprDeleteJobsByPrefixAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/DeleteJobsByPrefixAlpha1"
+	// DaprDeleteJobsByPrefixProcedure is the fully-qualified name of the Dapr's DeleteJobsByPrefix RPC.
+	DaprDeleteJobsByPrefixProcedure = "/dapr.proto.runtime.v1.Dapr/DeleteJobsByPrefix"
 	// DaprListJobsAlpha1Procedure is the fully-qualified name of the Dapr's ListJobsAlpha1 RPC.
 	DaprListJobsAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/ListJobsAlpha1"
+	// DaprListJobsProcedure is the fully-qualified name of the Dapr's ListJobs RPC.
+	DaprListJobsProcedure = "/dapr.proto.runtime.v1.Dapr/ListJobs"
 	// DaprConverseAlpha1Procedure is the fully-qualified name of the Dapr's ConverseAlpha1 RPC.
 	DaprConverseAlpha1Procedure = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
 	// DaprConverseAlpha2Procedure is the fully-qualified name of the Dapr's ConverseAlpha2 RPC.
@@ -344,14 +354,36 @@ type DaprClient interface {
 	RaiseEventWorkflowBeta1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
 	// Shutdown the sidecar
 	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[emptypb.Empty], error)
-	// Create and schedule a job
+	// Deprecated: Create and schedule a job
+	//
+	// Deprecated: do not use.
 	ScheduleJobAlpha1(context.Context, *connect.Request[v1.ScheduleJobRequest]) (*connect.Response[v1.ScheduleJobResponse], error)
-	// Gets a scheduled job
+	// Create and schedule a job
+	ScheduleJob(context.Context, *connect.Request[v1.ScheduleJobRequest]) (*connect.Response[v1.ScheduleJobResponse], error)
+	// Deprecated: Gets a scheduled job
+	//
+	// Deprecated: do not use.
 	GetJobAlpha1(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
-	// Delete a job
+	// Gets a scheduled job
+	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
+	// Deprecated: Delete a job
+	//
+	// Deprecated: do not use.
 	DeleteJobAlpha1(context.Context, *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error)
+	// Delete a job
+	DeleteJob(context.Context, *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error)
+	// Deprecated: Delete jobs by name prefix
+	//
+	// Deprecated: do not use.
 	DeleteJobsByPrefixAlpha1(context.Context, *connect.Request[v1.DeleteJobsByPrefixRequestAlpha1]) (*connect.Response[v1.DeleteJobsByPrefixResponseAlpha1], error)
+	// Delete jobs by name prefix
+	DeleteJobsByPrefix(context.Context, *connect.Request[v1.DeleteJobsByPrefixRequest]) (*connect.Response[v1.DeleteJobsByPrefixResponse], error)
+	// Deprecated: List all jobs
+	//
+	// Deprecated: do not use.
 	ListJobsAlpha1(context.Context, *connect.Request[v1.ListJobsRequestAlpha1]) (*connect.Response[v1.ListJobsResponseAlpha1], error)
+	// List all jobs
+	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
 	// Converse with a LLM service
 	ConverseAlpha1(context.Context, *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error)
 	// Converse with a LLM service via alpha2 api
@@ -668,9 +700,19 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			baseURL+DaprScheduleJobAlpha1Procedure,
 			opts...,
 		),
+		scheduleJob: connect.NewClient[v1.ScheduleJobRequest, v1.ScheduleJobResponse](
+			httpClient,
+			baseURL+DaprScheduleJobProcedure,
+			opts...,
+		),
 		getJobAlpha1: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
 			httpClient,
 			baseURL+DaprGetJobAlpha1Procedure,
+			opts...,
+		),
+		getJob: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
+			httpClient,
+			baseURL+DaprGetJobProcedure,
 			opts...,
 		),
 		deleteJobAlpha1: connect.NewClient[v1.DeleteJobRequest, v1.DeleteJobResponse](
@@ -678,14 +720,29 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 			baseURL+DaprDeleteJobAlpha1Procedure,
 			opts...,
 		),
+		deleteJob: connect.NewClient[v1.DeleteJobRequest, v1.DeleteJobResponse](
+			httpClient,
+			baseURL+DaprDeleteJobProcedure,
+			opts...,
+		),
 		deleteJobsByPrefixAlpha1: connect.NewClient[v1.DeleteJobsByPrefixRequestAlpha1, v1.DeleteJobsByPrefixResponseAlpha1](
 			httpClient,
 			baseURL+DaprDeleteJobsByPrefixAlpha1Procedure,
 			opts...,
 		),
+		deleteJobsByPrefix: connect.NewClient[v1.DeleteJobsByPrefixRequest, v1.DeleteJobsByPrefixResponse](
+			httpClient,
+			baseURL+DaprDeleteJobsByPrefixProcedure,
+			opts...,
+		),
 		listJobsAlpha1: connect.NewClient[v1.ListJobsRequestAlpha1, v1.ListJobsResponseAlpha1](
 			httpClient,
 			baseURL+DaprListJobsAlpha1Procedure,
+			opts...,
+		),
+		listJobs: connect.NewClient[v1.ListJobsRequest, v1.ListJobsResponse](
+			httpClient,
+			baseURL+DaprListJobsProcedure,
 			opts...,
 		),
 		converseAlpha1: connect.NewClient[v1.ConversationRequest, v1.ConversationResponse](
@@ -763,10 +820,15 @@ type daprClient struct {
 	raiseEventWorkflowBeta1        *connect.Client[v1.RaiseEventWorkflowRequest, emptypb.Empty]
 	shutdown                       *connect.Client[v1.ShutdownRequest, emptypb.Empty]
 	scheduleJobAlpha1              *connect.Client[v1.ScheduleJobRequest, v1.ScheduleJobResponse]
+	scheduleJob                    *connect.Client[v1.ScheduleJobRequest, v1.ScheduleJobResponse]
 	getJobAlpha1                   *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
+	getJob                         *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
 	deleteJobAlpha1                *connect.Client[v1.DeleteJobRequest, v1.DeleteJobResponse]
+	deleteJob                      *connect.Client[v1.DeleteJobRequest, v1.DeleteJobResponse]
 	deleteJobsByPrefixAlpha1       *connect.Client[v1.DeleteJobsByPrefixRequestAlpha1, v1.DeleteJobsByPrefixResponseAlpha1]
+	deleteJobsByPrefix             *connect.Client[v1.DeleteJobsByPrefixRequest, v1.DeleteJobsByPrefixResponse]
 	listJobsAlpha1                 *connect.Client[v1.ListJobsRequestAlpha1, v1.ListJobsResponseAlpha1]
+	listJobs                       *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
 	converseAlpha1                 *connect.Client[v1.ConversationRequest, v1.ConversationResponse]
 	converseAlpha2                 *connect.Client[v1.ConversationRequestAlpha2, v1.ConversationResponseAlpha2]
 }
@@ -1083,28 +1145,63 @@ func (c *daprClient) Shutdown(ctx context.Context, req *connect.Request[v1.Shutd
 }
 
 // ScheduleJobAlpha1 calls dapr.proto.runtime.v1.Dapr.ScheduleJobAlpha1.
+//
+// Deprecated: do not use.
 func (c *daprClient) ScheduleJobAlpha1(ctx context.Context, req *connect.Request[v1.ScheduleJobRequest]) (*connect.Response[v1.ScheduleJobResponse], error) {
 	return c.scheduleJobAlpha1.CallUnary(ctx, req)
 }
 
+// ScheduleJob calls dapr.proto.runtime.v1.Dapr.ScheduleJob.
+func (c *daprClient) ScheduleJob(ctx context.Context, req *connect.Request[v1.ScheduleJobRequest]) (*connect.Response[v1.ScheduleJobResponse], error) {
+	return c.scheduleJob.CallUnary(ctx, req)
+}
+
 // GetJobAlpha1 calls dapr.proto.runtime.v1.Dapr.GetJobAlpha1.
+//
+// Deprecated: do not use.
 func (c *daprClient) GetJobAlpha1(ctx context.Context, req *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error) {
 	return c.getJobAlpha1.CallUnary(ctx, req)
 }
 
+// GetJob calls dapr.proto.runtime.v1.Dapr.GetJob.
+func (c *daprClient) GetJob(ctx context.Context, req *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error) {
+	return c.getJob.CallUnary(ctx, req)
+}
+
 // DeleteJobAlpha1 calls dapr.proto.runtime.v1.Dapr.DeleteJobAlpha1.
+//
+// Deprecated: do not use.
 func (c *daprClient) DeleteJobAlpha1(ctx context.Context, req *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error) {
 	return c.deleteJobAlpha1.CallUnary(ctx, req)
 }
 
+// DeleteJob calls dapr.proto.runtime.v1.Dapr.DeleteJob.
+func (c *daprClient) DeleteJob(ctx context.Context, req *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error) {
+	return c.deleteJob.CallUnary(ctx, req)
+}
+
 // DeleteJobsByPrefixAlpha1 calls dapr.proto.runtime.v1.Dapr.DeleteJobsByPrefixAlpha1.
+//
+// Deprecated: do not use.
 func (c *daprClient) DeleteJobsByPrefixAlpha1(ctx context.Context, req *connect.Request[v1.DeleteJobsByPrefixRequestAlpha1]) (*connect.Response[v1.DeleteJobsByPrefixResponseAlpha1], error) {
 	return c.deleteJobsByPrefixAlpha1.CallUnary(ctx, req)
 }
 
+// DeleteJobsByPrefix calls dapr.proto.runtime.v1.Dapr.DeleteJobsByPrefix.
+func (c *daprClient) DeleteJobsByPrefix(ctx context.Context, req *connect.Request[v1.DeleteJobsByPrefixRequest]) (*connect.Response[v1.DeleteJobsByPrefixResponse], error) {
+	return c.deleteJobsByPrefix.CallUnary(ctx, req)
+}
+
 // ListJobsAlpha1 calls dapr.proto.runtime.v1.Dapr.ListJobsAlpha1.
+//
+// Deprecated: do not use.
 func (c *daprClient) ListJobsAlpha1(ctx context.Context, req *connect.Request[v1.ListJobsRequestAlpha1]) (*connect.Response[v1.ListJobsResponseAlpha1], error) {
 	return c.listJobsAlpha1.CallUnary(ctx, req)
+}
+
+// ListJobs calls dapr.proto.runtime.v1.Dapr.ListJobs.
+func (c *daprClient) ListJobs(ctx context.Context, req *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error) {
+	return c.listJobs.CallUnary(ctx, req)
 }
 
 // ConverseAlpha1 calls dapr.proto.runtime.v1.Dapr.ConverseAlpha1.
@@ -1253,14 +1350,36 @@ type DaprHandler interface {
 	RaiseEventWorkflowBeta1(context.Context, *connect.Request[v1.RaiseEventWorkflowRequest]) (*connect.Response[emptypb.Empty], error)
 	// Shutdown the sidecar
 	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[emptypb.Empty], error)
-	// Create and schedule a job
+	// Deprecated: Create and schedule a job
+	//
+	// Deprecated: do not use.
 	ScheduleJobAlpha1(context.Context, *connect.Request[v1.ScheduleJobRequest]) (*connect.Response[v1.ScheduleJobResponse], error)
-	// Gets a scheduled job
+	// Create and schedule a job
+	ScheduleJob(context.Context, *connect.Request[v1.ScheduleJobRequest]) (*connect.Response[v1.ScheduleJobResponse], error)
+	// Deprecated: Gets a scheduled job
+	//
+	// Deprecated: do not use.
 	GetJobAlpha1(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
-	// Delete a job
+	// Gets a scheduled job
+	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
+	// Deprecated: Delete a job
+	//
+	// Deprecated: do not use.
 	DeleteJobAlpha1(context.Context, *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error)
+	// Delete a job
+	DeleteJob(context.Context, *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error)
+	// Deprecated: Delete jobs by name prefix
+	//
+	// Deprecated: do not use.
 	DeleteJobsByPrefixAlpha1(context.Context, *connect.Request[v1.DeleteJobsByPrefixRequestAlpha1]) (*connect.Response[v1.DeleteJobsByPrefixResponseAlpha1], error)
+	// Delete jobs by name prefix
+	DeleteJobsByPrefix(context.Context, *connect.Request[v1.DeleteJobsByPrefixRequest]) (*connect.Response[v1.DeleteJobsByPrefixResponse], error)
+	// Deprecated: List all jobs
+	//
+	// Deprecated: do not use.
 	ListJobsAlpha1(context.Context, *connect.Request[v1.ListJobsRequestAlpha1]) (*connect.Response[v1.ListJobsResponseAlpha1], error)
+	// List all jobs
+	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
 	// Converse with a LLM service
 	ConverseAlpha1(context.Context, *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error)
 	// Converse with a LLM service via alpha2 api
@@ -1573,9 +1692,19 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		svc.ScheduleJobAlpha1,
 		opts...,
 	)
+	daprScheduleJobHandler := connect.NewUnaryHandler(
+		DaprScheduleJobProcedure,
+		svc.ScheduleJob,
+		opts...,
+	)
 	daprGetJobAlpha1Handler := connect.NewUnaryHandler(
 		DaprGetJobAlpha1Procedure,
 		svc.GetJobAlpha1,
+		opts...,
+	)
+	daprGetJobHandler := connect.NewUnaryHandler(
+		DaprGetJobProcedure,
+		svc.GetJob,
 		opts...,
 	)
 	daprDeleteJobAlpha1Handler := connect.NewUnaryHandler(
@@ -1583,14 +1712,29 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 		svc.DeleteJobAlpha1,
 		opts...,
 	)
+	daprDeleteJobHandler := connect.NewUnaryHandler(
+		DaprDeleteJobProcedure,
+		svc.DeleteJob,
+		opts...,
+	)
 	daprDeleteJobsByPrefixAlpha1Handler := connect.NewUnaryHandler(
 		DaprDeleteJobsByPrefixAlpha1Procedure,
 		svc.DeleteJobsByPrefixAlpha1,
 		opts...,
 	)
+	daprDeleteJobsByPrefixHandler := connect.NewUnaryHandler(
+		DaprDeleteJobsByPrefixProcedure,
+		svc.DeleteJobsByPrefix,
+		opts...,
+	)
 	daprListJobsAlpha1Handler := connect.NewUnaryHandler(
 		DaprListJobsAlpha1Procedure,
 		svc.ListJobsAlpha1,
+		opts...,
+	)
+	daprListJobsHandler := connect.NewUnaryHandler(
+		DaprListJobsProcedure,
+		svc.ListJobs,
 		opts...,
 	)
 	daprConverseAlpha1Handler := connect.NewUnaryHandler(
@@ -1725,14 +1869,24 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 			daprShutdownHandler.ServeHTTP(w, r)
 		case DaprScheduleJobAlpha1Procedure:
 			daprScheduleJobAlpha1Handler.ServeHTTP(w, r)
+		case DaprScheduleJobProcedure:
+			daprScheduleJobHandler.ServeHTTP(w, r)
 		case DaprGetJobAlpha1Procedure:
 			daprGetJobAlpha1Handler.ServeHTTP(w, r)
+		case DaprGetJobProcedure:
+			daprGetJobHandler.ServeHTTP(w, r)
 		case DaprDeleteJobAlpha1Procedure:
 			daprDeleteJobAlpha1Handler.ServeHTTP(w, r)
+		case DaprDeleteJobProcedure:
+			daprDeleteJobHandler.ServeHTTP(w, r)
 		case DaprDeleteJobsByPrefixAlpha1Procedure:
 			daprDeleteJobsByPrefixAlpha1Handler.ServeHTTP(w, r)
+		case DaprDeleteJobsByPrefixProcedure:
+			daprDeleteJobsByPrefixHandler.ServeHTTP(w, r)
 		case DaprListJobsAlpha1Procedure:
 			daprListJobsAlpha1Handler.ServeHTTP(w, r)
+		case DaprListJobsProcedure:
+			daprListJobsHandler.ServeHTTP(w, r)
 		case DaprConverseAlpha1Procedure:
 			daprConverseAlpha1Handler.ServeHTTP(w, r)
 		case DaprConverseAlpha2Procedure:
@@ -1986,20 +2140,40 @@ func (UnimplementedDaprHandler) ScheduleJobAlpha1(context.Context, *connect.Requ
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ScheduleJobAlpha1 is not implemented"))
 }
 
+func (UnimplementedDaprHandler) ScheduleJob(context.Context, *connect.Request[v1.ScheduleJobRequest]) (*connect.Response[v1.ScheduleJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ScheduleJob is not implemented"))
+}
+
 func (UnimplementedDaprHandler) GetJobAlpha1(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetJobAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.GetJob is not implemented"))
 }
 
 func (UnimplementedDaprHandler) DeleteJobAlpha1(context.Context, *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteJobAlpha1 is not implemented"))
 }
 
+func (UnimplementedDaprHandler) DeleteJob(context.Context, *connect.Request[v1.DeleteJobRequest]) (*connect.Response[v1.DeleteJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteJob is not implemented"))
+}
+
 func (UnimplementedDaprHandler) DeleteJobsByPrefixAlpha1(context.Context, *connect.Request[v1.DeleteJobsByPrefixRequestAlpha1]) (*connect.Response[v1.DeleteJobsByPrefixResponseAlpha1], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteJobsByPrefixAlpha1 is not implemented"))
 }
 
+func (UnimplementedDaprHandler) DeleteJobsByPrefix(context.Context, *connect.Request[v1.DeleteJobsByPrefixRequest]) (*connect.Response[v1.DeleteJobsByPrefixResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.DeleteJobsByPrefix is not implemented"))
+}
+
 func (UnimplementedDaprHandler) ListJobsAlpha1(context.Context, *connect.Request[v1.ListJobsRequestAlpha1]) (*connect.Response[v1.ListJobsResponseAlpha1], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ListJobsAlpha1 is not implemented"))
+}
+
+func (UnimplementedDaprHandler) ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.runtime.v1.Dapr.ListJobs is not implemented"))
 }
 
 func (UnimplementedDaprHandler) ConverseAlpha1(context.Context, *connect.Request[v1.ConversationRequest]) (*connect.Response[v1.ConversationResponse], error) {
