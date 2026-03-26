@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -258,6 +259,7 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	}
 
 	var handlerErr error
+	contentLength := int64(-1)
 
 	go func() {
 		defer rw.signalReady()
@@ -278,6 +280,15 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 			if clientResp != nil {
 				defer clientResp.Body.Close()
 				copyHeader(w.Header(), clientResp.Header)
+				// Capture Content-Length for metrics before removing it
+				// from forwarded headers, so that the upstream app's stale
+				// or incorrect value is not forwarded to the caller.
+				if cl := w.Header().Get("Content-Length"); cl != "" {
+					if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
+						contentLength = parsed
+					}
+				}
+				w.Header().Del("Content-Length")
 				w.WriteHeader(clientResp.StatusCode)
 				_, _ = io.Copy(w, clientResp.Body)
 			}
@@ -293,15 +304,6 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
-
-	contentLength := int64(-1)
-	if rw.h != nil {
-		if cl := rw.h.Get("content-length"); cl != "" {
-			if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
-				contentLength = parsed
-			}
-		}
-	}
 
 	if handlerErr != nil {
 		pr.Close()
@@ -429,8 +431,9 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	var (
-		isSse      bool
-		handlerErr error
+		isSse         bool
+		handlerErr    error
+		contentLength = int64(-1)
 	)
 
 	go func() {
@@ -480,8 +483,25 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 					}
 				} else {
 					copyHeader(w.Header(), clientResp.Header)
+					// Capture Content-Length for metrics before removing
+					// it from forwarded headers, so that the upstream
+					// app's stale or incorrect value is not forwarded to
+					// the caller.
+					if cl := w.Header().Get("Content-Length"); cl != "" {
+						if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
+							contentLength = parsed
+						}
+					}
+					w.Header().Del("Content-Length")
 					w.WriteHeader(clientResp.StatusCode)
 					_, pipeErr = io.Copy(w, clientResp.Body)
+					// If the upstream app declared a Content-Length larger
+					// than the actual body, Go's HTTP client body reader
+					// returns io.ErrUnexpectedEOF. The data we received is
+					// still valid, so treat this as a normal completion.
+					if errors.Is(pipeErr, io.ErrUnexpectedEOF) {
+						pipeErr = nil
+					}
 				}
 			}
 		}))
@@ -499,8 +519,6 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
-	contentLength := int64(-1)
-
 	if handlerErr != nil {
 		pr.Close()
 		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
@@ -511,14 +529,6 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	if isSse && statusOK {
 		pr.Close()
 		return nil, nil
-	}
-
-	if rw.h != nil {
-		if cl := rw.h.Get("content-length"); cl != "" {
-			if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
-				contentLength = parsed
-			}
-		}
 	}
 
 	// Construct the http.Response with the pipe reader as the body so data
@@ -600,13 +610,20 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		channelReq.Header.Set(hdr.Name, hdr.Value.String())
 	}
 
-	if cl := channelReq.Header.Get(invokev1.ContentLengthHeader); cl != "" {
-		v, err := strconv.ParseInt(cl, 10, 64)
-		if err != nil {
-			return nil, err
+	// Content-Length is not forwarded by InternalMetadataToHTTPHeader
+	// (to prevent stale values on rebuilt responses), so read it
+	// directly from the internal metadata for outgoing requests.
+	if md := req.Metadata(); md != nil {
+		for k, clVal := range md {
+			if strings.EqualFold(k, invokev1.ContentLengthHeader) && len(clVal.GetValues()) > 0 {
+				v, err := strconv.ParseInt(clVal.GetValues()[0], 10, 64)
+				if err != nil {
+					return nil, err
+				}
+				channelReq.ContentLength = v
+				break
+			}
 		}
-
-		channelReq.ContentLength = v
 	}
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
