@@ -43,6 +43,7 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 		":authority":     testValue,
 		"grpc-timeout":   testValue,
 		"content-type":   testValue, // skip
+		"content-length": testValue, // skip
 		"grpc-trace-bin": testValue,
 	}
 
