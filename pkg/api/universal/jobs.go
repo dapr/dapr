@@ -217,7 +217,13 @@ func (a *Universal) DeleteJobsByPrefix(ctx context.Context, req *runtimev1pb.Del
 }
 
 func (a *Universal) DeleteJobsByPrefixAlpha1(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequestAlpha1) (*runtimev1pb.DeleteJobsByPrefixResponseAlpha1, error) {
-	return a.deleteJobsByPrefix(ctx, req)
+	_, err := a.deleteJobsByPrefix(ctx, &runtimev1pb.DeleteJobsByPrefixRequest{
+		NamePrefix: req.NamePrefix,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
 func (a *Universal) deleteJobsByPrefix(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequest) (*runtimev1pb.DeleteJobsByPrefixResponse, error) {
@@ -251,8 +257,14 @@ func (a *Universal) ListJobs(ctx context.Context, req *runtimev1pb.ListJobsReque
 	return a.listJobs(ctx, req)
 }
 
-func (a *Universal) ListJobsAlpha1(ctx context.Context, req *runtimev1pb.ListJobsRequestAlpha1) (*runtimev1pb.ListJobsResponseAlpha1, error) {
-	return a.listJobs(ctx, req)
+func (a *Universal) ListJobsAlpha1(ctx context.Context, _ *runtimev1pb.ListJobsRequestAlpha1) (*runtimev1pb.ListJobsResponseAlpha1, error) {
+	resp, err := a.listJobs(ctx, new(runtimev1pb.ListJobsRequest))
+	if err != nil {
+		return nil, err
+	}
+	return &runtimev1pb.ListJobsResponseAlpha1{
+		Jobs: resp.GetJobs(),
+	}, nil
 }
 
 func (a *Universal) listJobs(ctx context.Context, req *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
@@ -295,7 +307,7 @@ func (a *Universal) listJobs(ctx context.Context, req *runtimev1pb.ListJobsReque
 		})
 	}
 
-	return &runtimev1pb.ListJobsResponseAlpha1{
+	return &runtimev1pb.ListJobsResponse{
 		Jobs: jobs,
 	}, nil
 }
