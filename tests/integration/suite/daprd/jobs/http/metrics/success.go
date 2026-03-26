@@ -65,7 +65,7 @@ func (s *success) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("successful job trigger", func(t *testing.T) {
 		body := strings.NewReader(`{"dueTime":"0s","data":"test","repeats":3,"schedule":"@every 0s"}`)
-		s.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/success", body)
+		s.daprd.HTTPPost2xx(t, ctx, "/v1.0/jobs/success", body)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := s.daprd.Metrics(c, ctx).All()
