@@ -55,10 +55,9 @@ func Test_SetCron_SwapAcrossRestarts(t *testing.T) {
 	// Each cron records which "generation" was called so we can verify the
 	// reconciler always uses the latest one.
 	for i := range 3 {
-		gen := i
 		var calledGen int
 		fakeCron := cronfake.New().WithClient(func(context.Context) (api.Interface, error) {
-			calledGen = gen
+			calledGen = i
 			return etcdcronfake.New(), nil
 		})
 
@@ -67,8 +66,8 @@ func Test_SetCron_SwapAcrossRestarts(t *testing.T) {
 
 		_, err := nsctrl.Reconcile(t.Context(), req)
 		require.NoError(t, err)
-		assert.Equal(t, gen, calledGen,
-			"reconciler should use cron from restart generation %d", gen)
+		assert.Equal(t, i, calledGen,
+			"reconciler should use cron from restart generation %d", i)
 	}
 }
 

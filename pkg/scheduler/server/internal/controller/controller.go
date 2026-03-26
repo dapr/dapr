@@ -45,13 +45,13 @@ type Options struct {
 // created once per process because controller-runtime registers controller
 // names globally in the metrics registry.
 type Controller struct {
-	cron atomic.Pointer[cron.Interface]
+	cron atomic.Value
 	run  func(ctx context.Context) error
 }
 
 // SetCron updates the cron interface used by the namespace reconciler.
 func (c *Controller) SetCron(cr cron.Interface) {
-	c.cron.Store(&cr)
+	c.cron.Store(cr)
 }
 
 func New(opts Options) (*Controller, error) {
