@@ -36,6 +36,7 @@ type Config struct {
 	KubeClusterDomain                 string `envconfig:"KUBE_CLUSTER_DOMAIN"`
 	AllowedServiceAccounts            string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
 	AllowedServiceAccountsPrefixNames string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES"`
+	AllowedServiceAccountsPatterns    string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_PATTERNS"`
 	IgnoreEntrypointTolerations       string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
 	ActorsEnabled                     string `envconfig:"ACTORS_ENABLED"`
 	ActorsServiceName                 string `envconfig:"ACTORS_SERVICE_NAME"`

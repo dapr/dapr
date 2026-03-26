@@ -205,6 +205,10 @@ spec:
         - name: ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES
           value: {{ .Values.allowedServiceAccountsPrefixNames | toYaml }}
 {{- end }}
+{{- if .Values.allowedServiceAccountsPatterns }}
+        - name: ALLOWED_SERVICE_ACCOUNTS_PATTERNS
+          value: {{ .Values.allowedServiceAccountsPatterns | toYaml }}
+{{- end }}
         ports:
         - name: https
           containerPort: 4000

@@ -100,7 +100,7 @@ type injector struct {
 	schedulerEnabled        bool
 
 	htarget              healthz.Target
-	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
+	namespaceNameMatcher namespacednamematcher.ServiceAccountMatcher
 	running              atomic.Bool
 }
 
@@ -163,7 +163,7 @@ func NewInjector(opts Options) (Injector, error) {
 		schedulerEnabled:        opts.SchedulerEnabled,
 	}
 
-	matcher, err := createNamespaceNameMatcher(opts.Config.AllowedServiceAccountsPrefixNames)
+	matcher, err := createServiceAccountMatcher(opts.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -173,16 +173,55 @@ func NewInjector(opts Options) (Injector, error) {
 	return i, nil
 }
 
-func createNamespaceNameMatcher(allowedPrefix string) (matcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher, err error) {
-	allowedPrefix = strings.TrimSpace(allowedPrefix)
-	if allowedPrefix != "" {
-		matcher, err = namespacednamematcher.CreateFromString(allowedPrefix)
-		if err != nil {
-			return nil, err
-		}
-		log.Debugf("Sidecar injector configured to allowed serviceaccounts prefixed by: %s", allowedPrefix)
+func createServiceAccountMatcher(cfg Config) (namespacednamematcher.ServiceAccountMatcher, error) {
+	var matchers []namespacednamematcher.ServiceAccountMatcher
+
+	// Build the list of exact service account matches from the defaults and
+	// the ALLOWED_SERVICE_ACCOUNTS config.
+	equalEntries := make([]string, 0, len(AllowedServiceAccountInfos))
+	equalEntries = append(equalEntries, AllowedServiceAccountInfos...)
+	if extra := strings.TrimSpace(cfg.AllowedServiceAccounts); extra != "" {
+		equalEntries = append(equalEntries, strings.Split(extra, ",")...)
 	}
-	return matcher, nil
+	equalMatcher, err := namespacednamematcher.NewEqualMatcher(strings.Join(equalEntries, ","))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create equal matcher: %w", err)
+	}
+	if equalMatcher != nil {
+		matchers = append(matchers, equalMatcher)
+	}
+
+	// Handle prefix config.
+	prefixCfg := strings.TrimSpace(cfg.AllowedServiceAccountsPrefixNames)
+	if prefixCfg != "" {
+		matcher, err := namespacednamematcher.NewPrefixMatcher(prefixCfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create prefix matcher: %w", err)
+		}
+		if matcher != nil {
+			log.Debugf("Sidecar injector configured with service account prefixes: %s", prefixCfg)
+			matchers = append(matchers, matcher)
+		}
+	}
+
+	// Handle new glob patterns config.
+	patternsCfg := strings.TrimSpace(cfg.AllowedServiceAccountsPatterns)
+	if patternsCfg != "" {
+		matcher, err := namespacednamematcher.NewGlobMatcher(patternsCfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create glob matcher from patterns: %w", err)
+		}
+		if matcher != nil {
+			log.Debugf("Sidecar injector configured with service account patterns: %s", patternsCfg)
+			matchers = append(matchers, matcher)
+		}
+	}
+
+	composite := namespacednamematcher.NewCompositeMatcher(matchers...)
+	if composite == nil {
+		return nil, nil
+	}
+	return composite, nil
 }
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
