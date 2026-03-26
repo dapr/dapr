@@ -133,7 +133,7 @@ func (m *MockServer) OnBulkTopicEvent(ctx context.Context, in *runtimev1pb.Topic
 }
 
 func (m *MockServer) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
-	return nil, nil
+	return &runtimev1pb.JobEventResponse{}, nil
 }
 
 func (m *MockServer) OnJobEventAlpha1(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {

@@ -459,11 +459,11 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 }
 
 func (s *server) OnJobEvent(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
-	return nil, nil
+	return &runtimev1pb.JobEventResponse{}, nil
 }
 
 func (s *server) OnJobEventAlpha1(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
-	return nil, nil
+	return &runtimev1pb.JobEventResponse{}, nil
 }
 
 func (s *server) bulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest, endpoint string) (*runtimev1pb.TopicEventBulkResponse, error) {
