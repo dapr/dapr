@@ -202,7 +202,7 @@ func writeReadmes(baseOutputDir string) {
 		}
 
 		readmePath := filepath.Join(parent, "README.md")
-		if err := os.WriteFile(readmePath, []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(readmePath, []byte(strings.TrimRight(b.String(), "\n")+"\n"), 0o600); err != nil {
 			log.Printf("warning: could not write combined README %s: %v", readmePath, err)
 		}
 	}
