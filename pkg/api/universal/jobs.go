@@ -223,7 +223,7 @@ func (a *Universal) DeleteJobsByPrefixAlpha1(ctx context.Context, req *runtimev1
 	if err != nil {
 		return nil, err
 	}
-	return nil, nil
+	return &runtimev1pb.DeleteJobsByPrefixResponseAlpha1{}, nil
 }
 
 func (a *Universal) deleteJobsByPrefix(ctx context.Context, req *runtimev1pb.DeleteJobsByPrefixRequest) (*runtimev1pb.DeleteJobsByPrefixResponse, error) {
@@ -243,14 +243,14 @@ func (a *Universal) deleteJobsByPrefix(ctx context.Context, req *runtimev1pb.Del
 		},
 	})
 	if err != nil {
-		a.logger.Errorf("Error listing jobs due to: %s", err)
+		a.logger.Errorf("Error deleting jobs by prefix due to: %s", err)
 		return nil, apierrors.SchedulerDeleteJob(map[string]string{
 			"appID":     a.AppID(),
 			"namespace": a.Namespace(),
 		}, err)
 	}
 
-	return nil, nil
+	return &runtimev1pb.DeleteJobsByPrefixResponse{}, nil
 }
 
 func (a *Universal) ListJobs(ctx context.Context, req *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
