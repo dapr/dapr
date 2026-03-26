@@ -42,10 +42,10 @@ func TestActorResponseContentLengthBodyMatch(t *testing.T) {
 		expectedBody          string
 	}{
 		{
-			name:                  "null body - upstream CL matches",
-			upstreamContentLength: "4",
-			bodyToWrite:           []byte("null"),
-			expectedBody:          "null",
+			name:                  "upstream CL matches actual body",
+			upstreamContentLength: "5",
+			bodyToWrite:           []byte("Hello"),
+			expectedBody:          "Hello",
 		},
 		{
 			name:                  "upstream CL larger than actual body",
