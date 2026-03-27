@@ -40,6 +40,12 @@ type Actors struct {
 	sched *scheduler.Scheduler
 	daprd *daprd.Daprd
 
+	// ownsControlPlaneServices is true when this Actors instance created its
+	// own placement, scheduler, and db (i.e. not shared via WithPeerActor).
+	// When false, Cleanup skips these shared resources so the owner can
+	// shut them down after its own daprd has exited cleanly.
+	ownsControlPlaneServices bool
+
 	runOnce     sync.Once
 	cleanupOnce sync.Once
 }
@@ -118,20 +124,23 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	}
 
 	return &Actors{
-		app:   app,
-		db:    opts.db,
-		place: opts.placement,
-		sched: opts.scheduler,
-		daprd: daprd.New(t, dopts...),
+		app:       app,
+		db:        opts.db,
+		place:     opts.placement,
+		sched:     opts.scheduler,
+		daprd:     daprd.New(t, dopts...),
+		ownsControlPlaneServices: !opts.peerShared,
 	}
 }
 
 func (a *Actors) Run(t *testing.T, ctx context.Context) {
 	a.runOnce.Do(func() {
 		a.app.Run(t, ctx)
-		a.db.Run(t, ctx)
-		a.place.Run(t, ctx)
-		a.sched.Run(t, ctx)
+		if a.ownsControlPlaneServices {
+			a.db.Run(t, ctx)
+			a.place.Run(t, ctx)
+			a.sched.Run(t, ctx)
+		}
 		a.daprd.Run(t, ctx)
 	})
 }
@@ -139,9 +148,11 @@ func (a *Actors) Run(t *testing.T, ctx context.Context) {
 func (a *Actors) Cleanup(t *testing.T) {
 	a.cleanupOnce.Do(func() {
 		a.daprd.Cleanup(t)
-		a.sched.Cleanup(t)
-		a.place.Cleanup(t)
-		a.db.Cleanup(t)
+		if a.ownsControlPlaneServices {
+			a.sched.Cleanup(t)
+			a.place.Cleanup(t)
+			a.db.Cleanup(t)
+		}
 		a.app.Cleanup(t)
 	})
 }

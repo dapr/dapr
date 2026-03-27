@@ -30,6 +30,7 @@ type options struct {
 
 	placement               *placement.Placement
 	scheduler               *scheduler.Scheduler
+	peerShared              bool
 	daprdConfigs            []string
 	actorTypeHandlers       map[string]http.HandlerFunc
 	handlers                map[string]http.HandlerFunc
@@ -92,6 +93,7 @@ func WithPeerActor(actor *Actors) Option {
 		WithDB(actor.DB())(o)
 		WithPlacement(actor.Placement())(o)
 		WithScheduler(actor.Scheduler())(o)
+		o.peerShared = true
 	}
 }
 
