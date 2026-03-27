@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/client"
 	"github.com/dapr/durabletask-go/task"
 	"github.com/dapr/kit/concurrency/slice"
@@ -56,7 +57,6 @@ func (f *fanoutthree) Setup(t *testing.T) []framework.Option {
 		sqlite.WithMetadata("disableWAL", "true"),
 	)
 
-	db.GetComponent(t)
 	f.daprd1 = daprd.New(t,
 		daprd.WithPlacementAddresses(placement.Address()),
 		daprd.WithScheduler(scheduler),
@@ -117,8 +117,9 @@ func (f *fanoutthree) Run(t *testing.T, ctx context.Context) {
 
 	id, err := client1.ScheduleNewOrchestration(ctx, "foo")
 	require.NoError(t, err)
-	_, err = client1.WaitForOrchestrationCompletion(ctx, id)
+	metadata, err := client1.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
+	require.True(t, api.OrchestrationMetadataIsComplete(metadata))
 	exp := make([]int, 5)
 	for i := range 5 {
 		exp[i] = i

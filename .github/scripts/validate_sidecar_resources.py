@@ -139,7 +139,7 @@ if __name__ == "__main__":
     goos=getenv("GOOS", "linux")
     goarch=getenv("GOARCH", "amd64")
     new_binary = f"./dist/{goos}_{goarch}/release/daprd"
-    old_binary = "~/.dapr/bin/daprd"
+    old_binary = f".baseline/dist/{goos}_{goarch}/release/daprd"
 
     binary_size_diff = size_diff(old_binary, new_binary)
 

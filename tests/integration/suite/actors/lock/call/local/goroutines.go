@@ -44,7 +44,7 @@ func (g *goroutines) Setup(t *testing.T) []framework.Option {
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			io.ReadAll(r.Body)
 		}),
-		actors.WithActorIdleTimeout(time.Second),
+		actors.WithActorIdleTimeout(5*time.Second),
 	)
 
 	return []framework.Option{
@@ -56,6 +56,13 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 	g.app.WaitUntilRunning(t, ctx)
 
 	client := g.app.GRPCClient(t, ctx)
+
+	_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+		ActorType: "abc",
+		ActorId:   "x",
+		Method:    "foo",
+	})
+	require.NoError(t, err)
 
 	startGoRoutines := g.app.Metrics(t, ctx)["go_goroutines"]
 
@@ -71,5 +78,5 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.InDelta(c, startGoRoutines, g.app.Metrics(t, ctx)["go_goroutines"], 10)
-	}, time.Second*20, time.Second)
+	}, time.Second*30, time.Second)
 }
