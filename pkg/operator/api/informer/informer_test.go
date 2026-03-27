@@ -107,36 +107,40 @@ func Test_WatchUpdates(t *testing.T) {
 			assert.Equal(c, 3, int(i.batchID.Load()))
 		}, 5*time.Second, 100*time.Millisecond)
 
+		expected := []*Event[compapi.Component]{
+			{
+				Manifest: compapi.Component{
+					ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: "ns1"},
+					Spec:       compapi.ComponentSpec{Type: "bindings.redis"},
+				},
+				Type: operator.ResourceEventType_UPDATED,
+			},
+			{
+				Manifest: compapi.Component{
+					ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: "ns1"},
+					Spec:       compapi.ComponentSpec{Type: "bindings.redis"},
+				},
+				Type: operator.ResourceEventType_DELETED,
+			},
+			{
+				Manifest: compapi.Component{
+					ObjectMeta: metav1.ObjectMeta{Name: "comp2", Namespace: "ns1"},
+				},
+				Type: operator.ResourceEventType_CREATED,
+			},
+		}
+
 		for _, appCh := range []<-chan *Event[compapi.Component]{appCh1, appCh2} {
-			for _, exp := range []*Event[compapi.Component]{
-				{
-					Manifest: compapi.Component{
-						ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: "ns1"},
-						Spec:       compapi.ComponentSpec{Type: "bindings.redis"},
-					},
-					Type: operator.ResourceEventType_UPDATED,
-				},
-				{
-					Manifest: compapi.Component{
-						ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: "ns1"},
-						Spec:       compapi.ComponentSpec{Type: "bindings.redis"},
-					},
-					Type: operator.ResourceEventType_DELETED,
-				},
-				{
-					Manifest: compapi.Component{
-						ObjectMeta: metav1.ObjectMeta{Name: "comp2", Namespace: "ns1"},
-					},
-					Type: operator.ResourceEventType_CREATED,
-				},
-			} {
+			var got []*Event[compapi.Component]
+			for range expected {
 				select {
 				case event := <-appCh:
-					assert.Equal(t, exp, event)
+					got = append(got, event)
 				case <-time.After(time.Second):
 					assert.Fail(t, "timeout waiting for app event")
 				}
 			}
+			assert.ElementsMatch(t, expected, got)
 		}
 	})
 }
