@@ -264,66 +264,66 @@ endif
 docker-manifest-create: SHELL := $(shell which bash)
 docker-manifest-create: check-docker-env
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	$(DOCKER) buildx imagetools create -t $(DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE):$(MANIFEST_TAG)-%)
-	$(DOCKER) buildx imagetools inspect $(DOCKER_IMAGE):$(DAPR_TAG)
+	$(DOCKER) manifest create --amend $(DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE):$(MANIFEST_TAG)-%)
+	$(DOCKER) manifest push --purge $(DOCKER_IMAGE):$(DAPR_TAG)
 else
-	$(DOCKER) buildx imagetools create -t $(DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE):$(MANIFEST_TAG)-%)
-	$(DOCKER) buildx imagetools inspect $(DOCKER_IMAGE):$(DAPR_TAG)
+	$(DOCKER) manifest create --amend $(DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE):$(MANIFEST_TAG)-%)
+	$(DOCKER) manifest push --purge $(DOCKER_IMAGE):$(DAPR_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_RUNTIME_DOCKER_IMAGE):$(DAPR_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_RUNTIME_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_RUNTIME_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_PLACEMENT_DOCKER_IMAGE):$(DAPR_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_PLACEMENT_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_PLACEMENT_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_SENTRY_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_SENTRY_DOCKER_IMAGE):$(DAPR_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_SENTRY_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_SENTRY_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_OPERATOR_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_OPERATOR_DOCKER_IMAGE):$(DAPR_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_OPERATOR_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_OPERATOR_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_OPERATOR_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_INJECTOR_DOCKER_IMAGE):$(DAPR_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_INJECTOR_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_INJECTOR_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SCHEDULER_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_SCHEDULER_DOCKER_IMAGE):$(DAPR_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_SCHEDULER_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SCHEDULER_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_SCHEDULER_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
 endif
 ifeq ($(LATEST_RELEASE),true)
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	$(DOCKER) buildx imagetools create -t $(DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%)
-	$(DOCKER) buildx imagetools inspect $(DOCKER_IMAGE):$(LATEST_TAG)
+	$(DOCKER) manifest create --amend $(DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%)
+	$(DOCKER) manifest push --purge $(DOCKER_IMAGE):$(LATEST_TAG)
 else
-	$(DOCKER) buildx imagetools create -t $(DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%)
-	$(DOCKER) buildx imagetools inspect $(DOCKER_IMAGE):$(LATEST_TAG)
+	$(DOCKER) manifest create --amend $(DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%)
+	$(DOCKER) manifest push --purge $(DOCKER_IMAGE):$(LATEST_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_RUNTIME_DOCKER_IMAGE):$(LATEST_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_RUNTIME_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_RUNTIME_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_PLACEMENT_DOCKER_IMAGE):$(LATEST_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_PLACEMENT_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_PLACEMENT_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_SENTRY_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_SENTRY_DOCKER_IMAGE):$(LATEST_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_SENTRY_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_SENTRY_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_OPERATOR_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_OPERATOR_DOCKER_IMAGE):$(LATEST_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_OPERATOR_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_OPERATOR_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_OPERATOR_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_INJECTOR_DOCKER_IMAGE):$(LATEST_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_INJECTOR_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_INJECTOR_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
-	$(DOCKER) buildx imagetools create -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SCHEDULER_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
-	$(DOCKER) buildx imagetools inspect $(DAPR_SCHEDULER_DOCKER_IMAGE):$(LATEST_TAG); \
+	$(DOCKER) manifest create --amend $(DAPR_SCHEDULER_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SCHEDULER_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
+	$(DOCKER) manifest push --purge $(DAPR_SCHEDULER_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 endif
 endif

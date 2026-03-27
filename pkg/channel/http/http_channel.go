@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -257,6 +259,7 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	}
 
 	var handlerErr error
+	contentLength := int64(-1)
 
 	go func() {
 		defer rw.signalReady()
@@ -277,6 +280,15 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 			if clientResp != nil {
 				defer clientResp.Body.Close()
 				copyHeader(w.Header(), clientResp.Header)
+				// Capture Content-Length for metrics before removing it
+				// from forwarded headers, so that the upstream app's stale
+				// or incorrect value is not forwarded to the caller.
+				if cl := w.Header().Get("Content-Length"); cl != "" {
+					if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
+						contentLength = parsed
+					}
+				}
+				w.Header().Del("Content-Length")
 				w.WriteHeader(clientResp.StatusCode)
 				_, _ = io.Copy(w, clientResp.Body)
 			}
@@ -292,15 +304,6 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 	}
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
-
-	contentLength := int64(-1)
-	if rw.h != nil {
-		if cl := rw.h.Get("content-length"); cl != "" {
-			if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
-				contentLength = parsed
-			}
-		}
-	}
 
 	if handlerErr != nil {
 		pr.Close()
@@ -385,8 +388,27 @@ func (h *Channel) HealthProbe(ctx context.Context) (*apphealth.Status, error) {
 }
 
 func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
-	channelReq, err := h.constructRequest(ctx, req, appID)
+	// For HTTP/2 (h2c) transports, the response body read is tied to the
+	// request context. If the caller's context is cancelled (e.g. resiliency
+	// timeout or placement dissemination) after headers are received but
+	// before the body is fully read through the pipe, the HTTP/2 stream is
+	// reset and io.Copy from the response body fails. This causes the pipe
+	// to receive 0 bytes and callers get 200 OK with empty body.
+	//
+	// To prevent this, we detach the HTTP request context from the caller's
+	// context for h2c, and instead cancel it when the pipe reader is closed.
+	// HTTP/1.1 is unaffected because TCP reads don't check the context.
+	reqCtx := ctx
+	var reqCancel context.CancelFunc
+	if _, ok := h.client.Transport.(*http2.Transport); ok {
+		reqCtx, reqCancel = context.WithCancel(context.WithoutCancel(ctx))
+	}
+
+	channelReq, err := h.constructRequest(reqCtx, req, appID)
 	if err != nil {
+		if reqCancel != nil {
+			reqCancel()
+		}
 		return nil, err
 	}
 
@@ -398,20 +420,33 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().GetMethod(), int64(len(req.Message().GetData().GetValue())))
 	startRequest := time.Now()
 
-	pr, pw := io.Pipe()
+	rawPR, pw := io.Pipe()
+	// Wrap the pipe reader so that closing it also cancels the detached
+	// request context (if any), preventing goroutine leaks from h2c
+	// requests that outlive the caller's context.
+	pr := wrapReadCloserWithCancel(rawPR, reqCancel)
 	rw := &rwRecorder{
 		pw:      pw,
 		readyCh: make(chan struct{}),
 	}
 
 	var (
-		isSse      bool
-		handlerErr error
+		isSse         bool
+		handlerErr    error
+		contentLength = int64(-1)
 	)
 
 	go func() {
 		defer rw.signalReady()
-		defer pw.Close()
+		// Track errors from io.Copy so they propagate through the pipe
+		// instead of silently returning empty body data. With HTTP/2 (h2c),
+		// context cancellation resets the stream, causing body reads to fail.
+		// Without error propagation, the pipe closes normally (EOF) with 0
+		// bytes, and callers receive 200 OK with empty body.
+		var pipeErr error
+		defer func() {
+			pw.CloseWithError(pipeErr)
+		}()
 		// Release the concurrency limiter slot when the handler goroutine
 		// finishes. Because io.Pipe is synchronous (no buffer), the goroutine
 		// naturally stays alive—and holds the slot—until the caller has
@@ -448,8 +483,25 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 					}
 				} else {
 					copyHeader(w.Header(), clientResp.Header)
+					// Capture Content-Length for metrics before removing
+					// it from forwarded headers, so that the upstream
+					// app's stale or incorrect value is not forwarded to
+					// the caller.
+					if cl := w.Header().Get("Content-Length"); cl != "" {
+						if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
+							contentLength = parsed
+						}
+					}
+					w.Header().Del("Content-Length")
 					w.WriteHeader(clientResp.StatusCode)
-					_, _ = io.Copy(w, clientResp.Body)
+					_, pipeErr = io.Copy(w, clientResp.Body)
+					// If the upstream app declared a Content-Length larger
+					// than the actual body, Go's HTTP client body reader
+					// returns io.ErrUnexpectedEOF. The data we received is
+					// still valid, so treat this as a normal completion.
+					if errors.Is(pipeErr, io.ErrUnexpectedEOF) {
+						pipeErr = nil
+					}
 				}
 			}
 		}))
@@ -467,8 +519,6 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
-	contentLength := int64(-1)
-
 	if handlerErr != nil {
 		pr.Close()
 		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
@@ -479,14 +529,6 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	if isSse && statusOK {
 		pr.Close()
 		return nil, nil
-	}
-
-	if rw.h != nil {
-		if cl := rw.h.Get("content-length"); cl != "" {
-			if parsed, parseErr := strconv.ParseInt(cl, 10, 64); parseErr == nil {
-				contentLength = parsed
-			}
-		}
 	}
 
 	// Construct the http.Response with the pipe reader as the body so data
@@ -568,13 +610,20 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		channelReq.Header.Set(hdr.Name, hdr.Value.String())
 	}
 
-	if cl := channelReq.Header.Get(invokev1.ContentLengthHeader); cl != "" {
-		v, err := strconv.ParseInt(cl, 10, 64)
-		if err != nil {
-			return nil, err
+	// Content-Length is not forwarded by InternalMetadataToHTTPHeader
+	// (to prevent stale values on rebuilt responses), so read it
+	// directly from the internal metadata for outgoing requests.
+	if md := req.Metadata(); md != nil {
+		for k, clVal := range md {
+			if strings.EqualFold(k, invokev1.ContentLengthHeader) && len(clVal.GetValues()) > 0 {
+				v, err := strconv.ParseInt(clVal.GetValues()[0], 10, 64)
+				if err != nil {
+					return nil, err
+				}
+				channelReq.ContentLength = v
+				break
+			}
 		}
-
-		channelReq.ContentLength = v
 	}
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
