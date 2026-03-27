@@ -94,6 +94,9 @@ func (p *Pool) AddConnection(req *schedulerv1pb.WatchJobsRequestInitial, stream 
 }
 
 // Trigger triggers a job event to the pool. It returns a response result.
+// If the context is cancelled (e.g., during engine shutdown from a quorum
+// change), Trigger returns UNDELIVERABLE immediately instead of blocking
+// forever waiting for the daprd to respond.
 func (p *Pool) Trigger(ctx context.Context, job *internalsv1pb.JobEvent) api.TriggerResponseResult {
 	<-p.readyCh
 
@@ -105,7 +108,27 @@ func (p *Pool) Trigger(ctx context.Context, job *internalsv1pb.JobEvent) api.Tri
 		},
 	})
 
-	resp := <-respCh
-	respChPool.Put(respCh)
-	return resp
+	select {
+	case resp := <-respCh:
+		respChPool.Put(respCh)
+		return resp
+	case <-ctx.Done():
+		// Prefer the response if it arrived at the same time as cancellation,
+		// avoiding spurious UNDELIVERABLE when a result is already available.
+		select {
+		case resp := <-respCh:
+			respChPool.Put(respCh)
+			return resp
+		default:
+		}
+
+		// Don't return respCh to pool. ResultFn still has a reference and may
+		// write to it later. Drain in the background so ResultFn doesn't block
+		// forever, then recycle.
+		go func() {
+			<-respCh
+			respChPool.Put(respCh)
+		}()
+		return api.TriggerResponseResult_UNDELIVERABLE
+	}
 }
