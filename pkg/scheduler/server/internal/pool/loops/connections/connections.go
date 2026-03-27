@@ -109,7 +109,12 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 
 	pcancel, err := c.cron.DeliverablePrefixes(ctx, prefixes...)
 	if err != nil {
-		return err
+		// Don't propagate. A single failed connection should not kill the entire
+		// pool. Cancel this connection and let the daprd reconnect.
+		log.Warnf("Failed to register deliverable prefixes for %s/%s: %s",
+			reqNamespace, reqAppID, err)
+		add.Cancel(err)
+		return nil
 	}
 
 	log.Debugf("Added a Sidecar connection to Scheduler for: %s/%s.",
