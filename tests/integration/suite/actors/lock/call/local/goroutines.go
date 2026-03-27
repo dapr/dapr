@@ -44,7 +44,7 @@ func (g *goroutines) Setup(t *testing.T) []framework.Option {
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
 			io.ReadAll(r.Body)
 		}),
-		actors.WithActorIdleTimeout(time.Second),
+		actors.WithActorIdleTimeout(5*time.Second),
 	)
 
 	return []framework.Option{

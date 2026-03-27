@@ -65,6 +65,7 @@ func (n *remotereceivernotoken) Setup(t *testing.T) []framework.Option {
 func (n *remotereceivernotoken) Run(t *testing.T, ctx context.Context) {
 	n.daprd1.WaitUntilRunning(t, ctx)
 	n.daprd2.WaitUntilRunning(t, ctx)
+	n.daprd2.WaitUntilAppHealth(t, ctx)
 
 	dclient := n.daprd1.GRPCClient(t, ctx)
 	_, err := dclient.InvokeService(ctx, &runtimev1.InvokeServiceRequest{
