@@ -113,9 +113,18 @@ func (p *Pool) Trigger(ctx context.Context, job *internalsv1pb.JobEvent) api.Tri
 		respChPool.Put(respCh)
 		return resp
 	case <-ctx.Done():
-		// Don't return respCh to pool- ResultFn still has a reference and may
-		// write to it later. Drain it in the background so the ResultFn goroutine
-		// doesn't block forever, then recycle.
+		// Prefer the response if it arrived at the same time as cancellation,
+		// avoiding spurious UNDELIVERABLE when a result is already available.
+		select {
+		case resp := <-respCh:
+			respChPool.Put(respCh)
+			return resp
+		default:
+		}
+
+		// Don't return respCh to pool. ResultFn still has a reference and may
+		// write to it later. Drain in the background so ResultFn doesn't block
+		// forever, then recycle.
 		go func() {
 			<-respCh
 			respChPool.Put(respCh)

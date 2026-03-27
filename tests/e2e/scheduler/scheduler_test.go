@@ -306,25 +306,31 @@ func TestSchedulerQuorumRecovery(t *testing.T) {
 	t.Logf("Baseline: %d triggers received", baselineCount)
 
 	// Kill a scheduler pod to force a quorum change.
-	ctx := context.Background()
+	kubeCtx, kubeCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer kubeCancel()
+
 	namespace := "dapr-system"
-	pods, err := platform.KubeClient.Pods(namespace).List(ctx, metav1.ListOptions{
+	pods, err := platform.KubeClient.Pods(namespace).List(kubeCtx, metav1.ListOptions{
 		LabelSelector: "app=dapr-scheduler-server",
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, pods.Items, "no scheduler pods found")
+	expectedCount := len(pods.Items)
 
 	victim := pods.Items[0].Name
-	t.Logf("Killing scheduler pod: %s", victim)
-	err = platform.KubeClient.Pods(namespace).Delete(ctx, victim, metav1.DeleteOptions{})
+	t.Logf("Killing scheduler pod: %s (cluster has %d pods)", victim, expectedCount)
+	err = platform.KubeClient.Pods(namespace).Delete(kubeCtx, victim, metav1.DeleteOptions{})
 	require.NoError(t, err)
 
-	// Wait for the killed pod to be replaced.
+	// Wait for the pod count to return to the expected count with all Ready.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		pods, perr := platform.KubeClient.Pods(namespace).List(ctx, metav1.ListOptions{
+		pods, perr := platform.KubeClient.Pods(namespace).List(kubeCtx, metav1.ListOptions{
 			LabelSelector: "app=dapr-scheduler-server",
 		})
 		if !assert.NoError(c, perr) {
+			return
+		}
+		if !assert.Len(c, pods.Items, expectedCount) {
 			return
 		}
 		readyCount := 0
@@ -335,8 +341,7 @@ func TestSchedulerQuorumRecovery(t *testing.T) {
 				}
 			}
 		}
-		assert.GreaterOrEqual(c, readyCount, len(pods.Items),
-			"not all scheduler pods are ready")
+		assert.Equal(c, expectedCount, readyCount, "not all scheduler pods are ready")
 	}, 60*time.Second, time.Second)
 	t.Log("Scheduler pod replaced and ready")
 

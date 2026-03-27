@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/diagridio/go-etcd-cron/api"
 
@@ -56,16 +55,25 @@ func TestTrigger_BlocksWhenCallbackNeverFires(t *testing.T) {
 	}
 	close(p.readyCh)
 
-	done := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan api.TriggerResponseResult, 1)
 	go func() {
-		defer close(done)
-		p.Trigger(context.Background(), testJob())
+		done <- p.Trigger(ctx, testJob())
 	}()
 
 	select {
 	case <-done:
 		t.Fatal("Trigger returned but callback was never called")
 	case <-time.After(time.Second):
+	}
+
+	// Cancel to release the goroutine.
+	cancel()
+	select {
+	case result := <-done:
+		assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, result)
+	case <-time.After(time.Second):
+		t.Fatal("Trigger goroutine did not exit after cancel")
 	}
 }
 
@@ -96,15 +104,12 @@ func TestTrigger_LateCallbackDoesNotCorruptNextTrigger(t *testing.T) {
 	// After ctx cancellation, ResultFn may fire later (e.g., stream
 	// shutdown). The late write must not corrupt a subsequent Trigger
 	// call that reuses the same respCh from the pool.
-	var captured []*loops.TriggerRequest
-	var mu sync.Mutex
+	enqueueCh := make(chan *loops.TriggerRequest, 10)
 
 	p := &Pool{
 		readyCh: make(chan struct{}),
 		connsLoop: fake.New[loops.Event]().WithEnqueue(func(e loops.Event) {
-			mu.Lock()
-			captured = append(captured, e.(*loops.TriggerRequest))
-			mu.Unlock()
+			enqueueCh <- e.(*loops.TriggerRequest)
 		}),
 	}
 	close(p.readyCh)
@@ -115,8 +120,8 @@ func TestTrigger_LateCallbackDoesNotCorruptNextTrigger(t *testing.T) {
 	result1 := p.Trigger(ctx1, testJob())
 	assert.Equal(t, api.TriggerResponseResult_UNDELIVERABLE, result1)
 
-	// Give the drain goroutine time to block on <-respCh.
-	time.Sleep(50 * time.Millisecond)
+	// Wait for Trigger 1's enqueue.
+	req1 := <-enqueueCh
 
 	// Trigger 2: should get its own result, not Trigger 1's late callback.
 	done := make(chan api.TriggerResponseResult, 1)
@@ -124,21 +129,14 @@ func TestTrigger_LateCallbackDoesNotCorruptNextTrigger(t *testing.T) {
 		done <- p.Trigger(context.Background(), testJob())
 	}()
 
-	// Give Trigger 2 time to enqueue.
-	time.Sleep(50 * time.Millisecond)
+	// Wait for Trigger 2's enqueue.
+	req2 := <-enqueueCh
 
 	// Fire Trigger 1's late ResultFn (simulates handleShutdown).
-	mu.Lock()
-	require.GreaterOrEqual(t, len(captured), 1)
-	captured[0].ResultFn(api.TriggerResponseResult_FAILED)
-	mu.Unlock()
+	req1.ResultFn(api.TriggerResponseResult_FAILED)
 
 	// Fire Trigger 2's ResultFn.
-	time.Sleep(50 * time.Millisecond)
-	mu.Lock()
-	require.Len(t, captured, 2)
-	captured[1].ResultFn(api.TriggerResponseResult_SUCCESS)
-	mu.Unlock()
+	req2.ResultFn(api.TriggerResponseResult_SUCCESS)
 
 	select {
 	case result2 := <-done:
