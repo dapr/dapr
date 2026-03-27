@@ -87,13 +87,11 @@ jobs:
           repository: ${{ github.repository }}
           ref: ${{ steps.baseline-ref.outputs.ref }}
           path: .baseline
-      - name: "Build and override baseline daprd from ${{ steps.baseline-ref.outputs.ref }}"
+      - name: "Build baseline daprd from ${{ steps.baseline-ref.outputs.ref }}"
         run: |
           cd .baseline
           git status
           make ./dist/${GOOS}_${GOARCH}/release/daprd
-          mkdir -p $HOME/.dapr/bin/
-          cp dist/${GOOS}_${GOARCH}/release/daprd $HOME/.dapr/bin/daprd
           cd ..
       - name: Validate sidecar's basic resource utilization
         env:
