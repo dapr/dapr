@@ -64,7 +64,8 @@ type rebalancing struct {
 
 func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 	i.activeActors = make([]atomic.Bool, iterations)
-	i.doubleActivationCh = make(chan string)
+	// Buffer the channel so sends never block even after the monitor goroutine exits.
+	i.doubleActivationCh = make(chan string, iterations*2)
 
 	// Create the SQLite database
 	i.db = sqlite.New(t,
@@ -221,9 +222,11 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 		}(j)
 	}
 
-	// After 2s, stop doubleActivationCh by sending an empty message
+	// After 5s, stop doubleActivationCh by sending an empty message.
+	// This must be longer than the actor handler sleep time (2s) to avoid
+	// missing double activations that occur near the end of the window.
 	go func() {
-		<-time.After(2 * time.Second)
+		<-time.After(5 * time.Second)
 		i.doubleActivationCh <- ""
 	}()
 
