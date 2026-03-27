@@ -309,7 +309,10 @@ func TestSchedulerQuorumRecovery(t *testing.T) {
 	kubeCtx, kubeCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer kubeCancel()
 
-	namespace := "dapr-system"
+	namespace := os.Getenv("DAPR_NAMESPACE")
+	if namespace == "" {
+		namespace = "dapr-system"
+	}
 	pods, err := platform.KubeClient.Pods(namespace).List(kubeCtx, metav1.ListOptions{
 		LabelSelector: "app=dapr-scheduler-server",
 	})
