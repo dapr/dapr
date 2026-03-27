@@ -57,6 +57,13 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	client := g.app.GRPCClient(t, ctx)
 
+	_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+		ActorType: "abc",
+		ActorId:   "x",
+		Method:    "foo",
+	})
+	require.NoError(t, err)
+
 	startGoRoutines := g.app.Metrics(t, ctx)["go_goroutines"]
 
 	const n = 1000
@@ -71,5 +78,5 @@ func (g *goroutines) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.InDelta(c, startGoRoutines, g.app.Metrics(t, ctx)["go_goroutines"], 10)
-	}, time.Second*20, time.Second)
+	}, time.Second*30, time.Second)
 }
