@@ -17,6 +17,7 @@ limitations under the License.
 package scheduler_e2e
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -254,4 +256,105 @@ func TestJobs(t *testing.T) {
 		deleteWg.Wait()
 		t.Log("Done.")
 	})
+}
+
+// TestSchedulerQuorumRecovery verifies that the scheduler cluster recovers
+// and continues triggering jobs after a scheduler pod is killed. This is a
+// regression test for the Pool.Trigger deadlock where in-flight triggers
+// blocked engine shutdown during quorum changes.
+func TestSchedulerQuorumRecovery(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	platform, ok := tr.Platform.(*runner.KubeTestPlatform)
+	if !ok {
+		t.Skip("skipping test; only supported on kubernetes")
+	}
+
+	t.Log("Checking if app is healthy ...")
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	// Schedule a recurring job that fires every 2s.
+	recoveryJobName := "recovery-test-job"
+	j := job{
+		Data: jobData{
+			DataType: "type.googleapis.com/google.protobuf.StringValue",
+			Value:    "recovery-test",
+		},
+		Schedule: "@every 2s",
+	}
+	jobBody, err := json.Marshal(j)
+	require.NoError(t, err)
+
+	_, err = utils.HTTPPost(
+		fmt.Sprintf("%s/scheduleJob/%s", externalURL, recoveryJobName),
+		jobBody,
+	)
+	require.NoError(t, err)
+
+	// Wait for at least one trigger to confirm the job is firing.
+	var baselineCount int
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, rerr := utils.HTTPGet(fmt.Sprintf(getTriggeredJobsURLFormat, externalURL))
+		require.NoError(t, rerr)
+		var jobs []triggeredJob
+		require.NoError(t, json.Unmarshal([]byte(resp), &jobs))
+		baselineCount = len(jobs)
+		assert.Greater(c, baselineCount, 0, "expected at least one trigger")
+	}, 30*time.Second, time.Second)
+	t.Logf("Baseline: %d triggers received", baselineCount)
+
+	// Kill a scheduler pod to force a quorum change.
+	ctx := context.Background()
+	namespace := "dapr-system"
+	pods, err := platform.KubeClient.Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app=dapr-scheduler-server",
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, pods.Items, "no scheduler pods found")
+
+	victim := pods.Items[0].Name
+	t.Logf("Killing scheduler pod: %s", victim)
+	err = platform.KubeClient.Pods(namespace).Delete(ctx, victim, metav1.DeleteOptions{})
+	require.NoError(t, err)
+
+	// Wait for the killed pod to be replaced.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		pods, perr := platform.KubeClient.Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: "app=dapr-scheduler-server",
+		})
+		if !assert.NoError(c, perr) {
+			return
+		}
+		readyCount := 0
+		for _, pod := range pods.Items {
+			for _, cond := range pod.Status.Conditions {
+				if cond.Type == "Ready" && cond.Status == "True" {
+					readyCount++
+				}
+			}
+		}
+		assert.GreaterOrEqual(c, readyCount, len(pods.Items),
+			"not all scheduler pods are ready")
+	}, 60*time.Second, time.Second)
+	t.Log("Scheduler pod replaced and ready")
+
+	// Verify the recurring job continues to fire after recovery.
+	// The trigger count should increase beyond the baseline.
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, rerr := utils.HTTPGet(fmt.Sprintf(getTriggeredJobsURLFormat, externalURL))
+		require.NoError(t, rerr)
+		var jobs []triggeredJob
+		require.NoError(t, json.Unmarshal([]byte(resp), &jobs))
+		assert.Greater(c, len(jobs), baselineCount,
+			"trigger count should increase after scheduler recovery")
+	}, 30*time.Second, time.Second)
+	t.Log("Triggers resumed after scheduler pod kill — cluster recovered")
+
+	// Cleanup.
+	_, err = utils.HTTPDelete(
+		fmt.Sprintf("%s/deleteJob/%s", externalURL, recoveryJobName),
+	)
+	require.NoError(t, err)
 }
