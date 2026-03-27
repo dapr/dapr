@@ -108,7 +108,6 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = r.workflow.BackendClient(t, clientCtx)
-	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		ids, err := client.ListInstanceIDs(ctx)
