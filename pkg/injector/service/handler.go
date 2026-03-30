@@ -223,5 +223,5 @@ func (i *injector) allowServiceAccountUser(reviewRequestUserInfo string) (allowe
 	if len(namespacedNameParts) <= 1 {
 		return false
 	}
-	return i.namespaceNameMatcher.MatchesNamespacedName(namespacedNameParts[0], namespacedNameParts[1])
+	return i.namespaceNameMatcher(namespacedNameParts[0], namespacedNameParts[1])
 }

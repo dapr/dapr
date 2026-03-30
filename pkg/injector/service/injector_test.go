@@ -47,9 +47,9 @@ func TestConfigCorrectValues(t *testing.T) {
 	assert.Equal(t, "e", injector.config.Namespace)
 	require.NotNil(t, injector.namespaceNameMatcher, "matcher should be configured from prefix names")
 	// Verify the prefix patterns match as expected.
-	assert.True(t, injector.namespaceNameMatcher.MatchesNamespacedName("ns-something", "sa"))
-	assert.True(t, injector.namespaceNameMatcher.MatchesNamespacedName("namespace", "sa-test"))
-	assert.False(t, injector.namespaceNameMatcher.MatchesNamespacedName("other", "sa"))
+	assert.True(t, injector.namespaceNameMatcher("ns-something", "sa"))
+	assert.True(t, injector.namespaceNameMatcher("namespace", "sa-test"))
+	assert.False(t, injector.namespaceNameMatcher("other", "sa"))
 }
 
 func TestConfigWithGlobPatterns(t *testing.T) {
@@ -66,11 +66,11 @@ func TestConfigWithGlobPatterns(t *testing.T) {
 
 	injector := i.(*injector)
 	require.NotNil(t, injector.namespaceNameMatcher)
-	assert.True(t, injector.namespaceNameMatcher.MatchesNamespacedName("something-abc", "fooXbar"))
-	assert.True(t, injector.namespaceNameMatcher.MatchesNamespacedName("something-", "foobar"))
-	assert.True(t, injector.namespaceNameMatcher.MatchesNamespacedName("prod-A", "exact"))
-	assert.False(t, injector.namespaceNameMatcher.MatchesNamespacedName("prod-AB", "exact"))
-	assert.False(t, injector.namespaceNameMatcher.MatchesNamespacedName("other", "foobar"))
+	assert.True(t, injector.namespaceNameMatcher("something-abc", "fooXbar"))
+	assert.True(t, injector.namespaceNameMatcher("something-", "foobar"))
+	assert.True(t, injector.namespaceNameMatcher("prod-A", "exact"))
+	assert.False(t, injector.namespaceNameMatcher("prod-AB", "exact"))
+	assert.False(t, injector.namespaceNameMatcher("other", "foobar"))
 }
 
 func TestConfigWithBothPrefixAndGlobPatterns(t *testing.T) {
@@ -89,10 +89,10 @@ func TestConfigWithBothPrefixAndGlobPatterns(t *testing.T) {
 	injector := i.(*injector)
 	require.NotNil(t, injector.namespaceNameMatcher)
 	// Legacy prefix patterns should still work.
-	assert.True(t, injector.namespaceNameMatcher.MatchesNamespacedName("legacy-ns-foo", "legacy-sa-bar"))
+	assert.True(t, injector.namespaceNameMatcher("legacy-ns-foo", "legacy-sa-bar"))
 	// New glob patterns should work.
-	assert.True(t, injector.namespaceNameMatcher.MatchesNamespacedName("new-ns-X", "new-sa-abc"))
-	assert.False(t, injector.namespaceNameMatcher.MatchesNamespacedName("new-ns-X", "new-sa-d"))
+	assert.True(t, injector.namespaceNameMatcher("new-ns-X", "new-sa-abc"))
+	assert.False(t, injector.namespaceNameMatcher("new-ns-X", "new-sa-d"))
 }
 
 func TestConfigNoExtraMatchersStillHasDefaults(t *testing.T) {
@@ -110,8 +110,8 @@ func TestConfigNoExtraMatchersStillHasDefaults(t *testing.T) {
 	// Even with no extra config, the default allowed service accounts
 	// (kube-system controllers, etc.) are always present.
 	require.NotNil(t, injector.namespaceNameMatcher)
-	assert.True(t, injector.namespaceNameMatcher.MatchesNamespacedName("kube-system", "deployment-controller"))
-	assert.False(t, injector.namespaceNameMatcher.MatchesNamespacedName("unknown", "unknown"))
+	assert.True(t, injector.namespaceNameMatcher("kube-system", "deployment-controller"))
+	assert.False(t, injector.namespaceNameMatcher("unknown", "unknown"))
 }
 
 func TestNewInjectorBadAllowedGlobPatternsConfig(t *testing.T) {
@@ -126,13 +126,13 @@ func TestNewInjectorBadAllowedGlobPatternsConfig(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestNewInjectorBadAllowedPrefixedServiceAccountConfig(t *testing.T) {
+func TestNewInjectorBadPatternConfig(t *testing.T) {
 	_, err := NewInjector(Options{
 		Config: Config{
 			SidecarImage:                      "c",
 			SidecarImagePullPolicy:            "d",
 			Namespace:                         "e",
-			AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*sa",
+			AllowedServiceAccountsPrefixNames: "ns:sa-[invalid",
 		},
 		Healthz: healthz.New(),
 	})
