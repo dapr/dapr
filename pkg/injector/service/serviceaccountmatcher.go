@@ -34,7 +34,7 @@ func NewServiceAccountMatcher(patterns ...string) (func(namespace, name string) 
 		}
 
 		if strings.Count(pattern, ":") != 1 {
-			return nil, fmt.Errorf("invalid pattern '%q', must contain exactly one ':' separating namespace and name", pattern)
+			return nil, fmt.Errorf("invalid pattern %q, must contain exactly one ':' separating namespace and name", pattern)
 		}
 
 		parts := strings.Split(pattern, ":")

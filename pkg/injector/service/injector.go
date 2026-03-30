@@ -162,6 +162,11 @@ func NewInjector(opts Options) (Injector, error) {
 		schedulerEnabled:        opts.SchedulerEnabled,
 	}
 
+	// All service account entries are matched using glob syntax. This means
+	// the legacy env vars (ALLOWED_SERVICE_ACCOUNTS, ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES)
+	// now also accept glob patterns such as *, ?, and [...] character classes.
+	// This is backwards-compatible because exact names and trailing-* prefixes
+	// are valid glob patterns with identical semantics.
 	patterns := []string{}
 	patterns = append(patterns, AllowedServiceAccountInfos...)
 	if opts.Config.AllowedServiceAccounts != "" {
@@ -185,8 +190,8 @@ func NewInjector(opts Options) (Injector, error) {
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed
 // service account on the webhook handler.
-// NOTE: These UIDs overlap with the name-based matcher built by
-// createServiceAccountMatcher (which covers the same entries). The UID-based
+// NOTE: These UIDs overlap with the name-based matcher built in NewInjector via
+// NewServiceAccountMatcher (which covers the same entries). The UID-based
 // path is kept as defense-in-depth for isAuthorizedUser.
 func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
 	allowedList := []string{}
