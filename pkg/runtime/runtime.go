@@ -312,6 +312,7 @@ func newDaprRuntime(ctx context.Context,
 		EnableClusteredDeployment:       globalConfig.IsFeatureEnabled(config.WorkflowsClusteredDeployment),
 		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
 		ComponentStore:                  compStore,
+		Security:                        sec,
 	})
 
 	jobsManager, err := scheduler.New(scheduler.Options{
@@ -677,7 +678,14 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		}
 		a.flushOutstandingMCPServers(ctx)
 		if len(a.compStore.ListMCPServers()) > 0 {
-			log.Debugf("MCP servers loaded: %d; additional handling to be implemented", len(a.compStore.ListMCPServers()))
+			// ActivateMCPServers calls RegisterActors which blocks on actors.waitForReady.
+			// The actor runtime is started in a goroutine after the linear initialization
+			// sequence completes, so we must not call this synchronously here.
+			go func() {
+				if err := a.wfengine.ActivateMCPServers(ctx); err != nil {
+					log.Warnf("failed to activate workflow actors for MCP servers: %s", err)
+				}
+			}()
 		}
 	}
 

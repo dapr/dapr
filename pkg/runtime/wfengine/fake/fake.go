@@ -101,3 +101,7 @@ func (f *Fake) ActivityActorType() string {
 func (f *Fake) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
 	return f.runtimeMetadataFn()
 }
+
+func (f *Fake) ActivateMCPServers(ctx context.Context) error {
+	return nil
+}

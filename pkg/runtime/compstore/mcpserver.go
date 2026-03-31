@@ -60,7 +60,39 @@ func (c *ComponentStore) DeleteMCPServer(name string) {
 	for i, s := range c.mcpServers {
 		if s.Name == name {
 			c.mcpServers = append(c.mcpServers[:i], c.mcpServers[i+1:]...)
-			return
+			break
 		}
 	}
+	delete(c.mcpToolSchemas, name)
+}
+
+// SetMCPToolSchema caches the input schema for a tool on a given MCPServer.
+// Called after a successful ListTools to enable client-side argument validation.
+func (c *ComponentStore) SetMCPToolSchema(serverName, toolName string, schema map[string]any) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.mcpToolSchemas == nil {
+		c.mcpToolSchemas = make(map[string]map[string]map[string]any)
+	}
+	if c.mcpToolSchemas[serverName] == nil {
+		c.mcpToolSchemas[serverName] = make(map[string]map[string]any)
+	}
+	c.mcpToolSchemas[serverName][toolName] = schema
+}
+
+// GetMCPToolSchema returns the cached input schema for a tool, if available.
+func (c *ComponentStore) GetMCPToolSchema(serverName, toolName string) (map[string]any, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	if c.mcpToolSchemas == nil {
+		return nil, false
+	}
+	tools, ok := c.mcpToolSchemas[serverName]
+	if !ok {
+		return nil, false
+	}
+	schema, ok := tools[toolName]
+	return schema, ok
 }
