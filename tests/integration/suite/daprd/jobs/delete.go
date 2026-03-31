@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -73,7 +72,7 @@ func (d *delete) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Empty(t, resp.GetJobs())
 	_, err = client1.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
-		Job: &rtv1.Job{Name: "test", Schedule: ptr.Of("@daily")},
+		Job: &rtv1.Job{Name: "test", Schedule: new("@daily")},
 	})
 	require.NoError(t, err)
 	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
@@ -96,19 +95,19 @@ func (d *delete) Run(t *testing.T, ctx context.Context) {
 
 	for i := range 5 {
 		_, err = client1.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
-			Job: &rtv1.Job{Name: "abc-" + strconv.Itoa(i), Schedule: ptr.Of("@daily")},
+			Job: &rtv1.Job{Name: "abc-" + strconv.Itoa(i), Schedule: new("@daily")},
 		})
 		require.NoError(t, err)
 	}
 	for i := range 5 {
 		_, err = client1.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
-			Job: &rtv1.Job{Name: "helloworld-" + strconv.Itoa(i), Schedule: ptr.Of("@daily")},
+			Job: &rtv1.Job{Name: "helloworld-" + strconv.Itoa(i), Schedule: new("@daily")},
 		})
 		require.NoError(t, err)
 	}
 	for i := range 5 {
 		_, err = client2.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
-			Job: &rtv1.Job{Name: "abc-" + strconv.Itoa(i), Schedule: ptr.Of("@daily")},
+			Job: &rtv1.Job{Name: "abc-" + strconv.Itoa(i), Schedule: new("@daily")},
 		})
 		require.NoError(t, err)
 	}
@@ -121,7 +120,7 @@ func (d *delete) Run(t *testing.T, ctx context.Context) {
 	assert.Len(t, resp.GetJobs(), 5)
 
 	_, err = client1.DeleteJobsByPrefixAlpha1(ctx, &rtv1.DeleteJobsByPrefixRequestAlpha1{
-		NamePrefix: ptr.Of("abc-"),
+		NamePrefix: new("abc-"),
 	})
 	require.NoError(t, err)
 	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
@@ -143,7 +142,7 @@ func (d *delete) Run(t *testing.T, ctx context.Context) {
 	assert.Len(t, resp.GetJobs(), 5)
 
 	_, err = client2.DeleteJobsByPrefixAlpha1(ctx, &rtv1.DeleteJobsByPrefixRequestAlpha1{
-		NamePrefix: ptr.Of("helloworld-"),
+		NamePrefix: new("helloworld-"),
 	})
 	require.NoError(t, err)
 	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))
@@ -154,7 +153,7 @@ func (d *delete) Run(t *testing.T, ctx context.Context) {
 	assert.Len(t, resp.GetJobs(), 5)
 
 	_, err = client2.DeleteJobsByPrefixAlpha1(ctx, &rtv1.DeleteJobsByPrefixRequestAlpha1{
-		NamePrefix: ptr.Of("abc-"),
+		NamePrefix: new("abc-"),
 	})
 	require.NoError(t, err)
 	resp, err = client1.ListJobsAlpha1(ctx, new(rtv1.ListJobsRequestAlpha1))

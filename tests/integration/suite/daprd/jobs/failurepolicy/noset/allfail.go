@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -72,7 +71,7 @@ func (a *allfail) Run(t *testing.T, ctx context.Context) {
 	_, err := a.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:    "test",
-			DueTime: ptr.Of("0s"),
+			DueTime: new("0s"),
 		},
 	})
 	require.NoError(t, err)
@@ -81,6 +80,8 @@ func (a *allfail) Run(t *testing.T, ctx context.Context) {
 		assert.ElementsMatch(c, []string{"test", "test", "test", "test"}, a.triggered.Slice())
 	}, time.Second*10, time.Millisecond*10)
 
-	time.Sleep(time.Second * 2)
-	assert.ElementsMatch(t, []string{"test", "test", "test", "test"}, a.triggered.Slice())
+	// Ensure no additional triggers arrive beyond the expected 4.
+	require.Never(t, func() bool {
+		return len(a.triggered.Slice()) != 4
+	}, time.Second*3, time.Millisecond*100)
 }

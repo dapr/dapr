@@ -14,11 +14,13 @@ limitations under the License.
 package config
 
 import (
+	"encoding/json"
 	"io"
 	"maps"
 	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +29,6 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestLoadStandaloneConfiguration(t *testing.T) {
@@ -78,8 +79,8 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
 		require.NoError(t, err, "Unexpected error")
 		assert.NotNil(t, config, "Config not loaded as expected")
-		assert.Equal(t, "secretappconfig", config.ObjectMeta.Name)
-		assert.Equal(t, "Configuration", config.TypeMeta.Kind)
+		assert.Equal(t, "secretappconfig", config.Name)
+		assert.Equal(t, "Configuration", config.Kind)
 	})
 
 	t.Run("metrics spec", func(t *testing.T) {
@@ -218,11 +219,14 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
 	})
 
-	t.Run("tracing spec headers value as string", func(t *testing.T) {
+	t.Run("tracing spec headers and timeout", func(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/tracing_config.yaml")
 		require.NoError(t, err)
-		assert.Equal(t, "header1=value1,header2=value2", config.Spec.TracingSpec.Otel.Headers)
-		assert.Equal(t, 5000, config.Spec.TracingSpec.Otel.Timeout)
+		require.Len(t, config.Spec.TracingSpec.Otel.Headers, 2)
+		assert.Equal(t, "header1=value1", config.Spec.TracingSpec.Otel.Headers[0])
+		assert.Equal(t, "header2=value2", config.Spec.TracingSpec.Otel.Headers[1])
+		require.NotNil(t, config.Spec.TracingSpec.Otel.Timeout)
+		assert.Equal(t, 5*time.Second, *config.Spec.TracingSpec.Otel.Timeout)
 	})
 
 	t.Run("tracing invalid spec", func(t *testing.T) {
@@ -456,7 +460,7 @@ func TestFeatureEnabled(t *testing.T) {
 	expect := append([]string{"testEnabled"}, buildinfo.Features()...)
 	slices.Sort(actual)
 	slices.Sort(expect)
-	assert.EqualValues(t, actual, expect)
+	assert.Equal(t, actual, expect)
 }
 
 func TestSetTracingSpecFromEnv(t *testing.T) {
@@ -475,14 +479,16 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	assert.Equal(t, "otlpendpoint:1234", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "http", conf.Spec.TracingSpec.Otel.Protocol)
 	require.False(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
-	assert.Equal(t, "api-key1=value1,api-key2=value2", conf.Spec.TracingSpec.Otel.Headers)
+	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 2)
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "api-key1=value1")
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "api-key2=value2")
 
 	// Spec from config file should not be overridden
 	conf = LoadDefaultConfiguration()
 	conf.Spec.TracingSpec.Otel.EndpointAddress = "configfileendpoint:4321"
 	conf.Spec.TracingSpec.Otel.Protocol = "grpc"
-	conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(true)
-	conf.Spec.TracingSpec.Otel.Headers = "another-key1=value1,another-key2=value2"
+	conf.Spec.TracingSpec.Otel.IsSecure = new(true)
+	conf.Spec.TracingSpec.Otel.Headers = []string{"another-key1=value1"}
 
 	// set tracing spec from env
 	err = SetTracingSpecFromEnv(conf)
@@ -491,7 +497,8 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	assert.Equal(t, "configfileendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
 	require.True(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
-	assert.Equal(t, "another-key1=value1,another-key2=value2", conf.Spec.TracingSpec.Otel.Headers)
+	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 1)
+	assert.Equal(t, "another-key1=value1", conf.Spec.TracingSpec.Otel.Headers[0])
 }
 
 func TestTracingPrecedenceFromEnv(t *testing.T) {
@@ -510,8 +517,40 @@ func TestTracingPrecedenceFromEnv(t *testing.T) {
 
 	assert.Equal(t, "tracesendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
-	assert.Equal(t, "traces-key1=value1,traces-key2=value2", conf.Spec.TracingSpec.Otel.Headers)
-	assert.Equal(t, 2000, conf.Spec.TracingSpec.Otel.Timeout)
+	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 2)
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "traces-key1=value1")
+	assert.Contains(t, conf.Spec.TracingSpec.Otel.Headers, "traces-key2=value2")
+	require.NotNil(t, conf.Spec.TracingSpec.Otel.Timeout)
+	assert.Equal(t, 2*time.Second, *conf.Spec.TracingSpec.Otel.Timeout)
+}
+
+func TestTracingConfigHeadersPrecedenceOverEnv(t *testing.T) {
+	// When endpointAddress is already set in config, SetTracingSpecFromEnv
+	// returns early and env var headers/timeout are not applied
+	t.Setenv(env.OtlpExporterTracesHeaders, "env-key=env-value")
+	t.Setenv(env.OtlpExporterTracesTimeout, "5000")
+
+	conf := &Configuration{
+		Spec: ConfigurationSpec{
+			TracingSpec: &TracingSpec{
+				Otel: &OtelSpec{
+					EndpointAddress: "already-set:4317",
+					Protocol:        "grpc",
+					Headers:         []string{"config-key=config-value"},
+				},
+			},
+		},
+	}
+
+	err := SetTracingSpecFromEnv(conf)
+	require.NoError(t, err)
+
+	// Config headers should be unchanged; env var headers should NOT be appended
+	require.Len(t, conf.Spec.TracingSpec.Otel.Headers, 1)
+	assert.Equal(t, "config-key=config-value", conf.Spec.TracingSpec.Otel.Headers[0])
+
+	// Timeout should remain nil since env vars were not applied
+	assert.Nil(t, conf.Spec.TracingSpec.Otel.Timeout)
 }
 
 func TestTracingTimeoutFromEnv(t *testing.T) {
@@ -520,13 +559,13 @@ func TestTracingTimeoutFromEnv(t *testing.T) {
 	err := SetTracingSpecFromEnv(conf)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid syntax")
-	assert.Equal(t, 0, conf.Spec.TracingSpec.Otel.Timeout)
+	assert.Nil(t, conf.Spec.TracingSpec.Otel.Timeout)
 
 	t.Setenv(env.OtlpExporterTracesTimeout, "-1")
 	conf = LoadDefaultConfiguration()
 	err = SetTracingSpecFromEnv(conf)
 	require.NoError(t, err)
-	assert.Equal(t, 0, conf.Spec.TracingSpec.Otel.Timeout)
+	assert.Nil(t, conf.Spec.TracingSpec.Otel.Timeout)
 }
 
 func TestAPIAccessRules(t *testing.T) {
@@ -557,7 +596,7 @@ func TestSortMetrics(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{
-					Enabled: ptr.Of(true),
+					Enabled: new(true),
 					Rules: []MetricsRule{
 						{
 							Name: "rule",
@@ -565,7 +604,7 @@ func TestSortMetrics(t *testing.T) {
 					},
 				},
 				MetricsSpec: &MetricSpec{
-					Enabled: ptr.Of(false),
+					Enabled: new(false),
 				},
 			},
 		}
@@ -579,7 +618,7 @@ func TestSortMetrics(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{
-					Enabled: ptr.Of(false),
+					Enabled: new(false),
 					Rules: []MetricsRule{
 						{
 							Name: "rule",
@@ -587,7 +626,7 @@ func TestSortMetrics(t *testing.T) {
 					},
 				},
 				MetricsSpec: &MetricSpec{
-					Enabled: ptr.Of(true),
+					Enabled: new(true),
 				},
 			},
 		}
@@ -601,7 +640,7 @@ func TestSortMetrics(t *testing.T) {
 		config := &Configuration{
 			Spec: ConfigurationSpec{
 				MetricSpec: &MetricSpec{
-					Enabled: ptr.Of(true),
+					Enabled: new(true),
 					Rules: []MetricsRule{
 						{
 							Name: "rule",
@@ -641,7 +680,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 	t.Run("value is set to true", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				IncreasedCardinality: ptr.Of(true),
+				IncreasedCardinality: new(true),
 			},
 		}
 		assert.True(t, m.GetHTTPIncreasedCardinality(log))
@@ -650,7 +689,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 	t.Run("value is set to false", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				IncreasedCardinality: ptr.Of(false),
+				IncreasedCardinality: new(false),
 			},
 		}
 		assert.False(t, m.GetHTTPIncreasedCardinality(log))
@@ -681,7 +720,7 @@ func TestMetricsGetHTTPLatencyDistributionBuckets(t *testing.T) {
 	latencyDistribution = view.Distribution(customLatencyDistribution...)
 	t.Run("value is set to list of integers", func(t *testing.T) {
 		m := MetricSpec{
-			LatencyDistributionBuckets: ptr.Of([]int{1, 2, 3}),
+			LatencyDistributionBuckets: new([]int{1, 2, 3}),
 		}
 		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
 	})
@@ -735,7 +774,7 @@ func TestMetricsGetHTTPExcludeVerbs(t *testing.T) {
 	t.Run("config is enabled", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				ExcludeVerbs: ptr.Of(true),
+				ExcludeVerbs: new(true),
 			},
 		}
 		assert.True(t, m.GetHTTPExcludeVerbs())
@@ -744,9 +783,59 @@ func TestMetricsGetHTTPExcludeVerbs(t *testing.T) {
 	t.Run("config is disabled", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				ExcludeVerbs: ptr.Of(false),
+				ExcludeVerbs: new(false),
 			},
 		}
 		assert.False(t, m.GetHTTPExcludeVerbs())
+	})
+}
+
+func TestWorkflowStateRetentionPolicyUnmarshalJSON(t *testing.T) {
+	t.Run("all fields with string durations", func(t *testing.T) {
+		data := `{"anyTerminal":"1s","completed":"2h","failed":"30m","terminated":"168h"}`
+		var p WorkflowStateRetentionPolicy
+		require.NoError(t, json.Unmarshal([]byte(data), &p))
+
+		require.NotNil(t, p.AnyTerminal)
+		assert.Equal(t, time.Second, *p.AnyTerminal)
+
+		require.NotNil(t, p.Completed)
+		assert.Equal(t, 2*time.Hour, *p.Completed)
+
+		require.NotNil(t, p.Failed)
+		assert.Equal(t, 30*time.Minute, *p.Failed)
+
+		require.NotNil(t, p.Terminated)
+		assert.Equal(t, 168*time.Hour, *p.Terminated)
+	})
+
+	t.Run("partial fields", func(t *testing.T) {
+		data := `{"anyTerminal":"5s"}`
+		var p WorkflowStateRetentionPolicy
+		require.NoError(t, json.Unmarshal([]byte(data), &p))
+
+		require.NotNil(t, p.AnyTerminal)
+		assert.Equal(t, 5*time.Second, *p.AnyTerminal)
+
+		assert.Nil(t, p.Completed)
+		assert.Nil(t, p.Failed)
+		assert.Nil(t, p.Terminated)
+	})
+
+	t.Run("empty object", func(t *testing.T) {
+		data := `{}`
+		var p WorkflowStateRetentionPolicy
+		require.NoError(t, json.Unmarshal([]byte(data), &p))
+
+		assert.Nil(t, p.AnyTerminal)
+		assert.Nil(t, p.Completed)
+		assert.Nil(t, p.Failed)
+		assert.Nil(t, p.Terminated)
+	})
+
+	t.Run("invalid duration string", func(t *testing.T) {
+		data := `{"anyTerminal":"notaduration"}`
+		var p WorkflowStateRetentionPolicy
+		assert.Error(t, json.Unmarshal([]byte(data), &p))
 	})
 }

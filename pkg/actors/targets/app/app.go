@@ -36,7 +36,6 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 	"github.com/dapr/kit/strings"
 )
 
@@ -59,17 +58,17 @@ type app struct {
 }
 
 func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	return a.doInvokeMethod(ctx, req)
+}
+
+func (a *app) doInvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	ctx, cancel, err := a.lock.LockRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	defer cancel()
 
-	return a.doInvokeMethod(ctx, req)
-}
-
-func (a *app) doInvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
+	a.idleAt.Store(new(a.clock.Now().Add(a.idleTimeout)))
 	a.idlerQueue.Enqueue(a)
 
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
@@ -152,15 +151,6 @@ func (a *app) doInvokeMethod(ctx context.Context, req *internalv1pb.InternalInvo
 }
 
 func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
-	ctx, cancel, err := a.lock.Lock(ctx)
-	if err != nil {
-		return err
-	}
-	defer cancel()
-
-	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
-	a.idlerQueue.Enqueue(a)
-
 	invokeMethod := "remind/" + reminder.Name
 	data, err := json.Marshal(&api.ReminderResponse{
 		DueTime: reminder.DueTime,
@@ -170,6 +160,7 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 	if err != nil {
 		return err
 	}
+
 	log.Debug("Executing reminder for actor " + reminder.Key())
 
 	req := internalv1pb.NewInternalInvokeRequest(invokeMethod).
@@ -189,12 +180,6 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 }
 
 func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
-	ctx, cancel, err := a.lock.Lock(ctx)
-	if err != nil {
-		return err
-	}
-	defer cancel()
-
 	invokeMethod := "timer/" + reminder.Name
 	data, err := json.Marshal(&api.TimerResponse{
 		Callback: reminder.Callback,

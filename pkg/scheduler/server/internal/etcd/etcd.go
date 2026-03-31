@@ -80,9 +80,9 @@ type etcd struct {
 	readyCh             chan struct{}
 }
 
-func New(opts Options) (Interface, error) {
+func New(ctx context.Context, opts Options) (Interface, error) {
 	if opts.Embed {
-		config, err := config(opts)
+		config, err := config(ctx, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create etcd config: %w", err)
 		}
@@ -200,7 +200,7 @@ func (e *etcd) runDefragLoop(ctx context.Context) error {
 
 func (e *etcd) doDefrag(ctx context.Context) error {
 	log.Debug("Checking if Etcd needs Defragmentation")
-	resp, err := e.client.Maintenance.Status(ctx, e.config.ListenClientUrls[0].Host)
+	resp, err := e.client.Status(ctx, e.config.ListenClientUrls[0].Host)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (e *etcd) doDefrag(ctx context.Context) error {
 
 	log.Infof("Defragmenting Etcd (dbSize: %s, dbSizeInUse: %s)", dbSize, dbSizeInUse)
 	start := time.Now()
-	_, err = e.client.Maintenance.Defragment(ctx, e.config.ListenClientUrls[0].Host)
+	_, err = e.client.Defragment(ctx, e.config.ListenClientUrls[0].Host)
 	if err != nil {
 		return err
 	}

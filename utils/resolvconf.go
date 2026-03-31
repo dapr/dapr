@@ -16,10 +16,14 @@ package utils
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"errors"
+	"net"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 const (
@@ -30,6 +34,38 @@ const (
 )
 
 var searchRegexp = regexp.MustCompile(`^\s*search\s*(([^\s]+\s*)*)$`)
+
+func GetKubeClusterDomainFromDNS(ctx context.Context) (string, error) {
+	const apiSvc = "kubernetes.default.svc"
+
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	r := net.Resolver{
+		PreferGo:     true,
+		StrictErrors: true,
+	}
+	cname, err := r.LookupCNAME(ctx, apiSvc)
+	if err != nil {
+		return "", err
+	}
+
+	clusterDomain := clusterDomainFromCNAME(apiSvc, cname)
+	if clusterDomain == "" {
+		return "", errors.New("could not parse cluster domain from CNAME: " + cname)
+	}
+
+	return clusterDomain, nil
+}
+
+// clusterDomainFromCNAME extracts the cluster domain from a CNAME response.
+// DNS CNAME responses typically include a trailing dot (e.g.
+// "kubernetes.default.svc.cluster.local."), which must be stripped.
+func clusterDomainFromCNAME(apiSvc, cname string) string {
+	clusterDomain := strings.TrimPrefix(cname, apiSvc)
+	clusterDomain = strings.Trim(clusterDomain, ".")
+	return clusterDomain
+}
 
 // GetKubeClusterDomain search KubeClusterDomain value from /etc/resolv.conf file.
 func GetKubeClusterDomain() (string, error) {
@@ -65,11 +101,11 @@ func getResolvSearchDomains(resolvConf []byte) []string {
 	scanner := bufio.NewScanner(bytes.NewReader(resolvConf))
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		commentIndex := bytes.Index(line, []byte(commentMarker))
-		if commentIndex == -1 {
+		before, _, ok := bytes.Cut(line, []byte(commentMarker))
+		if !ok {
 			lines = append(lines, line)
 		} else {
-			lines = append(lines, line[:commentIndex])
+			lines = append(lines, before)
 		}
 	}
 

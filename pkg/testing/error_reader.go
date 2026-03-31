@@ -1,6 +1,5 @@
 // This file contains stream utils that are only used in tests
 //go:build unit
-// +build unit
 
 /*
 Copyright 2022 The Dapr Authors

@@ -22,7 +22,7 @@ import (
 // This need to be maintained as a separate struct, as we need to filter out messages and
 // their related info doing retries of resiliency support.
 type Message struct {
-	CloudEvent map[string]interface{}
+	CloudEvent map[string]any
 	RawData    *pubsub.BulkSubscribeMessageItem
 	Entry      *contribpubsub.BulkMessageEntry
 }

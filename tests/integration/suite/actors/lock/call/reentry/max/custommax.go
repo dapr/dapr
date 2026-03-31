@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/concurrency/slice"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -53,7 +52,7 @@ func (c *custommax) Setup(t *testing.T) []framework.Option {
 			return
 		}
 		if c.rid.Load() == nil {
-			c.rid.Store(ptr.Of(r.Header.Get("Dapr-Reentrancy-Id")))
+			c.rid.Store(new(r.Header.Get("Dapr-Reentrancy-Id")))
 		}
 		c.called.Append(r.URL.Path)
 		<-c.holdCall

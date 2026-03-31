@@ -40,11 +40,13 @@ func (c *connector) run(ctx context.Context) error {
 
 	if err != nil {
 		log.Errorf("Failed to watch scheduler jobs, retrying: %s", err)
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(time.Second):
 		}
+
 		return err
 	}
 
@@ -54,6 +56,7 @@ func (c *connector) run(ctx context.Context) error {
 		}
 
 		log.Errorf("scheduler stream error, re-connecting: %s", err)
+
 		return err
 	}
 
@@ -66,7 +69,6 @@ func (c *connector) run(ctx context.Context) error {
 		actors:   c.actors,
 		wfengine: c.wfengine,
 	}).run(ctx)
-
 	if err == nil {
 		log.Infof("Scheduler stream disconnected")
 	} else {

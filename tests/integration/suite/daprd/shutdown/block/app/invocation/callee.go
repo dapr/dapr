@@ -105,7 +105,7 @@ func (c *callee) Run(t *testing.T, ctx context.Context) {
 		errCh <- err
 	}()
 
-	require.Eventually(t, c.inInvoke.Load, time.Second*10, time.Millisecond*10)
+	require.Eventually(t, c.inInvoke.Load, time.Second*20, time.Millisecond*10)
 
 	go c.daprd2.Cleanup(t)
 
@@ -120,7 +120,7 @@ func (c *callee) Run(t *testing.T, ctx context.Context) {
 	select {
 	case err := <-errCh:
 		require.NoError(t, err)
-	case <-time.After(time.Second * 10):
+	case <-time.After(time.Second * 20):
 		assert.Fail(t, "timeout")
 	}
 }

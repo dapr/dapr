@@ -31,33 +31,28 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/events/queue"
-	"github.com/dapr/kit/ptr"
 )
 
 type Options struct {
-	ActorType               string
-	AppChannel              channel.AppChannel
-	Resiliency              resiliency.Provider
-	IdleTimeout             time.Duration
-	clock                   clock.Clock
-	Reentrancy              *reentrancystore.Store
-	DrainOngoingCallTimeout time.Duration
-	Placement               placement.Interface
-	EntityConfig            *api.EntityConfig
-	DrainRebalancedActors   bool
+	ActorType    string
+	AppChannel   channel.AppChannel
+	Resiliency   resiliency.Provider
+	IdleTimeout  time.Duration
+	clock        clock.Clock
+	Reentrancy   *reentrancystore.Store
+	Placement    placement.Interface
+	EntityConfig *api.EntityConfig
 }
 
 type factory struct {
-	actorType               string
-	appChannel              channel.AppChannel
-	resiliency              resiliency.Provider
-	idlerQueue              *queue.Processor[string, *app]
-	reentrancy              *reentrancystore.Store
-	clock                   clock.Clock
-	drainOngoingCallTimeout time.Duration
-	placement               placement.Interface
-	entityConfig            *api.EntityConfig
-	drainRebalancedActors   bool
+	actorType    string
+	appChannel   channel.AppChannel
+	resiliency   resiliency.Provider
+	idlerQueue   *queue.Processor[string, *app]
+	reentrancy   *reentrancystore.Store
+	clock        clock.Clock
+	placement    placement.Interface
+	entityConfig *api.EntityConfig
 
 	// idleTimeout is the configured max idle time for actors of this kind.
 	idleTimeout time.Duration
@@ -72,16 +67,14 @@ func New(opts Options) targets.Factory {
 	}
 
 	f := &factory{
-		actorType:               opts.ActorType,
-		appChannel:              opts.AppChannel,
-		resiliency:              opts.Resiliency,
-		placement:               opts.Placement,
-		clock:                   opts.clock,
-		idleTimeout:             opts.IdleTimeout,
-		reentrancy:              opts.Reentrancy,
-		drainOngoingCallTimeout: opts.DrainOngoingCallTimeout,
-		entityConfig:            opts.EntityConfig,
-		drainRebalancedActors:   opts.DrainRebalancedActors,
+		actorType:    opts.ActorType,
+		appChannel:   opts.AppChannel,
+		resiliency:   opts.Resiliency,
+		placement:    opts.Placement,
+		clock:        opts.clock,
+		idleTimeout:  opts.IdleTimeout,
+		reentrancy:   opts.Reentrancy,
+		entityConfig: opts.EntityConfig,
 	}
 
 	f.idlerQueue = queue.NewProcessor[string, *app](queue.Options[string, *app]{
@@ -118,7 +111,7 @@ func (f *factory) initApp(actorID string) *app {
 		}),
 	}
 
-	app.idleAt.Store(ptr.Of(f.clock.Now().Add(f.idleTimeout)))
+	app.idleAt.Store(new(f.clock.Now().Add(f.idleTimeout)))
 
 	f.idlerQueue.Enqueue(app)
 
@@ -128,20 +121,23 @@ func (f *factory) initApp(actorID string) *app {
 func (f *factory) HaltAll(ctx context.Context) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	return f.haltActors(ctx, false, func(actorID string) bool {
+	return f.haltActors(ctx, func(actorID string) bool {
 		return false
 	})
 }
 
-func (f *factory) HaltNonHosted(ctx context.Context) error {
+func (f *factory) HaltNonHosted(ctx context.Context, fn func(*api.LookupActorRequest) bool) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	return f.haltActors(ctx, true, func(actorID string) bool {
-		return f.placement.IsActorHosted(ctx, f.actorType, actorID)
+	return f.haltActors(ctx, func(actorID string) bool {
+		return fn(&api.LookupActorRequest{
+			ActorType: f.actorType,
+			ActorID:   actorID,
+		})
 	})
 }
 
-func (f *factory) haltActors(ctx context.Context, drain bool, fn func(string) bool) error {
+func (f *factory) haltActors(ctx context.Context, fn func(string) bool) error {
 	var wg sync.WaitGroup
 	errs := slice.New[error]()
 
@@ -155,7 +151,7 @@ func (f *factory) haltActors(ctx context.Context, drain bool, fn func(string) bo
 		wg.Add(1)
 		go func(aa *app) {
 			defer wg.Done()
-			errs.Append(f.halt(ctx, aa, drain))
+			errs.Append(f.halt(ctx, aa))
 		}(aa)
 
 		return true
@@ -183,34 +179,20 @@ func (f *factory) handleIdleActor(target *app) {
 		log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
 		return
 	}
-	defer cancel()
+	defer cancel(nil)
 
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
 	log.Debugf("Actor %s is idle, deactivating", target.Key())
 
-	if err := f.halt(ctx, target, false); err != nil {
+	if err := f.halt(ctx, target); err != nil {
 		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
 		return
 	}
 }
 
-func (f *factory) halt(ctx context.Context, app *app, drain bool) error {
-	if drain {
-		if f.entityConfig != nil {
-			drain = f.entityConfig.DrainRebalancedActors
-		} else {
-			drain = f.drainRebalancedActors
-		}
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, f.drainOngoingCallTimeout)
-	defer cancel()
-	if !drain {
-		cancel()
-	}
-
+func (f *factory) halt(ctx context.Context, app *app) error {
 	key := app.Key()
 
 	diag.DefaultMonitoring.ActorRebalanced(app.Type())

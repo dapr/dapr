@@ -40,6 +40,7 @@ func Test_Run(t *testing.T) {
 		loader := fake.New().WithComponents(compLoader)
 
 		var listCalled atomic.Int32
+
 		compLoader.WithList(func(context.Context) (*differ.LocalRemoteResources[componentsapi.Component], error) {
 			listCalled.Add(1)
 			return nil, nil
@@ -55,6 +56,7 @@ func Test_Run(t *testing.T) {
 
 		errCh := make(chan error)
 		ctx, cancel := context.WithCancel(t.Context())
+
 		go func() {
 			errCh <- r.Run(ctx)
 		}()
@@ -70,6 +72,7 @@ func Test_Run(t *testing.T) {
 		}, time.Second*3, time.Millisecond*100)
 
 		cancel()
+
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
@@ -82,6 +85,7 @@ func Test_Run(t *testing.T) {
 		compLoader := fake.NewFake[componentsapi.Component]()
 
 		compCh := make(chan *loader.Event[componentsapi.Component])
+
 		compLoader.WithStream(func(context.Context) (*loader.StreamConn[componentsapi.Component], error) {
 			return &loader.StreamConn[componentsapi.Component]{
 				EventCh:     compCh,
@@ -112,6 +116,7 @@ func Test_Run(t *testing.T) {
 
 		errCh := make(chan error)
 		ctx, cancel := context.WithCancel(t.Context())
+
 		go func() {
 			errCh <- r.Run(ctx)
 		}()
@@ -167,6 +172,7 @@ func Test_Run(t *testing.T) {
 		}
 
 		cancel()
+
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
@@ -179,6 +185,7 @@ func Test_Run(t *testing.T) {
 		compLoader := fake.NewFake[componentsapi.Component]()
 
 		recCh := make(chan struct{})
+
 		compLoader.WithStream(func(context.Context) (*loader.StreamConn[componentsapi.Component], error) {
 			return &loader.StreamConn[componentsapi.Component]{
 				EventCh:     make(chan *loader.Event[componentsapi.Component]),
@@ -209,11 +216,13 @@ func Test_Run(t *testing.T) {
 
 		errCh := make(chan error)
 		ctx, cancel := context.WithCancel(t.Context())
+
 		go func() {
 			errCh <- r.Run(ctx)
 		}()
 
 		comp1 := componentsapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
+
 		compLoader.WithList(func(context.Context) (*differ.LocalRemoteResources[componentsapi.Component], error) {
 			return &differ.LocalRemoteResources[componentsapi.Component]{
 				Local:  []componentsapi.Component{},
@@ -236,6 +245,7 @@ func Test_Run(t *testing.T) {
 
 		comp2 := comp1.DeepCopy()
 		comp2.Spec = componentsapi.ComponentSpec{Version: "123"}
+
 		compLoader.WithList(func(context.Context) (*differ.LocalRemoteResources[componentsapi.Component], error) {
 			return &differ.LocalRemoteResources[componentsapi.Component]{
 				Local:  []componentsapi.Component{comp1},
@@ -277,6 +287,7 @@ func Test_Run(t *testing.T) {
 		}
 
 		cancel()
+
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
@@ -315,8 +326,10 @@ func Test_reconcile(t *testing.T) {
 
 	t.Run("events should be sent in the correct grouped order", func(t *testing.T) {
 		recDone := make(chan struct{})
+
 		go func() {
 			defer close(recDone)
+
 			r.reconcile(t.Context(), &differ.Result[componentsapi.Component]{
 				Deleted: deleted,
 				Updated: updated,
@@ -325,6 +338,7 @@ func Test_reconcile(t *testing.T) {
 		}()
 
 		var got []componentsapi.Component
+
 		for range caseNum {
 			select {
 			case e := <-eventCh:
@@ -333,9 +347,11 @@ func Test_reconcile(t *testing.T) {
 				t.Error("did not get event in time")
 			}
 		}
+
 		assert.ElementsMatch(t, deleted, got)
 
 		got = []componentsapi.Component{}
+
 		for range caseNum {
 			select {
 			case e := <-eventCh:
@@ -344,9 +360,11 @@ func Test_reconcile(t *testing.T) {
 				t.Error("did not get event in time")
 			}
 		}
+
 		assert.ElementsMatch(t, updated, got)
 
 		got = []componentsapi.Component{}
+
 		for range caseNum {
 			select {
 			case e := <-eventCh:
@@ -355,6 +373,7 @@ func Test_reconcile(t *testing.T) {
 				t.Error("did not get event in time")
 			}
 		}
+
 		assert.ElementsMatch(t, created, got)
 
 		select {
@@ -373,10 +392,12 @@ func Test_handleEvent(t *testing.T) {
 
 	mngr.deleteFn = func(_ context.Context, c componentsapi.Component) {
 		assert.Equal(t, comp1, c)
+
 		deleteCalled++
 	}
 	mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
 		assert.Equal(t, comp1, c)
+
 		updateCalled++
 	}
 
@@ -385,21 +406,21 @@ func Test_handleEvent(t *testing.T) {
 	assert.Equal(t, 0, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(t.Context(), &loader.Event[componentsapi.Component]{
+	r.handleResourceEvent(t.Context(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_CREATED,
 		Resource: comp1,
 	})
 	assert.Equal(t, 1, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(t.Context(), &loader.Event[componentsapi.Component]{
+	r.handleResourceEvent(t.Context(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_UPDATED,
 		Resource: comp1,
 	})
 	assert.Equal(t, 2, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(t.Context(), &loader.Event[componentsapi.Component]{
+	r.handleResourceEvent(t.Context(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_DELETED,
 		Resource: comp1,
 	})
@@ -409,6 +430,7 @@ func Test_handleEvent(t *testing.T) {
 
 type fakeManager struct {
 	loader.Loader[componentsapi.Component]
+
 	updateFn func(context.Context, componentsapi.Component)
 	deleteFn func(context.Context, componentsapi.Component)
 }

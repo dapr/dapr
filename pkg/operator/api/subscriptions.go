@@ -16,42 +16,18 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"sync"
 
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
+	loopsclient "github.com/dapr/dapr/pkg/operator/api/loops/client"
+	"github.com/dapr/dapr/pkg/operator/api/loops/sender"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
-
-type SubscriptionUpdateEvent struct {
-	Subscription *subapi.Subscription
-	EventType    operatorv1pb.ResourceEventType
-}
-
-func (a *apiServer) OnSubscriptionUpdated(ctx context.Context, eventType operatorv1pb.ResourceEventType, subscription *subapi.Subscription) {
-	a.subLock.Lock()
-	var wg sync.WaitGroup
-	wg.Add(len(a.allSubscriptionUpdateChan))
-	for _, connUpdateChan := range a.allSubscriptionUpdateChan {
-		go func(connUpdateChan chan *SubscriptionUpdateEvent) {
-			defer wg.Done()
-			select {
-			case connUpdateChan <- &SubscriptionUpdateEvent{
-				Subscription: subscription,
-				EventType:    eventType,
-			}:
-			case <-ctx.Done():
-			}
-		}(connUpdateChan)
-	}
-	wg.Wait()
-	a.subLock.Unlock()
-}
 
 // ListSubscriptions returns a list of Dapr pub/sub subscriptions.
 func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
@@ -91,71 +67,43 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 	return resp, nil
 }
 
+// SubscriptionUpdate handles subscription update streaming for a connected client.
+// Each client connection gets its own client loop that watches the informer
+// and sends updates over the gRPC stream.
 func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateRequest, srv operatorv1pb.Operator_SubscriptionUpdateServer) error { //nolint:nosnakecase
-	if _, err := authz.Request(srv.Context(), in.GetNamespace()); err != nil {
-		return err
+	if a.closed.Load() {
+		return errors.New("server is closed")
 	}
 
 	log.Info("sidecar connected for subscription updates")
-	keyObj, err := uuid.NewRandom()
+
+	ctx := srv.Context()
+
+	// Verify authorization via informer's WatchUpdates, which checks SPIFFE ID
+	ch, cancel, err := a.subInformer.WatchUpdates(ctx, in.GetNamespace())
 	if err != nil {
 		return err
 	}
-	key := keyObj.String()
 
-	a.subLock.Lock()
-	if a.closed.Load() {
-		a.subLock.Unlock()
-		return nil
-	}
-	updateChan := make(chan *SubscriptionUpdateEvent)
-	a.allSubscriptionUpdateChan[key] = updateChan
-	a.subLock.Unlock()
-
-	defer func() {
-		a.subLock.Lock()
-		defer a.subLock.Unlock()
-		delete(a.allSubscriptionUpdateChan, key)
-	}()
-
-	updateSubscriptionFunc := func(ctx context.Context, t operatorv1pb.ResourceEventType, sub *subapi.Subscription) {
-		if sub.Namespace != in.GetNamespace() {
-			return
-		}
-
-		b, err := json.Marshal(&sub)
-		if err != nil {
-			log.Warnf("error serializing subscription %s for pod %s/%s: %s", sub.GetName(), in.GetNamespace(), in.GetPodName(), err)
-			return
-		}
-
-		err = srv.Send(&operatorv1pb.SubscriptionUpdateEvent{
-			Subscription: b,
-			Type:         t,
-		})
-		if err != nil {
-			log.Warnf("error updating sidecar with subscroption %s to pod %s/%s: %s", sub.GetName(), in.GetNamespace(), in.GetPodName(), err)
-			return
-		}
-
-		log.Debugf("updated sidecar with subscription %s %s to pod %s/%s", t.String(), sub.GetName(), in.GetNamespace(), in.GetPodName())
+	stream, err := sender.New(srv)
+	if err != nil {
+		return err
 	}
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	for {
-		select {
-		case <-srv.Context().Done():
-			return nil
-		case c, ok := <-updateChan:
-			if !ok {
-				return nil
-			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				updateSubscriptionFunc(srv.Context(), c.EventType, c.Subscription)
-			}()
-		}
+	// Create a client for this connection
+	client := loopsclient.New(loopsclient.Options[subapi.Subscription]{
+		EventCh:     ch,
+		CancelWatch: cancel,
+		Stream:      stream,
+		Namespace:   in.GetNamespace(),
+		PodName:     in.GetPodName(),
+	})
+	defer client.CacheLoop()
+
+	// Run the client - this will block until context is done or event channel closes
+	if err := client.Run(ctx); err != nil {
+		log.Warnf("subscription client loop ended with error: %s", err)
 	}
+
+	return nil
 }

@@ -16,6 +16,7 @@ package jwt
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -30,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca/bundle"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestIssuer_Generate(t *testing.T) {
@@ -120,7 +120,7 @@ func TestIssuer_Generate(t *testing.T) {
 			signingAlgorithm: jwa.ES256,
 			keyID:            "test-key-id",
 			clockSkew:        time.Minute,
-			issuer:           ptr.Of("https://auth.example.com"),
+			issuer:           new("https://auth.example.com"),
 			request: &Request{
 				TrustDomain: spiffeid.RequireTrustDomainFromString("example.com"),
 				Audiences:   []string{"example.com"},
@@ -260,7 +260,7 @@ func TestIssuer_Generate(t *testing.T) {
 // and included in the CA bundle.
 func TestJWTIssuerWithBundleGeneration(t *testing.T) {
 	// Generate a test root key for X.509 certificates
-	x509RootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, x509RootKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	// Generate a test root key for JWT signing
@@ -356,19 +356,19 @@ func TestCustomIssuerInToken(t *testing.T) {
 		},
 		{
 			name:           "empty issuer configured",
-			issuerValue:    ptr.Of(""),
+			issuerValue:    new(""),
 			expectedIssuer: "",
 			hasIssuer:      true,
 		},
 		{
 			name:           "custom issuer URL",
-			issuerValue:    ptr.Of("https://auth.example.com"),
+			issuerValue:    new("https://auth.example.com"),
 			expectedIssuer: "https://auth.example.com",
 			hasIssuer:      true,
 		},
 		{
 			name:           "custom string issuer",
-			issuerValue:    ptr.Of("dapr-sentry"),
+			issuerValue:    new("dapr-sentry"),
 			expectedIssuer: "dapr-sentry",
 			hasIssuer:      true,
 		},

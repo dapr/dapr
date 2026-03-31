@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"strings"
 
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -42,6 +41,11 @@ type InvokeMethodRequest struct {
 	dataObject         any
 	dataTypeURL        string
 	httpResponseWriter http.ResponseWriter
+	// streamingRequest is set when the request body is a stream that cannot be
+	// replayed (e.g. chunked-transfer / unknown content-length).
+	// When true, WithReplay becomes a no-op to prevent the entire body
+	// from being buffered into memory for retry purposes.
+	streamingRequest bool
 }
 
 // NewInvokeMethodRequest creates InvokeMethodRequest object for method.
@@ -172,12 +176,31 @@ func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *In
 }
 
 // WithReplay enables replaying for the data stream.
+// If the request is streaming, this is a no-op to prevent buffering the
+// entire body in memory.
 func (imr *InvokeMethodRequest) WithReplay(enabled bool) *InvokeMethodRequest {
+	if imr.streamingRequest {
+		return imr
+	}
 	// If the object has data in-memory, WithReplay is a nop
 	if !imr.HasMessageData() {
-		imr.replayableRequest.SetReplay(enabled)
+		imr.SetReplay(enabled)
 	}
 	return imr
+}
+
+// SetStreamingRequest marks the request body as a stream that cannot be
+// replayed. This prevents WithReplay from buffering the entire body in
+// memory, and causes built-in and user-configured retries to be skipped.
+func (imr *InvokeMethodRequest) SetStreamingRequest() *InvokeMethodRequest {
+	imr.streamingRequest = true
+	return imr
+}
+
+// IsStreamingRequest returns true if the request body is a stream that
+// cannot be replayed.
+func (imr *InvokeMethodRequest) IsStreamingRequest() bool {
+	return imr.streamingRequest
 }
 
 // WithHTTPResponseWriter enables downstream channel implementations to stream data back to the caller.
@@ -236,17 +259,28 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 		return imr.r, nil
 	}
 
-	// Clone the object
-	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeRequest)
-
-	// Read the data and store it in the object
+	// Read the data first so we can include it directly in the shallow copy.
 	data, err := imr.RawDataFull()
 	if err != nil {
-		return m, err
+		return nil, err
 	}
-	m.Message.Data = &anypb.Any{
-		Value:   data,
-		TypeUrl: imr.dataTypeURL, // Could be empty
+
+	// Create a shallow copy instead of a deep proto.Clone.
+	// We only need a new Message.Data field; headers and metadata are shared
+	// read-only references that callers do not modify.
+	m := &internalv1pb.InternalInvokeRequest{
+		Ver:      imr.r.GetVer(),
+		Actor:    imr.r.GetActor(),
+		Metadata: imr.r.GetMetadata(),
+		Message: &commonv1pb.InvokeRequest{
+			Method:        imr.r.GetMessage().GetMethod(),
+			ContentType:   imr.r.GetMessage().GetContentType(),
+			HttpExtension: imr.r.GetMessage().GetHttpExtension(),
+			Data: &anypb.Any{
+				Value:   data,
+				TypeUrl: imr.dataTypeURL, // Could be empty
+			},
+		},
 	}
 
 	return m, nil

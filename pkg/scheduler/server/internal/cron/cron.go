@@ -26,7 +26,6 @@ import (
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/dapr/dapr/pkg/healthz"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
@@ -34,8 +33,8 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
+	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.scheduler.server.cron")
@@ -43,7 +42,6 @@ var log = logger.NewLogger("dapr.scheduler.server.cron")
 type Options struct {
 	ID      string
 	Host    *schedulerv1pb.Host
-	Healthz healthz.Healthz
 	Etcd    etcd.Interface
 	Workers uint32
 }
@@ -114,7 +112,7 @@ func (c *cron) Run(ctx context.Context) error {
 		TriggerFn:       c.triggerHandler,
 		ReplicaData:     hostAny,
 		WatchLeadership: watchLeadershipCh,
-		Workers:         ptr.Of(c.workers),
+		Workers:         new(c.workers),
 	})
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
@@ -124,13 +122,28 @@ func (c *cron) Run(ctx context.Context) error {
 		Cron: c.etcdcron,
 	})
 
+	// Use a loop to process leadership updates. The loop's Enqueue is
+	// non-blocking, which prevents the go-etcd-cron wleaderCh send from
+	// blocking when the consumer is busy broadcasting to WatchHosts
+	// subscribers. Without this, a blocked send can race with elected context
+	// cancellation during quorum changes, causing the cron module to exit
+	// silently.
+	leaderLoop := loop.New[[]*anypb.Any](64).NewLoop(&leadership{
+		hostBroadcaster: c.hostBroadcaster,
+		lock:            &c.lock,
+		currHosts:       &c.currHosts,
+		readyCh:         c.readyCh,
+	})
+
 	return concurrency.NewRunnerManager(
 		c.connectionPool.Run,
 		c.etcdcron.Run,
+		leaderLoop.Run,
 		func(ctx context.Context) error {
 			defer log.Info("Cron shut down")
 			defer close(c.closeCh)
 			defer c.hostBroadcaster.Close()
+			defer leaderLoop.Close(nil)
 
 			for {
 				select {
@@ -140,28 +153,7 @@ func (c *cron) Run(ctx context.Context) error {
 					if !ok {
 						return nil
 					}
-
-					hosts := make([]*schedulerv1pb.Host, len(anyhosts))
-					for i, anyhost := range anyhosts {
-						var host schedulerv1pb.Host
-						if err := anyhost.UnmarshalTo(&host); err != nil {
-							return err
-						}
-						hosts[i] = &host
-					}
-
-					c.lock.Lock()
-					c.currHosts = hosts
-
-					select {
-					case <-c.readyCh:
-					default:
-						close(c.readyCh)
-						log.Info("Cron is ready")
-					}
-
-					c.hostBroadcaster.Broadcast(hosts)
-					c.lock.Unlock()
+					leaderLoop.Enqueue(anyhosts)
 				}
 			}
 		},

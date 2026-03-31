@@ -42,7 +42,7 @@ func NewDaprComponent(client *KubeClient, ns string, comp ComponentDescription) 
 
 // toComponentSpec builds the componentSpec for the given ComponentDescription
 func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
-	metadata := []commonapi.NameValuePair{}
+	metadata := make([]commonapi.NameValuePair, 0, len(do.component.MetaData))
 
 	for k, v := range do.component.MetaData {
 		var item commonapi.NameValuePair

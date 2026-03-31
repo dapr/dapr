@@ -104,11 +104,10 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 				return nil, csrErr
 			}
 			certs, csrErr := camngr.SignIdentity(ctx, &ca.SignRequest{
-				PublicKey:          csr.PublicKey.(crypto.PublicKey),
-				SignatureAlgorithm: csr.SignatureAlgorithm,
-				TrustDomain:        opts.Config.TrustDomain,
-				Namespace:          ns,
-				AppID:              "dapr-sentry",
+				PublicKey:   csr.PublicKey.(crypto.PublicKey),
+				TrustDomain: opts.Config.TrustDomain,
+				Namespace:   ns,
+				AppID:       "dapr-sentry",
 			})
 			if csrErr != nil {
 				monitoring.ServerCertIssueFailed("ca_error")
@@ -125,7 +124,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 
 	tld := opts.Config.TrustDomain
 	if opts.Config.Mode == modes.KubernetesMode {
-		tldd, err := utils.GetKubeClusterDomain()
+		tldd, err := utils.GetKubeClusterDomainFromDNS(ctx)
 		if err != nil {
 			log.Errorf("Error getting Kubernetes cluster domain, falling back to %q: %w", tld, err)
 		} else {

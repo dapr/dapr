@@ -132,11 +132,9 @@ func (b *grpcInputBinding) Read(ctx context.Context, handler bindings.Handler) e
 				b.logger.Errorf("failed to receive binding message: %v", err)
 				return
 			}
-			b.wg.Add(1)
-			go func() {
-				defer b.wg.Done()
+			b.wg.Go(func() {
 				handle(msg)
-			}()
+			})
 		}
 	}()
 

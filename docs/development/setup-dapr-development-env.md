@@ -23,11 +23,11 @@ This document helps you get started developing Dapr. If you find any problems wh
 
 ## Go (Golang)
 
-1. Download and install [Go 1.24.12 or later](https://golang.org/doc/install#tarball).
+1. Download and install [Go 1.26.1 or later](https://golang.org/doc/install#tarball).
 
 2. Install [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Go debugging, if desired.
 
-3. Install [golangci-lint](https://golangci-lint.run/docs/welcome/install/) version 1.64.6.
+3. Install [golangci-lint](https://golangci-lint.run/docs/welcome/install/) version 2.10.1.
 
 ## Setup a Kubernetes development environment
 

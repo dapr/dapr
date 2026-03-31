@@ -75,3 +75,30 @@ func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix st
 		},
 	})
 }
+
+// deleteAllReminders deletes all reminders for the workflow and its
+// activities. This is called when the workflow completes to ensure no orphan
+// reminders (e.g. unfired timers) remain in the scheduler.
+func (o *orchestrator) deleteAllReminders(ctx context.Context) error {
+	actorType := o.actorTypeBuilder.Workflow(o.appID)
+
+	log.Debugf("Workflow actor '%s': deleting all reminders for completed workflow", o.actorID)
+
+	if err := o.reminders.DeleteByActorID(ctx, &actorapi.DeleteRemindersByActorIDRequest{
+		ActorType:       actorType,
+		ActorID:         o.actorID,
+		MatchIDAsPrefix: false,
+	}); err != nil {
+		return fmt.Errorf("actor '%s' failed to delete reminders on completion: %w", o.actorID, err)
+	}
+
+	if err := o.reminders.DeleteByActorID(ctx, &actorapi.DeleteRemindersByActorIDRequest{
+		ActorType:       o.activityActorType,
+		ActorID:         o.actorID + "::",
+		MatchIDAsPrefix: true,
+	}); err != nil {
+		return fmt.Errorf("actor '%s' failed to delete activity reminders on completion: %w", o.actorID, err)
+	}
+
+	return nil
+}

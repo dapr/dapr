@@ -94,7 +94,7 @@ func Run() {
 	}
 
 	if opts.OIDC.TLSCertFile != nil && opts.OIDC.TLSKeyFile != nil {
-		log.Info("Using OIDC TLS certificate and key files: %s, %s", *opts.OIDC.TLSCertFile, *opts.OIDC.TLSKeyFile)
+		log.Infof("Using OIDC TLS certificate and key files: %s, %s", *opts.OIDC.TLSCertFile, *opts.OIDC.TLSKeyFile)
 	} else if opts.OIDC.TLSCertFile != nil || opts.OIDC.TLSKeyFile != nil {
 		log.Fatal("both OIDC TLS certificate and key must be provided if one is specified")
 	}

@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -75,7 +74,7 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 					},
 					Features: []configapi.FeatureSpec{{
 						Name:    "HotReload",
-						Enabled: ptr.Of(true),
+						Enabled: new(true),
 					}},
 				},
 			}},

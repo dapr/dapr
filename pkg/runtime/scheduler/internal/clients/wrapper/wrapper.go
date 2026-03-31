@@ -45,9 +45,12 @@ func (w *wrapper) Addresses() []string {
 
 func (w *wrapper) DeleteJob(ctx context.Context, req *v1pb.DeleteJobRequest, opts ...grpc.CallOption) (*v1pb.DeleteJobResponse, error) {
 	var resp *v1pb.DeleteJobResponse
+
 	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
 		var err error
+
 		resp, err = client.DeleteJob(ctx, req, opts...)
+
 		return err
 	})
 
@@ -56,9 +59,12 @@ func (w *wrapper) DeleteJob(ctx context.Context, req *v1pb.DeleteJobRequest, opt
 
 func (w *wrapper) DeleteByMetadata(ctx context.Context, req *v1pb.DeleteByMetadataRequest, opts ...grpc.CallOption) (*v1pb.DeleteByMetadataResponse, error) {
 	var resp *v1pb.DeleteByMetadataResponse
+
 	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
 		var err error
+
 		resp, err = client.DeleteByMetadata(ctx, req, opts...)
+
 		return err
 	})
 
@@ -67,61 +73,85 @@ func (w *wrapper) DeleteByMetadata(ctx context.Context, req *v1pb.DeleteByMetada
 
 func (w *wrapper) GetJob(ctx context.Context, req *v1pb.GetJobRequest, opts ...grpc.CallOption) (*v1pb.GetJobResponse, error) {
 	var resp *v1pb.GetJobResponse
+
 	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
 		var err error
+
 		resp, err = client.GetJob(ctx, req, opts...)
+
 		return err
 	})
+
 	return resp, err
 }
 
 func (w *wrapper) ListJobs(ctx context.Context, req *v1pb.ListJobsRequest, opts ...grpc.CallOption) (*v1pb.ListJobsResponse, error) {
 	var resp *v1pb.ListJobsResponse
+
 	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
 		var err error
+
 		resp, err = client.ListJobs(ctx, req, opts...)
+
 		return err
 	})
+
 	return resp, err
 }
 
 func (w *wrapper) ScheduleJob(ctx context.Context, req *v1pb.ScheduleJobRequest, opts ...grpc.CallOption) (*v1pb.ScheduleJobResponse, error) {
 	var resp *v1pb.ScheduleJobResponse
+
 	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
 		var err error
+
 		resp, err = client.ScheduleJob(ctx, req, opts...)
+
 		return err
 	})
+
 	return resp, err
 }
 
 func (w *wrapper) WatchJobs(ctx context.Context, opts ...grpc.CallOption) (v1pb.Scheduler_WatchJobsClient, error) {
 	var resp v1pb.Scheduler_WatchJobsClient
+
 	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
 		var err error
+
 		resp, err = client.WatchJobs(ctx, opts...)
+
 		return err
 	})
+
 	return resp, err
 }
 
 func (w *wrapper) WatchHosts(ctx context.Context, req *v1pb.WatchHostsRequest, opts ...grpc.CallOption) (v1pb.Scheduler_WatchHostsClient, error) {
 	var resp v1pb.Scheduler_WatchHostsClient
+
 	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
 		var err error
+
 		resp, err = client.WatchHosts(ctx, req, opts...)
+
 		return err
 	})
+
 	return resp, err
 }
 
 func (w *wrapper) DeleteByNamePrefix(ctx context.Context, req *v1pb.DeleteByNamePrefixRequest, opts ...grpc.CallOption) (*v1pb.DeleteByNamePrefixResponse, error) {
 	var resp *v1pb.DeleteByNamePrefixResponse
+
 	err := w.call(ctx, func(client v1pb.SchedulerClient) error {
 		var err error
+
 		resp, err = client.DeleteByNamePrefix(ctx, req, opts...)
+
 		return err
 	})
+
 	return resp, err
 }
 
@@ -129,12 +159,15 @@ type apiFn func(client v1pb.SchedulerClient) error
 
 func (w *wrapper) call(ctx context.Context, fn apiFn) error {
 	for {
-		client, err := w.clients.Next(ctx)
+		client, done, err := w.clients.Next(ctx)
 		if err != nil {
 			return err
 		}
 
 		err = fn(client)
+
+		done()
+
 		status, ok := status.FromError(err)
 		if ok && status.Code() == codes.Canceled {
 			continue

@@ -97,9 +97,10 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 			return ComponentEncryptionKeys{}, fmt.Errorf("%s: %w", errPrefix, err)
 		}
 
-		if m.Name == primaryEncryptionKey {
+		switch m.Name {
+		case primaryEncryptionKey:
 			cek.Primary = key
-		} else if m.Name == secondaryEncryptionKey {
+		case secondaryEncryptionKey:
 			cek.Secondary = key
 		}
 	}

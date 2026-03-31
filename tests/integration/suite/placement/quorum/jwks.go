@@ -15,8 +15,7 @@ package quorum
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -43,7 +42,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -131,7 +129,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		TrustAnchors:            j.sentry.CABundle().X509.TrustAnchors,
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
-		SentryTokenFile:         ptr.Of(j.appTokenFile),
+		SentryTokenFile:         new(j.appTokenFile),
 		Healthz:                 healthz.New(),
 	})
 	require.NoError(t, err)
@@ -150,51 +148,39 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 	placeID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", "default", "dapr-placement")
 	require.NoError(t, err)
 
-	var stream v1pb.Placement_ReportDaprStatusClient
+	var leader *placement.Placement
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		for _, p := range []*placement.Placement{j.places[0], j.places[1], j.places[2]} {
+			if p.IsLeader(t, ctx) {
+				leader = p
+				break
+			}
+		}
+		assert.NotNil(c, leader, "no leader found")
+	}, time.Second*20, time.Millisecond*10)
 
-	// Try connecting to each placement until one succeeds,
-	// indicating that a leader has been elected
-	i := -1
-	require.Eventually(t, func() bool {
-		i++
-		if i >= 3 {
-			i = 0
-		}
-		host := j.places[i].Address()
-		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(), //nolint:staticcheck
-			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID), //nolint:staticcheck
-		)
-		if cerr != nil {
-			return false
-		}
-		t.Cleanup(func() { require.NoError(t, conn.Close()) })
-		client := v1pb.NewPlacementClient(conn)
+	conn, cerr := grpc.DialContext(ctx, leader.Address(), grpc.WithBlock(), //nolint:staticcheck
+		grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID), //nolint:staticcheck
+	)
+	require.NoError(t, cerr)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+	client := v1pb.NewPlacementClient(conn)
 
-		stream, err = client.ReportDaprStatus(ctx)
-		if err != nil {
-			return false
-		}
-		err = stream.Send(&v1pb.Host{Id: "app-1"})
-		if err != nil {
-			return false
-		}
-		_, err = stream.Recv()
-		if err != nil {
-			return false
-		}
-		return true
-	}, time.Second*10, time.Millisecond*10)
-
-	err = stream.Send(&v1pb.Host{
-		Name:      "app-1",
-		Namespace: "default",
-		Port:      1234,
-		Load:      1,
-		Entities:  []string{"entity-1", "entity-2"},
-		Id:        "app-1",
-		Pod:       "pod-1",
-	})
+	stream, err := client.ReportDaprStatus(ctx)
 	require.NoError(t, err)
+
+	for range 3 {
+		err = stream.Send(&v1pb.Host{
+			Name:      "app-1",
+			Namespace: "default",
+			Port:      1234,
+			Load:      1,
+			Entities:  []string{"entity-1", "entity-2"},
+			Id:        "app-1",
+			Pod:       "pod-1",
+		})
+		require.NoError(t, err)
+	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		o, err := stream.Recv()
@@ -223,7 +209,7 @@ func (j *jwks) signJWT(t *testing.T, jwkPriv jwk.Key, id string) []byte {
 		Build()
 	require.NoError(t, err)
 
-	signed, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, jwkPriv))
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.EdDSA, jwkPriv))
 	require.NoError(t, err)
 
 	return signed
@@ -233,14 +219,14 @@ func (j *jwks) genPrivateJWK(t *testing.T) (jwk.Key, []byte) {
 	t.Helper()
 
 	// Generate a signing key
-	privK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privK, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	jwtSigningKeyPriv, err := jwk.FromRaw(privK)
 	require.NoError(t, err)
 
 	jwtSigningKeyPriv.Set("kid", "mykey")
-	jwtSigningKeyPriv.Set("alg", "ES256")
+	jwtSigningKeyPriv.Set("alg", "EdDSA")
 	jwtSigningKeyPub, err := jwtSigningKeyPriv.PublicKey()
 	require.NoError(t, err)
 

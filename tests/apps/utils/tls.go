@@ -16,8 +16,7 @@ limitations under the License.
 package utils
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -47,14 +46,14 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 	// *********************
 	// Generate private key
 	// *********************
-	tlsKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, tlsKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return err
 	}
 
 	b, err := x509.MarshalPKCS8PrivateKey(tlsKey)
 	if err != nil {
-		log.Printf("Unable to marshal ECDSA private key: %v", err)
+		log.Printf("Unable to marshal private key: %v", err)
 		return err
 	}
 
@@ -85,8 +84,8 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 		IsCA:                  true,
 	}
 
-	hosts := strings.Split(host, ",")
-	for _, h := range hosts {
+	hosts := strings.SplitSeq(host, ",")
+	for h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
 			certTemplate.IPAddresses = append(certTemplate.IPAddresses, ip)
 		} else {
@@ -94,7 +93,7 @@ func GenerateTLSCertAndKey(host string, validFrom time.Time, validFor time.Durat
 		}
 	}
 
-	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &tlsKey.PublicKey, tlsKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, tlsKey.Public(), tlsKey)
 	if err != nil {
 		log.Printf("Unable to create certificate: %v", err)
 		return err

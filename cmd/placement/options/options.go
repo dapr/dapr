@@ -23,7 +23,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/placement/raft"
+	"github.com/dapr/dapr/pkg/placement/peers"
 	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
@@ -46,16 +46,14 @@ const (
 	keepAliveTimeoutMin     = 1 * time.Second
 	keepAliveTimeoutMax     = 10 * time.Second
 
-	disseminateTimeoutDefault = 2 * time.Second
-	disseminateTimeoutMin     = 1 * time.Second
-	disseminateTimeoutMax     = 3 * time.Second
+	disseminateTimeoutDefault = 8 * time.Second
 )
 
 type Options struct {
 	// Raft protocol configurations
 	RaftID           string
 	raftPeerFlag     []string
-	RaftPeers        []raft.PeerInfo
+	RaftPeers        []peers.PeerInfo
 	RaftInMemEnabled bool
 	RaftLogStorePath string
 
@@ -119,17 +117,22 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 	fs.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
 	fs.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
-	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
-	fs.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
 	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on virtual nodes")
 	fs.DurationVar(&opts.KeepAliveTime, "keepalive-time", keepAliveTimeDefault, "sets the interval at which the placement service sends keepalive pings to daprd \non the gRPC stream to check if the connection is still alive. \nLower values will lead to shorter actor rebalancing time in case of pod loss/restart, \nbut higher network traffic during normal operation. \nAccepts values between 1 and 10 seconds")
 	fs.DurationVar(&opts.KeepAliveTimeout, "keepalive-timeout", keepAliveTimeoutDefault, "sets the timeout period for daprd to respond to the placement service's keepalive pings \nbefore the placement service closes the connection. \nLower values will lead to shorter actor rebalancing time in case of pod loss/restart, \nbut higher network traffic during normal operation. \nAccepts values between 1 and 10 seconds")
-	fs.DurationVar(&opts.DisseminateTimeout, "disseminate-timeout", disseminateTimeoutDefault, "sets the timeout period for dissemination to be delayed after actor membership change \nso as to avoid excessive dissemination during multiple pod restarts. \nHigher values will reduce the frequency of dissemination, but delay the table dissemination. \nAccepts values between 1 and 3 seconds")
+	fs.DurationVar(&opts.DisseminateTimeout, "disseminate-timeout", disseminateTimeoutDefault, "sets the period of time in which a dissemination is considered failed if not completed. \nAny daprds which have not responded within this time will be considered non-responsive and kicked. \nHigher values will increase the grace period to complete dissemination in case of network issues, \nbut reduce the chance of skipping daprds which are slow to respond.")
 
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
 	fs.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Placement")
+
+	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
+	fs.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
+	fs.MarkDeprecated("max-api-level", "this flag will be removed in future releases")
+	fs.MarkDeprecated("min-api-level", "this flag will be removed in future releases")
+	fs.MarkHidden("max-api-level")
+	fs.MarkHidden("min-api-level")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
@@ -152,8 +155,8 @@ func New(origArgs []string) (*Options, error) {
 	return &opts, nil
 }
 
-func parsePeersFromFlag(val []string) []raft.PeerInfo {
-	peers := make([]raft.PeerInfo, len(val))
+func parsePeersFromFlag(val []string) []peers.PeerInfo {
+	ps := make([]peers.PeerInfo, len(val))
 
 	i := 0
 	for _, addr := range val {
@@ -162,14 +165,14 @@ func parsePeersFromFlag(val []string) []raft.PeerInfo {
 			continue
 		}
 
-		peers[i] = raft.PeerInfo{
+		ps[i] = peers.PeerInfo{
 			ID:      strings.TrimSpace(peer[0]),
 			Address: strings.TrimSpace(peer[1]),
 		}
 		i++
 	}
 
-	return peers[:i]
+	return ps[:i]
 }
 
 func (o *Options) Validate() error {
@@ -179,10 +182,6 @@ func (o *Options) Validate() error {
 
 	if o.KeepAliveTimeout < keepAliveTimeoutMin || o.KeepAliveTimeout > keepAliveTimeoutMax {
 		return fmt.Errorf("invalid value for keepalive-timeout: value should be between %s and %s, got %s", keepAliveTimeoutMin, keepAliveTimeoutMax, o.KeepAliveTimeout)
-	}
-
-	if o.DisseminateTimeout < disseminateTimeoutMin || o.DisseminateTimeout > disseminateTimeoutMax {
-		return fmt.Errorf("invalid value for disseminate-timeout: value should be between %s and %s, got %s", disseminateTimeoutMin, disseminateTimeoutMax, o.DisseminateTimeout)
 	}
 
 	return nil

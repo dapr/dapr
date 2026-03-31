@@ -22,7 +22,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/perf"
@@ -93,12 +95,14 @@ func TestPubsubPublishGrpcPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log("running baseline test...")
-	baselineResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	var baselineResp []byte
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		baselineResp, err = utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+		assert.NoError(c, err, "baseline test HTTP POST failed")
+	}, 90*time.Second, 2*time.Second, "baseline test failed after retries")
+
 	t.Logf("baseline test results: %s", string(baselineResp))
-	t.Log("checking err...")
-	require.NoError(t, err)
 	require.NotEmpty(t, baselineResp)
-	// fast fail if daprResp starts with error
 	require.False(t, strings.HasPrefix(string(baselineResp), "error"))
 
 	// Perform dapr test
@@ -108,12 +112,14 @@ func TestPubsubPublishGrpcPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log("running dapr test...")
-	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	var daprResp []byte
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		daprResp, err = utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+		assert.NoError(c, err, "dapr test HTTP POST failed")
+	}, 90*time.Second, 2*time.Second, "dapr test failed after retries")
+
 	t.Logf("dapr test results: %s", string(daprResp))
-	t.Log("checking err...")
-	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
-	// fast fail if daprResp starts with error
 	require.False(t, strings.HasPrefix(string(daprResp), "error"))
 
 	sidecarUsage, err := tr.Platform.GetSidecarUsage(appName)

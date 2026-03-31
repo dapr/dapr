@@ -50,7 +50,7 @@ func TestAPIAllowlist(t *testing.T) {
 					assert.True(t, valid)
 				}
 
-				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints := make([]endpoints.Endpoint, 0, 8)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
@@ -90,7 +90,7 @@ func TestAPIAllowlist(t *testing.T) {
 					assert.False(t, valid, e.Route)
 				}
 
-				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints := make([]endpoints.Endpoint, 0, 8)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
@@ -128,7 +128,7 @@ func TestAPIAllowlist(t *testing.T) {
 					assert.True(t, valid)
 				}
 
-				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints := make([]endpoints.Endpoint, 0, 8)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
@@ -163,7 +163,7 @@ func TestAPIAllowlist(t *testing.T) {
 					assert.True(t, valid)
 				}
 
-				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints := make([]endpoints.Endpoint, 0, 8)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
@@ -198,7 +198,7 @@ func TestAPIAllowlist(t *testing.T) {
 					assert.True(t, valid)
 				}
 
-				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints := make([]endpoints.Endpoint, 0, 8)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
@@ -233,7 +233,7 @@ func TestAPIAllowlist(t *testing.T) {
 					assert.True(t, valid)
 				}
 
-				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints := make([]endpoints.Endpoint, 0, 8)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
@@ -268,7 +268,7 @@ func TestAPIAllowlist(t *testing.T) {
 					assert.True(t, valid)
 				}
 
-				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints := make([]endpoints.Endpoint, 0, 8)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
@@ -303,7 +303,7 @@ func TestAPIAllowlist(t *testing.T) {
 					assert.True(t, valid)
 				}
 
-				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints := make([]endpoints.Endpoint, 0, 8)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
@@ -344,7 +344,7 @@ func TestAPIAllowlist(t *testing.T) {
 				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 				a := &api{}
-				allEndpoints := []endpoints.Endpoint{}
+				allEndpoints := make([]endpoints.Endpoint, 0, 9)
 				allEndpoints = append(allEndpoints, a.constructDirectMessagingEndpoints()...)
 				allEndpoints = append(allEndpoints, a.constructActorEndpoints()...)
 				allEndpoints = append(allEndpoints, a.constructBindingsEndpoints()...)
@@ -392,7 +392,7 @@ func TestAPIAllowlist(t *testing.T) {
 				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 				a := &api{}
-				allEndpoints := []endpoints.Endpoint{}
+				allEndpoints := make([]endpoints.Endpoint, 0, 9)
 				allEndpoints = append(allEndpoints, a.constructDirectMessagingEndpoints()...)
 				allEndpoints = append(allEndpoints, a.constructActorEndpoints()...)
 				allEndpoints = append(allEndpoints, a.constructBindingsEndpoints()...)

@@ -472,7 +472,8 @@ func testEnvHandler(w http.ResponseWriter, r *http.Request) {
 // the test side calls the 4 cases below in order
 func actorStateTest(testName string, w http.ResponseWriter, actorType string, id string) error {
 	// save multiple key values
-	if testName == "savestatetest" {
+	switch testName {
+	case "savestatetest":
 		url := fmt.Sprintf(actorSaveStateURLFormat, daprHTTPPort, actorType, id)
 
 		operations := []TempTransactionalOperation{
@@ -512,7 +513,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
-	} else if testName == "getstatetest" {
+	case "getstatetest":
 		// perform a get on a key saved above
 		url := fmt.Sprintf(actorGetStateURLFormat, daprHTTPPort, actorType, id, "key1")
 
@@ -546,7 +547,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
-	} else if testName == "savestatetest2" {
+	case "savestatetest2":
 		// perform another transaction including a delete
 		url := fmt.Sprintf(actorSaveStateURLFormat, daprHTTPPort, actorType, id)
 
@@ -574,7 +575,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
-	} else if testName == "getstatetest2" {
+	case "getstatetest2":
 		// perform a get on an existing key
 		url := fmt.Sprintf(actorGetStateURLFormat, daprHTTPPort, actorType, id, "key1")
 
@@ -600,7 +601,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 			w.WriteHeader(http.StatusInternalServerError)
 			return errors.New("expected 0 length response")
 		}
-	} else {
+	default:
 		return errors.New("actorStateTest() - unexpected option")
 	}
 
@@ -635,7 +636,7 @@ func nonHostedTestHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "OK")
 }
 
-func httpCall(method string, url string, requestBody interface{}, expectedHTTPStatusCode int) ([]byte, error) {
+func httpCall(method string, url string, requestBody any, expectedHTTPStatusCode int) ([]byte, error) {
 	var body []byte
 	var err error
 
@@ -662,10 +663,10 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 		var errBody []byte
 		errBody, err = io.ReadAll(res.Body)
 		if err == nil {
-			return nil, fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody)) //nolint:stylecheck
+			return nil, fmt.Errorf("expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody))
 		}
 
-		return nil, fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode) //nolint:stylecheck
+		return nil, fmt.Errorf("expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode)
 	}
 
 	resBody, err := io.ReadAll(res.Body)

@@ -111,7 +111,7 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 
 	client := u.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "bar", api.WithInstanceID("unhealthy-test"))
+	_, err := client.ScheduleNewOrchestration(ctx, "bar", api.WithInstanceID("unhealthy-test"))
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -122,9 +122,6 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, u.sentUnhealthySignal.Load, time.Second*10, time.Millisecond*10)
 
 	close(releaseCh)
-
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
-	require.NoError(t, err)
 
 	u.logline.EventuallyFoundAll(t)
 

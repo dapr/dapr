@@ -24,6 +24,7 @@ import (
 func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ...subapi.Subscription) bool {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
 	if p.shutdown.Load() {
 		return false
 	}
@@ -35,6 +36,7 @@ func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ..
 
 	for i := range scopedSubs {
 		comp := scopedSubs[i]
+
 		sub := rtpubsub.Subscription{
 			PubsubName:      comp.Spec.Pubsubname,
 			Topic:           comp.Spec.Topic,
@@ -53,8 +55,10 @@ func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ..
 				p.errorSubscriptions(ctx, err)
 				return false
 			}
+
 			sub.Rules = append(sub.Rules, erule)
 		}
+
 		if len(comp.Spec.Routes.Default) > 0 {
 			sub.Rules = append(sub.Rules, &rtpubsub.Rule{
 				Path: comp.Spec.Routes.Default,
@@ -62,9 +66,12 @@ func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ..
 		}
 
 		p.compStore.AddDeclarativeSubscription(&comp, sub)
-		if err := p.subscriber.ReloadDeclaredAppSubscription(comp.Name, comp.Spec.Pubsubname); err != nil {
+
+		err := p.subscriber.ReloadDeclaredAppSubscription(comp.Name, comp.Spec.Pubsubname)
+		if err != nil {
 			p.compStore.DeleteDeclarativeSubscription(comp.Name)
 			p.errorSubscriptions(ctx, err)
+
 			return false
 		}
 	}
@@ -78,21 +85,28 @@ func (p *Processor) scopeFilterSubscriptions(subs []subapi.Subscription) []subap
 		if len(sub.Scopes) > 0 && !utils.Contains[string](sub.Scopes, p.appID) {
 			continue
 		}
+
 		scopedSubs = append(scopedSubs, sub)
 	}
+
 	return scopedSubs
 }
 
 func (p *Processor) CloseSubscription(ctx context.Context, sub *subapi.Subscription) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
 	if _, ok := p.compStore.GetDeclarativeSubscription(sub.Name); !ok {
 		return nil
 	}
+
 	p.compStore.DeleteDeclarativeSubscription(sub.Name)
-	if err := p.subscriber.ReloadDeclaredAppSubscription(sub.Name, sub.Spec.Pubsubname); err != nil {
+
+	err := p.subscriber.ReloadDeclaredAppSubscription(sub.Name, sub.Spec.Pubsubname)
+	if err != nil {
 		return err
 	}
+
 	return nil
 }
 

@@ -50,7 +50,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/kit/ptr"
 )
 
 type Scheduler struct {
@@ -94,7 +93,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		etcdClientPort:           fp.Port(t),
 		namespace:                "default",
 		etcdBackendBatchInterval: "50ms",
-		workers:                  ptr.Of(uint32(128)),
+		workers:                  new(uint32(128)),
 	}
 
 	for _, fopt := range fopts {
@@ -134,9 +133,9 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	if opts.etcdInitialCluster == nil {
 		if opts.sentry == nil {
-			opts.etcdInitialCluster = ptr.Of(opts.id + "=http://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
+			opts.etcdInitialCluster = new(opts.id + "=http://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
 		} else {
-			opts.etcdInitialCluster = ptr.Of(opts.id + "=https://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
+			opts.etcdInitialCluster = new(opts.id + "=https://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
 		}
 	}
 
@@ -339,7 +338,7 @@ func (s *Scheduler) security(t *testing.T, ctx context.Context, ns *string, appI
 		SentryAddress:            "localhost:" + strconv.Itoa(s.sentry.Port()),
 		ControlPlaneTrustDomain:  s.sentry.TrustDomain(t),
 		ControlPlaneNamespace:    s.sentry.Namespace(),
-		TrustAnchorsFile:         ptr.Of(s.sentry.TrustAnchorsFile(t)),
+		TrustAnchorsFile:         new(s.sentry.TrustAnchorsFile(t)),
 		AppID:                    appID,
 		Mode:                     modes.StandaloneMode,
 		MTLSEnabled:              true,
@@ -395,7 +394,7 @@ func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Clie
 
 func (s *Scheduler) EtcdJobs(t *testing.T, ctx context.Context) []*mvccpb.KeyValue {
 	t.Helper()
-	resp, err := s.ETCDClient(t, ctx).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	resp, err := s.ETCDClient(t, ctx).Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	return resp.Kvs
 }
@@ -477,7 +476,7 @@ func (s *Scheduler) WatchJobsFailed(t *testing.T, ctx context.Context, initial *
 func (s *Scheduler) JobNowJob(name, namespace, appID string) *schedulerv1pb.ScheduleJobRequest {
 	return &schedulerv1pb.ScheduleJobRequest{
 		Name: name,
-		Job:  &schedulerv1pb.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
+		Job:  &schedulerv1pb.Job{DueTime: new(time.Now().Format(time.RFC3339))},
 		Metadata: &schedulerv1pb.JobMetadata{
 			Namespace: namespace, AppId: appID,
 			Target: &schedulerv1pb.JobTargetMetadata{
@@ -490,7 +489,7 @@ func (s *Scheduler) JobNowJob(name, namespace, appID string) *schedulerv1pb.Sche
 func (s *Scheduler) JobNowActor(name, namespace, appID, actorType, actorID string) *schedulerv1pb.ScheduleJobRequest {
 	return &schedulerv1pb.ScheduleJobRequest{
 		Name: name,
-		Job:  &schedulerv1pb.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
+		Job:  &schedulerv1pb.Job{DueTime: new(time.Now().Format(time.RFC3339))},
 		Metadata: &schedulerv1pb.JobMetadata{
 			Namespace: namespace, AppId: appID,
 			Target: &schedulerv1pb.JobTargetMetadata{

@@ -14,6 +14,8 @@ limitations under the License.
 package compstore
 
 import (
+	"maps"
+
 	"github.com/dapr/components-contrib/pubsub"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
@@ -21,19 +23,23 @@ import (
 func (c *ComponentStore) AddPubSub(name string, item *rtpubsub.PubsubItem) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	c.pubSubs[name] = item
 }
 
 func (c *ComponentStore) GetPubSub(name string) (*rtpubsub.PubsubItem, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	pubsub, ok := c.pubSubs[name]
+
 	return pubsub, ok
 }
 
 func (c *ComponentStore) GetPubSubComponent(name string) (pubsub.PubSub, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	pubsub, ok := c.pubSubs[name]
 	if !ok {
 		return nil, false
@@ -45,17 +51,20 @@ func (c *ComponentStore) GetPubSubComponent(name string) (pubsub.PubSub, bool) {
 func (c *ComponentStore) ListPubSubs() map[string]*rtpubsub.PubsubItem {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.pubSubs
+
+	return maps.Clone(c.pubSubs)
 }
 
 func (c *ComponentStore) PubSubsLen() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+
 	return len(c.pubSubs)
 }
 
 func (c *ComponentStore) DeletePubSub(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
 	delete(c.pubSubs, name)
 }

@@ -16,6 +16,7 @@ package actors
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -202,7 +203,6 @@ func (a *actors) Init(opts InitOptions) error {
 		Namespace: a.namespace,
 		Hostname:  opts.Hostname,
 		Port:      a.port,
-		APILevel:  apiLevel,
 		Healthz:   a.healthz,
 		Mode:      a.mode,
 		Scheduler: opts.SchedulerReloader,
@@ -266,6 +266,7 @@ func (a *actors) Run(ctx context.Context) error {
 	log.Info("Actor runtime started")
 
 	mngr := concurrency.NewRunnerCloserManager(log, nil,
+		a.router.Run,
 		func(ctx context.Context) error {
 			// Only wait for host registration before starting the placement client,
 			// since registering Actor host types is dependent on the Actor state
@@ -391,12 +392,9 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		config := api.TranslateEntityConfig(entityConfg)
 		for _, entity := range entityConfg.Entities {
 			var found bool
-			for _, hostedType := range cfg.HostedActorTypes {
-				if hostedType == entity {
-					entityConfigs[entity] = config
-					found = true
-					break
-				}
+			if slices.Contains(cfg.HostedActorTypes, entity) {
+				entityConfigs[entity] = config
+				found = true
 			}
 
 			if !found {
@@ -441,13 +439,12 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 			Type:       actorType,
 			Reentrancy: reentrancy,
 			Factory: app.New(app.Options{
-				ActorType:               actorType,
-				AppChannel:              cfg.AppChannel,
-				Resiliency:              a.resiliency,
-				IdleTimeout:             idleTimeout,
-				Reentrancy:              a.reentrancyStore,
-				DrainOngoingCallTimeout: drainOngoingCallTimeout,
-				Placement:               a.placement,
+				ActorType:   actorType,
+				AppChannel:  cfg.AppChannel,
+				Resiliency:  a.resiliency,
+				IdleTimeout: idleTimeout,
+				Reentrancy:  a.reentrancyStore,
+				Placement:   a.placement,
 			}),
 		})
 	}
@@ -456,11 +453,14 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 	a.table.RegisterActorTypes(table.RegisterActorTypeOptions{
 		Factories: factories,
 		HostOptions: &table.ActorHostOptions{
-			EntityConfigs:           entityConfigs,
-			DrainRebalancedActors:   true,
-			DrainOngoingCallTimeout: drainOngoingCallTimeout,
+			EntityConfigs: entityConfigs,
 		},
 	})
+
+	// Update the placement service with the drain settings so that during
+	// dissemination, in-flight actor calls are given the configured time to
+	// complete before being forcefully cancelled.
+	a.placement.SetDrainOngoingCallTimeout(cfg.DrainRebalancedActors, &drainOngoingCallTimeout)
 
 	return nil
 }

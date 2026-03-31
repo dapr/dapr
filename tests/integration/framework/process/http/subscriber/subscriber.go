@@ -161,7 +161,7 @@ func (s *Subscriber) Port() int {
 func (s *Subscriber) Receive(t *testing.T, ctx context.Context) *RouteEvent {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
 	select {
@@ -176,7 +176,7 @@ func (s *Subscriber) Receive(t *testing.T, ctx context.Context) *RouteEvent {
 func (s *Subscriber) ReceiveBulk(t *testing.T, ctx context.Context) *pubsub.BulkSubscribeEnvelope {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
 	select {

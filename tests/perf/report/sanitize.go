@@ -20,6 +20,7 @@ func sanitizeName(s string) string {
 	replacer := strings.NewReplacer(
 		"/", "_",
 		" ", "_",
+		":", "_", // Windows forbids colons in filenames
 		"[", "",
 		"]", "",
 		"=", "",
@@ -75,10 +76,10 @@ func repairJSONClosers(s string) string {
 	var b strings.Builder
 	b.WriteString(s)
 	// Close arrays first, then objects since most blocks are objects containing arrays
-	for range make([]struct{}, openSquare-closeSquare) {
+	for range openSquare - closeSquare {
 		b.WriteString("]")
 	}
-	for range make([]struct{}, openCurly-closeCurly) {
+	for range openCurly - closeCurly {
 		b.WriteString("}")
 	}
 	return b.String()

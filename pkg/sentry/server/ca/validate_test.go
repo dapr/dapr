@@ -55,7 +55,7 @@ func genCrt(t *testing.T,
 		NotAfter:              time.Now().Add(time.Hour),
 	}
 
-	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, pk, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	if signCrt == nil {
@@ -82,7 +82,11 @@ func genCrt(t *testing.T,
 }
 
 func joinPEM(crts ...[]byte) []byte {
-	var b []byte
+	totalLen := 0
+	for _, crt := range crts {
+		totalLen += len(crt)
+	}
+	b := make([]byte, 0, totalLen)
 	for _, crt := range crts {
 		b = append(b, crt...)
 	}

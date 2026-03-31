@@ -102,8 +102,17 @@ func (e *Etcd) Run(t *testing.T, ctx context.Context) {
 	for i, config := range e.configs {
 		e.fp[i].Free(t)
 
-		etcd, err := embed.StartEtcd(config)
-		require.NoError(t, err)
+		var etcd *embed.Etcd
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			var err error
+			etcd, err = embed.StartEtcd(config)
+			if !assert.NoError(c, err) {
+				if strings.Contains(err.Error(), "bind: address already in use") {
+					return
+				}
+				require.NoError(t, err)
+			}
+		}, time.Second*20, time.Millisecond*10)
 
 		t.Logf("Running etcd with config: %+v", etcd.Config())
 
@@ -148,16 +157,16 @@ func (e *Etcd) setupUserPass(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	defer client.Close()
 
-	_, err = client.Auth.UserAdd(ctx, *e.username, *e.password)
+	_, err = client.UserAdd(ctx, *e.username, *e.password)
 	require.NoError(t, err)
 
-	_, err = client.Auth.RoleAdd(ctx, "root")
+	_, err = client.RoleAdd(ctx, "root")
 	require.NoError(t, err)
 
-	_, err = client.Auth.UserGrantRole(ctx, *e.username, "root")
+	_, err = client.UserGrantRole(ctx, *e.username, "root")
 	require.NoError(t, err)
 
-	_, err = client.Auth.RoleGrantPermission(ctx, "root", "", "", clientv3.PermissionType(clientv3.PermReadWrite))
+	_, err = client.RoleGrantPermission(ctx, "root", "", "", clientv3.PermissionType(clientv3.PermReadWrite))
 	require.NoError(t, err)
 
 	_, err = client.AuthEnable(ctx)

@@ -31,7 +31,7 @@ type Summary struct {
 }
 
 // K6 perf test summary for x iterations. Show success/failure/VUs.
-func processK6Summary(k6JSON, testName, pkg, baseOutputDir string) {
+func processK6Summary(k6JSON, testName, pkg, baseOutputDir string, resourceByTest map[string]*ResourceUsage) {
 	k6JSON = strings.TrimSpace(k6JSON)
 	if k6JSON == "" || !strings.HasPrefix(k6JSON, "{") {
 		return
@@ -53,7 +53,11 @@ func processK6Summary(k6JSON, testName, pkg, baseOutputDir string) {
 		fmt.Fprintf(os.Stderr, "unknown API or transport for %s.\nk6 JSON: %+v\n", testName, summary)
 		return
 	}
-	storeRunner(r, info)
+	var ru *ResourceUsage
+	if resourceByTest != nil {
+		ru = resourceByTest[testName]
+	}
+	storeRunner(r, info, ru)
 }
 
 // Data volume chart shows the total bytes received & sent
