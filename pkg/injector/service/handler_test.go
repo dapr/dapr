@@ -497,10 +497,10 @@ func TestHandleRequestWithAllowedServiceAccountsByName(t *testing.T) {
 func TestHandleRequestWithGlobPatterns(t *testing.T) {
 	i, err := NewInjector(Options{
 		Config: Config{
-			SidecarImage:                   "test-image",
-			Namespace:                      "test-ns",
-			ControlPlaneTrustDomain:        "test-trust-domain",
-			AllowedServiceAccountsPatterns: "proj-*:sa-[dt]*,staging-?:*",
+			SidecarImage:            "test-image",
+			Namespace:               "test-ns",
+			ControlPlaneTrustDomain: "test-trust-domain",
+			AllowedServiceAccounts:  "proj-*:sa-[dt]*,staging-?:*",
 		},
 		DaprClient: fake.NewSimpleClientset(),
 		KubeClient: kubernetesfake.NewSimpleClientset(),

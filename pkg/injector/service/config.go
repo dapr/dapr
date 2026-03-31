@@ -30,13 +30,14 @@ import (
 //
 //nolint:recvcheck
 type Config struct {
-	SidecarImage                      string `envconfig:"SIDECAR_IMAGE" required:"true"`
-	SidecarImagePullPolicy            string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
-	Namespace                         string `envconfig:"NAMESPACE" required:"true"`
-	KubeClusterDomain                 string `envconfig:"KUBE_CLUSTER_DOMAIN"`
-	AllowedServiceAccounts            string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
+	SidecarImage           string `envconfig:"SIDECAR_IMAGE" required:"true"`
+	SidecarImagePullPolicy string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
+	Namespace              string `envconfig:"NAMESPACE" required:"true"`
+	KubeClusterDomain      string `envconfig:"KUBE_CLUSTER_DOMAIN"`
+	AllowedServiceAccounts string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
+	// Deprecated: use AllowedServiceAccounts instead, which now supports the
+	// same glob patterns including trailing-* prefix matching.
 	AllowedServiceAccountsPrefixNames string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES"`
-	AllowedServiceAccountsPatterns    string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_PATTERNS"`
 	IgnoreEntrypointTolerations       string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
 	ActorsEnabled                     string `envconfig:"ACTORS_ENABLED"`
 	ActorsServiceName                 string `envconfig:"ACTORS_SERVICE_NAME"`

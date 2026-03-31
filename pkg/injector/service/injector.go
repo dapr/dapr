@@ -162,9 +162,7 @@ func NewInjector(opts Options) (Injector, error) {
 		schedulerEnabled:        opts.SchedulerEnabled,
 	}
 
-	// All service account entries are matched using glob syntax. This means
-	// the legacy env vars (ALLOWED_SERVICE_ACCOUNTS, ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES)
-	// now also accept glob patterns such as *, ?, and [...] character classes.
+	// All service account entries are matched using glob syntax (*, ?, [...]).
 	// This is backwards-compatible because exact names and trailing-* prefixes
 	// are valid glob patterns with identical semantics.
 	patterns := []string{}
@@ -173,10 +171,8 @@ func NewInjector(opts Options) (Injector, error) {
 		patterns = append(patterns, strings.Split(opts.Config.AllowedServiceAccounts, ",")...)
 	}
 	if opts.Config.AllowedServiceAccountsPrefixNames != "" {
+		log.Warn("ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES is deprecated; use ALLOWED_SERVICE_ACCOUNTS instead, which now supports glob patterns")
 		patterns = append(patterns, strings.Split(opts.Config.AllowedServiceAccountsPrefixNames, ",")...)
-	}
-	if opts.Config.AllowedServiceAccountsPatterns != "" {
-		patterns = append(patterns, strings.Split(opts.Config.AllowedServiceAccountsPatterns, ",")...)
 	}
 	matcher, err := NewServiceAccountMatcher(patterns...)
 	if err != nil {

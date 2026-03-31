@@ -55,10 +55,10 @@ func TestConfigCorrectValues(t *testing.T) {
 func TestConfigWithGlobPatterns(t *testing.T) {
 	i, err := NewInjector(Options{
 		Config: Config{
-			SidecarImage:                   "img",
-			Namespace:                      "ns",
-			ControlPlaneTrustDomain:        "trust.domain",
-			AllowedServiceAccountsPatterns: "something-*:foo*bar,prod-?:exact",
+			SidecarImage:            "img",
+			Namespace:               "ns",
+			ControlPlaneTrustDomain: "trust.domain",
+			AllowedServiceAccounts:  "something-*:foo*bar,prod-?:exact",
 		},
 		Healthz: healthz.New(),
 	})
@@ -73,14 +73,14 @@ func TestConfigWithGlobPatterns(t *testing.T) {
 	assert.False(t, injector.namespaceNameMatcher("other", "foobar"))
 }
 
-func TestConfigWithBothPrefixAndGlobPatterns(t *testing.T) {
+func TestConfigWithBothAllowedAndDeprecatedPrefix(t *testing.T) {
 	i, err := NewInjector(Options{
 		Config: Config{
 			SidecarImage:                      "img",
 			Namespace:                         "ns",
 			ControlPlaneTrustDomain:           "trust.domain",
 			AllowedServiceAccountsPrefixNames: "legacy-ns*:legacy-sa*",
-			AllowedServiceAccountsPatterns:    "new-ns-?:new-sa-[abc]*",
+			AllowedServiceAccounts:            "new-ns-?:new-sa-[abc]*",
 		},
 		Healthz: healthz.New(),
 	})
@@ -88,9 +88,9 @@ func TestConfigWithBothPrefixAndGlobPatterns(t *testing.T) {
 
 	injector := i.(*injector)
 	require.NotNil(t, injector.namespaceNameMatcher)
-	// Legacy prefix patterns should still work.
+	// Deprecated prefix config should still work.
 	assert.True(t, injector.namespaceNameMatcher("legacy-ns-foo", "legacy-sa-bar"))
-	// New glob patterns should work.
+	// AllowedServiceAccounts glob patterns should work.
 	assert.True(t, injector.namespaceNameMatcher("new-ns-X", "new-sa-abc"))
 	assert.False(t, injector.namespaceNameMatcher("new-ns-X", "new-sa-d"))
 }
@@ -112,18 +112,6 @@ func TestConfigNoExtraMatchersStillHasDefaults(t *testing.T) {
 	require.NotNil(t, injector.namespaceNameMatcher)
 	assert.True(t, injector.namespaceNameMatcher("kube-system", "deployment-controller"))
 	assert.False(t, injector.namespaceNameMatcher("unknown", "unknown"))
-}
-
-func TestNewInjectorBadAllowedGlobPatternsConfig(t *testing.T) {
-	_, err := NewInjector(Options{
-		Config: Config{
-			SidecarImage:                   "img",
-			Namespace:                      "ns",
-			AllowedServiceAccountsPatterns: "ns:sa[invalid",
-		},
-		Healthz: healthz.New(),
-	})
-	require.Error(t, err)
 }
 
 func TestNewInjectorBadPatternConfig(t *testing.T) {
