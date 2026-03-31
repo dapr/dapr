@@ -660,7 +660,10 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return fmt.Errorf("failed to load components: %s", err)
 	}
 
-	a.flushOutstandingComponents(ctx)
+	err = a.flushOutstandingComponents(ctx)
+	if err != nil {
+		return fmt.Errorf("failed while waiting for components to be processed: %w", err)
+	}
 
 	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {
@@ -1267,12 +1270,20 @@ func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	log.Info("All outstanding http endpoints processed")
 }
 
-func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
+func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) error {
 	log.Info("Waiting for all outstanding components to be processed…")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.processor.AddPendingComponent(ctx, compapi.Component{})
+	if !a.processor.AddPendingComponent(ctx, compapi.Component{}) {
+		if err := context.Cause(ctx); err != nil {
+			return err
+		}
+
+		return errors.New("waiting for outstanding components was interrupted")
+	}
 	log.Info("All outstanding components processed")
+
+	return nil
 }
 
 func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
