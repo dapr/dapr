@@ -14,6 +14,7 @@ limitations under the License.
 package processor
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -503,6 +504,47 @@ func TestProcessNoWorkflow(t *testing.T) {
 	proc, _ := newTestProc()
 	_, ok := proc.managers[components.CategoryWorkflow]
 	require.False(t, ok, "workflow cannot be registered as user facing component")
+}
+
+func TestProcessComponentLogsBeforeInitFailure(t *testing.T) {
+	prev := log
+	testLog := logger.NewLogger("test-runtime-processor")
+	logDest := &bytes.Buffer{}
+	testLog.SetOutput(logDest)
+	testLog.SetOutputLevel(logger.InfoLevel)
+	log = testLog
+	t.Cleanup(func() {
+		log = prev
+	})
+
+	proc, reg := newTestProc()
+	mockPubSub := new(daprt.MockPubSub)
+
+	reg.PubSubs().RegisterComponent(
+		func(_ logger.Logger) pubsub.PubSub {
+			return mockPubSub
+		},
+		"mockPubSub",
+	)
+
+	comp := componentsapi.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testpubsub",
+		},
+		Spec: componentsapi.ComponentSpec{
+			Type:        "pubsub.mockPubSub",
+			Version:     "v1",
+			Metadata:    daprt.GetFakeMetadataItems(),
+			InitTimeout: "2",
+		},
+	}
+
+	mockPubSub.On("Init", mock.Anything).Return(errors.New("error"))
+
+	err := proc.processComponentAndDependents(t.Context(), comp)
+	require.Error(t, err)
+	assert.Contains(t, logDest.String(), "Loading component: "+comp.LogName())
+	assert.Contains(t, logDest.String(), "Failed to init component "+comp.LogName()+":")
 }
 
 func TestReporter(t *testing.T) {
