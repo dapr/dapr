@@ -187,8 +187,10 @@ func NewInjector(opts Options) (Injector, error) {
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed
 // service account on the webhook handler.
 // NOTE: These UIDs overlap with the name-based matcher built in NewInjector via
-// NewServiceAccountMatcher (which covers the same entries). The UID-based
-// path is kept as defense-in-depth for isAuthorizedUser.
+// NewServiceAccountMatcher only for exact "namespace:name" entries (including
+// those in AllowedServiceAccountInfos). Glob/pattern-based matches are handled
+// solely by the matcher; this UID-based path is kept as defense-in-depth for
+// isAuthorizedUser.
 func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
 	allowedList := []string{}
 	if cfg.AllowedServiceAccounts != "" {

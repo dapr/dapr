@@ -13,7 +13,7 @@ spec:
 {{- if eq .Values.global.ha.enabled true }}
   replicas: {{ .Values.global.ha.replicaCount }}
 {{- else }}
-  replicas: {{ .Values.replicaCount }}  
+  replicas: {{ .Values.replicaCount }}
 {{- end }}
   selector:
     matchLabels:
@@ -204,10 +204,6 @@ spec:
 {{- if .Values.allowedServiceAccountsPrefixNames }}
         - name: ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES
           value: {{ .Values.allowedServiceAccountsPrefixNames | toYaml }}
-{{- end }}
-{{- if .Values.allowedServiceAccountsPatterns }}
-        - name: ALLOWED_SERVICE_ACCOUNTS_PATTERNS
-          value: {{ .Values.allowedServiceAccountsPatterns | toYaml }}
 {{- end }}
         ports:
         - name: https

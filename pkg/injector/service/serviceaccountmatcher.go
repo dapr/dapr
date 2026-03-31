@@ -51,9 +51,11 @@ func NewServiceAccountMatcher(patterns ...string) (func(namespace, name string) 
 			return nil, fmt.Errorf("invalid service account pattern %q: %w", saPattern, err)
 		}
 
+		nsPat := nsPattern
+		saPat := saPattern
 		matchers = append(matchers, func(namespace, name string) bool {
-			nsMatch, _ := path.Match(nsPattern, namespace)
-			saMatch, _ := path.Match(saPattern, name)
+			nsMatch, _ := path.Match(nsPat, namespace)
+			saMatch, _ := path.Match(saPat, name)
 			return nsMatch && saMatch
 		})
 	}
