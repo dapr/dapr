@@ -1321,7 +1321,10 @@ func (a *DaprRuntime) loadMCPServers(ctx context.Context) error {
 		return err
 	}
 
-	authorizedServers := a.authz.GetAuthorizedObjects(servers, a.authz.IsObjectAuthorized).([]mcpserverapi.MCPServer)
+	authorizedServers, ok := a.authz.GetAuthorizedObjects(servers, a.authz.IsObjectAuthorized).([]mcpserverapi.MCPServer)
+	if !ok {
+		return fmt.Errorf("unexpected type from GetAuthorizedObjects for MCPServers")
+	}
 
 	for _, s := range authorizedServers {
 		log.Infof("Found MCP server: %s", s.Name)
