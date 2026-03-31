@@ -61,7 +61,7 @@ func NewServiceAccountMatcher(patterns ...string) (func(namespace, name string) 
 	}
 
 	if len(matchers) == 0 {
-		return nil, nil
+		return func(_, _ string) bool { return false }, nil
 	}
 
 	return func(namespace, name string) bool {
