@@ -44,8 +44,8 @@ func NewMCPServers(opts Options) loader.Loader[mcpserverapi.MCPServer] {
 }
 
 // Load fetches MCPServer resources from the Operator for this namespace.
-// If the MCPServer CRD is not installed the Operator returns an empty list;
-// this is not treated as an error.
+// If the MCPServer CRD is not installed, the Operator's client.List returns
+// an error which is propagated to the caller.
 func (m *mcpservers) Load(ctx context.Context) ([]mcpserverapi.MCPServer, error) {
 	resp, err := m.client.ListMCPServers(ctx, &operatorv1pb.ListMCPServersRequest{
 		Namespace: m.namespace,

@@ -44,11 +44,9 @@ type MCPServer struct {
 	common.Scoped `json:",inline"`
 }
 
-const kind = "MCPServer"
-
 // Kind returns the resource kind.
 func (MCPServer) Kind() string {
-	return kind
+	return Kind
 }
 
 // APIVersion returns the resource API version.
@@ -67,7 +65,8 @@ func (m MCPServer) GetNamespace() string {
 }
 
 // GetSecretStore returns the name of the secret store used for resolving
-// secretKeyRef entries in spec.headers and auth.oauth2 credentials.
+// secretKeyRef entries in spec.headers during resource processing.
+// auth.oauth2.secretKeyRef is resolved separately at call time by the MCP worker.
 func (m MCPServer) GetSecretStore() string {
 	if m.Spec.Auth == nil || m.Spec.Auth.SecretStore == nil {
 		return ""
