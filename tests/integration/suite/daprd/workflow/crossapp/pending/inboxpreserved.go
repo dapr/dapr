@@ -141,9 +141,18 @@ func (p *inboxpreserved) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, db.QueryRowContext(ctx,
 		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE key LIKE '%%||test-inbox||inbox-%%'", tableName),
 	).Scan(&inboxCount))
-	assert.GreaterOrEqual(t, inboxCount, 1, "inbox should be preserved after no-op replay retries")
+	assert.GreaterOrEqual(t, inboxCount, 1, "inbox should be preserved after retry cycles")
 
-	// Bring daprd2 online and verify the workflow completes.
+	// Verify history does not grow with each retry. The pre-save writes history
+	// once (OrchestratorStarted + ExecutionStarted = 2 entries). Retries that
+	// fail to dispatch should NOT save state, so the history count must remain
+	// stable even after multiple retry cycles.
+	var historyCount int
+	require.NoError(t, db.QueryRowContext(ctx,
+		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE key LIKE '%%||test-inbox||history-%%'", tableName),
+	).Scan(&historyCount))
+	assert.Equal(t, 2, historyCount, "history should contain exactly 2 entries from the pre-save (OrchestratorStarted + ExecutionStarted), not grow with retries")
+
 	p.daprd2.Run(t, ctx)
 	t.Cleanup(func() { p.daprd2.Cleanup(t) })
 	p.daprd2.WaitUntilRunning(t, ctx)
