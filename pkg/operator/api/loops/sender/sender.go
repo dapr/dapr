@@ -53,6 +53,10 @@ func New(stream any) (Interface, error) {
 		return &resiliency{
 			stream: s,
 		}, nil
+	case operatorv1pb.Operator_WorkflowAccessPolicyUpdateServer:
+		return &workflowAccessPolicy{
+			stream: s,
+		}, nil
 
 	default:
 		return nil, errors.New("unsupported stream type")
@@ -122,5 +126,16 @@ func (r *resiliency) Send(data []byte, eventType operatorv1pb.ResourceEventType)
 	return r.stream.Send(&operatorv1pb.ResiliencyUpdateEvent{
 		Resiliency: data,
 		Type:       eventType,
+	})
+}
+
+type workflowAccessPolicy struct {
+	stream operatorv1pb.Operator_WorkflowAccessPolicyUpdateServer
+}
+
+func (w *workflowAccessPolicy) Send(data []byte, eventType operatorv1pb.ResourceEventType) error {
+	return w.stream.Send(&operatorv1pb.WorkflowAccessPolicyUpdateEvent{
+		Policy: data,
+		Type:   eventType,
 	})
 }

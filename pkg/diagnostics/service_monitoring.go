@@ -72,6 +72,10 @@ type serviceMetrics struct {
 	appPolicyActionBlocked    *stats.Int64Measure
 	globalPolicyActionBlocked *stats.Int64Measure
 
+	// Workflow Access Policy metrics
+	workflowACLAllowed *stats.Int64Measure
+	workflowACLDenied  *stats.Int64Measure
+
 	// Service Invocation metrics
 	serviceInvocationRequestSentTotal        *stats.Int64Measure
 	serviceInvocationRequestReceivedTotal    *stats.Int64Measure
@@ -186,6 +190,16 @@ func newServiceMetrics() *serviceMetrics {
 			"The number of requests blocked by the global action specified in the access control policy.",
 			stats.UnitDimensionless),
 
+		// Workflow Access Policy
+		workflowACLAllowed: stats.Int64(
+			"runtime/workflow/acl_action_allowed_total",
+			"The number of workflow/activity operations allowed by workflow access policy.",
+			stats.UnitDimensionless),
+		workflowACLDenied: stats.Int64(
+			"runtime/workflow/acl_action_denied_total",
+			"The number of workflow/activity operations denied by workflow access policy.",
+			stats.UnitDimensionless),
+
 		// Service Invocation
 		serviceInvocationRequestSentTotal: stats.Int64(
 			"runtime/service_invocation/req_sent_total",
@@ -247,6 +261,9 @@ func (s *serviceMetrics) Init(meter view.Meter, appID string, latencyDistributio
 		diagUtils.NewMeasureView(s.globalPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(s.appPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
+
+		diagUtils.NewMeasureView(s.workflowACLAllowed, []tag.Key{appIDKey, namespaceKey, sourceAppIDKey, operationKey, typeKey}, view.Count()),
+		diagUtils.NewMeasureView(s.workflowACLDenied, []tag.Key{appIDKey, namespaceKey, sourceAppIDKey, operationKey, typeKey}, view.Count()),
 
 		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, typeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey}, view.Count()),
@@ -505,6 +522,40 @@ func (s *serviceMetrics) RequestBlockedByGlobalAction(spiffeID *spiffe.Parsed) {
 				trustDomainKey, spiffeID.TrustDomain().String(),
 				namespaceKey, spiffeID.Namespace())...),
 			stats.WithMeasurements(s.globalPolicyActionBlocked.M(1)))
+	}
+}
+
+// WorkflowACLActionAllowed records a workflow/activity operation allowed by workflow access policy.
+func (s *serviceMetrics) WorkflowACLActionAllowed(callerAppID, opType, operation string) {
+	if s.enabled {
+		stats.RecordWithOptions(
+			s.ctx,
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
+				s.workflowACLAllowed.Name(),
+				appIDKey, s.appID,
+				namespaceKey, "",
+				sourceAppIDKey, callerAppID,
+				operationKey, operation,
+				typeKey, opType)...),
+			stats.WithMeasurements(s.workflowACLAllowed.M(1)))
+	}
+}
+
+// WorkflowACLActionDenied records a workflow/activity operation denied by workflow access policy.
+func (s *serviceMetrics) WorkflowACLActionDenied(callerAppID, opType, operation string) {
+	if s.enabled {
+		stats.RecordWithOptions(
+			s.ctx,
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(
+				s.workflowACLDenied.Name(),
+				appIDKey, s.appID,
+				namespaceKey, "",
+				sourceAppIDKey, callerAppID,
+				operationKey, operation,
+				typeKey, opType)...),
+			stats.WithMeasurements(s.workflowACLDenied.M(1)))
 	}
 }
 
