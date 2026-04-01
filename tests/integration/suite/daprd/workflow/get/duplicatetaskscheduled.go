@@ -111,6 +111,7 @@ func (d *duplicatetaskscheduled) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 
+	require.Len(t, seen, 2, "expected exactly 2 distinct TaskScheduled events (local and remote)")
 	for eventID, count := range seen {
 		assert.Equalf(t, 1, count,
 			"TaskScheduled with EventId %d appears %d times in history; expected exactly once", eventID, count)

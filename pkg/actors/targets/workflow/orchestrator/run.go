@@ -173,21 +173,20 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	pendingTasks := rs.GetPendingTasks()
 
-	err = o.callActivities(ctx, pendingTasks, state)
-	if err != nil {
+	callResult := o.callActivities(ctx, pendingTasks, state)
+	if callResult.err != nil {
 		firstRemoteExecution := len(state.History) == 0 && hasRemoteTasks(pendingTasks)
 		if firstRemoteExecution {
-			// Save state without remote TaskScheduled events so the workflow
-			// transitions to RUNNING. Excluding remote TaskScheduled ensures the
-			// retry re-executes the orchestrator and regenerates only the remote
-			// pending tasks for dispatch. Local TaskScheduled events are kept so
-			// already-dispatched local activities are not re-dispatched. The inbox
-			// is preserved so the existing reminder retries the full execution.
+			// Save state without the TaskScheduled events that failed to
+			// dispatch so the workflow transitions to RUNNING. Successfully
+			// dispatched activities keep their TaskScheduled in history so they
+			// are not re-dispatched on retry. The inbox is preserved so the
+			// existing reminder retries the full execution.
 			origNewEvents := rs.NewEvents
 			filtered := origNewEvents[:0:0]
 			for _, e := range origNewEvents {
-				if ts := e.GetTaskScheduled(); ts != nil {
-					if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
+				if e.GetTaskScheduled() != nil {
+					if _, failed := callResult.failedEventIDs[e.GetEventId()]; failed {
 						continue
 					}
 				}
@@ -200,11 +199,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				return todo.RunCompletedFalse, saveErr
 			}
 			executionStatus = diag.StatusRecoverable
-			return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(callResult.err)
 		}
 
 		executionStatus = diag.StatusRecoverable
-		return todo.RunCompletedFalse, err
+		return todo.RunCompletedFalse, callResult.err
 	}
 
 	// Process the outbound orchestrator events

@@ -29,7 +29,16 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) error {
+// callActivitiesResult holds the result of a callActivities invocation.
+type callActivitiesResult struct {
+	// failedEventIDs contains the EventIds of TaskScheduled events whose
+	// dispatch failed. Used by the pre-save path to exclude these from
+	// history so the retry can regenerate and re-dispatch them.
+	failedEventIDs map[int32]struct{}
+	err            error
+}
+
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) callActivitiesResult {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -37,6 +46,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 		dueTime = state.Inbox[0].GetTimestamp().AsTime()
 	}
 
+	var result callActivitiesResult
 	for _, e := range es {
 		err := o.callActivity(ctx, e, dueTime, state.Generation)
 		if err != nil {
@@ -45,11 +55,16 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 				continue
 			}
 
-			return err
+			if result.failedEventIDs == nil {
+				result.failedEventIDs = make(map[int32]struct{})
+			}
+			result.failedEventIDs[e.GetEventId()] = struct{}{}
+			result.err = errors.Join(result.err, err)
+			continue
 		}
 	}
 
-	return nil
+	return result
 }
 
 func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent, dueTime time.Time, generation uint64) error {
@@ -93,6 +108,9 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 		WithContentType(invokev1.ProtobufContentType),
 	)
 	if err != nil {
+		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
+			return fmt.Errorf("failed to dispatch activity '%s' to remote app '%s' (the app may not be available): %w", ts.GetName(), router.GetTargetAppID(), err)
+		}
 		return fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), err)
 	}
 

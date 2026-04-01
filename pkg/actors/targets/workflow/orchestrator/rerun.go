@@ -164,9 +164,10 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	}
 
 	startedEvent := o.getExecutionStartedEvent(newState)
+	actResult := o.callActivities(ctx, activities, newState)
 	if err = errors.Join(
 		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs),
-		o.callActivities(ctx, activities, newState),
+		actResult.err,
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
 		return err
