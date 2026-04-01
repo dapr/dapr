@@ -235,7 +235,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 
 		executionStatus = diag.StatusRecoverable
-		return todo.RunCompletedFalse, dispatchErr
+		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 	}
 
 	state.ApplyRuntimeStateChanges(rs)
