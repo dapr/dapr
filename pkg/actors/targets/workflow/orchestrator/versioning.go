@@ -153,7 +153,7 @@ func compactPatches(rs *backend.OrchestrationRuntimeState) {
 				}
 
 				if len(newPatches) > 0 {
-					os.Version = &protos.OrchestrationVersion{Patches: newPatches}
+					os.Version = &protos.WorkflowVersion{Patches: newPatches}
 				} else {
 					os.Version = nil
 				}

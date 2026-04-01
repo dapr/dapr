@@ -432,8 +432,8 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 	return req, nil
 }
 
-func (s *State) ToWorkflowState() *backend.WorkflowState {
-	return &backend.WorkflowState{
+func (s *State) ToWorkflowState() *backend.BackendWorkflowState {
+	return &backend.BackendWorkflowState{
 		Inbox:        s.Inbox,
 		History:      s.History,
 		CustomStatus: s.CustomStatus,
@@ -441,7 +441,7 @@ func (s *State) ToWorkflowState() *backend.WorkflowState {
 	}
 }
 
-func (s *State) FromWorkflowState(state *backend.WorkflowState) {
+func (s *State) FromWorkflowState(state *backend.BackendWorkflowState) {
 	s.Reset()
 
 	for _, e := range state.GetInbox() {

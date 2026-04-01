@@ -106,7 +106,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		return status.Errorf(codes.AlreadyExists, "workflow '%s' has already been created", o.actorID)
 	}
 
-	var workflowState backend.WorkflowState
+	var workflowState backend.BackendWorkflowState
 	if err = proto.Unmarshal(request, &workflowState); err != nil {
 		return fmt.Errorf("failed to unmarshal workflow history: %w", err)
 	}
