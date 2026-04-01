@@ -22,6 +22,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dispatch"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -29,16 +30,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-// callActivitiesResult holds the result of a callActivities invocation.
-type callActivitiesResult struct {
-	// failedEventIDs contains the EventIds of TaskScheduled events whose
-	// dispatch failed. Used by the pre-save path to exclude these from
-	// history so the retry can regenerate and re-dispatch them.
-	failedEventIDs map[int32]struct{}
-	err            error
-}
-
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) callActivitiesResult {
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) dispatch.Result {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -46,7 +38,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 		dueTime = state.Inbox[0].GetTimestamp().AsTime()
 	}
 
-	var result callActivitiesResult
+	var result dispatch.Result
 	for _, e := range es {
 		err := o.callActivity(ctx, e, dueTime, state.Generation)
 		if err != nil {
@@ -55,11 +47,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 				continue
 			}
 
-			if result.failedEventIDs == nil {
-				result.failedEventIDs = make(map[int32]struct{})
-			}
-			result.failedEventIDs[e.GetEventId()] = struct{}{}
-			result.err = errors.Join(result.err, err)
+			result.RecordFailure(e.GetEventId(), err)
 			continue
 		}
 	}
@@ -91,11 +79,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
-	// Use a short timeout per dispatch. Dispatch is a one-way message to the
-	// activity actor, so it should complete in milliseconds when the target app
-	// is reachable. A short timeout ensures the actor lock is released quickly
-	// when an app is offline, allowing status queries and retries to proceed.
-	ctx, cancel := context.WithTimeout(ctx, activityDispatchTimeout)
+	ctx, cancel := context.WithTimeout(ctx, dispatch.Timeout)
 	defer cancel()
 
 	_, err = o.router.Call(ctx, internalsv1pb.
@@ -117,16 +101,6 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	return nil
 }
 
-func hasRemoteTasks(es []*backend.HistoryEvent) bool {
-	for _, e := range es {
-		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
-			return true
-		}
-	}
-	return false
-}
-
 func buildActivityActorID(workflowID string, taskID int32, generation uint64) string {
-	// An activity can be identified by its name followed by its task ID and generation. Example: SayHello::0::1, SayHello::1::1, etc.
 	return workflowID + "::" + strconv.Itoa(int(taskID)) + "::" + strconv.FormatUint(generation, 10)
 }

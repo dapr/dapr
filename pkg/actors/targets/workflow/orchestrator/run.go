@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dispatch"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -173,40 +174,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	pendingTasks := rs.GetPendingTasks()
 
-	callResult := o.callActivities(ctx, pendingTasks, state)
-	if callResult.err != nil {
-		firstRemoteExecution := len(state.History) == 0 && hasRemoteTasks(pendingTasks)
-		if firstRemoteExecution {
-			// Save state without the TaskScheduled events that failed to
-			// dispatch so the workflow transitions to RUNNING. Successfully
-			// dispatched activities keep their TaskScheduled in history so they
-			// are not re-dispatched on retry. The inbox is preserved so the
-			// existing reminder retries the full execution.
-			origNewEvents := rs.NewEvents
-			filtered := origNewEvents[:0:0]
-			for _, e := range origNewEvents {
-				if e.GetTaskScheduled() != nil {
-					if _, failed := callResult.failedEventIDs[e.GetEventId()]; failed {
-						continue
-					}
-				}
-				filtered = append(filtered, e)
-			}
-			rs.NewEvents = filtered
-			state.ApplyRuntimeStateChanges(rs)
-			rs.NewEvents = origNewEvents
-			if saveErr := o.saveInternalState(ctx, state); saveErr != nil {
-				return todo.RunCompletedFalse, saveErr
-			}
-			executionStatus = diag.StatusRecoverable
-			return todo.RunCompletedFalse, wferrors.NewRecoverable(callResult.err)
-		}
-
-		executionStatus = diag.StatusRecoverable
-		return todo.RunCompletedFalse, callResult.err
-	}
-
-	// Process the outbound orchestrator events
+	// Process the outbound orchestrator events.
 	var addWorkflows []*backend.OrchestrationRuntimeStateMessage
 	var createWorkflows []*backend.OrchestrationRuntimeStateMessage
 	for _, msg := range rs.GetPendingMessages() {
@@ -222,12 +190,52 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
-	if err = o.callAddEventStateMessage(ctx, addWorkflows); err != nil {
-		return todo.RunCompletedFalse, err
-	}
+	// Dispatch activities and messages, collecting failures.
+	activityResult := o.callActivities(ctx, pendingTasks, state)
+	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
+	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
 
-	if err = o.callCreateWorkflowStateMessage(ctx, createWorkflows); err != nil {
-		return todo.RunCompletedFalse, err
+	dispatchErr := errors.Join(activityResult.Err, addResult.Err, createResult.Err)
+	if dispatchErr != nil {
+		if len(state.History) == 0 && (dispatch.HasRemoteTasks(pendingTasks) || dispatch.HasRemoteMessages(createWorkflows)) {
+			// Save state without the events that failed to dispatch so the
+			// workflow transitions to RUNNING. Successfully dispatched items
+			// keep their events in history so they are not re-dispatched on
+			// retry. The inbox is preserved so the existing reminder retries
+			// the full execution.
+			allFailed := make(map[int32]struct{})
+			for id := range activityResult.FailedEventIDs {
+				allFailed[id] = struct{}{}
+			}
+			for id := range createResult.FailedEventIDs {
+				allFailed[id] = struct{}{}
+			}
+			for id := range addResult.FailedEventIDs {
+				allFailed[id] = struct{}{}
+			}
+
+			origNewEvents := rs.NewEvents
+			filtered := origNewEvents[:0:0]
+			for _, e := range origNewEvents {
+				if dispatch.IsDispatchableEvent(e) {
+					if _, failed := allFailed[e.GetEventId()]; failed {
+						continue
+					}
+				}
+				filtered = append(filtered, e)
+			}
+			rs.NewEvents = filtered
+			state.ApplyRuntimeStateChanges(rs)
+			rs.NewEvents = origNewEvents
+			if saveErr := o.saveInternalState(ctx, state); saveErr != nil {
+				return todo.RunCompletedFalse, saveErr
+			}
+			executionStatus = diag.StatusRecoverable
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
+		}
+
+		executionStatus = diag.StatusRecoverable
+		return todo.RunCompletedFalse, dispatchErr
 	}
 
 	state.ApplyRuntimeStateChanges(rs)
