@@ -496,7 +496,7 @@ func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.Orc
 }
 
 func (abe *Actors) WatchWorkflowRuntimeStatus(ctx context.Context, id api.InstanceID, condition func(*backend.WorkflowMetadata) bool) error {
-	log.Debugf("Actor backend streaming OrchestrationRuntimeStatus %s", id)
+	log.Debugf("Actor backend streaming WorkflowRuntimeStatus %s", id)
 
 	router, err := abe.actors.Router(ctx)
 	if err != nil {
