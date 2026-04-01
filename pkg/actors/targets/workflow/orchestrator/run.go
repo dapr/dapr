@@ -171,8 +171,38 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
-	err = o.callActivities(ctx, rs.GetPendingTasks(), state)
+	pendingTasks := rs.GetPendingTasks()
+
+	err = o.callActivities(ctx, pendingTasks, state)
 	if err != nil {
+		firstRemoteExecution := len(state.History) == 0 && hasRemoteTasks(pendingTasks)
+		if firstRemoteExecution {
+			// Save state without remote TaskScheduled events so the workflow
+			// transitions to RUNNING. Excluding remote TaskScheduled ensures the
+			// retry re-executes the orchestrator and regenerates only the remote
+			// pending tasks for dispatch. Local TaskScheduled events are kept so
+			// already-dispatched local activities are not re-dispatched. The inbox
+			// is preserved so the existing reminder retries the full execution.
+			origNewEvents := rs.NewEvents
+			filtered := origNewEvents[:0:0]
+			for _, e := range origNewEvents {
+				if ts := e.GetTaskScheduled(); ts != nil {
+					if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
+						continue
+					}
+				}
+				filtered = append(filtered, e)
+			}
+			rs.NewEvents = filtered
+			state.ApplyRuntimeStateChanges(rs)
+			rs.NewEvents = origNewEvents
+			if saveErr := o.saveInternalState(ctx, state); saveErr != nil {
+				return todo.RunCompletedFalse, saveErr
+			}
+			executionStatus = diag.StatusRecoverable
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(err)
+		}
+
 		executionStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, err
 	}

@@ -76,6 +76,13 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
+	// Use a short timeout per dispatch. Dispatch is a one-way message to the
+	// activity actor, so it should complete in milliseconds when the target app
+	// is reachable. A short timeout ensures the actor lock is released quickly
+	// when an app is offline, allowing status queries and retries to proceed.
+	ctx, cancel := context.WithTimeout(ctx, activityDispatchTimeout)
+	defer cancel()
+
 	_, err = o.router.Call(ctx, internalsv1pb.
 		NewInternalInvokeRequest("Execute").
 		WithActor(activityActorType, targetActorID).
@@ -90,6 +97,15 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 	}
 
 	return nil
+}
+
+func hasRemoteTasks(es []*backend.HistoryEvent) bool {
+	for _, e := range es {
+		if router := e.GetRouter(); router != nil && router.TargetAppID != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func buildActivityActorID(workflowID string, taskID int32, generation uint64) string {

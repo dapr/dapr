@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -26,6 +27,13 @@ const (
 	reminderPrefixStart    = "start"
 	reminderPrefixNewEvent = "new-event"
 	reminderPrefixTimer    = "timer-"
+
+	// activityDispatchTimeout is the timeout for dispatching activities to their
+	// target actor. Dispatch is a one-way fire-and-forget message, so it should
+	// complete in milliseconds when the target app is reachable. If the app is
+	// offline, the short timeout ensures the actor lock is released quickly so
+	// status queries and reminder retries can proceed.
+	activityDispatchTimeout = 2 * time.Second
 )
 
 func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
