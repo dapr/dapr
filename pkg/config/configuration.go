@@ -68,6 +68,10 @@ const (
 	// When enabled, daprd loads MCPServer manifests at startup,
 	// and makes them available for tool execution via workflow orchestrations.
 	MCPServerResource Feature = "MCPServerResource"
+
+	// Enables workflow access control policies. When enabled, WorkflowAccessPolicy
+	// resources are loaded and enforced at the target sidecar's CallActor handler.
+	WorkflowAccessPolicy Feature = "WorkflowAccessPolicy"
 )
 
 // end feature flags section

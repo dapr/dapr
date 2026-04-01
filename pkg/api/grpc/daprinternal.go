@@ -295,6 +295,10 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 // CallActor invokes a virtual actor.
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	if err := a.callActorValidateWorkflowACL(ctx, in); err != nil {
+		return nil, err
+	}
+
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	var res *internalv1pb.InternalInvokeResponse
 	router, err := a.ActorRouter(ctx)
@@ -328,6 +332,12 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 // CallActorReminder invokes an internal virtual actor.
 func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
+	// Enforce workflow access policy on reminder calls to prevent a malicious
+	// sidecar from injecting fake activity results or workflow events.
+	if err := a.callActorReminderValidateWorkflowACL(ctx, in); err != nil {
+		return nil, err
+	}
+
 	router, err := a.ActorRouter(ctx)
 	if err != nil {
 		return nil, err
@@ -349,6 +359,10 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 }
 
 func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream internalv1pb.ServiceInvocation_CallActorStreamServer) error {
+	if err := a.callActorValidateWorkflowACL(stream.Context(), req); err != nil {
+		return err
+	}
+
 	router, err := a.ActorRouter(stream.Context())
 	if err != nil {
 		return err

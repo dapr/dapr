@@ -1,0 +1,25 @@
+apiVersion: dapr.io/v1alpha1
+kind: WorkflowAccessPolicy
+metadata:
+  name: wfacl-e2e-policy
+spec:
+  defaultAction: deny
+  rules:
+  - callers:
+    - appID: "wfacl-caller"
+    operations:
+    - type: workflow
+      name: "AllowedWorkflow"
+      action: allow
+    - type: workflow
+      name: "DeniedWorkflow"
+      action: deny
+    - type: activity
+      name: "*"
+      action: allow
+  - callers:
+    - appID: "wfacl-target"
+    operations:
+    - type: activity
+      name: "*"
+      action: allow
