@@ -203,7 +203,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			// keep their events in history so they are not re-dispatched on
 			// retry. The inbox is preserved so the existing reminder retries
 			// the full execution.
-			allFailed := make(map[int32]struct{})
+			allFailed := make(map[int32]struct{}, len(activityResult.failedEventIDs)+len(createResult.failedEventIDs)+len(addResult.failedEventIDs))
 			maps.Copy(allFailed, activityResult.failedEventIDs)
 			maps.Copy(allFailed, createResult.failedEventIDs)
 			maps.Copy(allFailed, addResult.failedEventIDs)
