@@ -23,7 +23,8 @@ import (
 func TestNewServiceAccountMatcherEmpty(t *testing.T) {
 	m, err := NewServiceAccountMatcher()
 	require.NoError(t, err)
-	assert.Nil(t, m)
+	require.NotNil(t, m)
+	assert.False(t, m("any", "any"))
 }
 
 func TestNewServiceAccountMatcherSkipsEmptyStrings(t *testing.T) {
@@ -51,13 +52,13 @@ func TestNewServiceAccountMatcherErrorPropagates(t *testing.T) {
 
 func TestServiceAccountMatcherParsing(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		wantNil   bool
-		wantError bool
+		name          string
+		input         string
+		wantAlwaysFalse bool
+		wantError     bool
 	}{
-		{name: "empty string", input: "", wantNil: true},
-		{name: "whitespace only", input: "   ", wantNil: true},
+		{name: "empty string", input: "", wantAlwaysFalse: true},
+		{name: "whitespace only", input: "   ", wantAlwaysFalse: true},
 		{name: "valid single", input: "ns:sa"},
 		{name: "missing colon", input: "namespace", wantError: true},
 		{name: "multiple colons", input: "ns:sa:extra", wantError: true},
@@ -75,10 +76,9 @@ func TestServiceAccountMatcherParsing(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			if tc.wantNil {
-				assert.Nil(t, m)
-			} else {
-				assert.NotNil(t, m)
+			require.NotNil(t, m)
+			if tc.wantAlwaysFalse {
+				assert.False(t, m("any", "any"))
 			}
 		})
 	}
