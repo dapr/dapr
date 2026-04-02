@@ -21,6 +21,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
 	loopsclient "github.com/dapr/dapr/pkg/operator/api/loops/client"
@@ -29,7 +30,7 @@ import (
 )
 
 // processMCPServerSecrets resolves any secretKeyRef entries in the transport
-// headers using the Kubernetes secret store.
+// headers and stdio env using the Kubernetes secret store.
 func processMCPServerSecrets(ctx context.Context, s *mcpserverapi.MCPServer, namespace string, kubeClient client.Client) error {
 	// Only resolve secrets when auth.secretStore is "kubernetes" or unset (defaults to kubernetes).
 	secretStore := s.GetSecretStore()
@@ -39,18 +40,33 @@ func processMCPServerSecrets(ctx context.Context, s *mcpserverapi.MCPServer, nam
 	}
 
 	// Resolve headers from whichever HTTP transport is configured.
-	headers := s.NameValuePairs()
-	for i, header := range headers {
-		if header.SecretKeyRef.Name == "" {
-			continue
-		}
-		v, err := getSecret(ctx, header.SecretKeyRef.Name, namespace, header.SecretKeyRef, kubeClient)
-		if err != nil {
-			return fmt.Errorf("error resolving header secret for MCPServer %q: %w", s.Name, err)
-		}
-		headers[i].Value = v
+	if err := resolveSecretKeyRefs(ctx, s.NameValuePairs(), s.Name, "header", namespace, kubeClient); err != nil {
+		return err
 	}
 
+	// Resolve env secrets for stdio transport.
+	if s.Spec.Endpoint.Stdio != nil {
+		if err := resolveSecretKeyRefs(ctx, s.Spec.Endpoint.Stdio.Env, s.Name, "stdio env", namespace, kubeClient); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// resolveSecretKeyRefs resolves secretKeyRef entries in a slice of NameValuePairs
+// using the Kubernetes secret store.
+func resolveSecretKeyRefs(ctx context.Context, pairs []commonapi.NameValuePair, serverName, fieldDesc, namespace string, kubeClient client.Client) error {
+	for i, pair := range pairs {
+		if pair.SecretKeyRef.Name == "" {
+			continue
+		}
+		v, err := getSecret(ctx, pair.SecretKeyRef.Name, namespace, pair.SecretKeyRef, kubeClient)
+		if err != nil {
+			return fmt.Errorf("error resolving %s secret for MCPServer %q: %w", fieldDesc, serverName, err)
+		}
+		pairs[i].Value = v
+	}
 	return nil
 }
 
