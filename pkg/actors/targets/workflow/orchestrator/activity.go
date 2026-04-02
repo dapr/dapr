@@ -22,7 +22,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dispatch"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -30,7 +29,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) dispatch.Result {
+func (o *orchestrator) callActivities(ctx context.Context, es []*backend.HistoryEvent, state *wfenginestate.State) dispatchResult {
 	var dueTime time.Time
 	if len(state.History) > 0 {
 		dueTime = state.History[0].GetTimestamp().AsTime()
@@ -38,7 +37,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 		dueTime = state.Inbox[0].GetTimestamp().AsTime()
 	}
 
-	var result dispatch.Result
+	var result dispatchResult
 	for _, e := range es {
 		err := o.callActivity(ctx, e, dueTime, state.Generation)
 		if err != nil {
@@ -47,7 +46,7 @@ func (o *orchestrator) callActivities(ctx context.Context, es []*backend.History
 				continue
 			}
 
-			result.RecordFailure(e.GetEventId(), err)
+			result.recordFailure(e.GetEventId(), err)
 			continue
 		}
 	}
@@ -79,7 +78,7 @@ func (o *orchestrator) callActivity(ctx context.Context, e *backend.HistoryEvent
 
 	log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s||%s'", o.actorID, activityActorType, targetActorID)
 
-	ctx, cancel := context.WithTimeout(ctx, dispatch.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, dispatchTimeout)
 	defer cancel()
 
 	_, err = o.router.Call(ctx, internalsv1pb.

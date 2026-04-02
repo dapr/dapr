@@ -17,13 +17,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dispatch"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
@@ -195,24 +195,18 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
 	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
 
-	dispatchErr := errors.Join(activityResult.Err, addResult.Err, createResult.Err)
+	dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
 	if dispatchErr != nil {
-		if len(state.History) == 0 && (dispatch.HasRemoteTasks(pendingTasks) || dispatch.HasRemoteMessages(createWorkflows)) {
+		if len(state.History) == 0 && (hasRemoteTasks(pendingTasks) || hasRemoteMessages(createWorkflows)) {
 			// Save state without the events that failed to dispatch so the
 			// workflow transitions to RUNNING. Successfully dispatched items
 			// keep their events in history so they are not re-dispatched on
 			// retry. The inbox is preserved so the existing reminder retries
 			// the full execution.
 			allFailed := make(map[int32]struct{})
-			for id := range activityResult.FailedEventIDs {
-				allFailed[id] = struct{}{}
-			}
-			for id := range createResult.FailedEventIDs {
-				allFailed[id] = struct{}{}
-			}
-			for id := range addResult.FailedEventIDs {
-				allFailed[id] = struct{}{}
-			}
+			maps.Copy(allFailed, activityResult.failedEventIDs)
+			maps.Copy(allFailed, createResult.failedEventIDs)
+			maps.Copy(allFailed, addResult.failedEventIDs)
 
 			// Temporarily replace rs.NewEvents with a filtered copy that excludes
 			// failed dispatch events, then restore the original after
@@ -222,7 +216,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			origNewEvents := rs.NewEvents
 			filtered := origNewEvents[:0:0]
 			for _, e := range origNewEvents {
-				if dispatch.IsDispatchableEvent(e) {
+				if isDispatchableEvent(e) {
 					if _, failed := allFailed[e.GetEventId()]; failed {
 						continue
 					}

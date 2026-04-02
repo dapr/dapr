@@ -60,15 +60,29 @@ func (d *duplicatetaskscheduled) Run(t *testing.T, ctx context.Context) {
 	reg2 := dworkflow.NewRegistry()
 
 	reg1.AddWorkflowN("fanout", func(ctx *dworkflow.WorkflowContext) (any, error) {
-		localTask := ctx.CallActivity("local")
-		remoteTask := ctx.CallActivity("remote",
+		localTask1 := ctx.CallActivity("local")
+		localTask2 := ctx.CallActivity("local")
+		localTask3 := ctx.CallActivity("local")
+		localTask4 := ctx.CallActivity("local")
+		remoteTask1 := ctx.CallActivity("remote",
+			dworkflow.WithActivityAppID(d.workflow.DaprN(1).AppID()))
+		remoteTask2 := ctx.CallActivity("remote",
+			dworkflow.WithActivityAppID(d.workflow.DaprN(1).AppID()))
+		remoteTask3 := ctx.CallActivity("remote",
+			dworkflow.WithActivityAppID(d.workflow.DaprN(1).AppID()))
+		remoteTask4 := ctx.CallActivity("remote",
 			dworkflow.WithActivityAppID(d.workflow.DaprN(1).AppID()))
 
-		if err := localTask.Await(nil); err != nil {
-			return nil, err
+		for _, t := range []dworkflow.Task{localTask1, localTask2, localTask3, localTask4} {
+			if err := t.Await(nil); err != nil {
+				return nil, err
+			}
 		}
-		if err := remoteTask.Await(nil); err != nil {
-			return nil, err
+
+		for _, remoteTask := range []dworkflow.Task{remoteTask1, remoteTask2, remoteTask3, remoteTask4} {
+			if err := remoteTask.Await(nil); err != nil {
+				return nil, err
+			}
 		}
 		return nil, nil
 	})
@@ -76,9 +90,9 @@ func (d *duplicatetaskscheduled) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	})
 
-	var inRemote atomic.Bool
+	var inRemote atomic.Int32
 	reg2.AddActivityN("remote", func(ctx dworkflow.ActivityContext) (any, error) {
-		inRemote.Store(true)
+		inRemote.Add(1)
 		select {
 		case <-d.remoteGate:
 		case <-ctx.Context().Done():
@@ -95,7 +109,9 @@ func (d *duplicatetaskscheduled) Run(t *testing.T, ctx context.Context) {
 	id, err := wf1.ScheduleWorkflow(ctx, "fanout")
 	require.NoError(t, err)
 
-	require.Eventually(t, inRemote.Load, 5*time.Second, 10*time.Millisecond)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, int32(4), inRemote.Load(), "expected all 4 remote activities to have started by now")
+	}, time.Second, 10*time.Millisecond)
 	close(d.remoteGate)
 
 	_, err = wf1.WaitForWorkflowCompletion(ctx, id)
@@ -111,7 +127,7 @@ func (d *duplicatetaskscheduled) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 
-	require.Len(t, seen, 2, "expected exactly 2 distinct TaskScheduled events (local and remote)")
+	require.Len(t, seen, 8, "expected exactly 2 distinct TaskScheduled events (local and remote)")
 	for eventID, count := range seen {
 		assert.Equalf(t, 1, count,
 			"TaskScheduled with EventId %d appears %d times in history; expected exactly once", eventID, count)

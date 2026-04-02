@@ -20,21 +20,16 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator/dispatch"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) dispatch.Result {
+func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) dispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
-	// actionIDs maps each message index to the parent action's EventId
-	// (SubOrchestrationInstanceCreated.EventId), which is the ID used in
-	// NewEvents. The PendingMessage's own EventId is -1 (ExecutionStarted),
-	// so we need this mapping to correctly filter failed events from history.
 	actionIDs := make([]int32, len(events))
 
 	for i, msg := range events {
@@ -48,10 +43,10 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 		}
 	}
 
-	return o.callStateMessagesWithActionIDs(ctx, msgs, historyEvents, targets, actionIDs, todo.CreateWorkflowInstanceMethod)
+	return o.callStateMessages(ctx, msgs, historyEvents, targets, actionIDs, todo.CreateWorkflowInstanceMethod)
 }
 
-func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) dispatch.Result {
+func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) dispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
@@ -62,22 +57,18 @@ func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*b
 		targets[i] = msg.GetTargetInstanceID()
 	}
 
-	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.AddWorkflowEventMethod)
+	return o.callStateMessages(ctx, msgs, historyEvents, targets, nil, todo.AddWorkflowEventMethod)
 }
 
-func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, method string) dispatch.Result {
-	return o.callStateMessagesWithActionIDs(ctx, msgs, historyEvents, targets, nil, method)
-}
-
-func (o *orchestrator) callStateMessagesWithActionIDs(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, actionIDs []int32, method string) dispatch.Result {
-	var result dispatch.Result
+func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, actionIDs []int32, method string) dispatchResult {
+	var result dispatchResult
 	for i, msg := range msgs {
 		if err := o.callStateMessage(ctx, msg, historyEvents[i], targets[i], method); err != nil {
 			eventID := historyEvents[i].GetEventId()
 			if actionIDs != nil {
 				eventID = actionIDs[i]
 			}
-			result.RecordFailure(eventID, err)
+			result.recordFailure(eventID, err)
 			continue
 		}
 	}
@@ -119,7 +110,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 
 	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", o.actorID, method, actorType, target)
 
-	callCtx, cancel := context.WithTimeout(ctx, dispatch.Timeout)
+	callCtx, cancel := context.WithTimeout(ctx, dispatchTimeout)
 	defer cancel()
 
 	if _, err = o.router.Call(callCtx, internalsv1pb.
