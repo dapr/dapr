@@ -33,6 +33,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/subscription/postman"
+	"github.com/dapr/dapr/pkg/runtime/subscription/todo"
 	"github.com/dapr/kit/logger"
 )
 
@@ -437,4 +439,88 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
+}
+
+func TestDeliverBulkTreatsEmptyStatusAsSuccess(t *testing.T) {
+	mockAppChannel := new(channelt.MockAppChannel)
+	h := New(Options{
+		Channels: new(channels.Channels).WithAppChannel(mockAppChannel),
+	})
+
+	bulkResponseBody, err := json.Marshal(contribpubsub.AppBulkResponse{
+		AppResponses: []contribpubsub.AppBulkResponseEntry{
+			{EntryId: "entry-1"},
+		},
+	})
+	require.NoError(t, err)
+
+	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+		WithRawDataBytes(bulkResponseBody).
+		WithContentType("application/json")
+	defer fakeResp.Close()
+
+	mockAppChannel.On(
+		"InvokeMethod",
+		mock.Anything,
+		mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+			return req.Message().GetMethod() == "bulk"
+		}),
+	).Return(fakeResp, nil)
+
+	rawItem := &runtimePubsub.BulkSubscribeMessageItem{
+		EntryId: "entry-1",
+		Event: map[string]any{
+			"id": "entry-1",
+		},
+	}
+	entry := &contribpubsub.BulkMessageEntry{
+		EntryId: "entry-1",
+		Event:   []byte(`{"id":"entry-1"}`),
+	}
+	psm := &todo.BulkSubscribedMessage{
+		PubSubMessages: []todo.Message{{
+			CloudEvent: map[string]any{
+				contribpubsub.IDField: "entry-1",
+			},
+			RawData: rawItem,
+			Entry:   entry,
+		}},
+		Topic: "topic1",
+		Metadata: map[string]string{
+			"pubsubName": "testpubsub",
+		},
+		Pubsub: "testpubsub",
+		Path:   "bulk",
+		Length: 1,
+	}
+
+	bulkResponses := make([]contribpubsub.BulkSubscribeResponseEntry, 1)
+	entryIndexMap := map[string]int{"entry-1": 0}
+	bulkDiag := todo.NewBulkSubIngressDiagnostics()
+	bsrr := &todo.BulkSubscribeResiliencyRes{
+		Envelope: runtimePubsub.NewBulkSubscribeEnvelope(&runtimePubsub.BulkSubscribeEnvelope{
+			Topic:  "topic1",
+			Pubsub: "testpubsub",
+		}),
+	}
+
+	err = h.DeliverBulk(t.Context(), &postman.DeliverBulkRequest{
+		BulkSubCallData: &todo.BulkSubscribeCallData{
+			BulkResponses:   &bulkResponses,
+			BulkSubDiag:     &bulkDiag,
+			EntryIdIndexMap: &entryIndexMap,
+			PsName:          "testpubsub",
+			Topic:           "topic1",
+		},
+		BulkSubMsg:           psm,
+		BulkSubResiliencyRes: bsrr,
+		BulkResponses:        &bsrr.Entries,
+	})
+	require.NoError(t, err)
+	require.Len(t, bsrr.Entries, 1)
+	assert.Equal(t, "entry-1", bsrr.Entries[0].EntryId)
+	assert.NoError(t, bsrr.Entries[0].Error)
+	assert.Equal(t, int64(1), bulkDiag.StatusWiseDiag[string(contribpubsub.Success)])
+	assert.Equal(t, int64(0), bulkDiag.StatusWiseDiag[string(contribpubsub.Retry)])
+	mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 }
