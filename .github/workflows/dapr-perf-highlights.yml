@@ -14,9 +14,10 @@
 name: Generate Performance Charts and Highlights
 
 on:
-  # Fires on official releases only — RCs (tags containing -rc) are excluded below
-  release:
-    types: [published]
+  # Fires on v* tag pushes — RCs (tags containing -rc) are excluded below
+  push:
+    tags:
+      - 'v*'
   # Manual trigger: re-run for a flaked release, or generate highlights for an old version.
   # Provide the version tag (with v prefix, ex: v1.18.0) — perf tests will be dispatched automatically.
   workflow_dispatch:
@@ -34,15 +35,16 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'release' && !contains(github.event.release.tag_name, '-rc'))
+      (github.event_name == 'push' && !contains(github.ref_name, '-rc'))
     outputs:
       version: ${{ steps.get.outputs.VERSION }}
       ref: ${{ steps.get.outputs.REF }}
     steps:
       - name: Get version and ref
         id: get
+        env:
+          VERSION: ${{ github.ref_name || inputs.version }}
         run: |
-          VERSION="${{ github.event.release.tag_name || inputs.version }}"
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "REF=refs/tags/${VERSION}" >> $GITHUB_OUTPUT
 
@@ -67,7 +69,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version-file: 'go.mod'
 
       - name: Download Performance Test Results
         uses: actions/download-artifact@v4
@@ -97,9 +99,11 @@ jobs:
 
       - name: Generate Charts and Highlights
         working-directory: tests/perf/report
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
         run: |
           go build -o _report_bin .
-          ./_report_bin --version ${{ needs.resolve-version.outputs.version }} \
+          ./_report_bin --version "${VERSION}" \
             --input-file ../test_report_perf.json \
             --model qwen2.5:7b
           rm -f _report_bin
