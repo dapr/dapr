@@ -103,7 +103,7 @@ rules:
     resources: ["configmaps"]
     verbs: ["get", "list", "watch", "update", "create"]
     resourceNames: ["operator.dapr.io", "webhooks.dapr.io"]
-# We cannot use resourceNames for create because Kubernetes doesn't nessarily
+# We cannot use resourceNames for create because Kubernetes doesn't necessarily
 # know resource names at authorization time.
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
