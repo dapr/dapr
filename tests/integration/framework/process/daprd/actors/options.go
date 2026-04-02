@@ -30,7 +30,7 @@ type options struct {
 
 	placement               *placement.Placement
 	scheduler               *scheduler.Scheduler
-	peerShared              bool
+	sharedControlPlane      bool
 	daprdConfigs            []string
 	actorTypeHandlers       map[string]http.HandlerFunc
 	handlers                map[string]http.HandlerFunc
@@ -88,12 +88,18 @@ func WithHandler(pattern string, handler http.HandlerFunc) Option {
 	}
 }
 
+func WithSharedControlPlane() Option {
+	return func(o *options) {
+		o.sharedControlPlane = true
+	}
+}
+
 func WithPeerActor(actor *Actors) Option {
 	return func(o *options) {
 		WithDB(actor.DB())(o)
 		WithPlacement(actor.Placement())(o)
 		WithScheduler(actor.Scheduler())(o)
-		o.peerShared = true
+		WithSharedControlPlane()(o)
 	}
 }
 
