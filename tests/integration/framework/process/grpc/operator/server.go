@@ -28,9 +28,11 @@ type server struct {
 	httpEndpointUpdateFn  func(*operatorv1.HTTPEndpointUpdateRequest, operatorv1.Operator_HTTPEndpointUpdateServer) error
 	listComponentsFn      func(context.Context, *operatorv1.ListComponentsRequest) (*operatorv1.ListComponentResponse, error)
 	listHTTPEndpointsFn   func(context.Context, *operatorv1.ListHTTPEndpointsRequest) (*operatorv1.ListHTTPEndpointsResponse, error)
+	listMCPServersFn      func(context.Context, *operatorv1.ListMCPServersRequest) (*operatorv1.ListMCPServersResponse, error)
 	listResiliencyFn      func(context.Context, *operatorv1.ListResiliencyRequest) (*operatorv1.ListResiliencyResponse, error)
 	listSubscriptionsFn   func(context.Context, *emptypb.Empty) (*operatorv1.ListSubscriptionsResponse, error)
 	listSubscriptionsV2Fn func(context.Context, *operatorv1.ListSubscriptionsRequest) (*operatorv1.ListSubscriptionsResponse, error)
+	mcpServerUpdateFn     func(*operatorv1.MCPServerUpdateRequest, operatorv1.Operator_MCPServerUpdateServer) error
 	subscriptionUpdateFn  func(*operatorv1.SubscriptionUpdateRequest, operatorv1.Operator_SubscriptionUpdateServer) error
 }
 
@@ -74,6 +76,20 @@ func (s *server) ListHTTPEndpoints(ctx context.Context, in *operatorv1.ListHTTPE
 		return s.listHTTPEndpointsFn(ctx, in)
 	}
 	return new(operatorv1.ListHTTPEndpointsResponse), nil
+}
+
+func (s *server) ListMCPServers(ctx context.Context, in *operatorv1.ListMCPServersRequest) (*operatorv1.ListMCPServersResponse, error) {
+	if s.listMCPServersFn != nil {
+		return s.listMCPServersFn(ctx, in)
+	}
+	return new(operatorv1.ListMCPServersResponse), nil
+}
+
+func (s *server) MCPServerUpdate(in *operatorv1.MCPServerUpdateRequest, srv operatorv1.Operator_MCPServerUpdateServer) error {
+	if s.mcpServerUpdateFn != nil {
+		return s.mcpServerUpdateFn(in, srv)
+	}
+	return nil
 }
 
 func (s *server) ListResiliency(ctx context.Context, in *operatorv1.ListResiliencyRequest) (*operatorv1.ListResiliencyResponse, error) {

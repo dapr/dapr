@@ -1,0 +1,376 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.2
+  name: mcpservers.dapr.io
+  labels:
+    app.kubernetes.io/part-of: "dapr"
+spec:
+  group: dapr.io
+  names:
+    kind: MCPServer
+    listKind: MCPServerList
+    plural: mcpservers
+    singular: mcpserver
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          MCPServer describes a Dapr MCPServer resource that declares a connection to
+          an MCP (Model Context Protocol) server. Dapr loads these at startup and
+          exposes built-in dapr.mcp.<name>.ListTools and dapr.mcp.<name>.CallTool
+          workflow orchestrations for durable tool execution.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          scopes:
+            description: Scopes lists the Dapr app IDs that are allowed to use this MCPServer.
+            items:
+              type: string
+            type: array
+          spec:
+            description: MCPServerSpec is the full configuration for an MCP server connection.
+            properties:
+              catalog:
+                description: Catalog holds UI-facing governance metadata. Purely informational.
+                properties:
+                  description:
+                    type: string
+                  displayName:
+                    type: string
+                  links:
+                    additionalProperties:
+                      type: string
+                    description: Links is a free-form map of named URLs.
+                    type: object
+                  owner:
+                    description: MCPCatalogOwner identifies the team responsible for the MCP server.
+                    properties:
+                      contact:
+                        type: string
+                      team:
+                        type: string
+                    type: object
+                  tags:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              endpoint:
+                description: |-
+                  Endpoint describes how to reach the MCP server.
+                  Exactly one of streamableHTTP, sse, or stdio must be set, matching transport.
+                properties:
+                  streamableHTTP:
+                    description: StreamableHTTP configures the streamable_http transport.
+                    properties:
+                      url:
+                        description: URL is the endpoint URL of the MCP server.
+                        type: string
+                      protocolVersion:
+                        description: ProtocolVersion pins the MCP spec version the server implements.
+                        type: string
+                      timeout:
+                        description: Timeout is the per-call deadline for MCP requests (e.g. 30s).
+                        type: string
+                      headers:
+                        description: Headers are injected on all outbound HTTP requests to the MCP server.
+                        items:
+                          description: NameValuePair is a name/value pair.
+                          properties:
+                            envRef:
+                              description: EnvRef is the name of an environmental variable to read the value from.
+                              type: string
+                            name:
+                              description: Name of the property.
+                              type: string
+                            secretKeyRef:
+                              description: SecretKeyRef is the reference of a value in a secret store component.
+                              properties:
+                                key:
+                                  description: Field in the secret.
+                                  type: string
+                                name:
+                                  description: Secret name.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            value:
+                              description: Value of the property, in plaintext.
+                              x-kubernetes-preserve-unknown-fields: true
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      auth:
+                        description: Auth configures authentication for the MCP server connection.
+                        properties:
+                          oauth2:
+                            description: OAuth2 configures OAuth2 client credentials flow for the MCP server.
+                            properties:
+                              audience:
+                                type: string
+                              issuer:
+                                description: Issuer is the token endpoint of the authorization server.
+                                type: string
+                              scopes:
+                                items:
+                                  type: string
+                                type: array
+                              secretKeyRef:
+                                description: SecretKeyRef references the client secret in the configured secret store.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                            required:
+                            - issuer
+                            type: object
+                          secretStore:
+                            description: SecretStore names the Dapr secret store for resolving secretKeyRef entries. Defaults to "kubernetes".
+                            type: string
+                            nullable: true
+                          spiffe:
+                            description: SPIFFE configures workload identity JWT injection.
+                            properties:
+                              jwt:
+                                properties:
+                                  audience:
+                                    type: string
+                                  header:
+                                    type: string
+                                  headerValuePrefix:
+                                    type: string
+                                required:
+                                - audience
+                                - header
+                                type: object
+                            type: object
+                        type: object
+                    required:
+                    - url
+                    type: object
+                  sse:
+                    description: SSE configures the legacy SSE transport.
+                    properties:
+                      url:
+                        description: URL is the endpoint URL of the MCP server.
+                        type: string
+                      protocolVersion:
+                        type: string
+                      timeout:
+                        type: string
+                      headers:
+                        items:
+                          description: NameValuePair is a name/value pair.
+                          properties:
+                            envRef:
+                              type: string
+                            name:
+                              type: string
+                            secretKeyRef:
+                              properties:
+                                key:
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            value:
+                              x-kubernetes-preserve-unknown-fields: true
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      auth:
+                        description: Auth configures authentication for the MCP server connection.
+                        properties:
+                          oauth2:
+                            properties:
+                              audience:
+                                type: string
+                              issuer:
+                                type: string
+                              scopes:
+                                items:
+                                  type: string
+                                type: array
+                              secretKeyRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                            required:
+                            - issuer
+                            type: object
+                          secretStore:
+                            type: string
+                            nullable: true
+                          spiffe:
+                            properties:
+                              jwt:
+                                properties:
+                                  audience:
+                                    type: string
+                                  header:
+                                    type: string
+                                  headerValuePrefix:
+                                    type: string
+                                required:
+                                - audience
+                                - header
+                                type: object
+                            type: object
+                        type: object
+                    required:
+                    - url
+                    type: object
+                  stdio:
+                    description: Stdio configures the stdio subprocess transport.
+                    properties:
+                      command:
+                        description: Command is the executable to run.
+                        type: string
+                      args:
+                        items:
+                          type: string
+                        type: array
+                      env:
+                        description: Env are environment variables injected into the subprocess.
+                        items:
+                          description: NameValuePair is a name/value pair.
+                          properties:
+                            envRef:
+                              type: string
+                            name:
+                              type: string
+                            secretKeyRef:
+                              properties:
+                                key:
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            value:
+                              x-kubernetes-preserve-unknown-fields: true
+                          required:
+                          - name
+                          type: object
+                        type: array
+                    required:
+                    - command
+                    type: object
+                type: object
+              middleware:
+                description: |-
+                  Middleware defines optional hook pipelines invoked around tool and list operations.
+                  Hooks are executed in array order.
+                properties:
+                  beforeCallTool:
+                    description: Hooks invoked in order before each CallTool. Errors abort the call.
+                    items:
+                      description: A single middleware hook. Exactly one field must be set.
+                      properties:
+                        workflow:
+                          description: Invoke a Dapr workflow as the hook.
+                          properties:
+                            workflowName:
+                              description: Name of the workflow to invoke.
+                              type: string
+                            appID:
+                              description: Target a remote Dapr app. When unset, runs locally.
+                              type: string
+                          required:
+                          - workflowName
+                          type: object
+                      type: object
+                    type: array
+                  afterCallTool:
+                    description: Hooks invoked in order after each CallTool. Errors are logged only.
+                    items:
+                      description: A single middleware hook. Exactly one field must be set.
+                      properties:
+                        workflow:
+                          description: Invoke a Dapr workflow as the hook.
+                          properties:
+                            workflowName:
+                              type: string
+                            appID:
+                              type: string
+                          required:
+                          - workflowName
+                          type: object
+                      type: object
+                    type: array
+                  beforeListTools:
+                    description: Hooks invoked in order before each ListTools. Errors abort the call.
+                    items:
+                      description: A single middleware hook. Exactly one field must be set.
+                      properties:
+                        workflow:
+                          description: Invoke a Dapr workflow as the hook.
+                          properties:
+                            workflowName:
+                              type: string
+                            appID:
+                              type: string
+                          required:
+                          - workflowName
+                          type: object
+                      type: object
+                    type: array
+                  afterListTools:
+                    description: Hooks invoked in order after each ListTools. Errors are logged only.
+                    items:
+                      description: A single middleware hook. Exactly one field must be set.
+                      properties:
+                        workflow:
+                          description: Invoke a Dapr workflow as the hook.
+                          properties:
+                            workflowName:
+                              type: string
+                            appID:
+                              type: string
+                          required:
+                          - workflowName
+                          type: object
+                      type: object
+                    type: array
+                type: object
+            required:
+            - endpoint
+            type: object
+        type: object
+    served: true
+    storage: true
