@@ -21,18 +21,18 @@ import (
 )
 
 // mcpStdioEnvResource is a thin adapter that wraps an MCPServer and overrides
-// NameValuePairs to return Spec.Stdio.Env instead of Spec.Headers.
-// This lets ProcessResource resolve secretKeyRef and envRef entries in stdio.env via the
-// same secret-store infrastructure used for headers.
+// NameValuePairs to return Spec.Endpoint.Stdio.Env instead of the HTTP transport headers.
+// This lets ProcessResource resolve secretKeyRef and envRef entries in stdio env via the
+// same secret-store infrastructure used for HTTP headers.
 type mcpStdioEnvResource struct {
 	*mcpserverapi.MCPServer
 }
 
 func (r mcpStdioEnvResource) NameValuePairs() []commonapi.NameValuePair {
-	if r.Spec.Stdio == nil {
+	if r.Spec.Endpoint.Stdio == nil {
 		return nil
 	}
-	return r.Spec.Stdio.Env
+	return r.Spec.Endpoint.Stdio.Env
 }
 
 // AddPendingMCPServer enqueues an MCPServer for processing.
@@ -63,6 +63,11 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 			continue
 		}
 
+		if err := s.Spec.Endpoint.Validate(); err != nil {
+			log.Warnf("MCPServer %q has invalid endpoint configuration: %s", s.Name, err)
+			continue
+		}
+
 		p.processMCPServerSecrets(ctx, &s)
 		p.compStore.AddMCPServer(s)
 		log.Infof("MCPServer loaded: %s", s.LogName())
@@ -72,17 +77,17 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 }
 
 // processMCPServerSecrets resolves secretKeyRef and envRef entries in both
-// spec.headers and spec.stdio.env using the configured secret store.
+// spec.endpoint.http.headers and spec.endpoint.stdio.env using the configured secret store.
 // Unlike components, MCPServer resources load after all secret store components are initialized,
 // so secrets are available immediately.
 // ProcessResource logs errors internally and resolves what it can; it does not
 // return an error. Unresolvable secretKeyRef values remain as empty strings.
 func (p *Processor) processMCPServerSecrets(ctx context.Context, s *mcpserverapi.MCPServer) {
-	// Resolve spec.headers (envRef + secretKeyRef).
+	// Resolve spec.endpoint.http.headers (envRef + secretKeyRef).
 	p.secret.ProcessResource(ctx, s)
 
-	// Resolve spec.stdio.env
-	if s.Spec.Stdio != nil {
+	// Resolve spec.endpoint.stdio.env
+	if s.Spec.Endpoint.Stdio != nil {
 		p.secret.ProcessResource(ctx, mcpStdioEnvResource{s})
 	}
 }

@@ -33,12 +33,11 @@ metadata:
   name: github
 spec:
   endpoint:
-    transport: streamable_http
-    target:
+    streamableHTTP:
       url: https://api.githubcopilot.com/mcp/
-  headers:
-  - name: Authorization
-    value: Bearer mytoken
+      headers:
+      - name: Authorization
+        value: Bearer mytoken
 `
 		require.NoError(t, os.WriteFile(filepath.Join(tmp, "github.yaml"), []byte(yaml), fs.FileMode(0o600)))
 
@@ -47,10 +46,11 @@ spec:
 		require.NoError(t, err)
 		require.Len(t, servers, 1)
 		assert.Equal(t, "github", servers[0].Name)
-		assert.Equal(t, "streamable_http", string(servers[0].Spec.Endpoint.Transport))
-		assert.Equal(t, "https://api.githubcopilot.com/mcp/", servers[0].Spec.Endpoint.Target.URL)
-		require.Len(t, servers[0].Spec.Headers, 1)
-		assert.Equal(t, "Authorization", servers[0].Spec.Headers[0].Name)
+		require.NotNil(t, servers[0].Spec.Endpoint.StreamableHTTP, "expected streamableHTTP transport")
+		require.NotNil(t, servers[0].Spec.Endpoint.StreamableHTTP)
+		assert.Equal(t, "https://api.githubcopilot.com/mcp/", servers[0].Spec.Endpoint.StreamableHTTP.URL)
+		require.Len(t, servers[0].Spec.Endpoint.StreamableHTTP.Headers, 1)
+		assert.Equal(t, "Authorization", servers[0].Spec.Endpoint.StreamableHTTP.Headers[0].Name)
 	})
 
 	t.Run("non-MCPServer manifests in same file are skipped", func(t *testing.T) {
@@ -62,8 +62,7 @@ metadata:
   name: mcp1
 spec:
   endpoint:
-    transport: sse
-    target:
+    sse:
       url: https://mcp.example.com/
 ---
 apiVersion: dapr.io/v1alpha1
@@ -99,8 +98,7 @@ metadata:
   name: scoped-mcp
 spec:
   endpoint:
-    transport: streamable_http
-    target:
+    streamableHTTP:
       url: https://mcp.example.com/
 scopes:
 - myapp

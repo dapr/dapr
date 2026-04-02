@@ -28,15 +28,19 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
-// processMCPServerSecrets resolves any secretKeyRef entries in spec.headers using the Kubernetes secret store.
+// processMCPServerSecrets resolves any secretKeyRef entries in the transport
+// headers using the Kubernetes secret store.
 func processMCPServerSecrets(ctx context.Context, s *mcpserverapi.MCPServer, namespace string, kubeClient client.Client) error {
 	// Only resolve secrets when auth.secretStore is "kubernetes" or unset (defaults to kubernetes).
-	if s.Spec.Auth != nil && s.Spec.Auth.SecretStore != nil && *s.Spec.Auth.SecretStore != "" && *s.Spec.Auth.SecretStore != kubernetesSecretStore {
+	secretStore := s.GetSecretStore()
+	if secretStore != "" && secretStore != kubernetesSecretStore {
 		// Non-kubernetes secret stores are resolved by the sidecar processor, not the operator.
 		return nil
 	}
 
-	for i, header := range s.Spec.Headers {
+	// Resolve headers from whichever HTTP transport is configured.
+	headers := s.NameValuePairs()
+	for i, header := range headers {
 		if header.SecretKeyRef.Name == "" {
 			continue
 		}
@@ -44,7 +48,7 @@ func processMCPServerSecrets(ctx context.Context, s *mcpserverapi.MCPServer, nam
 		if err != nil {
 			return fmt.Errorf("error resolving header secret for MCPServer %q: %w", s.Name, err)
 		}
-		s.Spec.Headers[i].Value = v
+		headers[i].Value = v
 	}
 
 	return nil
