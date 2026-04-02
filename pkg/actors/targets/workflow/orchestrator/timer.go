@@ -45,7 +45,7 @@ func (o *orchestrator) createTimers(ctx context.Context, es []*backend.HistoryEv
 
 // hasUnfiredTimers returns true if the runtime state contains TimerCreated
 // events that do not have a corresponding TimerFired event.
-func hasUnfiredTimers(rs *protos.OrchestrationRuntimeState) bool {
+func hasUnfiredTimers(rs *protos.WorkflowRuntimeState) bool {
 	var created, fired int
 	for _, events := range [2][]*protos.HistoryEvent{
 		(rs.GetOldEvents()),
@@ -129,7 +129,7 @@ func (o *orchestrator) createTimerReminder(ctx context.Context, name string, dat
 // cancellation, since events in OldEvents were already processed in a
 // previous execution. TimerCreated and TimerFired are scanned across both
 // OldEvents and NewEvents.
-func (o *orchestrator) deleteCancelledEventTimers(ctx context.Context, rs *protos.OrchestrationRuntimeState) error {
+func (o *orchestrator) deleteCancelledEventTimers(ctx context.Context, rs *protos.WorkflowRuntimeState) error {
 	newEvents := rs.GetNewEvents()
 
 	// Quick check: if there are no new events that could contain an

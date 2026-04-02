@@ -17,12 +17,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
-
 	"google.golang.org/protobuf/proto"
 
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
-	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/runtimestate"
 )
@@ -32,7 +29,6 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 	if err := proto.Unmarshal(request, &createWorkflowInstanceRequest); err != nil {
 		return fmt.Errorf("failed to unmarshal createWorkflowInstanceRequest: %w", err)
 	}
-	reuseIDPolicy := createWorkflowInstanceRequest.GetPolicy()
 
 	startEvent := createWorkflowInstanceRequest.GetStartEvent()
 	if es := startEvent.GetExecutionStarted(); es == nil {
@@ -42,15 +38,15 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 			log.Debugf("Workflow actor '%s': creating workflow '%s' with instanceId '%s'",
 				o.actorID,
 				es.GetName(),
-				es.GetOrchestrationInstance().GetInstanceId(),
+				es.GetWorkflowInstance().GetInstanceId(),
 			)
 		} else {
 			log.Debugf("Workflow actor '%s': creating child workflow '%s' with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'",
 				o.actorID,
 				es.GetName(),
-				es.GetOrchestrationInstance().GetInstanceId(),
+				es.GetWorkflowInstance().GetInstanceId(),
 				es.GetParentInstance().GetName(),
-				es.GetParentInstance().GetOrchestrationInstance().GetInstanceId(),
+				es.GetParentInstance().GetWorkflowInstance().GetInstanceId(),
 			)
 		}
 	}
@@ -68,36 +64,13 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 			WorkflowActorType: o.actorType,
 			ActivityActorType: o.activityActorType,
 		})
-		o.rstate = runtimestate.NewOrchestrationRuntimeState(o.actorID, state.CustomStatus, state.History)
+		o.rstate = runtimestate.NewWorkflowRuntimeState(o.actorID, state.CustomStatus, state.History)
 		o.ometa = o.ometaFromState(o.rstate, startEvent.GetExecutionStarted())
 		return o.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 
-	// orchestration already existed: apply reuse id policy
-	rs := o.rstate
-	runtimeStatus := runtimestate.RuntimeStatus(rs)
-	// if target status doesn't match, fall back to original logic, create instance only if previous one is completed
-	if !isStatusMatch(reuseIDPolicy.GetOperationStatus(), runtimeStatus) {
-		return o.createIfCompleted(ctx, rs, state, startEvent)
-	}
-
-	switch reuseIDPolicy.GetAction() {
-	case api.REUSE_ID_ACTION_IGNORE:
-		// Log an warning message and ignore creating new instance
-		log.Warnf("Workflow actor '%s': ignoring request to recreate the current workflow instance", o.actorID)
-		return nil
-	case api.REUSE_ID_ACTION_TERMINATE:
-		// terminate existing instance
-		if err := o.cleanupWorkflowStateInternal(ctx, state, false); err != nil {
-			return fmt.Errorf("failed to terminate existing instance with ID '%s'", o.actorID)
-		}
-
-		// created a new instance
-		state.Reset()
-		return o.scheduleWorkflowStart(ctx, startEvent, state)
-	}
-	// default Action ERROR, fall back to original logic
-	return o.createIfCompleted(ctx, rs, state, startEvent)
+	// orchestration already existed: create instance only if previous one is completed
+	return o.createIfCompleted(ctx, o.rstate, state, startEvent)
 }
 
 func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.OrchestrationRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent) error {
@@ -109,7 +82,7 @@ func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.Orches
 		// re-execute and attempt the child creation again.
 		if o.isSameParentCreation(state, startEvent) {
 			log.Debugf("Workflow actor '%s': ignoring duplicate child workflow creation from parent '%s'",
-				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetOrchestrationInstance().GetInstanceId())
+				o.actorID, startEvent.GetExecutionStarted().GetParentInstance().GetWorkflowInstance().GetInstanceId())
 			return nil
 		}
 		return fmt.Errorf("an active workflow with ID '%s' already exists", o.actorID)
@@ -153,10 +126,7 @@ func (o *orchestrator) isSameParentCreation(state *wfenginestate.State, startEve
 		return false
 	}
 
-	return existingParent.GetOrchestrationInstance().GetInstanceId() == newParent.GetOrchestrationInstance().GetInstanceId() &&
+	return existingParent.GetWorkflowInstance().GetInstanceId() == newParent.GetWorkflowInstance().GetInstanceId() &&
 		existingParent.GetTaskScheduledId() == newParent.GetTaskScheduledId()
 }
 
-func isStatusMatch(statuses []api.OrchestrationStatus, runtimeStatus api.OrchestrationStatus) bool {
-	return slices.Contains(statuses, runtimeStatus)
-}

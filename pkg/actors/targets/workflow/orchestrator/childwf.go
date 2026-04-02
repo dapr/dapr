@@ -47,11 +47,11 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 					ParentInstance: &protos.ParentInstanceInfo{
 						TaskScheduledId:       e.EventId,
 						Name:                  wrapperspb.String(startEventName),
-						OrchestrationInstance: &protos.OrchestrationInstance{InstanceId: o.actorID},
+						WorkflowInstance: &protos.WorkflowInstance{InstanceId: o.actorID},
 						AppID:                 new(o.appID),
 					},
 					Input: createSO.Input,
-					OrchestrationInstance: &protos.OrchestrationInstance{
+					WorkflowInstance: &protos.WorkflowInstance{
 						InstanceId:  createSO.InstanceId,
 						ExecutionId: wrapperspb.String(uuid.New().String()),
 					},

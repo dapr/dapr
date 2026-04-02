@@ -26,7 +26,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) error {
+func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage) error {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
@@ -34,13 +34,13 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 	for i, msg := range events {
 		msgs[i] = &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
 		historyEvents[i] = msg.GetHistoryEvent()
-		targets[i] = msg.GetTargetInstanceID()
+		targets[i] = msg.GetTargetInstanceId()
 	}
 
 	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.CreateWorkflowInstanceMethod)
 }
 
-func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) error {
+func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage) error {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
@@ -48,7 +48,7 @@ func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*b
 	for i, msg := range events {
 		msgs[i] = msg.GetHistoryEvent()
 		historyEvents[i] = msg.GetHistoryEvent()
-		targets[i] = msg.GetTargetInstanceID()
+		targets[i] = msg.GetTargetInstanceId()
 	}
 
 	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.AddWorkflowEventMethod)
