@@ -11,17 +11,20 @@
 # limitations under the License.
 #
 
-name: Backport
+name: Automerge
+
 on:
-  pull_request_target:
-    types:
-      - closed
-      - labeled
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
 
 permissions: {}
 
 jobs:
-  backport:
-    uses: dapr/.github/.github/workflows/backport.yaml@main
+  automerge:
+    if: github.repository_owner == 'dapr'
+    uses: dapr/.github/.github/workflows/automerge.yaml@main
+    with:
+      maintainer-teams: maintainers-dapr
     secrets:
       dapr_bot_token: ${{ secrets.DAPR_BOT_TOKEN }}
