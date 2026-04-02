@@ -1323,7 +1323,7 @@ func (a *DaprRuntime) loadMCPServers(ctx context.Context) error {
 
 	authorizedServers, ok := a.authz.GetAuthorizedObjects(servers, a.authz.IsObjectAuthorized).([]mcpserverapi.MCPServer)
 	if !ok {
-		return fmt.Errorf("unexpected type from GetAuthorizedObjects for MCPServers")
+		return errors.New("unexpected type from GetAuthorizedObjects for MCPServers")
 	}
 
 	for _, s := range authorizedServers {
