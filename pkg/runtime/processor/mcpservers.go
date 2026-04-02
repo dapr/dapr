@@ -76,14 +76,15 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 	return nil
 }
 
-// processMCPServerSecrets resolves secretKeyRef and envRef entries in both
-// spec.endpoint.http.headers and spec.endpoint.stdio.env using the configured secret store.
+// processMCPServerSecrets resolves secretKeyRef and envRef entries in the
+// transport headers (spec.endpoint.streamableHTTP.headers or spec.endpoint.sse.headers)
+// and spec.endpoint.stdio.env using the configured secret store.
 // Unlike components, MCPServer resources load after all secret store components are initialized,
 // so secrets are available immediately.
 // ProcessResource logs errors internally and resolves what it can; it does not
 // return an error. Unresolvable secretKeyRef values remain as empty strings.
 func (p *Processor) processMCPServerSecrets(ctx context.Context, s *mcpserverapi.MCPServer) {
-	// Resolve spec.endpoint.http.headers (envRef + secretKeyRef).
+	// Resolve transport headers (envRef + secretKeyRef).
 	p.secret.ProcessResource(ctx, s)
 
 	// Resolve spec.endpoint.stdio.env
