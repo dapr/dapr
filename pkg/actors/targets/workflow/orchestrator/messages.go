@@ -125,9 +125,9 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 		WithContentType(invokev1.ProtobufContentType),
 	); err != nil {
 		if router := historyEvent.GetRouter(); router != nil && router.TargetAppID != nil {
-			return fmt.Errorf("failed to dispatch child workflow to remote app '%s' (the app may not be available): %w", router.GetTargetAppID(), err)
+			return fmt.Errorf("failed to invoke '%s' on remote app '%s' (the app may not be available): %w", method, router.GetTargetAppID(), err)
 		}
-		return fmt.Errorf("failed to invoke method '%s' on actor '%s': %w", method, target, err)
+		return fmt.Errorf("failed to invoke '%s' on actor '%s': %w", method, target, err)
 	}
 
 	return nil
