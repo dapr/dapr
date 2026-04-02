@@ -177,7 +177,7 @@ type MCPEndpoint struct {
 
 // Validate checks that exactly one transport is configured and that the
 // configured transport has all required fields set.
-func (e MCPEndpoint) Validate() error {
+func (e *MCPEndpoint) Validate() error {
 	count := 0
 	if e.StreamableHTTP != nil {
 		count++
