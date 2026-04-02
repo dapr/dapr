@@ -52,10 +52,10 @@ func TestNewServiceAccountMatcherErrorPropagates(t *testing.T) {
 
 func TestServiceAccountMatcherParsing(t *testing.T) {
 	tests := []struct {
-		name          string
-		input         string
+		name            string
+		input           string
 		wantAlwaysFalse bool
-		wantError     bool
+		wantError       bool
 	}{
 		{name: "empty string", input: "", wantAlwaysFalse: true},
 		{name: "whitespace only", input: "   ", wantAlwaysFalse: true},
