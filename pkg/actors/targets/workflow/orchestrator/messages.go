@@ -62,18 +62,18 @@ func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*b
 }
 
 func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, method string) dispatch.Result {
-	actionIDs := make([]int32, len(historyEvents))
-	for i, e := range historyEvents {
-		actionIDs[i] = e.GetEventId()
-	}
-	return o.callStateMessagesWithActionIDs(ctx, msgs, historyEvents, targets, actionIDs, method)
+	return o.callStateMessagesWithActionIDs(ctx, msgs, historyEvents, targets, nil, method)
 }
 
 func (o *orchestrator) callStateMessagesWithActionIDs(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, actionIDs []int32, method string) dispatch.Result {
 	var result dispatch.Result
 	for i, msg := range msgs {
 		if err := o.callStateMessage(ctx, msg, historyEvents[i], targets[i], method); err != nil {
-			result.RecordFailure(actionIDs[i], err)
+			eventID := historyEvents[i].GetEventId()
+			if actionIDs != nil {
+				eventID = actionIDs[i]
+			}
+			result.RecordFailure(eventID, err)
 			continue
 		}
 	}

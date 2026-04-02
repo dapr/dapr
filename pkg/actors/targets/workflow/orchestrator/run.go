@@ -214,6 +214,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				allFailed[id] = struct{}{}
 			}
 
+			// Temporarily replace rs.NewEvents with a filtered copy that excludes
+			// failed dispatch events, then restore the original after
+			// ApplyRuntimeStateChanges. This works because ApplyRuntimeStateChanges
+			// reads rs.NewEvents by reference (via GetNewEvents()) and appends
+			// directly to state.History. It does not copy or retain the slice.
 			origNewEvents := rs.NewEvents
 			filtered := origNewEvents[:0:0]
 			for _, e := range origNewEvents {
