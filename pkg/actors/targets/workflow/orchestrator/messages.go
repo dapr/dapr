@@ -41,7 +41,11 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 		msgs[i] = &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
 		historyEvents[i] = msg.GetHistoryEvent()
 		targets[i] = msg.GetTargetInstanceID()
-		actionIDs[i] = msg.GetHistoryEvent().GetExecutionStarted().GetParentInstance().GetTaskScheduledId()
+		if es := msg.GetHistoryEvent().GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
+			actionIDs[i] = es.GetParentInstance().GetTaskScheduledId()
+		} else {
+			actionIDs[i] = msg.GetHistoryEvent().GetEventId()
+		}
 	}
 
 	return o.callStateMessagesWithActionIDs(ctx, msgs, historyEvents, targets, actionIDs, todo.CreateWorkflowInstanceMethod)
