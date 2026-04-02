@@ -14,6 +14,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"errors"
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -65,26 +68,59 @@ func (m MCPServer) GetNamespace() string {
 }
 
 // GetSecretStore returns the name of the secret store used for resolving
-// secretKeyRef entries in spec.headers during resource processing.
+// secretKeyRef entries in transport headers during resource processing.
 // auth.oauth2.secretKeyRef is resolved separately at call time by the MCP worker.
 func (m MCPServer) GetSecretStore() string {
-	if m.Spec.Auth == nil || m.Spec.Auth.SecretStore == nil {
-		return ""
+	if auth := m.httpAuth(); auth != nil && auth.SecretStore != nil {
+		return *auth.SecretStore
 	}
-	return *m.Spec.Auth.SecretStore
+	return ""
 }
 
 // LogName returns a human-readable name suitable for log messages.
 func (m MCPServer) LogName() string {
-	if m.Spec.Endpoint.Target.URL != "" {
-		return m.Name + " (" + m.Spec.Endpoint.Target.URL + ")"
+	if url := m.URL(); url != "" {
+		return m.Name + " (" + url + ")"
 	}
 	return m.Name
 }
 
-// NameValuePairs returns the headers as name/value pairs for secret processing.
+// NameValuePairs returns the HTTP headers as name/value pairs for secret processing.
 func (m MCPServer) NameValuePairs() []common.NameValuePair {
-	return m.Spec.Headers
+	switch {
+	case m.Spec.Endpoint.StreamableHTTP != nil:
+		return m.Spec.Endpoint.StreamableHTTP.Headers
+	case m.Spec.Endpoint.SSE != nil:
+		return m.Spec.Endpoint.SSE.Headers
+	default:
+		return nil
+	}
+}
+
+// URL returns the endpoint URL from whichever HTTP transport is configured,
+// or "" for stdio.
+func (m MCPServer) URL() string {
+	switch {
+	case m.Spec.Endpoint.StreamableHTTP != nil:
+		return m.Spec.Endpoint.StreamableHTTP.URL
+	case m.Spec.Endpoint.SSE != nil:
+		return m.Spec.Endpoint.SSE.URL
+	default:
+		return ""
+	}
+}
+
+// httpAuth returns the auth config from whichever HTTP transport is configured,
+// or nil for stdio.
+func (m MCPServer) httpAuth() *MCPAuth {
+	switch {
+	case m.Spec.Endpoint.StreamableHTTP != nil:
+		return m.Spec.Endpoint.StreamableHTTP.Auth
+	case m.Spec.Endpoint.SSE != nil:
+		return m.Spec.Endpoint.SSE.Auth
+	default:
+		return nil
+	}
 }
 
 // GetScopes returns the app scopes for this resource.
@@ -118,9 +154,82 @@ type MCPServerSpec struct {
 	// Endpoint describes the transport and target of the MCP server.
 	Endpoint MCPEndpoint `json:"endpoint"`
 
-	// Headers are injected on all outbound HTTP transport requests to the MCP server:
-	// once per SSE connection handshake, or per-request for streamable_http.
-	// Not applicable when endpoint.transport is "stdio".
+	// Middleware defines optional workflow hooks invoked around each tool call.
+	//+optional
+	Middleware *MCPMiddleware `json:"middleware,omitempty"`
+}
+
+// MCPEndpoint describes how to reach the MCP server.
+// Exactly one of StreamableHTTP, SSE, or Stdio must be set.
+type MCPEndpoint struct {
+	// StreamableHTTP holds configuration for the streamable_http transport.
+	//+optional
+	StreamableHTTP *MCPStreamableHTTP `json:"streamableHTTP,omitempty"`
+
+	// SSE holds configuration for the legacy SSE transport.
+	//+optional
+	SSE *MCPSSE `json:"sse,omitempty"`
+
+	// Stdio holds configuration for the stdio subprocess transport.
+	//+optional
+	Stdio *MCPStdio `json:"stdio,omitempty"`
+}
+
+// Validate checks that exactly one transport is configured and that the
+// configured transport has all required fields set.
+func (e MCPEndpoint) Validate() error {
+	count := 0
+	if e.StreamableHTTP != nil {
+		count++
+	}
+	if e.SSE != nil {
+		count++
+	}
+	if e.Stdio != nil {
+		count++
+	}
+
+	if count == 0 {
+		return errors.New("exactly one of streamableHTTP, sse, or stdio must be set")
+	}
+	if count > 1 {
+		return fmt.Errorf("only one of streamableHTTP, sse, or stdio may be set (found %d)", count)
+	}
+
+	switch {
+	case e.StreamableHTTP != nil:
+		if e.StreamableHTTP.URL == "" {
+			return errors.New("streamableHTTP.url is required")
+		}
+	case e.SSE != nil:
+		if e.SSE.URL == "" {
+			return errors.New("sse.url is required")
+		}
+	case e.Stdio != nil:
+		if e.Stdio.Command == "" {
+			return errors.New("stdio.command is required")
+		}
+	}
+
+	return nil
+}
+
+// MCPStreamableHTTP configures the streamable_http transport.
+type MCPStreamableHTTP struct {
+	// URL is the endpoint URL of the MCP server.
+	URL string `json:"url"`
+
+	// ProtocolVersion pins the MCP spec version the server implements,
+	// using the date-based format defined by the MCP specification (e.g. "2025-06-18").
+	// When unset, the go-sdk negotiates the latest version supported by both sides.
+	//+optional
+	ProtocolVersion *string `json:"protocolVersion,omitempty"`
+
+	// Timeout is the per-call deadline for MCP requests.
+	//+optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// Headers are injected on all outbound HTTP requests to the MCP server.
 	// Each entry follows the same NameValuePair contract used by HTTPEndpoint:
 	// plain value, secretKeyRef, or envRef. Secret resolution uses auth.secretStore.
 	//+optional
@@ -129,57 +238,34 @@ type MCPServerSpec struct {
 	// Auth configures authentication for the MCP server connection.
 	//+optional
 	Auth *MCPAuth `json:"auth,omitempty"`
-
-	// Middleware defines optional workflow hooks invoked around each tool call.
-	//+optional
-	Middleware *MCPMiddleware `json:"middleware,omitempty"`
-
-	// Stdio is only valid when endpoint.transport is "stdio".
-	//+optional
-	Stdio *MCPStdioSpec `json:"stdio,omitempty"`
 }
 
-// MCPTransport identifies the wire transport used to reach the MCP server.
-type MCPTransport string
+// MCPSSE configures the legacy SSE transport.
+type MCPSSE struct {
+	// URL is the endpoint URL of the MCP server.
+	URL string `json:"url"`
 
-const (
-	MCPTransportStreamableHTTP MCPTransport = "streamable_http"
-	MCPTransportSSE            MCPTransport = "sse"
-	MCPTransportStdio          MCPTransport = "stdio"
-)
-
-// MCPEndpoint describes the transport and target of the MCP server.
-type MCPEndpoint struct {
-	// Transport is the wire transport: streamable_http, sse, or stdio.
-	Transport MCPTransport `json:"transport"`
-
-	// Target is a one-of identifying the MCP server.
-	// Only url is supported in v1. Future iterations add appID and httpEndpointName.
-	Target MCPEndpointTarget `json:"target"`
-
-	// ProtocolVersion pins the MCP spec version the server implements.
-	// Used by the go-sdk client to negotiate correctly.
+	// ProtocolVersion pins the MCP spec version the server implements,
+	// using the date-based format defined by the MCP specification (e.g. "2025-06-18").
+	// When unset, the go-sdk negotiates the latest version supported by both sides.
 	//+optional
 	ProtocolVersion *string `json:"protocolVersion,omitempty"`
 
 	// Timeout is the per-call deadline for MCP requests.
 	//+optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
-}
 
-// MCPEndpointTarget is a one-of: set exactly one field.
-// In v1 only URL is supported. AppID and HTTPEndpointName are reserved for
-// future iterations.
-type MCPEndpointTarget struct {
-	// URL is the raw endpoint URL of the MCP server.
+	// Headers are injected on all outbound HTTP requests to the MCP server.
 	//+optional
-	URL string `json:"url,omitempty"`
-	// AppID and HTTPEndpointName are reserved for future iterations.
+	Headers []common.NameValuePair `json:"headers,omitempty"`
+
+	// Auth configures authentication for the MCP server connection.
+	//+optional
+	Auth *MCPAuth `json:"auth,omitempty"`
 }
 
-// MCPStdioSpec configures a local stdio MCP server subprocess.
-// Only valid when endpoint.transport is "stdio". Not supported in Kubernetes mode.
-type MCPStdioSpec struct {
+// MCPStdio configures the stdio subprocess transport.
+type MCPStdio struct {
 	// Command is the executable to run.
 	Command string `json:"command"`
 	//+optional
@@ -196,7 +282,8 @@ type MCPStdioSpec struct {
 // When target.httpEndpointName is used (future), auth is delegated to that resource.
 type MCPAuth struct {
 	// SecretStore names the Dapr secret store used to resolve secretKeyRef entries
-	// in spec.headers and OAuth2 credentials. Defaults to "kubernetes".
+	// in spec.endpoint.http.headers. auth.oauth2.secretKeyRef is resolved separately
+	// at call time by the MCP worker. Defaults to "kubernetes".
 	//+optional
 	SecretStore *string `json:"secretStore,omitempty"`
 
@@ -207,7 +294,7 @@ type MCPAuth struct {
 	// SPIFFE configures workload identity JWT injection via Dapr's Sentry CA.
 	// No secret is required; Sentry issues the SVID automatically.
 	//+optional
-	SPIFFE *SPIFFESpec `json:"spiffe,omitempty"`
+	SPIFFE *SPIFFE `json:"spiffe,omitempty"`
 }
 
 // MCPOAuth2 configures OAuth2 client credentials for authenticating to an MCP server.
@@ -223,48 +310,84 @@ type MCPOAuth2 struct {
 	SecretKeyRef *common.SecretKeyRef `json:"secretKeyRef,omitempty"`
 }
 
-// SPIFFESpec configures SPIFFE workload identity for MCP server authentication.
-type SPIFFESpec struct {
+// SPIFFE configures SPIFFE workload identity for MCP server authentication.
+type SPIFFE struct {
 	// JWT configures how the SPIFFE SVID JWT is attached to outbound requests.
 	//+optional
-	JWT *SPIFFEJWTSpec `json:"jwt,omitempty"`
+	JWT *SPIFFEJWT `json:"jwt,omitempty"`
 }
 
-// SPIFFEJWTSpec describes how to attach a SPIFFE SVID JWT to outbound MCP requests.
-type SPIFFEJWTSpec struct {
+// SPIFFEJWT describes how to attach a SPIFFE SVID JWT to outbound MCP requests.
+type SPIFFEJWT struct {
 	// Header is the HTTP header name to inject the JWT into (e.g. "Authorization").
 	Header string `json:"header" validate:"required"`
+	// HeaderValuePrefix is an optional string prepended to the JWT value (e.g. "Bearer ").
+	//+optional
+	HeaderValuePrefix *string `json:"headerValuePrefix,omitempty"`
 	// Audience is the intended audience for the JWT (e.g. "mcp://payments").
 	Audience string `json:"audience" validate:"required"`
-	// Prefix is an optional string prepended to the JWT value (e.g. "Bearer ").
-	//+optional
-	Prefix *string `json:"prefix,omitempty"`
 }
 
-// MCPMiddleware defines optional workflow hooks invoked around each tool call.
+// MCPMiddleware defines optional hook pipelines invoked around tool and list operations.
+// Hooks are executed in array order. For "before" hooks, any error aborts the
+// chain and the operation. For "after" hooks, errors are logged but do not
+// affect the result returned to the caller.
 type MCPMiddleware struct {
-	// BeforeCall names a user-registered workflow invoked before each ListTools/CallTool.
-	// Receives {mcpServer, tool, arguments} as input.
-	// If this workflow returns an error the tool call is aborted and the error is
-	// returned as CallToolResult{isError: true} to the caller.
+	// BeforeCallTool hooks are invoked in order before each CallTool.
+	// Receives {mcpServer, toolName, arguments} as input.
+	// If any hook returns an error, the chain stops and the error is returned
+	// as CallToolResult{isError: true}.
 	//+optional
-	BeforeCall *string `json:"beforeCall,omitempty"`
+	BeforeCallTool []MCPMiddlewareHook `json:"beforeCallTool,omitempty"`
 
-	// AfterCall names a user-registered workflow invoked after each ListTools/CallTool.
-	// Receives {mcpServer, tool, arguments, result} as input.
-	// Errors from this workflow are logged but do not affect the result returned to
-	// the caller — the MCP call has already completed.
+	// AfterCallTool hooks are invoked in order after each CallTool.
+	// Receives {mcpServer, toolName, arguments, result} as input.
+	// Errors are logged but do not affect the result.
 	//+optional
-	AfterCall *string `json:"afterCall,omitempty"`
+	AfterCallTool []MCPMiddlewareHook `json:"afterCallTool,omitempty"`
+
+	// BeforeListTools hooks are invoked in order before each ListTools.
+	// Receives {mcpServer} as input.
+	// If any hook returns an error, the chain stops and the error is returned.
+	//+optional
+	BeforeListTools []MCPMiddlewareHook `json:"beforeListTools,omitempty"`
+
+	// AfterListTools hooks are invoked in order after each ListTools.
+	// Receives {mcpServer, result} as input.
+	// Errors are logged but do not affect the result.
+	//+optional
+	AfterListTools []MCPMiddlewareHook `json:"afterListTools,omitempty"`
+}
+
+// MCPMiddlewareHook is a single middleware hook. Exactly one field must be set.
+// Currently only Workflow is supported; additional hook types (e.g. HTTP callback,
+// policy evaluation) may be added in future.
+type MCPMiddlewareHook struct {
+	// Workflow invokes a Dapr workflow as the hook.
+	//+optional
+	Workflow *MCPMiddlewareWorkflow `json:"workflow,omitempty"`
+}
+
+// MCPMiddlewareWorkflow identifies a workflow to invoke as a middleware hook.
+// When AppID is set, the workflow runs on the remote app via Dapr service invocation.
+// When AppID is unset, the workflow runs locally in the same daprd's workflow engine.
+type MCPMiddlewareWorkflow struct {
+	// WorkflowName is the name of the workflow to invoke.
+	WorkflowName string `json:"workflowName"`
+
+	// AppID targets the workflow on a remote Dapr app via service invocation.
+	// When unset, the workflow is invoked locally.
+	//+optional
+	AppID *string `json:"appID,omitempty"`
 }
 
 // MCPServerCatalog holds user-facing governance metadata. It is purely
 // informational and has no effect on runtime behaviour.
 type MCPServerCatalog struct {
 	//+optional
-	DisplayName string `json:"displayName,omitempty"`
+	DisplayName *string `json:"displayName,omitempty"`
 	//+optional
-	Description string `json:"description,omitempty"`
+	Description *string `json:"description,omitempty"`
 	//+optional
 	Owner *MCPCatalogOwner `json:"owner,omitempty"`
 	//+optional
@@ -277,9 +400,9 @@ type MCPServerCatalog struct {
 // MCPCatalogOwner identifies the team responsible for the MCP server.
 type MCPCatalogOwner struct {
 	//+optional
-	Team string `json:"team,omitempty"`
+	Team *string `json:"team,omitempty"`
 	//+optional
-	Contact string `json:"contact,omitempty"`
+	Contact *string `json:"contact,omitempty"`
 }
 
 //+kubebuilder:object:root=true

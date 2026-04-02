@@ -674,7 +674,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if a.globalConfig.IsFeatureEnabled(config.MCPServerResource) {
 		err = a.loadMCPServers(ctx)
 		if err != nil {
-			log.Warnf("failed to load MCP servers: %s", err)
+			return fmt.Errorf("failed to load mcpservers: %s", err)
 		}
 		a.flushOutstandingMCPServers(ctx)
 		if len(a.compStore.ListMCPServers()) > 0 {

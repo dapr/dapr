@@ -1007,8 +1007,7 @@ func TestListsNamespaced(t *testing.T) {
 				},
 				Spec: mcpserverapi.MCPServerSpec{
 					Endpoint: mcpserverapi.MCPEndpoint{
-						Transport: mcpserverapi.MCPTransportStreamableHTTP,
-						Target:    mcpserverapi.MCPEndpointTarget{URL: "https://api.githubcopilot.com/mcp/"},
+						StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: "https://api.githubcopilot.com/mcp/"},
 					},
 				},
 			}, &mcpserverapi.MCPServer{
@@ -1019,8 +1018,7 @@ func TestListsNamespaced(t *testing.T) {
 				},
 				Spec: mcpserverapi.MCPServerSpec{
 					Endpoint: mcpserverapi.MCPEndpoint{
-						Transport: mcpserverapi.MCPTransportStreamableHTTP,
-						Target:    mcpserverapi.MCPEndpointTarget{URL: "https://other.example.com/mcp/"},
+						StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: "https://other.example.com/mcp/"},
 					},
 				},
 			}).
@@ -1132,17 +1130,20 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 func TestProcessMCPServerSecrets(t *testing.T) {
 	makeServer := func(secretStore *string) mcpserverapi.MCPServer {
 		s := mcpserverapi.MCPServer{}
-		s.Spec.Headers = []commonapi.NameValuePair{
-			{
-				Name: "Authorization",
-				SecretKeyRef: commonapi.SecretKeyRef{
-					Name: "mcp-secret",
-					Key:  "token",
+		s.Spec.Endpoint.StreamableHTTP = &mcpserverapi.MCPStreamableHTTP{
+			URL: "http://example.com",
+			Headers: []commonapi.NameValuePair{
+				{
+					Name: "Authorization",
+					SecretKeyRef: commonapi.SecretKeyRef{
+						Name: "mcp-secret",
+						Key:  "token",
+					},
 				},
 			},
 		}
 		if secretStore != nil {
-			s.Spec.Auth = &mcpserverapi.MCPAuth{SecretStore: secretStore}
+			s.Spec.Endpoint.StreamableHTTP.Auth = &mcpserverapi.MCPAuth{SecretStore: secretStore}
 		}
 		return s
 	}
@@ -1153,7 +1154,7 @@ func TestProcessMCPServerSecrets(t *testing.T) {
 		err := processMCPServerSecrets(t.Context(), &srv, "default", nil)
 		require.NoError(t, err)
 		// value should not have been resolved
-		assert.Empty(t, srv.Spec.Headers[0].Value.Raw)
+		assert.Empty(t, srv.Spec.Endpoint.StreamableHTTP.Headers[0].Value.Raw)
 	})
 
 	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
@@ -1176,12 +1177,12 @@ func TestProcessMCPServerSecrets(t *testing.T) {
 		require.NoError(t, processMCPServerSecrets(t.Context(), &srv, "default", client))
 		enc := base64.StdEncoding.EncodeToString([]byte("my-token"))
 		jsonEnc, _ := json.Marshal(enc)
-		assert.JSONEq(t, string(jsonEnc), string(srv.Spec.Headers[0].Value.Raw))
+		assert.JSONEq(t, string(jsonEnc), string(srv.Spec.Endpoint.StreamableHTTP.Headers[0].Value.Raw))
 	})
 
 	t.Run("secret ref exists, nil auth (default kubernetes), secret extracted", func(t *testing.T) {
 		srv := makeServer(nil)
-		srv.Spec.Auth = nil // ensure nil auth defaults to kubernetes
+		srv.Spec.Endpoint.StreamableHTTP.Auth = nil // ensure nil auth defaults to kubernetes
 
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
@@ -1199,7 +1200,7 @@ func TestProcessMCPServerSecrets(t *testing.T) {
 		require.NoError(t, processMCPServerSecrets(t.Context(), &srv, "default", client))
 		enc := base64.StdEncoding.EncodeToString([]byte("my-token"))
 		jsonEnc, _ := json.Marshal(enc)
-		assert.JSONEq(t, string(jsonEnc), string(srv.Spec.Headers[0].Value.Raw))
+		assert.JSONEq(t, string(jsonEnc), string(srv.Spec.Endpoint.StreamableHTTP.Headers[0].Value.Raw))
 	})
 }
 

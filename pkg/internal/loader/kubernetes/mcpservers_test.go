@@ -54,8 +54,9 @@ func TestLoadMCPServersKubernetes(t *testing.T) {
 		server.Name = "github"
 		server.Spec = mcpserverapi.MCPServerSpec{
 			Endpoint: mcpserverapi.MCPEndpoint{
-				Transport: mcpserverapi.MCPTransportStreamableHTTP,
-				Target:    mcpserverapi.MCPEndpointTarget{URL: "https://api.githubcopilot.com/mcp/"},
+				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+					URL: "https://api.githubcopilot.com/mcp/",
+				},
 			},
 		}
 
@@ -82,8 +83,8 @@ func TestLoadMCPServersKubernetes(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, servers, 1)
 		assert.Equal(t, "github", servers[0].Name)
-		assert.Equal(t, mcpserverapi.MCPTransportStreamableHTTP, servers[0].Spec.Endpoint.Transport)
-		assert.Equal(t, "https://api.githubcopilot.com/mcp/", servers[0].Spec.Endpoint.Target.URL)
+		require.NotNil(t, servers[0].Spec.Endpoint.StreamableHTTP)
+		assert.Equal(t, "https://api.githubcopilot.com/mcp/", servers[0].Spec.Endpoint.StreamableHTTP.URL)
 	})
 
 	t.Run("empty response returns nil, no error", func(t *testing.T) {
