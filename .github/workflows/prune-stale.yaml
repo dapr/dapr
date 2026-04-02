@@ -11,17 +11,22 @@
 # limitations under the License.
 #
 
-name: Backport
+name: Prune Stale
+
 on:
-  pull_request_target:
-    types:
-      - closed
-      - labeled
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
 
 permissions: {}
 
 jobs:
-  backport:
-    uses: dapr/.github/.github/workflows/backport.yaml@main
+  prune-stale:
+    uses: dapr/.github/.github/workflows/prune-stale.yaml@main
+    with:
+      days-before-pr-stale: 90
+      days-before-issue-stale: 90
+      days-before-pr-close: 7
+      days-before-issue-close: 7
     secrets:
       dapr_bot_token: ${{ secrets.DAPR_BOT_TOKEN }}
