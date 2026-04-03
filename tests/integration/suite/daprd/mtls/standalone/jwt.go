@@ -96,7 +96,6 @@ func (j *jwt) Setup(t *testing.T) []framework.Option {
 
 	j.scheduler = scheduler.New(t,
 		scheduler.WithSentry(j.sentry),
-		scheduler.WithID("dapr-scheduler-server-0"),
 	)
 
 	j.placement = placement.New(t,

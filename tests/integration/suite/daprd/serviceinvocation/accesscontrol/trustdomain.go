@@ -65,7 +65,6 @@ func (e *trustdomain) Setup(t *testing.T) []framework.Option {
 
 	scheduler := scheduler.New(t,
 		scheduler.WithSentry(e.sentry),
-		scheduler.WithID("dapr-scheduler-server-0"),
 	)
 
 	cnf := configapi.Configuration{
