@@ -19,13 +19,27 @@ import (
 	"fmt"
 	"net/http"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
+// httpTransportConfig extracts headers and auth from whichever HTTP transport
+// is configured on the MCPServer. Returns nil slices/pointers for stdio.
+func httpTransportConfig(server *mcpserverapi.MCPServer) ([]commonapi.NameValuePair, *mcpserverapi.MCPAuth) {
+	switch {
+	case server.Spec.Endpoint.StreamableHTTP != nil:
+		return server.Spec.Endpoint.StreamableHTTP.Headers, server.Spec.Endpoint.StreamableHTTP.Auth
+	case server.Spec.Endpoint.SSE != nil:
+		return server.Spec.Endpoint.SSE.Headers, server.Spec.Endpoint.SSE.Auth
+	default:
+		return nil, nil
+	}
+}
+
 // buildHTTPClient returns an http.Client configured with:
-//  1. Static header injection from resolved spec.headers.
+//  1. Static header injection from transport headers.
 //  2. OAuth2 client credentials token injection (if auth.oauth2 is set and secrets != nil).
 //  3. SPIFFE JWT injection via the configured header (if auth.spiffe.jwt is set and jwt != nil).
 //
@@ -37,9 +51,11 @@ func buildHTTPClient(
 	secrets SecretGetter,
 	jwt JWTFetcher,
 ) (*http.Client, error) {
+	transportHeaders, auth := httpTransportConfig(server)
+
 	// Build the resolved-header map (processor has already resolved secretKeyRef/envRef).
-	headers := make(map[string]string, len(server.Spec.Headers))
-	for _, h := range server.Spec.Headers {
+	headers := make(map[string]string, len(transportHeaders))
+	for _, h := range transportHeaders {
 		if h.Name != "" {
 			headers[h.Name] = h.Value.String()
 		}
@@ -52,8 +68,8 @@ func buildHTTPClient(
 	}
 
 	// OAuth2 client credentials — wraps base transport with token injection.
-	if server.Spec.Auth != nil && server.Spec.Auth.OAuth2 != nil && secrets != nil {
-		client, err := buildOAuth2Client(ctx, server, secrets, base)
+	if auth != nil && auth.OAuth2 != nil && secrets != nil {
+		client, err := buildOAuth2Client(ctx, auth, secrets, base)
 		if err != nil {
 			return nil, err
 		}
@@ -61,15 +77,15 @@ func buildHTTPClient(
 	}
 
 	// SPIFFE JWT — wraps base transport, injects the SVID per-request.
-	if server.Spec.Auth != nil &&
-		server.Spec.Auth.SPIFFE != nil &&
-		server.Spec.Auth.SPIFFE.JWT != nil &&
+	if auth != nil &&
+		auth.SPIFFE != nil &&
+		auth.SPIFFE.JWT != nil &&
 		jwt != nil {
-		jwtSpec := server.Spec.Auth.SPIFFE.JWT
+		jwtSpec := auth.SPIFFE.JWT
 		return &http.Client{
 			Transport: &jwtRoundTripper{
 				header:   jwtSpec.Header,
-				prefix:   stringDeref(jwtSpec.Prefix),
+				prefix:   stringDeref(jwtSpec.HeaderValuePrefix),
 				audience: jwtSpec.Audience,
 				fetcher:  jwt,
 				base:     base,
@@ -85,18 +101,18 @@ func buildHTTPClient(
 // The token is fetched on first use and cached until expiry by the oauth2 package.
 func buildOAuth2Client(
 	ctx context.Context,
-	server *mcpserverapi.MCPServer,
+	auth *mcpserverapi.MCPAuth,
 	secrets SecretGetter,
 	base http.RoundTripper,
 ) (*http.Client, error) {
-	o := server.Spec.Auth.OAuth2
+	o := auth.OAuth2
 	if o.SecretKeyRef == nil {
 		return nil, fmt.Errorf("auth.oauth2.secretKeyRef is required for OAuth2 client credentials")
 	}
 
 	storeName := k8sStoreName
-	if server.Spec.Auth.SecretStore != nil {
-		storeName = *server.Spec.Auth.SecretStore
+	if auth.SecretStore != nil {
+		storeName = *auth.SecretStore
 	}
 
 	clientSecret, err := secrets.GetSecret(ctx, storeName, o.SecretKeyRef.Name, o.SecretKeyRef.Key)

@@ -102,8 +102,7 @@ metadata:
   name: weather-sse
 spec:
   endpoint:
-    transport: sse
-    target:
+    sse:
       url: http://localhost:%d
 `, mcpSrvProc.Port())),
 	)

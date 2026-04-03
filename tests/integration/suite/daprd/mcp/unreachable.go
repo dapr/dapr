@@ -80,10 +80,9 @@ metadata:
   name: dead-server
 spec:
   endpoint:
-    transport: streamable_http
-    target:
+    streamableHTTP:
       url: http://localhost:%d/mcp
-    timeout: 5s
+      timeout: 5s
 `, deadPort)),
 	)
 

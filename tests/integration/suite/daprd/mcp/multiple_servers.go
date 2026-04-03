@@ -116,8 +116,7 @@ metadata:
   name: weather
 spec:
   endpoint:
-    transport: streamable_http
-    target:
+    streamableHTTP:
       url: http://localhost:%d
 `, mcpProcA.Port()),
 			fmt.Sprintf(`
@@ -127,8 +126,7 @@ metadata:
   name: greeter
 spec:
   endpoint:
-    transport: streamable_http
-    target:
+    streamableHTTP:
       url: http://localhost:%d
 `, mcpProcB.Port()),
 		),

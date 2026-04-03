@@ -134,12 +134,17 @@ func TestBuildHTTPClient_SPIFFEInjectsJWT(t *testing.T) {
 	prefix := "Bearer "
 	srv := &mcpserverapi.MCPServer{
 		Spec: mcpserverapi.MCPServerSpec{
-			Auth: &mcpserverapi.MCPAuth{
-				SPIFFE: &mcpserverapi.SPIFFESpec{
-					JWT: &mcpserverapi.SPIFFEJWTSpec{
-						Header:   "X-SVID",
-						Audience: "mcp://payments",
-						Prefix:   &prefix,
+			Endpoint: mcpserverapi.MCPEndpoint{
+				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+					URL: ts.URL,
+					Auth: &mcpserverapi.MCPAuth{
+						SPIFFE: &mcpserverapi.SPIFFE{
+							JWT: &mcpserverapi.SPIFFEJWT{
+								Header:            "X-SVID",
+								Audience:          "mcp://payments",
+								HeaderValuePrefix: &prefix,
+							},
+						},
 					},
 				},
 			},
@@ -169,11 +174,16 @@ func TestBuildHTTPClient_SPIFFEWithoutPrefix(t *testing.T) {
 
 	srv := &mcpserverapi.MCPServer{
 		Spec: mcpserverapi.MCPServerSpec{
-			Auth: &mcpserverapi.MCPAuth{
-				SPIFFE: &mcpserverapi.SPIFFESpec{
-					JWT: &mcpserverapi.SPIFFEJWTSpec{
-						Header:   "X-JWT",
-						Audience: "aud",
+			Endpoint: mcpserverapi.MCPEndpoint{
+				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+					URL: ts.URL,
+					Auth: &mcpserverapi.MCPAuth{
+						SPIFFE: &mcpserverapi.SPIFFE{
+							JWT: &mcpserverapi.SPIFFEJWT{
+								Header:   "X-JWT",
+								Audience: "aud",
+							},
+						},
 					},
 				},
 			},
@@ -206,13 +216,18 @@ func TestBuildHTTPClient_OAuth2InjectsBearer(t *testing.T) {
 	storeName := "my-store"
 	srv := &mcpserverapi.MCPServer{
 		Spec: mcpserverapi.MCPServerSpec{
-			Auth: &mcpserverapi.MCPAuth{
-				SecretStore: &storeName,
-				OAuth2: &mcpserverapi.MCPOAuth2{
-					Issuer: tokenServer.URL,
-					SecretKeyRef: &commonapi.SecretKeyRef{
-						Name: "my-secret",
-						Key:  "client_secret",
+			Endpoint: mcpserverapi.MCPEndpoint{
+				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+					URL: targetServer.URL,
+					Auth: &mcpserverapi.MCPAuth{
+						SecretStore: &storeName,
+						OAuth2: &mcpserverapi.MCPOAuth2{
+							Issuer: tokenServer.URL,
+							SecretKeyRef: &commonapi.SecretKeyRef{
+								Name: "my-secret",
+								Key:  "client_secret",
+							},
+						},
 					},
 				},
 			},
@@ -239,12 +254,17 @@ func TestBuildHTTPClient_OAuth2InjectsBearer(t *testing.T) {
 func TestBuildHTTPClient_OAuth2SecretFetchError(t *testing.T) {
 	srv := &mcpserverapi.MCPServer{
 		Spec: mcpserverapi.MCPServerSpec{
-			Auth: &mcpserverapi.MCPAuth{
-				OAuth2: &mcpserverapi.MCPOAuth2{
-					Issuer: "http://example.com/token",
-					SecretKeyRef: &commonapi.SecretKeyRef{
-						Name: "missing-secret",
-						Key:  "client_secret",
+			Endpoint: mcpserverapi.MCPEndpoint{
+				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+					URL: "http://example.com",
+					Auth: &mcpserverapi.MCPAuth{
+						OAuth2: &mcpserverapi.MCPOAuth2{
+							Issuer: "http://example.com/token",
+							SecretKeyRef: &commonapi.SecretKeyRef{
+								Name: "missing-secret",
+								Key:  "client_secret",
+							},
+						},
 					},
 				},
 			},
@@ -266,7 +286,12 @@ func TestBuildHTTPClient_StaticHeadersNoAuth(t *testing.T) {
 	defer ts.Close()
 
 	srv := namedServer("s", mcpserverapi.MCPServerSpec{
-		Headers: []commonapi.NameValuePair{plainHeader("X-Static", "hello")},
+		Endpoint: mcpserverapi.MCPEndpoint{
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+				URL:     ts.URL,
+				Headers: []commonapi.NameValuePair{plainHeader("X-Static", "hello")},
+			},
+		},
 	})
 	client, err := buildHTTPClient(context.Background(), &srv, nil, nil)
 	require.NoError(t, err)

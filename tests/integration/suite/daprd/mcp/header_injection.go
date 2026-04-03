@@ -105,12 +105,11 @@ metadata:
   name: authed-server
 spec:
   endpoint:
-    transport: streamable_http
-    target:
+    streamableHTTP:
       url: http://localhost:%d
-  headers:
-  - name: X-API-Key
-    value: test-secret-key-12345
+      headers:
+      - name: X-API-Key
+        value: test-secret-key-12345
 `, mcpSrvProc.Port())),
 	)
 

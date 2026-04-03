@@ -18,39 +18,93 @@ import (
 	"github.com/dapr/durabletask-go/task"
 )
 
-// runBeforeCall schedules the beforeCall workflow as a child orchestration and
-// awaits it. Returns nil if no middleware is configured or if the workflow
-// succeeds. Returns an error if the workflow fails (call should be aborted).
-func runBeforeCall(
+// runBeforeCallTool executes the beforeCallTool middleware pipeline in order.
+// If any hook returns an error, the chain stops and the error is returned.
+func runBeforeCallTool(
 	ctx *task.OrchestrationContext,
 	server *mcpserverapi.MCPServer,
 	serverName, tool string,
 	arguments map[string]any,
 ) error {
-	if server.Spec.Middleware == nil || server.Spec.Middleware.BeforeCall == nil {
+	if server.Spec.Middleware == nil {
 		return nil
 	}
 	input := BeforeCallInput{MCPServerName: serverName, ToolName: tool, Arguments: arguments}
-	t := ctx.CallSubOrchestrator(*server.Spec.Middleware.BeforeCall,
-		task.WithSubOrchestratorInput(input))
-	return t.Await(nil)
+	for _, hook := range server.Spec.Middleware.BeforeCallTool {
+		if hook.Workflow == nil {
+			continue
+		}
+		t := ctx.CallSubOrchestrator(hook.Workflow.WorkflowName,
+			task.WithSubOrchestratorInput(input))
+		if err := t.Await(nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// runAfterCall schedules the afterCall workflow as a fire-and-forget child
-// orchestration. Errors scheduling the sub-orchestration are logged; they
-// never affect the result returned to the caller.
-func runAfterCall(
+// runAfterCallTool executes the afterCallTool middleware pipeline in order.
+// Errors are logged but do not affect the result returned to the caller.
+func runAfterCallTool(
 	ctx *task.OrchestrationContext,
 	server *mcpserverapi.MCPServer,
 	serverName, tool string,
 	arguments map[string]any,
 	result any,
 ) {
-	if server.Spec.Middleware == nil || server.Spec.Middleware.AfterCall == nil {
+	if server.Spec.Middleware == nil {
 		return
 	}
 	input := AfterCallInput{MCPServerName: serverName, ToolName: tool, Arguments: arguments, Result: result}
-	// Fire-and-forget: do not await the task.
-	ctx.CallSubOrchestrator(*server.Spec.Middleware.AfterCall,
-		task.WithSubOrchestratorInput(input))
+	for _, hook := range server.Spec.Middleware.AfterCallTool {
+		if hook.Workflow == nil {
+			continue
+		}
+		// Fire-and-forget: do not await the task.
+		ctx.CallSubOrchestrator(hook.Workflow.WorkflowName,
+			task.WithSubOrchestratorInput(input))
+	}
+}
+
+// runBeforeListTools executes the beforeListTools middleware pipeline in order.
+func runBeforeListTools(
+	ctx *task.OrchestrationContext,
+	server *mcpserverapi.MCPServer,
+	serverName string,
+) error {
+	if server.Spec.Middleware == nil {
+		return nil
+	}
+	input := BeforeCallInput{MCPServerName: serverName}
+	for _, hook := range server.Spec.Middleware.BeforeListTools {
+		if hook.Workflow == nil {
+			continue
+		}
+		t := ctx.CallSubOrchestrator(hook.Workflow.WorkflowName,
+			task.WithSubOrchestratorInput(input))
+		if err := t.Await(nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runAfterListTools executes the afterListTools middleware pipeline in order.
+func runAfterListTools(
+	ctx *task.OrchestrationContext,
+	server *mcpserverapi.MCPServer,
+	serverName string,
+	result any,
+) {
+	if server.Spec.Middleware == nil {
+		return
+	}
+	input := AfterCallInput{MCPServerName: serverName, Result: result}
+	for _, hook := range server.Spec.Middleware.AfterListTools {
+		if hook.Workflow == nil {
+			continue
+		}
+		ctx.CallSubOrchestrator(hook.Workflow.WorkflowName,
+			task.WithSubOrchestratorInput(input))
+	}
 }

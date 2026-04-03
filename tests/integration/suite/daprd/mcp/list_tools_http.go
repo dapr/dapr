@@ -111,8 +111,7 @@ metadata:
   name: weather
 spec:
   endpoint:
-    transport: streamable_http
-    target:
+    streamableHTTP:
       url: http://localhost:%d
 `, mcpSrvProc.Port())),
 	)

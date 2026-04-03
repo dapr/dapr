@@ -117,24 +117,24 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.OrchestrationC
 				input.MCPServerName = serverName
 			}
 
-			// beforeCall middleware
-			if err := runBeforeCall(ctx, &server, serverName, "", nil); err != nil {
+			// beforeListTools middleware pipeline
+			if err := runBeforeListTools(ctx, &server, serverName); err != nil {
 				return &CallToolResult{IsError: true, Content: []ContentItem{{
 					Type: textContentType,
-					Text: fmt.Sprintf("beforeCall: %s", err),
+					Text: fmt.Sprintf("beforeListTools: %s", err),
 				}}}, nil
 			}
 
 			var result ListToolsResult
 			t := ctx.CallActivity(activityListTools, task.WithActivityInput(input))
 			if err := t.Await(&result); err != nil {
-				runAfterCall(ctx, &server, serverName, "", nil, &CallToolResult{
+				runAfterListTools(ctx, &server, serverName, &CallToolResult{
 					IsError: true, Content: []ContentItem{{Type: textContentType, Text: err.Error()}},
 				})
 				return nil, fmt.Errorf("list-tools activity failed: %w", err)
 			}
 
-			runAfterCall(ctx, &server, serverName, "", nil, result)
+			runAfterListTools(ctx, &server, serverName, result)
 			return result, nil
 
 		case strings.HasSuffix(name, suffixCallTool):
@@ -155,11 +155,11 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.OrchestrationC
 				input.MCPServerName = serverName
 			}
 
-			// beforeCall middleware
-			if err := runBeforeCall(ctx, &server, serverName, input.ToolName, input.Arguments); err != nil {
+			// beforeCallTool middleware pipeline
+			if err := runBeforeCallTool(ctx, &server, serverName, input.ToolName, input.Arguments); err != nil {
 				return &CallToolResult{IsError: true, Content: []ContentItem{{
 					Type: textContentType,
-					Text: fmt.Sprintf("beforeCall: %s", err),
+					Text: fmt.Sprintf("beforeCallTool: %s", err),
 				}}}, nil
 			}
 
@@ -172,11 +172,11 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.OrchestrationC
 					Type: textContentType,
 					Text: err.Error(),
 				}}}
-				runAfterCall(ctx, &server, serverName, input.ToolName, input.Arguments, errResult)
+				runAfterCallTool(ctx, &server, serverName, input.ToolName, input.Arguments, errResult)
 				return errResult, nil
 			}
 
-			runAfterCall(ctx, &server, serverName, input.ToolName, input.Arguments, result)
+			runAfterCallTool(ctx, &server, serverName, input.ToolName, input.Arguments, result)
 			return result, nil
 
 		default:
@@ -349,43 +349,44 @@ func makeCallToolActivity(opts ExecutorOptions) task.Activity {
 }
 
 // buildTransport constructs the appropriate mcp.Transport for the given MCPServer.
-// The httpClient is used for HTTP-based transports (streamable_http, sse).
+// The httpClient is used for HTTP-based transports (streamableHTTP, sse).
 func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mcp.Transport, error) {
-	switch server.Spec.Endpoint.Transport {
-	case mcpserverapi.MCPTransportStreamableHTTP:
+	switch {
+	case server.Spec.Endpoint.StreamableHTTP != nil:
 		return &mcp.StreamableClientTransport{
-			Endpoint:   server.Spec.Endpoint.Target.URL,
+			Endpoint:   server.Spec.Endpoint.StreamableHTTP.URL,
 			HTTPClient: httpClient,
 		}, nil
 
-	case mcpserverapi.MCPTransportSSE:
+	case server.Spec.Endpoint.SSE != nil:
 		return &mcp.SSEClientTransport{
-			Endpoint:   server.Spec.Endpoint.Target.URL,
+			Endpoint:   server.Spec.Endpoint.SSE.URL,
 			HTTPClient: httpClient,
 		}, nil
 
-	case mcpserverapi.MCPTransportStdio:
-		if server.Spec.Stdio == nil {
-			return nil, fmt.Errorf("transport is %q but spec.stdio is not configured", server.Spec.Endpoint.Transport)
-		}
-		cmd := exec.Command(server.Spec.Stdio.Command, server.Spec.Stdio.Args...) //nolint:gosec
-		for _, env := range server.Spec.Stdio.Env {
+	case server.Spec.Endpoint.Stdio != nil:
+		cmd := exec.Command(server.Spec.Endpoint.Stdio.Command, server.Spec.Endpoint.Stdio.Args...) //nolint:gosec
+		for _, env := range server.Spec.Endpoint.Stdio.Env {
 			cmd.Env = append(cmd.Env, env.Name+"="+env.Value.String())
 		}
 		return &mcp.CommandTransport{Command: cmd}, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported MCP transport %q for server %q", server.Spec.Endpoint.Transport, server.Name)
+		return nil, fmt.Errorf("no transport configured for MCPServer %q: set one of streamableHTTP, sse, or stdio", server.Name)
 	}
 }
 
 // callTimeout returns the per-call deadline for the given MCPServer.
 // Falls back to defaultMCPTimeout when no timeout is configured.
 func callTimeout(server *mcpserverapi.MCPServer) time.Duration {
-	if server.Spec.Endpoint.Timeout != nil {
-		return server.Spec.Endpoint.Timeout.Duration
+	switch {
+	case server.Spec.Endpoint.StreamableHTTP != nil && server.Spec.Endpoint.StreamableHTTP.Timeout != nil:
+		return server.Spec.Endpoint.StreamableHTTP.Timeout.Duration
+	case server.Spec.Endpoint.SSE != nil && server.Spec.Endpoint.SSE.Timeout != nil:
+		return server.Spec.Endpoint.SSE.Timeout.Duration
+	default:
+		return defaultMCPTimeout
 	}
-	return defaultMCPTimeout
 }
 
 // withDeadline creates a context with the given timeout, or returns the

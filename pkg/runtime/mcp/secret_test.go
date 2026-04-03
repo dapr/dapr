@@ -80,16 +80,17 @@ func TestMakeCallToolActivity_OAuth2SecretFetchRetriesActivity(t *testing.T) {
 	storeName := "my-store"
 	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
-			Transport: mcpserverapi.MCPTransportStreamableHTTP,
-			Target:    mcpserverapi.MCPEndpointTarget{URL: "http://localhost:1"},
-		},
-		Auth: &mcpserverapi.MCPAuth{
-			SecretStore: &storeName,
-			OAuth2: &mcpserverapi.MCPOAuth2{
-				Issuer: "http://example.com/token",
-				SecretKeyRef: &commonapi.SecretKeyRef{
-					Name: "my-secret",
-					Key:  "client_secret",
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+				URL: "http://localhost:1",
+				Auth: &mcpserverapi.MCPAuth{
+					SecretStore: &storeName,
+					OAuth2: &mcpserverapi.MCPOAuth2{
+						Issuer: "http://example.com/token",
+						SecretKeyRef: &commonapi.SecretKeyRef{
+							Name: "my-secret",
+							Key:  "client_secret",
+						},
+					},
 				},
 			},
 		},

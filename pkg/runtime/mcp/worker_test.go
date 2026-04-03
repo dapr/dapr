@@ -135,7 +135,12 @@ func TestCallTimeout(t *testing.T) {
 		d := metav1.Duration{Duration: 5 * time.Second}
 		s := &mcpserverapi.MCPServer{
 			Spec: mcpserverapi.MCPServerSpec{
-				Endpoint: mcpserverapi.MCPEndpoint{Timeout: &d},
+				Endpoint: mcpserverapi.MCPEndpoint{
+					StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+						URL:     "http://example.com",
+						Timeout: &d,
+					},
+				},
 			},
 		}
 		assert.Equal(t, 5*time.Second, callTimeout(s))
@@ -143,38 +148,26 @@ func TestCallTimeout(t *testing.T) {
 }
 
 func TestBuildTransport_UnsupportedTransport(t *testing.T) {
-	s := &mcpserverapi.MCPServer{
-		Spec: mcpserverapi.MCPServerSpec{
-			Endpoint: mcpserverapi.MCPEndpoint{
-				Transport: "websocket",
-				Target:    mcpserverapi.MCPEndpointTarget{URL: "ws://example.com"},
-			},
-		},
-	}
+	s := &mcpserverapi.MCPServer{}
+	s.Name = "bad"
 	_, err := buildTransport(s, http.DefaultClient)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported MCP transport")
+	assert.Contains(t, err.Error(), "no transport configured")
 }
 
-func TestBuildTransport_StdioMissingSpec(t *testing.T) {
-	s := &mcpserverapi.MCPServer{
-		Spec: mcpserverapi.MCPServerSpec{
-			Endpoint: mcpserverapi.MCPEndpoint{
-				Transport: mcpserverapi.MCPTransportStdio,
-			},
-		},
-	}
+func TestBuildTransport_NoTransport(t *testing.T) {
+	s := &mcpserverapi.MCPServer{}
+	s.Name = "empty"
 	_, err := buildTransport(s, http.DefaultClient)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "spec.stdio is not configured")
+	assert.Contains(t, err.Error(), "no transport configured")
 }
 
 func TestBuildTransport_StreamableHTTP(t *testing.T) {
 	s := &mcpserverapi.MCPServer{
 		Spec: mcpserverapi.MCPServerSpec{
 			Endpoint: mcpserverapi.MCPEndpoint{
-				Transport: mcpserverapi.MCPTransportStreamableHTTP,
-				Target:    mcpserverapi.MCPEndpointTarget{URL: "http://example.com/mcp"},
+				StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: "http://example.com/mcp"},
 			},
 		},
 	}
@@ -189,8 +182,7 @@ func TestBuildTransport_SSE(t *testing.T) {
 	s := &mcpserverapi.MCPServer{
 		Spec: mcpserverapi.MCPServerSpec{
 			Endpoint: mcpserverapi.MCPEndpoint{
-				Transport: mcpserverapi.MCPTransportSSE,
-				Target:    mcpserverapi.MCPEndpointTarget{URL: "http://example.com/sse"},
+				SSE: &mcpserverapi.MCPSSE{URL: "http://example.com/sse"},
 			},
 		},
 	}
@@ -372,8 +364,7 @@ func TestMakeListToolsActivity_RealServer(t *testing.T) {
 	store := compstore.New()
 	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
-			Transport: mcpserverapi.MCPTransportStreamableHTTP,
-			Target:    mcpserverapi.MCPEndpointTarget{URL: ts.URL},
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: ts.URL},
 		},
 	}))
 
@@ -398,8 +389,7 @@ func TestMakeListToolsActivity_CachesToolSchema(t *testing.T) {
 	store := compstore.New()
 	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
-			Transport: mcpserverapi.MCPTransportStreamableHTTP,
-			Target:    mcpserverapi.MCPEndpointTarget{URL: ts.URL},
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: ts.URL},
 		},
 	}))
 
@@ -441,8 +431,7 @@ func TestMakeCallToolActivity_RealServer(t *testing.T) {
 	store := compstore.New()
 	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
-			Transport: mcpserverapi.MCPTransportStreamableHTTP,
-			Target:    mcpserverapi.MCPEndpointTarget{URL: ts.URL},
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: ts.URL},
 		},
 	}))
 
@@ -473,10 +462,11 @@ func TestMakeCallToolActivity_HeaderInjection(t *testing.T) {
 	store := compstore.New()
 	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
-			Transport: mcpserverapi.MCPTransportStreamableHTTP,
-			Target:    mcpserverapi.MCPEndpointTarget{URL: ts.URL},
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+				URL:     ts.URL,
+				Headers: []commonapi.NameValuePair{plainHeader("X-Test", "injected-value")},
+			},
 		},
-		Headers: []commonapi.NameValuePair{plainHeader("X-Test", "injected-value")},
 	}))
 
 	activity := makeCallToolActivity(ExecutorOptions{Store: store})
@@ -496,8 +486,7 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 	store := compstore.New()
 	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
-			Transport: mcpserverapi.MCPTransportStreamableHTTP,
-			Target:    mcpserverapi.MCPEndpointTarget{URL: ts.URL},
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: ts.URL},
 		},
 	}))
 	store.SetMCPToolSchema("myserver", "greet", map[string]any{
@@ -530,15 +519,16 @@ func TestMakeCallToolActivity_SPIFFEAuth(t *testing.T) {
 	prefix := "SVID "
 	store.AddMCPServer(namedServer("myserver", mcpserverapi.MCPServerSpec{
 		Endpoint: mcpserverapi.MCPEndpoint{
-			Transport: mcpserverapi.MCPTransportStreamableHTTP,
-			Target:    mcpserverapi.MCPEndpointTarget{URL: ts.URL},
-		},
-		Auth: &mcpserverapi.MCPAuth{
-			SPIFFE: &mcpserverapi.SPIFFESpec{
-				JWT: &mcpserverapi.SPIFFEJWTSpec{
-					Header:   "X-Test",
-					Audience: "mcp://test",
-					Prefix:   &prefix,
+			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{
+				URL: ts.URL,
+				Auth: &mcpserverapi.MCPAuth{
+					SPIFFE: &mcpserverapi.SPIFFE{
+						JWT: &mcpserverapi.SPIFFEJWT{
+							Header:            "X-Test",
+							HeaderValuePrefix: &prefix,
+							Audience:          "mcp://test",
+						},
+					},
 				},
 			},
 		},
