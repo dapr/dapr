@@ -80,7 +80,7 @@ require (
 	k8s.io/cli-runtime v0.30.2
 	k8s.io/client-go v0.32.3
 	k8s.io/code-generator v0.31.0
-	k8s.io/klog v1.0.0
+	k8s.io/klog/v2 v2.140.0
 	k8s.io/metrics v0.30.2
 	k8s.io/utils v0.0.0-20250502105355-0f33e8f1c979
 	modernc.org/sqlite v1.34.5
@@ -487,7 +487,6 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/gengo/v2 v2.0.0-20240826214909-a7b603a56eb7 // indirect
-	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
 	modernc.org/libc v1.61.9 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	"github.com/dapr/dapr/pkg/metrics"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
@@ -66,7 +66,17 @@ func New() *Options {
 	// This resets the flags on klog, which will otherwise try to log to the FS.
 	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
 	klog.InitFlags(klogFlags)
-	klogFlags.Set("logtostderr", "true")
+	if err := klogFlags.Set("logtostderr", "true"); err != nil {
+		log.Fatalf("failed to set klog flag logtostderr: %v", err)
+	}
+
+	// Opt into fixed stderrthreshold behavior (kubernetes/klog#212).
+	if err := klogFlags.Set("legacy_stderr_threshold_behavior", "false"); err != nil {
+		log.Fatalf("failed to set klog flag legacy_stderr_threshold_behavior: %v", err)
+	}
+	if err := klogFlags.Set("stderrthreshold", "INFO"); err != nil {
+		log.Fatalf("failed to set klog flag stderrthreshold: %v", err)
+	}
 
 	flag.StringVar(&opts.Config, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 
