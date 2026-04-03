@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -141,8 +142,8 @@ func (s *triggerstall) Run(t *testing.T, ctx context.Context) {
 		_, err := client.ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
 			Name: fmt.Sprintf("job-%d", i),
 			Job: &schedulerv1.Job{
-				Schedule: new("@every 2s"),
-				DueTime:  new(time.Now().Format(time.RFC3339)),
+				Schedule: ptr.Of("@every 2s"),
+				DueTime:  ptr.Of(time.Now().Format(time.RFC3339)),
 			},
 			Metadata: &schedulerv1.JobMetadata{
 				AppId: "testapp", Namespace: "default",
