@@ -11,18 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mcp
+package mcpserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
-	"sync/atomic"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -30,11 +26,9 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
-	daprmcp "github.com/dapr/dapr/pkg/runtime/mcp"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -42,41 +36,22 @@ import (
 )
 
 func init() {
-	suite.Register(new(headerInjection))
+	suite.Register(new(listToolsUnreachable))
 }
 
-// headerInjection verifies that static headers declared in the MCPServer
-// spec.headers are injected into all HTTP requests to the MCP server.
-type headerInjection struct {
+// listToolsUnreachable verifies that the dapr.mcp.<name>.ListTools workflow
+// fails (non-nil failure state) when the MCP server is unreachable.
+type listToolsUnreachable struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
 	sched      *scheduler.Scheduler
 	httpClient *http.Client
-
-	capturedAPIKey atomic.Value // stores string
 }
 
-func (s *headerInjection) Setup(t *testing.T) []framework.Option {
-	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-header-server", Version: "v1"}, nil)
-
-	mcp.AddTool(mcpSrv, &mcp.Tool{
-		Name:        "echo",
-		Description: "Echoes input",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct{}, error) {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: "ok"}},
-		}, struct{}{}, nil
-	})
-
-	// Wrap the MCP handler to capture the X-API-Key header from incoming requests.
-	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
-		if key := r.Header.Get("X-API-Key"); key != "" {
-			s.capturedAPIKey.Store(key)
-		}
-		return mcpSrv
-	}, nil)
-
-	mcpSrvProc := prochttp.New(t, prochttp.WithHandler(mcpHandler))
+func (s *listToolsUnreachable) Setup(t *testing.T) []framework.Option {
+	// Use port 1 which is a privileged port — nothing will be listening there
+	// on localhost in a test environment, so the connection is always refused.
+	const deadPort = 1
 
 	appProc := app.New(t)
 
@@ -102,23 +77,21 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: authed-server
+  name: dead-server
 spec:
   endpoint:
     streamableHTTP:
-      url: http://localhost:%d
-      headers:
-      - name: X-API-Key
-        value: test-secret-key-12345
-`, mcpSrvProc.Port())),
+      url: http://localhost:%d/mcp
+      timeout: 5s
+`, deadPort)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.place, s.sched, appProc, mcpSrvProc, s.daprd),
+		framework.WithProcesses(s.place, s.sched, appProc, s.daprd),
 	}
 }
 
-func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
+func (s *listToolsUnreachable) Run(t *testing.T, ctx context.Context) {
 	s.sched.WaitUntilRunning(t, ctx)
 	s.place.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
@@ -126,29 +99,19 @@ func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	t.Run("static header X-API-Key is injected into MCP requests", func(t *testing.T) {
-		input := map[string]any{
-			"mcpServerName": "authed-server",
-			"toolName":          "echo",
-			"arguments":     map[string]any{},
-		}
+	t.Run("ListTools fails when MCP server is unreachable", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.authed-server.CallTool", input)
+			"dapr.mcp.dead-server.ListTools", map[string]any{"mcpServerName": "dead-server"})
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		var result daprmcp.CallToolResult
-		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError)
-		require.NotEmpty(t, result.Content)
-		assert.True(t, strings.Contains(result.Content[0].Text, "ok"))
-
-		// Verify the MCP server actually received the injected header.
-		capturedKey, ok := s.capturedAPIKey.Load().(string)
-		require.True(t, ok, "expected X-API-Key header to have been captured")
-		assert.Equal(t, "test-secret-key-12345", capturedKey)
+		// The list-tools activity fails (connection refused / timeout), which causes
+		// the orchestration to fail. The output should be empty or the failure reason
+		// should be available in the failure details.
+		assert.NotNil(t, metadata.GetFailureDetails(),
+			"expected orchestration to fail when MCP server is unreachable")
 	})
 }

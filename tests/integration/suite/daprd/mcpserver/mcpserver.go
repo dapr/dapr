@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,11 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package crossapp
+package mcpserver
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp/activity"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp/pending"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp/resultreminder"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/crossapp/suborchestrator"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/mcpserver/operator"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/mcpserver/selfhosted"
 )

@@ -11,13 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mcp
+package mcpserver
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -40,34 +42,46 @@ import (
 )
 
 func init() {
-	suite.Register(new(listToolsSSE))
+	suite.Register(new(listToolsHTTP))
 }
 
-// listToolsSSE verifies that the dapr.mcp.<name>.ListTools workflow returns
-// the correct tool definitions when the MCPServer uses the legacy SSE transport.
-type listToolsSSE struct {
+// listToolsHTTP verifies that the dapr.mcp.<name>.ListTools workflow returns
+// the correct tool definitions when the MCPServer uses the streamable_http transport.
+type listToolsHTTP struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
 	sched      *scheduler.Scheduler
 	httpClient *http.Client
 }
 
-func (s *listToolsSSE) Setup(t *testing.T) []framework.Option {
-	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-sse-server", Version: "v1"}, nil)
+func (s *listToolsHTTP) Setup(t *testing.T) []framework.Option {
+	// Build a minimal MCP server with two tools.
+	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-weather-server", Version: "v1"}, nil)
 
+	type cityInput struct {
+		City string `json:"city"`
+	}
 	mcp.AddTool(mcpSrv, &mcp.Tool{
 		Name:        "get_weather",
-		Description: "Get current weather",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct{}, error) {
+		Description: "Get current weather for a city",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: "sunny"}},
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("sunny, 72°F in %s", args.City)}},
+		}, struct{}{}, nil
+	})
+	mcp.AddTool(mcpSrv, &mcp.Tool{
+		Name:        "get_forecast",
+		Description: "Get weather forecast for a city",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("partly cloudy tomorrow in %s", args.City)}},
 		}, struct{}{}, nil
 	})
 
-	// Serve the SSEHandler at root — matching how worker_test.go sets up
+	// Serve the StreamableHTTPHandler at root — matching how worker_test.go sets up
 	// test servers (httptest.NewServer(handler) with no path suffix in the URL).
 	mcpSrvProc := prochttp.New(t, prochttp.WithHandler(
-		mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return mcpSrv }, nil),
+		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpSrv }, nil),
 	))
 
 	appProc := app.New(t)
@@ -94,10 +108,10 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: weather-sse
+  name: weather
 spec:
   endpoint:
-    sse:
+    streamableHTTP:
       url: http://localhost:%d
 `, mcpSrvProc.Port())),
 	)
@@ -107,7 +121,7 @@ spec:
 	}
 }
 
-func (s *listToolsSSE) Run(t *testing.T, ctx context.Context) {
+func (s *listToolsHTTP) Run(t *testing.T, ctx context.Context) {
 	s.sched.WaitUntilRunning(t, ctx)
 	s.place.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
@@ -115,9 +129,9 @@ func (s *listToolsSSE) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	t.Run("ListTools via SSE transport returns expected tools", func(t *testing.T) {
+	t.Run("ListTools via streamable_http returns expected tools", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather-sse.ListTools", map[string]any{"mcpServerName": "weather-sse"})
+			"dapr.mcp.weather.ListTools", map[string]any{"mcpServerName": "weather"})
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
@@ -131,6 +145,34 @@ func (s *listToolsSSE) Run(t *testing.T, ctx context.Context) {
 		for i, tool := range result.Tools {
 			names[i] = tool.Name
 		}
-		assert.Contains(t, names, "get_weather")
+		assert.ElementsMatch(t, []string{"get_weather", "get_forecast"}, names)
 	})
+}
+
+// startMCPWorkflow starts a dapr.mcp.* workflow via the HTTP API and returns the instance ID.
+func startMCPWorkflow(ctx context.Context, t *testing.T, httpClient *http.Client, httpPort int, workflowName string, input any) string {
+	t.Helper()
+
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", httpPort, workflowName)
+	data, err := json.Marshal(input)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(string(data)))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	if !assert.Equal(t, http.StatusAccepted, resp.StatusCode) {
+		body, _ := io.ReadAll(resp.Body)
+		require.Fail(t, string(body))
+	}
+
+	var response struct {
+		InstanceID string `json:"instanceID"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	return response.InstanceID
 }

@@ -1251,7 +1251,6 @@ type MCPServerUpdateRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	PodName   string `protobuf:"bytes,2,opt,name=pod_name,json=podName,proto3" json:"pod_name,omitempty"`
 }
 
 func (x *MCPServerUpdateRequest) Reset() {
@@ -1293,12 +1292,6 @@ func (x *MCPServerUpdateRequest) GetNamespace() string {
 	return ""
 }
 
-func (x *MCPServerUpdateRequest) GetPodName() string {
-	if x != nil {
-		return x.PodName
-	}
-	return ""
-}
 
 // MCPServerUpdateEvent includes an updated MCP server event.
 type MCPServerUpdateEvent struct {

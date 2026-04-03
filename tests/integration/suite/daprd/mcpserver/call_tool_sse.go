@@ -11,13 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mcp
+package mcpserver
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -42,46 +41,38 @@ import (
 )
 
 func init() {
-	suite.Register(new(listToolsHTTP))
+	suite.Register(new(callToolSSE))
 }
 
-// listToolsHTTP verifies that the dapr.mcp.<name>.ListTools workflow returns
-// the correct tool definitions when the MCPServer uses the streamable_http transport.
-type listToolsHTTP struct {
+// callToolSSE verifies that CallTool works correctly over the legacy SSE transport.
+type callToolSSE struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
 	sched      *scheduler.Scheduler
 	httpClient *http.Client
 }
 
-func (s *listToolsHTTP) Setup(t *testing.T) []framework.Option {
-	// Build a minimal MCP server with two tools.
-	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-weather-server", Version: "v1"}, nil)
+func (s *callToolSSE) Setup(t *testing.T) []framework.Option {
+	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-sse-calltool-server", Version: "v1"}, nil)
 
 	type cityInput struct {
 		City string `json:"city"`
 	}
 	mcp.AddTool(mcpSrv, &mcp.Tool{
 		Name:        "get_weather",
-		Description: "Get current weather for a city",
+		Description: "Return current conditions for a city",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
+		text := fmt.Sprintf("Weather in %s: sunny, 72F", args.City)
+		if args.City == "" {
+			text = "Weather: sunny, 72F"
+		}
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("sunny, 72°F in %s", args.City)}},
-		}, struct{}{}, nil
-	})
-	mcp.AddTool(mcpSrv, &mcp.Tool{
-		Name:        "get_forecast",
-		Description: "Get weather forecast for a city",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("partly cloudy tomorrow in %s", args.City)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: text}},
 		}, struct{}{}, nil
 	})
 
-	// Serve the StreamableHTTPHandler at root — matching how worker_test.go sets up
-	// test servers (httptest.NewServer(handler) with no path suffix in the URL).
 	mcpSrvProc := prochttp.New(t, prochttp.WithHandler(
-		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpSrv }, nil),
+		mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return mcpSrv }, nil),
 	))
 
 	appProc := app.New(t)
@@ -108,10 +99,10 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: weather
+  name: weather-sse
 spec:
   endpoint:
-    streamableHTTP:
+    sse:
       url: http://localhost:%d
 `, mcpSrvProc.Port())),
 	)
@@ -121,7 +112,7 @@ spec:
 	}
 }
 
-func (s *listToolsHTTP) Run(t *testing.T, ctx context.Context) {
+func (s *callToolSSE) Run(t *testing.T, ctx context.Context) {
 	s.sched.WaitUntilRunning(t, ctx)
 	s.place.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
@@ -129,50 +120,27 @@ func (s *listToolsHTTP) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	t.Run("ListTools via streamable_http returns expected tools", func(t *testing.T) {
+	t.Run("CallTool via SSE transport returns tool result", func(t *testing.T) {
+		input := map[string]any{
+			"mcpServerName": "weather-sse",
+			"toolName":          "get_weather",
+			"arguments":     map[string]any{"city": "Denver"},
+		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather.ListTools", map[string]any{"mcpServerName": "weather"})
+			"dapr.mcp.weather-sse.CallTool", input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		var result daprmcp.ListToolsResult
+		var result daprmcp.CallToolResult
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
 
-		names := make([]string, len(result.Tools))
-		for i, tool := range result.Tools {
-			names[i] = tool.Name
-		}
-		assert.ElementsMatch(t, []string{"get_weather", "get_forecast"}, names)
+		assert.False(t, result.IsError, "expected isError=false")
+		require.NotEmpty(t, result.Content)
+		assert.Equal(t, "text", result.Content[0].Type)
+		assert.True(t, strings.Contains(result.Content[0].Text, "Denver"),
+			"expected tool result to mention Denver, got: %s", result.Content[0].Text)
 	})
-}
-
-// startMCPWorkflow starts a dapr.mcp.* workflow via the HTTP API and returns the instance ID.
-func startMCPWorkflow(ctx context.Context, t *testing.T, httpClient *http.Client, httpPort int, workflowName string, input any) string {
-	t.Helper()
-
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", httpPort, workflowName)
-	data, err := json.Marshal(input)
-	require.NoError(t, err)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(string(data)))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := httpClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	if !assert.Equal(t, http.StatusAccepted, resp.StatusCode) {
-		body, _ := io.ReadAll(resp.Body)
-		require.Fail(t, string(body))
-	}
-
-	var response struct {
-		InstanceID string `json:"instanceID"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
-	return response.InstanceID
 }

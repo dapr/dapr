@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mcp
+package mcpserver
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -41,42 +42,41 @@ import (
 )
 
 func init() {
-	suite.Register(new(callTool))
+	suite.Register(new(headerInjection))
 }
 
-// callTool verifies that the dapr.mcp.<name>.CallTool workflow invokes the
-// requested tool and returns its result via the workflow output.
-type callTool struct {
+// headerInjection verifies that static headers declared in the MCPServer
+// spec.headers are injected into all HTTP requests to the MCP server.
+type headerInjection struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
 	sched      *scheduler.Scheduler
 	httpClient *http.Client
+
+	capturedAPIKey atomic.Value // stores string
 }
 
-func (s *callTool) Setup(t *testing.T) []framework.Option {
-	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-calltool-server", Version: "v1"}, nil)
+func (s *headerInjection) Setup(t *testing.T) []framework.Option {
+	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-header-server", Version: "v1"}, nil)
 
-	type cityInput struct {
-		City string `json:"city"`
-	}
 	mcp.AddTool(mcpSrv, &mcp.Tool{
-		Name:        "get_weather",
-		Description: "Return current conditions for a city",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
-		text := fmt.Sprintf("Weather in %s: sunny, 72°F", args.City)
-		if args.City == "" {
-			text = "Weather: sunny, 72°F"
-		}
+		Name:        "echo",
+		Description: "Echoes input",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct{}, error) {
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: text}},
+			Content: []mcp.Content{&mcp.TextContent{Text: "ok"}},
 		}, struct{}{}, nil
 	})
 
-	// Serve the StreamableHTTPHandler at root — matching how worker_test.go sets up
-	// test servers (httptest.NewServer(handler) with no path suffix in the URL).
-	mcpSrvProc := prochttp.New(t, prochttp.WithHandler(
-		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpSrv }, nil),
-	))
+	// Wrap the MCP handler to capture the X-API-Key header from incoming requests.
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		if key := r.Header.Get("X-API-Key"); key != "" {
+			s.capturedAPIKey.Store(key)
+		}
+		return mcpSrv
+	}, nil)
+
+	mcpSrvProc := prochttp.New(t, prochttp.WithHandler(mcpHandler))
 
 	appProc := app.New(t)
 
@@ -102,11 +102,14 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: weather
+  name: authed-server
 spec:
   endpoint:
     streamableHTTP:
       url: http://localhost:%d
+      headers:
+      - name: X-API-Key
+        value: test-secret-key-12345
 `, mcpSrvProc.Port())),
 	)
 
@@ -115,7 +118,7 @@ spec:
 	}
 }
 
-func (s *callTool) Run(t *testing.T, ctx context.Context) {
+func (s *headerInjection) Run(t *testing.T, ctx context.Context) {
 	s.sched.WaitUntilRunning(t, ctx)
 	s.place.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
@@ -123,48 +126,29 @@ func (s *callTool) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	t.Run("CallTool returns tool result with correct content", func(t *testing.T) {
+	t.Run("static header X-API-Key is injected into MCP requests", func(t *testing.T) {
 		input := map[string]any{
-			"mcpServerName": "weather",
-			"toolName":          "get_weather",
-			"arguments":     map[string]any{"city": "Seattle"},
-		}
-		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather.CallTool", input)
-
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
-			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
-		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
-
-		var result daprmcp.CallToolResult
-		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-
-		assert.False(t, result.IsError, "expected isError=false")
-		require.NotEmpty(t, result.Content)
-		assert.Equal(t, "text", result.Content[0].Type)
-		assert.True(t, strings.Contains(result.Content[0].Text, "Seattle"),
-			"expected tool result to mention Seattle, got: %s", result.Content[0].Text)
-	})
-
-	t.Run("CallTool unknown tool name sets isError=true", func(t *testing.T) {
-		input := map[string]any{
-			"mcpServerName": "weather",
-			"toolName":          "nonexistent_tool",
+			"mcpServerName": "authed-server",
+			"toolName":          "echo",
 			"arguments":     map[string]any{},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather.CallTool", input)
+			"dapr.mcp.authed-server.CallTool", input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		// The MCP server returns isError=true for unknown tools, which surfaces
-		// as a completed workflow with isError=true in the output, NOT a workflow failure.
 		var result daprmcp.CallToolResult
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.True(t, result.IsError, "expected isError=true for unknown tool")
+		assert.False(t, result.IsError)
+		require.NotEmpty(t, result.Content)
+		assert.True(t, strings.Contains(result.Content[0].Text, "ok"))
+
+		// Verify the MCP server actually received the injected header.
+		capturedKey, ok := s.capturedAPIKey.Load().(string)
+		require.True(t, ok, "expected X-API-Key header to have been captured")
+		assert.Equal(t, "test-secret-key-12345", capturedKey)
 	})
 }

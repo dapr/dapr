@@ -63,11 +63,6 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 			continue
 		}
 
-		if err := s.Spec.Endpoint.Validate(); err != nil {
-			log.Warnf("MCPServer %q has invalid endpoint configuration: %s", s.Name, err)
-			continue
-		}
-
 		p.processMCPServerSecrets(ctx, &s)
 		p.compStore.AddMCPServer(s)
 		log.Infof("MCPServer loaded: %s", s.LogName())

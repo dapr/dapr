@@ -677,7 +677,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 			return fmt.Errorf("failed to load mcpservers: %s", err)
 		}
 		a.flushOutstandingMCPServers(ctx)
-		if len(a.compStore.ListMCPServers()) > 0 {
+		if list := len(a.compStore.ListMCPServers()); list > 0 {
 			// ActivateMCPServers calls RegisterActors which blocks on actors.waitForReady.
 			// The actor runtime is started in a goroutine after the linear initialization
 			// sequence completes, so we must not call this synchronously here.

@@ -11,18 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mcp
+package mcpserver
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"runtime"
 	"strings"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
@@ -40,38 +37,24 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(restartMidCall))
+	suite.Register(new(callTool))
 }
 
-// restartMidCall verifies that an MCP tool-call activity retries automatically
-// when daprd restarts while the call is in-flight. The workflow is durable:
-// actor reminders in the scheduler re-deliver the pending activity to the new
-// daprd instance after restart, and the SQLite state store provides persistent
-// workflow history so the orchestration can resume correctly.
-type restartMidCall struct {
+// callTool verifies that the dapr.mcp.<name>.CallTool workflow invokes the
+// requested tool and returns its result via the workflow output.
+type callTool struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
 	sched      *scheduler.Scheduler
-	db         *sqlite.SQLite
 	httpClient *http.Client
-
-	callCount  atomic.Int32
-	firstCall  chan struct{} // closed when first call begins
 }
 
-func (s *restartMidCall) Setup(t *testing.T) []framework.Option {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows: SQLite used for persistent workflow state is not reliable on Windows CI")
-	}
-
-	s.firstCall = make(chan struct{})
-
-	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-restart-server", Version: "v1"}, nil)
+func (s *callTool) Setup(t *testing.T) []framework.Option {
+	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-calltool-server", Version: "v1"}, nil)
 
 	type cityInput struct {
 		City string `json:"city"`
@@ -79,35 +62,23 @@ func (s *restartMidCall) Setup(t *testing.T) []framework.Option {
 	mcp.AddTool(mcpSrv, &mcp.Tool{
 		Name:        "get_weather",
 		Description: "Return current conditions for a city",
-	}, func(reqCtx context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
-		n := s.callCount.Add(1)
-		if n == 1 {
-			// Signal that the first call has started, then block until the
-			// HTTP connection is dropped (i.e. daprd is killed). This ensures
-			// the activity is in-flight when daprd is restarted.
-			close(s.firstCall)
-			<-reqCtx.Done()
-			// Return an error so the MCP SDK cleans up cleanly.
-			return nil, struct{}{}, reqCtx.Err()
+	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
+		text := fmt.Sprintf("Weather in %s: sunny, 72°F", args.City)
+		if args.City == "" {
+			text = "Weather: sunny, 72°F"
 		}
-		// Subsequent calls (after restart) complete normally.
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("sunny in %s", args.City)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: text}},
 		}, struct{}{}, nil
 	})
 
+	// Serve the StreamableHTTPHandler at root — matching how worker_test.go sets up
+	// test servers (httptest.NewServer(handler) with no path suffix in the URL).
 	mcpSrvProc := prochttp.New(t, prochttp.WithHandler(
 		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpSrv }, nil),
 	))
 
 	appProc := app.New(t)
-
-	// SQLite provides persistent actor state store so the workflow history
-	// survives the daprd restart.
-	s.db = sqlite.New(t,
-		sqlite.WithActorStateStore(true),
-		sqlite.WithCreateStateTables(),
-	)
 
 	s.sched = scheduler.New(t)
 	s.place = placement.New(t)
@@ -116,7 +87,7 @@ func (s *restartMidCall) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppProtocol("http"),
 		daprd.WithPlacementAddresses(s.place.Address()),
 		daprd.WithSchedulerAddresses(s.sched.Address()),
-		daprd.WithResourceFiles(s.db.GetComponent(t)),
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -144,14 +115,15 @@ spec:
 	}
 }
 
-func (s *restartMidCall) Run(t *testing.T, ctx context.Context) {
+func (s *callTool) Run(t *testing.T, ctx context.Context) {
 	s.sched.WaitUntilRunning(t, ctx)
 	s.place.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	s.httpClient = fclient.HTTP(t)
+	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	t.Run("activity retries after daprd restart mid tool call", func(t *testing.T) {
+	t.Run("CallTool returns tool result with correct content", func(t *testing.T) {
 		input := map[string]any{
 			"mcpServerName": "weather",
 			"toolName":          "get_weather",
@@ -160,45 +132,39 @@ func (s *restartMidCall) Run(t *testing.T, ctx context.Context) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
 			"dapr.mcp.weather.CallTool", input)
 
-		// Wait until the first MCP tool call is in-flight inside the activity.
-		select {
-		case <-s.firstCall:
-		case <-ctx.Done():
-			require.Fail(t, "timed out waiting for first tool call to start")
-		}
-
-		// Restart daprd. The in-flight activity is interrupted (its HTTP
-		// connection to the MCP server is dropped, which cancels reqCtx).
-		// The scheduler retains actor reminders for the pending activity so the
-		// new daprd instance will re-deliver and re-execute it.
-		s.daprd.Restart(t, ctx)
-		s.daprd.WaitUntilRunning(t, ctx)
-
-		// Reconnect the task-hub client to the restarted daprd instance.
-		taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
-
-		// Wait for the orchestration to complete. The scheduler's actor
-		// reminder re-delivers the pending activity to the new daprd, which
-		// calls the MCP server a second time and succeeds.
-		completionCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		t.Cleanup(cancel)
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
-			completionCtx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
+			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
-		assert.Nil(t, metadata.GetFailureDetails(),
-			"expected orchestration to succeed after daprd restart")
 
 		var result daprmcp.CallToolResult
 		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
-		assert.False(t, result.IsError)
+
+		assert.False(t, result.IsError, "expected isError=false")
 		require.NotEmpty(t, result.Content)
+		assert.Equal(t, "text", result.Content[0].Type)
 		assert.True(t, strings.Contains(result.Content[0].Text, "Seattle"),
 			"expected tool result to mention Seattle, got: %s", result.Content[0].Text)
+	})
 
-		// The tool was called at least twice: once before the restart (which
-		// was abandoned when daprd died) and at least once after (the retry).
-		assert.GreaterOrEqual(t, int(s.callCount.Load()), 2,
-			"expected tool to be called at least twice (original + retry after restart)")
+	t.Run("CallTool unknown tool name sets isError=true", func(t *testing.T) {
+		input := map[string]any{
+			"mcpServerName": "weather",
+			"toolName":          "nonexistent_tool",
+			"arguments":     map[string]any{},
+		}
+		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
+			"dapr.mcp.weather.CallTool", input)
+
+		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
+			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+
+		// The MCP server returns isError=true for unknown tools, which surfaces
+		// as a completed workflow with isError=true in the output, NOT a workflow failure.
+		var result daprmcp.CallToolResult
+		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		assert.True(t, result.IsError, "expected isError=true for unknown tool")
 	})
 }

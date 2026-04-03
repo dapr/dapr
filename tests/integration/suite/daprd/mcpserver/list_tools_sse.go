@@ -11,14 +11,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mcp
+package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,9 +28,11 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	dtclient "github.com/dapr/durabletask-go/client"
 
+	daprmcp "github.com/dapr/dapr/pkg/runtime/mcp"
 	"github.com/dapr/dapr/tests/integration/framework"
 	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -36,22 +40,35 @@ import (
 )
 
 func init() {
-	suite.Register(new(listToolsUnreachable))
+	suite.Register(new(listToolsSSE))
 }
 
-// listToolsUnreachable verifies that the dapr.mcp.<name>.ListTools workflow
-// fails (non-nil failure state) when the MCP server is unreachable.
-type listToolsUnreachable struct {
+// listToolsSSE verifies that the dapr.mcp.<name>.ListTools workflow returns
+// the correct tool definitions when the MCPServer uses the legacy SSE transport.
+type listToolsSSE struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
 	sched      *scheduler.Scheduler
 	httpClient *http.Client
 }
 
-func (s *listToolsUnreachable) Setup(t *testing.T) []framework.Option {
-	// Use port 1 which is a privileged port — nothing will be listening there
-	// on localhost in a test environment, so the connection is always refused.
-	const deadPort = 1
+func (s *listToolsSSE) Setup(t *testing.T) []framework.Option {
+	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-sse-server", Version: "v1"}, nil)
+
+	mcp.AddTool(mcpSrv, &mcp.Tool{
+		Name:        "get_weather",
+		Description: "Get current weather",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct{}, error) {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "sunny"}},
+		}, struct{}{}, nil
+	})
+
+	// Serve the SSEHandler at root — matching how worker_test.go sets up
+	// test servers (httptest.NewServer(handler) with no path suffix in the URL).
+	mcpSrvProc := prochttp.New(t, prochttp.WithHandler(
+		mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return mcpSrv }, nil),
+	))
 
 	appProc := app.New(t)
 
@@ -77,21 +94,20 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: dead-server
+  name: weather-sse
 spec:
   endpoint:
-    streamableHTTP:
-      url: http://localhost:%d/mcp
-      timeout: 5s
-`, deadPort)),
+    sse:
+      url: http://localhost:%d
+`, mcpSrvProc.Port())),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.place, s.sched, appProc, s.daprd),
+		framework.WithProcesses(s.place, s.sched, appProc, mcpSrvProc, s.daprd),
 	}
 }
 
-func (s *listToolsUnreachable) Run(t *testing.T, ctx context.Context) {
+func (s *listToolsSSE) Run(t *testing.T, ctx context.Context) {
 	s.sched.WaitUntilRunning(t, ctx)
 	s.place.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
@@ -99,19 +115,22 @@ func (s *listToolsUnreachable) Run(t *testing.T, ctx context.Context) {
 	s.httpClient = fclient.HTTP(t)
 	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	t.Run("ListTools fails when MCP server is unreachable", func(t *testing.T) {
+	t.Run("ListTools via SSE transport returns expected tools", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.dead-server.ListTools", map[string]any{"mcpServerName": "dead-server"})
+			"dapr.mcp.weather-sse.ListTools", map[string]any{"mcpServerName": "weather-sse"})
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
-		// The list-tools activity fails (connection refused / timeout), which causes
-		// the orchestration to fail. The output should be empty or the failure reason
-		// should be available in the failure details.
-		assert.NotNil(t, metadata.GetFailureDetails(),
-			"expected orchestration to fail when MCP server is unreachable")
+		var result daprmcp.ListToolsResult
+		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+
+		names := make([]string, len(result.Tools))
+		for i, tool := range result.Tools {
+			names[i] = tool.Name
+		}
+		assert.Contains(t, names, "get_weather")
 	})
 }

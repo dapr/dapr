@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mcp
+package mcpserver
 
 import (
 	"context"
@@ -20,14 +20,11 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
-	dtclient "github.com/dapr/durabletask-go/client"
 
 	daprmcp "github.com/dapr/dapr/pkg/runtime/mcp"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -38,22 +35,24 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
 )
 
 func init() {
-	suite.Register(new(callToolSSE))
+	suite.Register(new(callToolHTTPClient))
 }
 
-// callToolSSE verifies that CallTool works correctly over the legacy SSE transport.
-type callToolSSE struct {
+// callToolHTTPClient verifies that a plain HTTP client (no durabletask SDK) can invoke MCP tools via the Dapr workflow API.
+// The routing through the built-in workflow orchestration is transparent to the HTTP caller.
+type callToolHTTPClient struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
 	sched      *scheduler.Scheduler
 	httpClient *http.Client
 }
 
-func (s *callToolSSE) Setup(t *testing.T) []framework.Option {
-	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-sse-calltool-server", Version: "v1"}, nil)
+func (s *callToolHTTPClient) Setup(t *testing.T) []framework.Option {
+	mcpSrv := mcp.NewServer(&mcp.Implementation{Name: "test-http-client-server", Version: "v1"}, nil)
 
 	type cityInput struct {
 		City string `json:"city"`
@@ -62,17 +61,13 @@ func (s *callToolSSE) Setup(t *testing.T) []framework.Option {
 		Name:        "get_weather",
 		Description: "Return current conditions for a city",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, args cityInput) (*mcp.CallToolResult, struct{}, error) {
-		text := fmt.Sprintf("Weather in %s: sunny, 72F", args.City)
-		if args.City == "" {
-			text = "Weather: sunny, 72F"
-		}
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: text}},
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("Weather in %s: sunny, 72°F", args.City)}},
 		}, struct{}{}, nil
 	})
 
 	mcpSrvProc := prochttp.New(t, prochttp.WithHandler(
-		mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return mcpSrv }, nil),
+		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpSrv }, nil),
 	))
 
 	appProc := app.New(t)
@@ -99,10 +94,10 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: weather-sse
+  name: weather
 spec:
   endpoint:
-    sse:
+    streamableHTTP:
       url: http://localhost:%d
 `, mcpSrvProc.Port())),
 	)
@@ -112,35 +107,60 @@ spec:
 	}
 }
 
-func (s *callToolSSE) Run(t *testing.T, ctx context.Context) {
+func (s *callToolHTTPClient) Run(t *testing.T, ctx context.Context) {
 	s.sched.WaitUntilRunning(t, ctx)
 	s.place.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	s.httpClient = fclient.HTTP(t)
-	taskhubClient := dtclient.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
-	t.Run("CallTool via SSE transport returns tool result", func(t *testing.T) {
+	t.Run("plain HTTP client can invoke MCP tool via workflow API without SDK", func(t *testing.T) {
+		// Start the CallTool workflow via a plain HTTP POST — no durabletask SDK needed.
 		input := map[string]any{
-			"mcpServerName": "weather-sse",
+			"mcpServerName": "weather",
 			"toolName":          "get_weather",
-			"arguments":     map[string]any{"city": "Denver"},
+			"arguments":     map[string]any{"city": "Portland"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather-sse.CallTool", input)
+			"dapr.mcp.weather.CallTool", input)
 
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
-			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
-		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		// Poll for completion using plain HTTP GET
+		statusURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s",
+			s.daprd.HTTPPort(), instanceID)
+
+		type wfStatus struct {
+			RuntimeStatus string            `json:"runtimeStatus"`
+			Properties    map[string]string `json:"properties"`
+		}
+
+		var status wfStatus
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, statusURL, nil)
+			if !assert.NoError(c, err) {
+				return
+			}
+			resp, err := s.httpClient.Do(req)
+			if !assert.NoError(c, err) {
+				return
+			}
+			defer resp.Body.Close()
+			if !assert.NoError(c, json.NewDecoder(resp.Body).Decode(&status)) {
+				return
+			}
+			assert.Equal(c, api.RUNTIME_STATUS_COMPLETED, status.RuntimeStatus)
+		}, 30*time.Second, 100*time.Millisecond)
+
+		// The tool output is stored in the dapr.workflow.output property.
+		outputJSON := status.Properties["dapr.workflow.output"]
+		require.NotEmpty(t, outputJSON, "expected dapr.workflow.output to be populated")
 
 		var result daprmcp.CallToolResult
-		require.NoError(t, json.Unmarshal([]byte(metadata.GetOutput().GetValue()), &result))
+		require.NoError(t, json.Unmarshal([]byte(outputJSON), &result))
 
 		assert.False(t, result.IsError, "expected isError=false")
 		require.NotEmpty(t, result.Content)
 		assert.Equal(t, "text", result.Content[0].Type)
-		assert.True(t, strings.Contains(result.Content[0].Text, "Denver"),
-			"expected tool result to mention Denver, got: %s", result.Content[0].Text)
+		assert.True(t, strings.Contains(result.Content[0].Text, "Portland"),
+			"expected tool result to mention Portland, got: %s", result.Content[0].Text)
 	})
 }
