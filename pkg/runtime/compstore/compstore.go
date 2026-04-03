@@ -17,8 +17,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/dapr/durabletask-go/backend"
-
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/conversation"
@@ -28,9 +26,12 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/workflows"
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 // ComponentStore is a store of all components which have been configured for the
@@ -55,6 +56,8 @@ type ComponentStore struct {
 	components              []compsv1alpha1.Component
 	subscriptions           *subscriptions
 	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
+	configurationResources  []configapi.Configuration
+	resiliencyResources     []resiliencyapi.Resiliency
 	actorStateStore         struct {
 		name  string
 		store state.Store

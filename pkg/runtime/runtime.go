@@ -50,7 +50,9 @@ import (
 	"github.com/dapr/dapr/pkg/api/http"
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
@@ -150,6 +152,8 @@ func newDaprRuntime(ctx context.Context,
 	globalConfig *config.Configuration,
 	accessControlList *config.AccessControlList,
 	resiliencyProvider resiliency.Provider,
+	configAPIResource *configapi.Configuration,
+	resiliencyConfigs []*resiliencyapi.Resiliency,
 ) (*DaprRuntime, error) {
 	// TODO: @joshvanl: find a solution for this:
 	// We need to register our custom proxy codec in the global registrar, but
@@ -170,6 +174,17 @@ func newDaprRuntime(ctx context.Context,
 	codec.Register()
 
 	compStore := compstore.New()
+
+	// Store raw API resources in compstore so that the SIGHUP reconciler can
+	// detect unchanged resource events and avoid unnecessary restarts.
+	if configAPIResource != nil {
+		compStore.AddConfigurationResource(*configAPIResource)
+	}
+	for _, res := range resiliencyConfigs {
+		if res != nil {
+			compStore.AddResiliencyResource(*res)
+		}
+	}
 
 	namespace := security.CurrentNamespace()
 	podName := getPodName()
@@ -380,6 +395,12 @@ func newDaprRuntime(ctx context.Context,
 
 			rerr := rt.initRuntime(ctx)
 			if rerr != nil {
+				// If the context was canceled (e.g. SIGHUP/SIGINT during
+				// init), treat the initialization failure as a clean
+				// shutdown rather than a fatal error.
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				return rerr
 			}
 
