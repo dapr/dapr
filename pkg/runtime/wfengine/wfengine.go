@@ -31,10 +31,14 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/mcp"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
+	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
 	"github.com/dapr/kit/logger"
+	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 )
 
 var (
@@ -49,6 +53,11 @@ type Interface interface {
 	RuntimeMetadata() *runtimev1pb.MetadataWorkflows
 
 	ActivityActorType() string
+
+	// ActivateMCPServers ensures workflow actors are registered,
+	// so that built-in dapr.mcp.* orchestrations can be scheduled even when no user workflow client has connected via GetWorkItems.
+	// It is called bythe runtime after MCPServer manifests are loaded.
+	ActivateMCPServers(ctx context.Context) error
 }
 
 type Options struct {
@@ -60,6 +69,9 @@ type Options struct {
 	Resiliency     resiliency.Provider
 	EventSink      orchestrator.EventSink
 	ComponentStore *compstore.ComponentStore
+	// Security is optional. When set,
+	// SPIFFE JWT SVID injection is enabled for MCPServer resources that configure auth.spiffe.
+	Security security.Handler
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
@@ -76,6 +88,12 @@ type engine struct {
 	client  workflows.Workflow
 
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
+
+	// mcpExec and mcpOpts support lazy initialization of the built-in MCP executor.
+	// NewBuiltinExecutor is only called from ActivateMCPServers so
+	// that sidecars with no MCPServer resources incur no MCP-related allocations.
+	mcpExec *mcp.RoutingExecutor
+	mcpOpts mcp.ExecutorOptions
 }
 
 func New(opts Options) Interface {
@@ -103,7 +121,7 @@ func New(opts Options) Interface {
 		lock              sync.Mutex
 	)
 
-	executor, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
+	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
 			lock.Lock()
 			defer lock.Unlock()
@@ -132,6 +150,18 @@ func New(opts Options) Interface {
 		}),
 		backend.WithStreamSendTimeout(time.Second*10),
 	)
+
+	// Wrap the gRPC executor with the routing executor.
+	// The built-in MCP executor is installed lazily in ActivateMCPServers when the first
+	// MCPServer manifest is loaded,
+	// so sidecars without MCPServer resources pay no MCP allocation cost at startup.
+	mcpExec := mcp.NewRoutingExecutor(grpcExec)
+	mcpOpts := mcp.ExecutorOptions{
+		Store:   opts.ComponentStore,
+		Secrets: mcp.NewCompstoreSecretGetter(opts.ComponentStore),
+		JWT:     newSPIFFEJWTFetcher(opts.Security),
+	}
+	executor := mcpExec
 
 	var topts []backend.NewTaskWorkerOptions
 	if opts.Spec.GetMaxConcurrentWorkflowInvocations() != nil {
@@ -171,6 +201,8 @@ func New(opts Options) Interface {
 		backend:              abackend,
 		registerGrpcServerFn: registerGrpcServerFn,
 		getWorkItemsCount:    &getWorkItemsCount,
+		mcpExec:              mcpExec,
+		mcpOpts:              mcpOpts,
 		client: &client{
 			logger: wfBackendLogger,
 			client: backend.NewTaskHubClient(abackend),
@@ -218,4 +250,42 @@ func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
 	return &runtimev1pb.MetadataWorkflows{
 		ConnectedWorkers: wfe.getWorkItemsCount.Load(),
 	}
+}
+
+// ActivateMCPServers registers workflow actors with the actor runtime,
+// so that built-in dapr.mcp.* orchestrations can be scheduled even when no user app has connected via GetWorkItems.
+// It is idempotent: registering when actors are already registered is a no-op.
+func (wfe *engine) ActivateMCPServers(ctx context.Context) error {
+	log.Debug("Activating workflow actors for MCP server orchestrations")
+	// Lazily construct the built-in MCP executor the first time an MCPServer
+	// manifest is loaded. EnableMCP is a no-op on subsequent calls.
+	wfe.mcpExec.EnableMCP(mcp.NewBuiltinExecutor(wfe.mcpOpts))
+	return wfe.backend.RegisterActors(ctx)
+}
+
+// spiffeJWTFetcher implements mcp.JWTFetcher using the runtime's security handler.
+// It injects a SPIFFE SVID context and fetches a JWT SVID for the given audience.
+// When sec is nil (security disabled), FetchJWT returns an error.
+type spiffeJWTFetcher struct {
+	sec security.Handler
+}
+
+func newSPIFFEJWTFetcher(sec security.Handler) *spiffeJWTFetcher {
+	return &spiffeJWTFetcher{sec: sec}
+}
+
+func (f *spiffeJWTFetcher) FetchJWT(ctx context.Context, audience string) (string, error) {
+	if f.sec == nil {
+		return "", fmt.Errorf("SPIFFE JWT auth is configured but no security handler is available")
+	}
+	ctxWithSVID := f.sec.WithSVIDContext(ctx)
+	jwtSource, ok := spiffecontext.JWTFrom(ctxWithSVID)
+	if !ok {
+		return "", fmt.Errorf("SPIFFE JWT source not available in context")
+	}
+	svid, err := jwtSource.FetchJWTSVID(ctx, jwtsvid.Params{Audience: audience})
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch SPIFFE JWT SVID: %w", err)
+	}
+	return svid.Marshal(), nil
 }

@@ -202,6 +202,7 @@ type GetMetadataResponse struct {
 	ActorRuntime            *ActorRuntime            `protobuf:"bytes,10,opt,name=actor_runtime,json=actorRuntime,proto3" json:"actor_runtime,omitempty"`
 	Scheduler               *MetadataScheduler       `protobuf:"bytes,11,opt,name=scheduler,proto3,oneof" json:"scheduler,omitempty"`
 	Workflows               *MetadataWorkflows       `protobuf:"bytes,12,opt,name=workflows,proto3,oneof" json:"workflows,omitempty"`
+	McpServers              []*MetadataMCPServer     `protobuf:"bytes,13,rep,name=mcp_servers,json=mcpServers,proto3" json:"mcp_servers,omitempty"`
 }
 
 func (x *GetMetadataResponse) Reset() {
@@ -317,6 +318,13 @@ func (x *GetMetadataResponse) GetScheduler() *MetadataScheduler {
 func (x *GetMetadataResponse) GetWorkflows() *MetadataWorkflows {
 	if x != nil {
 		return x.Workflows
+	}
+	return nil
+}
+
+func (x *GetMetadataResponse) GetMcpServers() []*MetadataMCPServer {
+	if x != nil {
+		return x.McpServers
 	}
 	return nil
 }
@@ -660,6 +668,22 @@ func (*MetadataHTTPEndpoint) Descriptor() ([]byte, []int) {
 }
 
 func (x *MetadataHTTPEndpoint) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+// MetadataMCPServer contains metadata about a loaded MCPServer resource.
+type MetadataMCPServer struct {
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+}
+
+func (x *MetadataMCPServer) Reset()         { *x = MetadataMCPServer{} }
+func (x *MetadataMCPServer) String() string { return x.GetName() }
+func (x *MetadataMCPServer) ProtoMessage()  {}
+
+func (x *MetadataMCPServer) GetName() string {
 	if x != nil {
 		return x.Name
 	}

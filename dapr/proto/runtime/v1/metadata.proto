@@ -40,6 +40,7 @@ message GetMetadataResponse {
   ActorRuntime actor_runtime = 10 [json_name = "actorRuntime"];
   optional MetadataScheduler scheduler = 11 [json_name = "scheduler"];
   optional MetadataWorkflows workflows = 12 [json_name = "workflows"];
+  repeated MetadataMCPServer mcp_servers = 13 [json_name = "mcpServers"];
 }
 
 message MetadataWorkflows {
@@ -87,6 +88,10 @@ message RegisteredComponents {
 }
 
 message MetadataHTTPEndpoint {
+  string name = 1 [json_name = "name"];
+}
+
+message MetadataMCPServer {
   string name = 1 [json_name = "name"];
 }
 
