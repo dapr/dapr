@@ -26,21 +26,27 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) error {
+func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) dispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
+	actionIDs := make([]int32, len(events))
 
 	for i, msg := range events {
 		msgs[i] = &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
 		historyEvents[i] = msg.GetHistoryEvent()
 		targets[i] = msg.GetTargetInstanceID()
+		if es := msg.GetHistoryEvent().GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
+			actionIDs[i] = es.GetParentInstance().GetTaskScheduledId()
+		} else {
+			actionIDs[i] = msg.GetHistoryEvent().GetEventId()
+		}
 	}
 
-	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.CreateWorkflowInstanceMethod)
+	return o.callStateMessages(ctx, msgs, historyEvents, targets, actionIDs, todo.CreateWorkflowInstanceMethod)
 }
 
-func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) error {
+func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) dispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
@@ -51,17 +57,22 @@ func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*b
 		targets[i] = msg.GetTargetInstanceID()
 	}
 
-	return o.callStateMessages(ctx, msgs, historyEvents, targets, todo.AddWorkflowEventMethod)
+	return o.callStateMessages(ctx, msgs, historyEvents, targets, nil, todo.AddWorkflowEventMethod)
 }
 
-func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, method string) error {
+func (o *orchestrator) callStateMessages(ctx context.Context, msgs []proto.Message, historyEvents []*backend.HistoryEvent, targets []string, actionIDs []int32, method string) dispatchResult {
+	var result dispatchResult
 	for i, msg := range msgs {
 		if err := o.callStateMessage(ctx, msg, historyEvents[i], targets[i], method); err != nil {
-			return err
+			eventID := historyEvents[i].GetEventId()
+			if actionIDs != nil {
+				eventID = actionIDs[i]
+			}
+			result.recordFailure(eventID, err)
+			continue
 		}
 	}
-
-	return nil
+	return result
 }
 
 func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, historyEvent *backend.HistoryEvent, target string, method string) error {
@@ -77,7 +88,6 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 
 		switch m := m.(type) {
 		case *backend.CreateWorkflowInstanceRequest:
-			// If target app is specified and different from current app, use cross-app actor type
 			if router.TargetAppID != nil {
 				actorType = o.actorTypeBuilder.Workflow(router.GetTargetAppID())
 			}
@@ -92,7 +102,6 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 				routeAppID = router.GetSourceAppID()
 			}
 
-			// If route app is specified and different from current app, use cross-app actor type
 			if routeAppID != "" && routeAppID != o.appID {
 				actorType = o.actorTypeBuilder.Workflow(routeAppID)
 			}
@@ -101,13 +110,19 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 
 	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", o.actorID, method, actorType, target)
 
-	if _, err = o.router.Call(ctx, internalsv1pb.
+	callCtx, cancel := context.WithTimeout(ctx, dispatchTimeout)
+	defer cancel()
+
+	if _, err = o.router.Call(callCtx, internalsv1pb.
 		NewInternalInvokeRequest(method).
 		WithActor(actorType, target).
 		WithData(b).
 		WithContentType(invokev1.ProtobufContentType),
 	); err != nil {
-		return fmt.Errorf("failed to invoke method '%s' on actor '%s': %w", method, target, err)
+		if router := historyEvent.GetRouter(); router != nil && router.TargetAppID != nil {
+			return fmt.Errorf("failed to invoke '%s' on remote app '%s' (the app may not be available): %w", method, router.GetTargetAppID(), err)
+		}
+		return fmt.Errorf("failed to invoke '%s' on actor '%s': %w", method, target, err)
 	}
 
 	return nil
