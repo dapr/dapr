@@ -229,6 +229,16 @@ spec:
 {{- end }}
 {{- if .Values.global.ha.enabled }}
         podAntiAffinity:
+{{- if eq .Values.global.ha.podAntiAffinityPolicy "requiredDuringSchedulingIgnoredDuringExecution" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - dapr-placement-server
+            topologyKey: {{ .Values.global.ha.topologyKey }}
+{{- else }}
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
             podAffinityTerm:
@@ -239,6 +249,7 @@ spec:
                   values:
                   - dapr-placement-server
               topologyKey: {{ .Values.global.ha.topologyKey }}
+{{- end }}
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
