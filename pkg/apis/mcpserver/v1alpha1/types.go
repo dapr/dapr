@@ -14,9 +14,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"errors"
-	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -79,10 +76,14 @@ func (m MCPServer) GetSecretStore() string {
 
 // LogName returns a human-readable name suitable for log messages.
 func (m MCPServer) LogName() string {
-	if url := m.URL(); url != "" {
-		return m.Name + " (" + url + ")"
+	switch {
+	case m.Spec.Endpoint.StreamableHTTP != nil:
+		return m.Name + " (" + m.Spec.Endpoint.StreamableHTTP.URL + ")"
+	case m.Spec.Endpoint.SSE != nil:
+		return m.Name + " (" + m.Spec.Endpoint.SSE.URL + ")"
+	default:
+		return m.Name
 	}
-	return m.Name
 }
 
 // NameValuePairs returns the HTTP headers as name/value pairs for secret processing.
@@ -94,19 +95,6 @@ func (m MCPServer) NameValuePairs() []common.NameValuePair {
 		return m.Spec.Endpoint.SSE.Headers
 	default:
 		return nil
-	}
-}
-
-// URL returns the endpoint URL from whichever HTTP transport is configured,
-// or "" for stdio.
-func (m MCPServer) URL() string {
-	switch {
-	case m.Spec.Endpoint.StreamableHTTP != nil:
-		return m.Spec.Endpoint.StreamableHTTP.URL
-	case m.Spec.Endpoint.SSE != nil:
-		return m.Spec.Endpoint.SSE.URL
-	default:
-		return ""
 	}
 }
 
@@ -161,6 +149,8 @@ type MCPServerSpec struct {
 
 // MCPEndpoint describes how to reach the MCP server.
 // Exactly one of StreamableHTTP, SSE, or Stdio must be set.
+//
+//+kubebuilder:validation:XValidation:rule="(has(self.streamableHTTP) ? 1 : 0) + (has(self.sse) ? 1 : 0) + (has(self.stdio) ? 1 : 0) == 1",message="exactly one of streamableHTTP, sse, or stdio must be set"
 type MCPEndpoint struct {
 	// StreamableHTTP holds configuration for the streamable_http transport.
 	//+optional
@@ -175,49 +165,11 @@ type MCPEndpoint struct {
 	Stdio *MCPStdio `json:"stdio,omitempty"`
 }
 
-// Validate checks that exactly one transport is configured and that the
-// configured transport has all required fields set.
-func (e *MCPEndpoint) Validate() error {
-	count := 0
-	if e.StreamableHTTP != nil {
-		count++
-	}
-	if e.SSE != nil {
-		count++
-	}
-	if e.Stdio != nil {
-		count++
-	}
-
-	if count == 0 {
-		return errors.New("exactly one of streamableHTTP, sse, or stdio must be set")
-	}
-	if count > 1 {
-		return fmt.Errorf("only one of streamableHTTP, sse, or stdio may be set (found %d)", count)
-	}
-
-	switch {
-	case e.StreamableHTTP != nil:
-		if e.StreamableHTTP.URL == "" {
-			return errors.New("streamableHTTP.url is required")
-		}
-	case e.SSE != nil:
-		if e.SSE.URL == "" {
-			return errors.New("sse.url is required")
-		}
-	case e.Stdio != nil:
-		if e.Stdio.Command == "" {
-			return errors.New("stdio.command is required")
-		}
-	}
-
-	return nil
-}
-
 // MCPStreamableHTTP configures the streamable_http transport.
 type MCPStreamableHTTP struct {
 	// URL is the endpoint URL of the MCP server.
-	URL string `json:"url"`
+	//+kubebuilder:validation:MinLength=1
+	URL string `json:"url" validate:"required"`
 
 	// ProtocolVersion pins the MCP spec version the server implements,
 	// using the date-based format defined by the MCP specification (e.g. "2025-06-18").
@@ -243,7 +195,8 @@ type MCPStreamableHTTP struct {
 // MCPSSE configures the legacy SSE transport.
 type MCPSSE struct {
 	// URL is the endpoint URL of the MCP server.
-	URL string `json:"url"`
+	//+kubebuilder:validation:MinLength=1
+	URL string `json:"url" validate:"required"`
 
 	// ProtocolVersion pins the MCP spec version the server implements,
 	// using the date-based format defined by the MCP specification (e.g. "2025-06-18").
@@ -267,7 +220,8 @@ type MCPSSE struct {
 // MCPStdio configures the stdio subprocess transport.
 type MCPStdio struct {
 	// Command is the executable to run.
-	Command string `json:"command"`
+	//+kubebuilder:validation:MinLength=1
+	Command string `json:"command" validate:"required"`
 	//+optional
 	Args []string `json:"args,omitempty"`
 	// Env are environment variables injected into the subprocess.
@@ -300,7 +254,8 @@ type MCPAuth struct {
 // MCPOAuth2 configures OAuth2 client credentials for authenticating to an MCP server.
 type MCPOAuth2 struct {
 	// Issuer is the token endpoint of the authorization server.
-	Issuer string `json:"issuer"`
+	//+kubebuilder:validation:MinLength=1
+	Issuer string `json:"issuer" validate:"required"`
 	//+optional
 	Audience *string `json:"audience,omitempty"`
 	//+optional
@@ -320,11 +275,13 @@ type SPIFFE struct {
 // SPIFFEJWT describes how to attach a SPIFFE SVID JWT to outbound MCP requests.
 type SPIFFEJWT struct {
 	// Header is the HTTP header name to inject the JWT into (e.g. "Authorization").
+	//+kubebuilder:validation:MinLength=1
 	Header string `json:"header" validate:"required"`
 	// HeaderValuePrefix is an optional string prepended to the JWT value (e.g. "Bearer ").
 	//+optional
 	HeaderValuePrefix *string `json:"headerValuePrefix,omitempty"`
 	// Audience is the intended audience for the JWT (e.g. "mcp://payments").
+	//+kubebuilder:validation:MinLength=1
 	Audience string `json:"audience" validate:"required"`
 }
 
@@ -373,7 +330,8 @@ type MCPMiddlewareHook struct {
 // When AppID is unset, the workflow runs locally in the same daprd's workflow engine.
 type MCPMiddlewareWorkflow struct {
 	// WorkflowName is the name of the workflow to invoke.
-	WorkflowName string `json:"workflowName"`
+	//+kubebuilder:validation:MinLength=1
+	WorkflowName string `json:"workflowName" validate:"required"`
 
 	// AppID targets the workflow on a remote Dapr app via service invocation.
 	// When unset, the workflow is invoked locally.

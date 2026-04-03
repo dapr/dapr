@@ -57,7 +57,6 @@ func (m *mcpservers) Load(ctx context.Context) ([]mcpserverapi.MCPServer, error)
 
 	items := resp.GetMcpServers()
 	if len(items) == 0 {
-		log.Debug("No MCP servers found")
 		return nil, nil
 	}
 
