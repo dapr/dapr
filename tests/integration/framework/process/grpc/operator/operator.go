@@ -197,9 +197,11 @@ func New(t *testing.T, fopts ...Option) *Operator {
 				httpEndpointUpdateFn:  opts.httpEndpointUpdateFn,
 				listComponentsFn:      opts.listComponentsFn,
 				listHTTPEndpointsFn:   opts.listHTTPEndpointsFn,
+				listMCPServersFn:      opts.listMCPServersFn,
 				listResiliencyFn:      opts.listResiliencyFn,
 				listSubscriptionsFn:   opts.listSubscriptionsFn,
 				listSubscriptionsV2Fn: opts.listSubscriptionsV2Fn,
+				mcpServerUpdateFn:     opts.mcpServerUpdateFn,
 				subscriptionUpdateFn:  opts.subscriptionUpdateFn,
 			}
 
