@@ -216,6 +216,8 @@ func (a *app) Deactivate(ctx context.Context) error {
 
 	a.lock.Close(ctx)
 	a.table.Delete(a.actorID)
+	count := a.activeCount.Add(-1)
+	diag.DefaultMonitoring.ActorActiveCount(a.actorType, count)
 
 	req := invokev1.NewInvokeMethodRequest("actors/"+a.actorType+"/"+a.actorID).
 		WithActor(a.actorType, a.actorID).
