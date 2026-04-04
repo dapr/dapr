@@ -65,6 +65,7 @@ type serviceMetrics struct {
 	actorReminderFiredTotal      *stats.Int64Measure
 	actorTimers                  *stats.Int64Measure
 	actorTimerFiredTotal         *stats.Int64Measure
+	actorActiveCount             *stats.Int64Measure
 
 	// Access Control Lists for Service Invocation metrics
 	appPolicyActionAllowed    *stats.Int64Measure
@@ -167,6 +168,10 @@ func newServiceMetrics() *serviceMetrics {
 			"runtime/actor/timers_fired_total",
 			"The number of actor timers fired requests.",
 			stats.UnitDimensionless),
+		actorActiveCount: stats.Int64(
+			"runtime/actor/active_count",
+			"The number of currently active actors per actor type.",
+			stats.UnitDimensionless),
 
 		// Access Control Lists for service invocation
 		appPolicyActionAllowed: stats.Int64(
@@ -242,6 +247,7 @@ func (s *serviceMetrics) Init(meter view.Meter, appID string, latencyDistributio
 		diagUtils.NewMeasureView(s.actorReminders, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 		diagUtils.NewMeasureView(s.actorReminderFiredTotal, []tag.Key{appIDKey, actorTypeKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(s.actorTimerFiredTotal, []tag.Key{appIDKey, actorTypeKey, successKey}, view.Count()),
+		diagUtils.NewMeasureView(s.actorActiveCount, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 
 		diagUtils.NewMeasureView(s.appPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(s.globalPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
@@ -431,6 +437,17 @@ func (s *serviceMetrics) ActorTimers(actorType string, timers int64) {
 			stats.WithRecorder(s.meter),
 			stats.WithTags(diagUtils.WithTags(s.actorTimers.Name(), appIDKey, s.appID, actorTypeKey, actorType)...),
 			stats.WithMeasurements(s.actorTimers.M(timers)))
+	}
+}
+
+// ActorActiveCount records the current number of active actors for an actor type.
+func (s *serviceMetrics) ActorActiveCount(actorType string, count int64) {
+	if s.enabled {
+		stats.RecordWithOptions(
+			s.ctx,
+			stats.WithRecorder(s.meter),
+			stats.WithTags(diagUtils.WithTags(s.actorActiveCount.Name(), appIDKey, s.appID, actorTypeKey, actorType)...),
+			stats.WithMeasurements(s.actorActiveCount.M(count)))
 	}
 }
 
