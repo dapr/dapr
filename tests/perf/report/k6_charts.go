@@ -25,11 +25,6 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-type Summary struct {
-	Pass           bool     `json:"pass"`
-	RunnersResults []Runner `json:"runnersResults"`
-}
-
 // K6 perf test summary for x iterations. Show success/failure/VUs.
 func processK6Summary(k6JSON, testName, pkg, baseOutputDir string, resourceByTest map[string]*ResourceUsage) {
 	k6JSON = strings.TrimSpace(k6JSON)
@@ -37,7 +32,7 @@ func processK6Summary(k6JSON, testName, pkg, baseOutputDir string, resourceByTes
 		return
 	}
 
-	var summary Summary
+	var summary K6Summary
 	if err := json.Unmarshal([]byte(k6JSON), &summary); err != nil {
 		fmt.Fprintf(os.Stderr, "k6 JSON parse error for %s: %v\nJSON: %s\n", testName, err, k6JSON)
 		return

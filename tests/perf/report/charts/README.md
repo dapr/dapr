@@ -153,14 +153,26 @@ This will be extended to other APIs in the future.
 
 ### How to run locally
 
-Charts are produced by:
+From `tests/perf/report/`, with a `test_report_perf.json` downloaded from CI and placed at `tests/perf/test_report_perf.json`.
 
-- Program (from `tests/perf/report/`): `charts.go`
-- Json input: `./test_report_perf.json` (`gotestsum` JSON from perf CI)
-- Output: `charts/v1.16.3/workflows/*.png`
+NOTE: Make sure to change the version and get relevant data json files for the version you are targeting.
+
+**Charts only:**
+```bash
+go build -o _report_bin .
+./_report_bin --version v1.18.0 --input-file ../test_report_perf.json
+rm -f _report_bin
+```
+
+**Charts + AI highlights** (requires [Ollama](https://ollama.ai) running locally with any model):
+```bash
+brew install ollama && ollama pull qwen2.5:7b && ollama serve
+```
 
 ```bash
-cd tests/perf/report
-rm -rf charts/v1.16.3/workflows/*
-go run .
+go build -o _report_bin .
+./_report_bin --version v1.18.0 --input-file ../test_report_perf.json --model qwen2.5:7b
+rm -f _report_bin
 ```
+
+> **Note:** The CI workflow uses `qwen2.5:7b`, but any Ollama model works (e.g. `llama3.2`, `mistral`). Pass the model name via `--model`.
