@@ -41,11 +41,13 @@ type kube struct {
 }
 
 // get retrieves the existing certificate bundle from Kubernetes.
-func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
+// It returns the bundle, a boolean indicating whether the ConfigMap needs to
+// be re-synced with the Secret, and any error.
+func (k *kube) get(ctx context.Context) (bundle.Bundle, bool, error) {
 	// Get the trust bundle secret
 	secret, err := k.client.CoreV1().Secrets(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
-		return bundle.Bundle{}, fmt.Errorf("failed to get trust bundle secret: %w", err)
+		return bundle.Bundle{}, false, fmt.Errorf("failed to get trust bundle secret: %w", err)
 	}
 
 	// Check if X.509 certificates need to be generated
@@ -55,14 +57,18 @@ func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 
 	generateX509 := !hasRootCert || !hasIssuerCert || !hasIssuerKey
 
-	// Also check if the ConfigMap is in sync
+	// Check if the ConfigMap is in sync with the Secret.
+	// The Secret is the authoritative source for certificate data. A ConfigMap
+	// mismatch should trigger a re-sync, not certificate regeneration.
+	var needsSync bool
 	configMap, err := k.client.CoreV1().ConfigMaps(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
 	if err != nil {
-		return bundle.Bundle{}, err
+		return bundle.Bundle{}, false, fmt.Errorf("failed to get trust bundle configmap: %w", err)
 	}
 
 	if configMapRootCert, ok := configMap.Data[filepath.Base(k.config.RootCertPath)]; !ok || (hasRootCert && configMapRootCert != string(trustAnchors)) {
-		generateX509 = true
+		needsSync = true
+		log.Warn("Trust bundle ConfigMap is out of sync with Secret; will re-sync")
 	}
 
 	// Create a bundle if certificates are available
@@ -70,7 +76,7 @@ func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 	if !generateX509 {
 		bndle.X509, err = verifyX509Bundle(trustAnchors, issChainPEM, issKeyPEM)
 		if err != nil {
-			return bundle.Bundle{}, fmt.Errorf("failed to verify CA bundle: %w", err)
+			return bundle.Bundle{}, false, fmt.Errorf("failed to verify CA bundle: %w", err)
 		}
 	}
 
@@ -81,11 +87,11 @@ func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 	if hasJWTKey && hasJWKS {
 		jwtKey, jwtErr := loadJWTSigningKey(jwtKeyPEM)
 		if jwtErr != nil {
-			return bundle.Bundle{}, fmt.Errorf("failed to load JWT signing key: %w", jwtErr)
+			return bundle.Bundle{}, false, fmt.Errorf("failed to load JWT signing key: %w", jwtErr)
 		}
 
 		if verifyErr := verifyJWKS(jwks, jwtKey, k.config.JWT.KeyID); verifyErr != nil {
-			return bundle.Bundle{}, fmt.Errorf("failed to verify JWKS: %w", verifyErr)
+			return bundle.Bundle{}, false, fmt.Errorf("failed to verify JWKS: %w", verifyErr)
 		}
 
 		bndle.JWT = &bundle.JWT{
@@ -95,11 +101,11 @@ func (k *kube) get(ctx context.Context) (bundle.Bundle, error) {
 		}
 		bndle.JWT.JWKS, err = jwk.Parse(jwks)
 		if err != nil {
-			return bundle.Bundle{}, fmt.Errorf("failed to parse JWKS: %w", err)
+			return bundle.Bundle{}, false, fmt.Errorf("failed to parse JWKS: %w", err)
 		}
 	}
 
-	return bndle, nil
+	return bndle, needsSync, nil
 }
 
 // store saves the certificate bundle to Kubernetes.
@@ -152,6 +158,33 @@ func (k *kube) store(ctx context.Context, bundle bundle.Bundle) error {
 	delete(configMap.Data, filepath.Base(k.config.JWT.JWKSPath))
 	if bundle.JWT != nil {
 		configMap.Data[filepath.Base(k.config.JWT.JWKSPath)] = string(bundle.JWT.JWKSJson)
+	}
+
+	if _, err = k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, configMap, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("failed to update trust bundle configmap: %w", err)
+	}
+
+	return nil
+}
+
+// syncConfigMap re-syncs only the ConfigMap with the provided bundle data,
+// without touching the Secret. This is used when the Secret already has correct
+// certs but the ConfigMap has diverged.
+func (k *kube) syncConfigMap(ctx context.Context, b bundle.Bundle) error {
+	configMap, err := k.client.CoreV1().ConfigMaps(k.namespace).Get(ctx, TrustBundleK8sName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get trust bundle configmap: %w", err)
+	}
+
+	if configMap.Data == nil {
+		configMap.Data = make(map[string]string)
+	}
+
+	configMap.Data[filepath.Base(k.config.RootCertPath)] = string(b.X509.TrustAnchors)
+
+	delete(configMap.Data, filepath.Base(k.config.JWT.JWKSPath))
+	if b.JWT != nil {
+		configMap.Data[filepath.Base(k.config.JWT.JWKSPath)] = string(b.JWT.JWKSJson)
 	}
 
 	if _, err = k.client.CoreV1().ConfigMaps(k.namespace).Update(ctx, configMap, metav1.UpdateOptions{}); err != nil {
