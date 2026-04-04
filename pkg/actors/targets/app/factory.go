@@ -97,6 +97,7 @@ func (f *factory) GetOrCreate(actorID string) targets.Interface {
 		var loaded bool
 		a, loaded = f.table.LoadOrStore(actorID, newApp)
 		if !loaded {
+			f.idlerQueue.Enqueue(newApp)
 			count := f.activeCount.Add(1)
 			diag.DefaultMonitoring.ActorActiveCount(f.actorType, count)
 		}
@@ -119,8 +120,6 @@ func (f *factory) initApp(actorID string) *app {
 	}
 
 	app.idleAt.Store(new(f.clock.Now().Add(f.idleTimeout)))
-
-	f.idlerQueue.Enqueue(app)
 
 	return app
 }
