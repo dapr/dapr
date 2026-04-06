@@ -104,10 +104,10 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 		delayTime := 30 * time.Second
 		var executedActivity atomic.Bool
 		r := task.NewTaskRegistry()
-		r.AddWorkflowN("Root", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("Root", func(ctx *task.WorkflowContext) (any, error) {
 			tasks := make([]task.Task, 0, 3)
 			for i := range 3 {
-				task := ctx.CallChildWorkflow("L1", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L1_"+strconv.Itoa(i)))
+				task := ctx.CallChildWorkflow("L1", task.WithChildWorkflowInstanceID(string(ctx.ID)+"_L1_"+strconv.Itoa(i)))
 				tasks = append(tasks, task)
 			}
 			for _, task := range tasks {
@@ -115,11 +115,11 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 			}
 			return nil, nil
 		})
-		r.AddWorkflowN("L1", func(ctx *task.OrchestrationContext) (any, error) {
-			ctx.CallChildWorkflow("L2", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L2")).Await(nil)
+		r.AddWorkflowN("L1", func(ctx *task.WorkflowContext) (any, error) {
+			ctx.CallChildWorkflow("L2", task.WithChildWorkflowInstanceID(string(ctx.ID)+"_L2")).Await(nil)
 			return nil, nil
 		})
-		r.AddWorkflowN("L2", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("L2", func(ctx *task.WorkflowContext) (any, error) {
 			ctx.CreateTimer(delayTime).Await(nil)
 			ctx.CallActivity("Fail").Await(nil)
 			return nil, nil

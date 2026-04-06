@@ -95,7 +95,7 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("basic", func(t *testing.T) {
 		r := task.NewTaskRegistry()
-		r.AddWorkflowN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("SingleActivity", func(ctx *task.WorkflowContext) (any, error) {
 			var input string
 			if err := ctx.GetInput(&input); err != nil {
 				return nil, err
