@@ -22,6 +22,7 @@ import (
 	"k8s.io/utils/clock"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/healthz"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -70,6 +71,22 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 		clock:   clock.RealClock{},
 		manager: &components{
 			Loader: opts.Loader.Components(),
+			store:  opts.CompStore,
+			proc:   opts.Processor,
+			auth:   opts.Authorizer,
+		},
+	}
+	r.loop = loopFactory.NewLoop(r)
+	return r
+}
+
+func NewMCPServers(opts Options[mcpserverapi.MCPServer]) *Reconciler[mcpserverapi.MCPServer] {
+	r := &Reconciler[mcpserverapi.MCPServer]{
+		kind:    mcpserverapi.Kind,
+		htarget: opts.Healthz.AddTarget("mcpserver-reconciler"),
+		clock:   clock.RealClock{},
+		manager: &mcpservers{
+			Loader: opts.Loader.MCPServers(),
 			store:  opts.CompStore,
 			proc:   opts.Processor,
 			auth:   opts.Authorizer,
