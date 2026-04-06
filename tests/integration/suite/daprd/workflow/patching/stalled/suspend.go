@@ -84,7 +84,7 @@ func (r *suspend) Run(t *testing.T, ctx context.Context) {
 	r.fw.WaitForStalled(t, ctx, id)
 
 	// Resuming a stalled workflow should do nothing
-	err := r.fw.CurrentClient.SuspendOrchestration(ctx, id, "myreason")
+	err := r.fw.CurrentClient.SuspendWorkflow(ctx, id, "myreason")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stalled")
 }

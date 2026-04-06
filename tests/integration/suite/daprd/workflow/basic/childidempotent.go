@@ -131,7 +131,7 @@ func (c *childidempotent) Run(t *testing.T, ctx context.Context) {
 
 	c.store.ArmFailureForKey(parentID+"||history-", failedCh)
 
-	// Uses StartWorkflowBeta1 instead of ScheduleNewOrchestration because it returns immediately
+	// Uses StartWorkflowBeta1 instead of ScheduleNewWorkflow because it returns immediately
 	_, err := gclient.StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
 		WorkflowComponent: "dapr",
 		WorkflowName:      "parent",

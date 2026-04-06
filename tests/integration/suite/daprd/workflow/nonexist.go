@@ -59,6 +59,6 @@ func (n *nonexist) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		meta, err := client.FetchWorkflowMetadata(ctx, id)
 		require.NoError(t, err)
-		assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), meta.RuntimeStatus.String())
+		assert.Equal(c, protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED.String(), meta.GetRuntimeStatus().String())
 	}, time.Second*10, time.Millisecond*10)
 }

@@ -147,7 +147,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		}
 
 		workflowState.History = append(workflowState.History, his)
-		workflowState.Inbox = append(workflowState.GetInbox()[:i], workflowState.GetInbox()[i+1:]...)
+		workflowState.Inbox = append(workflowState.Inbox[:i], workflowState.Inbox[i+1:]...)
 		i--
 	}
 

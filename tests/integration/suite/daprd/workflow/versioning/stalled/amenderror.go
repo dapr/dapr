@@ -52,7 +52,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	d.registerActivity(d.workflow.Registry())
 	d.workflow.WaitUntilRunning(t, ctx)
 
-	d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v1", true, func(ctx *task.OrchestrationContext) (any, error) {
+	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 			return nil, err
 		}
@@ -65,15 +65,15 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	clientCtx, cancelClient := context.WithCancel(ctx)
 	defer cancelClient()
 	client := d.workflow.BackendClient(t, clientCtx)
-	id, scheduleErr := client.ScheduleNewOrchestration(ctx, "workflow")
+	id, scheduleErr := client.ScheduleNewWorkflow(ctx, "workflow")
 	require.NoError(t, scheduleErr)
 
-	wf.WaitForOrchestratorStartedEvent(t, ctx, client, id)
+	wf.WaitForWorkflowStartedEvent(t, ctx, client, id)
 
 	cancelClient()
 	d.workflow.ResetRegistry(t)
 	d.registerActivity(d.workflow.Registry())
-	d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v2", true, func(ctx *task.OrchestrationContext) (any, error) {
+	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v2", true, func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 			return nil, err
 		}
@@ -97,7 +97,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	cancelClient()
 	d.workflow.ResetRegistry(t)
 	d.registerActivity(d.workflow.Registry())
-	d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v1", true, func(ctx *task.OrchestrationContext) (any, error) {
+	d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 			return nil, err
 		}
@@ -109,7 +109,7 @@ func (d *amenderror) Run(t *testing.T, ctx context.Context) {
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = d.workflow.BackendClient(t, clientCtx)
-	md, completeErr := client.WaitForOrchestrationCompletion(ctx, id)
+	md, completeErr := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, completeErr)
 	require.Equal(t, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED, md.RuntimeStatus)
 }

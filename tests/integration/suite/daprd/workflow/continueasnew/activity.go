@@ -52,7 +52,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	var barCalled atomic.Int64
 
 	reg := a.workflow.Registry()
-	require.NoError(t, reg.AddWorkflowN("can", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, reg.AddWorkflowN("can", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		require.NoError(t, ctx.GetInput(&input))
 		if cont.Load() {
@@ -70,7 +70,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	}))
 
-	require.NoError(t, reg.AddWorkflowN("can-keep", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, reg.AddWorkflowN("can-keep", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		require.NoError(t, ctx.GetInput(&input))
 		if cont.Load() {
@@ -88,7 +88,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	}))
 
-	require.NoError(t, reg.AddWorkflowN("can-keep-many", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, reg.AddWorkflowN("can-keep-many", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		require.NoError(t, ctx.GetInput(&input))
 		if cont.Load() {

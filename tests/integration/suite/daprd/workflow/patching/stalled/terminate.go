@@ -84,7 +84,7 @@ func (r *terminate) Run(t *testing.T, ctx context.Context) {
 	r.fw.WaitForStalled(t, ctx, id)
 
 	// Terminating a stalled workflow should fail
-	err := r.fw.CurrentClient.TerminateOrchestration(ctx, id)
+	err := r.fw.CurrentClient.TerminateWorkflow(ctx, id)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stalled")
 }

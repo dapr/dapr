@@ -51,25 +51,25 @@ func (d *defaultToLatest) Run(t *testing.T, ctx context.Context) {
 
 	calledV1 := atomic.Bool{}
 	calledV2 := atomic.Bool{}
-	require.NoError(t, d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v2", true, func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v2", true, func(ctx *task.WorkflowContext) (any, error) {
 		calledV2.Store(true)
 		return nil, nil
 	}))
-	require.NoError(t, d.workflow.Registry().AddVersionedOrchestratorN("workflow", "v1", false, func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, d.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", false, func(ctx *task.WorkflowContext) (any, error) {
 		calledV1.Store(true)
 		return nil, nil
 	}))
 
 	client := d.workflow.BackendClient(t, ctx)
-	id, err := client.ScheduleNewOrchestration(ctx, "workflow")
+	id, err := client.ScheduleNewWorkflow(ctx, "workflow")
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	require.False(t, calledV1.Load())
 	require.True(t, calledV2.Load())
 
 	orchestratorStarted := wf.GetLastHistoryEventOfType[protos.HistoryEvent_OrchestratorStarted](t, ctx, client, id)
-	require.NotNil(t, orchestratorStarted.GetOrchestratorStarted().GetVersion())
-	require.Equal(t, "v2", orchestratorStarted.GetOrchestratorStarted().GetVersion().GetName())
+	require.NotNil(t, orchestratorStarted.GetWorkflowStarted().GetVersion())
+	require.Equal(t, "v2", orchestratorStarted.GetWorkflowStarted().GetVersion().GetName())
 }

@@ -88,9 +88,9 @@ func (n *newinput) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 	assert.True(t, proto.Equal(
-		history.Events[2].GetSubOrchestrationInstanceCreated(),
+		history.Events[2].GetChildWorkflowInstanceCreated(),
 		exp,
-	), "%v != %v", exp, history.Events[2].GetSubOrchestrationInstanceCreated())
+	), "%v != %v", exp, history.Events[2].GetChildWorkflowInstanceCreated())
 
 	ids, err := client.ListInstanceIDs(ctx)
 	require.NoError(t, err)

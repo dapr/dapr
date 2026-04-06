@@ -85,10 +85,10 @@ func (r *purge) Run(t *testing.T, ctx context.Context) {
 	r.fw.WaitForStalled(t, ctx, id)
 
 	// Resuming a stalled workflow should do nothing
-	err := r.fw.CurrentClient.PurgeOrchestrationState(ctx, id)
+	err := r.fw.CurrentClient.PurgeWorkflowState(ctx, id)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stalled")
 
-	err = r.fw.CurrentClient.PurgeOrchestrationState(ctx, id, api.WithForcePurge(true))
+	err = r.fw.CurrentClient.PurgeWorkflowState(ctx, id, api.WithForcePurge(true))
 	require.NoError(t, err)
 }

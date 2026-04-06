@@ -50,10 +50,10 @@ type options struct {
 
 func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
 	t.Helper()
-	return WithAddOrchestratorN(t, 0, name, or)
+	return WithAddWorkflowN(t, 0, name, or)
 }
 
-func WithAddOrchestratorN(t *testing.T, index int, name string, or func(*task.WorkflowContext) (any, error)) Option {
+func WithAddWorkflowN(t *testing.T, index int, name string, or func(*task.WorkflowContext) (any, error)) Option {
 	t.Helper()
 
 	return func(o *options) {

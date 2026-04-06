@@ -26,7 +26,7 @@ import (
 	"github.com/dapr/durabletask-go/client"
 )
 
-func WaitForOrchestratorStartedEvent(t *testing.T, ctx context.Context, client *client.TaskHubGrpcClient, id api.InstanceID) {
+func WaitForWorkflowStartedEvent(t *testing.T, ctx context.Context, client *client.TaskHubGrpcClient, id api.InstanceID) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		count := CountHistoryEventsOfType[protos.HistoryEvent_OrchestratorStarted](t, ctx, client, id)
@@ -37,7 +37,7 @@ func WaitForOrchestratorStartedEvent(t *testing.T, ctx context.Context, client *
 func WaitForRuntimeStatus(t *testing.T, ctx context.Context, client *client.TaskHubGrpcClient, id api.InstanceID, status protos.OrchestrationStatus) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		md, err := client.FetchOrchestrationMetadata(ctx, id)
+		md, err := client.FetchWorkflowMetadata(ctx, id)
 		require.NoError(c, err)
 		require.Equal(c, status.String(), md.RuntimeStatus.String())
 	}, 20*time.Second, 10*time.Millisecond)
