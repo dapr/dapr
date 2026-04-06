@@ -151,6 +151,8 @@ func New(opts Options) Interface {
 		backend.WithStreamSendTimeout(time.Second*10),
 	)
 
+	// TODO: handle somewhere that users cannot use a managed workflow name themselves.
+
 	// Wrap the gRPC executor with the routing executor.
 	// The built-in MCP executor is installed lazily in ActivateMCPServers when the first
 	// MCPServer manifest is loaded,

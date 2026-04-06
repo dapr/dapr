@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -152,7 +153,7 @@ func TestBuildHTTPClient_SPIFFEInjectsJWT(t *testing.T) {
 	}
 
 	fetcher := &fakeJWTFetcher{token: "spiffe-svid-token"}
-	client, err := buildHTTPClient(context.Background(), srv, nil, fetcher)
+	client, err := buildHTTPClient(context.Background(), srv, nil, fetcher, 30*time.Second)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
@@ -191,7 +192,7 @@ func TestBuildHTTPClient_SPIFFEWithoutPrefix(t *testing.T) {
 	}
 
 	fetcher := &fakeJWTFetcher{token: "raw-token"}
-	client, err := buildHTTPClient(context.Background(), srv, nil, fetcher)
+	client, err := buildHTTPClient(context.Background(), srv, nil, fetcher, 30*time.Second)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)
@@ -240,7 +241,7 @@ func TestBuildHTTPClient_OAuth2InjectsBearer(t *testing.T) {
 		},
 	}
 
-	client, err := buildHTTPClient(context.Background(), srv, secrets, nil)
+	client, err := buildHTTPClient(context.Background(), srv, secrets, nil, 30*time.Second)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, targetServer.URL, nil)
@@ -272,7 +273,7 @@ func TestBuildHTTPClient_OAuth2SecretFetchError(t *testing.T) {
 	}
 
 	secrets := &fakeSecretGetter{err: errors.New("secret store unavailable")}
-	_, err := buildHTTPClient(context.Background(), srv, secrets, nil)
+	_, err := buildHTTPClient(context.Background(), srv, secrets, nil, 30*time.Second)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "secret store unavailable")
 }
@@ -293,7 +294,7 @@ func TestBuildHTTPClient_StaticHeadersNoAuth(t *testing.T) {
 			},
 		},
 	})
-	client, err := buildHTTPClient(context.Background(), &srv, nil, nil)
+	client, err := buildHTTPClient(context.Background(), &srv, nil, nil, 30*time.Second)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL, nil)

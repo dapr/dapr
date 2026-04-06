@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
@@ -50,6 +51,7 @@ func buildHTTPClient(
 	server *mcpserverapi.MCPServer,
 	secrets SecretGetter,
 	jwt JWTFetcher,
+	timeout time.Duration,
 ) (*http.Client, error) {
 	transportHeaders, auth := httpTransportConfig(server)
 
@@ -61,10 +63,17 @@ func buildHTTPClient(
 		}
 	}
 
+	// Clone the default transport so each MCP connection gets its own dial
+	// settings and doesn't share state with other HTTP clients. The Timeout
+	// on the http.Client is intentionally not set here — the per-call deadline
+	// is managed via callCtx. However, the DialContext timeout ensures that
+	// stuck TCP connections fail fast.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+
 	// Base transport: static header injection.
 	var base http.RoundTripper = &headerRoundTripper{
 		headers: headers,
-		base:    http.DefaultTransport,
+		base:    transport,
 	}
 
 	// OAuth2 client credentials — wraps base transport with token injection.
@@ -73,6 +82,7 @@ func buildHTTPClient(
 		if err != nil {
 			return nil, err
 		}
+		client.Timeout = timeout
 		return client, nil
 	}
 
@@ -83,6 +93,7 @@ func buildHTTPClient(
 		jwt != nil {
 		jwtSpec := auth.SPIFFE.JWT
 		return &http.Client{
+			Timeout: timeout,
 			Transport: &jwtRoundTripper{
 				header:   jwtSpec.Header,
 				prefix:   stringDeref(jwtSpec.HeaderValuePrefix),
@@ -93,7 +104,7 @@ func buildHTTPClient(
 		}, nil
 	}
 
-	return &http.Client{Transport: base}, nil
+	return &http.Client{Transport: base, Timeout: timeout}, nil
 }
 
 // buildOAuth2Client fetches the client_secret from the secret store and builds

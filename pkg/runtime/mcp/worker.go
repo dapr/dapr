@@ -16,6 +16,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os/exec"
@@ -131,7 +132,7 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.OrchestrationC
 				runAfterListTools(ctx, &server, serverName, &CallToolResult{
 					IsError: true, Content: []ContentItem{{Type: textContentType, Text: err.Error()}},
 				})
-				return nil, fmt.Errorf("list-tools activity failed: %w", err)
+				return nil, errors.New("list-tools activity failed: " + err.Error())
 			}
 
 			runAfterListTools(ctx, &server, serverName, result)
@@ -209,10 +210,11 @@ func makeListToolsActivity(opts ExecutorOptions) task.Activity {
 
 		callCtx := ctx.Context()
 		timeout := callTimeout(&server)
+		workerLog.Debugf("list-tools: MCPServer %q timeout=%s", input.MCPServerName, timeout)
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
 
-		httpClient, err := buildHTTPClient(callCtx, &server, opts.Secrets, opts.JWT)
+		httpClient, err := buildHTTPClient(callCtx, &server, opts.Secrets, opts.JWT, timeout)
 		if err != nil {
 			return &ListToolsResult{}, fmt.Errorf("list-tools: failed to build HTTP client for %q: %w", input.MCPServerName, err)
 		}
@@ -222,6 +224,7 @@ func makeListToolsActivity(opts ExecutorOptions) task.Activity {
 			return &ListToolsResult{}, fmt.Errorf("list-tools: failed to build transport for %q: %w", input.MCPServerName, err)
 		}
 
+		workerLog.Debugf("list-tools: connecting to MCP server %q", input.MCPServerName)
 		c := mcp.NewClient(&mcp.Implementation{Name: mcpClientName, Version: mcpClientVersion}, nil)
 		session, err := c.Connect(callCtx, transport, nil)
 		if err != nil {
@@ -229,6 +232,7 @@ func makeListToolsActivity(opts ExecutorOptions) task.Activity {
 		}
 		defer session.Close()
 
+		workerLog.Debugf("list-tools: connected, listing tools on %q", input.MCPServerName)
 		// TODO: in future, we can do pagination on the tools available.
 		result, err := session.ListTools(callCtx, &mcp.ListToolsParams{})
 		if err != nil {
@@ -287,7 +291,7 @@ func makeCallToolActivity(opts ExecutorOptions) task.Activity {
 		callCtx, cancel := withDeadline(callCtx, timeout)
 		defer cancel()
 
-		httpClient, err := buildHTTPClient(callCtx, &server, opts.Secrets, opts.JWT)
+		httpClient, err := buildHTTPClient(callCtx, &server, opts.Secrets, opts.JWT, timeout)
 		if err != nil {
 			// Secret fetch failures are transient — return an activity error so
 			// the workflow engine retries. Log details server-side only.
