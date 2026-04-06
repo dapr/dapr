@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -139,7 +140,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 				},
 			})
 
-		case *protos.HistoryEvent_SubOrchestrationInstanceCreated:
+		case *protos.HistoryEvent_ChildWorkflowInstanceCreated:
 			childWFs = append(childWFs, his)
 
 		default:
@@ -147,7 +148,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		}
 
 		workflowState.History = append(workflowState.History, his)
-		workflowState.Inbox = append(workflowState.Inbox[:i], workflowState.Inbox[i+1:]...)
+		workflowState.Inbox = slices.Delete(workflowState.GetInbox(), i, i+1)
 		i--
 	}
 

@@ -69,7 +69,7 @@ func (d *defaultToLatest) Run(t *testing.T, ctx context.Context) {
 	require.False(t, calledV1.Load())
 	require.True(t, calledV2.Load())
 
-	orchestratorStarted := wf.GetLastHistoryEventOfType[protos.HistoryEvent_OrchestratorStarted](t, ctx, client, id)
+	orchestratorStarted := wf.GetLastHistoryEventOfType[protos.HistoryEvent_WorkflowStarted](t, ctx, client, id)
 	require.NotNil(t, orchestratorStarted.GetWorkflowStarted().GetVersion())
 	require.Equal(t, "v2", orchestratorStarted.GetWorkflowStarted().GetVersion().GetName())
 }

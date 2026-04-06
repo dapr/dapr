@@ -83,7 +83,7 @@ func (h *history) Run(t *testing.T, ctx context.Context) {
 
 	assert.True(t, proto.Equal(
 		history.Events[3].GetChildWorkflowInstanceCreated(),
-		&protos.SubOrchestrationInstanceCreatedEvent{
+		&protos.ChildWorkflowInstanceCreatedEvent{
 			InstanceId: "abc:0000",
 			Name:       "bar",
 		},
@@ -91,7 +91,7 @@ func (h *history) Run(t *testing.T, ctx context.Context) {
 
 	assert.True(t, proto.Equal(
 		history.Events[5].GetChildWorkflowInstanceCreated(),
-		&protos.SubOrchestrationInstanceCreatedEvent{
+		&protos.ChildWorkflowInstanceCreatedEvent{
 			InstanceId: "hello:0001",
 			Name:       "bar",
 			RerunParentInstanceInfo: &protos.RerunParentInstanceInfo{

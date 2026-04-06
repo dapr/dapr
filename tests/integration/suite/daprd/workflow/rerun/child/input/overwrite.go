@@ -81,7 +81,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Len(t, history.Events, 6)
 
-	exp := &protos.SubOrchestrationInstanceCreatedEvent{
+	exp := &protos.ChildWorkflowInstanceCreatedEvent{
 		InstanceId: "hello:0000",
 		Name:       "bar",
 		Input:      wrapperspb.String(`"a-different-input"`),

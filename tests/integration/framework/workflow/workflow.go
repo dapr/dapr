@@ -29,7 +29,7 @@ import (
 func WaitForWorkflowStartedEvent(t *testing.T, ctx context.Context, client *client.TaskHubGrpcClient, id api.InstanceID) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		count := CountHistoryEventsOfType[protos.HistoryEvent_OrchestratorStarted](t, ctx, client, id)
+		count := CountHistoryEventsOfType[protos.HistoryEvent_WorkflowStarted](t, ctx, client, id)
 		require.Equal(c, 1, count)
 	}, 20*time.Second, 10*time.Millisecond)
 }
