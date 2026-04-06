@@ -112,7 +112,7 @@ type Actors struct {
 	enableClusteredDeployment       bool
 	workflowsRemoteActivityReminder bool
 
-	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
+	orchestrationWorkItemChan chan *backend.WorkflowWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 
 	stopped atomic.Bool
@@ -140,7 +140,7 @@ func New(opts Options) *Actors {
 		resiliency:                opts.Resiliency,
 		pendingTasksBackend:       pendingTasksBackend,
 		compStore:                 opts.ComponentStore,
-		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
+		orchestrationWorkItemChan: make(chan *backend.WorkflowWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		eventSink:                 opts.EventSink,
 		retentionPolicy:           opts.RetentionPolicy,
@@ -165,7 +165,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 		Actors:             abe.actors,
 		RetentionActorType: abe.retentionerActorType,
 		RetentionPolicy:    abe.retentionPolicy,
-		Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+		Scheduler: func(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 			log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 
 			select {
@@ -306,7 +306,7 @@ func (abe *Actors) CreateWorkflowInstance(ctx context.Context, e *backend.Histor
 
 	if es := e.GetExecutionStarted(); es == nil {
 		return errors.New("the history event must be an ExecutionStartedEvent")
-	} else if oi := es.GetOrchestrationInstance(); oi == nil {
+	} else if oi := es.GetWorkflowInstance(); oi == nil {
 		return errors.New("the ExecutionStartedEvent did not contain orchestration instance information")
 	} else {
 		workflowInstanceID = oi.GetInstanceId()
@@ -409,7 +409,7 @@ func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Activity
 
 // AbandonWorkflowWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow orchestration execution pipeline.
-func (*Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (*Actors) AbandonWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 	log.Warnf("%s: aborting workflow execution", wi.InstanceID)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
@@ -463,7 +463,7 @@ func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.Activit
 }
 
 // CompleteWorkflowWorkItem implements backend.Backend
-func (*Actors) CompleteWorkflowWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (*Actors) CompleteWorkflowWorkItem(ctx context.Context, wi *backend.WorkflowWorkItem) error {
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
@@ -480,7 +480,7 @@ func (*Actors) DeleteTaskHub(context.Context) error {
 }
 
 // GetWorkflowRuntimeState implements backend.Backend
-func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
+func (abe *Actors) GetWorkflowRuntimeState(ctx context.Context, owi *backend.WorkflowWorkItem) (*backend.WorkflowRuntimeState, error) {
 	state, err := abe.loadInternalState(ctx, owi.InstanceID)
 	if err != nil {
 		return nil, err
@@ -591,7 +591,7 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 }
 
 // NextWorkflowWorkItem implements backend.Backend
-func (abe *Actors) NextWorkflowWorkItem(ctx context.Context) (*backend.OrchestrationWorkItem, error) {
+func (abe *Actors) NextWorkflowWorkItem(ctx context.Context) (*backend.WorkflowWorkItem, error) {
 	// Wait for the workflow actor to signal us with some work to do
 	select {
 	case wi := <-abe.orchestrationWorkItemChan:

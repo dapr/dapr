@@ -93,7 +93,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 			}
 		case *backend.HistoryEvent:
 			var routeAppID string
-			if m.GetSubOrchestrationInstanceCompleted() != nil || m.GetSubOrchestrationInstanceFailed() != nil {
+			if m.GetChildWorkflowInstanceCompleted() != nil || m.GetChildWorkflowInstanceFailed() != nil {
 				if router.TargetAppID == nil {
 					return errors.New("sub-orchestrator completion events should have a target appID")
 				}

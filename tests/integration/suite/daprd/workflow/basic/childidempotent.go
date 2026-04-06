@@ -111,7 +111,7 @@ func (c *childidempotent) Run(t *testing.T, ctx context.Context) {
 		}
 	}))
 
-	require.NoError(t, r.AddOrchestratorN("child", func(octx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, r.AddWorkflowN("child", func(octx *task.WorkflowContext) (any, error) {
 		var result string
 		if err := octx.CallActivity("blocking").Await(&result); err != nil {
 			return nil, err
@@ -119,10 +119,10 @@ func (c *childidempotent) Run(t *testing.T, ctx context.Context) {
 		return result, nil
 	}))
 
-	require.NoError(t, r.AddOrchestratorN("parent", func(octx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, r.AddWorkflowN("parent", func(octx *task.WorkflowContext) (any, error) {
 		var output string
-		err := octx.CallSubOrchestrator("child",
-			task.WithSubOrchestrationInstanceID(childID),
+		err := octx.CallChildWorkflow("child",
+			task.WithChildWorkflowInstanceID(childID),
 		).Await(&output)
 		return output, err
 	}))

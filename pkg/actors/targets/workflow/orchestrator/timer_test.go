@@ -71,12 +71,12 @@ func Test_hasUnfiredTimers(t *testing.T) {
 
 	t.Run("empty state returns false", func(t *testing.T) {
 		t.Parallel()
-		assert.False(t, hasUnfiredTimers(&protos.OrchestrationRuntimeState{}))
+		assert.False(t, hasUnfiredTimers(&protos.WorkflowRuntimeState{}))
 	})
 
 	t.Run("no timers returns false", func(t *testing.T) {
 		t.Parallel()
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			NewEvents: []*protos.HistoryEvent{
 				{EventType: &protos.HistoryEvent_EventRaised{
 					EventRaised: &protos.EventRaisedEvent{Name: "foo"},
@@ -88,7 +88,7 @@ func Test_hasUnfiredTimers(t *testing.T) {
 
 	t.Run("created without fired returns true", func(t *testing.T) {
 		t.Parallel()
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{timerCreated(0)},
 		}
 		assert.True(t, hasUnfiredTimers(rs))
@@ -96,7 +96,7 @@ func Test_hasUnfiredTimers(t *testing.T) {
 
 	t.Run("created and fired returns false", func(t *testing.T) {
 		t.Parallel()
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{timerCreated(0), timerFired(0)},
 		}
 		assert.False(t, hasUnfiredTimers(rs))
@@ -104,7 +104,7 @@ func Test_hasUnfiredTimers(t *testing.T) {
 
 	t.Run("two created one fired returns true", func(t *testing.T) {
 		t.Parallel()
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{timerCreated(0), timerCreated(1)},
 			NewEvents: []*protos.HistoryEvent{timerFired(0)},
 		}
@@ -113,7 +113,7 @@ func Test_hasUnfiredTimers(t *testing.T) {
 
 	t.Run("all fired returns false", func(t *testing.T) {
 		t.Parallel()
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{timerCreated(0), timerCreated(1), timerFired(0)},
 			NewEvents: []*protos.HistoryEvent{timerFired(1)},
 		}
@@ -122,7 +122,7 @@ func Test_hasUnfiredTimers(t *testing.T) {
 
 	t.Run("timer in NewEvents only returns true", func(t *testing.T) {
 		t.Parallel()
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			NewEvents: []*protos.HistoryEvent{timerCreated(0)},
 		}
 		assert.True(t, hasUnfiredTimers(rs))
@@ -253,7 +253,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		t.Parallel()
 		o := newOrchestrator(remindersfake.New())
 
-		err := o.deleteCancelledEventTimers(t.Context(), &protos.OrchestrationRuntimeState{})
+		err := o.deleteCancelledEventTimers(t.Context(), &protos.WorkflowRuntimeState{})
 		require.NoError(t, err)
 	})
 
@@ -261,7 +261,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		t.Parallel()
 		o := newOrchestrator(remindersfake.New())
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			NewEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 			},
@@ -279,7 +279,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			NewEvents: []*protos.HistoryEvent{
 				eventRaised("bar"),
 			},
@@ -298,7 +298,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 			},
@@ -320,7 +320,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			NewEvents: []*protos.HistoryEvent{
 				timerCreated(5, eventName("bar")),
 				eventRaised("bar"),
@@ -340,7 +340,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("MyEvent")),
 			},
@@ -362,7 +362,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 				timerFired(0),
@@ -385,7 +385,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, nil), // plain timer, not from WaitForSingleEvent
 			},
@@ -407,7 +407,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 				timerCreated(1, eventName("bar")),
@@ -430,7 +430,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 				timerCreated(1, eventName("bar")),
@@ -455,7 +455,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("foo")),
 				timerCreated(1, eventName("bar")),
@@ -481,7 +481,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 			},
@@ -504,7 +504,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 			},
@@ -523,7 +523,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 			},
@@ -543,7 +543,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 			},
@@ -570,7 +570,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 				timerCreated(1, eventName("bar")),
@@ -598,7 +598,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("foo")),
 				timerCreated(1, eventName("bar")),
@@ -624,7 +624,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 
 		// Both the timer and event are in OldEvents (already processed).
 		// No new EventRaised in NewEvents, so nothing should be deleted.
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 				eventRaised("bar"),
@@ -645,7 +645,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			NewEvents: []*protos.HistoryEvent{
 				timerCreated(0, eventName("bar")),
 				timerFired(0),

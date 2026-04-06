@@ -39,7 +39,7 @@ type orchestrator struct {
 	actorID string
 
 	state  *wfenginestate.State
-	rstate *backend.OrchestrationRuntimeState
+	rstate *backend.WorkflowRuntimeState
 	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool

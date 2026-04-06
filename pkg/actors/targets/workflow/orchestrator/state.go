@@ -160,7 +160,7 @@ func (o *orchestrator) cleanupWorkflowStateInternal(ctx context.Context, state *
 	return nil
 }
 
-func (o *orchestrator) ometaFromState(rstate *backend.OrchestrationRuntimeState, startEvent *protos.ExecutionStartedEvent) *backend.WorkflowMetadata {
+func (o *orchestrator) ometaFromState(rstate *backend.WorkflowRuntimeState, startEvent *protos.ExecutionStartedEvent) *backend.WorkflowMetadata {
 	var se *protos.ExecutionStartedEvent = nil
 	if rstate.GetStartEvent() != nil {
 		se = rstate.GetStartEvent()

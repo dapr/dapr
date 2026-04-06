@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/logger"
 )
@@ -96,7 +97,7 @@ func (s *State) ResetChangeTracking() {
 	s.historyRemovedCount = 0
 }
 
-func (s *State) ApplyRuntimeStateChanges(rs *backend.OrchestrationRuntimeState) {
+func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
 	if rs.GetContinuedAsNew() {
 		s.historyRemovedCount += len(s.History)
 		s.historyAddedCount = 0
@@ -169,7 +170,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		})
 	}
 
-	metaProto, err := proto.Marshal(&backend.WorkflowStateMetadata{
+	metaProto, err := proto.Marshal(&backend.BackendWorkflowStateMetadata{
 		InboxLength:   uint64(len(s.Inbox)),
 		HistoryLength: uint64(len(s.History)),
 		Generation:    s.Generation,
@@ -284,7 +285,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		return nil, nil
 	}
 
-	var metadata backend.WorkflowStateMetadata
+	var metadata backend.BackendWorkflowStateMetadata
 	if err = proto.Unmarshal(res.Data, &metadata); err != nil {
 		// TODO: @joshvanl: remove in v1.16
 		var metadataJSON legacyWorkflowStateMetadata
@@ -432,8 +433,8 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 	return req, nil
 }
 
-func (s *State) ToWorkflowState() *backend.BackendWorkflowState {
-	return &backend.BackendWorkflowState{
+func (s *State) ToWorkflowState() *protos.BackendWorkflowState {
+	return &protos.BackendWorkflowState{
 		Inbox:        s.Inbox,
 		History:      s.History,
 		CustomStatus: s.CustomStatus,
@@ -441,7 +442,7 @@ func (s *State) ToWorkflowState() *backend.BackendWorkflowState {
 	}
 }
 
-func (s *State) FromWorkflowState(state *backend.BackendWorkflowState) {
+func (s *State) FromWorkflowState(state *protos.BackendWorkflowState) {
 	s.Reset()
 
 	for _, e := range state.GetInbox() {

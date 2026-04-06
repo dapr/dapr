@@ -73,7 +73,7 @@ func (o *orchestrator) createWorkflowInstance(ctx context.Context, request []byt
 	return o.createIfCompleted(ctx, o.rstate, state, startEvent)
 }
 
-func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.OrchestrationRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent) error {
+func (o *orchestrator) createIfCompleted(ctx context.Context, rs *backend.WorkflowRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent) error {
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
 	if !runtimestate.IsCompleted(rs) {

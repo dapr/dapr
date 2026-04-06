@@ -50,7 +50,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 		return status.Errorf(codes.NotFound, "workflow instance does not exist with ID '%s'", o.actorID)
 	}
 
-	if !api.OrchestrationMetadataIsComplete(ometa) {
+	if !api.WorkflowMetadataIsComplete(ometa) {
 		return status.Errorf(codes.InvalidArgument, "'%s' is not in a terminal state", o.actorID)
 	}
 
@@ -106,7 +106,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		return status.Errorf(codes.AlreadyExists, "workflow '%s' has already been created", o.actorID)
 	}
 
-	var workflowState backend.BackendWorkflowState
+	var workflowState protos.BackendWorkflowState
 	if err = proto.Unmarshal(request, &workflowState); err != nil {
 		return fmt.Errorf("failed to unmarshal workflow history: %w", err)
 	}
