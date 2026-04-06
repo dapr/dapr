@@ -453,8 +453,8 @@ func (s *State) FromWorkflowState(state *protos.BackendWorkflowState) {
 		s.AddToHistory(e)
 	}
 
-	s.CustomStatus = state.CustomStatus
-	s.Generation = state.Generation
+	s.CustomStatus = state.GetCustomStatus()
+	s.Generation = state.GetGeneration()
 }
 
 func getMultiEntryKeyName(prefix string, i uint64) string {

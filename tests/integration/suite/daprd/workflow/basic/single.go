@@ -95,7 +95,7 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("basic", func(t *testing.T) {
 		r := task.NewTaskRegistry()
-		r.AddOrchestratorN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
 			var input string
 			if err := ctx.GetInput(&input); err != nil {
 				return nil, err
@@ -116,9 +116,9 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 		defer cancelTaskhub()
 
 		id := api.InstanceID(s.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
-		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+		metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 }

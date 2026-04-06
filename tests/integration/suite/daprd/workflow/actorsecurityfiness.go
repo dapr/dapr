@@ -74,7 +74,7 @@ func (s *actorsecurityfiness) Setup(t *testing.T) []framework.Option {
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app2 activity: %w", err)
 		}
-		return fmt.Sprintf("Processed by app2: %s", input), nil
+		return "Processed by app2: " + input, nil
 	})
 
 	s.registry1.AddOrchestratorN("AppWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
@@ -126,9 +126,9 @@ func (s *actorsecurityfiness) Run(t *testing.T, ctx context.Context) {
 	client2 := client.NewTaskHubGrpcClient(s.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 
 	err := client1.StartWorkItemListener(ctx, s.registry1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = client2.StartWorkItemListener(ctx, s.registry2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	id, err := client1.ScheduleNewOrchestration(ctx, "AppWorkflow", api.WithInput("Hello from app1"))
 	require.NoError(t, err)

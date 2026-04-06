@@ -61,7 +61,7 @@ func (i *invalidappid) Setup(t *testing.T) []framework.Option {
 func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 	i.workflow.WaitUntilRunning(t, ctx)
 
-	i.workflow.Registry().AddOrchestratorN("InvalidAppWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	i.workflow.Registry().AddWorkflowN("InvalidAppWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
@@ -80,7 +80,7 @@ func (i *invalidappid) Run(t *testing.T, ctx context.Context) {
 	id, err := client.ScheduleNewOrchestration(ctx, "InvalidAppWorkflow", api.WithInput("Hello from app0"))
 	require.NoError(t, err)
 
-	metadata, err := client.WaitForOrchestrationStart(ctx, id)
+	metadata, err := client.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.RuntimeStatus)
 

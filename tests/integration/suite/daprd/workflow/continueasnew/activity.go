@@ -52,7 +52,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	var barCalled atomic.Int64
 
 	reg := a.workflow.Registry()
-	require.NoError(t, reg.AddOrchestratorN("can", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, reg.AddWorkflowN("can", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		require.NoError(t, ctx.GetInput(&input))
 		if cont.Load() {
@@ -70,7 +70,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	}))
 
-	require.NoError(t, reg.AddOrchestratorN("can-keep", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, reg.AddWorkflowN("can-keep", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		require.NoError(t, ctx.GetInput(&input))
 		if cont.Load() {
@@ -88,7 +88,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	}))
 
-	require.NoError(t, reg.AddOrchestratorN("can-keep-many", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, reg.AddWorkflowN("can-keep-many", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		require.NoError(t, ctx.GetInput(&input))
 		if cont.Load() {
@@ -117,12 +117,12 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	barCalled.Store(0)
 	cont.Store(false)
-	id, err := client.ScheduleNewOrchestration(ctx, "can",
+	id, err := client.ScheduleNewWorkflow(ctx, "can",
 		api.WithInstanceID("cani"),
 		api.WithInput("first call"),
 	)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), barCalled.Load())
 	time.Sleep(time.Second)
@@ -130,12 +130,12 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	barCalled.Store(0)
 	cont.Store(false)
-	id, err = client.ScheduleNewOrchestration(ctx, "can-keep",
+	id, err = client.ScheduleNewWorkflow(ctx, "can-keep",
 		api.WithInstanceID("cank"),
 		api.WithInput("first call"),
 	)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), barCalled.Load())
 	time.Sleep(time.Second)
@@ -143,12 +143,12 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	barCalled.Store(0)
 	cont.Store(false)
-	id, err = client.ScheduleNewOrchestration(ctx, "can-keep-many",
+	id, err = client.ScheduleNewWorkflow(ctx, "can-keep-many",
 		api.WithInstanceID("canm"),
 		api.WithInput("first call"),
 	)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(30), barCalled.Load())

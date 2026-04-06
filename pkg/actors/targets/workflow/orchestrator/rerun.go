@@ -111,7 +111,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		return fmt.Errorf("failed to unmarshal workflow history: %w", err)
 	}
 
-	if len(workflowState.Inbox) == 0 {
+	if len(workflowState.GetInbox()) == 0 {
 		return errors.New("expect rerun workflow inbox to not be empty")
 	}
 
@@ -119,8 +119,8 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	var timers []*protos.HistoryEvent
 	var childWFs []*protos.HistoryEvent
 
-	for i := 0; i < len(workflowState.Inbox); i++ {
-		his := workflowState.Inbox[i]
+	for i := 0; i < len(workflowState.GetInbox()); i++ {
+		his := workflowState.GetInbox()[i]
 		his.Timestamp = timestamppb.Now()
 
 		switch his.GetEventType().(type) {

@@ -129,4 +129,3 @@ func (o *orchestrator) isSameParentCreation(state *wfenginestate.State, startEve
 	return existingParent.GetWorkflowInstance().GetInstanceId() == newParent.GetWorkflowInstance().GetInstanceId() &&
 		existingParent.GetTaskScheduledId() == newParent.GetTaskScheduledId()
 }
-

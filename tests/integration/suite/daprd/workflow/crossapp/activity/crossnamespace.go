@@ -64,7 +64,7 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 		return "Processed by app1: " + input, nil
 	})
 
-	c.workflow.Registry().AddOrchestratorN("CrossNamespaceWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry().AddWorkflowN("CrossNamespaceWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app0: %w", err)
@@ -95,7 +95,7 @@ func (c *crossnamespace) Run(t *testing.T, ctx context.Context) {
 	id, err := client.ScheduleNewOrchestration(ctx, "CrossNamespaceWorkflow", api.WithInput("Hello from app0"))
 	require.NoError(t, err)
 
-	metadata, err := client.WaitForOrchestrationStart(ctx, id)
+	metadata, err := client.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.RuntimeStatus)
 

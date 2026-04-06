@@ -49,7 +49,7 @@ func (b *base) Run(t *testing.T, ctx context.Context) {
 
 	var cont atomic.Bool
 	var called atomic.Int64
-	b.workflow.Registry().AddOrchestratorN("can", func(ctx *task.OrchestrationContext) (any, error) {
+	b.workflow.Registry().AddWorkflowN("can", func(ctx *task.OrchestrationContext) (any, error) {
 		defer called.Add(1)
 
 		var input string

@@ -11,9 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/task"
@@ -25,11 +22,6 @@ func init() {
 
 // callactivity demonstrates calling activities across different Dapr applications.
 type callactivity struct {
-	daprd1 *daprd.Daprd
-	daprd2 *daprd.Daprd
-	place  *placement.Placement
-	sched  *scheduler.Scheduler
-
 	workflow1 *workflow.Workflow
 	workflow2 *workflow.Workflow
 
@@ -105,7 +97,7 @@ func (c *callactivity) Setup(t *testing.T) []framework.Option {
 				return nil, fmt.Errorf("failed to get input in app2 activity: %w", err)
 			}
 			fmt.Printf("[DEBUG] app2 activity received input: %s\n", input)
-			result := fmt.Sprintf("[App2] Processed: %s", input)
+			result := "[App2] Processed: " + input
 			return result, nil
 		}))
 

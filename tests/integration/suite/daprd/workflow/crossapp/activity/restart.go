@@ -112,7 +112,7 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 	)
 
 	// App1: Orchestrator, calls app2
-	r.registry1.AddOrchestratorN("restartWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	r.registry1.AddWorkflowN("restartWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
@@ -151,7 +151,7 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(ccancel)
 	require.NoError(t, client2.StartWorkItemListener(cctx, r.registry2))
 
-	id, err := client1.ScheduleNewOrchestration(t.Context(), "restartWorkflow", api.WithInput("Hello from app1"))
+	id, err := client1.ScheduleNewWorkflow(t.Context(), "restartWorkflow", api.WithInput("Hello from app1"))
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -185,6 +185,6 @@ func (r *restart) Run(t *testing.T, ctx context.Context) {
 
 	close(r.blockActivityChan)
 
-	_, err = client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+	_, err = client1.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	assert.NoError(t, err)
 }

@@ -83,7 +83,7 @@ func (b *bindingtraceparent) Run(t *testing.T, ctx context.Context) {
 	resp, err := httpClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	assert.Equal(t, resp.StatusCode, http.StatusOK)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// invoke app
 	// TODO: invoke both apps
@@ -93,7 +93,7 @@ func (b *bindingtraceparent) Run(t *testing.T, ctx context.Context) {
 	appresp, err := httpClient.Do(appreq)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	assert.Equal(t, appresp.StatusCode, http.StatusOK)
+	assert.Equal(t, http.StatusOK, appresp.StatusCode)
 
 	//return resp.StatusCode == http.StatusOK
 	//}, time.Second*5, 10*time.Millisecond)
@@ -130,5 +130,4 @@ func (b *bindingtraceparent) Run(t *testing.T, ctx context.Context) {
 	svcresp, err := client.InvokeService(ctx, &svcreq)
 	require.NoError(t, err)
 	require.NotNil(t, svcresp)
-
 }
