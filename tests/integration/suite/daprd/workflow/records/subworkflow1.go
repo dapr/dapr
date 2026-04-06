@@ -16,6 +16,7 @@ package workflow
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,6 +82,8 @@ func (a *subworkflow1) Run(t *testing.T, ctx context.Context) {
 	// 11. OrchestratorStarted
 	// 12. ExecutionCompleted
 	// 13. OrchestratorCompleted
-	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
-	assert.Equal(t, 13, count)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tableName).Scan(&count))
+		assert.Equal(c, 13, count)
+	}, time.Second*10, time.Millisecond*10)
 }
