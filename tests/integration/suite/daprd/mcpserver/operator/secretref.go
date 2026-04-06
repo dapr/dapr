@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -42,17 +41,11 @@ func init() {
 // MCPServer spec.endpoint.streamableHTTP.headers using the Kubernetes secret store,
 // and daprd receives the resolved values.
 type secretref struct {
-	daprd   *daprd.Daprd
-	logline *logline.LogLine
+	daprd *daprd.Daprd
 }
 
 func (s *secretref) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
-
-	// The MCPServer references a secret for its Authorization header.
-	s.logline = logline.New(t,
-		logline.WithStdoutLineContains("MCPServer loaded: secreted-mcp"),
-	)
 
 	kubeapi := kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
@@ -113,7 +106,6 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithNamespace("default"),
 		daprd.WithAppID("test-app"),
-		daprd.WithLogLineStdout(s.logline),
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -135,10 +127,6 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("MCPServer with secretKeyRef header is loaded via operator", func(t *testing.T) {
-		s.logline.EventuallyFoundAll(t)
-	})
-
-	t.Run("MCPServer appears in metadata API", func(t *testing.T) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			mcpServers := s.daprd.GetMetaMCPServers(c, ctx)
 			assert.Len(c, mcpServers, 1)

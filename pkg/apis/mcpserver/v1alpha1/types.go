@@ -14,6 +14,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -163,6 +165,26 @@ type MCPEndpoint struct {
 	// Stdio holds configuration for the stdio subprocess transport.
 	//+optional
 	Stdio *MCPStdio `json:"stdio,omitempty"`
+}
+
+// Validate checks that exactly one transport is configured.
+// In Kubernetes mode this is enforced by the CEL XValidation rule on the CRD.
+// This method covers standalone mode where no CRD admission exists.
+func (e *MCPEndpoint) Validate() error {
+	count := 0
+	if e.StreamableHTTP != nil {
+		count++
+	}
+	if e.SSE != nil {
+		count++
+	}
+	if e.Stdio != nil {
+		count++
+	}
+	if count != 1 {
+		return errors.New("exactly one of streamableHTTP, sse, or stdio must be set")
+	}
+	return nil
 }
 
 // MCPStreamableHTTP configures the streamable_http transport.
