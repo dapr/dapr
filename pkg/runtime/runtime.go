@@ -128,6 +128,7 @@ type DaprRuntime struct {
 	runnerCloser          *concurrency.RunnerCloserManager
 	clock                 clock.Clock
 	reloader              *hotreload.Reloader
+	mcpServersReady       chan struct{} // closed when MCP workflow actors are registered
 
 	grpcAPIServer      grpc.Server
 	grpcInternalServer grpc.Server
@@ -383,6 +384,15 @@ func newDaprRuntime(ctx context.Context,
 			rerr := rt.initRuntime(ctx)
 			if rerr != nil {
 				return rerr
+			}
+
+			// Wait for MCP workflow actors to be registered before reporting ready.
+			if rt.mcpServersReady != nil {
+				select {
+				case <-rt.mcpServersReady:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 			}
 
 			d := time.Since(start).Milliseconds()
@@ -681,7 +691,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 			// ActivateMCPServers calls RegisterActors which blocks on actors.waitForReady.
 			// The actor runtime is started in a goroutine after the linear initialization
 			// sequence completes, so we must not call this synchronously here.
+			// We use mcpServersReady to signal completion so that the sidecar
+			// does not report ready until MCP workflow actors are registered.
+			a.mcpServersReady = make(chan struct{})
 			go func() {
+				defer close(a.mcpServersReady)
 				if err := a.wfengine.ActivateMCPServers(ctx); err != nil {
 					log.Warnf("failed to activate workflow actors for MCP servers: %s", err)
 				}

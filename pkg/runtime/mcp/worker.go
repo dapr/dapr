@@ -155,6 +155,9 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.OrchestrationC
 			if input.MCPServerName == "" {
 				input.MCPServerName = serverName
 			}
+			if input.ToolName == "" {
+				return nil, fmt.Errorf("CallTool requires a non-empty toolName")
+			}
 
 			// beforeCallTool middleware pipeline
 			if err := runBeforeCallTool(ctx, &server, serverName, input.ToolName, input.Arguments); err != nil {
@@ -232,12 +235,22 @@ func makeListToolsActivity(opts ExecutorOptions) task.Activity {
 		}
 		defer session.Close()
 
+		// The MCP SDK v1.2.0 detaches the connection context from callCtx,
+		// so context deadlines do not propagate to the underlying SSE stream.
+		// Enforce our own timeout by closing the session if the deadline fires.
+		timer := time.AfterFunc(timeout, func() {
+			workerLog.Warnf("list-tools: timeout (%s) reached for MCPServer %q, closing session", timeout, input.MCPServerName)
+			session.Close()
+		})
+		defer timer.Stop()
+
 		workerLog.Debugf("list-tools: connected, listing tools on %q", input.MCPServerName)
 		// TODO: in future, we can do pagination on the tools available.
 		result, err := session.ListTools(callCtx, &mcp.ListToolsParams{})
 		if err != nil {
 			return &ListToolsResult{}, fmt.Errorf("list-tools: MCP call failed for %q: %w", input.MCPServerName, err)
 		}
+		timer.Stop()
 
 		tools := make([]ToolDefinition, 0, len(result.Tools))
 		for _, t := range result.Tools {
@@ -330,6 +343,14 @@ func makeCallToolActivity(opts ExecutorOptions) task.Activity {
 			}}}, nil
 		}
 		defer session.Close()
+
+		// The MCP SDK v1.2.0 detaches the connection context, so enforce
+		// our own timeout by closing the session if the deadline fires.
+		timer := time.AfterFunc(timeout, func() {
+			workerLog.Warnf("call-tool: timeout (%s) reached for MCPServer %q, closing session", timeout, input.MCPServerName)
+			session.Close()
+		})
+		defer timer.Stop()
 
 		argBytes, err := json.Marshal(input.Arguments)
 		if err != nil {
