@@ -11,10 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package crds embeds the Dapr CRD YAML files for use by runtime validation.
-package crds
+// Package daprcrds embeds the Dapr CRD YAML files so the runtime can extract
+// validation rules (CEL, minLength, etc.) for standalone mode where there
+// is no Kubernetes API server to enforce them.
+package daprcrds
 
 import _ "embed"
 
-//go:embed mcpservers.yaml
+//go:embed crds/mcpservers.yaml
 var MCPServerCRD []byte
