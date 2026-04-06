@@ -74,34 +74,52 @@ func (c *crossactivity) Run(t *testing.T, ctx context.Context) {
 
 	evs := resp.Events
 
-	// Can have 1 or 2 `GetOrchestratorStarted` events depending on timing.
-	require.True(t, len(evs) == 7 || len(evs) == 6)
+	// OrchestratorStarted events can appear at varying positions depending on
+	// timing, so find the non-OrchestratorStarted events by scanning rather
+	// than assuming fixed indices.
+	require.True(t, len(evs) >= 6 && len(evs) <= 8,
+		"expected 6-8 events, got %d", len(evs))
 
 	assert.NotNil(t, evs[0].GetOrchestratorStarted())
-	assert.NotNil(t, evs[1].GetExecutionStarted())
-	assert.Equal(t, "foo", evs[1].GetExecutionStarted().GetName())
-	assert.Equal(t, "abc", evs[1].GetExecutionStarted().GetOrchestrationInstance().GetInstanceId())
-	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[1].GetRouter().GetSourceAppID())
 
-	assert.NotNil(t, evs[2].GetTaskScheduled())
-	assert.Equal(t, "a", evs[2].GetTaskScheduled().GetName())
-	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[2].GetRouter().GetSourceAppID())
-	assert.Equal(t, c.workflow.DaprN(1).AppID(), evs[2].GetRouter().GetTargetAppID())
-
-	assert.NotNil(t, evs[3].GetOrchestratorStarted())
-
-	// The index of the next events depends on whether there are 6 or 7 events
-	// total.
-	i := 4
-	if len(evs) == 7 {
-		i = 5
-		assert.NotNil(t, evs[4].GetOrchestratorStarted())
+	// Find ExecutionStarted (first non-OrchestratorStarted event).
+	i := 1
+	for i < len(evs) && evs[i].GetOrchestratorStarted() != nil {
+		i++
 	}
+	require.Less(t, i, len(evs), "ExecutionStarted event not found")
+	assert.NotNil(t, evs[i].GetExecutionStarted())
+	assert.Equal(t, "foo", evs[i].GetExecutionStarted().GetName())
+	assert.Equal(t, "abc", evs[i].GetExecutionStarted().GetOrchestrationInstance().GetInstanceId())
+	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[i].GetRouter().GetSourceAppID())
 
+	// Find TaskScheduled (skip any OrchestratorStarted events).
+	i++
+	for i < len(evs) && evs[i].GetOrchestratorStarted() != nil {
+		i++
+	}
+	require.Less(t, i, len(evs), "TaskScheduled event not found")
+	assert.NotNil(t, evs[i].GetTaskScheduled())
+	assert.Equal(t, "a", evs[i].GetTaskScheduled().GetName())
+	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[i].GetRouter().GetSourceAppID())
+	assert.Equal(t, c.workflow.DaprN(1).AppID(), evs[i].GetRouter().GetTargetAppID())
+
+	// Find TaskCompleted (skip any OrchestratorStarted events).
+	i++
+	for i < len(evs) && evs[i].GetOrchestratorStarted() != nil {
+		i++
+	}
+	require.Less(t, i, len(evs), "TaskCompleted event not found")
 	assert.NotNil(t, evs[i].GetTaskCompleted())
 	assert.Equal(t, c.workflow.DaprN(0).AppID(), evs[i].GetRouter().GetSourceAppID())
 	assert.Equal(t, c.workflow.DaprN(1).AppID(), evs[i].GetRouter().GetTargetAppID())
 
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[i+1].GetExecutionCompleted().GetOrchestrationStatus().String())
-	assert.Equal(t, c.workflow.Dapr().AppID(), evs[i+1].GetRouter().GetSourceAppID())
+	// Find ExecutionCompleted (skip any OrchestratorStarted events).
+	i++
+	for i < len(evs) && evs[i].GetOrchestratorStarted() != nil {
+		i++
+	}
+	require.Less(t, i, len(evs), "ExecutionCompleted event not found")
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[i].GetExecutionCompleted().GetOrchestrationStatus().String())
+	assert.Equal(t, c.workflow.Dapr().AppID(), evs[i].GetRouter().GetSourceAppID())
 }
