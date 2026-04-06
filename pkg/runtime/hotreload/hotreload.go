@@ -17,6 +17,7 @@ import (
 	"context"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -60,6 +61,7 @@ type Reloader struct {
 	loader                  loader.Interface
 	componentsReconciler    *reconciler.Reconciler[compapi.Component]
 	subscriptionsReconciler *reconciler.Reconciler[subapi.Subscription]
+	mcpServersReconciler    *reconciler.Reconciler[mcpserverapi.MCPServer]
 }
 
 func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
@@ -88,6 +90,13 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 			Healthz:    opts.Healthz,
 		}),
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
+		}),
+		mcpServersReconciler: reconciler.NewMCPServers(reconciler.Options[mcpserverapi.MCPServer]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,
@@ -127,6 +136,13 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 			Authorizer: opts.Authorizer,
 			Healthz:    opts.Healthz,
 		}),
+		mcpServersReconciler: reconciler.NewMCPServers(reconciler.Options[mcpserverapi.MCPServer]{
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
+		}),
 	}
 }
 
@@ -138,11 +154,12 @@ func (r *Reloader) Run(ctx context.Context) error {
 		return nil
 	}
 
-	log.Info("Hot reloading enabled. Daprd will reload 'Component' and 'Subscription' resources on change.")
+	log.Info("Hot reloading enabled. Daprd will reload 'Component', 'Subscription', and 'MCPServer' resources on change.")
 
 	return concurrency.NewRunnerManager(
 		r.loader.Run,
 		r.componentsReconciler.Run,
 		r.subscriptionsReconciler.Run,
+		r.mcpServersReconciler.Run,
 	).Run(ctx)
 }

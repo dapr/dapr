@@ -63,8 +63,8 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 			continue
 		}
 
-		if err := s.Spec.Endpoint.Validate(); err != nil {
-			log.Warnf("MCPServer %q has invalid endpoint: %s", s.Name, err)
+		if err := mcpserverapi.ValidateResource(&s); err != nil {
+			log.Warnf("MCPServer %q failed validation: %s", s.Name, err)
 			continue
 		}
 
