@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dapr/kit/logger"
-
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextinternal "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextconv "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -32,10 +30,8 @@ import (
 	celconfig "k8s.io/apiserver/pkg/apis/cel"
 
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
-	"github.com/dapr/dapr/charts/dapr/crds"
+	daprcrds "github.com/dapr/dapr/charts/dapr"
 )
-
-var log = logger.NewLogger("dapr.loader.validate")
 
 var (
 	celValidator *cel.Validator
@@ -51,7 +47,7 @@ func initValidator() {
 		return
 	}
 	codecs := serializer.NewCodecFactory(scheme)
-	obj, _, err := codecs.UniversalDeserializer().Decode(crds.MCPServerCRD, nil, nil)
+	obj, _, err := codecs.UniversalDeserializer().Decode(daprcrds.MCPServerCRD, nil, nil)
 	if err != nil {
 		initErr = fmt.Errorf("failed to decode CRD YAML: %w", err)
 		return
@@ -94,14 +90,10 @@ func initValidator() {
 // ValidateResource validates an MCPServer against the CEL rules and schema
 // constraints embedded in the CRD. This provides the same validation in
 // standalone mode that the Kubernetes API server provides via CRD admission.
-func MCPServer(server *mcpserverapi.MCPServer) error {
+func MCPServer(ctx context.Context, server *mcpserverapi.MCPServer) error {
 	initOnce.Do(initValidator)
 	if initErr != nil {
-		// If the CEL validator could not be initialized (e.g. CRD schema
-		// parsing failed), log once and skip validation rather than rejecting
-		// all resources. The resource will be loaded and may fail at call time.
-		log.Warnf("CEL validator unavailable, skipping validation: %s", initErr)
-		return nil
+		return fmt.Errorf("CEL validator initialization failed: %w", initErr)
 	}
 
 	// Convert typed struct to unstructured map for CEL evaluation.
@@ -116,7 +108,7 @@ func MCPServer(server *mcpserverapi.MCPServer) error {
 	}
 
 	errs, _ := celValidator.Validate(
-		context.Background(),
+		ctx,
 		field.NewPath(""),
 		nil, // structural schema already baked into the validator
 		obj,

@@ -64,7 +64,7 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 			continue
 		}
 
-		if err := validate.MCPServer(&s); err != nil {
+		if err := validate.MCPServer(ctx, &s); err != nil {
 			log.Warnf("MCPServer %q failed validation: %s", s.Name, err)
 			continue
 		}
