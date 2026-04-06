@@ -11,54 +11,56 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package validate
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 )
 
-func TestValidateResource_ExactlyOneTransport(t *testing.T) {
+func TestMCPServer_ExactlyOneTransport(t *testing.T) {
 	t.Run("valid: streamableHTTP only", func(t *testing.T) {
-		s := &MCPServer{}
+		s := &mcpserverapi.MCPServer{}
 		s.Name = "test"
-		s.Spec.Endpoint.StreamableHTTP = &MCPStreamableHTTP{URL: "http://example.com"}
-		err := ValidateResource(s)
+		s.Spec.Endpoint.StreamableHTTP = &mcpserverapi.MCPStreamableHTTP{URL: "http://example.com"}
+		err := MCPServer(s)
 		require.NoError(t, err)
 	})
 
 	t.Run("valid: sse only", func(t *testing.T) {
-		s := &MCPServer{}
+		s := &mcpserverapi.MCPServer{}
 		s.Name = "test"
-		s.Spec.Endpoint.SSE = &MCPSSE{URL: "http://example.com"}
-		err := ValidateResource(s)
+		s.Spec.Endpoint.SSE = &mcpserverapi.MCPSSE{URL: "http://example.com"}
+		err := MCPServer(s)
 		require.NoError(t, err)
 	})
 
 	t.Run("valid: stdio only", func(t *testing.T) {
-		s := &MCPServer{}
+		s := &mcpserverapi.MCPServer{}
 		s.Name = "test"
-		s.Spec.Endpoint.Stdio = &MCPStdio{Command: "echo"}
-		err := ValidateResource(s)
+		s.Spec.Endpoint.Stdio = &mcpserverapi.MCPStdio{Command: "echo"}
+		err := MCPServer(s)
 		require.NoError(t, err)
 	})
 
 	t.Run("invalid: no transport set", func(t *testing.T) {
-		s := &MCPServer{}
+		s := &mcpserverapi.MCPServer{}
 		s.Name = "test"
-		err := ValidateResource(s)
+		err := MCPServer(s)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly one of streamableHTTP, sse, or stdio must be set")
 	})
 
 	t.Run("invalid: two transports set", func(t *testing.T) {
-		s := &MCPServer{}
+		s := &mcpserverapi.MCPServer{}
 		s.Name = "test"
-		s.Spec.Endpoint.StreamableHTTP = &MCPStreamableHTTP{URL: "http://example.com"}
-		s.Spec.Endpoint.SSE = &MCPSSE{URL: "http://example.com"}
-		err := ValidateResource(s)
+		s.Spec.Endpoint.StreamableHTTP = &mcpserverapi.MCPStreamableHTTP{URL: "http://example.com"}
+		s.Spec.Endpoint.SSE = &mcpserverapi.MCPSSE{URL: "http://example.com"}
+		err := MCPServer(s)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly one of streamableHTTP, sse, or stdio must be set")
 	})

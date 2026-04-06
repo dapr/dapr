@@ -102,6 +102,30 @@ spec:
   version: v1
 `), 0o600))
 
+	// Invalid: two transports set — should be rejected by CEL validation.
+	require.NoError(t, os.WriteFile(filepath.Join(resDir, "invalid-two-transports.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: invalid-mcp
+spec:
+  endpoint:
+    streamableHTTP:
+      url: http://example.com/mcp
+    sse:
+      url: http://example.com/sse
+`), 0o600))
+
+	// Invalid: no transport set — should be rejected by CEL validation.
+	require.NoError(t, os.WriteFile(filepath.Join(resDir, "invalid-no-transport.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: empty-mcp
+spec:
+  endpoint: {}
+`), 0o600))
+
 	s.daprd = daprd.New(t,
 		daprd.WithAppID("test-app"),
 		daprd.WithResourcesDir(resDir),
@@ -125,7 +149,7 @@ spec:
 func (s *fileload) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
-	t.Run("global, scoped, and mixed MCPServers are loaded; other-app is filtered", func(t *testing.T) {
+	t.Run("valid MCPServers loaded; scoped-out and invalid ones rejected", func(t *testing.T) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			servers := s.daprd.GetMetaMCPServers(c, ctx)
 			names := mcpServerNames(servers)
@@ -133,7 +157,12 @@ func (s *fileload) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(c, names, "global-mcp")
 			assert.Contains(c, names, "scoped-mcp")
 			assert.Contains(c, names, "mixed-mcp")
+			// Scoped to different app — filtered out.
 			assert.NotContains(c, names, "other-app-mcp")
+			// Invalid: two transports — rejected by CEL validation.
+			assert.NotContains(c, names, "invalid-mcp")
+			// Invalid: no transport — rejected by CEL validation.
+			assert.NotContains(c, names, "empty-mcp")
 		}, 10*time.Second, 100*time.Millisecond)
 	})
 }

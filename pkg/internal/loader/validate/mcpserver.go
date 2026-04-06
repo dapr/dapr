@@ -11,13 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package validate
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
+
+	"github.com/dapr/kit/logger"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextinternal "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
@@ -29,8 +31,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	celconfig "k8s.io/apiserver/pkg/apis/cel"
 
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/charts/dapr/crds"
 )
+
+var log = logger.NewLogger("dapr.loader.validate")
 
 var (
 	celValidator *cel.Validator
@@ -89,10 +94,14 @@ func initValidator() {
 // ValidateResource validates an MCPServer against the CEL rules and schema
 // constraints embedded in the CRD. This provides the same validation in
 // standalone mode that the Kubernetes API server provides via CRD admission.
-func ValidateResource(server *MCPServer) error {
+func MCPServer(server *mcpserverapi.MCPServer) error {
 	initOnce.Do(initValidator)
 	if initErr != nil {
-		return fmt.Errorf("CEL validator initialization failed: %w", initErr)
+		// If the CEL validator could not be initialized (e.g. CRD schema
+		// parsing failed), log once and skip validation rather than rejecting
+		// all resources. The resource will be loaded and may fail at call time.
+		log.Warnf("CEL validator unavailable, skipping validation: %s", initErr)
+		return nil
 	}
 
 	// Convert typed struct to unstructured map for CEL evaluation.

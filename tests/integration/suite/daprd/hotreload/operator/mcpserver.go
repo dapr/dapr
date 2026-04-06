@@ -101,7 +101,7 @@ func (m *mcpserver) Run(t *testing.T, ctx context.Context) {
 			if len(servers) > 0 {
 				assert.Equal(c, "weather-mcp", servers[0].GetName())
 			}
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 	})
 
 	t.Run("deleting the MCPServer via operator update", func(t *testing.T) {
@@ -116,6 +116,6 @@ func (m *mcpserver) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			servers := m.daprd.GetMetaMCPServers(c, ctx)
 			assert.Empty(c, servers)
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 	})
 }
