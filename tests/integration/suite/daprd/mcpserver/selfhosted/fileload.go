@@ -18,12 +18,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -34,8 +36,7 @@ func init() {
 // fileload verifies that MCPServer YAML files are loaded from disk in
 // self-hosted mode and that scoped resources are filtered by app ID.
 type fileload struct {
-	daprd   *daprd.Daprd
-	logline *logline.LogLine
+	daprd *daprd.Daprd
 }
 
 func (s *fileload) Setup(t *testing.T) []framework.Option {
@@ -101,18 +102,9 @@ spec:
   version: v1
 `), 0o600))
 
-	s.logline = logline.New(t,
-		logline.WithStdoutLineContains(
-			"MCPServer loaded: global-mcp",
-			"MCPServer loaded: scoped-mcp",
-			"MCPServer loaded: mixed-mcp",
-		),
-	)
-
 	s.daprd = daprd.New(t,
 		daprd.WithAppID("test-app"),
 		daprd.WithResourcesDir(resDir),
-		daprd.WithLogLineStdout(s.logline),
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -134,6 +126,22 @@ func (s *fileload) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("global, scoped, and mixed MCPServers are loaded; other-app is filtered", func(t *testing.T) {
-		s.logline.EventuallyFoundAll(t)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			servers := s.daprd.GetMetaMCPServers(c, ctx)
+			names := mcpServerNames(servers)
+			assert.Len(c, names, 3)
+			assert.Contains(c, names, "global-mcp")
+			assert.Contains(c, names, "scoped-mcp")
+			assert.Contains(c, names, "mixed-mcp")
+			assert.NotContains(c, names, "other-app-mcp")
+		}, 10*time.Second, 100*time.Millisecond)
 	})
+}
+
+func mcpServerNames(servers []*rtv1.MetadataMCPServer) []string {
+	names := make([]string, len(servers))
+	for i, s := range servers {
+		names[i] = s.GetName()
+	}
+	return names
 }

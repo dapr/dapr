@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -45,25 +44,10 @@ func init() {
 type scopes struct {
 	daprd1 *daprd.Daprd // app "myapp" in "default" namespace
 	daprd2 *daprd.Daprd // app "otherapp" in "default" namespace
-
-	logline1 *logline.LogLine
-	logline2 *logline.LogLine
 }
 
 func (s *scopes) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
-
-	// daprd1 ("myapp") should load both global-mcp and scoped-mcp.
-	s.logline1 = logline.New(t,
-		logline.WithStdoutLineContains(
-			"MCPServer loaded: global-mcp",
-			"MCPServer loaded: scoped-mcp",
-		),
-	)
-	// daprd2 ("otherapp") should load only global-mcp (scoped-mcp is restricted to myapp).
-	s.logline2 = logline.New(t,
-		logline.WithStdoutLineContains("MCPServer loaded: global-mcp"),
-	)
 
 	kubeapi := kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
@@ -90,7 +74,7 @@ func (s *scopes) Setup(t *testing.T) []framework.Option {
 							StreamableHTTP: &mcpapi.MCPStreamableHTTP{URL: "http://scoped.example.com/mcp"},
 						},
 					},
-					Scoped: scopedTo("myapp"),
+					Scoped: commonapi.Scoped{Scopes: []string{"myapp"}},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "other-ns-mcp", Namespace: "other"},
@@ -117,7 +101,6 @@ func (s *scopes) Setup(t *testing.T) []framework.Option {
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithNamespace("default"),
 		daprd.WithAppID("myapp"),
-		daprd.WithLogLineStdout(s.logline1),
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -137,7 +120,6 @@ spec:
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithNamespace("default"),
 		daprd.WithAppID("otherapp"),
-		daprd.WithLogLineStdout(s.logline2),
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -160,8 +142,6 @@ func (s *scopes) Run(t *testing.T, ctx context.Context) {
 	s.daprd2.WaitUntilRunning(t, ctx)
 
 	t.Run("myapp loads global-mcp and scoped-mcp", func(t *testing.T) {
-		s.logline1.EventuallyFoundAll(t)
-
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			servers := s.daprd1.GetMetaMCPServers(c, ctx)
 			names := mcpServerNames(servers)
@@ -172,8 +152,6 @@ func (s *scopes) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("otherapp loads global-mcp only", func(t *testing.T) {
-		s.logline2.EventuallyFoundAll(t)
-
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			servers := s.daprd2.GetMetaMCPServers(c, ctx)
 			names := mcpServerNames(servers)
@@ -189,8 +167,4 @@ func mcpServerNames(servers []*rtv1.MetadataMCPServer) []string {
 		names[i] = s.GetName()
 	}
 	return names
-}
-
-func scopedTo(appIDs ...string) commonapi.Scoped {
-	return commonapi.Scoped{Scopes: appIDs}
 }
