@@ -18,6 +18,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	"github.com/dapr/dapr/pkg/internal/loader/validate"
 )
 
 // mcpStdioEnvResource is a thin adapter that wraps an MCPServer and overrides
@@ -63,7 +64,7 @@ func (p *Processor) processMCPServers(ctx context.Context) error {
 			continue
 		}
 
-		if err := mcpserverapi.ValidateResource(&s); err != nil {
+		if err := validate.MCPServer(&s); err != nil {
 			log.Warnf("MCPServer %q failed validation: %s", s.Name, err)
 			continue
 		}
