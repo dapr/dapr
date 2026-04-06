@@ -112,7 +112,7 @@ func (r *restart) Setup(t *testing.T) []framework.Option {
 	)
 
 	// App1: Orchestrator, calls app2
-	r.registry1.AddWorkflowN("restartWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	r.registry1.AddWorkflowN("restartWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)

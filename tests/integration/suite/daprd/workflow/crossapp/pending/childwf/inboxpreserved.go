@@ -80,7 +80,7 @@ func (p *inboxpreserved) Setup(t *testing.T) []framework.Option {
 		daprd.WithLogLevel("debug"),
 	)
 
-	p.registry1.AddWorkflowN("ParentWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	p.registry1.AddWorkflowN("ParentWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -95,7 +95,7 @@ func (p *inboxpreserved) Setup(t *testing.T) []framework.Option {
 		return result, nil
 	})
 
-	p.registry2.AddWorkflowN("ChildWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	p.registry2.AddWorkflowN("ChildWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -122,7 +122,7 @@ func (p *inboxpreserved) Run(t *testing.T, ctx context.Context) {
 
 	metadata, err := client1.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.RuntimeStatus)
+	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.GetRuntimeStatus())
 
 	time.Sleep(5 * time.Second)
 

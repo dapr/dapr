@@ -78,7 +78,7 @@ func (m *multihop) Setup(t *testing.T) []framework.Option {
 	})
 
 	// App0: Orchestrator that coordinates all apps
-	err := m.workflow.Registry().AddWorkflowN("ManyAppsWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	err := m.workflow.Registry().AddWorkflowN("ManyAppsWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
@@ -148,7 +148,7 @@ func (m *multihop) Run(t *testing.T, ctx context.Context) {
 	metadata, err := client0.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.GetRuntimeStatus())
 	expectedResult := `"Enriched by app4: Transformed by app3: Validated by app2: Processed by app1: Hello from app0"`
 	assert.Equal(t, expectedResult, metadata.GetOutput().GetValue())
 }

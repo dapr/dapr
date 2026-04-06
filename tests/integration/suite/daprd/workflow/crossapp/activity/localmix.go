@@ -83,7 +83,7 @@ func (l *localmix) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// App0: Orchestrator - mixes local & cross-app calls
-	l.workflow.Registry().AddWorkflowN("MixedWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	l.workflow.Registry().AddWorkflowN("MixedWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
@@ -140,7 +140,7 @@ func (l *localmix) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
-	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.GetRuntimeStatus())
 	expectedResult := `"Local processed: Local processed: Remote processed: Local processed: Hello from app0"`
 	assert.Equal(t, expectedResult, metadata.GetOutput().GetValue())
 }

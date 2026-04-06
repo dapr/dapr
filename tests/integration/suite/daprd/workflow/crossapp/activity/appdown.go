@@ -98,7 +98,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 	)
 
 	// App1: Orchestrator, calls app2
-	a.registry1.AddWorkflowN("AppDownWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	a.registry1.AddWorkflowN("AppDownWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
