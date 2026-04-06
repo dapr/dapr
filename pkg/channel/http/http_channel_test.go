@@ -112,7 +112,6 @@ func TestConstructRequestReservedCharactersInMethod(t *testing.T) {
 			require.Equal(t, tt.expectedRawPath, httpReq.URL.EscapedPath())
 			require.Equal(t, tt.expectedRawQuery, httpReq.URL.RawQuery)
 			require.NotContains(t, httpReq.URL.String(), "#")
-
 		})
 	}
 }
