@@ -21,7 +21,6 @@ import (
 	"sync"
 
 	apiextinternal "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-	apiextconv "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel"
@@ -70,7 +69,7 @@ func initValidator() {
 
 	// Convert v1 JSONSchemaProps to internal.
 	var internalSchema apiextinternal.JSONSchemaProps
-	convertErr := apiextconv.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(
+	convertErr := apiextensionsv1.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(
 		v1Schema, &internalSchema, nil,
 	)
 	if convertErr != nil {
