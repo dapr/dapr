@@ -401,7 +401,7 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		})
 		o := newOrchestrator(reminders)
 
-		rs := &protos.OrchestrationRuntimeState{
+		rs := &protos.WorkflowRuntimeState{
 			OldEvents: []*protos.HistoryEvent{
 				timerCreatedWithOrigin(3, "myevent"),
 			},
