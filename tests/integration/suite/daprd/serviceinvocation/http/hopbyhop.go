@@ -269,7 +269,10 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 				})
 
 				assert.Equal(t, http.StatusOK, status)
-				assert.NotContains(t, body, hdr+": test-value",
+				// Use canonical header key since Go's HTTP server
+				// canonicalizes header names (e.g. HTTP2-Settings -> Http2-Settings).
+				canonicalHdr := http.CanonicalHeaderKey(hdr)
+				assert.NotContains(t, body, canonicalHdr+": test-value",
 					"hop-by-hop request header %q should not be forwarded to app", hdr)
 			})
 		}
@@ -315,7 +318,8 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 		}
 
 		for hdr := range hopHeaders {
-			assert.NotContains(t, body, hdr+": ",
+			canonicalHdr := http.CanonicalHeaderKey(hdr)
+			assert.NotContains(t, body, canonicalHdr+": ",
 				"hop-by-hop header %q should not be forwarded to app", hdr)
 		}
 	})
@@ -344,7 +348,8 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 				assert.Equal(t, http.StatusOK, status)
 
 				for hdr := range hopHeaders {
-					assert.NotContains(t, body, hdr+": ",
+					canonicalHdr := http.CanonicalHeaderKey(hdr)
+					assert.NotContains(t, body, canonicalHdr+": ",
 						"hop-by-hop header %q should not be forwarded for %s", hdr, method)
 				}
 			})
