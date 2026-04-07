@@ -58,8 +58,9 @@ func (d *createtimer) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		keys := d.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs")
-		if assert.Len(c, keys, 1) {
+		if assert.Len(c, keys, 2) {
 			assert.Contains(c, keys[0], "timer-0")
+			assert.Contains(c, keys[1], "timer-1")
 		}
 	}, time.Second*20, 10*time.Millisecond)
 
