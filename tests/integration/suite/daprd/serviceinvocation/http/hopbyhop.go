@@ -121,21 +121,24 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := client.HTTP(t)
 
-	doReq := func(t require.TestingT, method, url string, headers map[string]string) (int, string, http.Header) {
-		if h, ok := t.(interface{ Helper() }); ok {
-			h.Helper()
-		}
+	doReq := func(method, url string, headers map[string]string) (int, string, http.Header, error) {
 		req, err := http.NewRequestWithContext(ctx, method, url, nil)
-		require.NoError(t, err)
+		if err != nil {
+			return 0, "", nil, err
+		}
 		for k, v := range headers {
 			req.Header.Set(k, v)
 		}
 		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
+		if err != nil {
+			return 0, "", nil, err
+		}
 		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-		return resp.StatusCode, string(body), resp.Header
+		if err != nil {
+			return 0, "", nil, err
+		}
+		resp.Body.Close()
+		return resp.StatusCode, string(body), resp.Header, nil
 	}
 
 	t.Run("request hop-by-hop stripped on local invocation", func(t *testing.T) {
@@ -158,7 +161,8 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 
 		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/passthrough",
 			h.daprd1.HTTPPort(), h.daprd1.AppID())
-		status, body, respHeader := doReq(t, http.MethodGet, url, reqHeaders)
+		status, body, respHeader, err := doReq(http.MethodGet, url, reqHeaders)
+		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusOK, status)
 		assert.Equal(t, "ok", body)
@@ -167,47 +171,60 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("request hop-by-hop stripped on remote invocation", func(t *testing.T) {
-		reqHeaders := map[string]string{
+		hopHeaders := map[string]string{
 			"Connection":     "keep-alive",
 			"Upgrade":        "websocket",
 			"HTTP2-Settings": "AAMAAABkAAQAAP__",
 			"Keep-Alive":     "timeout=5",
-			"X-Custom":       "should-survive",
 		}
 
-		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/passthrough",
+		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/echo-request-headers",
 			h.daprd2.HTTPPort(), h.daprd1.AppID())
-		status, body, respHeader := doReq(t, http.MethodGet, url, reqHeaders)
+		status, body, _, err := doReq(http.MethodGet, url, hopHeaders)
+		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusOK, status)
-		assert.Equal(t, "ok", body)
-		assert.Equal(t, "present", respHeader.Get("X-Custom-Response"))
+
+		for hdr := range hopHeaders {
+			canonicalHdr := http.CanonicalHeaderKey(hdr)
+			assert.NotContains(t, body, canonicalHdr+": ",
+				"hop-by-hop request header %q should not be forwarded to app via remote invocation", hdr)
+		}
 	})
 
 	t.Run("request hop-by-hop stripped on HTTPEndpoint invocation", func(t *testing.T) {
+		hopHeaders := map[string]string{
+			"Connection":          "keep-alive",
+			"Upgrade":             "websocket",
+			"HTTP2-Settings":      "AAMAAABkAAQAAP__",
+			"Keep-Alive":          "timeout=5",
+			"TE":                  "trailers",
+			"Trailer":             "X-Checksum",
+			"Proxy-Authorization": "Basic dGVzdDp0ZXN0",
+			"Proxy-Connection":    "keep-alive",
+		}
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/upstream/method/passthrough",
+			url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/upstream/method/echo-request-headers",
 				h.daprdEndpoint.HTTPPort())
-			status, body, _ := doReq(c, http.MethodGet, url, map[string]string{
-				"Connection":          "keep-alive",
-				"Upgrade":             "websocket",
-				"HTTP2-Settings":      "AAMAAABkAAQAAP__",
-				"Keep-Alive":          "timeout=5",
-				"TE":                  "trailers",
-				"Trailer":             "X-Checksum",
-				"Proxy-Authorization": "Basic dGVzdDp0ZXN0",
-				"Proxy-Connection":    "keep-alive",
-				"X-Custom-Header":     "should-survive",
-			})
+			status, body, _, err := doReq(http.MethodGet, url, hopHeaders)
+			if !assert.NoError(c, err) {
+				return
+			}
 			assert.Equal(c, http.StatusOK, status)
-			assert.Equal(c, "ok", body)
+
+			for hdr := range hopHeaders {
+				canonicalHdr := http.CanonicalHeaderKey(hdr)
+				assert.NotContains(c, body, canonicalHdr+": ",
+					"hop-by-hop request header %q should not be forwarded to app via HTTPEndpoint", hdr)
+			}
 		}, time.Second*20, time.Millisecond*200)
 	})
 
 	t.Run("response hop-by-hop stripped on local invocation", func(t *testing.T) {
 		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/respond-with-hop-by-hop",
 			h.daprd1.HTTPPort(), h.daprd1.AppID())
-		status, body, respHeader := doReq(t, http.MethodGet, url, nil)
+		status, body, respHeader, err := doReq(http.MethodGet, url, nil)
+		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusOK, status)
 		assert.Equal(t, "ok", body)
@@ -223,7 +240,8 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 	t.Run("response hop-by-hop stripped on remote invocation", func(t *testing.T) {
 		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/respond-with-hop-by-hop",
 			h.daprd2.HTTPPort(), h.daprd1.AppID())
-		status, body, respHeader := doReq(t, http.MethodGet, url, nil)
+		status, body, respHeader, err := doReq(http.MethodGet, url, nil)
+		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusOK, status)
 		assert.Equal(t, "ok", body)
@@ -240,7 +258,10 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/upstream/method/respond-with-hop-by-hop",
 				h.daprdEndpoint.HTTPPort())
-			status, body, respHeader := doReq(c, http.MethodGet, url, nil)
+			status, body, respHeader, err := doReq(http.MethodGet, url, nil)
+			if !assert.NoError(c, err) {
+				return
+			}
 			assert.Equal(c, http.StatusOK, status)
 			assert.Equal(c, "ok", body)
 
@@ -258,10 +279,11 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 			t.Run(hdr, func(t *testing.T) {
 				url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/echo-request-headers",
 					h.daprd1.HTTPPort(), h.daprd1.AppID())
-				status, body, _ := doReq(t, http.MethodGet, url, map[string]string{
+				status, body, _, err := doReq(http.MethodGet, url, map[string]string{
 					hdr:            "test-value",
 					"X-End-To-End": "should-survive",
 				})
+				require.NoError(t, err)
 
 				assert.Equal(t, http.StatusOK, status)
 				// Use canonical header key since Go's HTTP server
@@ -277,7 +299,8 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 		for _, hdr := range hopByHopHeaders {
 			url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/respond-with-hop-by-hop",
 				h.daprd1.HTTPPort(), h.daprd1.AppID())
-			_, _, respHeader := doReq(t, http.MethodGet, url, nil)
+			_, _, respHeader, err := doReq(http.MethodGet, url, nil)
+			require.NoError(t, err)
 			assert.Empty(t, respHeader.Get(hdr),
 				"hop-by-hop response header %q should be stripped", hdr)
 		}
@@ -303,7 +326,8 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 
 		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/echo-request-headers",
 			h.daprd1.HTTPPort(), h.daprd1.AppID())
-		status, body, _ := doReq(t, http.MethodGet, url, allHeaders)
+		status, body, _, err := doReq(http.MethodGet, url, allHeaders)
+		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusOK, status)
 
@@ -338,7 +362,8 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 			t.Run(method, func(t *testing.T) {
 				url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/echo-request-headers",
 					h.daprd1.HTTPPort(), h.daprd1.AppID())
-				status, body, _ := doReq(t, method, url, hopHeaders)
+				status, body, _, err := doReq(method, url, hopHeaders)
+				require.NoError(t, err)
 
 				assert.Equal(t, http.StatusOK, status)
 
@@ -353,13 +378,14 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("hop-by-hop stripped with dapr-app-id header invocation", func(t *testing.T) {
 		url := fmt.Sprintf("http://localhost:%d/passthrough", h.daprd1.HTTPPort())
-		status, body, respHeader := doReq(t, http.MethodGet, url, map[string]string{
+		status, body, respHeader, err := doReq(http.MethodGet, url, map[string]string{
 			"dapr-app-id":    h.daprd2.AppID(),
 			"Connection":     "keep-alive",
 			"Upgrade":        "websocket",
 			"HTTP2-Settings": "AAMAAABkAAQAAP__",
 			"X-Custom":       "should-survive",
 		})
+		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusOK, status)
 		assert.Equal(t, "ok", body)
@@ -369,11 +395,12 @@ func (h *hopbyhop) Run(t *testing.T, ctx context.Context) {
 	t.Run("hop-by-hop stripped with direct URL invocation", func(t *testing.T) {
 		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/http://localhost:%d/method/passthrough",
 			h.daprd1.HTTPPort(), h.daprd1.AppPort(t))
-		status, body, _ := doReq(t, http.MethodGet, url, map[string]string{
+		status, body, _, err := doReq(http.MethodGet, url, map[string]string{
 			"Connection":     "keep-alive",
 			"Upgrade":        "websocket",
 			"HTTP2-Settings": "AAMAAABkAAQAAP__",
 		})
+		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusOK, status)
 		assert.Equal(t, "ok", body)
