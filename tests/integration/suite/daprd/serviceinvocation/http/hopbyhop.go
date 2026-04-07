@@ -54,6 +54,7 @@ var hopByHopHeaders = []string{
 	"TE",
 	"Trailer",
 	"Proxy-Authorization",
+	"Proxy-Authenticate",
 }
 
 func (h *hopbyhop) Setup(t *testing.T) []framework.Option {
@@ -81,6 +82,7 @@ func (h *hopbyhop) Setup(t *testing.T) []framework.Option {
 		w.Header().Set("TE", "trailers")
 		w.Header().Set("Trailer", "X-Checksum")
 		w.Header().Set("Proxy-Authorization", "Basic dGVzdDp0ZXN0")
+		w.Header().Set("Proxy-Authenticate", "Basic realm=test")
 
 		w.Header().Set("X-Custom-Response", "should-be-forwarded")
 		w.WriteHeader(http.StatusOK)

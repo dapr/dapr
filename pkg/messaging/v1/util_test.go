@@ -71,6 +71,7 @@ func TestIsHopByHopHeader(t *testing.T) {
 		"TE", "te",
 		"Trailer", "trailer",
 		"Proxy-Authorization", "proxy-authorization",
+		"Proxy-Authenticate", "proxy-authenticate",
 	}
 	for _, h := range hopByHopHeaders {
 		assert.True(t, IsHopByHopHeader(h), "expected %q to be hop-by-hop", h)
@@ -105,6 +106,23 @@ func TestInternalMetadataToHTTPHeaderStripsHopByHop(t *testing.T) {
 	})
 
 	assert.Equal(t, []string{"custom-header"}, savedHeaderKeyNames)
+}
+
+func TestInternalMetadataToHTTPHeaderStripsConnectionNominated(t *testing.T) {
+	fakeMetadata := map[string]*internalv1pb.ListStringValue{
+		"Connection":      {Values: []string{"X-Foo, X-Bar"}},
+		"X-Foo":           {Values: []string{"should-be-stripped"}},
+		"X-Bar":           {Values: []string{"should-be-stripped"}},
+		"X-Custom-Header": {Values: []string{"should-survive"}},
+	}
+
+	savedHeaderKeyNames := []string{}
+	ctx := t.Context()
+	InternalMetadataToHTTPHeader(ctx, fakeMetadata, func(k, v string) {
+		savedHeaderKeyNames = append(savedHeaderKeyNames, k)
+	})
+
+	assert.Equal(t, []string{"x-custom-header"}, savedHeaderKeyNames)
 }
 
 func TestIsJSONContentType(t *testing.T) {

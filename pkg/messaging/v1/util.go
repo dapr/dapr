@@ -106,10 +106,33 @@ func IsHopByHopHeader(hdr string) bool {
 		"http2-settings",
 		"te",
 		"trailer",
-		"proxy-authorization":
+		"proxy-authorization",
+		"proxy-authenticate":
 		return true
 	}
 	return false
+}
+
+// ConnectionHopByHopHeaders returns the set of header names nominated as
+// hop-by-hop by the Connection header value per RFC 7230 Section 6.1.
+func ConnectionHopByHopHeaders(internalMD DaprInternalMetadata) map[string]struct{} {
+	headers := make(map[string]struct{})
+	connVal, ok := internalMD["Connection"]
+	if !ok {
+		connVal, ok = internalMD["connection"]
+	}
+	if !ok || connVal == nil {
+		return headers
+	}
+	for _, v := range connVal.GetValues() {
+		for token := range strings.SplitSeq(v, ",") {
+			token = strings.TrimSpace(token)
+			if token != "" {
+				headers[strings.ToLower(token)] = struct{}{}
+			}
+		}
+	}
+	return headers
 }
 
 // isPermanentHTTPHeader checks whether hdr belongs to the list of
@@ -226,6 +249,10 @@ func ReservedGRPCMetadataToDaprPrefixHeader(key string) string {
 
 // InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers.
 func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMetadata, setHeader func(string, string)) {
+	// Build the set of headers nominated by the Connection header value
+	// per RFC 7230 Section 6.1.
+	connHopByHop := ConnectionHopByHopHeaders(internalMD)
+
 	var traceparentValue, tracestateValue, grpctracebinValue string
 	for k, listVal := range internalMD {
 		if len(listVal.GetValues()) == 0 {
@@ -255,8 +282,12 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 			continue
 		}
 
-		// Strip hop-by-hop headers per RFC 7230 Section 6.1.
+		// Strip hop-by-hop headers per RFC 7230 Section 6.1,
+		// including headers nominated by the Connection header.
 		if IsHopByHopHeader(keyName) {
+			continue
+		}
+		if _, ok := connHopByHop[keyName]; ok {
 			continue
 		}
 
