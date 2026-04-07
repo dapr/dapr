@@ -182,16 +182,16 @@ func writeInboxToDB(t *testing.T, ctx context.Context, db *sql.DB, tableName, ap
 	).Scan(&existingVal, &isBin)
 	require.NoError(t, err)
 
+	require.True(t, isBin, "expected workflow metadata row %q to be stored as binary", metaKey)
+
 	var meta backend.WorkflowStateMetadata
-	if isBin {
-		raw, derr := base64.StdEncoding.DecodeString(existingVal)
-		require.NoError(t, derr)
-		require.NoError(t, proto.Unmarshal(raw, &meta))
-	}
+	raw, derr := base64.StdEncoding.DecodeString(existingVal)
+	require.NoError(t, derr)
+	require.NoError(t, proto.Unmarshal(raw, &meta))
 
 	//nolint:gosec
 	meta.InboxLength = uint64(n)
-	raw, err := proto.Marshal(&meta)
+	raw, err = proto.Marshal(&meta)
 	require.NoError(t, err)
 
 	encoded := base64.StdEncoding.EncodeToString(raw)

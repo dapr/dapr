@@ -115,7 +115,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// with o.rstate (same pointer) and may overwrite it during ContinueAsNew
 	// (*s = *newState in the applier). If the engine fails, we restore the
 	// snapshot so the cached state remains consistent with the store.
-	rstateSnapshot := proto.Clone(o.rstate).(*backend.OrchestrationRuntimeState)
+	var rstateSnapshot *backend.OrchestrationRuntimeState
+	if o.rstate != nil {
+		rstateSnapshot = proto.Clone(o.rstate).(*backend.OrchestrationRuntimeState)
+	}
 
 	// TODO: @joshvanl remove.
 	err = o.scheduler(ctx, wi)
@@ -138,7 +141,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
-		// Workflow execution failed with recoverable error
+		// The engine may have partially mutated o.rstate via the shared
+		// wi.State pointer before the context was cancelled. Restore the
+		// snapshot so the cached state stays consistent with the store.
+		o.rstate = rstateSnapshot
 		executionStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, ctx.Err()
 	case completed := <-callback:
