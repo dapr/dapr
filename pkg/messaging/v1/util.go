@@ -113,9 +113,9 @@ func IsHopByHopHeader(hdr string) bool {
 	return false
 }
 
-// ConnectionHopByHopHeaders returns the set of header names nominated as
+// connectionHopByHopHeaders returns the set of header names nominated as
 // hop-by-hop by the Connection header value per RFC 7230 Section 6.1.
-func ConnectionHopByHopHeaders(internalMD DaprInternalMetadata) map[string]struct{} {
+func connectionHopByHopHeaders(internalMD DaprInternalMetadata) map[string]struct{} {
 	headers := make(map[string]struct{})
 	connVal, ok := internalMD["Connection"]
 	if !ok {
@@ -251,7 +251,7 @@ func ReservedGRPCMetadataToDaprPrefixHeader(key string) string {
 func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	// Build the set of headers nominated by the Connection header value
 	// per RFC 7230 Section 6.1.
-	connHopByHop := ConnectionHopByHopHeaders(internalMD)
+	connHopByHop := connectionHopByHopHeaders(internalMD)
 
 	var traceparentValue, tracestateValue, grpctracebinValue string
 	for k, listVal := range internalMD {

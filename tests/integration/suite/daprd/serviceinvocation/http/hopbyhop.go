@@ -94,11 +94,6 @@ func (h *hopbyhop) Setup(t *testing.T) []framework.Option {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
-	handler.HandleFunc("/connection-header-values", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	})
-
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 
 	h.daprd1 = procdaprd.New(t, procdaprd.WithAppPort(srv.Port()))
