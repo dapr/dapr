@@ -55,6 +55,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/outbox"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -1182,6 +1183,22 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		in.Metadata = make(map[string]string)
 	}
 	in.Metadata["Dapr-API-Call"] = "true"
+
+	for _, param := range []struct{ name, val string }{
+		{"actorType", in.GetActorType()}, {"actorId", in.GetActorId()},
+	} {
+		if vErr := method.ValidateName(param.val); vErr != nil {
+			apiServerLogger.Debug(vErr)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid %s: %v", param.name, vErr)
+		}
+	}
+
+	normalized, err := method.NormalizeMethod(in.GetMethod())
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return nil, status.Errorf(codes.InvalidArgument, "invalid actor method: %v", err)
+	}
+	in.Method = normalized
 
 	req := in.ToInternalInvokeRequest()
 
