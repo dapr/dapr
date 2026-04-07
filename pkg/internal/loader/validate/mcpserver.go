@@ -16,12 +16,13 @@ package validate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextinternal "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextconv "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,39 +30,39 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	celconfig "k8s.io/apiserver/pkg/apis/cel"
 
-	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	daprcrds "github.com/dapr/dapr/charts/dapr"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 )
 
 var (
 	celValidator *cel.Validator
 	initOnce     sync.Once
-	initErr      error
+	errInit      error
 )
 
 func initValidator() {
 	// Decode the embedded CRD YAML.
 	scheme := runtime.NewScheme()
 	if err := apiextensionsv1.AddToScheme(scheme); err != nil {
-		initErr = fmt.Errorf("failed to add apiextensions to scheme: %w", err)
+		errInit = fmt.Errorf("failed to add apiextensions to scheme: %w", err)
 		return
 	}
 	codecs := serializer.NewCodecFactory(scheme)
 	obj, _, err := codecs.UniversalDeserializer().Decode(daprcrds.MCPServerCRD, nil, nil)
 	if err != nil {
-		initErr = fmt.Errorf("failed to decode CRD YAML: %w", err)
+		errInit = fmt.Errorf("failed to decode CRD YAML: %w", err)
 		return
 	}
 
 	crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 	if !ok {
-		initErr = fmt.Errorf("decoded object is %T, not CustomResourceDefinition", obj)
+		errInit = fmt.Errorf("decoded object is %T, not CustomResourceDefinition", obj)
 		return
 	}
 
 	if len(crd.Spec.Versions) == 0 || crd.Spec.Versions[0].Schema == nil ||
 		crd.Spec.Versions[0].Schema.OpenAPIV3Schema == nil {
-		initErr = fmt.Errorf("CRD has no OpenAPI schema")
+		errInit = errors.New("CRD has no OpenAPI schema")
 		return
 	}
 
@@ -69,17 +70,18 @@ func initValidator() {
 
 	// Convert v1 JSONSchemaProps to internal.
 	var internalSchema apiextinternal.JSONSchemaProps
-	if err := apiextconv.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(
+	convertErr := apiextconv.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(
 		v1Schema, &internalSchema, nil,
-	); err != nil {
-		initErr = fmt.Errorf("failed to convert schema to internal: %w", err)
+	)
+	if convertErr != nil {
+		errInit = fmt.Errorf("failed to convert schema to internal: %w", convertErr)
 		return
 	}
 
 	// Build structural schema.
 	structural, err := structuralschema.NewStructural(&internalSchema)
 	if err != nil {
-		initErr = fmt.Errorf("failed to create structural schema: %w", err)
+		errInit = fmt.Errorf("failed to create structural schema: %w", err)
 		return
 	}
 
@@ -87,22 +89,21 @@ func initValidator() {
 	celValidator = cel.NewValidator(structural, true, celconfig.PerCallLimit)
 }
 
-// ValidateResource validates an MCPServer against the CEL rules and schema
+// MCPServer validates an MCPServer against the CEL rules and schema
 // constraints embedded in the CRD. This provides the same validation in
 // standalone mode that the Kubernetes API server provides via CRD admission.
 func MCPServer(ctx context.Context, server *mcpserverapi.MCPServer) error {
 	initOnce.Do(initValidator)
-	if initErr != nil {
-		return fmt.Errorf("CEL validator initialization failed: %w", initErr)
+	if errInit != nil {
+		return fmt.Errorf("CEL validator initialization failed: %w", errInit)
 	}
 
 	// Convert typed struct to unstructured map for CEL evaluation.
-	// The validator expects the full object rooted at the CRD schema root.
 	raw, err := json.Marshal(server)
 	if err != nil {
 		return fmt.Errorf("failed to marshal MCPServer: %w", err)
 	}
-	var obj interface{}
+	var obj any
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return fmt.Errorf("failed to unmarshal MCPServer: %w", err)
 	}
@@ -110,9 +111,9 @@ func MCPServer(ctx context.Context, server *mcpserverapi.MCPServer) error {
 	errs, _ := celValidator.Validate(
 		ctx,
 		field.NewPath(""),
-		nil, // structural schema already baked into the validator
+		nil,
 		obj,
-		nil, // no old object
+		nil,
 		celconfig.RuntimeCELCostBudget,
 	)
 
