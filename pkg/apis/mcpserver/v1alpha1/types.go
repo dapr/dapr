@@ -150,7 +150,7 @@ type MCPServerSpec struct {
 // MCPEndpoint describes how to reach the MCP server.
 // Exactly one of StreamableHTTP, SSE, or Stdio must be set.
 //
-//+kubebuilder:validation:XValidation:rule="(has(self.streamableHTTP) ? 1 : 0) + (has(self.sse) ? 1 : 0) + (has(self.stdio) ? 1 : 0) == 1",message="exactly one of streamableHTTP, sse, or stdio must be set"
+// +kubebuilder:validation:XValidation:rule="(has(self.streamableHTTP) ? 1 : 0) + (has(self.sse) ? 1 : 0) + (has(self.stdio) ? 1 : 0) == 1",message="exactly one of streamableHTTP, sse, or stdio must be set"
 type MCPEndpoint struct {
 	// StreamableHTTP holds configuration for the streamable_http transport.
 	//+optional
@@ -164,7 +164,6 @@ type MCPEndpoint struct {
 	//+optional
 	Stdio *MCPStdio `json:"stdio,omitempty"`
 }
-
 
 // MCPStreamableHTTP configures the streamable_http transport.
 type MCPStreamableHTTP struct {
