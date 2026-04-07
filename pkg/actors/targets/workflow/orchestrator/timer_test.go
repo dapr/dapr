@@ -216,6 +216,22 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		}
 	}
 
+	timerCreatedWithOrigin := func(eventID int32, eventName string) *protos.HistoryEvent {
+		return &protos.HistoryEvent{
+			EventId: eventID,
+			EventType: &protos.HistoryEvent_TimerCreated{
+				TimerCreated: &protos.TimerCreatedEvent{
+					Name: &eventName,
+					Origin: &protos.TimerCreatedEvent_ExternalEvent{
+						ExternalEvent: &protos.TimerOriginExternalEvent{
+							Name: eventName,
+						},
+					},
+				},
+			},
+		}
+	}
+
 	timerFired := func(timerID int32) *protos.HistoryEvent {
 		return &protos.HistoryEvent{
 			EventId: -1,
@@ -374,6 +390,28 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		err := o.deleteCancelledEventTimers(t.Context(), rs)
 		require.NoError(t, err)
 		assert.False(t, deleteCalled)
+	})
+
+	t.Run("origin.external_event with Name matches and deletes timer", func(t *testing.T) {
+		t.Parallel()
+		var deletedNames []string
+		reminders := remindersfake.New().WithDelete(func(_ context.Context, req *actorapi.DeleteReminderRequest) error {
+			deletedNames = append(deletedNames, req.Name)
+			return nil
+		})
+		o := newOrchestrator(reminders)
+
+		rs := &protos.OrchestrationRuntimeState{
+			OldEvents: []*protos.HistoryEvent{
+				timerCreatedWithOrigin(3, "myevent"),
+			},
+			NewEvents: []*protos.HistoryEvent{
+				eventRaised("myevent"),
+			},
+		}
+		err := o.deleteCancelledEventTimers(t.Context(), rs)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"timer-3"}, deletedNames)
 	})
 
 	t.Run("timer without Name field is ignored", func(t *testing.T) {
