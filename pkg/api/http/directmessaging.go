@@ -93,13 +93,10 @@ func (a *api) constructDirectMessagingEndpoints() []endpoints.Endpoint {
 }
 
 func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
-	// RawPath could be empty
-	reqPath := r.URL.RawPath
-	if reqPath == "" {
-		reqPath = r.URL.Path
-	}
-
-	targetID, invokeMethodName := findTargetIDAndMethod(reqPath, r.Header)
+	// Use Path (decoded) rather than RawPath so that percent-encoded characters
+	// are resolved before method extraction. This ensures the method string
+	// used for ACL evaluation and dispatch is the decoded canonical form.
+	targetID, invokeMethodName := findTargetIDAndMethod(r.URL.Path, r.Header)
 	if targetID == "" {
 		respondWithError(w, messages.ErrDirectInvokeNoAppID)
 		return
@@ -330,7 +327,10 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 		// - `http%3A%2F%2Fexample.com/method/mymethod`
 		if idx = strings.Index(reqPath, "/method/"); idx > 0 {
 			targetID := reqPath[:idx]
-			method := reqPath[(idx + len("/method/")):]
+			method := path.Clean(reqPath[(idx + len("/method/")):])
+			if method == "." {
+				method = ""
+			}
 			if t, _ := url.QueryUnescape(targetID); t != "" {
 				targetID = t
 			}

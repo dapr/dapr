@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
+	methodutil "github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -181,7 +183,14 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.Name = chi.URLParamFromCtx(ctx, nameParam)
+	name := chi.URLParamFromCtx(ctx, nameParam)
+	if vErr := methodutil.ValidateName(name); vErr != nil {
+		msg := messages.ErrBadRequest.WithFormat(vErr)
+		respondWithError(w, msg)
+		log.Debug(msg)
+		return
+	}
+	req.Name = name
 	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
@@ -221,7 +230,14 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.Name = chi.URLParamFromCtx(ctx, nameParam)
+	name := chi.URLParamFromCtx(ctx, nameParam)
+	if vErr := methodutil.ValidateName(name); vErr != nil {
+		msg := messages.ErrBadRequest.WithFormat(vErr)
+		respondWithError(w, msg)
+		log.Debug(msg)
+		return
+	}
+	req.Name = name
 	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
@@ -358,8 +374,24 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
+	for _, param := range []struct{ name, val string }{
+		{"actorType", actorType}, {"actorId", actorID},
+	} {
+		if vErr := methodutil.ValidateName(param.val); vErr != nil {
+			msg := messages.ErrBadRequest.WithFormat(fmt.Sprintf("invalid %s: %v", param.name, vErr))
+			respondWithError(w, msg)
+			log.Debug(msg)
+			return
+		}
+	}
 	verb := strings.ToUpper(r.Method)
-	method := chi.URLParamFromCtx(ctx, methodParam)
+	method, err := methodutil.NormalizeMethod(chi.URLParamFromCtx(ctx, methodParam))
+	if err != nil {
+		msg := messages.ErrBadRequest.WithFormat(err)
+		respondWithError(w, msg)
+		log.Debug(msg)
+		return
+	}
 
 	// Actor invocation doesn't support streaming, so we need to read the entire reqBody
 	reqBody, err := io.ReadAll(r.Body)

@@ -62,14 +62,24 @@ func (f *fuzzgrpc) Setup(t *testing.T) []framework.Option {
 	f.daprd1 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv.Port(t)))
 	f.daprd2 = procdaprd.New(t)
 
-	f.methods = make([]string, numTests)
 	f.bodies = make([][]byte, numTests)
 	f.queries = make([]map[string]string, numTests)
 	for i := range numTests {
 		fz := fuzz.New()
-		fz.NumElements(0, 100).Fuzz(&f.methods[i])
 		fz.NumElements(0, 100).Fuzz(&f.bodies[i])
 		fz.NumElements(0, 100).Fuzz(&f.queries[i])
+	}
+	// Generate method names that don't contain characters forbidden by
+	// NormalizeMethod (#, ?, %, \x00). Fuzzed strings frequently contain
+	// these, causing the test to fail on method validation rather than
+	// testing the actual invocation path.
+	f.methods = make([]string, 0, numTests)
+	for len(f.methods) < numTests {
+		var m string
+		fuzz.New().NumElements(0, 100).Fuzz(&m)
+		if !strings.ContainsAny(m, "#?%\x00") {
+			f.methods = append(f.methods, m)
+		}
 	}
 
 	return []framework.Option{
