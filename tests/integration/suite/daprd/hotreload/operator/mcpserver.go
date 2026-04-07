@@ -50,7 +50,7 @@ func (m *mcpserver) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t)
 
 	m.logline = logline.New(t,
-		logline.WithStdoutLineContains("MCPServer loaded: weather-mcp"),
+		logline.WithStdoutLineContains("MCPServer updated via hot-reload: weather-mcp"),
 	)
 
 	m.operator = operator.New(t,
@@ -77,7 +77,7 @@ func (m *mcpserver) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, m.operator, m.daprd),
+		framework.WithProcesses(m.logline, sentry, m.operator, m.daprd),
 	}
 }
 

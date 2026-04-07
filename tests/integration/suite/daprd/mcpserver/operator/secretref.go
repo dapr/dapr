@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	mcpapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -58,6 +59,27 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 			"default",
 			sentry.Port(),
 		),
+		kubernetes.WithDaprConfigurationGet(t, &configapi.Configuration{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
+			ObjectMeta: metav1.ObjectMeta{Name: "mcpconfig", Namespace: "default"},
+			Spec: configapi.ConfigurationSpec{
+				Features: []configapi.FeatureSpec{
+					{Name: "MCPServerResource", Enabled: new(true)},
+				},
+			},
+		}),
+		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
+			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"},
+			Items: []configapi.Configuration{{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mcpconfig", Namespace: "default"},
+				Spec: configapi.ConfigurationSpec{
+					Features: []configapi.FeatureSpec{
+						{Name: "MCPServerResource", Enabled: new(true)},
+					},
+				},
+			}},
+		}),
 		kubernetes.WithClusterDaprMCPServerList(t, &mcpapi.MCPServerList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "MCPServerList"},
 			Items: []mcpapi.MCPServer{
@@ -113,20 +135,11 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 		daprd.WithNamespace("default"),
 		daprd.WithAppID("test-app"),
 		daprd.WithLogLineStdout(s.logline),
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: mcpconfig
-spec:
-  features:
-  - name: MCPServerResource
-    enabled: true
-`),
+		daprd.WithConfigs("mcpconfig"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, kubeapi, opr, s.daprd),
+		framework.WithProcesses(s.logline, sentry, kubeapi, opr, s.daprd),
 	}
 }
 
