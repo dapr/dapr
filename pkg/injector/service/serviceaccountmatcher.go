@@ -23,7 +23,8 @@ import (
 // NewServiceAccountMatcher takes "namespace:name" glob patterns and returns a
 // function that reports whether a namespace:name pair matches any of them.
 // Both components support glob syntax (*, ?, [...]). Empty strings are
-// silently skipped. Returns nil when no valid patterns are provided.
+// silently skipped. When no valid patterns are provided, a matcher that always
+// returns false is returned.
 func NewServiceAccountMatcher(patterns ...string) (func(namespace, name string) bool, error) {
 	var matchers []func(namespace, name string) bool
 
