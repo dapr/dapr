@@ -94,6 +94,24 @@ func IsJSONContentType(contentType string) bool {
 	return strings.HasPrefix(strings.ToLower(contentType), JSONContentType)
 }
 
+// IsHopByHopHeader returns true if the header is a hop-by-hop header
+// that must not be forwarded by proxies per RFC 7230 Section 6.1.
+func IsHopByHopHeader(hdr string) bool {
+	switch strings.ToLower(hdr) {
+	case "connection",
+		"keep-alive",
+		"proxy-connection",
+		"transfer-encoding",
+		"upgrade",
+		"http2-settings",
+		"te",
+		"trailer",
+		"proxy-authorization":
+		return true
+	}
+	return false
+}
+
 // isPermanentHTTPHeader checks whether hdr belongs to the list of
 // permanent request headers maintained by IANA.
 // http://www.iana.org/assignments/message-headers/message-headers.xml
@@ -234,6 +252,11 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 		}
 
 		if strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) || keyName == ContentTypeHeader || keyName == ContentLengthHeader {
+			continue
+		}
+
+		// Strip hop-by-hop headers per RFC 7230 Section 6.1.
+		if IsHopByHopHeader(keyName) {
 			continue
 		}
 

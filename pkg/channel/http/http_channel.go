@@ -669,6 +669,10 @@ func (h *Channel) parseChannelResponse(channelResp *http.Response) (*invokev1.In
 
 func copyHeader(dst http.Header, src http.Header) {
 	for k, vv := range src {
+		// Strip hop-by-hop headers per RFC 7230 Section 6.1.
+		if invokev1.IsHopByHopHeader(k) {
+			continue
+		}
 		for _, v := range vv {
 			dst.Add(k, v)
 		}
