@@ -125,6 +125,22 @@ func TestInternalMetadataToHTTPHeaderStripsConnectionNominated(t *testing.T) {
 	assert.Equal(t, []string{"x-custom-header"}, savedHeaderKeyNames)
 }
 
+func TestInternalMetadataToHTTPHeaderStripsConnectionNominatedMixedCase(t *testing.T) {
+	fakeMetadata := map[string]*internalv1pb.ListStringValue{
+		"CoNnEcTiOn":      {Values: []string{"X-Foo"}},
+		"X-Foo":           {Values: []string{"should-be-stripped"}},
+		"X-Custom-Header": {Values: []string{"should-survive"}},
+	}
+
+	savedHeaderKeyNames := []string{}
+	ctx := t.Context()
+	InternalMetadataToHTTPHeader(ctx, fakeMetadata, func(k, v string) {
+		savedHeaderKeyNames = append(savedHeaderKeyNames, k)
+	})
+
+	assert.Equal(t, []string{"x-custom-header"}, savedHeaderKeyNames)
+}
+
 func TestIsJSONContentType(t *testing.T) {
 	contentTypeTests := []struct {
 		in  string

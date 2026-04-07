@@ -117,11 +117,14 @@ func IsHopByHopHeader(hdr string) bool {
 // hop-by-hop by the Connection header value per RFC 7230 Section 6.1.
 func connectionHopByHopHeaders(internalMD DaprInternalMetadata) map[string]struct{} {
 	headers := make(map[string]struct{})
-	connVal, ok := internalMD["Connection"]
-	if !ok {
-		connVal, ok = internalMD["connection"]
+	var connVal *internalv1pb.ListStringValue
+	for key, val := range internalMD {
+		if strings.EqualFold(key, "Connection") {
+			connVal = val
+			break
+		}
 	}
-	if !ok || connVal == nil {
+	if connVal == nil {
 		return headers
 	}
 	for _, v := range connVal.GetValues() {
