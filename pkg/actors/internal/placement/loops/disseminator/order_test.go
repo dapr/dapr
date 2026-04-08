@@ -14,6 +14,7 @@ limitations under the License.
 package disseminator
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -58,7 +59,7 @@ func newTestDisseminator(t *testing.T) (*disseminator, *healthzfake.Fake, *sched
 		currentOperation: v1pb.HostOperation_LOCK,
 		currentVersion:   0,
 		timeout:          time.Second * 30,
-		cancel:           func(error) {},
+		ready:            new(atomic.Bool),
 	}
 
 	diss.loop = dissLoop
