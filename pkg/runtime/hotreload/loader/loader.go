@@ -17,6 +17,7 @@ import (
 	"context"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
@@ -28,6 +29,7 @@ type Interface interface {
 	Run(context.Context) error
 	Components() Loader[compapi.Component]
 	Subscriptions() Loader[subapi.Subscription]
+	MCPServers() Loader[mcpserverapi.MCPServer]
 }
 
 type StreamConn[T differ.Resource] struct {
