@@ -191,7 +191,6 @@ message ListMCPServersResponse {
 // MCPServerUpdateRequest is the request to receive updates about MCP server changes for a given namespace.
 message MCPServerUpdateRequest {
   string namespace = 1;
-  string pod_name = 2;
 }
 
 // MCPServerUpdateEvent includes an updated MCP server event.

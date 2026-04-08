@@ -39,13 +39,17 @@ func processMCPServerSecrets(ctx context.Context, s *mcpserverapi.MCPServer, nam
 		return nil
 	}
 
-	// Resolve headers from whichever HTTP transport is configured.
-	if err := resolveSecretKeyRefs(ctx, s.NameValuePairs(), s.Name, "header", namespace, kubeClient); err != nil {
-		return err
-	}
-
-	// Resolve env secrets for stdio transport.
-	if s.Spec.Endpoint.Stdio != nil {
+	// Resolve header secrets for whichever HTTP transport is configured.
+	switch {
+	case s.Spec.Endpoint.StreamableHTTP != nil:
+		if err := resolveSecretKeyRefs(ctx, s.Spec.Endpoint.StreamableHTTP.Headers, s.Name, "streamableHTTP header", namespace, kubeClient); err != nil {
+			return err
+		}
+	case s.Spec.Endpoint.SSE != nil:
+		if err := resolveSecretKeyRefs(ctx, s.Spec.Endpoint.SSE.Headers, s.Name, "sse header", namespace, kubeClient); err != nil {
+			return err
+		}
+	case s.Spec.Endpoint.Stdio != nil:
 		if err := resolveSecretKeyRefs(ctx, s.Spec.Endpoint.Stdio.Env, s.Name, "stdio env", namespace, kubeClient); err != nil {
 			return err
 		}
@@ -111,7 +115,7 @@ func (a *apiServer) MCPServerUpdate(in *operatorv1pb.MCPServerUpdateRequest, srv
 		return errors.New("server is closed")
 	}
 
-	log.Info("sidecar connected for MCP server updates")
+	log.Debug("sidecar connected for MCP server updates")
 
 	ctx := srv.Context()
 
@@ -130,7 +134,6 @@ func (a *apiServer) MCPServerUpdate(in *operatorv1pb.MCPServerUpdateRequest, srv
 		CancelWatch:    cancel,
 		Stream:         stream,
 		Namespace:      in.GetNamespace(),
-		PodName:        in.GetPodName(),
 		KubeClient:     a.Client,
 		ProcessSecrets: processMCPServerSecrets,
 	})
