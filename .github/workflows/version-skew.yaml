@@ -376,7 +376,16 @@ jobs:
       run: |
         make build-linux
         make docker-build
-        make docker-push
+        # Retry docker-push up to 3 times for transient registry errors
+        for i in 1 2 3; do
+          make docker-push && break
+          echo "docker-push attempt $i failed, retrying in $((i * 5))s..."
+          sleep $((i * 5))
+          if [ $i -eq 3 ]; then
+            echo "docker-push failed after 3 attempts"
+            exit 1
+          fi
+        done
 
     - name: Build and push test apps
       run: |
