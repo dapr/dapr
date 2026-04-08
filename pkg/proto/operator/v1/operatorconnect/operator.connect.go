@@ -73,6 +73,11 @@ const (
 	// OperatorHTTPEndpointUpdateProcedure is the fully-qualified name of the Operator's
 	// HTTPEndpointUpdate RPC.
 	OperatorHTTPEndpointUpdateProcedure = "/dapr.proto.operator.v1.Operator/HTTPEndpointUpdate"
+	// OperatorListMCPServersProcedure is the fully-qualified name of the Operator's ListMCPServers RPC.
+	OperatorListMCPServersProcedure = "/dapr.proto.operator.v1.Operator/ListMCPServers"
+	// OperatorMCPServerUpdateProcedure is the fully-qualified name of the Operator's MCPServerUpdate
+	// RPC.
+	OperatorMCPServerUpdateProcedure = "/dapr.proto.operator.v1.Operator/MCPServerUpdate"
 )
 
 // OperatorClient is a client for the dapr.proto.operator.v1.Operator service.
@@ -97,6 +102,10 @@ type OperatorClient interface {
 	ListHTTPEndpoints(context.Context, *connect.Request[v1.ListHTTPEndpointsRequest]) (*connect.Response[v1.ListHTTPEndpointsResponse], error)
 	// Sends events to Dapr sidecars upon http endpoint changes.
 	HTTPEndpointUpdate(context.Context, *connect.Request[v1.HTTPEndpointUpdateRequest]) (*connect.ServerStreamForClient[v1.HTTPEndpointUpdateEvent], error)
+	// Returns a list of MCP server configurations.
+	ListMCPServers(context.Context, *connect.Request[v1.ListMCPServersRequest]) (*connect.Response[v1.ListMCPServersResponse], error)
+	// Sends events to Dapr sidecars upon MCP server changes.
+	MCPServerUpdate(context.Context, *connect.Request[v1.MCPServerUpdateRequest]) (*connect.ServerStreamForClient[v1.MCPServerUpdateEvent], error)
 }
 
 // NewOperatorClient constructs a client for the dapr.proto.operator.v1.Operator service. By
@@ -159,6 +168,16 @@ func NewOperatorClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			baseURL+OperatorHTTPEndpointUpdateProcedure,
 			opts...,
 		),
+		listMCPServers: connect.NewClient[v1.ListMCPServersRequest, v1.ListMCPServersResponse](
+			httpClient,
+			baseURL+OperatorListMCPServersProcedure,
+			opts...,
+		),
+		mCPServerUpdate: connect.NewClient[v1.MCPServerUpdateRequest, v1.MCPServerUpdateEvent](
+			httpClient,
+			baseURL+OperatorMCPServerUpdateProcedure,
+			opts...,
+		),
 	}
 }
 
@@ -174,6 +193,8 @@ type operatorClient struct {
 	subscriptionUpdate  *connect.Client[v1.SubscriptionUpdateRequest, v1.SubscriptionUpdateEvent]
 	listHTTPEndpoints   *connect.Client[v1.ListHTTPEndpointsRequest, v1.ListHTTPEndpointsResponse]
 	hTTPEndpointUpdate  *connect.Client[v1.HTTPEndpointUpdateRequest, v1.HTTPEndpointUpdateEvent]
+	listMCPServers      *connect.Client[v1.ListMCPServersRequest, v1.ListMCPServersResponse]
+	mCPServerUpdate     *connect.Client[v1.MCPServerUpdateRequest, v1.MCPServerUpdateEvent]
 }
 
 // ComponentUpdate calls dapr.proto.operator.v1.Operator.ComponentUpdate.
@@ -226,6 +247,16 @@ func (c *operatorClient) HTTPEndpointUpdate(ctx context.Context, req *connect.Re
 	return c.hTTPEndpointUpdate.CallServerStream(ctx, req)
 }
 
+// ListMCPServers calls dapr.proto.operator.v1.Operator.ListMCPServers.
+func (c *operatorClient) ListMCPServers(ctx context.Context, req *connect.Request[v1.ListMCPServersRequest]) (*connect.Response[v1.ListMCPServersResponse], error) {
+	return c.listMCPServers.CallUnary(ctx, req)
+}
+
+// MCPServerUpdate calls dapr.proto.operator.v1.Operator.MCPServerUpdate.
+func (c *operatorClient) MCPServerUpdate(ctx context.Context, req *connect.Request[v1.MCPServerUpdateRequest]) (*connect.ServerStreamForClient[v1.MCPServerUpdateEvent], error) {
+	return c.mCPServerUpdate.CallServerStream(ctx, req)
+}
+
 // OperatorHandler is an implementation of the dapr.proto.operator.v1.Operator service.
 type OperatorHandler interface {
 	// Sends events to Dapr sidecars upon component changes.
@@ -248,6 +279,10 @@ type OperatorHandler interface {
 	ListHTTPEndpoints(context.Context, *connect.Request[v1.ListHTTPEndpointsRequest]) (*connect.Response[v1.ListHTTPEndpointsResponse], error)
 	// Sends events to Dapr sidecars upon http endpoint changes.
 	HTTPEndpointUpdate(context.Context, *connect.Request[v1.HTTPEndpointUpdateRequest], *connect.ServerStream[v1.HTTPEndpointUpdateEvent]) error
+	// Returns a list of MCP server configurations.
+	ListMCPServers(context.Context, *connect.Request[v1.ListMCPServersRequest]) (*connect.Response[v1.ListMCPServersResponse], error)
+	// Sends events to Dapr sidecars upon MCP server changes.
+	MCPServerUpdate(context.Context, *connect.Request[v1.MCPServerUpdateRequest], *connect.ServerStream[v1.MCPServerUpdateEvent]) error
 }
 
 // NewOperatorHandler builds an HTTP handler from the service implementation. It returns the path on
@@ -306,6 +341,16 @@ func NewOperatorHandler(svc OperatorHandler, opts ...connect.HandlerOption) (str
 		svc.HTTPEndpointUpdate,
 		opts...,
 	)
+	operatorListMCPServersHandler := connect.NewUnaryHandler(
+		OperatorListMCPServersProcedure,
+		svc.ListMCPServers,
+		opts...,
+	)
+	operatorMCPServerUpdateHandler := connect.NewServerStreamHandler(
+		OperatorMCPServerUpdateProcedure,
+		svc.MCPServerUpdate,
+		opts...,
+	)
 	return "/dapr.proto.operator.v1.Operator/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case OperatorComponentUpdateProcedure:
@@ -328,6 +373,10 @@ func NewOperatorHandler(svc OperatorHandler, opts ...connect.HandlerOption) (str
 			operatorListHTTPEndpointsHandler.ServeHTTP(w, r)
 		case OperatorHTTPEndpointUpdateProcedure:
 			operatorHTTPEndpointUpdateHandler.ServeHTTP(w, r)
+		case OperatorListMCPServersProcedure:
+			operatorListMCPServersHandler.ServeHTTP(w, r)
+		case OperatorMCPServerUpdateProcedure:
+			operatorMCPServerUpdateHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -375,4 +424,12 @@ func (UnimplementedOperatorHandler) ListHTTPEndpoints(context.Context, *connect.
 
 func (UnimplementedOperatorHandler) HTTPEndpointUpdate(context.Context, *connect.Request[v1.HTTPEndpointUpdateRequest], *connect.ServerStream[v1.HTTPEndpointUpdateEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.operator.v1.Operator.HTTPEndpointUpdate is not implemented"))
+}
+
+func (UnimplementedOperatorHandler) ListMCPServers(context.Context, *connect.Request[v1.ListMCPServersRequest]) (*connect.Response[v1.ListMCPServersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.operator.v1.Operator.ListMCPServers is not implemented"))
+}
+
+func (UnimplementedOperatorHandler) MCPServerUpdate(context.Context, *connect.Request[v1.MCPServerUpdateRequest], *connect.ServerStream[v1.MCPServerUpdateEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.operator.v1.Operator.MCPServerUpdate is not implemented"))
 }

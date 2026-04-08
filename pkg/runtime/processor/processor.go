@@ -24,6 +24,7 @@ import (
 	grpcmanager "github.com/dapr/dapr/pkg/api/grpc/manager"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/middleware/http"
@@ -128,6 +129,7 @@ type Processor struct {
 	reporter        registry.Reporter
 
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
+	pendingMCPServers          chan mcpserverapi.MCPServer
 	pendingComponents          chan componentsapi.Component
 	pendingComponentsWaiting   sync.RWMutex
 	pendingComponentDependents map[string][]componentsapi.Component
@@ -190,6 +192,7 @@ func New(opts Options) *Processor {
 	return &Processor{
 		appID:                      opts.ID,
 		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
+		pendingMCPServers:          make(chan mcpserverapi.MCPServer),
 		pendingComponents:          make(chan componentsapi.Component),
 		pendingComponentDependents: make(map[string][]componentsapi.Component),
 		subErrCh:                   make(chan error),
@@ -249,6 +252,7 @@ func (p *Processor) Process(ctx context.Context) error {
 	return concurrency.NewRunnerManager(
 		p.processComponents,
 		p.processHTTPEndpoints,
+		p.processMCPServers,
 		p.processSubscriptions,
 		p.subscriber.Run,
 		func(ctx context.Context) error {
@@ -260,6 +264,7 @@ func (p *Processor) Process(ctx context.Context) error {
 			p.shutdown.Store(true)
 			close(p.pendingComponents)
 			close(p.pendingHTTPEndpoints)
+			close(p.pendingMCPServers)
 
 			return nil
 		},

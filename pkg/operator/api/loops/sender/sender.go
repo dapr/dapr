@@ -40,6 +40,11 @@ func New(stream any) (Interface, error) {
 			stream: s,
 		}, nil
 
+	case operatorv1pb.Operator_MCPServerUpdateServer:
+		return &mcpserver{
+			stream: s,
+		}, nil
+
 	default:
 		return nil, errors.New("unsupported stream type")
 	}
@@ -75,5 +80,16 @@ func (h *httpendpoint) Send(data []byte, eventType operatorv1pb.ResourceEventTyp
 	return h.stream.Send(&operatorv1pb.HTTPEndpointUpdateEvent{
 		HttpEndpoints: data,
 		Type:          eventType,
+	})
+}
+
+type mcpserver struct {
+	stream operatorv1pb.Operator_MCPServerUpdateServer
+}
+
+func (m *mcpserver) Send(data []byte, eventType operatorv1pb.ResourceEventType) error {
+	return m.stream.Send(&operatorv1pb.MCPServerUpdateEvent{
+		McpServer: data,
+		Type:      eventType,
 	})
 }
