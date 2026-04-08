@@ -154,15 +154,46 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			// overwritten o.rstate via the shared wi.State pointer
 			// (*s = *newState in the applier). If CAN progress was made,
 			// persist it to the state store so it survives actor
-			// deactivation. The inbox is NOT cleared — it still contains
-			// the original events. On retry, the engine replays from the
-			// saved CAN progress and re-processes the inbox, skipping
-			// already-consumed events via deduplication.
+			// deactivation. Carryover events (unprocessed EventRaised
+			// events from the CAN state) are moved to the Inbox so they
+			// become NewEvents on retry. The stale inbox (which contained
+			// ALL original events including those already consumed) is
+			// replaced to prevent duplicate event delivery.
 			// If no CAN progress was made (non-CAN failure), restore the
 			// pre-engine snapshot so the cached state stays consistent.
 			if wi.State.GetContinuedAsNew() {
+				// Separate carryover EventRaised events from the CAN
+				// execution events (WorkflowStarted, ExecutionStarted).
+				// Carryover events must go into the Inbox so they become
+				// NewEvents on retry. If they stay in History (as
+				// OldEvents) alongside the original Inbox events
+				// (NewEvents), the engine would buffer both sets and the
+				// workflow would process duplicate events.
+				canNewEvents := wi.State.GetNewEvents()
+				filtered := make([]*backend.HistoryEvent, 0, len(canNewEvents))
+				var carryover []*backend.HistoryEvent
+				for _, e := range canNewEvents {
+					if e.GetEventRaised() != nil {
+						carryover = append(carryover, e)
+					} else {
+						filtered = append(filtered, e)
+					}
+				}
+
+				// Temporarily swap NewEvents so ApplyRuntimeStateChanges
+				// only writes the CAN execution events to History.
+				wi.State.NewEvents = filtered
 				state.ApplyRuntimeStateChanges(wi.State)
+				wi.State.NewEvents = canNewEvents
+
 				state.Generation++
+
+				// Replace the stale inbox with the carryover events.
+				state.ClearInbox()
+				for _, e := range carryover {
+					state.AddToInbox(e)
+				}
+
 				if err = o.saveInternalState(ctx, state); err != nil {
 					o.rstate = rstateSnapshot
 					return todo.RunCompletedFalse, err
