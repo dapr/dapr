@@ -16,7 +16,6 @@ package operator
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -24,10 +23,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	mcpapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -41,11 +42,16 @@ func init() {
 // MCPServer spec.endpoint.streamableHTTP.headers using the Kubernetes secret store,
 // and daprd receives the resolved values.
 type secretref struct {
-	daprd *daprd.Daprd
+	daprd   *daprd.Daprd
+	logline *logline.LogLine
 }
 
 func (s *secretref) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+
+	s.logline = logline.New(t,
+		logline.WithStdoutLineContains("MCPServer loaded: secreted-mcp"),
+	)
 
 	kubeapi := kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
@@ -53,6 +59,27 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 			"default",
 			sentry.Port(),
 		),
+		kubernetes.WithDaprConfigurationGet(t, &configapi.Configuration{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
+			ObjectMeta: metav1.ObjectMeta{Name: "mcpconfig", Namespace: "default"},
+			Spec: configapi.ConfigurationSpec{
+				Features: []configapi.FeatureSpec{
+					{Name: "MCPServerResource", Enabled: new(true)},
+				},
+			},
+		}),
+		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
+			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"},
+			Items: []configapi.Configuration{{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mcpconfig", Namespace: "default"},
+				Spec: configapi.ConfigurationSpec{
+					Features: []configapi.FeatureSpec{
+						{Name: "MCPServerResource", Enabled: new(true)},
+					},
+				},
+			}},
+		}),
 		kubernetes.WithClusterDaprMCPServerList(t, &mcpapi.MCPServerList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "MCPServerList"},
 			Items: []mcpapi.MCPServer{
@@ -103,23 +130,16 @@ func (s *secretref) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithSentry(t, sentry),
 		daprd.WithControlPlaneAddress(opr.Address()),
+		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithNamespace("default"),
 		daprd.WithAppID("test-app"),
-		daprd.WithConfigManifests(t, `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: mcpconfig
-spec:
-  features:
-  - name: MCPServerResource
-    enabled: true
-`),
+		daprd.WithLogLineStdout(s.logline),
+		daprd.WithConfigs("mcpconfig"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, kubeapi, opr, s.daprd),
+		framework.WithProcesses(s.logline, sentry, kubeapi, opr, s.daprd),
 	}
 }
 
@@ -127,12 +147,12 @@ func (s *secretref) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("MCPServer with secretKeyRef header is loaded via operator", func(t *testing.T) {
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			mcpServers := s.daprd.GetMetaMCPServers(c, ctx)
-			assert.Len(c, mcpServers, 1)
-			if len(mcpServers) > 0 {
-				assert.Equal(c, "secreted-mcp", mcpServers[0].GetName())
-			}
-		}, 10*time.Second, 100*time.Millisecond)
+		s.logline.EventuallyFoundAll(t)
+	})
+
+	// TODO(sicoyle): Once the metadata API exposes MCPServers, add metadata API
+	// checks to verify secreted-mcp appears with resolved headers.
+	t.Run("metadata API does not yet expose MCPServers on this branch", func(t *testing.T) {
+		assert.Empty(t, s.daprd.GetMetaMCPServers(t, ctx))
 	})
 }
