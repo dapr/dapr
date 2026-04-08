@@ -27,7 +27,6 @@ import (
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
@@ -52,8 +51,6 @@ type httpendpoint struct {
 }
 
 func (h *httpendpoint) Setup(t *testing.T) []framework.Option {
-	os.SkipWindows(t)
-
 	h.endpointSent = make(chan struct{})
 
 	endpointJSON, err := json.Marshal(map[string]any{

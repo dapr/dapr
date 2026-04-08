@@ -41,8 +41,6 @@ type resiliencysighup struct {
 }
 
 func (r *resiliencysighup) Setup(t *testing.T) []framework.Option {
-	os.SkipWindows(t)
-
 	r.logOut = log.New()
 	r.resiliencyDir = t.TempDir()
 

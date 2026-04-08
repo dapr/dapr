@@ -40,8 +40,6 @@ type httpendpointsighup struct {
 }
 
 func (h *httpendpointsighup) Setup(t *testing.T) []framework.Option {
-	os.SkipWindows(t)
-
 	h.endpointDir = t.TempDir()
 
 	configFile := os.WriteFileYaml(t, `

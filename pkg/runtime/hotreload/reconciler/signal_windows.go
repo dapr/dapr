@@ -15,7 +15,15 @@ limitations under the License.
 
 package reconciler
 
-// sendSIGHUP is a no-op on Windows as SIGHUP is not supported.
+import (
+	"os"
+
+	"github.com/dapr/kit/signals"
+)
+
+// sendSIGHUP triggers a reload of the current process on Windows by connecting
+// to the named pipe that the main loop is listening on, which is the Windows
+// equivalent of sending SIGHUP on POSIX systems.
 func sendSIGHUP() error {
-	return nil
+	return signals.SignalReload(os.Getpid())
 }

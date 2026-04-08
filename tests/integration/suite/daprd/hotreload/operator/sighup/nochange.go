@@ -27,7 +27,6 @@ import (
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/log"
-	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
@@ -55,8 +54,6 @@ type nochange struct {
 }
 
 func (n *nochange) Setup(t *testing.T) []framework.Option {
-	os.SkipWindows(t)
-
 	n.logOut = log.New()
 	n.configSendCh = make(chan []byte, 1)
 	n.httpEndSendCh = make(chan []byte, 1)

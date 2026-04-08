@@ -30,7 +30,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	frameworkos "github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -50,8 +49,6 @@ type httpendpoint struct {
 }
 
 func (h *httpendpoint) Setup(t *testing.T) []framework.Option {
-	frameworkos.SkipWindows(t)
-
 	h.resDir = t.TempDir()
 
 	configFile := filepath.Join(t.TempDir(), "config.yaml")

@@ -26,7 +26,6 @@ import (
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/log"
-	"github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
@@ -52,8 +51,6 @@ type resiliency struct {
 }
 
 func (r *resiliency) Setup(t *testing.T) []framework.Option {
-	os.SkipWindows(t)
-
 	r.logOut = log.New()
 	r.resiliencySent = make(chan struct{})
 

@@ -27,7 +27,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/log"
-	frameworkos "github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
@@ -47,8 +46,6 @@ type configuration struct {
 }
 
 func (c *configuration) Setup(t *testing.T) []framework.Option {
-	frameworkos.SkipWindows(t)
-
 	c.logOut = log.New()
 	c.resDir = t.TempDir()
 

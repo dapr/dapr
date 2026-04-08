@@ -189,6 +189,18 @@ func NewOperatorClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(operatorMethods.ByName("HTTPEndpointUpdate")),
 			connect.WithClientOptions(opts...),
 		),
+		listMCPServers: connect.NewClient[v1.ListMCPServersRequest, v1.ListMCPServersResponse](
+			httpClient,
+			baseURL+OperatorListMCPServersProcedure,
+			connect.WithSchema(operatorMethods.ByName("ListMCPServers")),
+			connect.WithClientOptions(opts...),
+		),
+		mCPServerUpdate: connect.NewClient[v1.MCPServerUpdateRequest, v1.MCPServerUpdateEvent](
+			httpClient,
+			baseURL+OperatorMCPServerUpdateProcedure,
+			connect.WithSchema(operatorMethods.ByName("MCPServerUpdate")),
+			connect.WithClientOptions(opts...),
+		),
 		configurationUpdate: connect.NewClient[v1.ConfigurationUpdateRequest, v1.ConfigurationUpdateEvent](
 			httpClient,
 			baseURL+OperatorConfigurationUpdateProcedure,
@@ -200,16 +212,6 @@ func NewOperatorClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			baseURL+OperatorResiliencyUpdateProcedure,
 			connect.WithSchema(operatorMethods.ByName("ResiliencyUpdate")),
 			connect.WithClientOptions(opts...),
-		),
-		listMCPServers: connect.NewClient[v1.ListMCPServersRequest, v1.ListMCPServersResponse](
-			httpClient,
-			baseURL+OperatorListMCPServersProcedure,
-			opts...,
-		),
-		mCPServerUpdate: connect.NewClient[v1.MCPServerUpdateRequest, v1.MCPServerUpdateEvent](
-			httpClient,
-			baseURL+OperatorMCPServerUpdateProcedure,
-			opts...,
 		),
 	}
 }
@@ -401,6 +403,18 @@ func NewOperatorHandler(svc OperatorHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(operatorMethods.ByName("HTTPEndpointUpdate")),
 		connect.WithHandlerOptions(opts...),
 	)
+	operatorListMCPServersHandler := connect.NewUnaryHandler(
+		OperatorListMCPServersProcedure,
+		svc.ListMCPServers,
+		connect.WithSchema(operatorMethods.ByName("ListMCPServers")),
+		connect.WithHandlerOptions(opts...),
+	)
+	operatorMCPServerUpdateHandler := connect.NewServerStreamHandler(
+		OperatorMCPServerUpdateProcedure,
+		svc.MCPServerUpdate,
+		connect.WithSchema(operatorMethods.ByName("MCPServerUpdate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	operatorConfigurationUpdateHandler := connect.NewServerStreamHandler(
 		OperatorConfigurationUpdateProcedure,
 		svc.ConfigurationUpdate,
@@ -412,16 +426,6 @@ func NewOperatorHandler(svc OperatorHandler, opts ...connect.HandlerOption) (str
 		svc.ResiliencyUpdate,
 		connect.WithSchema(operatorMethods.ByName("ResiliencyUpdate")),
 		connect.WithHandlerOptions(opts...),
-	)
-	operatorListMCPServersHandler := connect.NewUnaryHandler(
-		OperatorListMCPServersProcedure,
-		svc.ListMCPServers,
-		opts...,
-	)
-	operatorMCPServerUpdateHandler := connect.NewServerStreamHandler(
-		OperatorMCPServerUpdateProcedure,
-		svc.MCPServerUpdate,
-		opts...,
 	)
 	return "/dapr.proto.operator.v1.Operator/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

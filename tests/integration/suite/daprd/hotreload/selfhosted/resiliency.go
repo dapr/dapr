@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/log"
-	frameworkos "github.com/dapr/dapr/tests/integration/framework/os"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -44,8 +43,6 @@ type resiliency struct {
 }
 
 func (r *resiliency) Setup(t *testing.T) []framework.Option {
-	frameworkos.SkipWindows(t)
-
 	r.logOut = log.New()
 	r.resDir = t.TempDir()
 
