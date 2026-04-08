@@ -115,9 +115,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// with o.rstate (same pointer) and may overwrite it during ContinueAsNew
 	// (*s = *newState in the applier). If the engine fails, we restore the
 	// snapshot so the cached state remains consistent with the store.
-	var rstateSnapshot *backend.OrchestrationRuntimeState
+	var rstateSnapshot *backend.WorkflowRuntimeState
 	if o.rstate != nil {
-		rstateSnapshot = proto.Clone(o.rstate).(*backend.OrchestrationRuntimeState)
+		rstateSnapshot = proto.Clone(o.rstate).(*backend.WorkflowRuntimeState)
 	}
 
 	// TODO: @joshvanl remove.
