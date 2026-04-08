@@ -58,14 +58,14 @@ func (w *workerclient) Run(t *testing.T, ctx context.Context) {
 	w.daprd.WaitUntilRunning(t, ctx)
 
 	reg := task.NewTaskRegistry()
-	reg.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	reg.AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	})
 
 	cl := client.NewTaskHubGrpcClient(w.daprd.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, cl.StartWorkItemListener(ctx, reg))
 
-	_, err := cl.ScheduleNewOrchestration(ctx, "foo")
+	_, err := cl.ScheduleNewWorkflow(ctx, "foo")
 	require.Error(t, err)
 	s, ok := status.FromError(err)
 	require.True(t, ok)

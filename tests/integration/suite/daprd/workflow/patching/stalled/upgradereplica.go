@@ -36,7 +36,7 @@ type upgradereplica struct {
 func (r *upgradereplica) Setup(t *testing.T) []framework.Option {
 	r.fw = stalled.New(t,
 		stalled.WithInitialReplica("new"),
-		stalled.WithNamedWorkflowReplica("new", func(ctx *task.OrchestrationContext) (any, error) {
+		stalled.WithNamedWorkflowReplica("new", func(ctx *task.WorkflowContext) (any, error) {
 			if ctx.IsPatched("patch1") {
 				if err := ctx.CallActivity("activity2").Await(nil); err != nil {
 					return nil, err
@@ -51,7 +51,7 @@ func (r *upgradereplica) Setup(t *testing.T) []framework.Option {
 			}
 			return nil, nil
 		}),
-		stalled.WithNamedWorkflowReplica("old", func(ctx *task.OrchestrationContext) (any, error) {
+		stalled.WithNamedWorkflowReplica("old", func(ctx *task.WorkflowContext) (any, error) {
 			if err := ctx.CallActivity("activity1").Await(nil); err != nil {
 				return nil, err
 			}
