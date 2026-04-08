@@ -57,7 +57,7 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("timer", func(t *testing.T) {
 		var timerCount atomic.Int32
-		reg.AddOrchestratorN("can-timer", func(ctx *task.OrchestrationContext) (any, error) {
+		reg.AddWorkflowN("can-timer", func(ctx *task.WorkflowContext) (any, error) {
 			var inc int
 			require.NoError(t, ctx.GetInput(&inc))
 			timerCount.Add(1)
@@ -70,12 +70,12 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 			return inc, nil
 		})
 
-		id, err := client.ScheduleNewOrchestration(ctx, "can-timer",
+		id, err := client.ScheduleNewWorkflow(ctx, "can-timer",
 			api.WithInstanceID("can-timer-i"),
 			api.WithInput(0),
 		)
 		require.NoError(t, err)
-		meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+		meta, err := client.WaitForWorkflowCompletion(ctx, id)
 		require.NoError(t, err)
 		assert.Equal(t, `3`, meta.GetOutput().GetValue())
 		assert.GreaterOrEqual(t, timerCount.Load(), int32(4))
@@ -83,7 +83,7 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("noinput", func(t *testing.T) {
 		var noinputCount atomic.Int32
-		reg.AddOrchestratorN("can-noinput", func(ctx *task.OrchestrationContext) (any, error) {
+		reg.AddWorkflowN("can-noinput", func(ctx *task.WorkflowContext) (any, error) {
 			n := noinputCount.Add(1)
 			if n < 4 {
 				ctx.ContinueAsNew("same")
@@ -91,12 +91,12 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 			return n, nil
 		})
 
-		id, err := client.ScheduleNewOrchestration(ctx, "can-noinput",
+		id, err := client.ScheduleNewWorkflow(ctx, "can-noinput",
 			api.WithInstanceID("can-noinput-i"),
 			api.WithInput("same"),
 		)
 		require.NoError(t, err)
-		meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+		meta, err := client.WaitForWorkflowCompletion(ctx, id)
 		require.NoError(t, err)
 		assert.Equal(t, `4`, meta.GetOutput().GetValue())
 		assert.Equal(t, int32(4), noinputCount.Load())
@@ -108,7 +108,7 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 			Values []string `json:"values"`
 		}
 
-		reg.AddOrchestratorN("can-events-between", func(ctx *task.OrchestrationContext) (any, error) {
+		reg.AddWorkflowN("can-events-between", func(ctx *task.WorkflowContext) (any, error) {
 			var s state
 			require.NoError(t, ctx.GetInput(&s))
 
@@ -123,12 +123,12 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 			return s, nil
 		})
 
-		id, err := client.ScheduleNewOrchestration(ctx, "can-events-between",
+		id, err := client.ScheduleNewWorkflow(ctx, "can-events-between",
 			api.WithInstanceID("can-events-between-i"),
 			api.WithInput(state{}),
 		)
 		require.NoError(t, err)
-		_, err = client.WaitForOrchestrationStart(ctx, id)
+		_, err = client.WaitForWorkflowStart(ctx, id)
 		require.NoError(t, err)
 
 		for i := range 3 {
@@ -137,7 +137,7 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 			time.Sleep(200 * time.Millisecond)
 		}
 
-		meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+		meta, err := client.WaitForWorkflowCompletion(ctx, id)
 		require.NoError(t, err)
 
 		var result state
@@ -148,13 +148,13 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("child", func(t *testing.T) {
 		var childCalls atomic.Int32
-		reg.AddOrchestratorN("can-child-parent", func(ctx *task.OrchestrationContext) (any, error) {
+		reg.AddWorkflowN("can-child-parent", func(ctx *task.WorkflowContext) (any, error) {
 			var inc int
 			require.NoError(t, ctx.GetInput(&inc))
 
 			var childResult int
-			require.NoError(t, ctx.CallSubOrchestrator("can-child-child",
-				task.WithSubOrchestratorInput(inc)).Await(&childResult))
+			require.NoError(t, ctx.CallChildWorkflow("can-child-child",
+				task.WithChildWorkflowInput(inc)).Await(&childResult))
 
 			if inc < 2 {
 				ctx.ContinueAsNew(inc + 1)
@@ -162,26 +162,26 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 			return childResult, nil
 		})
 
-		reg.AddOrchestratorN("can-child-child", func(ctx *task.OrchestrationContext) (any, error) {
+		reg.AddWorkflowN("can-child-child", func(ctx *task.WorkflowContext) (any, error) {
 			var input int
 			require.NoError(t, ctx.GetInput(&input))
 			childCalls.Add(1)
 			return input * 10, nil
 		})
 
-		id, err := client.ScheduleNewOrchestration(ctx, "can-child-parent",
+		id, err := client.ScheduleNewWorkflow(ctx, "can-child-parent",
 			api.WithInstanceID("can-child-parent-i"),
 			api.WithInput(0),
 		)
 		require.NoError(t, err)
-		meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+		meta, err := client.WaitForWorkflowCompletion(ctx, id)
 		require.NoError(t, err)
 		assert.Equal(t, `20`, meta.GetOutput().GetValue())
 		assert.Equal(t, int32(3), childCalls.Load())
 	})
 
 	t.Run("generation", func(t *testing.T) {
-		reg.AddOrchestratorN("can-generation", func(ctx *task.OrchestrationContext) (any, error) {
+		reg.AddWorkflowN("can-generation", func(ctx *task.WorkflowContext) (any, error) {
 			var inc int
 			require.NoError(t, ctx.GetInput(&inc))
 			if inc < 5 {
@@ -190,12 +190,12 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 			return inc, nil
 		})
 
-		id, err := client.ScheduleNewOrchestration(ctx, "can-generation",
+		id, err := client.ScheduleNewWorkflow(ctx, "can-generation",
 			api.WithInstanceID("can-generation-i"),
 			api.WithInput(0),
 		)
 		require.NoError(t, err)
-		_, err = client.WaitForOrchestrationCompletion(ctx, id)
+		_, err = client.WaitForWorkflowCompletion(ctx, id)
 		require.NoError(t, err)
 
 		db := m.workflow.DB().GetConnection(t)
@@ -214,7 +214,7 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 
 		raw, err := base64.StdEncoding.DecodeString(val)
 		require.NoError(t, err)
-		var wfMeta backend.WorkflowStateMetadata
+		var wfMeta backend.BackendWorkflowStateMetadata
 		require.NoError(t, proto.Unmarshal(raw, &wfMeta))
 		assert.Equal(t, uint64(2), wfMeta.GetGeneration(),
 			"generation should be 2: initial(1) + one CAN execution(+1)")

@@ -88,7 +88,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	rs := o.rstate
-	wi := &backend.OrchestrationWorkItem{
+	wi := &backend.WorkflowWorkItem{
 		InstanceID: api.InstanceID(rs.GetInstanceId()),
 		NewEvents:  state.Inbox,
 		RetryCount: -1, // TODO
@@ -115,9 +115,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// with o.rstate (same pointer) and may overwrite it during ContinueAsNew
 	// (*s = *newState in the applier). If the engine fails, we restore the
 	// snapshot so the cached state remains consistent with the store.
-	var rstateSnapshot *backend.OrchestrationRuntimeState
+	var rstateSnapshot *backend.WorkflowRuntimeState
 	if o.rstate != nil {
-		rstateSnapshot = proto.Clone(o.rstate).(*backend.OrchestrationRuntimeState)
+		rstateSnapshot = proto.Clone(o.rstate).(*backend.WorkflowRuntimeState)
 	}
 
 	// TODO: @joshvanl remove.
@@ -208,14 +208,14 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	pendingTasks := rs.GetPendingTasks()
 
 	// Process the outbound orchestrator events.
-	var addWorkflows []*backend.OrchestrationRuntimeStateMessage
-	var createWorkflows []*backend.OrchestrationRuntimeStateMessage
+	var addWorkflows []*backend.WorkflowRuntimeStateMessage
+	var createWorkflows []*backend.WorkflowRuntimeStateMessage
 	for _, msg := range rs.GetPendingMessages() {
 		switch {
 		case msg.GetHistoryEvent().GetExecutionStarted() != nil:
 			createWorkflows = append(createWorkflows, msg)
 
-		case msg.GetHistoryEvent().GetSubOrchestrationInstanceCompleted() != nil, msg.GetHistoryEvent().GetSubOrchestrationInstanceFailed() != nil:
+		case msg.GetHistoryEvent().GetChildWorkflowInstanceCompleted() != nil, msg.GetHistoryEvent().GetChildWorkflowInstanceFailed() != nil:
 			addWorkflows = append(addWorkflows, msg)
 
 		default:
@@ -312,7 +312,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 func (*orchestrator) calculateWorkflowExecutionLatency(state *wfenginestate.State) (wExecutionElapsedTime float64) {
 	for _, e := range state.History {
-		if os := e.GetOrchestratorStarted(); os != nil {
+		if os := e.GetWorkflowStarted(); os != nil {
 			return diag.ElapsedSince(e.GetTimestamp().AsTime())
 		}
 	}

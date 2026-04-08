@@ -34,7 +34,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 	log.Debugf("Workflow actor '%s': calling %d child workflows", o.actorID, len(es))
 
 	for _, e := range es {
-		createSO := e.GetSubOrchestrationInstanceCreated()
+		createSO := e.GetChildWorkflowInstanceCreated()
 
 		//nolint:protogetter
 		startEvent := &protos.HistoryEvent{
@@ -45,13 +45,13 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 				ExecutionStarted: &protos.ExecutionStartedEvent{
 					Name: createSO.Name,
 					ParentInstance: &protos.ParentInstanceInfo{
-						TaskScheduledId:       e.EventId,
-						Name:                  wrapperspb.String(startEventName),
-						OrchestrationInstance: &protos.OrchestrationInstance{InstanceId: o.actorID},
-						AppID:                 new(o.appID),
+						TaskScheduledId:  e.EventId,
+						Name:             wrapperspb.String(startEventName),
+						WorkflowInstance: &protos.WorkflowInstance{InstanceId: o.actorID},
+						AppID:            new(o.appID),
 					},
 					Input: createSO.Input,
-					OrchestrationInstance: &protos.OrchestrationInstance{
+					WorkflowInstance: &protos.WorkflowInstance{
 						InstanceId:  createSO.InstanceId,
 						ExecutionId: wrapperspb.String(uuid.New().String()),
 					},
@@ -67,7 +67,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			return fmt.Errorf("failed to marshal child workflow request: %w", err)
 		}
 
-		id := e.GetSubOrchestrationInstanceCreated().GetInstanceId()
+		id := e.GetChildWorkflowInstanceCreated().GetInstanceId()
 		req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
 			WithActor(o.actorType, id).
 			WithData(reqP).
