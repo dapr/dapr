@@ -320,7 +320,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(t.Context())
+		require.NoError(t, rt.flushOutstandingComponents(t.Context()))
 		assert.True(t, wasCalled)
 
 		// Make sure that the goroutine was restarted and can flush a second time
@@ -342,7 +342,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(t.Context())
+		require.NoError(t, rt.flushOutstandingComponents(t.Context()))
 		assert.True(t, wasCalled)
 	})
 	t.Run("flushOutstandingComponents blocks for components with outstanding dependanices", func(t *testing.T) {
@@ -448,7 +448,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		rt.flushOutstandingComponents(t.Context())
+		require.NoError(t, rt.flushOutstandingComponents(t.Context()))
 		assert.True(t, wasCalled)
 		assert.True(t, wasCalledChild)
 		assert.True(t, wasCalledGrandChild)
@@ -1708,6 +1708,8 @@ spec:
 		case <-time.After(5 * time.Second):
 			t.Error("timed out waiting for runtime to error")
 		}
+
+		assert.False(t, rt.runtimeConfig.healthz.IsReady())
 
 		select {
 		case <-secretClosed:
