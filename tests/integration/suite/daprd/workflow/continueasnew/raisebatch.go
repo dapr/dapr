@@ -77,9 +77,6 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 			return inc + 1, nil
 		}
 
-		// Use negative timeout (wait indefinitely) so no durable timer is created.
-		// Without a timer reminder the actor deactivates after yielding, clearing
-		// the in-memory cache.
 		ctx.WaitForSingleEvent("incr", -1).Await(nil)
 		ctx.ContinueAsNew(inc+1, task.WithKeepUnprocessedEvents())
 		return nil, nil
@@ -132,13 +129,13 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
 
-	// The workflow should complete. The exact output depends on how many
-	// CAN iterations succeeded across retries before drainMode is set —
-	// this is non-deterministic because multiple retries may fire within
-	// the sleep window, each processing up to MaxContinueAsNewCount (20)
-	// iterations. The critical thing is that the workflow completes and
-	// doesn't hang — which it would if the CAN progress wasn't saved
-	// (the retry would hit the same limit with the same 25 events forever).
+	// The workflow should complete. The exact output depends on how many CAN
+	// iterations succeeded across retries before drainMode is set. This is
+	// non-deterministic because multiple retries may fire within the sleep
+	// window, each processing up to MaxContinueAsNewCount (20) iterations. The
+	// critical thing is that the workflow completes and doesn't hang, which it
+	// would if the CAN progress wasn't saved (the retry would hit the same limit
+	// with the same 25 events forever).
 	require.NotNil(t, meta.GetOutput(),
 		"workflow should complete with output; nil means it hung")
 }
