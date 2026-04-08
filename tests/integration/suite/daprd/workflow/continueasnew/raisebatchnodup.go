@@ -70,17 +70,15 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, ctx.GetInput(&inc))
 
 		if drainMode.Load() {
-			for {
-				var got bool
-				ctx.WaitForSingleEvent("incr", 3*time.Second).Await(&got)
-				if !got {
-					return inc, nil
-				}
-				eventCount.Add(1)
-				inc++
-				ctx.ContinueAsNew(inc, task.WithKeepUnprocessedEvents())
-				return nil, nil
+			var got bool
+			ctx.WaitForSingleEvent("incr", 3*time.Second).Await(&got)
+			if !got {
+				return inc, nil
 			}
+			eventCount.Add(1)
+			inc++
+			ctx.ContinueAsNew(inc, task.WithKeepUnprocessedEvents())
+			return nil, nil
 		}
 
 		ctx.WaitForSingleEvent("incr", time.Minute).Await(nil)

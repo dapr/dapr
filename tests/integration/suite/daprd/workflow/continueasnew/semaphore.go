@@ -82,24 +82,25 @@ func (s *semaphore) Run(t *testing.T, ctx context.Context) {
 		var st coordState
 		require.NoError(t, ctx.GetInput(&st))
 
-		dispatching := false
 		for len(st.Pending) > 0 && st.Active < maxConcurrency {
 			reqID := st.Pending[0]
 			st.Pending = st.Pending[1:]
 			st.Active++
-			dispatching = true
 			require.NoError(t, ctx.CallActivity("sem-dispatch",
 				task.WithActivityInput(reqID),
 			).Await(nil))
 		}
 
-		if dispatching && st.Active > 0 {
+		// Drain "done" events whenever there are active slots to free,
+		// regardless of whether we dispatched in this iteration.
+		for st.Active > 0 {
 			var done bool
 			ctx.WaitForSingleEvent("done", 200*time.Millisecond).Await(&done)
-			if done {
-				st.Active--
-				st.Done++
+			if !done {
+				break
 			}
+			st.Active--
+			st.Done++
 		}
 
 		if st.Done >= totalRequests {
@@ -151,6 +152,6 @@ func (s *semaphore) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, 1, count,
 			"request %q dispatched %d times, expected 1", reqID, count)
 	}
-	assert.GreaterOrEqual(t, len(dispatched), totalRequests,
+	assert.Equal(t, totalRequests, len(dispatched),
 		"all %d requests should have been dispatched", totalRequests)
 }
