@@ -286,7 +286,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 
 		err = diag.InitMetrics(meter, intc.id, namespace, metricsSpec)
 		if err != nil {
-			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
+			log.Error(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
 		}
 	}
 

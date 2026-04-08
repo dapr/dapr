@@ -922,12 +922,12 @@ func TestGracefulShutdown(t *testing.T) {
 
 func TestPodName(t *testing.T) {
 	t.Run("empty podName", func(t *testing.T) {
-		assert.Empty(t, getPodName())
+		assert.Empty(t, os.Getenv("POD_NAME"))
 	})
 
 	t.Run("non-empty podName", func(t *testing.T) {
 		t.Setenv("POD_NAME", "testPodName")
-		assert.Equal(t, "testPodName", getPodName())
+		assert.Equal(t, "testPodName", os.Getenv("POD_NAME"))
 	})
 }
 

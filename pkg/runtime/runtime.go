@@ -656,7 +656,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Register and initialize name resolution for service discovery.
 	err = a.initNameResolution(ctx)
 	if err != nil {
-		log.Errorf(err.Error())
+		log.Error(err.Error())
 	}
 
 	// Start proxy
