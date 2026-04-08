@@ -17,9 +17,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -109,6 +111,15 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend
+	// Snapshot o.rstate before the engine runs. The engine shares wi.State
+	// with o.rstate (same pointer) and may overwrite it during ContinueAsNew
+	// (*s = *newState in the applier). If the engine fails, we restore the
+	// snapshot so the cached state remains consistent with the store.
+	var rstateSnapshot *backend.OrchestrationRuntimeState
+	if o.rstate != nil {
+		rstateSnapshot = proto.Clone(o.rstate).(*backend.OrchestrationRuntimeState)
+	}
+
 	// TODO: @joshvanl remove.
 	err = o.scheduler(ctx, wi)
 	if err != nil {
@@ -130,12 +141,35 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
-		// Workflow execution failed with recoverable error
+		// The engine may have partially mutated o.rstate via the shared
+		// wi.State pointer before the context was cancelled. Restore the
+		// snapshot so the cached state stays consistent with the store.
+		o.rstate = rstateSnapshot
 		executionStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, ctx.Err()
 	case completed := <-callback:
 		if !completed {
-			// Workflow execution failed with recoverable error
+			// The engine abandoned this work item (e.g. MaxContinueAsNewCount
+			// exceeded). The engine's ContinueAsNew tight-loop may have
+			// overwritten o.rstate via the shared wi.State pointer
+			// (*s = *newState in the applier). If CAN progress was made,
+			// persist it to the state store so it survives actor
+			// deactivation. The inbox is NOT cleared — it still contains
+			// the original events. On retry, the engine replays from the
+			// saved CAN progress and re-processes the inbox, skipping
+			// already-consumed events via deduplication.
+			// If no CAN progress was made (non-CAN failure), restore the
+			// pre-engine snapshot so the cached state stays consistent.
+			if wi.State.GetContinuedAsNew() {
+				state.ApplyRuntimeStateChanges(wi.State)
+				state.Generation++
+				if err = o.saveInternalState(ctx, state); err != nil {
+					o.rstate = rstateSnapshot
+					return todo.RunCompletedFalse, err
+				}
+			} else {
+				o.rstate = rstateSnapshot
+			}
 			executionStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(todo.ErrExecutionAborted)
 		}
@@ -171,13 +205,9 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
-	err = o.callActivities(ctx, rs.GetPendingTasks(), state)
-	if err != nil {
-		executionStatus = diag.StatusRecoverable
-		return todo.RunCompletedFalse, err
-	}
+	pendingTasks := rs.GetPendingTasks()
 
-	// Process the outbound orchestrator events
+	// Process the outbound orchestrator events.
 	var addWorkflows []*backend.OrchestrationRuntimeStateMessage
 	var createWorkflows []*backend.OrchestrationRuntimeStateMessage
 	for _, msg := range rs.GetPendingMessages() {
@@ -193,12 +223,51 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 	}
 
-	if err = o.callAddEventStateMessage(ctx, addWorkflows); err != nil {
-		return todo.RunCompletedFalse, err
-	}
+	// Dispatch activities and messages, collecting failures.
+	activityResult := o.callActivities(ctx, pendingTasks, state)
+	addResult := o.callAddEventStateMessage(ctx, addWorkflows)
+	createResult := o.callCreateWorkflowStateMessage(ctx, createWorkflows)
 
-	if err = o.callCreateWorkflowStateMessage(ctx, createWorkflows); err != nil {
-		return todo.RunCompletedFalse, err
+	dispatchErr := errors.Join(activityResult.err, addResult.err, createResult.err)
+	if dispatchErr != nil {
+		if len(state.History) == 0 && (hasRemoteTasks(pendingTasks) || hasRemoteMessages(createWorkflows)) {
+			// Save state without the events that failed to dispatch so the
+			// workflow transitions to RUNNING. Successfully dispatched items
+			// keep their events in history so they are not re-dispatched on
+			// retry. The inbox is preserved so the existing reminder retries
+			// the full execution.
+			allFailed := make(map[int32]struct{}, len(activityResult.failedEventIDs)+len(createResult.failedEventIDs)+len(addResult.failedEventIDs))
+			maps.Copy(allFailed, activityResult.failedEventIDs)
+			maps.Copy(allFailed, createResult.failedEventIDs)
+			maps.Copy(allFailed, addResult.failedEventIDs)
+
+			// Temporarily replace rs.NewEvents with a filtered copy that excludes
+			// failed dispatch events, then restore the original after
+			// ApplyRuntimeStateChanges. This works because ApplyRuntimeStateChanges
+			// reads rs.NewEvents by reference (via GetNewEvents()) and appends
+			// directly to state.History. It does not copy or retain the slice.
+			origNewEvents := rs.NewEvents
+			filtered := origNewEvents[:0:0]
+			for _, e := range origNewEvents {
+				if isDispatchableEvent(e) {
+					if _, failed := allFailed[e.GetEventId()]; failed {
+						continue
+					}
+				}
+				filtered = append(filtered, e)
+			}
+			rs.NewEvents = filtered
+			state.ApplyRuntimeStateChanges(rs)
+			rs.NewEvents = origNewEvents
+			if saveErr := o.saveInternalState(ctx, state); saveErr != nil {
+				return todo.RunCompletedFalse, saveErr
+			}
+			executionStatus = diag.StatusRecoverable
+			return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
+		}
+
+		executionStatus = diag.StatusRecoverable
+		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 	}
 
 	state.ApplyRuntimeStateChanges(rs)
