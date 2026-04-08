@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/task"
 )
 
@@ -72,4 +73,22 @@ func (d *base) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Empty(c, d.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
 	}, time.Second*20, 10*time.Millisecond)
+
+	hist, err := cl.GetInstanceHistory(ctx, id)
+	require.NoError(t, err)
+
+	var found bool
+	for _, e := range hist.GetEvents() {
+		tc := e.GetTimerCreated()
+		if tc == nil {
+			continue
+		}
+		found = true
+		ee := tc.GetExternalEvent()
+		require.NotNil(t, ee, "expected TimerCreated to have origin.external_event set")
+		assert.Equal(t, "bar", ee.GetName())
+		_, ok := tc.GetOrigin().(*protos.TimerCreatedEvent_ExternalEvent)
+		require.True(t, ok, "expected origin to be ExternalEvent, got %T", tc.GetOrigin())
+	}
+	require.True(t, found, "expected at least one TimerCreated event in history")
 }
