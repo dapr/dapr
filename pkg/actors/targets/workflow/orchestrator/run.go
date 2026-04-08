@@ -164,6 +164,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				state.ApplyRuntimeStateChanges(wi.State)
 				state.Generation++
 				if err = o.saveInternalState(ctx, state); err != nil {
+					o.rstate = rstateSnapshot
 					return todo.RunCompletedFalse, err
 				}
 			} else {
