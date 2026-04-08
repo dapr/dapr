@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -142,20 +143,25 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 
 // writeInboxToDB writes n EventRaised events and updated metadata directly
 // into the SQLite state store, using the same base64+is_binary encoding that
-// the Dapr sqlite state component uses.
-func writeInboxToDB(t *testing.T, ctx context.Context, db *sql.DB, tableName, appID, actorType, actorID string, n int) {
+// the Dapr sqlite state component uses. An optional input payload can be set
+// on each event.
+func writeInboxToDB(t *testing.T, ctx context.Context, db *sql.DB, tableName, appID, actorType, actorID string, n int, input ...*wrapperspb.StringValue) {
 	t.Helper()
 
 	keyPrefix := appID + "||" + actorType + "||" + actorID + "||"
 
 	for i := range n {
+		eventRaised := &protos.EventRaisedEvent{
+			Name: "incr",
+		}
+		if len(input) > 0 {
+			eventRaised.Input = input[0]
+		}
 		evt := &protos.HistoryEvent{
 			EventId:   int32(i),
 			Timestamp: timestamppb.Now(),
 			EventType: &protos.HistoryEvent_EventRaised{
-				EventRaised: &protos.EventRaisedEvent{
-					Name: "incr",
-				},
+				EventRaised: eventRaised,
 			},
 		}
 		raw, err := proto.Marshal(evt)

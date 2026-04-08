@@ -15,26 +15,18 @@ package continueasnew
 
 import (
 	"context"
-	"database/sql"
-	"encoding/base64"
-	"fmt"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/api/protos"
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/task"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -81,7 +73,7 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		}
 
-		ctx.WaitForSingleEvent("incr", time.Minute).Await(nil)
+		require.NoError(t, ctx.WaitForSingleEvent("incr", time.Minute).Await(nil))
 		eventCount.Add(1)
 		ctx.ContinueAsNew(inc+1, task.WithKeepUnprocessedEvents())
 		return nil, nil
@@ -115,7 +107,7 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 
 	db := r.workflow.DB().GetConnection(t)
 	tableName := r.workflow.DB().TableName()
-	writeInboxWithPayloadToDB(t, ctx, db, tableName, appID, actorType, actorID, totalEvents)
+	writeInboxToDB(t, ctx, db, tableName, appID, actorType, actorID, totalEvents, wrapperspb.String(`true`))
 
 	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: actorType,
@@ -136,62 +128,4 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 		"each event should be processed exactly once; duplicates indicate "+
 			"the inbox was not properly replaced with carryover events "+
 			"during CAN progress save")
-}
-
-// writeInboxWithPayloadToDB writes n EventRaised events with a `true` payload
-// directly into the SQLite state store.
-func writeInboxWithPayloadToDB(t *testing.T, ctx context.Context, db *sql.DB, tableName, appID, actorType, actorID string, n int) {
-	t.Helper()
-
-	keyPrefix := appID + "||" + actorType + "||" + actorID + "||"
-
-	for i := range n {
-		evt := &protos.HistoryEvent{
-			EventId:   int32(i),
-			Timestamp: timestamppb.Now(),
-			EventType: &protos.HistoryEvent_EventRaised{
-				EventRaised: &protos.EventRaisedEvent{
-					Name:  "incr",
-					Input: wrapperspb.String(`true`),
-				},
-			},
-		}
-		raw, err := proto.Marshal(evt)
-		require.NoError(t, err)
-
-		encoded := base64.StdEncoding.EncodeToString(raw)
-		key := fmt.Sprintf("%sinbox-%06d", keyPrefix, i)
-		_, err = db.ExecContext(ctx,
-			fmt.Sprintf("INSERT OR REPLACE INTO '%s' (key, value, is_binary, etag) VALUES (?, ?, 1, ?)", tableName),
-			key, encoded, strconv.FormatInt(time.Now().UnixNano(), 10),
-		)
-		require.NoError(t, err)
-	}
-
-	metaKey := keyPrefix + "metadata"
-	var existingVal string
-	var isBin bool
-	err := db.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT value, is_binary FROM '%s' WHERE key = ?", tableName),
-		metaKey,
-	).Scan(&existingVal, &isBin)
-	require.NoError(t, err)
-	require.True(t, isBin)
-
-	var meta backend.BackendWorkflowStateMetadata
-	raw, derr := base64.StdEncoding.DecodeString(existingVal)
-	require.NoError(t, derr)
-	require.NoError(t, proto.Unmarshal(raw, &meta))
-
-	//nolint:gosec
-	meta.InboxLength = uint64(n)
-	raw, err = proto.Marshal(&meta)
-	require.NoError(t, err)
-
-	encoded := base64.StdEncoding.EncodeToString(raw)
-	_, err = db.ExecContext(ctx,
-		fmt.Sprintf("INSERT OR REPLACE INTO '%s' (key, value, is_binary, etag) VALUES (?, ?, 1, ?)", tableName),
-		metaKey, encoded, strconv.FormatInt(time.Now().UnixNano(), 10),
-	)
-	require.NoError(t, err)
 }

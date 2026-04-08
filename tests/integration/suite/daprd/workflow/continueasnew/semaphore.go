@@ -108,7 +108,9 @@ func (s *semaphore) Run(t *testing.T, ctx context.Context) {
 		}
 
 		var reqID string
-		ctx.WaitForSingleEvent("request", 30*time.Second).Await(&reqID)
+		if err := ctx.WaitForSingleEvent("request", 30*time.Second).Await(&reqID); err != nil {
+			return nil, err
+		}
 		if reqID != "" {
 			st.Pending = append(st.Pending, reqID)
 		}
@@ -152,6 +154,6 @@ func (s *semaphore) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, 1, count,
 			"request %q dispatched %d times, expected 1", reqID, count)
 	}
-	assert.Equal(t, totalRequests, len(dispatched),
+	assert.Len(t, dispatched, totalRequests,
 		"all %d requests should have been dispatched", totalRequests)
 }
