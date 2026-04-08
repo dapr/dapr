@@ -53,7 +53,7 @@ func (o *orchestrator) handleStream(ctx context.Context,
 			Message: &commonv1pb.InvokeResponse{Data: arstate},
 		})
 		if err != nil || ok {
-			if api.OrchestrationMetadataIsComplete(ometa) {
+			if api.WorkflowMetadataIsComplete(ometa) {
 				o.deactivate(o)
 			}
 			return false, err

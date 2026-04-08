@@ -62,7 +62,7 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("connect_multiple_workers_to_single_daprd", func(t *testing.T) {
 		r := task.NewTaskRegistry()
-		r.AddOrchestratorN("ConnectMultipleListenersToSingleDaprd", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("ConnectMultipleListenersToSingleDaprd", func(ctx *task.WorkflowContext) (any, error) {
 			var input string
 			if err := ctx.GetInput(&input); err != nil {
 				return nil, err
@@ -102,17 +102,17 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 
 				if i == 0 {
 					// only the first worker will schedule the orchestration
-					if _, err = backendClient.ScheduleNewOrchestration(ctx, "ConnectMultipleListenersToSingleDaprd", api.WithInstanceID("Dapr"), api.WithInput("Dapr")); err != nil {
+					if _, err = backendClient.ScheduleNewWorkflow(ctx, "ConnectMultipleListenersToSingleDaprd", api.WithInstanceID("Dapr"), api.WithInput("Dapr")); err != nil {
 						return err
 					}
 				}
 
-				metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID("Dapr"), api.WithFetchPayloads(true))
+				metadata, err := backendClient.WaitForWorkflowCompletion(ctx, api.InstanceID("Dapr"), api.WithFetchPayloads(true))
 				if err != nil {
 					return err
 				}
 
-				if !api.OrchestrationMetadataIsComplete(metadata) {
+				if !api.WorkflowMetadataIsComplete(metadata) {
 					return errors.New("orchestration is not complete")
 				}
 				if metadata.GetOutput().GetValue() != `"Hello, Dapr!"` {
