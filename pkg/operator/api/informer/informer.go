@@ -92,7 +92,7 @@ func (i *informer[T]) Run(ctx context.Context) error {
 		// version-skew scenarios where newer control plane binaries run against a
 		// cluster that doesn't yet have all CRDs.
 		if apimeta.IsNoMatchError(err) {
-			i.log.Warnf("CRD for %s not found, skipping informer", zero.Kind())
+			i.log.Warnf("CRD for %s/%s not found, skipping informer: %v", zero.APIVersion(), zero.Kind(), err)
 			<-ctx.Done()
 			return nil
 		}
