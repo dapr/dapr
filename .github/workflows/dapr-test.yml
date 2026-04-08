@@ -354,14 +354,13 @@ jobs:
       - name: Push Dapr container images
         if: env.TEST_PREFIX != ''
         run: |
-          push_cmd="make docker-push"
           if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
             # For Linux, we use images based on Mariner
-            push_cmd="DOCKERFILE=Dockerfile-mariner make docker-push"
+            export DOCKERFILE=Dockerfile-mariner
           fi
           # Retry docker-push up to 3 times for transient registry errors
           for i in 1 2 3; do
-            eval $push_cmd && break
+            make docker-push && break
             echo "docker-push attempt $i failed, retrying in $((i * 5))s..."
             sleep $((i * 5))
             if [ $i -eq 3 ]; then

@@ -225,7 +225,7 @@ func (c *cmdE2EPerf) buildAndPushCmd(cmd *cobra.Command, args []string) error {
 		}
 
 		// Copying the image failed, so we'll resort to build + push
-		fmt.Printf("Copying image directly from cache failed after 3 attempts. Will build image.\n")
+		fmt.Printf("Copying image directly from cache failed after 3 attempts: %s. Will build image.\n", err)
 	} else {
 		fmt.Println("Cache registry not set: will not use cache")
 	}
