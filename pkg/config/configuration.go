@@ -68,6 +68,12 @@ const (
 	// history events are signed using the app's X.509 SVID identity,
 	// creating a verifiable chain of signatures. Enabled by default.
 	WorkflowSignState Feature = "WorkflowSignState"
+
+	// Enables support for the MCPServer first-class resource,
+	// which declares connections to MCP (Model Context Protocol) servers.
+	// When enabled, daprd loads MCPServer manifests at startup,
+	// and makes them available for tool execution via workflow orchestrations.
+	MCPServerResource Feature = "MCPServerResource"
 )
 
 // end feature flags section
