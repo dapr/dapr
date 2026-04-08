@@ -50,18 +50,18 @@ func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
 	var act atomic.Int64
-	s.workflow.Registry().AddOrchestratorN("foo1", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry().AddWorkflowN("foo1", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
-		require.NoError(t, ctx.CallSubOrchestrator("foo2").Await(nil))
-		require.NoError(t, ctx.CallSubOrchestrator("foo3").Await(nil))
+		require.NoError(t, ctx.CallChildWorkflow("foo2").Await(nil))
+		require.NoError(t, ctx.CallChildWorkflow("foo3").Await(nil))
 		return nil, nil
 	})
-	s.workflow.Registry().AddOrchestratorN("foo2", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry().AddWorkflowN("foo2", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
-		require.NoError(t, ctx.CallSubOrchestrator("foo3").Await(nil))
+		require.NoError(t, ctx.CallChildWorkflow("foo3").Await(nil))
 		return nil, nil
 	})
-	s.workflow.Registry().AddOrchestratorN("foo3", func(ctx *task.OrchestrationContext) (any, error) {
+	s.workflow.Registry().AddWorkflowN("foo3", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
 	})
@@ -71,16 +71,16 @@ func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 	})
 	client := s.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo1", api.WithInstanceID("abc"))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo1", api.WithInstanceID("abc"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, int64(4), act.Load())
 
 	act.Store(0)
 	newID, err := client.RerunWorkflowFromEvent(ctx, id, 0)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(4), act.Load())
 

@@ -38,7 +38,7 @@ type purge struct {
 func (r *purge) Setup(t *testing.T) []framework.Option {
 	r.fw = stalled.New(t,
 		stalled.WithInitialReplica("new"),
-		stalled.WithNamedWorkflowReplica("new", func(ctx *task.OrchestrationContext) (any, error) {
+		stalled.WithNamedWorkflowReplica("new", func(ctx *task.WorkflowContext) (any, error) {
 			if ctx.IsPatched("patch1") {
 				if err := ctx.CallActivity("activity2").Await(nil); err != nil {
 					return nil, err
@@ -53,7 +53,7 @@ func (r *purge) Setup(t *testing.T) []framework.Option {
 			}
 			return nil, nil
 		}),
-		stalled.WithNamedWorkflowReplica("old", func(ctx *task.OrchestrationContext) (any, error) {
+		stalled.WithNamedWorkflowReplica("old", func(ctx *task.WorkflowContext) (any, error) {
 			if err := ctx.CallActivity("activity1").Await(nil); err != nil {
 				return nil, err
 			}
@@ -85,10 +85,10 @@ func (r *purge) Run(t *testing.T, ctx context.Context) {
 	r.fw.WaitForStalled(t, ctx, id)
 
 	// Resuming a stalled workflow should do nothing
-	err := r.fw.CurrentClient.PurgeOrchestrationState(ctx, id)
+	err := r.fw.CurrentClient.PurgeWorkflowState(ctx, id)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stalled")
 
-	err = r.fw.CurrentClient.PurgeOrchestrationState(ctx, id, api.WithForcePurge(true))
+	err = r.fw.CurrentClient.PurgeWorkflowState(ctx, id, api.WithForcePurge(true))
 	require.NoError(t, err)
 }

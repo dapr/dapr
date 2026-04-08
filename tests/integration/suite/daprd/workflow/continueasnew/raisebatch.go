@@ -65,7 +65,7 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	var drainMode atomic.Bool
 	const totalEvents = 25
 
-	r.workflow.Registry().AddOrchestratorN("raisebatch", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddWorkflowN("raisebatch", func(ctx *task.WorkflowContext) (any, error) {
 		var inc int
 		require.NoError(t, ctx.GetInput(&inc))
 
@@ -85,13 +85,13 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	client := r.workflow.BackendClient(t, ctx)
 	gclient := r.workflow.GRPCClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "raisebatch",
+	id, err := client.ScheduleNewWorkflow(ctx, "raisebatch",
 		api.WithInstanceID("raisebatchi"),
 		api.WithInput(0),
 	)
 	require.NoError(t, err)
 
-	_, err = client.WaitForOrchestrationStart(ctx, id)
+	_, err = client.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
 
 	appID := r.workflow.Dapr().AppID()
@@ -126,7 +126,7 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	time.Sleep(2 * time.Second)
 	drainMode.Store(true)
 
-	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	// The workflow should complete. The exact output depends on how many CAN
@@ -181,7 +181,7 @@ func writeInboxToDB(t *testing.T, ctx context.Context, db *sql.DB, tableName, ap
 
 	require.True(t, isBin, "expected workflow metadata row %q to be stored as binary", metaKey)
 
-	var meta backend.WorkflowStateMetadata
+	var meta backend.BackendWorkflowStateMetadata
 	raw, derr := base64.StdEncoding.DecodeString(existingVal)
 	require.NoError(t, derr)
 	require.NoError(t, proto.Unmarshal(raw, &meta))

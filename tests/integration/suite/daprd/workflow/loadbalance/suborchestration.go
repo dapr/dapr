@@ -50,11 +50,11 @@ func (s *suborchestration) Setup(t *testing.T) []framework.Option {
 func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 
-	require.NoError(t, s.workflow.RegistryN(0).AddOrchestratorN("top", func(ctx *task.OrchestrationContext) (any, error) {
-		require.NoError(t, ctx.CallSubOrchestrator("sub").Await(nil))
+	require.NoError(t, s.workflow.RegistryN(0).AddWorkflowN("top", func(ctx *task.WorkflowContext) (any, error) {
+		require.NoError(t, ctx.CallChildWorkflow("sub").Await(nil))
 		return nil, nil
 	}))
-	require.NoError(t, s.workflow.RegistryN(0).AddOrchestratorN("sub", func(ctx *task.OrchestrationContext) (any, error) {
+	require.NoError(t, s.workflow.RegistryN(0).AddWorkflowN("sub", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	}))
 	_ = s.workflow.BackendClientN(t, ctx, 0)
@@ -74,12 +74,12 @@ func (s *suborchestration) Run(t *testing.T, ctx context.Context) {
 
 	var err error
 	for i := range n {
-		ids[i], err = client.ScheduleNewOrchestration(ctx, "top")
+		ids[i], err = client.ScheduleNewWorkflow(ctx, "top")
 		require.NoError(t, err)
 	}
 
 	for i := range n {
-		_, err = client.WaitForOrchestrationCompletion(ctx, ids[i])
+		_, err = client.WaitForWorkflowCompletion(ctx, ids[i])
 		require.NoError(t, err)
 	}
 }
