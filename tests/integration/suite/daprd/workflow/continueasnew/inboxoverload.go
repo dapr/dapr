@@ -19,10 +19,12 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -40,62 +42,60 @@ import (
 )
 
 func init() {
-	suite.Register(new(raisebatch))
+	suite.Register(new(inboxoverload))
 }
 
-// raisebatch is a regression test for the state corruption bug where o.rstate
-// was shared with wi.State via a bare pointer. When the engine's
-// ContinueAsNew tight-loop exceeded MaxContinueAsNewCount (20), the applier
-// had already mutated *wi.State (and thus o.rstate) via *s = *newState. On
-// retry the corrupted rstate would carry forward a wrong input value, causing
-// the workflow's counter to jump ahead and silently skip events.
-type raisebatch struct {
+// inboxoverload injects 25 events with unique payloads directly into the state
+// store, guaranteeing MaxContinueAsNewCount (20) is exceeded. The workflow
+// tracks every received payload. This verifies each payload is received
+// exactly once, none are lost, and ordering is preserved.
+type inboxoverload struct {
 	workflow *workflow.Workflow
 }
 
-func (r *raisebatch) Setup(t *testing.T) []framework.Option {
-	r.workflow = workflow.New(t)
+func (i *inboxoverload) Setup(t *testing.T) []framework.Option {
+	i.workflow = workflow.New(t)
 	return []framework.Option{
-		framework.WithProcesses(r.workflow),
+		framework.WithProcesses(i.workflow),
 	}
 }
 
-func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
-	r.workflow.WaitUntilRunning(t, ctx)
+func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
+	i.workflow.WaitUntilRunning(t, ctx)
 
-	var drainMode atomic.Bool
 	const totalEvents = 25
 
-	r.workflow.Registry().AddWorkflowN("raisebatch", func(ctx *task.WorkflowContext) (any, error) {
+	var mu sync.Mutex
+	var payloads []string
+	var drainMode atomic.Bool
+
+	i.workflow.Registry().AddWorkflowN("inboxoverload", func(ctx *task.WorkflowContext) (any, error) {
 		var inc int
 		require.NoError(t, ctx.GetInput(&inc))
 
-		// In drain mode, process one event and complete. The CAN progress
-		// was saved when MaxContinueAsNewCount was hit, so inc reflects
-		// the saved progress (e.g. 20 after 20 successful CAN iterations).
-		if drainMode.Load() {
-			ctx.WaitForSingleEvent("incr", time.Minute).Await(nil)
-			return inc + 1, nil
-		}
-
-		var got bool
-		ctx.WaitForSingleEvent("incr", 3*time.Second).Await(&got)
-		if !got {
+		var val string
+		ctx.WaitForSingleEvent("ev", 3*time.Second).Await(&val)
+		if val == "" {
 			if drainMode.Load() {
 				return inc, nil
 			}
 			ctx.ContinueAsNew(inc, task.WithKeepUnprocessedEvents())
 			return nil, nil
 		}
+
+		mu.Lock()
+		payloads = append(payloads, val)
+		mu.Unlock()
+
 		ctx.ContinueAsNew(inc+1, task.WithKeepUnprocessedEvents())
 		return nil, nil
 	})
 
-	client := r.workflow.BackendClient(t, ctx)
-	gclient := r.workflow.GRPCClient(t, ctx)
+	client := i.workflow.BackendClient(t, ctx)
+	gclient := i.workflow.GRPCClient(t, ctx)
 
-	id, err := client.ScheduleNewWorkflow(ctx, "raisebatch",
-		api.WithInstanceID("raisebatchi"),
+	id, err := client.ScheduleNewWorkflow(ctx, "inboxoverload",
+		api.WithInstanceID("inboxoverloadi"),
 		api.WithInput(0),
 	)
 	require.NoError(t, err)
@@ -103,13 +103,10 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
 
-	appID := r.workflow.Dapr().AppID()
+	appID := i.workflow.Dapr().AppID()
 	actorType := "dapr.internal.default." + appID + ".workflow"
-	actorID := "raisebatchi"
+	actorID := "inboxoverloadi"
 
-	// Force the actor to deactivate by firing a dummy reminder. The reminder
-	// finds an empty inbox and returns RunCompletedTrue, which triggers
-	// deactivation and clears the in-memory cache.
 	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: actorType,
 		ActorId:   actorID,
@@ -120,9 +117,9 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 
 	time.Sleep(2 * time.Second)
 
-	db := r.workflow.DB().GetConnection(t)
-	tableName := r.workflow.DB().TableName()
-	writeInboxToDB(t, ctx, db, tableName, appID, actorType, actorID, totalEvents)
+	db := i.workflow.DB().GetConnection(t)
+	tableName := i.workflow.DB().TableName()
+	writeUniquePayloadInbox(t, ctx, db, tableName, appID, actorType, actorID, totalEvents)
 
 	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: actorType,
@@ -137,46 +134,48 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 
 	meta, err := client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
+	require.NotNil(t, meta.GetOutput())
 
-	// The workflow should complete. The exact output depends on how many CAN
-	// iterations succeeded across retries before drainMode is set. This is
-	// non-deterministic because multiple retries may fire within the sleep
-	// window, each processing up to MaxContinueAsNewCount (20) iterations. The
-	// critical thing is that the workflow completes and doesn't hang, which it
-	// would if the CAN progress wasn't saved (the retry would hit the same limit
-	// with the same 25 events forever).
-	require.NotNil(t, meta.GetOutput(),
-		"workflow should complete with output; nil means it hung")
+	mu.Lock()
+	defer mu.Unlock()
+
+	assert.Len(t, payloads, totalEvents)
+
+	seen := make(map[string]int)
+	for _, p := range payloads {
+		seen[p]++
+	}
+	for p, count := range seen {
+		assert.Equal(t, 1, count, "payload %q seen %d times", p, count)
+	}
+
+	for idx, p := range payloads {
+		assert.Equal(t, fmt.Sprintf("payload-%d", idx), p,
+			"event at position %d has wrong payload", idx)
+	}
 }
 
-// writeInboxToDB writes n EventRaised events and updated metadata directly
-// into the SQLite state store, using the same base64+is_binary encoding that
-// the Dapr sqlite state component uses. An optional input payload can be set
-// on each event.
-func writeInboxToDB(t *testing.T, ctx context.Context, db *sql.DB, tableName, appID, actorType, actorID string, n int, input ...*wrapperspb.StringValue) {
+func writeUniquePayloadInbox(t *testing.T, ctx context.Context, db *sql.DB, tableName, appID, actorType, actorID string, n int) {
 	t.Helper()
 
 	keyPrefix := appID + "||" + actorType + "||" + actorID + "||"
 
-	for i := range n {
-		eventRaised := &protos.EventRaisedEvent{
-			Name: "incr",
-		}
-		if len(input) > 0 {
-			eventRaised.Input = input[0]
-		}
+	for j := range n {
 		evt := &protos.HistoryEvent{
-			EventId:   int32(i),
+			EventId:   int32(j),
 			Timestamp: timestamppb.Now(),
 			EventType: &protos.HistoryEvent_EventRaised{
-				EventRaised: eventRaised,
+				EventRaised: &protos.EventRaisedEvent{
+					Name:  "ev",
+					Input: wrapperspb.String(fmt.Sprintf(`"payload-%d"`, j)),
+				},
 			},
 		}
 		raw, err := proto.Marshal(evt)
 		require.NoError(t, err)
 
 		encoded := base64.StdEncoding.EncodeToString(raw)
-		key := fmt.Sprintf("%sinbox-%06d", keyPrefix, i)
+		key := fmt.Sprintf("%sinbox-%06d", keyPrefix, j)
 		_, err = db.ExecContext(ctx,
 			fmt.Sprintf("INSERT OR REPLACE INTO '%s' (key, value, is_binary, etag) VALUES (?, ?, 1, ?)", tableName),
 			key, encoded, strconv.FormatInt(time.Now().UnixNano(), 10),
@@ -192,8 +191,7 @@ func writeInboxToDB(t *testing.T, ctx context.Context, db *sql.DB, tableName, ap
 		metaKey,
 	).Scan(&existingVal, &isBin)
 	require.NoError(t, err)
-
-	require.True(t, isBin, "expected workflow metadata row %q to be stored as binary", metaKey)
+	require.True(t, isBin)
 
 	var meta backend.BackendWorkflowStateMetadata
 	raw, derr := base64.StdEncoding.DecodeString(existingVal)
