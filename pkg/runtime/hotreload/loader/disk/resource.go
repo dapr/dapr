@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 
 	internalloader "github.com/dapr/dapr/pkg/internal/loader"
+	"github.com/dapr/dapr/pkg/internal/loader/disk/dirdata"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -32,7 +33,7 @@ type resource[T differ.Resource] struct {
 	store      store.Store[T]
 	diskLoader internalloader.Loader[T]
 
-	triggerCh chan struct{}
+	triggerCh chan *dirdata.DirData
 	closeCh   chan struct{}
 	closed    atomic.Bool
 	wg        sync.WaitGroup
@@ -51,7 +52,7 @@ func newResource[T differ.Resource](opts resourceOptions[T]) *resource[T] {
 	return &resource[T]{
 		store:      opts.store,
 		diskLoader: opts.loader,
-		triggerCh:  make(chan struct{}, 1),
+		triggerCh:  make(chan *dirdata.DirData, 1),
 		closeCh:    make(chan struct{}),
 		resultCh:   make(chan struct{}, 1),
 	}
@@ -59,7 +60,25 @@ func newResource[T differ.Resource](opts resourceOptions[T]) *resource[T] {
 
 // List returns the current list of resources loaded from disk.
 func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], error) {
-	remotes, err := r.diskLoader.Load(ctx)
+	return r.list(ctx, nil)
+}
+
+// list returns the current list of resources. If dirData is non-nil, it uses
+// the pre-read file data instead of reading from disk.
+func (r *resource[T]) list(ctx context.Context, dirData *dirdata.DirData) (*differ.LocalRemoteResources[T], error) {
+	var remotes []T
+	var err error
+
+	if dirData != nil {
+		if ddl, ok := r.diskLoader.(dirdata.DirDataLoader[T]); ok {
+			remotes, err = ddl.LoadFromDirData(dirData)
+		} else {
+			remotes, err = r.diskLoader.Load(ctx)
+		}
+	} else {
+		remotes, err = r.diskLoader.Load(ctx)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -134,10 +153,17 @@ func (r *resource[T]) sendEvents(ctx context.Context, conn *loader.StreamConn[T]
 	}
 }
 
-// trigger sends a trigger signal to process file changes.
-func (r *resource[T]) trigger(ctx context.Context) error {
+// trigger sends a trigger signal to process file changes. If dirData is
+// non-nil, the pre-read file data is used instead of re-reading files from
+// disk, avoiding file handle contention when multiple resource types are
+// loaded from the same directories.
+func (r *resource[T]) trigger(ctx context.Context, dirData ...*dirdata.DirData) error {
+	var data *dirdata.DirData
+	if len(dirData) > 0 {
+		data = dirData[0]
+	}
 	select {
-	case r.triggerCh <- struct{}{}:
+	case r.triggerCh <- data:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -153,17 +179,18 @@ func (r *resource[T]) run(ctx context.Context) error {
 	}()
 
 	for {
+		var dirData *dirdata.DirData
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-r.closeCh:
 			return nil
-		case <-r.triggerCh:
+		case dirData = <-r.triggerCh:
 		}
 
 		// List the resources which exist locally (those loaded already), and those
 		// which reside as in a resource file on disk.
-		resources, err := r.List(ctx)
+		resources, err := r.list(ctx, dirData)
 		if err != nil {
 			return fmt.Errorf("failed to load resources from disk: %s", err)
 		}

@@ -51,7 +51,7 @@ func Test_runWorkflow_stateIsolation(t *testing.T) {
 			ExecutionStarted: &protos.ExecutionStartedEvent{
 				Name:  "TestWorkflow",
 				Input: wrapperspb.String(`0`),
-				OrchestrationInstance: &protos.OrchestrationInstance{
+				WorkflowInstance: &protos.WorkflowInstance{
 					InstanceId: instanceID,
 				},
 			},
@@ -61,8 +61,8 @@ func Test_runWorkflow_stateIsolation(t *testing.T) {
 	history := []*backend.HistoryEvent{
 		{
 			EventId: -1, Timestamp: timestamppb.Now(),
-			EventType: &protos.HistoryEvent_OrchestratorStarted{
-				OrchestratorStarted: &protos.OrchestratorStartedEvent{},
+			EventType: &protos.HistoryEvent_WorkflowStarted{
+				WorkflowStarted: &protos.WorkflowStartedEvent{},
 			},
 		},
 		startEvent,
@@ -93,24 +93,24 @@ func Test_runWorkflow_stateIsolation(t *testing.T) {
 		state.AddToHistory(e)
 	}
 
-	rstate := runtimestate.NewOrchestrationRuntimeState(instanceID, nil, history)
+	rstate := runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
 
-	originalRstate := proto.Clone(rstate).(*backend.OrchestrationRuntimeState)
+	originalRstate := proto.Clone(rstate).(*backend.WorkflowRuntimeState)
 
 	schedulerCalled := false
-	scheduler := func(_ context.Context, wi *backend.OrchestrationWorkItem) error {
+	scheduler := func(_ context.Context, wi *backend.WorkflowWorkItem) error {
 		schedulerCalled = true
 
 		// Simulate a non-CAN failure (e.g. gRPC stream disconnect) where
 		// the engine mutates wi.State but does NOT set ContinuedAsNew.
 		// Without proto.Clone, this mutation would corrupt o.rstate.
-		newState := &protos.OrchestrationRuntimeState{
+		newState := &protos.WorkflowRuntimeState{
 			InstanceId:     instanceID,
 			ContinuedAsNew: false,
 			StartEvent: &protos.ExecutionStartedEvent{
 				Name:  "TestWorkflow",
 				Input: wrapperspb.String(`999`), // Corrupted input
-				OrchestrationInstance: &protos.OrchestrationInstance{
+				WorkflowInstance: &protos.WorkflowInstance{
 					InstanceId: instanceID,
 				},
 			},

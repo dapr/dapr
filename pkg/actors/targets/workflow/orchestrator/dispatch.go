@@ -44,7 +44,7 @@ func hasRemoteTasks(es []*backend.HistoryEvent) bool {
 	return false
 }
 
-func hasRemoteMessages(msgs []*backend.OrchestrationRuntimeStateMessage) bool {
+func hasRemoteMessages(msgs []*backend.WorkflowRuntimeStateMessage) bool {
 	for _, msg := range msgs {
 		if router := msg.GetHistoryEvent().GetRouter(); router != nil && router.TargetAppID != nil {
 			return true
@@ -54,5 +54,5 @@ func hasRemoteMessages(msgs []*backend.OrchestrationRuntimeStateMessage) bool {
 }
 
 func isDispatchableEvent(e *backend.HistoryEvent) bool {
-	return e.GetTaskScheduled() != nil || e.GetSubOrchestrationInstanceCreated() != nil
+	return e.GetTaskScheduled() != nil || e.GetChildWorkflowInstanceCreated() != nil
 }

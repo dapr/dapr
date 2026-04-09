@@ -53,7 +53,7 @@ func (a *activity) Setup(t *testing.T) []framework.Option {
 func (a *activity) Run(t *testing.T, ctx context.Context) {
 	a.workflow.WaitUntilRunning(t, ctx)
 
-	a.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	a.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, ctx.CallActivity("bar").Await(nil)
 	})
 	a.workflow.Registry().AddActivityN("bar", func(c task.ActivityContext) (any, error) {
@@ -73,7 +73,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, a.workflow.Dapr().GetMetadata(t, ctx).ActorRuntime.ActiveActors, 3)
 	}, time.Second*10, time.Millisecond*10)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "foo")
+	id, err := client.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -93,7 +93,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
 	t.Cleanup(waitCompletionCancel)
-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+	meta, err := client.WaitForWorkflowCompletion(waitCompletionCtx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 

@@ -85,7 +85,7 @@ func (a *async) Run(t *testing.T, ctx context.Context) {
 
 	childs := make([]string, 0, 2)
 	for _, e := range history.Events {
-		if s := e.GetSubOrchestrationInstanceCreated(); s != nil {
+		if s := e.GetChildWorkflowInstanceCreated(); s != nil {
 			childs = append(childs, s.GetInstanceId())
 		}
 	}
