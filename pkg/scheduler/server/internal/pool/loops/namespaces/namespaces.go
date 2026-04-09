@@ -30,8 +30,9 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.pool.loops.namespaces")
 
 type Options struct {
-	Cron       api.Interface
-	CancelPool context.CancelCauseFunc
+	Cron           api.Interface
+	CancelPool     context.CancelCauseFunc
+	SchedulerCount func() int32
 }
 
 type connectionLoop struct {
@@ -42,8 +43,9 @@ type connectionLoop struct {
 // namespaces is the main control loop for managing stream
 // connections for each namespace.
 type namespaces struct {
-	cron       api.Interface
-	cancelPool context.CancelCauseFunc
+	cron           api.Interface
+	cancelPool     context.CancelCauseFunc
+	schedulerCount func() int32
 
 	// connections holds the active namespace connections.
 	connections map[string]*connectionLoop
@@ -54,9 +56,10 @@ type namespaces struct {
 
 func New(opts Options) loop.Interface[loops.EventNS] {
 	ns := &namespaces{
-		cron:        opts.Cron,
-		cancelPool:  opts.CancelPool,
-		connections: make(map[string]*connectionLoop),
+		cron:           opts.Cron,
+		cancelPool:     opts.CancelPool,
+		schedulerCount: opts.SchedulerCount,
+		connections:    make(map[string]*connectionLoop),
 	}
 
 	ns.loop = loop.New[loops.EventNS](1024).NewLoop(ns)
@@ -83,8 +86,9 @@ func (n *namespaces) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 	connLoop, ok := n.connections[add.Request.GetNamespace()]
 	if !ok {
 		loop := connections.New(connections.Options{
-			Cron:          n.cron,
-			NamespaceLoop: n.loop,
+			Cron:           n.cron,
+			NamespaceLoop:  n.loop,
+			SchedulerCount: n.schedulerCount,
 		})
 
 		n.wg.Go(func() {

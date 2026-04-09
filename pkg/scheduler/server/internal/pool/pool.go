@@ -30,13 +30,15 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler.server.pool")
 
 type Options struct {
-	Cron api.Interface
+	Cron           api.Interface
+	SchedulerCount func() int32
 }
 
 // Pool represents a connection pool for namespace/appID separation of sidecars
 // to schedulers.
 type Pool struct {
-	cron api.Interface
+	cron           api.Interface
+	schedulerCount func() int32
 
 	nsLoop  loop.Interface[loops.EventNS]
 	readyCh chan struct{}
@@ -44,16 +46,18 @@ type Pool struct {
 
 func New(opts Options) *Pool {
 	return &Pool{
-		readyCh: make(chan struct{}),
-		cron:    opts.Cron,
+		readyCh:        make(chan struct{}),
+		cron:           opts.Cron,
+		schedulerCount: opts.SchedulerCount,
 	}
 }
 
 func (p *Pool) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	p.nsLoop = namespaces.New(namespaces.Options{
-		Cron:       p.cron,
-		CancelPool: cancel,
+		Cron:           p.cron,
+		CancelPool:     cancel,
+		SchedulerCount: p.schedulerCount,
 	})
 
 	close(p.readyCh)

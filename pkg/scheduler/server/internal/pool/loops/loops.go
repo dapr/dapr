@@ -72,6 +72,11 @@ type ConnCloseStream struct {
 	Namespace string
 }
 
+type ConcurrencyRelease struct {
+	*connbase
+	GateKeys []string
+}
+
 // Shutdown is the event for shutting down the scheduler loops.
 type Shutdown struct {
 	*nsbase

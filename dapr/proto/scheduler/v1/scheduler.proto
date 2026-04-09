@@ -97,6 +97,12 @@ message JobMetadata {
 
   // target is the type of the job.
   JobTargetMetadata target = 3;
+
+  // concurrency_key is an optional key used for per-name concurrency limiting.
+  // When set, the scheduler enforces a separate concurrency gate keyed by this
+  // value in addition to any type-level gate. For workflow activities this is
+  // the activity name, for workflows this is the workflow name.
+  optional string concurrency_key = 4;
 }
 
 // WatchJobsRequest is the message used by the daprd sidecar to connect to the
@@ -122,6 +128,30 @@ message WatchJobsRequestInitial {
   // accept_job_types is the list of job types which the client will watch for
   // and accept upon triggering accept.
   repeated JobTargetType accept_job_types = 4;
+
+  // concurrency_limits is the optional list of global concurrency limits.
+  // When set, the scheduler will enforce these limits across all replicas by
+  // dividing the limit among scheduler instances. Each limit is identified by
+  // a key which groups triggers, and an optional concurrency_key for per-name
+  // sub-limits within a group.
+  repeated ConcurrencyLimit concurrency_limits = 5;
+}
+
+// ConcurrencyLimit defines a global concurrency limit enforced by the
+// scheduler across all replicas.
+message ConcurrencyLimit {
+  // group is the broad concurrency group that triggers belong to (e.g., all
+  // workflow invocations or all activity invocations for an app).
+  string group = 1;
+
+  // name is an optional identifier for a specific item within the group
+  // (e.g., a specific activity or workflow name like "SendEmail"). When set,
+  // the limit applies only to triggers matching both the group and this name.
+  optional string name = 2;
+
+  // max_concurrent is the maximum number of concurrent in-flight triggers
+  // across all replicas for this limit.
+  int32 max_concurrent = 3;
 }
 
 // WatchJobsRequestResultStatus is sent by clients to signal where the job

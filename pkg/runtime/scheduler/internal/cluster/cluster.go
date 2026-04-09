@@ -20,6 +20,7 @@ import (
 	"io"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/config"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
@@ -30,10 +31,11 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler.cluster")
 
 type Options struct {
-	Namespace  string
-	AppID      string
-	AppTarget  bool
-	ActorTypes []string
+	Namespace    string
+	AppID        string
+	AppTarget    bool
+	ActorTypes   []string
+	WorkflowSpec *config.WorkflowSpec
 
 	Clients  []schedulerv1pb.SchedulerClient
 	Actors   actors.Interface
@@ -43,10 +45,11 @@ type Options struct {
 
 // Cluster manages connections to multiple schedulers.
 type Cluster struct {
-	namespace  string
-	appID      string
-	appTarget  bool
-	actorTypes []string
+	namespace    string
+	appID        string
+	appTarget    bool
+	actorTypes   []string
+	workflowSpec *config.WorkflowSpec
 
 	clients  []schedulerv1pb.SchedulerClient
 	actors   actors.Interface
@@ -56,14 +59,15 @@ type Cluster struct {
 
 func New(opts Options) *Cluster {
 	return &Cluster{
-		namespace:  opts.Namespace,
-		appID:      opts.AppID,
-		appTarget:  opts.AppTarget,
-		actorTypes: opts.ActorTypes,
-		clients:    opts.Clients,
-		actors:     opts.Actors,
-		channels:   opts.Channels,
-		wfengine:   opts.WFEngine,
+		namespace:    opts.Namespace,
+		appID:        opts.AppID,
+		appTarget:    opts.AppTarget,
+		actorTypes:   opts.ActorTypes,
+		workflowSpec: opts.WorkflowSpec,
+		clients:      opts.Clients,
+		actors:       opts.Actors,
+		channels:     opts.Channels,
+		wfengine:     opts.WFEngine,
 	}
 }
 
@@ -107,6 +111,7 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 	}
 
 	req.GetInitial().AcceptJobTypes = acceptJobTypes
+	req.GetInitial().ConcurrencyLimits = c.buildConcurrencyLimits()
 
 	if len(c.clients) == 0 {
 		log.Debug("No scheduler clients available, not watching jobs")
@@ -132,4 +137,50 @@ func (c *Cluster) watchJobs(ctx context.Context) error {
 	}
 
 	return concurrency.NewRunnerManager(runners...).Run(ctx)
+}
+
+func (c *Cluster) buildConcurrencyLimits() []*schedulerv1pb.ConcurrencyLimit {
+	if c.workflowSpec == nil || c.wfengine == nil {
+		return nil
+	}
+
+	var limits []*schedulerv1pb.ConcurrencyLimit
+
+	if v := c.workflowSpec.GetGlobalMaxConcurrentWorkflowInvocations(); v != nil {
+		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
+			Group:         c.wfengine.WorkflowActorType(),
+			MaxConcurrent: *v,
+		})
+	}
+
+	if v := c.workflowSpec.GetGlobalMaxConcurrentActivityInvocations(); v != nil {
+		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
+			Group:         c.wfengine.ActivityActorType(),
+			MaxConcurrent: *v,
+		})
+	}
+
+	for _, l := range c.workflowSpec.WorkflowConcurrencyLimits {
+		if l.Name == nil || l.MaxConcurrent == nil || *l.MaxConcurrent <= 0 {
+			continue
+		}
+		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
+			Group:         c.wfengine.WorkflowActorType(),
+			Name:          l.Name,
+			MaxConcurrent: *l.MaxConcurrent,
+		})
+	}
+
+	for _, l := range c.workflowSpec.ActivityConcurrencyLimits {
+		if l.Name == nil || l.MaxConcurrent == nil || *l.MaxConcurrent <= 0 {
+			continue
+		}
+		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
+			Group:         c.wfengine.ActivityActorType(),
+			Name:          l.Name,
+			MaxConcurrent: *l.MaxConcurrent,
+		})
+	}
+
+	return limits
 }

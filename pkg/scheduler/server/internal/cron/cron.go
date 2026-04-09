@@ -119,7 +119,8 @@ func (c *cron) Run(ctx context.Context) error {
 	}
 
 	c.connectionPool = pool.New(pool.Options{
-		Cron: c.etcdcron,
+		Cron:           c.etcdcron,
+		SchedulerCount: c.schedulerCount,
 	})
 
 	// Use a loop to process leadership updates. The loop's Enqueue is
@@ -158,6 +159,18 @@ func (c *cron) Run(ctx context.Context) error {
 			}
 		},
 	).Run(ctx)
+}
+
+// schedulerCount returns the number of active scheduler hosts in the cluster.
+func (c *cron) schedulerCount() int32 {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	n := len(c.currHosts)
+	if n < 1 {
+		return 1
+	}
+	//nolint:gosec // scheduler cluster size will never overflow int32
+	return int32(n)
 }
 
 // Client returns the Cron client, blocking until Etcd and the Cron library are
