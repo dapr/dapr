@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.26.1
+go 1.26.2
 
 require (
 	connectrpc.com/connect v1.19.1
@@ -14,7 +14,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.17.3
 	github.com/dapr/durabletask-go v0.11.4-0.20260406161632-36d7b5486fa8
-	github.com/dapr/kit v0.17.1-0.20260316190405-af26c703b2b1
+	github.com/dapr/kit v0.17.1-0.20260402173438-be272d92042b
 	github.com/diagridio/go-etcd-cron v0.12.4
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
@@ -134,6 +134,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.50.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.50.0 // indirect
 	github.com/IBM/sarama v1.45.2 // indirect
+	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect
 	github.com/RoaringBitmap/roaring/v2 v2.8.0 // indirect

@@ -31,7 +31,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// OperatorName is the fully-qualified name of the Operator service.
@@ -78,6 +78,12 @@ const (
 	// OperatorMCPServerUpdateProcedure is the fully-qualified name of the Operator's MCPServerUpdate
 	// RPC.
 	OperatorMCPServerUpdateProcedure = "/dapr.proto.operator.v1.Operator/MCPServerUpdate"
+	// OperatorConfigurationUpdateProcedure is the fully-qualified name of the Operator's
+	// ConfigurationUpdate RPC.
+	OperatorConfigurationUpdateProcedure = "/dapr.proto.operator.v1.Operator/ConfigurationUpdate"
+	// OperatorResiliencyUpdateProcedure is the fully-qualified name of the Operator's ResiliencyUpdate
+	// RPC.
+	OperatorResiliencyUpdateProcedure = "/dapr.proto.operator.v1.Operator/ResiliencyUpdate"
 )
 
 // OperatorClient is a client for the dapr.proto.operator.v1.Operator service.
@@ -94,7 +100,7 @@ type OperatorClient interface {
 	GetResiliency(context.Context, *connect.Request[v1.GetResiliencyRequest]) (*connect.Response[v1.GetResiliencyResponse], error)
 	// Returns a list of resiliency configurations
 	ListResiliency(context.Context, *connect.Request[v1.ListResiliencyRequest]) (*connect.Response[v1.ListResiliencyResponse], error)
-	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
+	// Returns a list of pub/sub subscriptions
 	ListSubscriptionsV2(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
 	// Sends events to Dapr sidecars upon subscription changes.
 	SubscriptionUpdate(context.Context, *connect.Request[v1.SubscriptionUpdateRequest]) (*connect.ServerStreamForClient[v1.SubscriptionUpdateEvent], error)
@@ -106,6 +112,10 @@ type OperatorClient interface {
 	ListMCPServers(context.Context, *connect.Request[v1.ListMCPServersRequest]) (*connect.Response[v1.ListMCPServersResponse], error)
 	// Sends events to Dapr sidecars upon MCP server changes.
 	MCPServerUpdate(context.Context, *connect.Request[v1.MCPServerUpdateRequest]) (*connect.ServerStreamForClient[v1.MCPServerUpdateEvent], error)
+	// Sends events to Dapr sidecars upon configuration changes.
+	ConfigurationUpdate(context.Context, *connect.Request[v1.ConfigurationUpdateRequest]) (*connect.ServerStreamForClient[v1.ConfigurationUpdateEvent], error)
+	// Sends events to Dapr sidecars upon resiliency changes.
+	ResiliencyUpdate(context.Context, *connect.Request[v1.ResiliencyUpdateRequest]) (*connect.ServerStreamForClient[v1.ResiliencyUpdateEvent], error)
 }
 
 // NewOperatorClient constructs a client for the dapr.proto.operator.v1.Operator service. By
@@ -117,66 +127,91 @@ type OperatorClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewOperatorClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OperatorClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	operatorMethods := v1.File_dapr_proto_operator_v1_operator_proto.Services().ByName("Operator").Methods()
 	return &operatorClient{
 		componentUpdate: connect.NewClient[v1.ComponentUpdateRequest, v1.ComponentUpdateEvent](
 			httpClient,
 			baseURL+OperatorComponentUpdateProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("ComponentUpdate")),
+			connect.WithClientOptions(opts...),
 		),
 		listComponents: connect.NewClient[v1.ListComponentsRequest, v1.ListComponentResponse](
 			httpClient,
 			baseURL+OperatorListComponentsProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("ListComponents")),
+			connect.WithClientOptions(opts...),
 		),
 		getConfiguration: connect.NewClient[v1.GetConfigurationRequest, v1.GetConfigurationResponse](
 			httpClient,
 			baseURL+OperatorGetConfigurationProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("GetConfiguration")),
+			connect.WithClientOptions(opts...),
 		),
 		listSubscriptions: connect.NewClient[emptypb.Empty, v1.ListSubscriptionsResponse](
 			httpClient,
 			baseURL+OperatorListSubscriptionsProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("ListSubscriptions")),
+			connect.WithClientOptions(opts...),
 		),
 		getResiliency: connect.NewClient[v1.GetResiliencyRequest, v1.GetResiliencyResponse](
 			httpClient,
 			baseURL+OperatorGetResiliencyProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("GetResiliency")),
+			connect.WithClientOptions(opts...),
 		),
 		listResiliency: connect.NewClient[v1.ListResiliencyRequest, v1.ListResiliencyResponse](
 			httpClient,
 			baseURL+OperatorListResiliencyProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("ListResiliency")),
+			connect.WithClientOptions(opts...),
 		),
 		listSubscriptionsV2: connect.NewClient[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse](
 			httpClient,
 			baseURL+OperatorListSubscriptionsV2Procedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("ListSubscriptionsV2")),
+			connect.WithClientOptions(opts...),
 		),
 		subscriptionUpdate: connect.NewClient[v1.SubscriptionUpdateRequest, v1.SubscriptionUpdateEvent](
 			httpClient,
 			baseURL+OperatorSubscriptionUpdateProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("SubscriptionUpdate")),
+			connect.WithClientOptions(opts...),
 		),
 		listHTTPEndpoints: connect.NewClient[v1.ListHTTPEndpointsRequest, v1.ListHTTPEndpointsResponse](
 			httpClient,
 			baseURL+OperatorListHTTPEndpointsProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("ListHTTPEndpoints")),
+			connect.WithClientOptions(opts...),
 		),
 		hTTPEndpointUpdate: connect.NewClient[v1.HTTPEndpointUpdateRequest, v1.HTTPEndpointUpdateEvent](
 			httpClient,
 			baseURL+OperatorHTTPEndpointUpdateProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("HTTPEndpointUpdate")),
+			connect.WithClientOptions(opts...),
 		),
 		listMCPServers: connect.NewClient[v1.ListMCPServersRequest, v1.ListMCPServersResponse](
 			httpClient,
 			baseURL+OperatorListMCPServersProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("ListMCPServers")),
+			connect.WithClientOptions(opts...),
 		),
 		mCPServerUpdate: connect.NewClient[v1.MCPServerUpdateRequest, v1.MCPServerUpdateEvent](
 			httpClient,
 			baseURL+OperatorMCPServerUpdateProcedure,
-			opts...,
+			connect.WithSchema(operatorMethods.ByName("MCPServerUpdate")),
+			connect.WithClientOptions(opts...),
+		),
+		configurationUpdate: connect.NewClient[v1.ConfigurationUpdateRequest, v1.ConfigurationUpdateEvent](
+			httpClient,
+			baseURL+OperatorConfigurationUpdateProcedure,
+			connect.WithSchema(operatorMethods.ByName("ConfigurationUpdate")),
+			connect.WithClientOptions(opts...),
+		),
+		resiliencyUpdate: connect.NewClient[v1.ResiliencyUpdateRequest, v1.ResiliencyUpdateEvent](
+			httpClient,
+			baseURL+OperatorResiliencyUpdateProcedure,
+			connect.WithSchema(operatorMethods.ByName("ResiliencyUpdate")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -195,6 +230,8 @@ type operatorClient struct {
 	hTTPEndpointUpdate  *connect.Client[v1.HTTPEndpointUpdateRequest, v1.HTTPEndpointUpdateEvent]
 	listMCPServers      *connect.Client[v1.ListMCPServersRequest, v1.ListMCPServersResponse]
 	mCPServerUpdate     *connect.Client[v1.MCPServerUpdateRequest, v1.MCPServerUpdateEvent]
+	configurationUpdate *connect.Client[v1.ConfigurationUpdateRequest, v1.ConfigurationUpdateEvent]
+	resiliencyUpdate    *connect.Client[v1.ResiliencyUpdateRequest, v1.ResiliencyUpdateEvent]
 }
 
 // ComponentUpdate calls dapr.proto.operator.v1.Operator.ComponentUpdate.
@@ -257,6 +294,16 @@ func (c *operatorClient) MCPServerUpdate(ctx context.Context, req *connect.Reque
 	return c.mCPServerUpdate.CallServerStream(ctx, req)
 }
 
+// ConfigurationUpdate calls dapr.proto.operator.v1.Operator.ConfigurationUpdate.
+func (c *operatorClient) ConfigurationUpdate(ctx context.Context, req *connect.Request[v1.ConfigurationUpdateRequest]) (*connect.ServerStreamForClient[v1.ConfigurationUpdateEvent], error) {
+	return c.configurationUpdate.CallServerStream(ctx, req)
+}
+
+// ResiliencyUpdate calls dapr.proto.operator.v1.Operator.ResiliencyUpdate.
+func (c *operatorClient) ResiliencyUpdate(ctx context.Context, req *connect.Request[v1.ResiliencyUpdateRequest]) (*connect.ServerStreamForClient[v1.ResiliencyUpdateEvent], error) {
+	return c.resiliencyUpdate.CallServerStream(ctx, req)
+}
+
 // OperatorHandler is an implementation of the dapr.proto.operator.v1.Operator service.
 type OperatorHandler interface {
 	// Sends events to Dapr sidecars upon component changes.
@@ -271,7 +318,7 @@ type OperatorHandler interface {
 	GetResiliency(context.Context, *connect.Request[v1.GetResiliencyRequest]) (*connect.Response[v1.GetResiliencyResponse], error)
 	// Returns a list of resiliency configurations
 	ListResiliency(context.Context, *connect.Request[v1.ListResiliencyRequest]) (*connect.Response[v1.ListResiliencyResponse], error)
-	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
+	// Returns a list of pub/sub subscriptions
 	ListSubscriptionsV2(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
 	// Sends events to Dapr sidecars upon subscription changes.
 	SubscriptionUpdate(context.Context, *connect.Request[v1.SubscriptionUpdateRequest], *connect.ServerStream[v1.SubscriptionUpdateEvent]) error
@@ -283,6 +330,10 @@ type OperatorHandler interface {
 	ListMCPServers(context.Context, *connect.Request[v1.ListMCPServersRequest]) (*connect.Response[v1.ListMCPServersResponse], error)
 	// Sends events to Dapr sidecars upon MCP server changes.
 	MCPServerUpdate(context.Context, *connect.Request[v1.MCPServerUpdateRequest], *connect.ServerStream[v1.MCPServerUpdateEvent]) error
+	// Sends events to Dapr sidecars upon configuration changes.
+	ConfigurationUpdate(context.Context, *connect.Request[v1.ConfigurationUpdateRequest], *connect.ServerStream[v1.ConfigurationUpdateEvent]) error
+	// Sends events to Dapr sidecars upon resiliency changes.
+	ResiliencyUpdate(context.Context, *connect.Request[v1.ResiliencyUpdateRequest], *connect.ServerStream[v1.ResiliencyUpdateEvent]) error
 }
 
 // NewOperatorHandler builds an HTTP handler from the service implementation. It returns the path on
@@ -291,65 +342,90 @@ type OperatorHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewOperatorHandler(svc OperatorHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	operatorMethods := v1.File_dapr_proto_operator_v1_operator_proto.Services().ByName("Operator").Methods()
 	operatorComponentUpdateHandler := connect.NewServerStreamHandler(
 		OperatorComponentUpdateProcedure,
 		svc.ComponentUpdate,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("ComponentUpdate")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorListComponentsHandler := connect.NewUnaryHandler(
 		OperatorListComponentsProcedure,
 		svc.ListComponents,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("ListComponents")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorGetConfigurationHandler := connect.NewUnaryHandler(
 		OperatorGetConfigurationProcedure,
 		svc.GetConfiguration,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("GetConfiguration")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorListSubscriptionsHandler := connect.NewUnaryHandler(
 		OperatorListSubscriptionsProcedure,
 		svc.ListSubscriptions,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("ListSubscriptions")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorGetResiliencyHandler := connect.NewUnaryHandler(
 		OperatorGetResiliencyProcedure,
 		svc.GetResiliency,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("GetResiliency")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorListResiliencyHandler := connect.NewUnaryHandler(
 		OperatorListResiliencyProcedure,
 		svc.ListResiliency,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("ListResiliency")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorListSubscriptionsV2Handler := connect.NewUnaryHandler(
 		OperatorListSubscriptionsV2Procedure,
 		svc.ListSubscriptionsV2,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("ListSubscriptionsV2")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorSubscriptionUpdateHandler := connect.NewServerStreamHandler(
 		OperatorSubscriptionUpdateProcedure,
 		svc.SubscriptionUpdate,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("SubscriptionUpdate")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorListHTTPEndpointsHandler := connect.NewUnaryHandler(
 		OperatorListHTTPEndpointsProcedure,
 		svc.ListHTTPEndpoints,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("ListHTTPEndpoints")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorHTTPEndpointUpdateHandler := connect.NewServerStreamHandler(
 		OperatorHTTPEndpointUpdateProcedure,
 		svc.HTTPEndpointUpdate,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("HTTPEndpointUpdate")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorListMCPServersHandler := connect.NewUnaryHandler(
 		OperatorListMCPServersProcedure,
 		svc.ListMCPServers,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("ListMCPServers")),
+		connect.WithHandlerOptions(opts...),
 	)
 	operatorMCPServerUpdateHandler := connect.NewServerStreamHandler(
 		OperatorMCPServerUpdateProcedure,
 		svc.MCPServerUpdate,
-		opts...,
+		connect.WithSchema(operatorMethods.ByName("MCPServerUpdate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	operatorConfigurationUpdateHandler := connect.NewServerStreamHandler(
+		OperatorConfigurationUpdateProcedure,
+		svc.ConfigurationUpdate,
+		connect.WithSchema(operatorMethods.ByName("ConfigurationUpdate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	operatorResiliencyUpdateHandler := connect.NewServerStreamHandler(
+		OperatorResiliencyUpdateProcedure,
+		svc.ResiliencyUpdate,
+		connect.WithSchema(operatorMethods.ByName("ResiliencyUpdate")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.operator.v1.Operator/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -377,6 +453,10 @@ func NewOperatorHandler(svc OperatorHandler, opts ...connect.HandlerOption) (str
 			operatorListMCPServersHandler.ServeHTTP(w, r)
 		case OperatorMCPServerUpdateProcedure:
 			operatorMCPServerUpdateHandler.ServeHTTP(w, r)
+		case OperatorConfigurationUpdateProcedure:
+			operatorConfigurationUpdateHandler.ServeHTTP(w, r)
+		case OperatorResiliencyUpdateProcedure:
+			operatorResiliencyUpdateHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -432,4 +512,12 @@ func (UnimplementedOperatorHandler) ListMCPServers(context.Context, *connect.Req
 
 func (UnimplementedOperatorHandler) MCPServerUpdate(context.Context, *connect.Request[v1.MCPServerUpdateRequest], *connect.ServerStream[v1.MCPServerUpdateEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.operator.v1.Operator.MCPServerUpdate is not implemented"))
+}
+
+func (UnimplementedOperatorHandler) ConfigurationUpdate(context.Context, *connect.Request[v1.ConfigurationUpdateRequest], *connect.ServerStream[v1.ConfigurationUpdateEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.operator.v1.Operator.ConfigurationUpdate is not implemented"))
+}
+
+func (UnimplementedOperatorHandler) ResiliencyUpdate(context.Context, *connect.Request[v1.ResiliencyUpdateRequest], *connect.ServerStream[v1.ResiliencyUpdateEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dapr.proto.operator.v1.Operator.ResiliencyUpdate is not implemented"))
 }
