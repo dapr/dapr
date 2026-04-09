@@ -196,14 +196,12 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		Ready:                p.ready,
 	})
 
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.wg.Go(func() {
 		derr := p.dissLoop.Run(ctx)
 		if derr != nil {
 			log.Errorf("Placement dissemination loop exited with error: %s", derr)
 		}
-	}()
+	})
 
 	if recon.ActorTypes != nil {
 		p.host.Entities = *recon.ActorTypes

@@ -76,8 +76,8 @@ func TestHandleTimeout(t *testing.T) {
 		diss, _, _ := newTestDisseminator(t)
 
 		var streamClosed bool
-		diss.streamLoop = loopfake.New[loops.EventStream]().
-			WithClose(func(loops.EventStream) {
+		diss.streamLoop = loopfake.New[loops.Event]().
+			WithClose(func(loops.Event) {
 				streamClosed = true
 			})
 
@@ -90,8 +90,8 @@ func TestHandleTimeout(t *testing.T) {
 		diss, _, _ := newTestDisseminator(t)
 
 		var streamClosed bool
-		diss.streamLoop = loopfake.New[loops.EventStream]().
-			WithClose(func(loops.EventStream) {
+		diss.streamLoop = loopfake.New[loops.Event]().
+			WithClose(func(loops.Event) {
 				streamClosed = true
 			})
 
@@ -106,8 +106,8 @@ func TestHandleOrder_UpdateVersionMismatch(t *testing.T) {
 		diss, _, _ := newTestDisseminator(t)
 
 		var streamClosed bool
-		diss.streamLoop = loopfake.New[loops.EventStream]().
-			WithClose(func(loops.EventStream) {
+		diss.streamLoop = loopfake.New[loops.Event]().
+			WithClose(func(loops.Event) {
 				streamClosed = true
 			})
 
@@ -128,8 +128,8 @@ func TestHandleOrder_UnknownOperation(t *testing.T) {
 		diss, _, _ := newTestDisseminator(t)
 
 		var streamClosed bool
-		diss.streamLoop = loopfake.New[loops.EventStream]().
-			WithClose(func(loops.EventStream) {
+		diss.streamLoop = loopfake.New[loops.Event]().
+			WithClose(func(loops.Event) {
 				streamClosed = true
 			})
 
@@ -148,8 +148,8 @@ func TestHandleTimeout_UpdateDequeuesTimeout(t *testing.T) {
 		diss, _, _ := newTestDisseminator(t)
 
 		var streamClosed bool
-		diss.streamLoop = loopfake.New[loops.EventStream]().
-			WithClose(func(loops.EventStream) {
+		diss.streamLoop = loopfake.New[loops.Event]().
+			WithClose(func(loops.Event) {
 				streamClosed = true
 			})
 

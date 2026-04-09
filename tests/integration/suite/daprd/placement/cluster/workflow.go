@@ -85,19 +85,18 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(cancel1)
 	require.NoError(t, client1.StartWorker(cctx1, dworkflow.NewRegistry()))
 
-	expHosts := []placement.Host{
-		{
-			Name:      w.daprd1.InternalGRPCAddress(),
-			ID:        w.daprd1.AppID(),
-			APIVLevel: 20,
-			Namespace: "default",
-			Entities: []string{
-				"dapr.internal.default." + w.daprd1.AppID() + ".activity",
-				"dapr.internal.default." + w.daprd1.AppID() + ".retentioner",
-				"dapr.internal.default." + w.daprd1.AppID() + ".workflow",
-			},
+	expHosts := make([]placement.Host, 0, 2)
+	expHosts = append(expHosts, placement.Host{
+		Name:      w.daprd1.InternalGRPCAddress(),
+		ID:        w.daprd1.AppID(),
+		APIVLevel: 20,
+		Namespace: "default",
+		Entities: []string{
+			"dapr.internal.default." + w.daprd1.AppID() + ".activity",
+			"dapr.internal.default." + w.daprd1.AppID() + ".retentioner",
+			"dapr.internal.default." + w.daprd1.AppID() + ".workflow",
 		},
-	}
+	})
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		table = leader.PlacementTables(t, ctx)
 		if !assert.Contains(c, table.Tables, "default") {
