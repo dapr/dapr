@@ -64,12 +64,12 @@ func (e *edges) Run(t *testing.T, ctx context.Context) {
 
 			switch st.Phase {
 			case 0:
-				ctx.WaitForSingleEvent("evA", time.Minute).Await(&st.GotA)
+				require.NoError(t, ctx.WaitForSingleEvent("evA", time.Minute).Await(&st.GotA))
 				st.Phase = 1
 				ctx.ContinueAsNew(st, task.WithKeepUnprocessedEvents())
 				return nil, nil
 			case 1:
-				ctx.WaitForSingleEvent("evB", 3*time.Second).Await(&st.GotB)
+				require.NoError(t, ctx.WaitForSingleEvent("evB", 3*time.Second).Await(&st.GotB))
 				return st, nil
 			}
 			return nil, nil
