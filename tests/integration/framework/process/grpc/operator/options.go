@@ -31,6 +31,7 @@ type options struct {
 
 	withRegister          func(*grpc.Server)
 	componentUpdateFn     func(*operatorv1.ComponentUpdateRequest, operatorv1.Operator_ComponentUpdateServer) error
+	configurationUpdateFn func(*operatorv1.ConfigurationUpdateRequest, operatorv1.Operator_ConfigurationUpdateServer) error
 	getConfigurationFn    func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error)
 	getResiliencyFn       func(context.Context, *operatorv1.GetResiliencyRequest) (*operatorv1.GetResiliencyResponse, error)
 	httpEndpointUpdateFn  func(*operatorv1.HTTPEndpointUpdateRequest, operatorv1.Operator_HTTPEndpointUpdateServer) error
@@ -41,6 +42,7 @@ type options struct {
 	listSubscriptionsFn   func(context.Context, *emptypb.Empty) (*operatorv1.ListSubscriptionsResponse, error)
 	listSubscriptionsV2Fn func(context.Context, *operatorv1.ListSubscriptionsRequest) (*operatorv1.ListSubscriptionsResponse, error)
 	mcpServerUpdateFn     func(*operatorv1.MCPServerUpdateRequest, operatorv1.Operator_MCPServerUpdateServer) error
+	resiliencyUpdateFn    func(*operatorv1.ResiliencyUpdateRequest, operatorv1.Operator_ResiliencyUpdateServer) error
 	subscriptionUpdateFn  func(*operatorv1.SubscriptionUpdateRequest, operatorv1.Operator_SubscriptionUpdateServer) error
 }
 
@@ -125,5 +127,17 @@ func WithListSubscriptionsV2Fn(fn func(context.Context, *operatorv1.ListSubscrip
 func WithSubscriptionUpdateFn(fn func(*operatorv1.SubscriptionUpdateRequest, operatorv1.Operator_SubscriptionUpdateServer) error) func(*options) {
 	return func(opts *options) {
 		opts.subscriptionUpdateFn = fn
+	}
+}
+
+func WithConfigurationUpdateFn(fn func(*operatorv1.ConfigurationUpdateRequest, operatorv1.Operator_ConfigurationUpdateServer) error) func(*options) {
+	return func(opts *options) {
+		opts.configurationUpdateFn = fn
+	}
+}
+
+func WithResiliencyUpdateFn(fn func(*operatorv1.ResiliencyUpdateRequest, operatorv1.Operator_ResiliencyUpdateServer) error) func(*options) {
+	return func(opts *options) {
+		opts.resiliencyUpdateFn = fn
 	}
 }

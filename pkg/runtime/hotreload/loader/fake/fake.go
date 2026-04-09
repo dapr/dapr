@@ -17,7 +17,10 @@ import (
 	"context"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -61,6 +64,18 @@ func (f *FakeT) Subscriptions() loader.Loader[subapi.Subscription] {
 
 func (f *FakeT) MCPServers() loader.Loader[mcpserverapi.MCPServer] {
 	return f.mcpServers
+}
+
+func (f *FakeT) Configurations() loader.Loader[configapi.Configuration] {
+	return nil
+}
+
+func (f *FakeT) HTTPEndpoints() loader.Loader[httpendpointapi.HTTPEndpoint] {
+	return nil
+}
+
+func (f *FakeT) Resiliencies() loader.Loader[resiliencyapi.Resiliency] {
+	return nil
 }
 
 func (f *FakeT) WithComponents(fake *Fake[compapi.Component]) *FakeT {

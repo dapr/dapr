@@ -30,7 +30,6 @@ type mcpservers struct {
 	config    config.KubernetesConfig
 	client    operatorv1pb.OperatorClient
 	namespace string
-	podName   string
 }
 
 // NewMCPServers returns a new Kubernetes loader for MCPServer resources.
@@ -39,7 +38,6 @@ func NewMCPServers(opts Options) loader.Loader[mcpserverapi.MCPServer] {
 		config:    opts.Config,
 		client:    opts.Client,
 		namespace: opts.Namespace,
-		podName:   opts.PodName,
 	}
 }
 

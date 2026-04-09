@@ -114,7 +114,10 @@ func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subs
 func (r *Reconciler[T]) Run(ctx context.Context) error {
 	conn, err := r.manager.Stream(ctx)
 	if err != nil {
-		return fmt.Errorf("error running component stream: %w", err)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("error running %s stream: %w", r.kind, err)
 	}
 
 	r.htarget.Ready()
