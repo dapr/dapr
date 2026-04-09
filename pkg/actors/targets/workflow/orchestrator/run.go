@@ -182,17 +182,20 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 				// Temporarily swap NewEvents so ApplyRuntimeStateChanges
 				// only writes the CAN execution events to History.
-				wi.State.NewEvents = filtered
-				state.ApplyRuntimeStateChanges(wi.State)
-				wi.State.NewEvents = canNewEvents
+				if len(carryover) > 0 {
+					wi.State.NewEvents = filtered
+					state.ApplyRuntimeStateChanges(wi.State)
+					wi.State.NewEvents = canNewEvents
+
+					state.ClearInbox()
+					for _, e := range carryover {
+						state.AddToInbox(e)
+					}
+				} else {
+					state.ApplyRuntimeStateChanges(wi.State)
+				}
 
 				state.Generation++
-
-				// Replace the stale inbox with the carryover events.
-				state.ClearInbox()
-				for _, e := range carryover {
-					state.AddToInbox(e)
-				}
 
 				if err = o.saveInternalState(ctx, state); err != nil {
 					o.rstate = rstateSnapshot
