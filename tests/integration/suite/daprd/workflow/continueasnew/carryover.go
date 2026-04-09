@@ -141,6 +141,8 @@ func (c *carryover) Run(t *testing.T, ctx context.Context) {
 
 			require.NoError(t, ctx.CallActivity("can-act").Await(nil))
 
+			// Wait for the next event; if the timeout fires (val == ""),
+			// all events have been consumed so return the final count.
 			var val string
 			ctx.WaitForSingleEvent("next", 2*time.Second).Await(&val)
 			if val == "" {

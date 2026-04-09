@@ -55,8 +55,8 @@ func TestGetStablePort(t *testing.T) {
 			port := getPort(t, fmt.Sprintf("different-app-%d", i))
 			ports[port] = true
 		}
-		assert.Greater(t, len(ports), 1,
-			"at least two of 10 different app IDs should produce different stable ports")
+		assert.Len(t, ports, 10,
+			"all 10 different app IDs should produce different stable ports")
 	})
 
 	t.Run("returns a random port if the stable one is busy", func(t *testing.T) {
