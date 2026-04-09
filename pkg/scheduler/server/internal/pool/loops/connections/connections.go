@@ -141,7 +141,11 @@ func (c *connections) updateConcurrencyLimits(req *schedulerv1pb.WatchJobsReques
 		}
 		activeKeys[key] = struct{}{}
 		//nolint:gosec // guarded by <= 0 check above
-		c.concurrencyGates[key] = &concurrencyGate{globalLimit: uint32(limit.GetMaxConcurrent())}
+		if gate, ok := c.concurrencyGates[key]; ok {
+			gate.globalLimit = uint32(limit.GetMaxConcurrent())
+		} else {
+			c.concurrencyGates[key] = &concurrencyGate{globalLimit: uint32(limit.GetMaxConcurrent())}
+		}
 	}
 
 	for key, gate := range c.concurrencyGates {
@@ -255,7 +259,6 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 	}
 }
 
-// drainPending attempts to dispatch the next pending trigger from a gate.
 // drainPending scans the pending queue to find a trigger that can acquire all
 // required gates. This avoids head-of-line blocking when the first pending
 // trigger is blocked on a different gate than the one that just released.
