@@ -100,7 +100,7 @@ func (w *workflowexec) Run(t *testing.T, ctx context.Context) {
 	backendClient := dtclient.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
 
 	r := task.NewTaskRegistry()
-	r.AddWorkflowN("TimeoutWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	r.AddWorkflowN("TimeoutWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if ierr := ctx.GetInput(&input); ierr != nil {
 			return nil, ierr
