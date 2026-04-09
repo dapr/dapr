@@ -93,8 +93,8 @@ func testHistoryEvent(id int32) *backend.HistoryEvent {
 	return &backend.HistoryEvent{
 		EventId:   id,
 		Timestamp: timestamppb.New(time.Date(2026, 3, 18, 12, 0, int(id), 0, time.UTC)),
-		EventType: &protos.HistoryEvent_OrchestratorStarted{
-			OrchestratorStarted: &protos.OrchestratorStartedEvent{},
+		EventType: &protos.HistoryEvent_WorkflowStarted{
+			WorkflowStarted: &protos.WorkflowStartedEvent{},
 		},
 	}
 }

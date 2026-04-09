@@ -33,26 +33,31 @@ import (
 
 // UnmarshalSigningData reads and unmarshals signatures, certificates, and raw
 // history events from the SQLite state store for the given workflow instance.
-func UnmarshalSigningData(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) ([]*protos.HistorySignature, []*protos.SigningCertificate, [][]byte) {
+// Returns raw signature bytes alongside parsed protos, as raw bytes are needed
+// for digest computation in chain verification.
+func UnmarshalSigningData(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) (rawSigs [][]byte, sigs []*protos.HistorySignature, certs []*protos.SigningCertificate, rawEvents [][]byte) {
 	t.Helper()
 
 	sigValues := db.ReadStateValues(t, ctx, instanceID, "signature")
 	certValues := db.ReadStateValues(t, ctx, instanceID, "sigcert")
-	rawEvents := db.ReadStateValues(t, ctx, instanceID, "history")
+	rawEvents = db.ReadStateValues(t, ctx, instanceID, "history")
 
-	sigs := make([]*protos.HistorySignature, len(sigValues))
+	rawSigs = make([][]byte, len(sigValues))
+	sigs = make([]*protos.HistorySignature, len(sigValues))
 	for i, v := range sigValues {
 		sigs[i] = new(protos.HistorySignature)
 		require.NoError(t, proto.Unmarshal(v, sigs[i]))
+		rawSigs[i] = make([]byte, len(v))
+		copy(rawSigs[i], v)
 	}
 
-	certs := make([]*protos.SigningCertificate, len(certValues))
+	certs = make([]*protos.SigningCertificate, len(certValues))
 	for i, v := range certValues {
 		certs[i] = new(protos.SigningCertificate)
 		require.NoError(t, proto.Unmarshal(v, certs[i]))
 	}
 
-	return sigs, certs, rawEvents
+	return rawSigs, sigs, certs, rawEvents
 }
 
 // VerifySignatureChain verifies the full history signature chain for a
@@ -61,9 +66,9 @@ func UnmarshalSigningData(t *testing.T, ctx context.Context, db *sqlite.SQLite, 
 func VerifySignatureChain(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string, trustAnchors []byte) {
 	t.Helper()
 
-	sigs, certs, rawEvents := UnmarshalSigningData(t, ctx, db, instanceID)
+	rawSigs, _, certs, rawEvents := UnmarshalSigningData(t, ctx, db, instanceID)
 
-	require.NotEmpty(t, sigs, "expected signature records")
+	require.NotEmpty(t, rawSigs, "expected signature records")
 	require.NotEmpty(t, certs, "expected certificate records")
 	require.NotEmpty(t, rawEvents, "expected history records")
 
@@ -71,10 +76,10 @@ func VerifySignatureChain(t *testing.T, ctx context.Context, db *sqlite.SQLite, 
 	s := signer.New(nil, fake.New(authorities...))
 
 	require.NoError(t, historysigning.VerifyChain(historysigning.VerifyChainOptions{
-		Signatures:   sigs,
-		Certs:        certs,
-		AllRawEvents: rawEvents,
-		Signer:       s,
+		RawSignatures: rawSigs,
+		Certs:         certs,
+		AllRawEvents:  rawEvents,
+		Signer:        s,
 	}))
 }
 

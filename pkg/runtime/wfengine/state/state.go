@@ -15,12 +15,14 @@ package state
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -69,6 +71,12 @@ type State struct {
 	// workflow transitions from a non-signing to a signing host.
 	RawHistory [][]byte
 
+	// RawSignatures holds the raw serialized bytes of each HistorySignature
+	// as loaded from the state store or returned by SignResult.RawSignature.
+	// These are the single source of truth for digest computation in chain
+	// linking and must be preserved exactly as stored.
+	RawSignatures [][]byte
+
 	// marshaledNewHistory holds deterministically marshaled bytes for newly
 	// added history events, set by SetMarshaledNewHistory. When set, these
 	// exact bytes are persisted to the state store (matching what was signed).
@@ -115,6 +123,7 @@ func (s *State) Reset() {
 	s.signaturesAddedCount = 0
 	s.signaturesRemovedCount += len(s.Signatures)
 	s.Signatures = nil
+	s.RawSignatures = nil
 	s.CustomStatus = nil
 	s.Generation++
 }
@@ -131,6 +140,7 @@ func (s *State) ResetChangeTracking() {
 	s.signaturesRemovedCount = 0
 	s.marshaledNewHistory = nil
 	s.RawHistory = nil
+	s.RawSignatures = nil
 }
 
 func (s *State) ApplyRuntimeStateChanges(rs *backend.WorkflowRuntimeState) {
@@ -168,9 +178,17 @@ func (s *State) AddSigningCertificate(cert *backend.SigningCertificate) {
 	s.signingCertificatesAddedCount++
 }
 
-func (s *State) AddSignature(sig *backend.HistorySignature) {
+func (s *State) AddSignature(sig *backend.HistorySignature, raw []byte) {
 	s.Signatures = append(s.Signatures, sig)
+	s.RawSignatures = append(s.RawSignatures, raw)
 	s.signaturesAddedCount++
+}
+
+// HistoryAddedCount returns the number of history events added since the
+// last save or reset. Used by the orchestrator to know how many events
+// need signing.
+func (s *State) HistoryAddedCount() int {
+	return s.historyAddedCount
 }
 
 // SetMarshaledNewHistory stores pre-marshaled bytes for newly added history
@@ -219,7 +237,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		return nil, err
 	}
 
-	if err := addProtoStateOperations(req, signatureKeyPrefix, s.Signatures, s.signaturesAddedCount, s.signaturesRemovedCount); err != nil {
+	if err := addRawBytesStateOperations(req, signatureKeyPrefix, s.RawSignatures, s.signaturesAddedCount, s.signaturesRemovedCount); err != nil {
 		return nil, err
 	}
 
@@ -377,6 +395,28 @@ func addProtoStateOperations[T proto.Message](req *api.TransactionalRequest, key
 	}
 
 	for i := len(items); i < removedCount; i++ {
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, uint64(i))},
+		})
+	}
+
+	return nil
+}
+
+// addRawBytesStateOperations persists pre-serialized raw bytes directly,
+// without re-marshaling. This preserves byte-exact determinism required for
+// signature chain linking.
+func addRawBytesStateOperations(req *api.TransactionalRequest, keyPrefix string, rawItems [][]byte, addedCount int, removedCount int) error {
+	for i := len(rawItems) - addedCount; i < len(rawItems); i++ {
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Upsert,
+			//nolint:gosec
+			Request: api.TransactionalUpsert{Key: getMultiEntryKeyName(keyPrefix, uint64(i)), Value: rawItems[i]},
+		})
+	}
+
+	for i := len(rawItems); i < removedCount; i++ {
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
 			Request:   api.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, uint64(i))},
@@ -552,6 +592,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 
 		wState.Signatures = append(wState.Signatures, &sig)
+		raw := make([]byte, len(bulkRes[key]))
+		copy(raw, bulkRes[key])
+		wState.RawSignatures = append(wState.RawSignatures, raw)
 	}
 
 	if len(bulkRes[customStatusKey]) > 0 {
@@ -575,11 +618,18 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 
 	if len(wState.Signatures) > 0 {
 		if opts.Signer == nil {
-			wfLogger.Warnf("Workflow '%s' has signed history but no signer is configured; signature verification skipped", actorID)
-		} else if err := verifySignatureChain(wState, opts.Signer); err != nil {
+			return wState, &VerificationError{
+				Err: fmt.Errorf("workflow '%s' has signed history but no signer is configured; cannot verify signatures", actorID),
+			}
+		}
+		if err := verifySignatureChain(wState, opts.Signer); err != nil {
 			return wState, &VerificationError{
 				Err: fmt.Errorf("workflow history signature verification failed for '%s': %w", actorID, err),
 			}
+		}
+	} else if opts.Signer != nil && len(wState.History) > 0 {
+		return wState, &VerificationError{
+			Err: fmt.Errorf("workflow '%s' has %d unsigned history events but signing is enabled", actorID, len(wState.History)),
 		}
 	}
 
@@ -595,12 +645,65 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 			rawEvents = rawEvents[:coveredEvents]
 		}
 	}
-	return historysigning.VerifyChain(historysigning.VerifyChainOptions{
-		Signatures:   s.Signatures,
-		Certs:        s.SigningCertificates,
-		AllRawEvents: rawEvents,
-		Signer:       sgn,
-	})
+	if err := historysigning.VerifyChain(historysigning.VerifyChainOptions{
+		RawSignatures: s.RawSignatures,
+		Certs:         s.SigningCertificates,
+		AllRawEvents:  rawEvents,
+		Signer:        sgn,
+	}); err != nil {
+		return err
+	}
+
+	// Verify that all signing certificates belong to the expected app.
+	// This prevents cross-app signature forgery where App B signs events
+	// for App A's workflow using a valid certificate from the same trust
+	// domain.
+	if s.appID != "" {
+		for i, cert := range s.SigningCertificates {
+			if err := verifyCertAppIdentity(cert.GetCertificate(), s.appID); err != nil {
+				return fmt.Errorf("signing certificate %d: %w", i, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// verifyCertAppIdentity checks that a DER-encoded signing certificate chain
+// contains a SPIFFE ID whose final path segment matches the expected app ID.
+// SPIFFE IDs follow the pattern: spiffe://<trust-domain>/ns/<namespace>/<app-id>
+func verifyCertAppIdentity(certChainDER []byte, expectedAppID string) error {
+	if len(certChainDER) == 0 {
+		return fmt.Errorf("certificate chain is empty")
+	}
+
+	certs, err := x509.ParseCertificates(certChainDER)
+	if err != nil {
+		return fmt.Errorf("failed to parse certificate chain: %w", err)
+	}
+	if len(certs) == 0 {
+		return fmt.Errorf("no certificates in chain")
+	}
+
+	leaf := certs[0]
+	spiffeID, err := x509svid.IDFromCert(leaf)
+	if err != nil {
+		return fmt.Errorf("failed to extract SPIFFE ID: %w", err)
+	}
+
+	// The SPIFFE ID path is "/ns/<namespace>/<app-id>". Extract the last
+	// segment as the app ID.
+	segments := strings.Split(spiffeID.Path(), "/")
+	if len(segments) < 2 {
+		return fmt.Errorf("SPIFFE ID %q has too few path segments", spiffeID)
+	}
+	certAppID := segments[len(segments)-1]
+
+	if certAppID != expectedAppID {
+		return fmt.Errorf("certificate SPIFFE ID app %q does not match expected app %q", certAppID, expectedAppID)
+	}
+
+	return nil
 }
 
 func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, error) {

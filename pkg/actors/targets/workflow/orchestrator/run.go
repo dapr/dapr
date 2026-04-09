@@ -73,6 +73,16 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedTrue, nil
 	}
 
+	// Validate inbox events: TaskCompleted/TaskFailed must match a
+	// TaskScheduled event in history. This prevents inbox injection
+	// attacks where an attacker writes fake activity results to the
+	// state store which would then be signed into the history chain.
+	if o.signer != nil {
+		if err := validateInboxEvents(state); err != nil {
+			return todo.RunCompletedTrue, fmt.Errorf("inbox validation failed for '%s': %w", o.actorID, err)
+		}
+	}
+
 	var esHistoryEvent *backend.HistoryEvent
 	for _, e := range state.Inbox {
 		if es := e.GetExecutionStarted(); es != nil {
@@ -197,7 +207,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 				state.Generation++
 
-				if err = o.saveInternalState(ctx, state); err != nil {
+				if err = o.signAndSaveState(ctx, state); err != nil {
 					o.rstate = rstateSnapshot
 					return todo.RunCompletedFalse, err
 				}
@@ -299,7 +309,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 			rs.NewEvents = filtered
 			state.ApplyRuntimeStateChanges(rs)
 			rs.NewEvents = origNewEvents
-			if saveErr := o.saveInternalState(ctx, state); saveErr != nil {
+			if saveErr := o.signAndSaveState(ctx, state); saveErr != nil {
 				return todo.RunCompletedFalse, saveErr
 			}
 			executionStatus = diag.StatusRecoverable
@@ -310,15 +320,10 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		return todo.RunCompletedFalse, wferrors.NewRecoverable(dispatchErr)
 	}
 
-	newEventCount := len(rs.GetNewEvents())
 	state.ApplyRuntimeStateChanges(rs)
 	state.ClearInbox()
 
-	if err = o.signNewEvents(state, newEventCount); err != nil {
-		return todo.RunCompletedFalse, fmt.Errorf("failed to sign new history events: %w", err)
-	}
-
-	err = o.saveInternalState(ctx, state)
+	err = o.signAndSaveState(ctx, state)
 	if err != nil {
 		return todo.RunCompletedFalse, err
 	}
@@ -417,6 +422,38 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 		log.Debugf("Workflow actor '%s': setting retention reminder for status '%s' with due time '%v'", o.actorID, status.String(), dueTime)
 		_, err := o.createRetentionReminder(ctx, name, time.Now().Add(*dueTime))
 		return err
+	}
+
+	return nil
+}
+
+// validateInboxEvents checks that TaskCompleted and TaskFailed events in the
+// inbox correspond to a TaskScheduled event in the signed history. This
+// prevents inbox injection attacks where fake activity results are written
+// directly to the state store.
+func validateInboxEvents(state *wfenginestate.State) error {
+	// Build set of scheduled task event IDs from history.
+	scheduledIDs := make(map[int32]struct{})
+	for _, e := range state.History {
+		if e.GetTaskScheduled() != nil {
+			scheduledIDs[e.GetEventId()] = struct{}{}
+		}
+	}
+
+	for _, e := range state.Inbox {
+		var taskID int32
+		switch {
+		case e.GetTaskCompleted() != nil:
+			taskID = e.GetTaskCompleted().GetTaskScheduledId()
+		case e.GetTaskFailed() != nil:
+			taskID = e.GetTaskFailed().GetTaskScheduledId()
+		default:
+			continue
+		}
+
+		if _, ok := scheduledIDs[taskID]; !ok {
+			return fmt.Errorf("inbox contains result for task %d which was not scheduled in signed history", taskID)
+		}
 	}
 
 	return nil

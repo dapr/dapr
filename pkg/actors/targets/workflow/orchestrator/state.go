@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -64,6 +65,16 @@ func (o *orchestrator) loadInternalState(ctx context.Context) (*wfenginestate.St
 	o.ometa = o.ometaFromState(o.rstate, o.getExecutionStartedEvent(state))
 
 	return state, o.ometa, nil
+}
+
+// signAndSaveState signs any newly added history events and then persists
+// the state. This is the single entry point for all state persistence —
+// callers must never call saveInternalState directly.
+func (o *orchestrator) signAndSaveState(ctx context.Context, state *wfenginestate.State) error {
+	if err := o.signNewEvents(state, state.HistoryAddedCount()); err != nil {
+		return fmt.Errorf("failed to sign new history events: %w", err)
+	}
+	return o.saveInternalState(ctx, state)
 }
 
 func (o *orchestrator) saveInternalState(ctx context.Context, state *wfenginestate.State) error {

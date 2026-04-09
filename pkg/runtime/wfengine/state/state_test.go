@@ -27,6 +27,13 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
+func addSig(t *testing.T, s *State, sig *backend.HistorySignature) {
+	t.Helper()
+	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(sig)
+	require.NoError(t, err)
+	s.AddSignature(sig, raw)
+}
+
 func testOpts() Options {
 	return Options{
 		AppID:             "test-app",
@@ -39,8 +46,8 @@ func testEvent(id int32) *backend.HistoryEvent {
 	return &backend.HistoryEvent{
 		EventId:   id,
 		Timestamp: timestamppb.Now(),
-		EventType: &protos.HistoryEvent_OrchestratorStarted{
-			OrchestratorStarted: &protos.OrchestratorStartedEvent{},
+		EventType: &protos.HistoryEvent_WorkflowStarted{
+			WorkflowStarted: &protos.WorkflowStartedEvent{},
 		},
 	}
 }
@@ -108,7 +115,7 @@ func TestAddSigningCertificateAndSignature(t *testing.T) {
 	}
 
 	s.AddSigningCertificate(cert)
-	s.AddSignature(sig)
+	addSig(t, s, sig)
 
 	assert.Len(t, s.SigningCertificates, 1)
 	assert.Equal(t, 1, s.signingCertificatesAddedCount)
@@ -125,7 +132,7 @@ func TestReset(t *testing.T) {
 	s.AddToHistory(testEvent(0))
 	s.AddToHistory(testEvent(1))
 	s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert")})
-	s.AddSignature(&backend.HistorySignature{Signature: []byte("sig")})
+	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig")})
 	s.CustomStatus = wrapperspb.String("running")
 
 	s.Reset()
@@ -157,7 +164,7 @@ func TestResetChangeTracking(t *testing.T) {
 
 	s.AddToHistory(testEvent(0))
 	s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert")})
-	s.AddSignature(&backend.HistorySignature{Signature: []byte("sig")})
+	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig")})
 	s.SetMarshaledNewHistory([][]byte{{1, 2, 3}})
 
 	s.ResetChangeTracking()
@@ -180,7 +187,7 @@ func TestApplyRuntimeStateChanges(t *testing.T) {
 		s := NewState(testOpts())
 		s.AddToHistory(testEvent(0))
 		s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert")})
-		s.AddSignature(&backend.HistorySignature{Signature: []byte("sig")})
+		addSig(t, s, &backend.HistorySignature{Signature: []byte("sig")})
 
 		// Reset tracking so we can see what ApplyRuntimeStateChanges does.
 		s.ResetChangeTracking()
@@ -205,7 +212,7 @@ func TestApplyRuntimeStateChanges(t *testing.T) {
 		s.AddToHistory(testEvent(0))
 		s.AddToHistory(testEvent(1))
 		s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert")})
-		s.AddSignature(&backend.HistorySignature{Signature: []byte("sig")})
+		addSig(t, s, &backend.HistorySignature{Signature: []byte("sig")})
 
 		// Reset tracking so we can see what ApplyRuntimeStateChanges does.
 		s.ResetChangeTracking()
@@ -309,7 +316,7 @@ func TestGetSaveRequest_SigningDataOperations(t *testing.T) {
 
 	s.AddToHistory(testEvent(0))
 	s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert-data")})
-	s.AddSignature(&backend.HistorySignature{
+	addSig(t, s, &backend.HistorySignature{
 		StartEventIndex: 0,
 		EventCount:      1,
 		Signature:       []byte("sig-data"),
@@ -342,8 +349,8 @@ func TestGetSaveRequest_DeletesOnReset(t *testing.T) {
 	s.AddToHistory(testEvent(0))
 	s.AddToHistory(testEvent(1))
 	s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert")})
-	s.AddSignature(&backend.HistorySignature{Signature: []byte("sig1")})
-	s.AddSignature(&backend.HistorySignature{Signature: []byte("sig2")})
+	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig1")})
+	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig2")})
 
 	s.Reset()
 
@@ -390,7 +397,7 @@ func TestGetSaveRequest_PreAllocatesOperations(t *testing.T) {
 		s.AddToHistory(testEvent(int32(i)))
 	}
 	s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert")})
-	s.AddSignature(&backend.HistorySignature{Signature: []byte("sig")})
+	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig")})
 
 	req, err := s.GetSaveRequest("actor1")
 	require.NoError(t, err)
@@ -410,8 +417,8 @@ func TestGetPurgeRequest(t *testing.T) {
 	s.AddToHistory(testEvent(0))
 	s.AddToHistory(testEvent(1))
 	s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert")})
-	s.AddSignature(&backend.HistorySignature{Signature: []byte("sig1")})
-	s.AddSignature(&backend.HistorySignature{Signature: []byte("sig2")})
+	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig1")})
+	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig2")})
 
 	req, err := s.GetPurgeRequest("actor1")
 	require.NoError(t, err)
@@ -445,7 +452,7 @@ func TestGetSaveRequest_MetadataIncludesSigningLengths(t *testing.T) {
 
 	s.AddToHistory(testEvent(0))
 	s.AddSigningCertificate(&backend.SigningCertificate{Certificate: []byte("cert")})
-	s.AddSignature(&backend.HistorySignature{Signature: []byte("sig")})
+	addSig(t, s, &backend.HistorySignature{Signature: []byte("sig")})
 
 	req, err := s.GetSaveRequest("actor1")
 	require.NoError(t, err)

@@ -19,7 +19,6 @@ import (
 
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	wfenginestate "github.com/dapr/dapr/pkg/runtime/wfengine/state"
-	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend/historysigning"
 )
 
@@ -74,16 +73,16 @@ func (o *orchestrator) signNewEvents(state *wfenginestate.State, newEventCount i
 		}
 	}
 
-	var prevSig *protos.HistorySignature
-	if len(state.Signatures) > 0 {
-		prevSig = state.Signatures[len(state.Signatures)-1]
+	var prevSigRaw []byte
+	if len(state.RawSignatures) > 0 {
+		prevSigRaw = state.RawSignatures[len(state.RawSignatures)-1]
 	}
 
 	result, err := historysigning.Sign(o.signer, historysigning.SignOptions{
-		RawEvents:         rawNewEvents,
-		StartEventIndex:   startIndex,
-		PreviousSignature: prevSig,
-		ExistingCerts:     state.SigningCertificates,
+		RawEvents:            rawNewEvents,
+		StartEventIndex:      startIndex,
+		PreviousSignatureRaw: prevSigRaw,
+		ExistingCerts:        state.SigningCertificates,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to sign history events: %w", err)
@@ -93,7 +92,7 @@ func (o *orchestrator) signNewEvents(state *wfenginestate.State, newEventCount i
 		state.AddSigningCertificate(result.NewCert)
 	}
 
-	state.AddSignature(result.Signature)
+	state.AddSignature(result.Signature, result.RawSignature)
 
 	return nil
 }
@@ -109,16 +108,16 @@ func (o *orchestrator) signCatchUp(state *wfenginestate.State, signedUpTo, start
 
 	rawCatchUp := state.RawHistory[signedUpTo:startIndex]
 
-	var prevSig *protos.HistorySignature
-	if len(state.Signatures) > 0 {
-		prevSig = state.Signatures[len(state.Signatures)-1]
+	var prevSigRaw []byte
+	if len(state.RawSignatures) > 0 {
+		prevSigRaw = state.RawSignatures[len(state.RawSignatures)-1]
 	}
 
 	result, err := historysigning.Sign(o.signer, historysigning.SignOptions{
-		RawEvents:         rawCatchUp,
-		StartEventIndex:   signedUpTo,
-		PreviousSignature: prevSig,
-		ExistingCerts:     state.SigningCertificates,
+		RawEvents:            rawCatchUp,
+		StartEventIndex:      signedUpTo,
+		PreviousSignatureRaw: prevSigRaw,
+		ExistingCerts:        state.SigningCertificates,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to sign catch-up history events [%d, %d): %w", signedUpTo, startIndex, err)
@@ -128,7 +127,7 @@ func (o *orchestrator) signCatchUp(state *wfenginestate.State, signedUpTo, start
 		state.AddSigningCertificate(result.NewCert)
 	}
 
-	state.AddSignature(result.Signature)
+	state.AddSignature(result.Signature, result.RawSignature)
 
 	return nil
 }

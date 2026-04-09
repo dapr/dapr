@@ -155,6 +155,6 @@ spec:
 	require.NoError(t, err)
 	assert.Equal(t, dworkflow.StatusCompleted, meta.RuntimeStatus)
 
-	sigs, _, _ := fworkflow.UnmarshalSigningData(t, ctx, s.db, id)
-	require.NotEmpty(t, sigs)
+	rawSigs, _, _, _ := fworkflow.UnmarshalSigningData(t, ctx, s.db, id)
+	require.NotEmpty(t, rawSigs)
 }
