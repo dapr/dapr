@@ -68,9 +68,6 @@ type Options struct {
 	// Mode is the mode of this Dapr instance.
 	Mode modes.DaprMode
 
-	// PodName is the name of the pod.
-	PodName string
-
 	// ActorsEnabled indicates whether placement service is enabled in this Dapr cluster.
 	ActorsEnabled bool
 	Actors        actors.Interface

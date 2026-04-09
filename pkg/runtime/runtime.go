@@ -50,8 +50,10 @@ import (
 	"github.com/dapr/dapr/pkg/api/http"
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
@@ -106,7 +108,6 @@ type DaprRuntime struct {
 	nameResolver          nr.Resolver
 	hostAddress           string
 	namespace             string
-	podName               string
 	daprUniversal         *universal.Universal
 	daprHTTPAPI           http.API
 	daprGRPCAPI           grpc.API
@@ -151,6 +152,8 @@ func newDaprRuntime(ctx context.Context,
 	globalConfig *config.Configuration,
 	accessControlList *config.AccessControlList,
 	resiliencyProvider resiliency.Provider,
+	configAPIResource *configapi.Configuration,
+	resiliencyConfigs []*resiliencyapi.Resiliency,
 ) (*DaprRuntime, error) {
 	// TODO: @joshvanl: find a solution for this:
 	// We need to register our custom proxy codec in the global registrar, but
@@ -172,12 +175,22 @@ func newDaprRuntime(ctx context.Context,
 
 	compStore := compstore.New()
 
+	// Store raw API resources in compstore so that the SIGHUP reconciler can
+	// detect unchanged resource events and avoid unnecessary restarts.
+	if configAPIResource != nil {
+		compStore.AddConfigurationResource(*configAPIResource)
+	}
+	for _, res := range resiliencyConfigs {
+		if res != nil {
+			compStore.AddResiliencyResource(*res)
+		}
+	}
+
 	namespace := security.CurrentNamespace()
-	podName := getPodName()
 
 	meta := meta.New(meta.Options{
 		ID:            runtimeConfig.id,
-		PodName:       podName,
+		PodName:       os.Getenv("POD_NAME"),
 		Namespace:     namespace,
 		StrictSandbox: globalConfig.Spec.WasmSpec.GetStrictSandbox(),
 		Mode:          runtimeConfig.mode,
@@ -258,7 +271,6 @@ func newDaprRuntime(ctx context.Context,
 		GlobalConfig:                    globalConfig,
 		Resiliency:                      resiliencyProvider,
 		Mode:                            runtimeConfig.mode,
-		PodName:                         podName,
 		OperatorClient:                  operatorClient,
 		GRPC:                            grpc,
 		Channels:                        channels,
@@ -275,7 +287,6 @@ func newDaprRuntime(ctx context.Context,
 	switch runtimeConfig.mode {
 	case modes.KubernetesMode:
 		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
-			PodName:        podName,
 			Namespace:      namespace,
 			Client:         operatorClient,
 			Config:         globalConfig,
@@ -350,7 +361,6 @@ func newDaprRuntime(ctx context.Context,
 		authz:                 authz,
 		reloader:              reloader,
 		namespace:             namespace,
-		podName:               podName,
 		initComplete:          make(chan struct{}),
 		isAppHealthy:          make(chan struct{}),
 		clock:                 new(clock.RealClock),
@@ -381,6 +391,12 @@ func newDaprRuntime(ctx context.Context,
 
 			rerr := rt.initRuntime(ctx)
 			if rerr != nil {
+				// If the context was canceled (e.g. SIGHUP/SIGINT during
+				// init), treat the initialization failure as a clean
+				// shutdown rather than a fatal error.
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				return rerr
 			}
 
@@ -482,10 +498,6 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 	}
 
 	return a.runnerCloser.Run(ctx)
-}
-
-func getPodName() string {
-	return os.Getenv("POD_NAME")
 }
 
 func getOperatorClient(ctx context.Context, sec security.Handler, cfg *internalConfig) (operatorv1pb.OperatorClient, error) {
@@ -644,7 +656,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Register and initialize name resolution for service discovery.
 	err = a.initNameResolution(ctx)
 	if err != nil {
-		log.Errorf(err.Error())
+		log.Error(err.Error())
 	}
 
 	// Start proxy
@@ -1190,7 +1202,6 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 			Config:    a.runtimeConfig.kubernetes,
 			Client:    a.operatorClient,
 			Namespace: a.namespace,
-			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
 		loader = disk.NewComponents(disk.Options{
@@ -1244,7 +1255,6 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 		loader = kubernetes.NewSubscriptions(kubernetes.Options{
 			Client:    a.operatorClient,
 			Namespace: a.namespace,
-			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
 		loader = disk.NewSubscriptions(disk.Options{
@@ -1295,7 +1305,6 @@ func (a *DaprRuntime) loadMCPServers(ctx context.Context) error {
 			Config:    a.runtimeConfig.kubernetes,
 			Client:    a.operatorClient,
 			Namespace: a.namespace,
-			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
 		l = disk.NewMCPServers(disk.Options{
@@ -1345,7 +1354,6 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 			Config:    a.runtimeConfig.kubernetes,
 			Client:    a.operatorClient,
 			Namespace: a.namespace,
-			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
 		loader = disk.NewHTTPEndpoints(disk.Options{
