@@ -36,9 +36,11 @@ type options struct {
 	httpEndpointUpdateFn  func(*operatorv1.HTTPEndpointUpdateRequest, operatorv1.Operator_HTTPEndpointUpdateServer) error
 	listComponentsFn      func(context.Context, *operatorv1.ListComponentsRequest) (*operatorv1.ListComponentResponse, error)
 	listHTTPEndpointsFn   func(context.Context, *operatorv1.ListHTTPEndpointsRequest) (*operatorv1.ListHTTPEndpointsResponse, error)
+	listMCPServersFn      func(context.Context, *operatorv1.ListMCPServersRequest) (*operatorv1.ListMCPServersResponse, error)
 	listResiliencyFn      func(context.Context, *operatorv1.ListResiliencyRequest) (*operatorv1.ListResiliencyResponse, error)
 	listSubscriptionsFn   func(context.Context, *emptypb.Empty) (*operatorv1.ListSubscriptionsResponse, error)
 	listSubscriptionsV2Fn func(context.Context, *operatorv1.ListSubscriptionsRequest) (*operatorv1.ListSubscriptionsResponse, error)
+	mcpServerUpdateFn     func(*operatorv1.MCPServerUpdateRequest, operatorv1.Operator_MCPServerUpdateServer) error
 	subscriptionUpdateFn  func(*operatorv1.SubscriptionUpdateRequest, operatorv1.Operator_SubscriptionUpdateServer) error
 }
 
@@ -87,6 +89,18 @@ func WithListComponentsFn(fn func(context.Context, *operatorv1.ListComponentsReq
 func WithListHTTPEndpointsFn(fn func(context.Context, *operatorv1.ListHTTPEndpointsRequest) (*operatorv1.ListHTTPEndpointsResponse, error)) func(*options) {
 	return func(opts *options) {
 		opts.listHTTPEndpointsFn = fn
+	}
+}
+
+func WithListMCPServersFn(fn func(context.Context, *operatorv1.ListMCPServersRequest) (*operatorv1.ListMCPServersResponse, error)) func(*options) {
+	return func(opts *options) {
+		opts.listMCPServersFn = fn
+	}
+}
+
+func WithMCPServerUpdateFn(fn func(*operatorv1.MCPServerUpdateRequest, operatorv1.Operator_MCPServerUpdateServer) error) func(*options) {
+	return func(opts *options) {
+		opts.mcpServerUpdateFn = fn
 	}
 }
 

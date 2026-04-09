@@ -47,7 +47,7 @@ func (r *reuse) Setup(t *testing.T) []framework.Option {
 func (r *reuse) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	r.workflow.Registry().AddOrchestratorN("reuse", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddWorkflowN("reuse", func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.CreateTimer(time.Second * 4).Await(nil); err != nil {
 			return nil, err
 		}
@@ -58,11 +58,11 @@ func (r *reuse) Run(t *testing.T, ctx context.Context) {
 
 	errCh := make(chan error)
 	go func() {
-		_, err := client.ScheduleNewOrchestration(ctx, "reuse", api.WithInstanceID("foo"))
+		_, err := client.ScheduleNewWorkflow(ctx, "reuse", api.WithInstanceID("foo"))
 		errCh <- err
 	}()
 	go func() {
-		_, err := client.ScheduleNewOrchestration(ctx, "reuse", api.WithInstanceID("foo"))
+		_, err := client.ScheduleNewWorkflow(ctx, "reuse", api.WithInstanceID("foo"))
 		errCh <- err
 	}()
 
@@ -79,14 +79,14 @@ func (r *reuse) Run(t *testing.T, ctx context.Context) {
 		assert.Contains(t, errs[1].Error(), "an active workflow with ID 'foo' already exists")
 	}
 
-	_, err := client.WaitForOrchestrationCompletion(ctx, "foo")
+	_, err := client.WaitForWorkflowCompletion(ctx, "foo")
 	require.NoError(t, err)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "reuse", api.WithInstanceID("foo"))
+	id, err := client.ScheduleNewWorkflow(ctx, "reuse", api.WithInstanceID("foo"))
 	require.NoError(t, err)
-	_, err = client.ScheduleNewOrchestration(ctx, "reuse", api.WithInstanceID("foo"))
+	_, err = client.ScheduleNewWorkflow(ctx, "reuse", api.WithInstanceID("foo"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "an active workflow with ID 'foo' already exists")
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 }
