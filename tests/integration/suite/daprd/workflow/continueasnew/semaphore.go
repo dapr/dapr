@@ -55,10 +55,7 @@ func (s *semaphore) Run(t *testing.T, ctx context.Context) {
 	s.workflow.WaitUntilRunning(t, ctx)
 	reg := s.workflow.Registry()
 
-	const (
-		totalRequests  = 30
-		maxConcurrency = 3
-	)
+	const totalRequests = 30
 
 	var mu sync.Mutex
 	dispatched := make(map[string]int)

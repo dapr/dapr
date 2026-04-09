@@ -78,7 +78,15 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 			return inc + 1, nil
 		}
 
-		ctx.WaitForSingleEvent("incr", 3*time.Second).Await(nil)
+		var got bool
+		ctx.WaitForSingleEvent("incr", 3*time.Second).Await(&got)
+		if !got {
+			if drainMode.Load() {
+				return inc, nil
+			}
+			ctx.ContinueAsNew(inc, task.WithKeepUnprocessedEvents())
+			return nil, nil
+		}
 		ctx.ContinueAsNew(inc+1, task.WithKeepUnprocessedEvents())
 		return nil, nil
 	})

@@ -53,6 +53,8 @@ func TestGetStablePort(t *testing.T) {
 		ports := make(map[int]bool)
 		for i := range 10 {
 			port := getPort(t, fmt.Sprintf("different-app-%d", i))
+			assert.True(t, (port >= 10233 && port <= 12280) || (port >= 22444 && port <= 24491),
+				"port %d for app %d is out of expected range", port, i)
 			ports[port] = true
 		}
 		assert.Greater(t, len(ports), 1,
