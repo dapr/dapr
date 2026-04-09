@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -39,6 +40,7 @@ type Options struct {
 type operator struct {
 	components    *resource[componentsapi.Component]
 	subscriptions *resource[subapi.Subscription]
+	mcpServers    *resource[mcpserverapi.MCPServer]
 
 	running atomic.Bool
 }
@@ -47,6 +49,7 @@ func New(opts Options) loader.Interface {
 	return &operator{
 		components:    newResource[componentsapi.Component](opts, loadercompstore.NewComponents(opts.ComponentStore), new(components)),
 		subscriptions: newResource[subapi.Subscription](opts, loadercompstore.NewSubscriptions(opts.ComponentStore), new(subscriptions)),
+		mcpServers:    newResource[mcpserverapi.MCPServer](opts, loadercompstore.NewMCPServers(opts.ComponentStore), new(mcpservers)),
 	}
 }
 
@@ -57,7 +60,7 @@ func (o *operator) Run(ctx context.Context) error {
 
 	<-ctx.Done()
 
-	return errors.Join(o.components.close(), o.subscriptions.close())
+	return errors.Join(o.components.close(), o.subscriptions.close(), o.mcpServers.close())
 }
 
 func (o *operator) Components() loader.Loader[componentsapi.Component] {
@@ -66,4 +69,8 @@ func (o *operator) Components() loader.Loader[componentsapi.Component] {
 
 func (o *operator) Subscriptions() loader.Loader[subapi.Subscription] {
 	return o.subscriptions
+}
+
+func (o *operator) MCPServers() loader.Loader[mcpserverapi.MCPServer] {
+	return o.mcpServers
 }

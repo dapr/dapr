@@ -94,6 +94,50 @@ func IsJSONContentType(contentType string) bool {
 	return strings.HasPrefix(strings.ToLower(contentType), JSONContentType)
 }
 
+// IsHopByHopHeader returns true if the header is a hop-by-hop header
+// that must not be forwarded by proxies per RFC 7230 Section 6.1.
+func IsHopByHopHeader(hdr string) bool {
+	switch strings.ToLower(hdr) {
+	case "connection",
+		"keep-alive",
+		"proxy-connection",
+		"transfer-encoding",
+		"upgrade",
+		"http2-settings",
+		"te",
+		"trailer",
+		"proxy-authorization",
+		"proxy-authenticate":
+		return true
+	}
+	return false
+}
+
+// connectionHopByHopHeaders returns the set of header names nominated as
+// hop-by-hop by the Connection header value per RFC 7230 Section 6.1.
+func connectionHopByHopHeaders(internalMD DaprInternalMetadata) map[string]struct{} {
+	headers := make(map[string]struct{})
+	var connVal *internalv1pb.ListStringValue
+	for key, val := range internalMD {
+		if strings.EqualFold(key, "Connection") {
+			connVal = val
+			break
+		}
+	}
+	if connVal == nil {
+		return headers
+	}
+	for _, v := range connVal.GetValues() {
+		for token := range strings.SplitSeq(v, ",") {
+			token = strings.TrimSpace(token)
+			if token != "" {
+				headers[strings.ToLower(token)] = struct{}{}
+			}
+		}
+	}
+	return headers
+}
+
 // isPermanentHTTPHeader checks whether hdr belongs to the list of
 // permanent request headers maintained by IANA.
 // http://www.iana.org/assignments/message-headers/message-headers.xml
@@ -208,6 +252,10 @@ func ReservedGRPCMetadataToDaprPrefixHeader(key string) string {
 
 // InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers.
 func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMetadata, setHeader func(string, string)) {
+	// Build the set of headers nominated by the Connection header value
+	// per RFC 7230 Section 6.1.
+	connHopByHop := connectionHopByHopHeaders(internalMD)
+
 	var traceparentValue, tracestateValue, grpctracebinValue string
 	for k, listVal := range internalMD {
 		if len(listVal.GetValues()) == 0 {
@@ -233,7 +281,16 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 			continue
 		}
 
-		if strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) || keyName == ContentTypeHeader {
+		if strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) || keyName == ContentTypeHeader || keyName == ContentLengthHeader {
+			continue
+		}
+
+		// Strip hop-by-hop headers per RFC 7230 Section 6.1,
+		// including headers nominated by the Connection header.
+		if IsHopByHopHeader(keyName) {
+			continue
+		}
+		if _, ok := connHopByHop[keyName]; ok {
 			continue
 		}
 

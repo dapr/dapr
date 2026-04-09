@@ -1,0 +1,32 @@
+#
+# Copyright 2026 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Prune Stale
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  prune-stale:
+    uses: dapr/.github/.github/workflows/prune-stale.yaml@main
+    with:
+      days-before-pr-stale: 90
+      days-before-issue-stale: 90
+      days-before-pr-close: 7
+      days-before-issue-close: 7
+    secrets:
+      dapr_bot_token: ${{ secrets.DAPR_BOT_TOKEN }}

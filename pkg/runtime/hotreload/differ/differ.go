@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/runtime/meta"
@@ -26,7 +27,7 @@ import (
 
 // Resource is a generic type constraint.
 type Resource interface {
-	componentsapi.Component | subapi.Subscription
+	componentsapi.Component | subapi.Subscription | mcpserverapi.MCPServer
 	meta.Resource
 }
 

@@ -80,6 +80,8 @@ func (a *allfail) Run(t *testing.T, ctx context.Context) {
 		assert.ElementsMatch(c, []string{"test", "test", "test", "test"}, a.triggered.Slice())
 	}, time.Second*10, time.Millisecond*10)
 
-	time.Sleep(time.Second * 2)
-	assert.ElementsMatch(t, []string{"test", "test", "test", "test"}, a.triggered.Slice())
+	// Ensure no additional triggers arrive beyond the expected 4.
+	require.Never(t, func() bool {
+		return len(a.triggered.Slice()) != 4
+	}, time.Second*3, time.Millisecond*100)
 }

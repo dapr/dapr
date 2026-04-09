@@ -62,7 +62,7 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 	var runv1 atomic.Bool
 	var runv2 atomic.Bool
 
-	wf1 := func(ctx *task.OrchestrationContext) (any, error) {
+	wf1 := func(ctx *task.WorkflowContext) (any, error) {
 		if err := ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 			return nil, err
 		}
@@ -70,20 +70,20 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 		return nil, nil
 	}
 
-	r.workflow.Registry().AddVersionedOrchestratorN("workflow", "v1", true, wf1)
+	r.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, wf1)
 
 	clientCtx, cancelClient := context.WithCancel(ctx)
 	defer cancelClient()
 	client := r.workflow.BackendClient(t, clientCtx)
-	id, err := client.ScheduleNewOrchestration(ctx, "workflow")
+	id, err := client.ScheduleNewWorkflow(ctx, "workflow")
 	require.NoError(t, err)
 
-	wf.WaitForOrchestratorStartedEvent(t, ctx, client, id)
+	wf.WaitForWorkflowStartedEvent(t, ctx, client, id)
 
 	cancelClient()
 	r.workflow.ResetRegistry(t)
 
-	r.workflow.Registry().AddVersionedOrchestratorN("workflow", "v2", true, func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddVersionedWorkflowN("workflow", "v2", true, func(ctx *task.WorkflowContext) (any, error) {
 		if err = ctx.WaitForSingleEvent("Continue", -1).Await(nil); err != nil {
 			return nil, err
 		}
@@ -103,12 +103,11 @@ func (r *retention) Run(t *testing.T, ctx context.Context) {
 
 	cancelClient()
 	r.workflow.ResetRegistry(t)
-	r.workflow.Registry().AddVersionedOrchestratorN("workflow", "v1", true, wf1)
+	r.workflow.Registry().AddVersionedWorkflowN("workflow", "v1", true, wf1)
 
 	clientCtx, cancelClient = context.WithCancel(ctx)
 	defer cancelClient()
 	client = r.workflow.BackendClient(t, clientCtx)
-	wf.WaitForRuntimeStatus(t, ctx, client, id, protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		ids, err := client.ListInstanceIDs(ctx)

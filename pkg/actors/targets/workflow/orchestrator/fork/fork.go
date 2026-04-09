@@ -115,7 +115,7 @@ func (f *Fork) Build() (*state.State, error) {
 
 	// Ensure incomplete child workflows are also rerun.
 	for _, unfin := range f.unfinishedChildWorkflows {
-		sub := unfin.GetSubOrchestrationInstanceCreated()
+		sub := unfin.GetChildWorkflowInstanceCreated()
 		sub.InstanceId = fmt.Sprintf("%s:%04x", f.newInstanceID, unfin.EventId)
 		f.newState.AddToInbox(unfin)
 	}
@@ -145,18 +145,18 @@ func (f *Fork) handleBefore(his *backend.HistoryEvent) {
 	case *protos.HistoryEvent_TimerCreated:
 		f.activeTimers[his.GetEventId()] = his
 
-	case *protos.HistoryEvent_SubOrchestrationInstanceCreated:
+	case *protos.HistoryEvent_ChildWorkflowInstanceCreated:
 		f.unfinishedChildWorkflows[his.GetEventId()] = his
 
-	case *protos.HistoryEvent_SubOrchestrationInstanceCompleted:
-		f.newState.AddToHistory(f.unfinishedChildWorkflows[his.GetSubOrchestrationInstanceCompleted().GetTaskScheduledId()])
+	case *protos.HistoryEvent_ChildWorkflowInstanceCompleted:
+		f.newState.AddToHistory(f.unfinishedChildWorkflows[his.GetChildWorkflowInstanceCompleted().GetTaskScheduledId()])
 		f.newState.AddToHistory(his)
-		delete(f.unfinishedChildWorkflows, his.GetSubOrchestrationInstanceCompleted().GetTaskScheduledId())
+		delete(f.unfinishedChildWorkflows, his.GetChildWorkflowInstanceCompleted().GetTaskScheduledId())
 
-	case *protos.HistoryEvent_SubOrchestrationInstanceFailed:
-		f.newState.AddToHistory(f.unfinishedChildWorkflows[his.GetSubOrchestrationInstanceFailed().GetTaskScheduledId()])
+	case *protos.HistoryEvent_ChildWorkflowInstanceFailed:
+		f.newState.AddToHistory(f.unfinishedChildWorkflows[his.GetChildWorkflowInstanceFailed().GetTaskScheduledId()])
 		f.newState.AddToHistory(his)
-		delete(f.unfinishedChildWorkflows, his.GetSubOrchestrationInstanceFailed().GetTaskScheduledId())
+		delete(f.unfinishedChildWorkflows, his.GetChildWorkflowInstanceFailed().GetTaskScheduledId())
 
 	default:
 		f.newState.AddToHistory(his)
@@ -191,8 +191,8 @@ func (f *Fork) handleFound(i int, his *backend.HistoryEvent) (*protos.HistoryEve
 		}
 		return his, nil
 
-	case *protos.HistoryEvent_SubOrchestrationInstanceCreated:
-		sub := his.GetSubOrchestrationInstanceCreated()
+	case *protos.HistoryEvent_ChildWorkflowInstanceCreated:
+		sub := his.GetChildWorkflowInstanceCreated()
 		sub.RerunParentInstanceInfo = &protos.RerunParentInstanceInfo{
 			InstanceID: f.instanceID,
 		}
