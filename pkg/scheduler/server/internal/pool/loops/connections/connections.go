@@ -37,6 +37,7 @@ var (
 			streams:          make(map[uint64]context.CancelFunc),
 			streamPool:       store.New(),
 			concurrencyGates: make(map[string]*concurrencyGate),
+			streamGateKeys:   make(map[uint64][]string),
 		}
 	}}
 )
@@ -59,6 +60,7 @@ type connections struct {
 	streamIDx        uint64
 	streamPool       *store.Store
 	concurrencyGates map[string]*concurrencyGate
+	streamGateKeys   map[uint64][]string
 	wg               sync.WaitGroup
 }
 
@@ -124,13 +126,13 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 		ActorTypes: add.Request.GetActorTypes(),
 	})
 
-	c.updateConcurrencyLimits(add.Request)
+	c.updateConcurrencyLimits(streamIDx, add.Request)
 
 	return nil
 }
 
-func (c *connections) updateConcurrencyLimits(req *schedulerv1pb.WatchJobsRequestInitial) {
-	activeKeys := make(map[string]struct{})
+func (c *connections) updateConcurrencyLimits(streamIDx uint64, req *schedulerv1pb.WatchJobsRequestInitial) {
+	var keys []string
 	for _, limit := range req.GetConcurrencyLimits() {
 		if limit.GetMaxConcurrent() <= 0 {
 			continue
@@ -139,7 +141,7 @@ func (c *connections) updateConcurrencyLimits(req *schedulerv1pb.WatchJobsReques
 		if limit.Name != nil {
 			key += ":" + limit.GetName()
 		}
-		activeKeys[key] = struct{}{}
+		keys = append(keys, key)
 		//nolint:gosec // guarded by <= 0 check above
 		if gate, ok := c.concurrencyGates[key]; ok {
 			gate.globalLimit = uint32(limit.GetMaxConcurrent())
@@ -147,9 +149,22 @@ func (c *connections) updateConcurrencyLimits(req *schedulerv1pb.WatchJobsReques
 			c.concurrencyGates[key] = &concurrencyGate{globalLimit: uint32(limit.GetMaxConcurrent())}
 		}
 	}
+	c.streamGateKeys[streamIDx] = keys
+
+	c.removeOrphanedGates()
+}
+
+// removeOrphanedGates deletes gates that no active stream references.
+func (c *connections) removeOrphanedGates() {
+	referenced := make(map[string]struct{})
+	for _, keys := range c.streamGateKeys {
+		for _, key := range keys {
+			referenced[key] = struct{}{}
+		}
+	}
 
 	for key, gate := range c.concurrencyGates {
-		if _, ok := activeKeys[key]; !ok {
+		if _, ok := referenced[key]; !ok {
 			for req := gate.dequeue(); req != nil; req = gate.dequeue() {
 				req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
 			}
@@ -316,7 +331,10 @@ func (c *connections) handleCloseStream(closeStream *loops.ConnCloseStream) erro
 	}
 
 	delete(c.streams, closeStream.StreamIDx)
+	delete(c.streamGateKeys, closeStream.StreamIDx)
 	cancel()
+
+	c.removeOrphanedGates()
 
 	return nil
 }
@@ -337,6 +355,7 @@ func (c *connections) handleShutdown() {
 		}
 	}
 	clear(c.concurrencyGates)
+	clear(c.streamGateKeys)
 
 	loopFactory.CacheLoop(c.loop)
 	connsCache.Put(c)
