@@ -47,7 +47,7 @@ func (c *completed) Setup(t *testing.T) []framework.Option {
 func (c *completed) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
-	c.workflow.Registry().AddOrchestratorN("completed-event", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry().AddWorkflowN("completed-event", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.WaitForSingleEvent("abc3", time.Hour).Await(nil))
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
@@ -59,29 +59,29 @@ func (c *completed) Run(t *testing.T, ctx context.Context) {
 
 	client := c.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "completed-event", api.WithInstanceID("ijk"))
+	id, err := client.ScheduleNewWorkflow(ctx, "completed-event", api.WithInstanceID("ijk"))
 	require.NoError(t, err)
 	time.Sleep(time.Second * 2)
 	require.NoError(t, client.RaiseEvent(ctx, id, "abc3"))
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	newID, err := client.RerunWorkflowFromEvent(ctx, id, 0)
 	require.NoError(t, err)
 	time.Sleep(time.Second * 3)
-	meta, err := client.FetchOrchestrationMetadata(ctx, newID)
+	meta, err := client.FetchWorkflowMetadata(ctx, newID)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_RUNNING.String(), meta.GetRuntimeStatus().String())
 
 	require.NoError(t, client.RaiseEvent(ctx, newID, "abc3"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 
 	newID, err = client.RerunWorkflowFromEvent(ctx, id, 1)
 	require.NoError(t, err)
 	time.Sleep(time.Second * 1)
 	require.NoError(t, client.RaiseEvent(ctx, newID, "abc3"))
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 }
