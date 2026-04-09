@@ -91,11 +91,6 @@ func (s *semaphore) Run(t *testing.T, ctx context.Context) {
 			return st.Dispatched, nil
 		}
 
-		// Wait for the next request event. WithKeepUnprocessedEvents
-		// carries over any buffered inbox events that arrived while this
-		// iteration was running, so st.Pending only holds the single
-		// event consumed here — the remaining inbox events become
-		// NewEvents on the next CAN iteration.
 		var reqID string
 		ctx.WaitForSingleEvent("request", 5*time.Second).Await(&reqID)
 		if reqID != "" {

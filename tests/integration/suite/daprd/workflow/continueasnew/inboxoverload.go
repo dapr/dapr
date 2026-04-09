@@ -114,7 +114,8 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 		DueTime:   "0s",
 	})
 	require.NoError(t, err)
-	time.Sleep(2 * time.Second)
+
+	time.Sleep(5 * time.Second)
 
 	db := i.workflow.DB().GetConnection(t)
 	tableName := i.workflow.DB().TableName()
@@ -128,7 +129,7 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 	drainMode.Store(true)
 
 	meta, err := client.WaitForWorkflowCompletion(ctx, id)
