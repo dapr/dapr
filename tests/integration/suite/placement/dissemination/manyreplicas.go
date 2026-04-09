@@ -73,12 +73,17 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 		streams[i] = s
 	}
 
+	type streamGuard struct {
+		mu     sync.Mutex
+		closed bool
+	}
+
 	var wg sync.WaitGroup
-	closeChs := make([]chan struct{}, numReplicas)
+	guards := make([]*streamGuard, numReplicas)
 	for i, s := range streams {
-		closeChs[i] = make(chan struct{})
+		guards[i] = &streamGuard{}
 		wg.Go(func() {
-			defer s.CloseSend()
+			g := guards[i]
 			id := "replica-" + strconv.Itoa(i)
 			for {
 				resp, err := s.Recv()
@@ -87,10 +92,10 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 				}
 				op := resp.GetOperation()
 				if op == "lock" || op == "update" || op == "unlock" {
-					select {
-					case <-closeChs[i]:
+					g.mu.Lock()
+					if g.closed {
+						g.mu.Unlock()
 						return
-					default:
 					}
 					_ = s.Send(&v1pb.Host{
 						Name: id, Port: int64(3000 + i),
@@ -100,6 +105,7 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 						Operation: hostOpFromString(op),
 						Version:   &resp.Version,
 					})
+					g.mu.Unlock()
 				}
 			}
 		})
@@ -113,8 +119,11 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, table.Tables["default"].Hosts, numReplicas)
 	}, time.Second*30, time.Millisecond*10)
 
-	for _, ch := range closeChs {
-		close(ch)
+	for i, s := range streams {
+		guards[i].mu.Lock()
+		guards[i].closed = true
+		require.NoError(t, s.CloseSend())
+		guards[i].mu.Unlock()
 	}
 	wg.Wait()
 
