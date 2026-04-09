@@ -78,7 +78,7 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 			return inc + 1, nil
 		}
 
-		ctx.WaitForSingleEvent("incr", -1).Await(nil)
+		ctx.WaitForSingleEvent("incr", 3*time.Second).Await(nil)
 		ctx.ContinueAsNew(inc+1, task.WithKeepUnprocessedEvents())
 		return nil, nil
 	})

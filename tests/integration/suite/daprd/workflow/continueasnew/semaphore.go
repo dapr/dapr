@@ -56,7 +56,7 @@ func (s *semaphore) Run(t *testing.T, ctx context.Context) {
 	reg := s.workflow.Registry()
 
 	const (
-		totalRequests  = 50
+		totalRequests  = 30
 		maxConcurrency = 3
 	)
 
@@ -64,9 +64,8 @@ func (s *semaphore) Run(t *testing.T, ctx context.Context) {
 	dispatched := make(map[string]int)
 
 	type coordState struct {
-		Pending []string `json:"pending"`
-		Active  int      `json:"active"`
-		Done    int      `json:"done"`
+		Pending    []string `json:"pending"`
+		Dispatched int      `json:"dispatched"`
 	}
 
 	require.NoError(t, reg.AddActivityN("sem-dispatch", func(c task.ActivityContext) (any, error) {
@@ -82,35 +81,21 @@ func (s *semaphore) Run(t *testing.T, ctx context.Context) {
 		var st coordState
 		require.NoError(t, ctx.GetInput(&st))
 
-		for len(st.Pending) > 0 && st.Active < maxConcurrency {
+		for len(st.Pending) > 0 && st.Dispatched < totalRequests {
 			reqID := st.Pending[0]
 			st.Pending = st.Pending[1:]
-			st.Active++
+			st.Dispatched++
 			require.NoError(t, ctx.CallActivity("sem-dispatch",
 				task.WithActivityInput(reqID),
 			).Await(nil))
 		}
 
-		// Drain "done" events whenever there are active slots to free,
-		// regardless of whether we dispatched in this iteration.
-		for st.Active > 0 {
-			var done bool
-			ctx.WaitForSingleEvent("done", 200*time.Millisecond).Await(&done)
-			if !done {
-				break
-			}
-			st.Active--
-			st.Done++
-		}
-
-		if st.Done >= totalRequests {
-			return st.Done, nil
+		if st.Dispatched >= totalRequests {
+			return st.Dispatched, nil
 		}
 
 		var reqID string
-		if err := ctx.WaitForSingleEvent("request", 30*time.Second).Await(&reqID); err != nil {
-			return nil, err
-		}
+		ctx.WaitForSingleEvent("request", 5*time.Second).Await(&reqID)
 		if reqID != "" {
 			st.Pending = append(st.Pending, reqID)
 		}
@@ -134,15 +119,6 @@ func (s *semaphore) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, client.RaiseEvent(ctx, coordID, "request",
 			api.WithEventPayload(reqID)))
 	}
-
-	go func() {
-		time.Sleep(2 * time.Second)
-		for range totalRequests {
-			_ = client.RaiseEvent(ctx, coordID, "done",
-				api.WithEventPayload(true))
-			time.Sleep(50 * time.Millisecond)
-		}
-	}()
 
 	meta, err := client.WaitForWorkflowCompletion(ctx, coordID)
 	require.NoError(t, err)

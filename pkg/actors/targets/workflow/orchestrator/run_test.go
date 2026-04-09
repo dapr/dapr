@@ -204,7 +204,6 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 		startEvent,
 	}
 
-	// Create 5 inbox events (simulates a burst of external events).
 	inbox := make([]*backend.HistoryEvent, 5)
 	for i := range inbox {
 		inbox[i] = &protos.HistoryEvent{
@@ -232,8 +231,7 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 
 	rstate := runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
 
-	// Simulate CAN progress: engine consumed 3 events, 2 remain as carryover.
-	carryover := inbox[3:] // last 2 events are carryover
+	carryover := inbox[3:]
 	canState := &protos.WorkflowRuntimeState{
 		InstanceId:     instanceID,
 		ContinuedAsNew: true,
@@ -269,7 +267,6 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 	}
 
 	scheduler := func(_ context.Context, wi *backend.WorkflowWorkItem) error {
-		// Simulate engine CAN progress and then failure (MaxContinueAsNewCount)
 		proto.Reset(wi.State)
 		proto.Merge(wi.State, canState)
 		wi.Properties[todo.CallbackChannelProperty].(chan bool) <- false
@@ -297,19 +294,12 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 	assert.Equal(t, todo.RunCompletedFalse, completed)
 	require.Error(t, runErr)
 
-	// CRITICAL: After CAN save, the inbox should contain ONLY the 2 carryover
-	// events, not the original 5. The stale inbox events (consumed during the
-	// CAN loop) must not be re-delivered on retry.
-	assert.Len(t, o.state.Inbox, len(carryover),
-		"inbox should contain only carryover events, not original inbox events")
+	assert.Len(t, o.state.Inbox, len(carryover))
 
-	// History should NOT contain EventRaised events — those were moved to Inbox.
 	for _, e := range o.state.History {
-		assert.Nil(t, e.GetEventRaised(),
-			"History should not contain EventRaised carryover events after CAN save")
+		assert.Nil(t, e.GetEventRaised())
 	}
 
-	// History should still contain the CAN execution events.
 	hasExecutionStarted := false
 	for _, e := range o.state.History {
 		if e.GetExecutionStarted() != nil {
@@ -317,10 +307,7 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 			break
 		}
 	}
-	assert.True(t, hasExecutionStarted,
-		"History should contain ExecutionStarted from CAN state")
+	assert.True(t, hasExecutionStarted)
 
-	// The rstate should reflect the CAN state (rebuilt from History).
-	assert.Equal(t, `3`, o.rstate.GetStartEvent().GetInput().GetValue(),
-		"rstate should reflect CAN progress input")
+	assert.Equal(t, `3`, o.rstate.GetStartEvent().GetInput().GetValue())
 }

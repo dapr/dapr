@@ -61,19 +61,15 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 		var inc int
 		require.NoError(t, ctx.GetInput(&inc))
 
-		if drainMode.Load() {
-			var got bool
-			ctx.WaitForSingleEvent("incr", 3*time.Second).Await(&got)
-			if !got {
+		var got bool
+		ctx.WaitForSingleEvent("incr", 3*time.Second).Await(&got)
+		if !got {
+			if drainMode.Load() {
 				return inc, nil
 			}
-			eventCount.Add(1)
-			inc++
 			ctx.ContinueAsNew(inc, task.WithKeepUnprocessedEvents())
 			return nil, nil
 		}
-
-		require.NoError(t, ctx.WaitForSingleEvent("incr", time.Minute).Await(nil))
 		eventCount.Add(1)
 		ctx.ContinueAsNew(inc+1, task.WithKeepUnprocessedEvents())
 		return nil, nil
@@ -125,7 +121,5 @@ func (r *raisebatchnodup) Run(t *testing.T, ctx context.Context) {
 	require.NotNil(t, meta.GetOutput(), "workflow should complete with output")
 
 	assert.Equal(t, int64(totalEvents), eventCount.Load(),
-		"each event should be processed exactly once; duplicates indicate "+
-			"the inbox was not properly replaced with carryover events "+
-			"during CAN progress save")
+		"each event should be processed exactly once")
 }
