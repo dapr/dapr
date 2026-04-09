@@ -78,6 +78,7 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 	for i, s := range streams {
 		closeChs[i] = make(chan struct{})
 		wg.Go(func() {
+			defer s.CloseSend()
 			id := "replica-" + strconv.Itoa(i)
 			for {
 				resp, err := s.Recv()
@@ -112,9 +113,8 @@ func (m *manyreplicas) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, table.Tables["default"].Hosts, numReplicas)
 	}, time.Second*30, time.Millisecond*10)
 
-	for i, s := range streams {
-		close(closeChs[i])
-		require.NoError(t, s.CloseSend())
+	for _, ch := range closeChs {
+		close(ch)
 	}
 	wg.Wait()
 
