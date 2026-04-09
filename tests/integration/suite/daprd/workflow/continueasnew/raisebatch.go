@@ -118,7 +118,7 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	db := r.workflow.DB().GetConnection(t)
 	tableName := r.workflow.DB().TableName()
@@ -132,7 +132,7 @@ func (r *raisebatch) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 	drainMode.Store(true)
 
 	meta, err := client.WaitForWorkflowCompletion(ctx, id)

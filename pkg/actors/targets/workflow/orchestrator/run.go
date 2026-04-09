@@ -201,6 +201,12 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 					o.rstate = rstateSnapshot
 					return todo.RunCompletedFalse, err
 				}
+
+				if len(carryover) > 0 {
+					if _, err = o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, time.Now(), o.appID); err != nil {
+						return todo.RunCompletedFalse, err
+					}
+				}
 			} else {
 				o.rstate = rstateSnapshot
 			}
