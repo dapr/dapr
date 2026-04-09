@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/loops"
@@ -49,7 +50,7 @@ type Options struct {
 	HTarget       healthz.Target
 
 	DisseminationTimeout time.Duration
-	Cancel               context.CancelCauseFunc
+	Ready                *atomic.Bool
 
 	Inflight  *inflight.Inflight
 	Namespace string
@@ -65,10 +66,10 @@ type disseminator struct {
 	actorTable   table.Interface
 	scheduler    schedclient.Reloader
 	healthTarget healthz.Target
+	ready        *atomic.Bool
 
 	timeout        time.Duration
 	timeoutQ       *timeout.Timeout
-	cancel         context.CancelCauseFunc
 	timeoutVersion uint64
 
 	streamLoop loop.Interface[loops.Event]
@@ -89,7 +90,9 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 
 	diss.currentOperation = v1pb.HostOperation_LOCK
 	diss.currentVersion = 0
+	diss.timeoutVersion = 0
 	diss.healthTarget = opts.HTarget
+	diss.ready = opts.Ready
 
 	diss.loop = LoopFactoryCache.NewLoop(diss)
 	diss.inflight = opts.Inflight
@@ -99,8 +102,6 @@ func New(ctx context.Context, opts Options) loop.Interface[loops.Event] {
 		Loop:    diss.loop,
 		Timeout: opts.DisseminationTimeout,
 	})
-	diss.cancel = opts.Cancel
-
 	diss.streamLoop = stream.New(ctx, stream.Options{
 		Channel:       opts.Channel,
 		PlacementLoop: opts.PlacementLoop,
@@ -157,10 +158,17 @@ func (d *disseminator) handleTimeout(ctx context.Context, timeout *loops.Dissemi
 		return
 	}
 
-	log.Warnf("Dissemination timeout for version %d, shutting down", timeout.Version)
+	log.Warnf("Dissemination timeout for version %d, closing stream to reconnect", timeout.Version)
 
-	d.cancel(fmt.Errorf("dissemination timeout after %s for version %d",
-		d.timeout,
-		timeout.Version,
-	))
+	// Close the stream rather than killing the placement subsystem. The recv
+	// goroutine will exit and enqueue ConnCloseStream to the placement loop,
+	// which will shut down this disseminator, halt actors, and reconnect to
+	// placement. This ensures actor operations are unblocked promptly instead
+	// of hanging until the server-side timeout resolves the slow peer.
+	d.streamLoop.Close(&loops.Shutdown{
+		Error: fmt.Errorf("dissemination timeout after %s for version %d",
+			d.timeout,
+			timeout.Version,
+		),
+	})
 }

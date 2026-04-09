@@ -52,7 +52,6 @@ type Options struct {
 	Scheduler  schedclient.Reloader
 
 	DisseminationTimeout time.Duration
-	Cancel               context.CancelCauseFunc
 }
 
 type placement struct {
@@ -77,7 +76,6 @@ type placement struct {
 	host     *v1pb.Host
 
 	dissTimeout time.Duration
-	cancel      context.CancelCauseFunc
 
 	wg sync.WaitGroup
 }
@@ -97,7 +95,6 @@ func New(opts Options) loop.Interface[loops.Event] {
 		actorTable:  opts.ActorTable,
 		scheduler:   opts.Scheduler,
 		dissTimeout: opts.DisseminationTimeout,
-		cancel:      opts.Cancel,
 	}
 	place.loop = loop.New[loops.Event](8).NewLoop(place)
 	return place.loop
@@ -196,7 +193,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		Scheduler:            p.scheduler,
 		HTarget:              p.htarget,
 		DisseminationTimeout: p.dissTimeout,
-		Cancel:               p.cancel,
+		Ready:                p.ready,
 	})
 
 	p.wg.Add(1)
@@ -221,8 +218,6 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		p.dissLoop.Enqueue(l)
 	}
 	p.lookups = nil
-
-	p.ready.Store(true)
 
 	return nil
 }
