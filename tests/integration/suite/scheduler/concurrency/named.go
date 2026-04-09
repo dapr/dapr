@@ -85,30 +85,40 @@ func (n *named) Run(t *testing.T, ctx context.Context) {
 		},
 	}))
 
-	// Collect triggers for a few seconds. We expect 3 triggers to arrive
-	// quickly: 2 fast (unlimited) + 1 slow (limited to 1). The 2nd slow
-	// job should be held back.
+	// We expect 3 triggers: 2 fast (unlimited) + 1 slow (limited to 1).
+	type recvResult struct {
+		resp *schedulerv1.WatchJobsResponse
+		err  error
+	}
+	recvCh := make(chan recvResult, 4)
+	go func() {
+		for {
+			resp, err := stream.Recv()
+			recvCh <- recvResult{resp, err}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
 	received := make(map[string]*schedulerv1.WatchJobsResponse)
-	deadline := time.After(time.Second * 10)
 	for range 3 {
 		select {
-		case <-deadline:
-			t.Fatalf("timed out, only received %d triggers", len(received))
-		default:
-			resp, err := stream.Recv()
-			require.NoError(t, err)
-			received[resp.GetName()] = resp
-			// Ack fast jobs immediately, hold slow jobs.
-			if resp.GetMetadata().GetConcurrencyKey() == "fast" {
+		case r := <-recvCh:
+			require.NoError(t, r.err)
+			received[r.resp.GetName()] = r.resp
+			if r.resp.GetMetadata().GetConcurrencyKey() == "fast" {
 				require.NoError(t, stream.Send(&schedulerv1.WatchJobsRequest{
 					WatchJobRequestType: &schedulerv1.WatchJobsRequest_Result{
 						Result: &schedulerv1.WatchJobsRequestResult{
-							Id:     resp.GetId(),
+							Id:     r.resp.GetId(),
 							Status: schedulerv1.WatchJobsRequestResultStatus_SUCCESS,
 						},
 					},
 				}))
 			}
+		case <-time.After(time.Second * 10):
+			t.Fatalf("timed out, only received %d triggers", len(received))
 		}
 	}
 
@@ -126,20 +136,10 @@ func (n *named) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, 1, slowCount, "only 1 slow job should be in-flight")
 
 	// No 4th trigger should arrive (the 2nd slow is held).
-	noMoreCtx, noMoreCancel := context.WithTimeout(ctx, time.Second*3)
-	defer noMoreCancel()
-	noMoreCh := make(chan struct{}, 1)
-	go func() {
-		_, err := stream.Recv()
-		if err == nil {
-			noMoreCh <- struct{}{}
-		}
-	}()
-
 	select {
-	case <-noMoreCh:
+	case <-recvCh:
 		t.Fatal("received 4th trigger while slow limit should hold it back")
-	case <-noMoreCtx.Done():
+	case <-time.After(time.Second * 3):
 	}
 
 	// Ack the slow job, the 2nd slow should now arrive.
@@ -153,8 +153,8 @@ func (n *named) Run(t *testing.T, ctx context.Context) {
 	}))
 
 	select {
-	case <-noMoreCh:
-		// Got the 2nd slow trigger.
+	case r := <-recvCh:
+		require.NoError(t, r.err)
 	case <-time.After(time.Second * 10):
 		t.Fatal("timed out waiting for 2nd slow trigger after ack")
 	}

@@ -252,39 +252,53 @@ func (c *connections) handleConcurrencyRelease(rel *loops.ConcurrencyRelease) {
 }
 
 // drainPending attempts to dispatch the next pending trigger from a gate.
+// drainPending scans the pending queue to find a trigger that can acquire all
+// required gates. This avoids head-of-line blocking when the first pending
+// trigger is blocked on a different gate than the one that just released.
 func (c *connections) drainPending(key string, gate *concurrencyGate) {
-	next := gate.dequeue()
-	if next == nil {
-		return
-	}
-	monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
-
-	streamLoop, ok := c.getStreamLoop(next.Job.GetMetadata())
-	if !ok {
-		next.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
-		c.drainPending(key, gate)
-		return
-	}
-
-	gateKeys := c.gateKeysForTrigger(next)
-	var acquired []string
-	for _, gk := range gateKeys {
-		g := c.concurrencyGates[gk]
-		if g.tryAcquire() {
-			acquired = append(acquired, gk)
-		} else {
-			for _, akey := range acquired {
-				c.concurrencyGates[akey].release()
-			}
-			primaryGate := c.concurrencyGates[gateKeys[0]]
-			if !primaryGate.enqueue(next) {
-				next.ResultFn(api.TriggerResponseResult_FAILED)
-			}
-			return
+	n := gate.pendingLen()
+	for range n {
+		next := gate.dequeue()
+		if next == nil {
+			break
 		}
+
+		streamLoop, ok := c.getStreamLoop(next.Job.GetMetadata())
+		if !ok {
+			next.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
+			continue
+		}
+
+		gateKeys := c.gateKeysForTrigger(next)
+		var acquired []string
+		blocked := false
+		for _, gk := range gateKeys {
+			g := c.concurrencyGates[gk]
+			if g.tryAcquire() {
+				acquired = append(acquired, gk)
+			} else {
+				for _, akey := range acquired {
+					c.concurrencyGates[akey].release()
+				}
+				primaryGate := c.concurrencyGates[gateKeys[0]]
+				if !primaryGate.enqueue(next) {
+					next.ResultFn(api.TriggerResponseResult_FAILED)
+				}
+				blocked = true
+				break
+			}
+		}
+
+		if blocked {
+			continue
+		}
+
+		monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
+		c.dispatchWithGates(streamLoop, next, gateKeys)
+		return
 	}
 
-	c.dispatchWithGates(streamLoop, next, gateKeys)
+	monitoring.RecordConcurrencyPending(key, int64(gate.pendingLen()))
 }
 
 // handleCloseStream handles a close stream request.
