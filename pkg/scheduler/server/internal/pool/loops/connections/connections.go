@@ -130,12 +130,7 @@ func (c *connections) handleAdd(ctx context.Context, add *loops.ConnAdd) error {
 }
 
 func (c *connections) updateConcurrencyLimits(req *schedulerv1pb.WatchJobsRequestInitial) {
-	var scount uint32 = 1
-	if c.schedulerCount != nil {
-		//nolint:gosec // scheduler count is always positive
-		scount = max(uint32(c.schedulerCount()), 1)
-	}
-
+	activeKeys := make(map[string]struct{})
 	for _, limit := range req.GetConcurrencyLimits() {
 		if limit.GetMaxConcurrent() <= 0 {
 			continue
@@ -144,18 +139,27 @@ func (c *connections) updateConcurrencyLimits(req *schedulerv1pb.WatchJobsReques
 		if limit.Name != nil {
 			key += ":" + limit.GetName()
 		}
+		activeKeys[key] = struct{}{}
 		//nolint:gosec // guarded by <= 0 check above
-		c.upsertGate(key, uint32(limit.GetMaxConcurrent()), scount)
+		c.concurrencyGates[key] = &concurrencyGate{globalLimit: uint32(limit.GetMaxConcurrent())}
+	}
+
+	for key, gate := range c.concurrencyGates {
+		if _, ok := activeKeys[key]; !ok {
+			for req := gate.dequeue(); req != nil; req = gate.dequeue() {
+				req.ResultFn(api.TriggerResponseResult_UNDELIVERABLE)
+			}
+			delete(c.concurrencyGates, key)
+		}
 	}
 }
 
-func (c *connections) upsertGate(key string, globalLimit, schedulerCount uint32) {
-	if gate, ok := c.concurrencyGates[key]; ok {
-		gate.globalLimit = globalLimit
-		gate.recalculateLocal(schedulerCount)
-	} else {
-		c.concurrencyGates[key] = newConcurrencyGate(globalLimit, schedulerCount)
+func (c *connections) getSchedulerCount() uint32 {
+	if c.schedulerCount != nil {
+		//nolint:gosec // scheduler count is always positive
+		return max(uint32(c.schedulerCount()), 1)
 	}
+	return 1
 }
 
 func (c *connections) handleTriggerRequest(req *loops.TriggerRequest) {
@@ -174,7 +178,7 @@ func (c *connections) handleTriggerRequest(req *loops.TriggerRequest) {
 	var acquired []string
 	for _, key := range gateKeys {
 		gate := c.concurrencyGates[key]
-		if gate.tryAcquire() {
+		if gate.tryAcquire(c.getSchedulerCount()) {
 			acquired = append(acquired, key)
 		} else {
 			for _, akey := range acquired {
@@ -274,7 +278,7 @@ func (c *connections) drainPending(key string, gate *concurrencyGate) {
 		blocked := false
 		for _, gk := range gateKeys {
 			g := c.concurrencyGates[gk]
-			if g.tryAcquire() {
+			if g.tryAcquire(c.getSchedulerCount()) {
 				acquired = append(acquired, gk)
 			} else {
 				for _, akey := range acquired {

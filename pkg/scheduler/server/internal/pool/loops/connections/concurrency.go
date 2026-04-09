@@ -23,16 +23,8 @@ const maxPendingPerGate = 100_000
 // Each scheduler enforces globalLimit / schedulerCount as its local share.
 type concurrencyGate struct {
 	globalLimit uint32
-	localLimit  uint32
 	current     uint32
 	pending     []*loops.TriggerRequest
-}
-
-func newConcurrencyGate(globalLimit, schedulerCount uint32) *concurrencyGate {
-	return &concurrencyGate{
-		globalLimit: globalLimit,
-		localLimit:  localLimitFromGlobal(globalLimit, schedulerCount),
-	}
 }
 
 func localLimitFromGlobal(globalLimit, schedulerCount uint32) uint32 {
@@ -46,8 +38,8 @@ func localLimitFromGlobal(globalLimit, schedulerCount uint32) uint32 {
 	return local
 }
 
-func (g *concurrencyGate) tryAcquire() bool {
-	if g.current < g.localLimit {
+func (g *concurrencyGate) tryAcquire(schedulerCount uint32) bool {
+	if g.current < localLimitFromGlobal(g.globalLimit, schedulerCount) {
 		g.current++
 		return true
 	}
@@ -75,11 +67,16 @@ func (g *concurrencyGate) dequeue() *loops.TriggerRequest {
 	req := g.pending[0]
 	g.pending[0] = nil
 	g.pending = g.pending[1:]
-	return req
-}
 
-func (g *concurrencyGate) recalculateLocal(schedulerCount uint32) {
-	g.localLimit = localLimitFromGlobal(g.globalLimit, schedulerCount)
+	if len(g.pending) == 0 {
+		g.pending = nil
+	} else if cap(g.pending) > 64 && len(g.pending)*4 <= cap(g.pending) {
+		pending := make([]*loops.TriggerRequest, len(g.pending))
+		copy(pending, g.pending)
+		g.pending = pending
+	}
+
+	return req
 }
 
 func (g *concurrencyGate) pendingLen() int {

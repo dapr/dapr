@@ -89,22 +89,50 @@ func TestLocalLimitFromGlobal(t *testing.T) {
 func TestConcurrencyGate_TryAcquireRelease(t *testing.T) {
 	t.Parallel()
 
-	gate := newConcurrencyGate(3, 1)
+	gate := &concurrencyGate{globalLimit: 3}
 
-	assert.True(t, gate.tryAcquire())
-	assert.True(t, gate.tryAcquire())
-	assert.True(t, gate.tryAcquire())
-	assert.False(t, gate.tryAcquire(), "should not acquire beyond limit")
+	assert.True(t, gate.tryAcquire(1))
+	assert.True(t, gate.tryAcquire(1))
+	assert.True(t, gate.tryAcquire(1))
+	assert.False(t, gate.tryAcquire(1), "should not acquire beyond limit")
 
 	gate.release()
-	assert.True(t, gate.tryAcquire(), "should acquire after release")
-	assert.False(t, gate.tryAcquire())
+	assert.True(t, gate.tryAcquire(1), "should acquire after release")
+	assert.False(t, gate.tryAcquire(1))
+}
+
+func TestConcurrencyGate_DynamicSchedulerCount(t *testing.T) {
+	t.Parallel()
+
+	gate := &concurrencyGate{globalLimit: 6}
+
+	// With 1 scheduler, local limit is 6.
+	assert.True(t, gate.tryAcquire(1))
+	assert.True(t, gate.tryAcquire(1))
+	assert.True(t, gate.tryAcquire(1))
+	assert.True(t, gate.tryAcquire(1))
+	assert.True(t, gate.tryAcquire(1))
+	assert.True(t, gate.tryAcquire(1))
+	assert.False(t, gate.tryAcquire(1))
+
+	// Release all.
+	for range 6 {
+		gate.release()
+	}
+
+	// With 3 schedulers, local limit is 2.
+	assert.True(t, gate.tryAcquire(3))
+	assert.True(t, gate.tryAcquire(3))
+	assert.False(t, gate.tryAcquire(3), "should respect new scheduler count")
+
+	// If scheduler count drops back to 1, limit returns to 6.
+	assert.True(t, gate.tryAcquire(1))
 }
 
 func TestConcurrencyGate_EnqueueDequeue(t *testing.T) {
 	t.Parallel()
 
-	gate := newConcurrencyGate(1, 1)
+	gate := &concurrencyGate{globalLimit: 1}
 
 	assert.Nil(t, gate.dequeue(), "empty queue returns nil")
 
@@ -127,49 +155,16 @@ func TestConcurrencyGate_EnqueueDequeue(t *testing.T) {
 	assert.Equal(t, 0, gate.pendingLen())
 }
 
-func TestConcurrencyGate_RecalculateLocal(t *testing.T) {
-	t.Parallel()
-
-	gate := newConcurrencyGate(100, 3)
-	assert.Equal(t, uint32(33), gate.localLimit)
-
-	gate.recalculateLocal(5)
-	assert.Equal(t, uint32(20), gate.localLimit)
-
-	gate.recalculateLocal(1)
-	assert.Equal(t, uint32(100), gate.localLimit)
-}
-
 func TestConcurrencyGate_ReleaseNeverNegative(t *testing.T) {
 	t.Parallel()
 
-	gate := newConcurrencyGate(5, 1)
+	gate := &concurrencyGate{globalLimit: 5}
 
 	gate.release()
 	assert.Equal(t, uint32(0), gate.current)
 
 	gate.release()
 	assert.Equal(t, uint32(0), gate.current)
-}
-
-func TestUpsertGate(t *testing.T) {
-	t.Parallel()
-
-	c := &connections{
-		concurrencyGates: make(map[string]*concurrencyGate),
-	}
-
-	c.upsertGate("activity", 100, 3)
-	require.Contains(t, c.concurrencyGates, "activity")
-	assert.Equal(t, uint32(33), c.concurrencyGates["activity"].localLimit)
-
-	c.upsertGate("activity:SendEmail", 10, 3)
-	require.Contains(t, c.concurrencyGates, "activity:SendEmail")
-	assert.Equal(t, uint32(3), c.concurrencyGates["activity:SendEmail"].localLimit)
-
-	// Update existing gate
-	c.upsertGate("activity:SendEmail", 30, 3)
-	assert.Equal(t, uint32(10), c.concurrencyGates["activity:SendEmail"].localLimit)
 }
 
 func TestGateKeysForTrigger(t *testing.T) {
@@ -181,23 +176,19 @@ func TestGateKeysForTrigger(t *testing.T) {
 
 	actorType := "dapr.internal.default.myapp.activity"
 
-	// No gates configured - should return nil
 	req := makeTriggerRequest(actorType, "", "")
 	keys := c.gateKeysForTrigger(req)
 	assert.Nil(t, keys)
 
-	// Only type-level gate
-	c.upsertGate(actorType, 50, 1)
+	c.concurrencyGates[actorType] = &concurrencyGate{globalLimit: 50}
 	keys = c.gateKeysForTrigger(req)
 	assert.Equal(t, []string{actorType}, keys)
 
-	// Type-level + named gate
-	c.upsertGate(actorType+":SendEmail", 5, 1)
+	c.concurrencyGates[actorType+":SendEmail"] = &concurrencyGate{globalLimit: 5}
 	reqWithKey := makeTriggerRequest(actorType, "actor1", "SendEmail")
 	keys = c.gateKeysForTrigger(reqWithKey)
 	assert.Equal(t, []string{actorType, actorType + ":SendEmail"}, keys)
 
-	// Named gate only (no concurrency key on trigger)
 	reqNoKey := makeTriggerRequest(actorType, "actor1", "")
 	keys = c.gateKeysForTrigger(reqNoKey)
 	assert.Equal(t, []string{actorType}, keys)
