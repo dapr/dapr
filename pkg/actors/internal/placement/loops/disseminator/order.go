@@ -78,10 +78,12 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 
 	case operationUpdate:
 		if d.currentVersion > version {
-			d.cancel(fmt.Errorf("version mismatch: expected %d, got %d",
-				d.currentVersion,
-				version,
-			))
+			d.streamLoop.Close(&loops.Shutdown{
+				Error: fmt.Errorf("version mismatch: expected %d, got %d",
+					d.currentVersion,
+					version,
+				),
+			})
 			return nil
 		}
 
@@ -137,9 +139,12 @@ func (d *disseminator) handleOrder(ctx context.Context, order *loops.StreamOrder
 		})
 
 		d.healthTarget.Ready()
+		d.ready.Store(true)
 
 	default:
-		d.cancel(fmt.Errorf("unknown operation: %s", order.Order.GetOperation()))
+		d.streamLoop.Close(&loops.Shutdown{
+			Error: fmt.Errorf("unknown operation: %s", order.Order.GetOperation()),
+		})
 		return nil
 	}
 
