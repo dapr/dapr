@@ -28,10 +28,6 @@ import (
 // The marshaled bytes are stored on the state so that GetSaveRequest can
 // persist the exact bytes that were signed.
 // If signer is nil (mTLS disabled or feature flag off), this is a no-op.
-//
-// When unsigned history events exist before the new batch (e.g. the workflow
-// previously ran on a non-signing host), a catch-up signature is created first
-// to cover the gap, ensuring contiguous signature coverage from index 0.
 func (o *orchestrator) signNewEvents(state *wfenginestate.State, newEventCount int) error {
 	if o.signer == nil {
 		return nil
@@ -57,22 +53,6 @@ func (o *orchestrator) signNewEvents(state *wfenginestate.State, newEventCount i
 
 	state.SetMarshaledNewHistory(rawNewEvents)
 
-	// Determine where existing signatures cover up to.
-	var signedUpTo uint64
-	if len(state.Signatures) > 0 {
-		last := state.Signatures[len(state.Signatures)-1]
-		signedUpTo = last.GetStartEventIndex() + last.GetEventCount()
-	}
-
-	// If there are unsigned events before the new batch, create a catch-up
-	// signature to fill the gap. This happens when a workflow transitions
-	// from a non-signing host to a signing host.
-	if signedUpTo < startIndex {
-		if err := o.signCatchUp(state, signedUpTo, startIndex); err != nil {
-			return err
-		}
-	}
-
 	var prevSigRaw []byte
 	if len(state.RawSignatures) > 0 {
 		prevSigRaw = state.RawSignatures[len(state.RawSignatures)-1]
@@ -86,41 +66,6 @@ func (o *orchestrator) signNewEvents(state *wfenginestate.State, newEventCount i
 	})
 	if err != nil {
 		return fmt.Errorf("failed to sign history events: %w", err)
-	}
-
-	if result.NewCert != nil {
-		state.AddSigningCertificate(result.NewCert)
-	}
-
-	state.AddSignature(result.Signature, result.RawSignature)
-
-	return nil
-}
-
-// signCatchUp creates a signature covering previously unsigned history events
-// in the range [signedUpTo, startIndex). It uses the raw bytes loaded from
-// the state store (state.RawHistory) so the signature matches the persisted
-// data.
-func (o *orchestrator) signCatchUp(state *wfenginestate.State, signedUpTo, startIndex uint64) error {
-	if uint64(len(state.RawHistory)) < startIndex {
-		return fmt.Errorf("raw history has %d entries but need %d for catch-up signing", len(state.RawHistory), startIndex)
-	}
-
-	rawCatchUp := state.RawHistory[signedUpTo:startIndex]
-
-	var prevSigRaw []byte
-	if len(state.RawSignatures) > 0 {
-		prevSigRaw = state.RawSignatures[len(state.RawSignatures)-1]
-	}
-
-	result, err := historysigning.Sign(o.signer, historysigning.SignOptions{
-		RawEvents:            rawCatchUp,
-		StartEventIndex:      signedUpTo,
-		PreviousSignatureRaw: prevSigRaw,
-		ExistingCerts:        state.SigningCertificates,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to sign catch-up history events [%d, %d): %w", signedUpTo, startIndex, err)
 	}
 
 	if result.NewCert != nil {

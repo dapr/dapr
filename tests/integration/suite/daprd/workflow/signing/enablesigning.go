@@ -16,7 +16,6 @@ package signing
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +26,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
-	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
@@ -37,8 +35,9 @@ func init() {
 }
 
 // enablesigning verifies that when a workflow starts on a non-signing host
-// then moves to a signing host, catch-up signatures cover the previously
-// unsigned events.
+// then moves to a signing host, the workflow is rejected because the unsigned
+// history has no integrity proof. Catch-up signing is not performed because
+// the unsigned events could have been tampered with.
 type enablesigning struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -82,11 +81,7 @@ func (e *enablesigning) Run(t *testing.T, ctx context.Context) {
 
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("sign-enable", func(ctx *dworkflow.WorkflowContext) (any, error) {
-		var payload string
-		if err := ctx.WaitForExternalEvent("continue", time.Second*5).Await(&payload); err != nil {
-			return nil, err
-		}
-		return payload, nil
+		return "done", nil
 	})
 
 	client1 := dworkflow.NewClient(e.daprd1.GRPCConn(t, ctx))
@@ -95,9 +90,8 @@ func (e *enablesigning) Run(t *testing.T, ctx context.Context) {
 	id, err := client1.ScheduleWorkflow(ctx, "sign-enable")
 	require.NoError(t, err)
 
-	meta, err := client1.WaitForWorkflowStart(ctx, id)
+	_, err = client1.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, dworkflow.StatusRunning, meta.RuntimeStatus)
 	assert.Equal(t, 0, e.db.CountStateKeys(t, ctx, "signature"))
 
 	e.daprd1.Kill(t)
@@ -116,14 +110,13 @@ func (e *enablesigning) Run(t *testing.T, ctx context.Context) {
 	client2 := dworkflow.NewClient(daprd2.GRPCConn(t, ctx))
 	require.NoError(t, client2.StartWorker(ctx, reg))
 
-	require.NoError(t, client2.RaiseEvent(ctx, id, "continue",
-		dworkflow.WithEventPayload("resumed")))
-
-	_, err = client2.WaitForWorkflowCompletion(ctx, id)
+	// The workflow should be marked FAILED because the unsigned history
+	// from the non-signing host has no integrity proof. Catch-up signing
+	// is not performed to avoid legitimizing potentially tampered data.
+	meta, err := client2.FetchWorkflowMetadata(ctx, id)
 	require.NoError(t, err)
-
-	fworkflow.VerifySignatureChain(t, ctx, e.db, id,
-		e.sentry.CABundle().X509.TrustAnchors,
-	)
-	fworkflow.VerifyCertAppID(t, ctx, e.db, id, daprd2.AppID())
+	assert.Equal(t, dworkflow.StatusFailed, meta.RuntimeStatus)
+	require.NotNil(t, meta.FailureDetails)
+	assert.Equal(t, "SignatureVerificationFailed", meta.FailureDetails.GetErrorType())
+	assert.Contains(t, meta.FailureDetails.GetErrorMessage(), "unsigned history events")
 }

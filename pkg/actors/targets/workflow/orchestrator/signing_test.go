@@ -27,6 +27,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -35,6 +36,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/backend/historysigning"
 	"github.com/dapr/kit/crypto/spiffe/signer"
+	"github.com/dapr/kit/crypto/spiffe/trustanchors/fake"
 )
 
 func generateTestCert(t *testing.T) ([]byte, ed25519.PrivateKey) {
@@ -57,6 +59,11 @@ func generateTestCert(t *testing.T) ([]byte, ed25519.PrivateKey) {
 
 func testSigner(t *testing.T, certDER []byte, key ed25519.PrivateKey) *signer.Signer {
 	t.Helper()
+	return testSignerWithTrust(t, certDER, key, false)
+}
+
+func testSignerWithTrust(t *testing.T, certDER []byte, key ed25519.PrivateKey, withTrustAnchors bool) *signer.Signer {
+	t.Helper()
 	certs, err := x509.ParseCertificates(certDER)
 	require.NoError(t, err)
 	id, err := x509svid.IDFromCert(certs[0])
@@ -66,6 +73,9 @@ func testSigner(t *testing.T, certDER []byte, key ed25519.PrivateKey) *signer.Si
 		Certificates: certs,
 		PrivateKey:   key,
 	}}
+	if withTrustAnchors {
+		return signer.New(source, fake.New(certs...))
+	}
 	return signer.New(source, nil)
 }
 
@@ -252,4 +262,103 @@ func TestSignNewEvents_VerifiesWithHistorySigning(t *testing.T) {
 
 	err = historysigning.VerifySignature(sig, st.Signatures[0], st.SigningCertificates, rawEvents)
 	require.NoError(t, err)
+}
+
+// TestSignNewEvents_RoundTripDeterminism verifies that signatures survive a
+// full sign → save → load → verify cycle. The saved raw bytes must be
+// preserved exactly so that chain linking digests remain valid.
+func TestSignNewEvents_RoundTripDeterminism(t *testing.T) {
+	t.Parallel()
+
+	certDER, priv := generateTestCert(t)
+	sgn := testSignerWithTrust(t, certDER, priv, true)
+	o := &orchestrator{factory: &factory{signer: sgn}}
+
+	// Sign two batches to test chain linking across a save cycle.
+	events := []*backend.HistoryEvent{
+		testHistoryEvent(0),
+		testHistoryEvent(1),
+	}
+	st := testState(events...)
+
+	err := o.signNewEvents(st, 2)
+	require.NoError(t, err)
+	require.Len(t, st.Signatures, 1)
+	require.Len(t, st.RawSignatures, 1)
+
+	// Build save request — this is what goes to the state store.
+	req, err := st.GetSaveRequest("test-actor")
+	require.NoError(t, err)
+
+	// Extract the persisted bytes for signatures, certs, and history.
+	savedBytes := make(map[string][]byte)
+	for _, op := range req.Operations {
+		if op.Operation == api.Upsert {
+			if u, ok := op.Request.(api.TransactionalUpsert); ok {
+				if v, ok := u.Value.([]byte); ok {
+					savedBytes[u.Key] = v
+				}
+			}
+		}
+	}
+
+	// Verify signature bytes were saved.
+	sigBytes, ok := savedBytes["signature-000000"]
+	require.True(t, ok, "signature-000000 should be in save request")
+	assert.Equal(t, st.RawSignatures[0], sigBytes,
+		"saved bytes must match RawSignatures exactly")
+
+	// Simulate a load: unmarshal signature from saved bytes and verify chain.
+	var loadedSig backend.HistorySignature
+	require.NoError(t, proto.Unmarshal(sigBytes, &loadedSig))
+
+	// Reconstruct raw events from saved history bytes.
+	var rawEvents [][]byte
+	for i := 0; ; i++ {
+		key := fmt.Sprintf("history-%06d", i)
+		b, exists := savedBytes[key]
+		if !exists {
+			break
+		}
+		rawEvents = append(rawEvents, b)
+	}
+	require.Len(t, rawEvents, 2)
+
+	// Verify chain using loaded raw bytes (same as LoadWorkflowState would).
+	err = historysigning.VerifyChain(historysigning.VerifyChainOptions{
+		RawSignatures: [][]byte{sigBytes},
+		Certs:         st.SigningCertificates,
+		AllRawEvents:  rawEvents,
+		Signer:        sgn,
+	})
+	require.NoError(t, err, "signatures must verify after round-trip")
+
+	// Now add a second batch and verify chain linking works with the
+	// raw bytes from the first batch. Simulate what LoadWorkflowState
+	// does: preserve RawSignatures across the save cycle.
+	savedRawSigs := make([][]byte, len(st.RawSignatures))
+	copy(savedRawSigs, st.RawSignatures)
+	st.ResetChangeTracking()
+	// Simulate reload: restore raw signatures as LoadWorkflowState would.
+	st.RawSignatures = savedRawSigs
+	st.AddToHistory(testHistoryEvent(2))
+
+	err = o.signNewEvents(st, 1)
+	require.NoError(t, err)
+	require.Len(t, st.Signatures, 2)
+	require.Len(t, st.RawSignatures, 2)
+
+	// Rebuild raw events including the new one.
+	newRaw, err := historysigning.MarshalEvent(testHistoryEvent(2))
+	require.NoError(t, err)
+	rawEvents = append(rawEvents, newRaw)
+
+	// Verify full chain with both signatures.
+	err = historysigning.VerifyChain(historysigning.VerifyChainOptions{
+		RawSignatures: st.RawSignatures,
+		Certs:         st.SigningCertificates,
+		AllRawEvents:  rawEvents,
+		Signer:        sgn,
+	})
+	require.NoError(t, err, "chained signatures must verify after round-trip")
 }

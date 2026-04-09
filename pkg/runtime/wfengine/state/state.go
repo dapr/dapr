@@ -42,6 +42,11 @@ const (
 	signatureKeyPrefix = "signature"
 	customStatusKey    = "customStatus"
 	metadataKey        = "metadata"
+
+	// maxStateEntries is the upper bound for any metadata count field
+	// (inbox, history, signatures, certificates). This prevents OOM from
+	// an attacker inflating metadata values in the state store.
+	maxStateEntries = 1_000_000
 )
 
 var wfLogger = logger.NewLogger("dapr.runtime.actor.target.workflow.state")
@@ -66,9 +71,8 @@ type State struct {
 	Generation          uint64
 
 	// RawHistory holds the raw bytes of history events as loaded from the
-	// state store. These are used for signature verification (to verify
-	// against actual persisted bytes) and for catch-up signing when a
-	// workflow transitions from a non-signing to a signing host.
+	// state store. These are used for signature verification to verify
+	// against the actual persisted bytes.
 	RawHistory [][]byte
 
 	// RawSignatures holds the raw serialized bytes of each HistorySignature
@@ -471,6 +475,21 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		metadata.HistoryLength = metadataJSON.HistoryLength
 	}
 
+	// Validate metadata bounds to prevent OOM from inflated state store values.
+	for _, entry := range []struct {
+		name  string
+		value uint64
+	}{
+		{"inbox", metadata.GetInboxLength()},
+		{"history", metadata.GetHistoryLength()},
+		{"signatures", metadata.GetSignatureLength()},
+		{"signing certificates", metadata.GetSigningCertificateLength()},
+	} {
+		if entry.value > maxStateEntries {
+			return nil, fmt.Errorf("workflow '%s' metadata %s length %d exceeds maximum %d", actorID, entry.name, entry.value, maxStateEntries)
+		}
+	}
+
 	// Load inbox, history, signing certs, signatures, and custom status using a bulk request
 	wState := NewState(opts)
 	wState.Generation = metadata.GetGeneration()
@@ -616,10 +635,21 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 
 	wfLogger.Debugf("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
 
+	// Signing enforcement. Once signing is enabled for a cluster, it is a
+	// one-way commitment: workflows created with signing must always run on
+	// signing-enabled hosts, and workflows created without signing cannot
+	// be migrated to signing-enabled hosts. Workflows that violate these
+	// rules are terminated. Operators must ensure all unsigned workflows
+	// complete or are purged before enabling signing cluster-wide.
 	if len(wState.Signatures) > 0 {
 		if opts.Signer == nil {
 			return wState, &VerificationError{
-				Err: fmt.Errorf("workflow '%s' has signed history but no signer is configured; cannot verify signatures", actorID),
+				Err: fmt.Errorf("workflow '%s' has signed history but no signer is configured; cannot verify signatures — signing cannot be disabled for workflows that were created with signing enabled", actorID),
+			}
+		}
+		if opts.AppID == "" {
+			return wState, &VerificationError{
+				Err: fmt.Errorf("workflow '%s' has signed history but app ID is not configured; cannot verify signer identity", actorID),
 			}
 		}
 		if err := verifySignatureChain(wState, opts.Signer); err != nil {
@@ -629,7 +659,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		}
 	} else if opts.Signer != nil && len(wState.History) > 0 {
 		return wState, &VerificationError{
-			Err: fmt.Errorf("workflow '%s' has %d unsigned history events but signing is enabled", actorID, len(wState.History)),
+			Err: fmt.Errorf("workflow '%s' has %d unsigned history events but signing is enabled — signing cannot be enabled for workflows that were created without signing; ensure all unsigned workflows complete or are purged before enabling signing", actorID, len(wState.History)),
 		}
 	}
 
@@ -642,7 +672,12 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 		last := s.Signatures[len(s.Signatures)-1]
 		coveredEvents := last.GetStartEventIndex() + last.GetEventCount()
 		if coveredEvents < uint64(len(rawEvents)) {
-			rawEvents = rawEvents[:coveredEvents]
+			// Signatures don't cover all history events. This means the
+			// workflow ran on a non-signing host mid-flight, creating
+			// an unsigned gap. These events have no integrity proof and
+			// could have been tampered with. The workflow must be purged.
+			return fmt.Errorf("signatures cover events [0, %d) but %d history events exist; %d events have no integrity proof — this workflow ran on a non-signing host and cannot be recovered",
+				coveredEvents, len(rawEvents), uint64(len(rawEvents))-coveredEvents)
 		}
 	}
 	if err := historysigning.VerifyChain(historysigning.VerifyChainOptions{

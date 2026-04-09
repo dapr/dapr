@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
-	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
@@ -36,8 +35,9 @@ func init() {
 	suite.Register(new(signinggap))
 }
 
-// signinggap verifies the signed → unsigned → signed scenario. Catch-up
-// signatures fill the unsigned gap so the chain remains valid.
+// signinggap verifies the signed → unsigned → signed scenario. When signing
+// is re-enabled, the workflow is rejected because the unsigned gap has no
+// integrity proof and could have been tampered with.
 type signinggap struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -136,7 +136,9 @@ spec:
 
 	daprd2.Kill(t)
 
-	// Phase 3: signing re-enabled — partial verification succeeds.
+	// Phase 3: signing re-enabled — the workflow has a signature gap
+	// (events from phase 2 are unsigned). The workflow should be marked
+	// FAILED because the unsigned events have no integrity proof.
 	daprd3 := daprd.New(t,
 		daprd.WithSentry(t, s.sentry),
 		daprd.WithAppID(appID),
@@ -153,8 +155,8 @@ spec:
 
 	meta, err = client3.FetchWorkflowMetadata(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, dworkflow.StatusCompleted, meta.RuntimeStatus)
-
-	rawSigs, _, _, _ := fworkflow.UnmarshalSigningData(t, ctx, s.db, id)
-	require.NotEmpty(t, rawSigs)
+	assert.Equal(t, dworkflow.StatusFailed, meta.RuntimeStatus)
+	require.NotNil(t, meta.FailureDetails)
+	assert.Equal(t, "SignatureVerificationFailed", meta.FailureDetails.GetErrorType())
+	assert.Contains(t, meta.FailureDetails.GetErrorMessage(), "no integrity proof")
 }

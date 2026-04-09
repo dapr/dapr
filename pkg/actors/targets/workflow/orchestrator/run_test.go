@@ -311,3 +311,152 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 
 	assert.Equal(t, `3`, o.rstate.GetStartEvent().GetInput().GetValue())
 }
+
+func TestValidateInboxEvents_EmptyInbox(t *testing.T) {
+	t.Parallel()
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	err := validateInboxEvents(state)
+	require.NoError(t, err)
+}
+
+func TestValidateInboxEvents_TaskCompletedValid(t *testing.T) {
+	t.Parallel()
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 1, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity1"}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 1, Result: wrapperspb.String("ok")}}},
+	}
+
+	err := validateInboxEvents(state)
+	require.NoError(t, err)
+}
+
+func TestValidateInboxEvents_TaskCompletedNoMatch(t *testing.T) {
+	t.Parallel()
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 1, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity1"}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 999, Result: wrapperspb.String("ok")}}},
+	}
+
+	err := validateInboxEvents(state)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "task result for task")
+}
+
+func TestValidateInboxEvents_TaskFailedValid(t *testing.T) {
+	t.Parallel()
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 2, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity2"}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskFailed{TaskFailed: &protos.TaskFailedEvent{TaskScheduledId: 2}}},
+	}
+
+	err := validateInboxEvents(state)
+	require.NoError(t, err)
+}
+
+func TestValidateInboxEvents_TaskFailedNoMatch(t *testing.T) {
+	t.Parallel()
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 2, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity2"}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskFailed{TaskFailed: &protos.TaskFailedEvent{TaskScheduledId: 777}}},
+	}
+
+	err := validateInboxEvents(state)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "task failure for task")
+}
+
+func TestValidateInboxEvents_ChildWorkflowCompletedValid(t *testing.T) {
+	t.Parallel()
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 5, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{TaskScheduledId: 5}}},
+	}
+
+	err := validateInboxEvents(state)
+	require.NoError(t, err)
+}
+
+func TestValidateInboxEvents_ChildWorkflowCompletedNoMatch(t *testing.T) {
+	t.Parallel()
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 5, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{TaskScheduledId: 99}}},
+	}
+
+	err := validateInboxEvents(state)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "child workflow result")
+}
+
+func TestValidateInboxEvents_ChildWorkflowFailedNoMatch(t *testing.T) {
+	t.Parallel()
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 5, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_ChildWorkflowInstanceFailed{ChildWorkflowInstanceFailed: &protos.ChildWorkflowInstanceFailedEvent{TaskScheduledId: 42}}},
+	}
+
+	err := validateInboxEvents(state)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "child workflow failure")
+}
+
+func TestValidateInboxEvents_EventRaisedPassesThrough(t *testing.T) {
+	t.Parallel()
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	// No matching history at all.
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_EventRaised{EventRaised: &protos.EventRaisedEvent{Name: "myevent"}}},
+	}
+
+	err := validateInboxEvents(state)
+	require.NoError(t, err)
+}
+
+func TestValidateInboxEvents_MultipleEventsAllValid(t *testing.T) {
+	t.Parallel()
+
+	state := wfenginestate.NewState(wfenginestate.Options{})
+	state.History = []*backend.HistoryEvent{
+		{EventId: 1, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity1"}}},
+		{EventId: 3, EventType: &protos.HistoryEvent_TaskScheduled{TaskScheduled: &protos.TaskScheduledEvent{Name: "activity2"}}},
+		{EventId: 5, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCreated{ChildWorkflowInstanceCreated: &protos.ChildWorkflowInstanceCreatedEvent{}}},
+	}
+	state.Inbox = []*backend.HistoryEvent{
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 1, Result: wrapperspb.String("ok")}}},
+		{EventId: -1, EventType: &protos.HistoryEvent_TaskCompleted{TaskCompleted: &protos.TaskCompletedEvent{TaskScheduledId: 3, Result: wrapperspb.String("ok")}}},
+		{EventId: -1, EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{TaskScheduledId: 5}}},
+	}
+
+	err := validateInboxEvents(state)
+	require.NoError(t, err)
+}

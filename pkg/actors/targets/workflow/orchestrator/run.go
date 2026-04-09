@@ -60,6 +60,11 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 		}
 
 		timerEvent := durableTimer.GetTimerEvent()
+		// Validate the timer event is actually a TimerFired event. A crafted
+		// reminder could contain arbitrary event types to inject into the inbox.
+		if timerEvent.GetTimerFired() == nil {
+			return todo.RunCompletedTrue, fmt.Errorf("workflow actor '%s': timer reminder contains non-TimerFired event type %T", o.actorID, timerEvent.GetEventType())
+		}
 		// timer fired event is precreated at the moment of creating the timer
 		// set the timestamp to now so it is accurately recorded in the history
 		timerEvent.Timestamp = timestamppb.Now()
@@ -427,32 +432,48 @@ func (o *orchestrator) handleRetention(ctx context.Context, status protos.Orches
 	return nil
 }
 
-// validateInboxEvents checks that TaskCompleted and TaskFailed events in the
-// inbox correspond to a TaskScheduled event in the signed history. This
-// prevents inbox injection attacks where fake activity results are written
-// directly to the state store.
+// validateInboxEvents checks that result events in the inbox correspond to
+// operations that were actually scheduled in the signed history. This prevents
+// injection attacks where fake results are written directly to the state store.
+//
+// Validated event types:
+//   - TaskCompleted/TaskFailed → must match a TaskScheduled event ID
+//   - ChildWorkflowInstanceCompleted/Failed → must match a ChildWorkflowInstanceCreated event ID
 func validateInboxEvents(state *wfenginestate.State) error {
-	// Build set of scheduled task event IDs from history.
-	scheduledIDs := make(map[int32]struct{})
+	// Build sets of scheduled operation event IDs from history.
+	scheduledTaskIDs := make(map[int32]struct{})
+	createdChildIDs := make(map[int32]struct{})
 	for _, e := range state.History {
-		if e.GetTaskScheduled() != nil {
-			scheduledIDs[e.GetEventId()] = struct{}{}
+		switch {
+		case e.GetTaskScheduled() != nil:
+			scheduledTaskIDs[e.GetEventId()] = struct{}{}
+		case e.GetChildWorkflowInstanceCreated() != nil:
+			createdChildIDs[e.GetEventId()] = struct{}{}
 		}
 	}
 
 	for _, e := range state.Inbox {
-		var taskID int32
 		switch {
 		case e.GetTaskCompleted() != nil:
-			taskID = e.GetTaskCompleted().GetTaskScheduledId()
+			taskID := e.GetTaskCompleted().GetTaskScheduledId()
+			if _, ok := scheduledTaskIDs[taskID]; !ok {
+				return fmt.Errorf("inbox contains task result for task %d which was not scheduled in signed history", taskID)
+			}
 		case e.GetTaskFailed() != nil:
-			taskID = e.GetTaskFailed().GetTaskScheduledId()
-		default:
-			continue
-		}
-
-		if _, ok := scheduledIDs[taskID]; !ok {
-			return fmt.Errorf("inbox contains result for task %d which was not scheduled in signed history", taskID)
+			taskID := e.GetTaskFailed().GetTaskScheduledId()
+			if _, ok := scheduledTaskIDs[taskID]; !ok {
+				return fmt.Errorf("inbox contains task failure for task %d which was not scheduled in signed history", taskID)
+			}
+		case e.GetChildWorkflowInstanceCompleted() != nil:
+			taskID := e.GetChildWorkflowInstanceCompleted().GetTaskScheduledId()
+			if _, ok := createdChildIDs[taskID]; !ok {
+				return fmt.Errorf("inbox contains child workflow result for task %d which was not created in signed history", taskID)
+			}
+		case e.GetChildWorkflowInstanceFailed() != nil:
+			taskID := e.GetChildWorkflowInstanceFailed().GetTaskScheduledId()
+			if _, ok := createdChildIDs[taskID]; !ok {
+				return fmt.Errorf("inbox contains child workflow failure for task %d which was not created in signed history", taskID)
+			}
 		}
 	}
 
