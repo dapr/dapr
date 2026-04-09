@@ -187,7 +187,7 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 			ExecutionStarted: &protos.ExecutionStartedEvent{
 				Name:  "TestWorkflow",
 				Input: wrapperspb.String(`0`),
-				WorkflowInstance: &protos.WorkflowInstance{
+				OrchestrationInstance: &protos.OrchestrationInstance{
 					InstanceId: instanceID,
 				},
 			},
@@ -197,8 +197,8 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 	history := []*backend.HistoryEvent{
 		{
 			EventId: -1, Timestamp: timestamppb.Now(),
-			EventType: &protos.HistoryEvent_WorkflowStarted{
-				WorkflowStarted: &protos.WorkflowStartedEvent{},
+			EventType: &protos.HistoryEvent_OrchestratorStarted{
+				OrchestratorStarted: &protos.OrchestratorStartedEvent{},
 			},
 		},
 		startEvent,
@@ -229,16 +229,16 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 		state.AddToHistory(e)
 	}
 
-	rstate := runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
+	rstate := runtimestate.NewOrchestrationRuntimeState(instanceID, nil, history)
 
 	carryover := inbox[3:]
-	canState := &protos.WorkflowRuntimeState{
+	canState := &protos.OrchestrationRuntimeState{
 		InstanceId:     instanceID,
 		ContinuedAsNew: true,
 		StartEvent: &protos.ExecutionStartedEvent{
 			Name:  "TestWorkflow",
 			Input: wrapperspb.String(`3`),
-			WorkflowInstance: &protos.WorkflowInstance{
+			OrchestrationInstance: &protos.OrchestrationInstance{
 				InstanceId: instanceID,
 			},
 		},
@@ -246,8 +246,8 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 		NewEvents: append([]*protos.HistoryEvent{
 			{
 				EventId: -1, Timestamp: timestamppb.Now(),
-				EventType: &protos.HistoryEvent_WorkflowStarted{
-					WorkflowStarted: &protos.WorkflowStartedEvent{},
+				EventType: &protos.HistoryEvent_OrchestratorStarted{
+					OrchestratorStarted: &protos.OrchestratorStartedEvent{},
 				},
 			},
 			{
@@ -257,7 +257,7 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 					ExecutionStarted: &protos.ExecutionStartedEvent{
 						Name:  "TestWorkflow",
 						Input: wrapperspb.String(`3`),
-						WorkflowInstance: &protos.WorkflowInstance{
+						OrchestrationInstance: &protos.OrchestrationInstance{
 							InstanceId: instanceID,
 						},
 					},
@@ -266,7 +266,7 @@ func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
 		}, carryover...),
 	}
 
-	scheduler := func(_ context.Context, wi *backend.WorkflowWorkItem) error {
+	scheduler := func(_ context.Context, wi *backend.OrchestrationWorkItem) error {
 		proto.Reset(wi.State)
 		proto.Merge(wi.State, canState)
 		wi.Properties[todo.CallbackChannelProperty].(chan bool) <- false
