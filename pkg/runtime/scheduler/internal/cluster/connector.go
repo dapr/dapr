@@ -31,47 +31,77 @@ type connector struct {
 	wfengine wfengine.Interface
 }
 
-// run starts the scheduler connector.
+// run starts the scheduler connector, retrying on failures so that a single
+// scheduler connection error does not tear down the other healthy connections
+// managed by the same RunnerManager.
 func (c *connector) run(ctx context.Context) error {
-	stream, err := c.client.WatchJobs(ctx)
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-
-	if err != nil {
-		log.Errorf("Failed to watch scheduler jobs, retrying: %s", err)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(time.Second):
-		}
-		return err
-	}
-
-	if err = stream.Send(c.req); err != nil {
+	var failCount int
+	for {
+		stream, err := c.client.WatchJobs(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 
-		log.Errorf("scheduler stream error, re-connecting: %s", err)
-		return err
+		if err != nil {
+			failCount++
+			if failCount == 1 {
+				log.Errorf("Failed to watch scheduler jobs, retrying: %s", err)
+			} else {
+				log.Debugf("Failed to watch scheduler jobs (attempt %d), retrying: %s", failCount, err)
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second / 2):
+				continue
+			}
+		}
+
+		if err = stream.Send(c.req); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+
+			failCount++
+			if failCount == 1 {
+				log.Errorf("Scheduler stream error, re-connecting: %s", err)
+			} else {
+				log.Debugf("Scheduler stream error (attempt %d), re-connecting: %s", failCount, err)
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second / 2):
+				continue
+			}
+		}
+
+		failCount = 0
+		log.Infof("Scheduler stream connected for %s", c.req.GetInitial().GetAcceptJobTypes())
+
+		err = (&streamer{
+			stream:   stream,
+			resultCh: make(chan *schedulerv1pb.WatchJobsRequest),
+			channels: c.channels,
+			actors:   c.actors,
+			wfengine: c.wfengine,
+		}).run(ctx)
+		if err == nil {
+			log.Infof("Scheduler stream disconnected")
+		} else {
+			log.Errorf("Scheduler stream disconnected: %v", err)
+		}
+
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second / 2):
+		}
 	}
-
-	log.Infof("Scheduler stream connected for %s", c.req.GetInitial().GetAcceptJobTypes())
-
-	err = (&streamer{
-		stream:   stream,
-		resultCh: make(chan *schedulerv1pb.WatchJobsRequest),
-		channels: c.channels,
-		actors:   c.actors,
-		wfengine: c.wfengine,
-	}).run(ctx)
-
-	if err == nil {
-		log.Infof("Scheduler stream disconnected")
-	} else {
-		log.Errorf("Scheduler stream disconnected: %v", err)
-	}
-
-	return err
 }
