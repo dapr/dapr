@@ -17,6 +17,7 @@ package wfengine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -96,10 +97,10 @@ func New(opts Options) (Interface, error) {
 	if !opts.WorkflowSignState {
 		s = nil
 	} else if s == nil {
-		// The feature flag is explicitly enabled but mTLS is not available.
-		// This is a misconfiguration — signing requires mTLS for the SPIFFE
-		// identity used as the signing key.
-		return nil, fmt.Errorf("WorkflowSignState feature flag is enabled but mTLS is not configured; workflow history signing requires mTLS to be active")
+		// The feature flag is explicitly enabled but mTLS is not available. This
+		// is a misconfiguration. Signing requires mTLS for the SPIFFE identity
+		// used as the signing key.
+		return nil, errors.New("WorkflowSignState feature flag is enabled but mTLS is not configured; workflow history signing requires mTLS to be active")
 	}
 
 	// If no backend was initialized by the manager, create a backend backed by actors
