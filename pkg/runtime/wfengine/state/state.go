@@ -719,8 +719,9 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 }
 
 // verifyCertAppIdentity checks that a DER-encoded signing certificate chain
-// contains a SPIFFE ID whose final path segment matches the expected app ID.
-// SPIFFE IDs follow the pattern: spiffe://<trust-domain>/ns/<namespace>/<app-id>
+// contains a SPIFFE ID matching the expected app ID. SPIFFE IDs follow the
+// pattern: spiffe://<trust-domain>/ns/<namespace>/<app-id>
+// The function validates the full path structure, not just the last segment.
 func verifyCertAppIdentity(certChainDER []byte, expectedAppID string) error {
 	if len(certChainDER) == 0 {
 		return errors.New("certificate chain is empty")
@@ -740,13 +741,13 @@ func verifyCertAppIdentity(certChainDER []byte, expectedAppID string) error {
 		return fmt.Errorf("failed to extract SPIFFE ID: %w", err)
 	}
 
-	// The SPIFFE ID path is "/ns/<namespace>/<app-id>". Extract the last
-	// segment as the app ID.
+	// Validate the full SPIFFE path structure: /ns/<namespace>/<app-id>
+	// Split produces: ["", "ns", "<namespace>", "<app-id>"]
 	segments := strings.Split(spiffeID.Path(), "/")
-	if len(segments) < 2 {
-		return fmt.Errorf("SPIFFE ID %q has too few path segments", spiffeID)
+	if len(segments) != 4 || segments[0] != "" || segments[1] != "ns" || segments[2] == "" || segments[3] == "" {
+		return fmt.Errorf("SPIFFE ID %q does not match expected path format /ns/<namespace>/<app-id>", spiffeID)
 	}
-	certAppID := segments[len(segments)-1]
+	certAppID := segments[3]
 
 	if certAppID != expectedAppID {
 		return fmt.Errorf("certificate SPIFFE ID app %q does not match expected app %q", certAppID, expectedAppID)

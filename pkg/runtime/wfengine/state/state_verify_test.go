@@ -108,10 +108,21 @@ func TestVerifyCertAppIdentity_NoURISAN(t *testing.T) {
 	assert.Contains(t, err.Error(), "SPIFFE ID")
 }
 
-func TestVerifyCertAppIdentity_DeepPath(t *testing.T) {
+func TestVerifyCertAppIdentity_DeepPathRejected(t *testing.T) {
 	t.Parallel()
 
+	// A SPIFFE ID with extra path segments beyond /ns/<namespace>/<app>
+	// should be rejected — only the exact 3-segment format is accepted.
 	certDER := generateTestCert(t, "spiffe://example.com/ns/prod/region/us-east/myapp")
+	err := verifyCertAppIdentity(certDER, "myapp")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not match expected path format")
+}
+
+func TestVerifyCertAppIdentity_CorrectNamespace(t *testing.T) {
+	t.Parallel()
+
+	certDER := generateTestCert(t, "spiffe://example.com/ns/production/myapp")
 	err := verifyCertAppIdentity(certDER, "myapp")
 	assert.NoError(t, err)
 }
