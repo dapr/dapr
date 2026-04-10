@@ -32,7 +32,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AppCallbackName is the fully-qualified name of the AppCallback service.
@@ -107,36 +107,43 @@ type AppCallbackClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewAppCallbackClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AppCallbackClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	appCallbackMethods := v11.File_dapr_proto_runtime_v1_appcallback_proto.Services().ByName("AppCallback").Methods()
 	return &appCallbackClient{
 		onInvoke: connect.NewClient[v1.InvokeRequest, v1.InvokeResponse](
 			httpClient,
 			baseURL+AppCallbackOnInvokeProcedure,
-			opts...,
+			connect.WithSchema(appCallbackMethods.ByName("OnInvoke")),
+			connect.WithClientOptions(opts...),
 		),
 		listTopicSubscriptions: connect.NewClient[emptypb.Empty, v11.ListTopicSubscriptionsResponse](
 			httpClient,
 			baseURL+AppCallbackListTopicSubscriptionsProcedure,
-			opts...,
+			connect.WithSchema(appCallbackMethods.ByName("ListTopicSubscriptions")),
+			connect.WithClientOptions(opts...),
 		),
 		onTopicEvent: connect.NewClient[v11.TopicEventRequest, v11.TopicEventResponse](
 			httpClient,
 			baseURL+AppCallbackOnTopicEventProcedure,
-			opts...,
+			connect.WithSchema(appCallbackMethods.ByName("OnTopicEvent")),
+			connect.WithClientOptions(opts...),
 		),
 		listInputBindings: connect.NewClient[emptypb.Empty, v11.ListInputBindingsResponse](
 			httpClient,
 			baseURL+AppCallbackListInputBindingsProcedure,
-			opts...,
+			connect.WithSchema(appCallbackMethods.ByName("ListInputBindings")),
+			connect.WithClientOptions(opts...),
 		),
 		onBindingEvent: connect.NewClient[v11.BindingEventRequest, v11.BindingEventResponse](
 			httpClient,
 			baseURL+AppCallbackOnBindingEventProcedure,
-			opts...,
+			connect.WithSchema(appCallbackMethods.ByName("OnBindingEvent")),
+			connect.WithClientOptions(opts...),
 		),
 		onBulkTopicEvent: connect.NewClient[v11.TopicEventBulkRequest, v11.TopicEventBulkResponse](
 			httpClient,
 			baseURL+AppCallbackOnBulkTopicEventProcedure,
-			opts...,
+			connect.WithSchema(appCallbackMethods.ByName("OnBulkTopicEvent")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -206,35 +213,42 @@ type AppCallbackHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewAppCallbackHandler(svc AppCallbackHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	appCallbackMethods := v11.File_dapr_proto_runtime_v1_appcallback_proto.Services().ByName("AppCallback").Methods()
 	appCallbackOnInvokeHandler := connect.NewUnaryHandler(
 		AppCallbackOnInvokeProcedure,
 		svc.OnInvoke,
-		opts...,
+		connect.WithSchema(appCallbackMethods.ByName("OnInvoke")),
+		connect.WithHandlerOptions(opts...),
 	)
 	appCallbackListTopicSubscriptionsHandler := connect.NewUnaryHandler(
 		AppCallbackListTopicSubscriptionsProcedure,
 		svc.ListTopicSubscriptions,
-		opts...,
+		connect.WithSchema(appCallbackMethods.ByName("ListTopicSubscriptions")),
+		connect.WithHandlerOptions(opts...),
 	)
 	appCallbackOnTopicEventHandler := connect.NewUnaryHandler(
 		AppCallbackOnTopicEventProcedure,
 		svc.OnTopicEvent,
-		opts...,
+		connect.WithSchema(appCallbackMethods.ByName("OnTopicEvent")),
+		connect.WithHandlerOptions(opts...),
 	)
 	appCallbackListInputBindingsHandler := connect.NewUnaryHandler(
 		AppCallbackListInputBindingsProcedure,
 		svc.ListInputBindings,
-		opts...,
+		connect.WithSchema(appCallbackMethods.ByName("ListInputBindings")),
+		connect.WithHandlerOptions(opts...),
 	)
 	appCallbackOnBindingEventHandler := connect.NewUnaryHandler(
 		AppCallbackOnBindingEventProcedure,
 		svc.OnBindingEvent,
-		opts...,
+		connect.WithSchema(appCallbackMethods.ByName("OnBindingEvent")),
+		connect.WithHandlerOptions(opts...),
 	)
 	appCallbackOnBulkTopicEventHandler := connect.NewUnaryHandler(
 		AppCallbackOnBulkTopicEventProcedure,
 		svc.OnBulkTopicEvent,
-		opts...,
+		connect.WithSchema(appCallbackMethods.ByName("OnBulkTopicEvent")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.runtime.v1.AppCallback/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -300,11 +314,13 @@ type AppCallbackHealthCheckClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewAppCallbackHealthCheckClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AppCallbackHealthCheckClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	appCallbackHealthCheckMethods := v11.File_dapr_proto_runtime_v1_appcallback_proto.Services().ByName("AppCallbackHealthCheck").Methods()
 	return &appCallbackHealthCheckClient{
 		healthCheck: connect.NewClient[emptypb.Empty, v11.HealthCheckResponse](
 			httpClient,
 			baseURL+AppCallbackHealthCheckHealthCheckProcedure,
-			opts...,
+			connect.WithSchema(appCallbackHealthCheckMethods.ByName("HealthCheck")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -332,10 +348,12 @@ type AppCallbackHealthCheckHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewAppCallbackHealthCheckHandler(svc AppCallbackHealthCheckHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	appCallbackHealthCheckMethods := v11.File_dapr_proto_runtime_v1_appcallback_proto.Services().ByName("AppCallbackHealthCheck").Methods()
 	appCallbackHealthCheckHealthCheckHandler := connect.NewUnaryHandler(
 		AppCallbackHealthCheckHealthCheckProcedure,
 		svc.HealthCheck,
-		opts...,
+		connect.WithSchema(appCallbackHealthCheckMethods.ByName("HealthCheck")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.runtime.v1.AppCallbackHealthCheck/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -373,16 +391,19 @@ type AppCallbackAlphaClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewAppCallbackAlphaClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AppCallbackAlphaClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	appCallbackAlphaMethods := v11.File_dapr_proto_runtime_v1_appcallback_proto.Services().ByName("AppCallbackAlpha").Methods()
 	return &appCallbackAlphaClient{
 		onBulkTopicEventAlpha1: connect.NewClient[v11.TopicEventBulkRequest, v11.TopicEventBulkResponse](
 			httpClient,
 			baseURL+AppCallbackAlphaOnBulkTopicEventAlpha1Procedure,
-			opts...,
+			connect.WithSchema(appCallbackAlphaMethods.ByName("OnBulkTopicEventAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		onJobEventAlpha1: connect.NewClient[v11.JobEventRequest, v11.JobEventResponse](
 			httpClient,
 			baseURL+AppCallbackAlphaOnJobEventAlpha1Procedure,
-			opts...,
+			connect.WithSchema(appCallbackAlphaMethods.ByName("OnJobEventAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -422,15 +443,18 @@ type AppCallbackAlphaHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewAppCallbackAlphaHandler(svc AppCallbackAlphaHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	appCallbackAlphaMethods := v11.File_dapr_proto_runtime_v1_appcallback_proto.Services().ByName("AppCallbackAlpha").Methods()
 	appCallbackAlphaOnBulkTopicEventAlpha1Handler := connect.NewUnaryHandler(
 		AppCallbackAlphaOnBulkTopicEventAlpha1Procedure,
 		svc.OnBulkTopicEventAlpha1,
-		opts...,
+		connect.WithSchema(appCallbackAlphaMethods.ByName("OnBulkTopicEventAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	appCallbackAlphaOnJobEventAlpha1Handler := connect.NewUnaryHandler(
 		AppCallbackAlphaOnJobEventAlpha1Procedure,
 		svc.OnJobEventAlpha1,
-		opts...,
+		connect.WithSchema(appCallbackAlphaMethods.ByName("OnJobEventAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.runtime.v1.AppCallbackAlpha/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

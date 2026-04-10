@@ -25,7 +25,7 @@ type Option func(*options)
 type orchestratorConfig struct {
 	index int
 	name  string
-	fn    func(*task.OrchestrationContext) (any, error)
+	fn    func(*task.WorkflowContext) (any, error)
 }
 
 type activityConfig struct {
@@ -48,12 +48,12 @@ type options struct {
 	daprdOptions  []daprdOptionConfig
 }
 
-func WithAddOrchestrator(t *testing.T, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+func WithAddOrchestrator(t *testing.T, name string, or func(*task.WorkflowContext) (any, error)) Option {
 	t.Helper()
-	return WithAddOrchestratorN(t, 0, name, or)
+	return WithAddWorkflowN(t, 0, name, or)
 }
 
-func WithAddOrchestratorN(t *testing.T, index int, name string, or func(*task.OrchestrationContext) (any, error)) Option {
+func WithAddWorkflowN(t *testing.T, index int, name string, or func(*task.WorkflowContext) (any, error)) Option {
 	t.Helper()
 
 	return func(o *options) {

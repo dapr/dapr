@@ -14,6 +14,7 @@ limitations under the License.
 package disseminator
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -58,7 +59,7 @@ func newTestDisseminator(t *testing.T) (*disseminator, *healthzfake.Fake, *sched
 		currentOperation: v1pb.HostOperation_LOCK,
 		currentVersion:   0,
 		timeout:          time.Second * 30,
-		cancel:           func(error) {},
+		ready:            new(atomic.Bool),
 	}
 
 	diss.loop = dissLoop
@@ -68,6 +69,113 @@ func newTestDisseminator(t *testing.T) (*disseminator, *healthzfake.Fake, *sched
 	})
 
 	return diss, ht, sched
+}
+
+func TestHandleTimeout(t *testing.T) {
+	t.Run("matching version closes stream", func(t *testing.T) {
+		diss, _, _ := newTestDisseminator(t)
+
+		var streamClosed bool
+		diss.streamLoop = loopfake.New[loops.EventStream]().
+			WithClose(func(loops.EventStream) {
+				streamClosed = true
+			})
+
+		diss.timeoutVersion = 3
+		diss.handleTimeout(t.Context(), &loops.DisseminationTimeout{Version: 3})
+		assert.True(t, streamClosed, "stream should be closed on matching timeout version")
+	})
+
+	t.Run("old version is ignored", func(t *testing.T) {
+		diss, _, _ := newTestDisseminator(t)
+
+		var streamClosed bool
+		diss.streamLoop = loopfake.New[loops.EventStream]().
+			WithClose(func(loops.EventStream) {
+				streamClosed = true
+			})
+
+		diss.timeoutVersion = 5
+		diss.handleTimeout(t.Context(), &loops.DisseminationTimeout{Version: 3})
+		assert.False(t, streamClosed, "stream should not be closed for stale timeout version")
+	})
+}
+
+func TestHandleOrder_UpdateVersionMismatch(t *testing.T) {
+	t.Run("update with lower version closes stream", func(t *testing.T) {
+		diss, _, _ := newTestDisseminator(t)
+
+		var streamClosed bool
+		diss.streamLoop = loopfake.New[loops.EventStream]().
+			WithClose(func(loops.EventStream) {
+				streamClosed = true
+			})
+
+		diss.currentVersion = 10
+		err := diss.handleOrder(t.Context(), &loops.StreamOrder{
+			Order: &v1pb.PlacementOrder{
+				Operation: operationUpdate,
+				Version:   5,
+			},
+		})
+		require.NoError(t, err)
+		assert.True(t, streamClosed, "stream should be closed on version mismatch")
+	})
+}
+
+func TestHandleOrder_UnknownOperation(t *testing.T) {
+	t.Run("unknown operation closes stream", func(t *testing.T) {
+		diss, _, _ := newTestDisseminator(t)
+
+		var streamClosed bool
+		diss.streamLoop = loopfake.New[loops.EventStream]().
+			WithClose(func(loops.EventStream) {
+				streamClosed = true
+			})
+
+		err := diss.handleOrder(t.Context(), &loops.StreamOrder{
+			Order: &v1pb.PlacementOrder{
+				Operation: "invalid",
+			},
+		})
+		require.NoError(t, err)
+		assert.True(t, streamClosed, "stream should be closed on unknown operation")
+	})
+}
+
+func TestHandleTimeout_UpdateDequeuesTimeout(t *testing.T) {
+	t.Run("UPDATE arriving before timeout dequeues the timeout", func(t *testing.T) {
+		diss, _, _ := newTestDisseminator(t)
+
+		var streamClosed bool
+		diss.streamLoop = loopfake.New[loops.EventStream]().
+			WithClose(func(loops.EventStream) {
+				streamClosed = true
+			})
+
+		err := diss.handleOrder(t.Context(), &loops.StreamOrder{
+			Order: &v1pb.PlacementOrder{
+				Operation: operationLock,
+				Version:   5,
+			},
+		})
+		require.NoError(t, err)
+
+		err = diss.handleOrder(t.Context(), &loops.StreamOrder{
+			Order: &v1pb.PlacementOrder{
+				Operation: operationUpdate,
+				Version:   5,
+				Tables:    &v1pb.PlacementTables{},
+			},
+		})
+		require.NoError(t, err)
+
+		savedVersion := diss.timeoutVersion - 1
+		diss.handleTimeout(t.Context(), &loops.DisseminationTimeout{
+			Version: savedVersion,
+		})
+		assert.False(t, streamClosed, "timeout should be ignored after UPDATE dequeued it")
+	})
 }
 
 func TestHandleOrder_UnlockVersionMismatch(t *testing.T) {

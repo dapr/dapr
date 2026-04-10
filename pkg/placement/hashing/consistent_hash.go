@@ -165,16 +165,19 @@ func (hc *VirtualNodesCache) setHashes(replicationFactor int64, host string) []u
 		}
 	}
 
-	hashMap := newHashMap()
-	hashMap.hashes[host] = make([]uint64, replicationFactor)
-
-	for i := range int(replicationFactor) {
-		hashMap.hashes[host][i] = hash(host + strconv.Itoa(i))
+	hm, exists := hc.data[replicationFactor]
+	if !exists {
+		hm = newHashMap()
+		hc.data[replicationFactor] = hm
 	}
 
-	hc.data[replicationFactor] = hashMap
+	hm.hashes[host] = make([]uint64, replicationFactor)
 
-	return hashMap.hashes[host]
+	for i := range int(replicationFactor) {
+		hm.hashes[host][i] = hash(host + strconv.Itoa(i))
+	}
+
+	return hm.hashes[host]
 }
 
 // ReadInternals returns the internal data structure of the consistent hash.

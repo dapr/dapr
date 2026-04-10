@@ -31,7 +31,7 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.targets.orchestrator")
 
-type EventSink func(*backend.OrchestrationMetadata)
+type EventSink func(*backend.WorkflowMetadata)
 
 type orchestrator struct {
 	*factory
@@ -39,8 +39,8 @@ type orchestrator struct {
 	actorID string
 
 	state  *wfenginestate.State
-	rstate *backend.OrchestrationRuntimeState
-	ometa  *backend.OrchestrationMetadata
+	rstate *backend.WorkflowRuntimeState
+	ometa  *backend.WorkflowMetadata
 
 	activityResultAwaited atomic.Bool
 	lock                  *lock.Stallable
