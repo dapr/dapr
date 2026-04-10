@@ -42,8 +42,6 @@ type logging struct {
 }
 
 func (l *logging) Setup(t *testing.T) []framework.Option {
-	os.SkipWindows(t)
-
 	l.log = log.New()
 
 	config := `

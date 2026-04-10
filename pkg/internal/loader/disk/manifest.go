@@ -98,6 +98,16 @@ func (m *manifestSet[T]) loadManifestsFromFile(path string) {
 	}
 }
 
+func (m *manifestSet[T]) loadManifestsFromBytes(path string, data []byte) {
+	defer func() {
+		m.fileIndex++
+	}()
+
+	if err := m.decodeYaml(bytes.NewReader(data)); err != nil {
+		log.Warnf("daprd load %s error when parsing manifests yaml resource in %s: %v", m.d.kind, path, err)
+	}
+}
+
 func (m *manifestSet[T]) decodeYaml(f io.Reader) error {
 	var errs []error
 	scanner := bufio.NewScanner(f)
