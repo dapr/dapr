@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2026 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -35,10 +35,12 @@ import (
 )
 
 func init() {
-	suite.Register(new(reconnect3))
+	suite.Register(new(reconnect4))
 }
 
-type reconnect3 struct {
+// reconnect4 tests that when a scheduler member in a 3-node cluster is killed
+// and replaced, the streaming connections recover and all jobs resume firing.
+type reconnect4 struct {
 	daprd      *daprd.Daprd
 	scheduler1 *scheduler.Scheduler
 	scheduler2 *scheduler.Scheduler
@@ -49,9 +51,8 @@ type reconnect3 struct {
 	lock         sync.Mutex
 }
 
-func (r *reconnect3) Setup(t *testing.T) []framework.Option {
+func (r *reconnect4) Setup(t *testing.T) []framework.Option {
 	if runtime.GOOS == "windows" {
-		// TODO: investigate why this test fails on Windows
 		t.Skip("Skip due to Windows specific error on loss of connection")
 	}
 
@@ -100,13 +101,13 @@ func (r *reconnect3) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
+func (r *reconnect4) Run(t *testing.T, ctx context.Context) {
 	r.scheduler1.WaitUntilRunning(t, ctx)
 	r.scheduler2.WaitUntilRunning(t, ctx)
 	r.scheduler3.WaitUntilRunning(t, ctx)
 
 	r.daprd.WaitUntilRunning(t, ctx)
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, r.daprd.GetMetaScheduler(c, ctx).GetConnectedAddresses(), 3)
 	}, time.Second*10, time.Millisecond*10)
 
@@ -114,7 +115,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 		_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     strconv.Itoa(i),
-				Schedule: new("@every 100ms"),
+				Schedule: new("@every 1s"),
 			},
 		})
 		require.NoError(t, err)
@@ -126,6 +127,10 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 		r.lock.Unlock()
 	}, time.Second*10, time.Millisecond*10)
 
+	// Kill scheduler2 and replace it immediately without a stabilization sleep.
+	// The replacement scheduler may briefly accept then close streaming
+	// connections while its cron subsystem initializes, exercising the
+	// per-connector retry logic.
 	r.scheduler2.Kill(t)
 
 	time.Sleep(time.Second * 5)
@@ -139,13 +144,11 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 	r.scheduler4.WaitUntilLeadership(t, ctx, 3)
 	t.Cleanup(func() { r.scheduler4.Kill(t) })
 
-	// Wait for daprd to reconnect to all 3 schedulers before expecting
-	// jobs to resume firing.
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, r.daprd.GetMetaScheduler(c, ctx).GetConnectedAddresses(), 3)
 	}, time.Second*40, time.Millisecond*10)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()
 		assert.Len(c, r.jobCalledMap, 5)
 		r.lock.Unlock()
