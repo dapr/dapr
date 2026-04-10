@@ -127,10 +127,10 @@ func (r *reconnect4) Run(t *testing.T, ctx context.Context) {
 		r.lock.Unlock()
 	}, time.Second*10, time.Millisecond*10)
 
-	// Kill scheduler2 and replace it immediately without a stabilization sleep.
-	// The replacement scheduler may briefly accept then close streaming
-	// connections while its cron subsystem initializes, exercising the
-	// per-connector retry logic.
+	// Kill scheduler2 and wait for the cluster to stabilize before starting
+	// the replacement. The replacement scheduler may briefly accept then close
+	// streaming connections while its cron subsystem initializes, exercising
+	// the per-connector retry logic.
 	r.scheduler2.Kill(t)
 
 	time.Sleep(time.Second * 5)

@@ -35,6 +35,7 @@ type connector struct {
 // scheduler connection error does not tear down the other healthy connections
 // managed by the same RunnerManager.
 func (c *connector) run(ctx context.Context) error {
+	var failCount int
 	for {
 		stream, err := c.client.WatchJobs(ctx)
 		if ctx.Err() != nil {
@@ -42,7 +43,12 @@ func (c *connector) run(ctx context.Context) error {
 		}
 
 		if err != nil {
-			log.Errorf("Failed to watch scheduler jobs, retrying: %s", err)
+			failCount++
+			if failCount == 1 {
+				log.Errorf("Failed to watch scheduler jobs, retrying: %s", err)
+			} else {
+				log.Debugf("Failed to watch scheduler jobs (attempt %d), retrying: %s", failCount, err)
+			}
 
 			select {
 			case <-ctx.Done():
@@ -57,7 +63,12 @@ func (c *connector) run(ctx context.Context) error {
 				return ctx.Err()
 			}
 
-			log.Errorf("scheduler stream error, re-connecting: %s", err)
+			failCount++
+			if failCount == 1 {
+				log.Errorf("Scheduler stream error, re-connecting: %s", err)
+			} else {
+				log.Debugf("Scheduler stream error (attempt %d), re-connecting: %s", failCount, err)
+			}
 
 			select {
 			case <-ctx.Done():
@@ -67,6 +78,7 @@ func (c *connector) run(ctx context.Context) error {
 			}
 		}
 
+		failCount = 0
 		log.Infof("Scheduler stream connected for %s", c.req.GetInitial().GetAcceptJobTypes())
 
 		err = (&streamer{
