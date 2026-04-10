@@ -84,7 +84,7 @@ func (p *inboxpreserved) Setup(t *testing.T) []framework.Option {
 		daprd.WithLogLevel("debug"),
 	)
 
-	p.registry1.AddOrchestratorN("InboxPreservedWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	p.registry1.AddWorkflowN("InboxPreservedWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -120,13 +120,13 @@ func (p *inboxpreserved) Run(t *testing.T, ctx context.Context) {
 	client1 := client.NewTaskHubGrpcClient(p.daprd1.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client1.StartWorkItemListener(ctx, p.registry1))
 
-	id, err := client1.ScheduleNewOrchestration(ctx, "InboxPreservedWorkflow",
+	id, err := client1.ScheduleNewWorkflow(ctx, "InboxPreservedWorkflow",
 		api.WithInput("hello"), api.WithInstanceID("test-inbox"))
 	require.NoError(t, err)
 
-	metadata, err := client1.WaitForOrchestrationStart(ctx, id)
+	metadata, err := client1.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.RuntimeStatus)
+	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.GetRuntimeStatus())
 
 	// Wait for a few retry cycles to give the no-op replay a chance to
 	// incorrectly clear the inbox.
@@ -160,8 +160,8 @@ func (p *inboxpreserved) Run(t *testing.T, ctx context.Context) {
 	client2 := client.NewTaskHubGrpcClient(p.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client2.StartWorkItemListener(ctx, p.registry2))
 
-	metadata, err = client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+	metadata, err = client1.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"processed: hello"`, metadata.GetOutput().GetValue())
 }

@@ -31,9 +31,8 @@ func init() {
 	suite.Register(new(notimeout))
 }
 
-// notimeout tests that WaitForSingleEvent without a timeout (no timer created)
-// still completes correctly when the event is raised. This verifies the timer
-// deletion logic does not interfere when there is no timer to delete.
+// notimeout tests that WaitForSingleEvent without a timeout creates a
+// timer that is properly deleted when the event is raised.
 type notimeout struct {
 	workflow *workflow.Workflow
 }
@@ -49,25 +48,27 @@ func (d *notimeout) Setup(t *testing.T) []framework.Option {
 func (d *notimeout) Run(t *testing.T, ctx context.Context) {
 	d.workflow.WaitUntilRunning(t, ctx)
 
-	d.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	d.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.WaitForSingleEvent("bar", -1).Await(nil))
 		return nil, nil
 	})
 
 	cl := d.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
+	id, err := cl.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		keys := d.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs")
-		assert.Empty(c, keys)
+		if assert.Len(c, keys, 1) {
+			assert.Contains(c, keys[0], "timer-0")
+		}
 	}, time.Second*20, 10*time.Millisecond)
 
 	require.NoError(t, cl.RaiseEvent(ctx, id, "bar"))
 
-	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	require.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.RuntimeStatus.String())
+	require.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.GetRuntimeStatus().String())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Empty(c, d.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))

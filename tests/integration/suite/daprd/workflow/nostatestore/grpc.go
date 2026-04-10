@@ -59,7 +59,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	g.daprd.WaitUntilRunning(t, ctx)
 
 	reg := task.NewTaskRegistry()
-	reg.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	reg.AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	})
 

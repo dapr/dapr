@@ -38,6 +38,7 @@ type StateManager interface {
 }
 
 type SecretManager interface {
+	// TODO: update to return an error.
 	ProcessResource(context.Context, meta.Resource) (bool, string)
 	manager
 }

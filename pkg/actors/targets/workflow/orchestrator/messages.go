@@ -26,7 +26,7 @@ import (
 	"github.com/dapr/durabletask-go/backend"
 )
 
-func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) dispatchResult {
+func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage) dispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
@@ -35,7 +35,7 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 	for i, msg := range events {
 		msgs[i] = &backend.CreateWorkflowInstanceRequest{StartEvent: msg.GetHistoryEvent()}
 		historyEvents[i] = msg.GetHistoryEvent()
-		targets[i] = msg.GetTargetInstanceID()
+		targets[i] = msg.GetTargetInstanceId()
 		if es := msg.GetHistoryEvent().GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
 			actionIDs[i] = es.GetParentInstance().GetTaskScheduledId()
 		} else {
@@ -46,7 +46,7 @@ func (o *orchestrator) callCreateWorkflowStateMessage(ctx context.Context, event
 	return o.callStateMessages(ctx, msgs, historyEvents, targets, actionIDs, todo.CreateWorkflowInstanceMethod)
 }
 
-func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.OrchestrationRuntimeStateMessage) dispatchResult {
+func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*backend.WorkflowRuntimeStateMessage) dispatchResult {
 	msgs := make([]proto.Message, len(events))
 	historyEvents := make([]*backend.HistoryEvent, len(events))
 	targets := make([]string, len(events))
@@ -54,7 +54,7 @@ func (o *orchestrator) callAddEventStateMessage(ctx context.Context, events []*b
 	for i, msg := range events {
 		msgs[i] = msg.GetHistoryEvent()
 		historyEvents[i] = msg.GetHistoryEvent()
-		targets[i] = msg.GetTargetInstanceID()
+		targets[i] = msg.GetTargetInstanceId()
 	}
 
 	return o.callStateMessages(ctx, msgs, historyEvents, targets, nil, todo.AddWorkflowEventMethod)
@@ -93,7 +93,7 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 			}
 		case *backend.HistoryEvent:
 			var routeAppID string
-			if m.GetSubOrchestrationInstanceCompleted() != nil || m.GetSubOrchestrationInstanceFailed() != nil {
+			if m.GetChildWorkflowInstanceCompleted() != nil || m.GetChildWorkflowInstanceFailed() != nil {
 				if router.TargetAppID == nil {
 					return errors.New("sub-orchestrator completion events should have a target appID")
 				}

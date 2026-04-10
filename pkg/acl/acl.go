@@ -207,7 +207,7 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 
 	if err != nil {
 		errMessage = fmt.Sprintf("error in method normalization: %v", err)
-		log.Debugf(errMessage)
+		log.Debug(errMessage)
 		return false, errMessage
 	}
 

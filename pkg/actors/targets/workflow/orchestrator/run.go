@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -87,7 +88,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	}
 
 	rs := o.rstate
-	wi := &backend.OrchestrationWorkItem{
+	wi := &backend.WorkflowWorkItem{
 		InstanceID: api.InstanceID(rs.GetInstanceId()),
 		NewEvents:  state.Inbox,
 		RetryCount: -1, // TODO
@@ -110,6 +111,15 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", o.actorID, wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend
+	// Snapshot o.rstate before the engine runs. The engine shares wi.State
+	// with o.rstate (same pointer) and may overwrite it during ContinueAsNew
+	// (*s = *newState in the applier). If the engine fails, we restore the
+	// snapshot so the cached state remains consistent with the store.
+	var rstateSnapshot *backend.WorkflowRuntimeState
+	if o.rstate != nil {
+		rstateSnapshot = proto.Clone(o.rstate).(*backend.WorkflowRuntimeState)
+	}
+
 	// TODO: @joshvanl remove.
 	err = o.scheduler(ctx, wi)
 	if err != nil {
@@ -131,12 +141,75 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
-		// Workflow execution failed with recoverable error
+		// The engine may have partially mutated o.rstate via the shared
+		// wi.State pointer before the context was cancelled. Restore the
+		// snapshot so the cached state stays consistent with the store.
+		o.rstate = rstateSnapshot
 		executionStatus = diag.StatusRecoverable
 		return todo.RunCompletedFalse, ctx.Err()
 	case completed := <-callback:
 		if !completed {
-			// Workflow execution failed with recoverable error
+			// The engine abandoned this work item (e.g. MaxContinueAsNewCount
+			// exceeded). The engine's ContinueAsNew tight-loop may have
+			// overwritten o.rstate via the shared wi.State pointer
+			// (*s = *newState in the applier). If CAN progress was made,
+			// persist it to the state store so it survives actor
+			// deactivation. Carryover events (unprocessed EventRaised
+			// events from the CAN state) are moved to the Inbox so they
+			// become NewEvents on retry. The stale inbox (which contained
+			// ALL original events including those already consumed) is
+			// replaced to prevent duplicate event delivery.
+			// If no CAN progress was made (non-CAN failure), restore the
+			// pre-engine snapshot so the cached state stays consistent.
+			if wi.State.GetContinuedAsNew() {
+				// Separate carryover EventRaised events from the CAN
+				// execution events (WorkflowStarted, ExecutionStarted).
+				// Carryover events must go into the Inbox so they become
+				// NewEvents on retry. If they stay in History (as
+				// OldEvents) alongside the original Inbox events
+				// (NewEvents), the engine would buffer both sets and the
+				// workflow would process duplicate events.
+				canNewEvents := wi.State.GetNewEvents()
+				filtered := make([]*backend.HistoryEvent, 0, len(canNewEvents))
+				var carryover []*backend.HistoryEvent
+				for _, e := range canNewEvents {
+					if e.GetEventRaised() != nil {
+						carryover = append(carryover, e)
+					} else {
+						filtered = append(filtered, e)
+					}
+				}
+
+				// Temporarily swap NewEvents so ApplyRuntimeStateChanges
+				// only writes the CAN execution events to History.
+				if len(carryover) > 0 {
+					wi.State.NewEvents = filtered
+					state.ApplyRuntimeStateChanges(wi.State)
+					wi.State.NewEvents = canNewEvents
+
+					state.ClearInbox()
+					for _, e := range carryover {
+						state.AddToInbox(e)
+					}
+				} else {
+					state.ApplyRuntimeStateChanges(wi.State)
+				}
+
+				state.Generation++
+
+				if err = o.saveInternalState(ctx, state); err != nil {
+					o.rstate = rstateSnapshot
+					return todo.RunCompletedFalse, err
+				}
+
+				if len(carryover) > 0 {
+					if _, err = o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, time.Now(), o.appID); err != nil {
+						return todo.RunCompletedFalse, err
+					}
+				}
+			} else {
+				o.rstate = rstateSnapshot
+			}
 			executionStatus = diag.StatusRecoverable
 			return todo.RunCompletedFalse, wferrors.NewRecoverable(todo.ErrExecutionAborted)
 		}
@@ -175,14 +248,14 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 	pendingTasks := rs.GetPendingTasks()
 
 	// Process the outbound orchestrator events.
-	var addWorkflows []*backend.OrchestrationRuntimeStateMessage
-	var createWorkflows []*backend.OrchestrationRuntimeStateMessage
+	var addWorkflows []*backend.WorkflowRuntimeStateMessage
+	var createWorkflows []*backend.WorkflowRuntimeStateMessage
 	for _, msg := range rs.GetPendingMessages() {
 		switch {
 		case msg.GetHistoryEvent().GetExecutionStarted() != nil:
 			createWorkflows = append(createWorkflows, msg)
 
-		case msg.GetHistoryEvent().GetSubOrchestrationInstanceCompleted() != nil, msg.GetHistoryEvent().GetSubOrchestrationInstanceFailed() != nil:
+		case msg.GetHistoryEvent().GetChildWorkflowInstanceCompleted() != nil, msg.GetHistoryEvent().GetChildWorkflowInstanceFailed() != nil:
 			addWorkflows = append(addWorkflows, msg)
 
 		default:
@@ -279,7 +352,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 
 func (*orchestrator) calculateWorkflowExecutionLatency(state *wfenginestate.State) (wExecutionElapsedTime float64) {
 	for _, e := range state.History {
-		if os := e.GetOrchestratorStarted(); os != nil {
+		if os := e.GetWorkflowStarted(); os != nil {
 			return diag.ElapsedSince(e.GetTimestamp().AsTime())
 		}
 	}

@@ -70,23 +70,23 @@ func (c *childwf) Run(t *testing.T, ctx context.Context) {
 
 	require.Len(t, evs, 6)
 
-	assert.NotNil(t, evs[0].GetOrchestratorStarted())
+	assert.NotNil(t, evs[0].GetWorkflowStarted())
 	assert.Nil(t, evs[0].GetExecutionStarted())
 	assert.NotNil(t, evs[1].GetExecutionStarted())
 	assert.Equal(t, "foo", evs[1].GetExecutionStarted().GetName())
-	assert.Equal(t, "abc", evs[1].GetExecutionStarted().GetOrchestrationInstance().GetInstanceId())
+	assert.Equal(t, "abc", evs[1].GetExecutionStarted().GetWorkflowInstance().GetInstanceId())
 	assert.Equal(t, c.workflow.Dapr().AppID(), evs[1].GetRouter().GetSourceAppID())
 
-	assert.NotNil(t, evs[2].GetSubOrchestrationInstanceCreated())
-	assert.Equal(t, "abc:0000", evs[2].GetSubOrchestrationInstanceCreated().GetInstanceId())
-	assert.Equal(t, "bar", evs[2].GetSubOrchestrationInstanceCreated().GetName())
+	assert.NotNil(t, evs[2].GetChildWorkflowInstanceCreated())
+	assert.Equal(t, "abc:0000", evs[2].GetChildWorkflowInstanceCreated().GetInstanceId())
+	assert.Equal(t, "bar", evs[2].GetChildWorkflowInstanceCreated().GetName())
 	assert.Equal(t, c.workflow.Dapr().AppID(), evs[2].GetRouter().GetSourceAppID())
 
-	assert.NotNil(t, evs[3].GetOrchestratorStarted())
+	assert.NotNil(t, evs[3].GetWorkflowStarted())
 
-	assert.NotNil(t, evs[4].GetSubOrchestrationInstanceCompleted())
+	assert.NotNil(t, evs[4].GetChildWorkflowInstanceCompleted())
 
 	assert.NotNil(t, evs[5].GetExecutionCompleted())
-	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[5].GetExecutionCompleted().GetOrchestrationStatus().String())
+	assert.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", evs[5].GetExecutionCompleted().GetWorkflowStatus().String())
 	assert.Equal(t, c.workflow.Dapr().AppID(), evs[5].GetRouter().GetSourceAppID())
 }
