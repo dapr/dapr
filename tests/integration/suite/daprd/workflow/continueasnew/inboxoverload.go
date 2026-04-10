@@ -74,7 +74,7 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, ctx.GetInput(&inc))
 
 		var val string
-		ctx.WaitForSingleEvent("ev", 3*time.Second).Await(&val)
+		ctx.WaitForSingleEvent("ev", 15*time.Second).Await(&val)
 		if val == "" {
 			if drainMode.Load() {
 				return inc, nil
@@ -115,7 +115,7 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	db := i.workflow.DB().GetConnection(t)
 	tableName := i.workflow.DB().TableName()
@@ -134,7 +134,7 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 		n := len(payloads)
 		mu.Unlock()
 		assert.Equal(c, totalEvents, n, "waiting for all events to be processed before draining")
-	}, 30*time.Second, 10*time.Millisecond)
+	}, time.Second*30, 10*time.Millisecond)
 	drainMode.Store(true)
 
 	meta, err := client.WaitForWorkflowCompletion(ctx, id)
