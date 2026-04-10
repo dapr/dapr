@@ -28,6 +28,7 @@ type Resource interface {
 	GetName() string
 	GetNamespace() string
 	LogName() string
+	// TODO: update to return *string to determine presence of secret store reference vs empty string value.
 	GetSecretStore() string
 	GetScopes() []string
 	NameValuePairs() []common.NameValuePair

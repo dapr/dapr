@@ -98,7 +98,7 @@ func (a *appdown) Setup(t *testing.T) []framework.Option {
 	)
 
 	// App1: Orchestrator, calls app2
-	a.registry1.AddOrchestratorN("AppDownWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	a.registry1.AddWorkflowN("AppDownWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in orchestrator: %w", err)
@@ -143,7 +143,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 	err = client2.StartWorkItemListener(cctx, a.registry2)
 	require.NoError(t, err)
 
-	id, err := client1.ScheduleNewOrchestration(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
+	id, err := client1.ScheduleNewWorkflow(t.Context(), "AppDownWorkflow", api.WithInput("Hello from app1"))
 	require.NoError(t, err)
 
 	select {
@@ -158,7 +158,7 @@ func (a *appdown) Run(t *testing.T, ctx context.Context) {
 
 	waitCtx, waitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer waitCancel()
-	_, err = client1.WaitForOrchestrationCompletion(waitCtx, id, api.WithFetchPayloads(true))
+	_, err = client1.WaitForWorkflowCompletion(waitCtx, id, api.WithFetchPayloads(true))
 	require.Error(t, err)
 	assert.EqualError(t, err, "context deadline exceeded")
 }

@@ -114,11 +114,13 @@ jobs:
           repository: dapr/python-sdk
           path: python-sdk
       - name: Set up Dapr CLI
-        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+        uses: dapr/.github/.github/actions/setup-dapr-cli@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize Dapr runtime
-        run: |
-          dapr uninstall --all
-          dapr init
+        uses: dapr/.github/.github/actions/setup-dapr-runtime@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and override daprd
         run: |
           make
@@ -247,11 +249,13 @@ jobs:
           repository: dapr/java-sdk
           path: java-sdk
       - name: Set up Dapr CLI
-        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+        uses: dapr/.github/.github/actions/setup-dapr-cli@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize Dapr runtime
-        run: |
-          dapr uninstall --all
-          dapr init
+        uses: dapr/.github/.github/actions/setup-dapr-runtime@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and override daprd
         run: |
           make
@@ -422,11 +426,13 @@ jobs:
           repository: dapr/js-sdk
           path: js-sdk
       - name: Set up Dapr CLI
-        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+        uses: dapr/.github/.github/actions/setup-dapr-cli@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize Dapr runtime
-        run: |
-          dapr uninstall --all
-          dapr init
+        uses: dapr/.github/.github/actions/setup-dapr-runtime@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and override daprd
         run: |
           make
@@ -556,11 +562,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install mechanical-markdown
       - name: Set up Dapr CLI
-        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+        uses: dapr/.github/.github/actions/setup-dapr-cli@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize Dapr runtime
-        run: |
-          dapr uninstall --all
-          dapr init
+        uses: dapr/.github/.github/actions/setup-dapr-runtime@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and override daprd with HEAD.
         run: |
           make
