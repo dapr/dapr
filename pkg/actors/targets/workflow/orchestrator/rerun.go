@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -50,7 +51,7 @@ func (o *orchestrator) forkWorkflowHistory(ctx context.Context, request []byte) 
 		return status.Errorf(codes.NotFound, "workflow instance does not exist with ID '%s'", o.actorID)
 	}
 
-	if !api.OrchestrationMetadataIsComplete(ometa) {
+	if !api.WorkflowMetadataIsComplete(ometa) {
 		return status.Errorf(codes.InvalidArgument, "'%s' is not in a terminal state", o.actorID)
 	}
 
@@ -106,12 +107,12 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		return status.Errorf(codes.AlreadyExists, "workflow '%s' has already been created", o.actorID)
 	}
 
-	var workflowState backend.WorkflowState
+	var workflowState protos.BackendWorkflowState
 	if err = proto.Unmarshal(request, &workflowState); err != nil {
 		return fmt.Errorf("failed to unmarshal workflow history: %w", err)
 	}
 
-	if len(workflowState.Inbox) == 0 {
+	if len(workflowState.GetInbox()) == 0 {
 		return errors.New("expect rerun workflow inbox to not be empty")
 	}
 
@@ -119,8 +120,8 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	var timers []*protos.HistoryEvent
 	var childWFs []*protos.HistoryEvent
 
-	for i := 0; i < len(workflowState.Inbox); i++ {
-		his := workflowState.Inbox[i]
+	for i := 0; i < len(workflowState.GetInbox()); i++ {
+		his := workflowState.GetInbox()[i]
 		his.Timestamp = timestamppb.Now()
 
 		switch his.GetEventType().(type) {
@@ -139,7 +140,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 				},
 			})
 
-		case *protos.HistoryEvent_SubOrchestrationInstanceCreated:
+		case *protos.HistoryEvent_ChildWorkflowInstanceCreated:
 			childWFs = append(childWFs, his)
 
 		default:
@@ -147,7 +148,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 		}
 
 		workflowState.History = append(workflowState.History, his)
-		workflowState.Inbox = append(workflowState.Inbox[:i], workflowState.Inbox[i+1:]...)
+		workflowState.Inbox = slices.Delete(workflowState.GetInbox(), i, i+1)
 		i--
 	}
 
@@ -166,7 +167,7 @@ func (o *orchestrator) rerunWorkflowInstanceRequest(ctx context.Context, request
 	startedEvent := o.getExecutionStartedEvent(newState)
 	if err = errors.Join(
 		o.callChildWorkflows(ctx, startedEvent.GetName(), childWFs),
-		o.callActivities(ctx, activities, newState),
+		o.callActivities(ctx, activities, newState).err,
 		o.createTimers(ctx, timers, newState.Generation),
 	); err != nil {
 		return err

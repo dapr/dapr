@@ -30,7 +30,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// QueriableStateStoreName is the fully-qualified name of the QueriableStateStore service.
@@ -98,11 +98,13 @@ type QueriableStateStoreClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewQueriableStateStoreClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) QueriableStateStoreClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	queriableStateStoreMethods := v1.File_dapr_proto_components_v1_state_proto.Services().ByName("QueriableStateStore").Methods()
 	return &queriableStateStoreClient{
 		query: connect.NewClient[v1.QueryRequest, v1.QueryResponse](
 			httpClient,
 			baseURL+QueriableStateStoreQueryProcedure,
-			opts...,
+			connect.WithSchema(queriableStateStoreMethods.ByName("Query")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -130,10 +132,12 @@ type QueriableStateStoreHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewQueriableStateStoreHandler(svc QueriableStateStoreHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	queriableStateStoreMethods := v1.File_dapr_proto_components_v1_state_proto.Services().ByName("QueriableStateStore").Methods()
 	queriableStateStoreQueryHandler := connect.NewUnaryHandler(
 		QueriableStateStoreQueryProcedure,
 		svc.Query,
-		opts...,
+		connect.WithSchema(queriableStateStoreMethods.ByName("Query")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.components.v1.QueriableStateStore/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -169,11 +173,13 @@ type TransactionalStateStoreClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewTransactionalStateStoreClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) TransactionalStateStoreClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	transactionalStateStoreMethods := v1.File_dapr_proto_components_v1_state_proto.Services().ByName("TransactionalStateStore").Methods()
 	return &transactionalStateStoreClient{
 		transact: connect.NewClient[v1.TransactionalStateRequest, v1.TransactionalStateResponse](
 			httpClient,
 			baseURL+TransactionalStateStoreTransactProcedure,
-			opts...,
+			connect.WithSchema(transactionalStateStoreMethods.ByName("Transact")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -201,10 +207,12 @@ type TransactionalStateStoreHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewTransactionalStateStoreHandler(svc TransactionalStateStoreHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	transactionalStateStoreMethods := v1.File_dapr_proto_components_v1_state_proto.Services().ByName("TransactionalStateStore").Methods()
 	transactionalStateStoreTransactHandler := connect.NewUnaryHandler(
 		TransactionalStateStoreTransactProcedure,
 		svc.Transact,
-		opts...,
+		connect.WithSchema(transactionalStateStoreMethods.ByName("Transact")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.components.v1.TransactionalStateStore/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -254,51 +262,61 @@ type StateStoreClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewStateStoreClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) StateStoreClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	stateStoreMethods := v1.File_dapr_proto_components_v1_state_proto.Services().ByName("StateStore").Methods()
 	return &stateStoreClient{
 		init: connect.NewClient[v1.InitRequest, v1.InitResponse](
 			httpClient,
 			baseURL+StateStoreInitProcedure,
-			opts...,
+			connect.WithSchema(stateStoreMethods.ByName("Init")),
+			connect.WithClientOptions(opts...),
 		),
 		features: connect.NewClient[v1.FeaturesRequest, v1.FeaturesResponse](
 			httpClient,
 			baseURL+StateStoreFeaturesProcedure,
-			opts...,
+			connect.WithSchema(stateStoreMethods.ByName("Features")),
+			connect.WithClientOptions(opts...),
 		),
 		delete: connect.NewClient[v1.DeleteRequest, v1.DeleteResponse](
 			httpClient,
 			baseURL+StateStoreDeleteProcedure,
-			opts...,
+			connect.WithSchema(stateStoreMethods.ByName("Delete")),
+			connect.WithClientOptions(opts...),
 		),
 		get: connect.NewClient[v1.GetRequest, v1.GetResponse](
 			httpClient,
 			baseURL+StateStoreGetProcedure,
-			opts...,
+			connect.WithSchema(stateStoreMethods.ByName("Get")),
+			connect.WithClientOptions(opts...),
 		),
 		set: connect.NewClient[v1.SetRequest, v1.SetResponse](
 			httpClient,
 			baseURL+StateStoreSetProcedure,
-			opts...,
+			connect.WithSchema(stateStoreMethods.ByName("Set")),
+			connect.WithClientOptions(opts...),
 		),
 		ping: connect.NewClient[v1.PingRequest, v1.PingResponse](
 			httpClient,
 			baseURL+StateStorePingProcedure,
-			opts...,
+			connect.WithSchema(stateStoreMethods.ByName("Ping")),
+			connect.WithClientOptions(opts...),
 		),
 		bulkDelete: connect.NewClient[v1.BulkDeleteRequest, v1.BulkDeleteResponse](
 			httpClient,
 			baseURL+StateStoreBulkDeleteProcedure,
-			opts...,
+			connect.WithSchema(stateStoreMethods.ByName("BulkDelete")),
+			connect.WithClientOptions(opts...),
 		),
 		bulkGet: connect.NewClient[v1.BulkGetRequest, v1.BulkGetResponse](
 			httpClient,
 			baseURL+StateStoreBulkGetProcedure,
-			opts...,
+			connect.WithSchema(stateStoreMethods.ByName("BulkGet")),
+			connect.WithClientOptions(opts...),
 		),
 		bulkSet: connect.NewClient[v1.BulkSetRequest, v1.BulkSetResponse](
 			httpClient,
 			baseURL+StateStoreBulkSetProcedure,
-			opts...,
+			connect.WithSchema(stateStoreMethods.ByName("BulkSet")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -389,50 +407,60 @@ type StateStoreHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewStateStoreHandler(svc StateStoreHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	stateStoreMethods := v1.File_dapr_proto_components_v1_state_proto.Services().ByName("StateStore").Methods()
 	stateStoreInitHandler := connect.NewUnaryHandler(
 		StateStoreInitProcedure,
 		svc.Init,
-		opts...,
+		connect.WithSchema(stateStoreMethods.ByName("Init")),
+		connect.WithHandlerOptions(opts...),
 	)
 	stateStoreFeaturesHandler := connect.NewUnaryHandler(
 		StateStoreFeaturesProcedure,
 		svc.Features,
-		opts...,
+		connect.WithSchema(stateStoreMethods.ByName("Features")),
+		connect.WithHandlerOptions(opts...),
 	)
 	stateStoreDeleteHandler := connect.NewUnaryHandler(
 		StateStoreDeleteProcedure,
 		svc.Delete,
-		opts...,
+		connect.WithSchema(stateStoreMethods.ByName("Delete")),
+		connect.WithHandlerOptions(opts...),
 	)
 	stateStoreGetHandler := connect.NewUnaryHandler(
 		StateStoreGetProcedure,
 		svc.Get,
-		opts...,
+		connect.WithSchema(stateStoreMethods.ByName("Get")),
+		connect.WithHandlerOptions(opts...),
 	)
 	stateStoreSetHandler := connect.NewUnaryHandler(
 		StateStoreSetProcedure,
 		svc.Set,
-		opts...,
+		connect.WithSchema(stateStoreMethods.ByName("Set")),
+		connect.WithHandlerOptions(opts...),
 	)
 	stateStorePingHandler := connect.NewUnaryHandler(
 		StateStorePingProcedure,
 		svc.Ping,
-		opts...,
+		connect.WithSchema(stateStoreMethods.ByName("Ping")),
+		connect.WithHandlerOptions(opts...),
 	)
 	stateStoreBulkDeleteHandler := connect.NewUnaryHandler(
 		StateStoreBulkDeleteProcedure,
 		svc.BulkDelete,
-		opts...,
+		connect.WithSchema(stateStoreMethods.ByName("BulkDelete")),
+		connect.WithHandlerOptions(opts...),
 	)
 	stateStoreBulkGetHandler := connect.NewUnaryHandler(
 		StateStoreBulkGetProcedure,
 		svc.BulkGet,
-		opts...,
+		connect.WithSchema(stateStoreMethods.ByName("BulkGet")),
+		connect.WithHandlerOptions(opts...),
 	)
 	stateStoreBulkSetHandler := connect.NewUnaryHandler(
 		StateStoreBulkSetProcedure,
 		svc.BulkSet,
-		opts...,
+		connect.WithSchema(stateStoreMethods.ByName("BulkSet")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.components.v1.StateStore/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -517,11 +545,13 @@ type TransactionalStoreMultiMaxSizeClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewTransactionalStoreMultiMaxSizeClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) TransactionalStoreMultiMaxSizeClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	transactionalStoreMultiMaxSizeMethods := v1.File_dapr_proto_components_v1_state_proto.Services().ByName("TransactionalStoreMultiMaxSize").Methods()
 	return &transactionalStoreMultiMaxSizeClient{
 		multiMaxSize: connect.NewClient[v1.MultiMaxSizeRequest, v1.MultiMaxSizeResponse](
 			httpClient,
 			baseURL+TransactionalStoreMultiMaxSizeMultiMaxSizeProcedure,
-			opts...,
+			connect.WithSchema(transactionalStoreMultiMaxSizeMethods.ByName("MultiMaxSize")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -550,10 +580,12 @@ type TransactionalStoreMultiMaxSizeHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewTransactionalStoreMultiMaxSizeHandler(svc TransactionalStoreMultiMaxSizeHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	transactionalStoreMultiMaxSizeMethods := v1.File_dapr_proto_components_v1_state_proto.Services().ByName("TransactionalStoreMultiMaxSize").Methods()
 	transactionalStoreMultiMaxSizeMultiMaxSizeHandler := connect.NewUnaryHandler(
 		TransactionalStoreMultiMaxSizeMultiMaxSizeProcedure,
 		svc.MultiMaxSize,
-		opts...,
+		connect.WithSchema(transactionalStoreMultiMaxSizeMethods.ByName("MultiMaxSize")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.components.v1.TransactionalStoreMultiMaxSize/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

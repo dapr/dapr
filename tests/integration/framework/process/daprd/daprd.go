@@ -427,6 +427,10 @@ func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*
 	return d.meta(t, ctx).HTTPEndpoints
 }
 
+func (d *Daprd) GetMetaMCPServers(t assert.TestingT, ctx context.Context) []*rtv1.MetadataMCPServer {
+	return d.meta(t, ctx).MCPServers
+}
+
 func (d *Daprd) GetMetaScheduler(t assert.TestingT, ctx context.Context) *rtv1.MetadataScheduler {
 	return d.meta(t, ctx).Scheduler
 }
@@ -444,6 +448,7 @@ type Metadata struct {
 	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
 	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
 	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
+	MCPServers           []*rtv1.MetadataMCPServer            `json:"mcpServers,omitempty"`
 	Scheduler            *rtv1.MetadataScheduler              `json:"scheduler,omitempty"`
 	ActorRuntime         *MetadataActorRuntime                `json:"actorRuntime,omitempty"`
 	Workflows            *MetadataWorkflows                   `json:"workflows"`
