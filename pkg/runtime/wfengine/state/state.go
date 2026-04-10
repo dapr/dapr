@@ -597,8 +597,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetSigningCertificateLength() {
 		key = getMultiEntryKeyName(sigcertKeyPrefix, i)
 		if bulkRes[key] == nil {
-			wfLogger.Warnf("Failed to load signing cert state key '%s': not found", key)
-			continue
+			return nil, wferrors.NewVerificationError(
+				fmt.Errorf("signing certificate state key '%s' declared in metadata but not found in state store — possible tampering", key),
+			)
 		}
 
 		var cert backend.SigningCertificate
@@ -613,8 +614,9 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetSignatureLength() {
 		key = getMultiEntryKeyName(signatureKeyPrefix, i)
 		if bulkRes[key] == nil {
-			wfLogger.Warnf("Failed to load signature state key '%s': not found", key)
-			continue
+			return nil, wferrors.NewVerificationError(
+				fmt.Errorf("signature state key '%s' declared in metadata but not found in state store — possible tampering", key),
+			)
 		}
 
 		var sig backend.HistorySignature
@@ -650,10 +652,10 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 
 	// Signing enforcement. Once signing is enabled for a cluster, it is a
 	// one-way commitment: workflows created with signing must always run on
-	// signing-enabled hosts, and workflows created without signing cannot
-	// be migrated to signing-enabled hosts. Workflows that violate these
-	// rules are terminated. Operators must ensure all unsigned workflows
-	// complete or are purged before enabling signing cluster-wide.
+	// signing-enabled hosts, and workflows created without signing cannot be
+	// migrated to signing-enabled hosts. Workflows that violate these rules are
+	// terminated. Operators must ensure all unsigned workflows complete or are
+	// purged before enabling signing cluster-wide.
 	if len(wState.Signatures) > 0 {
 		if opts.Signer == nil {
 			return wState, wferrors.NewVerificationError(
@@ -685,10 +687,10 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 		last := s.Signatures[len(s.Signatures)-1]
 		coveredEvents := last.GetStartEventIndex() + last.GetEventCount()
 		if coveredEvents < uint64(len(rawEvents)) {
-			// Signatures don't cover all history events. This means the
-			// workflow ran on a non-signing host mid-flight, creating
-			// an unsigned gap. These events have no integrity proof and
-			// could have been tampered with. The workflow must be purged.
+			// Signatures don't cover all history events. This means the workflow ran
+			// on a non-signing host mid-flight, creating an unsigned gap. These
+			// events have no integrity proof and could have been tampered with. The
+			// workflow must be purged.
 			return fmt.Errorf("signatures cover events [0, %d) but %d history events exist; %d events have no integrity proof — this workflow ran on a non-signing host and cannot be recovered",
 				coveredEvents, len(rawEvents), uint64(len(rawEvents))-coveredEvents)
 		}
@@ -702,15 +704,14 @@ func verifySignatureChain(s *State, sgn *signer.Signer) error {
 		return err
 	}
 
-	// Verify that all signing certificates belong to the expected app.
-	// This prevents cross-app signature forgery where App B signs events
-	// for App A's workflow using a valid certificate from the same trust
-	// domain.
-	if s.appID != "" {
-		for i, cert := range s.SigningCertificates {
-			if err := verifyCertAppIdentity(cert.GetCertificate(), s.appID); err != nil {
-				return fmt.Errorf("signing certificate %d: %w", i, err)
-			}
+	// Verify that all signing certificates belong to the expected app. This
+	// prevents cross-app signature forgery where App B signs events for App A's
+	// workflow using a valid certificate from the same trust domain. The appID
+	// is guaranteed non-empty here because LoadWorkflowState rejects signed
+	// workflows with an empty AppID.
+	for i, cert := range s.SigningCertificates {
+		if err := verifyCertAppIdentity(cert.GetCertificate(), s.appID); err != nil {
+			return fmt.Errorf("signing certificate %d: %w", i, err)
 		}
 	}
 
