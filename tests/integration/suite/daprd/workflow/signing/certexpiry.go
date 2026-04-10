@@ -145,7 +145,7 @@ func (c *certexpiry) Run(t *testing.T, ctx context.Context) {
 	// The SVID rotated multiple times during the workflow. Each rotation
 	// produces a new signing certificate entry.
 	certCount := c.db.CountStateKeys(t, ctx, "sigcert")
-	assert.Equal(t, 5, certCount,
+	assert.GreaterOrEqual(t, certCount, 2,
 		"expected at least 2 certificates from natural SVID rotation, got %d", certCount)
 
 	// The full signature chain must be valid across all certificate rotations.
