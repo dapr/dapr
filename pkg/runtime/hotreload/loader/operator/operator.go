@@ -19,34 +19,46 @@ import (
 	"sync/atomic"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.hotreload.loader.operator")
 
 type Options struct {
-	PodName        string
 	Namespace      string
 	ComponentStore *compstore.ComponentStore
 	OperatorClient operatorpb.OperatorClient
 }
 
 type operator struct {
-	components    *resource[componentsapi.Component]
-	subscriptions *resource[subapi.Subscription]
+	components     *resource[componentsapi.Component]
+	subscriptions  *resource[subapi.Subscription]
+	mcpServers     *resource[mcpserverapi.MCPServer]
+	configurations *resource[configapi.Configuration]
+	httpEndpoints  *resource[httpendpointapi.HTTPEndpoint]
+	resiliencies   *resource[resiliencyapi.Resiliency]
 
 	running atomic.Bool
 }
 
 func New(opts Options) loader.Interface {
 	return &operator{
-		components:    newResource[componentsapi.Component](opts, loadercompstore.NewComponents(opts.ComponentStore), new(components)),
-		subscriptions: newResource[subapi.Subscription](opts, loadercompstore.NewSubscriptions(opts.ComponentStore), new(subscriptions)),
+		components:     newResource[componentsapi.Component](opts, loadercompstore.NewComponents(opts.ComponentStore), new(components)),
+		subscriptions:  newResource[subapi.Subscription](opts, loadercompstore.NewSubscriptions(opts.ComponentStore), new(subscriptions)),
+		mcpServers:     newResource[mcpserverapi.MCPServer](opts, loadercompstore.NewMCPServers(opts.ComponentStore), new(mcpservers)),
+		configurations: newResource[configapi.Configuration](opts, loadercompstore.NewConfigurations(opts.ComponentStore), new(configurations)),
+		httpEndpoints:  newResource[httpendpointapi.HTTPEndpoint](opts, loadercompstore.NewHTTPEndpoints(opts.ComponentStore), new(httpEndpoints)),
+		resiliencies:   newResource[resiliencyapi.Resiliency](opts, loadercompstore.NewResiliencies(opts.ComponentStore), new(resiliencies)),
 	}
 }
 
@@ -55,9 +67,23 @@ func (o *operator) Run(ctx context.Context) error {
 		return errors.New("already running")
 	}
 
-	<-ctx.Done()
+	runners := make([]concurrency.Runner, 0, 6)
+	for _, r := range []func() error{
+		o.components.close,
+		o.subscriptions.close,
+		o.mcpServers.close,
+		o.configurations.close,
+		o.httpEndpoints.close,
+		o.resiliencies.close,
+	} {
+		cr := r
+		runners = append(runners, func(ctx context.Context) error {
+			<-ctx.Done()
+			return cr()
+		})
+	}
 
-	return errors.Join(o.components.close(), o.subscriptions.close())
+	return concurrency.NewRunnerManager(runners...).Run(ctx)
 }
 
 func (o *operator) Components() loader.Loader[componentsapi.Component] {
@@ -66,4 +92,20 @@ func (o *operator) Components() loader.Loader[componentsapi.Component] {
 
 func (o *operator) Subscriptions() loader.Loader[subapi.Subscription] {
 	return o.subscriptions
+}
+
+func (o *operator) MCPServers() loader.Loader[mcpserverapi.MCPServer] {
+	return o.mcpServers
+}
+
+func (o *operator) Configurations() loader.Loader[configapi.Configuration] {
+	return o.configurations
+}
+
+func (o *operator) HTTPEndpoints() loader.Loader[httpendpointapi.HTTPEndpoint] {
+	return o.httpEndpoints
+}
+
+func (o *operator) Resiliencies() loader.Loader[resiliencyapi.Resiliency] {
+	return o.resiliencies
 }

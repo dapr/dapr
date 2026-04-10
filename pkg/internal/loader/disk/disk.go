@@ -18,7 +18,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
+	"github.com/dapr/dapr/pkg/internal/loader/disk/dirdata"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
@@ -50,13 +52,25 @@ func new[T meta.Resource](opts Options) *disk[T] {
 	}
 }
 
-// load loads manifests for the given directory.
+// Load loads manifests from disk by reading all YAML files from the
+// configured directories.
 func (d *disk[T]) Load(context.Context) ([]T, error) {
 	set, err := d.loadWithOrder()
 	if err != nil {
 		return nil, err
 	}
+	return d.filterManifests(set)
+}
 
+// LoadFromDirData loads manifests from pre-read directory data, avoiding
+// repeated file system reads when multiple resource types need to be loaded
+// from the same directories.
+func (d *disk[T]) LoadFromDirData(data *dirdata.DirData) ([]T, error) {
+	set := d.loadWithOrderFromDirData(data)
+	return d.filterManifests(set)
+}
+
+func (d *disk[T]) filterManifests(set *manifestSet[T]) ([]T, error) {
 	nsDefined := len(os.Getenv("NAMESPACE")) != 0
 
 	names := make(map[string]string)
@@ -105,4 +119,19 @@ func (d *disk[T]) loadWithOrder() (*manifestSet[T], error) {
 	}
 
 	return set, nil
+}
+
+func (d *disk[T]) loadWithOrderFromDirData(data *dirdata.DirData) *manifestSet[T] {
+	set := &manifestSet[T]{d: d}
+	for _, entry := range data.Entries {
+		set.fileIndex = 0
+		for _, file := range entry.Files {
+			set.loadManifestsFromBytes(
+				filepath.Join(entry.Dir, file.Name),
+				file.Content,
+			)
+		}
+		set.dirIndex++
+	}
+	return set
 }
