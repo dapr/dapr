@@ -35,7 +35,6 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 	"github.com/dapr/kit/logger"
 )
 
@@ -100,7 +99,7 @@ type injector struct {
 	schedulerEnabled        bool
 
 	htarget              healthz.Target
-	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
+	namespaceNameMatcher func(namespace, name string) bool
 	running              atomic.Bool
 }
 
@@ -163,7 +162,19 @@ func NewInjector(opts Options) (Injector, error) {
 		schedulerEnabled:        opts.SchedulerEnabled,
 	}
 
-	matcher, err := createNamespaceNameMatcher(opts.Config.AllowedServiceAccountsPrefixNames)
+	// All service account entries are matched using glob syntax (*, ?, [...]).
+	// This is backwards-compatible because exact names and trailing-* prefixes
+	// are valid glob patterns with identical semantics.
+	patterns := []string{}
+	patterns = append(patterns, AllowedServiceAccountInfos...)
+	if opts.Config.AllowedServiceAccounts != "" {
+		patterns = append(patterns, strings.Split(opts.Config.AllowedServiceAccounts, ",")...)
+	}
+	if opts.Config.AllowedServiceAccountsPrefixNames != "" {
+		log.Warn("ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES is deprecated; use ALLOWED_SERVICE_ACCOUNTS instead, which now supports glob patterns")
+		patterns = append(patterns, strings.Split(opts.Config.AllowedServiceAccountsPrefixNames, ",")...)
+	}
+	matcher, err := NewServiceAccountMatcher(patterns...)
 	if err != nil {
 		return nil, err
 	}
@@ -173,19 +184,13 @@ func NewInjector(opts Options) (Injector, error) {
 	return i, nil
 }
 
-func createNamespaceNameMatcher(allowedPrefix string) (matcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher, err error) {
-	allowedPrefix = strings.TrimSpace(allowedPrefix)
-	if allowedPrefix != "" {
-		matcher, err = namespacednamematcher.CreateFromString(allowedPrefix)
-		if err != nil {
-			return nil, err
-		}
-		log.Debugf("Sidecar injector configured to allowed serviceaccounts prefixed by: %s", allowedPrefix)
-	}
-	return matcher, nil
-}
-
-// AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
+// AllowedControllersServiceAccountUID returns an array of UID, list of allowed
+// service account on the webhook handler.
+// NOTE: These UIDs overlap with the name-based matcher built in NewInjector via
+// NewServiceAccountMatcher only for exact "namespace:name" entries (including
+// those in AllowedServiceAccountInfos). Glob/pattern-based matches are handled
+// solely by the matcher; this UID-based path is kept as defense-in-depth for
+// isAuthorizedUser.
 func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
 	allowedList := []string{}
 	if cfg.AllowedServiceAccounts != "" {
