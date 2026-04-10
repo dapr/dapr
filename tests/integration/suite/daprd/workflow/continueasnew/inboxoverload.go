@@ -129,7 +129,12 @@ func (i *inboxoverload) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(2 * time.Second)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		mu.Lock()
+		n := len(payloads)
+		mu.Unlock()
+		assert.Equal(c, totalEvents, n, "waiting for all events to be processed before draining")
+	}, 30*time.Second, 10*time.Millisecond)
 	drainMode.Store(true)
 
 	meta, err := client.WaitForWorkflowCompletion(ctx, id)
