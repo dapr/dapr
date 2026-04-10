@@ -98,7 +98,7 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	// Apply orchestrators & activities to the registry
 	for _, orch := range opts.orchestrators {
 		if orch.index < len(daprds) {
-			require.NoError(t, registries[orch.index].AddOrchestratorN(orch.name, orch.fn))
+			require.NoError(t, registries[orch.index].AddWorkflowN(orch.name, orch.fn))
 		}
 	}
 	for _, act := range opts.activities {

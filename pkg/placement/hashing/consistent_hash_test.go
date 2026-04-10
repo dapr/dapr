@@ -89,6 +89,26 @@ func TestGetAndSetVirtualNodeCacheHashes(t *testing.T) {
 	assert.Equal(t, uint64(694935339057032644), hashes[2])
 }
 
+func TestVirtualNodeCacheRetainsHostsWithSharedReplicationFactor(t *testing.T) {
+	cache := NewVirtualNodesCache()
+	replicationFactor := int64(5)
+
+	host1 := "192.168.1.83:60992"
+	host2 := "192.168.1.89:62362"
+
+	host1Hashes := cache.GetHashes(replicationFactor, host1)
+	host2Hashes := cache.GetHashes(replicationFactor, host2)
+
+	require.Contains(t, cache.data, replicationFactor)
+	require.Len(t, cache.data[replicationFactor].hashes, 2)
+	require.Contains(t, cache.data[replicationFactor].hashes, host1)
+	require.Contains(t, cache.data[replicationFactor].hashes, host2)
+
+	assert.Equal(t, host1Hashes, cache.data[replicationFactor].hashes[host1])
+	assert.Equal(t, host2Hashes, cache.data[replicationFactor].hashes[host2])
+	assert.Same(t, &host1Hashes[0], &cache.data[replicationFactor].hashes[host1][0])
+}
+
 func TestGetAndSetVirtualNodeCacheHashesConcurrently(t *testing.T) {
 	cache := NewVirtualNodesCache()
 	replicationFactor := int64(5)

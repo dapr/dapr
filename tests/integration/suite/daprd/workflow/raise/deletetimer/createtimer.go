@@ -46,28 +46,29 @@ func (d *createtimer) Setup(t *testing.T) []framework.Option {
 func (d *createtimer) Run(t *testing.T, ctx context.Context) {
 	d.workflow.WaitUntilRunning(t, ctx)
 
-	d.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	d.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		_ = ctx.CreateTimer(time.Hour)
 		require.NoError(t, ctx.WaitForSingleEvent("done", -1).Await(nil))
 		return nil, nil
 	})
 
 	cl := d.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
+	id, err := cl.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		keys := d.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs")
-		if assert.Len(c, keys, 1) {
+		if assert.Len(c, keys, 2) {
 			assert.Contains(c, keys[0], "timer-0")
+			assert.Contains(c, keys[1], "timer-1")
 		}
 	}, time.Second*20, 10*time.Millisecond)
 
 	require.NoError(t, cl.RaiseEvent(ctx, id, "done"))
 
-	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	require.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.RuntimeStatus.String())
+	require.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.GetRuntimeStatus().String())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Empty(c, d.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))

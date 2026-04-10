@@ -33,7 +33,6 @@ import (
 // resource will watch and load resources from the operator service.
 type resource[T differ.Resource] struct {
 	opClient  operatorpb.OperatorClient
-	podName   string
 	namespace string
 
 	streamer streamer[T]
@@ -48,16 +47,15 @@ type resource[T differ.Resource] struct {
 // We need a generic interface because the gRPC methods used for streaming
 // differ between resources.
 type streamer[T differ.Resource] interface {
-	list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error)
+	list(ctx context.Context, opclient operatorpb.OperatorClient, ns string) ([][]byte, error)
 	close() error
 	recv(context.Context) (*loader.Event[T], error)
-	establish(context.Context, operatorpb.OperatorClient, string, string) error
+	establish(context.Context, operatorpb.OperatorClient, string) error
 }
 
 func newResource[T differ.Resource](opts Options, store store.Store[T], streamer streamer[T]) *resource[T] {
 	return &resource[T]{
 		opClient:  opts.OperatorClient,
-		podName:   opts.PodName,
 		namespace: opts.Namespace,
 		streamer:  streamer,
 		store:     store,
@@ -67,7 +65,7 @@ func newResource[T differ.Resource](opts Options, store store.Store[T], streamer
 
 func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], error) {
 	resp, err := backoff.RetryWithData(func() ([][]byte, error) {
-		return r.streamer.list(ctx, r.opClient, r.namespace, r.podName)
+		return r.streamer.list(ctx, r.opClient, r.namespace)
 	}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx))
 	if err != nil {
 		return nil, err
@@ -94,7 +92,7 @@ func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error)
 		return nil, errors.New("stream is closed")
 	}
 
-	if err := r.streamer.establish(ctx, r.opClient, r.namespace, r.podName); err != nil {
+	if err := r.streamer.establish(ctx, r.opClient, r.namespace); err != nil {
 		return nil, err
 	}
 
@@ -151,7 +149,7 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 		}
 
 		if err := backoff.Retry(func() error {
-			berr := r.streamer.establish(ctx, r.opClient, r.namespace, r.podName)
+			berr := r.streamer.establish(ctx, r.opClient, r.namespace)
 			if berr != nil {
 				log.Errorf("Failed to establish stream: %s", berr)
 			}

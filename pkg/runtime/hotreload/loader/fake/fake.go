@@ -17,6 +17,10 @@ import (
 	"context"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -26,6 +30,7 @@ type FakeT struct {
 	runFn         func(context.Context) error
 	components    *Fake[compapi.Component]
 	subscriptions *Fake[subapi.Subscription]
+	mcpServers    *Fake[mcpserverapi.MCPServer]
 	startFn       func(context.Context) error
 }
 
@@ -37,6 +42,7 @@ func New() *FakeT {
 		},
 		components:    NewFake[compapi.Component](),
 		subscriptions: NewFake[subapi.Subscription](),
+		mcpServers:    NewFake[mcpserverapi.MCPServer](),
 		startFn: func(ctx context.Context) error {
 			<-ctx.Done()
 			return nil
@@ -54,6 +60,22 @@ func (f *FakeT) Components() loader.Loader[compapi.Component] {
 
 func (f *FakeT) Subscriptions() loader.Loader[subapi.Subscription] {
 	return f.subscriptions
+}
+
+func (f *FakeT) MCPServers() loader.Loader[mcpserverapi.MCPServer] {
+	return f.mcpServers
+}
+
+func (f *FakeT) Configurations() loader.Loader[configapi.Configuration] {
+	return nil
+}
+
+func (f *FakeT) HTTPEndpoints() loader.Loader[httpendpointapi.HTTPEndpoint] {
+	return nil
+}
+
+func (f *FakeT) Resiliencies() loader.Loader[resiliencyapi.Resiliency] {
+	return nil
 }
 
 func (f *FakeT) WithComponents(fake *Fake[compapi.Component]) *FakeT {
