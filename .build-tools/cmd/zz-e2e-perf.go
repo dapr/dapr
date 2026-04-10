@@ -218,14 +218,14 @@ func (c *cmdE2EPerf) buildAndPushCmd(cmd *cobra.Command, args []string) error {
 				fmt.Println("Image copied from cache directly! You're all set.")
 				return nil
 			}
-			fmt.Printf("crane.Copy attempt %d/3 failed: %s\n", attempt, err)
+			fmt.Printf("crane.Copy attempt %d/3 failed: %v\n", attempt, err)
 			if attempt < 3 {
 				time.Sleep(time.Duration(attempt*2) * time.Second)
 			}
 		}
 
 		// Copying the image failed, so we'll resort to build + push
-		fmt.Printf("Copying image directly from cache failed after 3 attempts: %s. Will build image.\n", err)
+		fmt.Printf("Copying image directly from cache failed after 3 attempts: %v. Will build image.\n", err)
 	} else {
 		fmt.Println("Cache registry not set: will not use cache")
 	}
@@ -390,7 +390,7 @@ func (c *cmdE2EPerf) pushDockerImage(destImage string) error {
 		if err == nil {
 			return nil
 		}
-		fmt.Printf("'docker push' attempt %d/3 returned an error: %s\n", attempt, err)
+		fmt.Printf("'docker push' attempt %d/3 returned an error: %v\n", attempt, err)
 		if attempt < 3 {
 			time.Sleep(time.Duration(attempt*2) * time.Second)
 		}
