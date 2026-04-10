@@ -123,10 +123,10 @@ func (i *childInjection) Run(tt *testing.T, ctx context.Context) {
 
 	assert.Positive(tt, i.db.CountStateKeys(tt, ctx, "signature"))
 
-	// Send the "continue" event so the parent can complete. Also send a
-	// fake child workflow completion via the addWorkflowEvent actor method.
-	// The fake event should be filtered out by inbox validation since there
-	// is no matching ChildWorkflowInstanceCreated with TaskScheduledId 9999.
+	// Send the "continue" event so the parent can complete. The inbox
+	// filtering validates that only legitimate child workflow results
+	// (matching ChildWorkflowInstanceCreated in signed history) are
+	// accepted — fake results would be purged by filterValidInboxEvents.
 	require.NoError(tt, client.RaiseEvent(ctx, id, "continue", dworkflow.WithEventPayload("real-event")))
 
 	meta, err = client.WaitForWorkflowCompletion(ctx, id)

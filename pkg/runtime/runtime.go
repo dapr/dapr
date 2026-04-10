@@ -89,6 +89,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/crypto/spiffe/signer"
 )
 
 var log = logger.NewLogger("dapr.runtime")
@@ -312,6 +313,11 @@ func newDaprRuntime(ctx context.Context,
 		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
 	}
 
+	var signer *signer.Signer
+	if sec != nil {
+		signer = sec.Signer()
+	}
+
 	wfe, err := wfengine.New(wfengine.Options{
 		AppID:                           runtimeConfig.id,
 		Namespace:                       namespace,
@@ -324,7 +330,7 @@ func newDaprRuntime(ctx context.Context,
 		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
 		WorkflowSignState:               globalConfig.IsFeatureEnabled(config.WorkflowSignState),
 		ComponentStore:                  compStore,
-		Signer:                          sec.Signer(),
+		Signer:                          signer,
 	})
 	if err != nil {
 		return nil, err
