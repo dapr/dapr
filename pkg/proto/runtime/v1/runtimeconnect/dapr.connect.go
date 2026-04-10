@@ -32,7 +32,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// DaprName is the fully-qualified name of the Dapr service.
@@ -399,306 +399,367 @@ type DaprClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DaprClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	daprMethods := v1.File_dapr_proto_runtime_v1_dapr_proto.Services().ByName("Dapr").Methods()
 	return &daprClient{
 		invokeService: connect.NewClient[v1.InvokeServiceRequest, v11.InvokeResponse](
 			httpClient,
 			baseURL+DaprInvokeServiceProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("InvokeService")),
+			connect.WithClientOptions(opts...),
 		),
 		getState: connect.NewClient[v1.GetStateRequest, v1.GetStateResponse](
 			httpClient,
 			baseURL+DaprGetStateProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetState")),
+			connect.WithClientOptions(opts...),
 		),
 		getBulkState: connect.NewClient[v1.GetBulkStateRequest, v1.GetBulkStateResponse](
 			httpClient,
 			baseURL+DaprGetBulkStateProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetBulkState")),
+			connect.WithClientOptions(opts...),
 		),
 		saveState: connect.NewClient[v1.SaveStateRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprSaveStateProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SaveState")),
+			connect.WithClientOptions(opts...),
 		),
 		queryStateAlpha1: connect.NewClient[v1.QueryStateRequest, v1.QueryStateResponse](
 			httpClient,
 			baseURL+DaprQueryStateAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("QueryStateAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteState: connect.NewClient[v1.DeleteStateRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprDeleteStateProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("DeleteState")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteBulkState: connect.NewClient[v1.DeleteBulkStateRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprDeleteBulkStateProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("DeleteBulkState")),
+			connect.WithClientOptions(opts...),
 		),
 		executeStateTransaction: connect.NewClient[v1.ExecuteStateTransactionRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprExecuteStateTransactionProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ExecuteStateTransaction")),
+			connect.WithClientOptions(opts...),
 		),
 		publishEvent: connect.NewClient[v1.PublishEventRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprPublishEventProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("PublishEvent")),
+			connect.WithClientOptions(opts...),
 		),
 		bulkPublishEventAlpha1: connect.NewClient[v1.BulkPublishRequest, v1.BulkPublishResponse](
 			httpClient,
 			baseURL+DaprBulkPublishEventAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("BulkPublishEventAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		bulkPublishEvent: connect.NewClient[v1.BulkPublishRequest, v1.BulkPublishResponse](
 			httpClient,
 			baseURL+DaprBulkPublishEventProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("BulkPublishEvent")),
+			connect.WithClientOptions(opts...),
 		),
 		subscribeTopicEventsAlpha1: connect.NewClient[v1.SubscribeTopicEventsRequestAlpha1, v1.SubscribeTopicEventsResponseAlpha1](
 			httpClient,
 			baseURL+DaprSubscribeTopicEventsAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SubscribeTopicEventsAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		invokeBinding: connect.NewClient[v1.InvokeBindingRequest, v1.InvokeBindingResponse](
 			httpClient,
 			baseURL+DaprInvokeBindingProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("InvokeBinding")),
+			connect.WithClientOptions(opts...),
 		),
 		getSecret: connect.NewClient[v1.GetSecretRequest, v1.GetSecretResponse](
 			httpClient,
 			baseURL+DaprGetSecretProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetSecret")),
+			connect.WithClientOptions(opts...),
 		),
 		getBulkSecret: connect.NewClient[v1.GetBulkSecretRequest, v1.GetBulkSecretResponse](
 			httpClient,
 			baseURL+DaprGetBulkSecretProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetBulkSecret")),
+			connect.WithClientOptions(opts...),
 		),
 		registerActorTimer: connect.NewClient[v1.RegisterActorTimerRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprRegisterActorTimerProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("RegisterActorTimer")),
+			connect.WithClientOptions(opts...),
 		),
 		unregisterActorTimer: connect.NewClient[v1.UnregisterActorTimerRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprUnregisterActorTimerProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("UnregisterActorTimer")),
+			connect.WithClientOptions(opts...),
 		),
 		registerActorReminder: connect.NewClient[v1.RegisterActorReminderRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprRegisterActorReminderProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("RegisterActorReminder")),
+			connect.WithClientOptions(opts...),
 		),
 		unregisterActorReminder: connect.NewClient[v1.UnregisterActorReminderRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprUnregisterActorReminderProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("UnregisterActorReminder")),
+			connect.WithClientOptions(opts...),
 		),
 		unregisterActorRemindersByType: connect.NewClient[v1.UnregisterActorRemindersByTypeRequest, v1.UnregisterActorRemindersByTypeResponse](
 			httpClient,
 			baseURL+DaprUnregisterActorRemindersByTypeProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("UnregisterActorRemindersByType")),
+			connect.WithClientOptions(opts...),
 		),
 		listActorReminders: connect.NewClient[v1.ListActorRemindersRequest, v1.ListActorRemindersResponse](
 			httpClient,
 			baseURL+DaprListActorRemindersProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ListActorReminders")),
+			connect.WithClientOptions(opts...),
 		),
 		getActorState: connect.NewClient[v1.GetActorStateRequest, v1.GetActorStateResponse](
 			httpClient,
 			baseURL+DaprGetActorStateProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetActorState")),
+			connect.WithClientOptions(opts...),
 		),
 		getActorReminder: connect.NewClient[v1.GetActorReminderRequest, v1.GetActorReminderResponse](
 			httpClient,
 			baseURL+DaprGetActorReminderProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetActorReminder")),
+			connect.WithClientOptions(opts...),
 		),
 		executeActorStateTransaction: connect.NewClient[v1.ExecuteActorStateTransactionRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprExecuteActorStateTransactionProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ExecuteActorStateTransaction")),
+			connect.WithClientOptions(opts...),
 		),
 		invokeActor: connect.NewClient[v1.InvokeActorRequest, v1.InvokeActorResponse](
 			httpClient,
 			baseURL+DaprInvokeActorProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("InvokeActor")),
+			connect.WithClientOptions(opts...),
 		),
 		getConfigurationAlpha1: connect.NewClient[v1.GetConfigurationRequest, v1.GetConfigurationResponse](
 			httpClient,
 			baseURL+DaprGetConfigurationAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetConfigurationAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		getConfiguration: connect.NewClient[v1.GetConfigurationRequest, v1.GetConfigurationResponse](
 			httpClient,
 			baseURL+DaprGetConfigurationProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetConfiguration")),
+			connect.WithClientOptions(opts...),
 		),
 		subscribeConfigurationAlpha1: connect.NewClient[v1.SubscribeConfigurationRequest, v1.SubscribeConfigurationResponse](
 			httpClient,
 			baseURL+DaprSubscribeConfigurationAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SubscribeConfigurationAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		subscribeConfiguration: connect.NewClient[v1.SubscribeConfigurationRequest, v1.SubscribeConfigurationResponse](
 			httpClient,
 			baseURL+DaprSubscribeConfigurationProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SubscribeConfiguration")),
+			connect.WithClientOptions(opts...),
 		),
 		unsubscribeConfigurationAlpha1: connect.NewClient[v1.UnsubscribeConfigurationRequest, v1.UnsubscribeConfigurationResponse](
 			httpClient,
 			baseURL+DaprUnsubscribeConfigurationAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("UnsubscribeConfigurationAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		unsubscribeConfiguration: connect.NewClient[v1.UnsubscribeConfigurationRequest, v1.UnsubscribeConfigurationResponse](
 			httpClient,
 			baseURL+DaprUnsubscribeConfigurationProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("UnsubscribeConfiguration")),
+			connect.WithClientOptions(opts...),
 		),
 		tryLockAlpha1: connect.NewClient[v1.TryLockRequest, v1.TryLockResponse](
 			httpClient,
 			baseURL+DaprTryLockAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("TryLockAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		unlockAlpha1: connect.NewClient[v1.UnlockRequest, v1.UnlockResponse](
 			httpClient,
 			baseURL+DaprUnlockAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("UnlockAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		encryptAlpha1: connect.NewClient[v1.EncryptRequest, v1.EncryptResponse](
 			httpClient,
 			baseURL+DaprEncryptAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("EncryptAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		decryptAlpha1: connect.NewClient[v1.DecryptRequest, v1.DecryptResponse](
 			httpClient,
 			baseURL+DaprDecryptAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("DecryptAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		getMetadata: connect.NewClient[v1.GetMetadataRequest, v1.GetMetadataResponse](
 			httpClient,
 			baseURL+DaprGetMetadataProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetMetadata")),
+			connect.WithClientOptions(opts...),
 		),
 		setMetadata: connect.NewClient[v1.SetMetadataRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprSetMetadataProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SetMetadata")),
+			connect.WithClientOptions(opts...),
 		),
 		subtleGetKeyAlpha1: connect.NewClient[v1.SubtleGetKeyRequest, v1.SubtleGetKeyResponse](
 			httpClient,
 			baseURL+DaprSubtleGetKeyAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SubtleGetKeyAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		subtleEncryptAlpha1: connect.NewClient[v1.SubtleEncryptRequest, v1.SubtleEncryptResponse](
 			httpClient,
 			baseURL+DaprSubtleEncryptAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SubtleEncryptAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		subtleDecryptAlpha1: connect.NewClient[v1.SubtleDecryptRequest, v1.SubtleDecryptResponse](
 			httpClient,
 			baseURL+DaprSubtleDecryptAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SubtleDecryptAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		subtleWrapKeyAlpha1: connect.NewClient[v1.SubtleWrapKeyRequest, v1.SubtleWrapKeyResponse](
 			httpClient,
 			baseURL+DaprSubtleWrapKeyAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SubtleWrapKeyAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		subtleUnwrapKeyAlpha1: connect.NewClient[v1.SubtleUnwrapKeyRequest, v1.SubtleUnwrapKeyResponse](
 			httpClient,
 			baseURL+DaprSubtleUnwrapKeyAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SubtleUnwrapKeyAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		subtleSignAlpha1: connect.NewClient[v1.SubtleSignRequest, v1.SubtleSignResponse](
 			httpClient,
 			baseURL+DaprSubtleSignAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SubtleSignAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		subtleVerifyAlpha1: connect.NewClient[v1.SubtleVerifyRequest, v1.SubtleVerifyResponse](
 			httpClient,
 			baseURL+DaprSubtleVerifyAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("SubtleVerifyAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		startWorkflowAlpha1: connect.NewClient[v1.StartWorkflowRequest, v1.StartWorkflowResponse](
 			httpClient,
 			baseURL+DaprStartWorkflowAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("StartWorkflowAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		getWorkflowAlpha1: connect.NewClient[v1.GetWorkflowRequest, v1.GetWorkflowResponse](
 			httpClient,
 			baseURL+DaprGetWorkflowAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetWorkflowAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		purgeWorkflowAlpha1: connect.NewClient[v1.PurgeWorkflowRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprPurgeWorkflowAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("PurgeWorkflowAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		terminateWorkflowAlpha1: connect.NewClient[v1.TerminateWorkflowRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprTerminateWorkflowAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("TerminateWorkflowAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		pauseWorkflowAlpha1: connect.NewClient[v1.PauseWorkflowRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprPauseWorkflowAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("PauseWorkflowAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		resumeWorkflowAlpha1: connect.NewClient[v1.ResumeWorkflowRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprResumeWorkflowAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ResumeWorkflowAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		raiseEventWorkflowAlpha1: connect.NewClient[v1.RaiseEventWorkflowRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprRaiseEventWorkflowAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("RaiseEventWorkflowAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		startWorkflowBeta1: connect.NewClient[v1.StartWorkflowRequest, v1.StartWorkflowResponse](
 			httpClient,
 			baseURL+DaprStartWorkflowBeta1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("StartWorkflowBeta1")),
+			connect.WithClientOptions(opts...),
 		),
 		getWorkflowBeta1: connect.NewClient[v1.GetWorkflowRequest, v1.GetWorkflowResponse](
 			httpClient,
 			baseURL+DaprGetWorkflowBeta1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetWorkflowBeta1")),
+			connect.WithClientOptions(opts...),
 		),
 		purgeWorkflowBeta1: connect.NewClient[v1.PurgeWorkflowRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprPurgeWorkflowBeta1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("PurgeWorkflowBeta1")),
+			connect.WithClientOptions(opts...),
 		),
 		terminateWorkflowBeta1: connect.NewClient[v1.TerminateWorkflowRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprTerminateWorkflowBeta1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("TerminateWorkflowBeta1")),
+			connect.WithClientOptions(opts...),
 		),
 		pauseWorkflowBeta1: connect.NewClient[v1.PauseWorkflowRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprPauseWorkflowBeta1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("PauseWorkflowBeta1")),
+			connect.WithClientOptions(opts...),
 		),
 		resumeWorkflowBeta1: connect.NewClient[v1.ResumeWorkflowRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprResumeWorkflowBeta1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ResumeWorkflowBeta1")),
+			connect.WithClientOptions(opts...),
 		),
 		raiseEventWorkflowBeta1: connect.NewClient[v1.RaiseEventWorkflowRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprRaiseEventWorkflowBeta1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("RaiseEventWorkflowBeta1")),
+			connect.WithClientOptions(opts...),
 		),
 		shutdown: connect.NewClient[v1.ShutdownRequest, emptypb.Empty](
 			httpClient,
 			baseURL+DaprShutdownProcedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("Shutdown")),
+			connect.WithClientOptions(opts...),
 		),
 		scheduleJobAlpha1: connect.NewClient[v1.ScheduleJobRequest, v1.ScheduleJobResponse](
 			httpClient,
 			baseURL+DaprScheduleJobAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ScheduleJobAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		scheduleJob: connect.NewClient[v1.ScheduleJobRequest, v1.ScheduleJobResponse](
 			httpClient,
@@ -708,7 +769,8 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		getJobAlpha1: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
 			httpClient,
 			baseURL+DaprGetJobAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("GetJobAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		getJob: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
 			httpClient,
@@ -718,7 +780,8 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		deleteJobAlpha1: connect.NewClient[v1.DeleteJobRequest, v1.DeleteJobResponse](
 			httpClient,
 			baseURL+DaprDeleteJobAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("DeleteJobAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteJob: connect.NewClient[v1.DeleteJobRequest, v1.DeleteJobResponse](
 			httpClient,
@@ -728,7 +791,8 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		deleteJobsByPrefixAlpha1: connect.NewClient[v1.DeleteJobsByPrefixRequestAlpha1, v1.DeleteJobsByPrefixResponseAlpha1](
 			httpClient,
 			baseURL+DaprDeleteJobsByPrefixAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("DeleteJobsByPrefixAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteJobsByPrefix: connect.NewClient[v1.DeleteJobsByPrefixRequest, v1.DeleteJobsByPrefixResponse](
 			httpClient,
@@ -738,7 +802,8 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		listJobsAlpha1: connect.NewClient[v1.ListJobsRequestAlpha1, v1.ListJobsResponseAlpha1](
 			httpClient,
 			baseURL+DaprListJobsAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ListJobsAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		listJobs: connect.NewClient[v1.ListJobsRequest, v1.ListJobsResponse](
 			httpClient,
@@ -748,12 +813,14 @@ func NewDaprClient(httpClient connect.HTTPClient, baseURL string, opts ...connec
 		converseAlpha1: connect.NewClient[v1.ConversationRequest, v1.ConversationResponse](
 			httpClient,
 			baseURL+DaprConverseAlpha1Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ConverseAlpha1")),
+			connect.WithClientOptions(opts...),
 		),
 		converseAlpha2: connect.NewClient[v1.ConversationRequestAlpha2, v1.ConversationResponseAlpha2](
 			httpClient,
 			baseURL+DaprConverseAlpha2Procedure,
-			opts...,
+			connect.WithSchema(daprMethods.ByName("ConverseAlpha2")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -1392,305 +1459,366 @@ type DaprHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	daprMethods := v1.File_dapr_proto_runtime_v1_dapr_proto.Services().ByName("Dapr").Methods()
 	daprInvokeServiceHandler := connect.NewUnaryHandler(
 		DaprInvokeServiceProcedure,
 		svc.InvokeService,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("InvokeService")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetStateHandler := connect.NewUnaryHandler(
 		DaprGetStateProcedure,
 		svc.GetState,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetState")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetBulkStateHandler := connect.NewUnaryHandler(
 		DaprGetBulkStateProcedure,
 		svc.GetBulkState,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetBulkState")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSaveStateHandler := connect.NewUnaryHandler(
 		DaprSaveStateProcedure,
 		svc.SaveState,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SaveState")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprQueryStateAlpha1Handler := connect.NewUnaryHandler(
 		DaprQueryStateAlpha1Procedure,
 		svc.QueryStateAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("QueryStateAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprDeleteStateHandler := connect.NewUnaryHandler(
 		DaprDeleteStateProcedure,
 		svc.DeleteState,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("DeleteState")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprDeleteBulkStateHandler := connect.NewUnaryHandler(
 		DaprDeleteBulkStateProcedure,
 		svc.DeleteBulkState,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("DeleteBulkState")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprExecuteStateTransactionHandler := connect.NewUnaryHandler(
 		DaprExecuteStateTransactionProcedure,
 		svc.ExecuteStateTransaction,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ExecuteStateTransaction")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprPublishEventHandler := connect.NewUnaryHandler(
 		DaprPublishEventProcedure,
 		svc.PublishEvent,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("PublishEvent")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprBulkPublishEventAlpha1Handler := connect.NewUnaryHandler(
 		DaprBulkPublishEventAlpha1Procedure,
 		svc.BulkPublishEventAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("BulkPublishEventAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprBulkPublishEventHandler := connect.NewUnaryHandler(
 		DaprBulkPublishEventProcedure,
 		svc.BulkPublishEvent,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("BulkPublishEvent")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSubscribeTopicEventsAlpha1Handler := connect.NewBidiStreamHandler(
 		DaprSubscribeTopicEventsAlpha1Procedure,
 		svc.SubscribeTopicEventsAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SubscribeTopicEventsAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprInvokeBindingHandler := connect.NewUnaryHandler(
 		DaprInvokeBindingProcedure,
 		svc.InvokeBinding,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("InvokeBinding")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetSecretHandler := connect.NewUnaryHandler(
 		DaprGetSecretProcedure,
 		svc.GetSecret,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetSecret")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetBulkSecretHandler := connect.NewUnaryHandler(
 		DaprGetBulkSecretProcedure,
 		svc.GetBulkSecret,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetBulkSecret")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprRegisterActorTimerHandler := connect.NewUnaryHandler(
 		DaprRegisterActorTimerProcedure,
 		svc.RegisterActorTimer,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("RegisterActorTimer")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprUnregisterActorTimerHandler := connect.NewUnaryHandler(
 		DaprUnregisterActorTimerProcedure,
 		svc.UnregisterActorTimer,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("UnregisterActorTimer")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprRegisterActorReminderHandler := connect.NewUnaryHandler(
 		DaprRegisterActorReminderProcedure,
 		svc.RegisterActorReminder,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("RegisterActorReminder")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprUnregisterActorReminderHandler := connect.NewUnaryHandler(
 		DaprUnregisterActorReminderProcedure,
 		svc.UnregisterActorReminder,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("UnregisterActorReminder")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprUnregisterActorRemindersByTypeHandler := connect.NewUnaryHandler(
 		DaprUnregisterActorRemindersByTypeProcedure,
 		svc.UnregisterActorRemindersByType,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("UnregisterActorRemindersByType")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprListActorRemindersHandler := connect.NewUnaryHandler(
 		DaprListActorRemindersProcedure,
 		svc.ListActorReminders,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ListActorReminders")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetActorStateHandler := connect.NewUnaryHandler(
 		DaprGetActorStateProcedure,
 		svc.GetActorState,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetActorState")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetActorReminderHandler := connect.NewUnaryHandler(
 		DaprGetActorReminderProcedure,
 		svc.GetActorReminder,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetActorReminder")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprExecuteActorStateTransactionHandler := connect.NewUnaryHandler(
 		DaprExecuteActorStateTransactionProcedure,
 		svc.ExecuteActorStateTransaction,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ExecuteActorStateTransaction")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprInvokeActorHandler := connect.NewUnaryHandler(
 		DaprInvokeActorProcedure,
 		svc.InvokeActor,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("InvokeActor")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetConfigurationAlpha1Handler := connect.NewUnaryHandler(
 		DaprGetConfigurationAlpha1Procedure,
 		svc.GetConfigurationAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetConfigurationAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetConfigurationHandler := connect.NewUnaryHandler(
 		DaprGetConfigurationProcedure,
 		svc.GetConfiguration,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetConfiguration")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSubscribeConfigurationAlpha1Handler := connect.NewServerStreamHandler(
 		DaprSubscribeConfigurationAlpha1Procedure,
 		svc.SubscribeConfigurationAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SubscribeConfigurationAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSubscribeConfigurationHandler := connect.NewServerStreamHandler(
 		DaprSubscribeConfigurationProcedure,
 		svc.SubscribeConfiguration,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SubscribeConfiguration")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprUnsubscribeConfigurationAlpha1Handler := connect.NewUnaryHandler(
 		DaprUnsubscribeConfigurationAlpha1Procedure,
 		svc.UnsubscribeConfigurationAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("UnsubscribeConfigurationAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprUnsubscribeConfigurationHandler := connect.NewUnaryHandler(
 		DaprUnsubscribeConfigurationProcedure,
 		svc.UnsubscribeConfiguration,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("UnsubscribeConfiguration")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprTryLockAlpha1Handler := connect.NewUnaryHandler(
 		DaprTryLockAlpha1Procedure,
 		svc.TryLockAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("TryLockAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprUnlockAlpha1Handler := connect.NewUnaryHandler(
 		DaprUnlockAlpha1Procedure,
 		svc.UnlockAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("UnlockAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprEncryptAlpha1Handler := connect.NewBidiStreamHandler(
 		DaprEncryptAlpha1Procedure,
 		svc.EncryptAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("EncryptAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprDecryptAlpha1Handler := connect.NewBidiStreamHandler(
 		DaprDecryptAlpha1Procedure,
 		svc.DecryptAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("DecryptAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetMetadataHandler := connect.NewUnaryHandler(
 		DaprGetMetadataProcedure,
 		svc.GetMetadata,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetMetadata")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSetMetadataHandler := connect.NewUnaryHandler(
 		DaprSetMetadataProcedure,
 		svc.SetMetadata,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SetMetadata")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSubtleGetKeyAlpha1Handler := connect.NewUnaryHandler(
 		DaprSubtleGetKeyAlpha1Procedure,
 		svc.SubtleGetKeyAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SubtleGetKeyAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSubtleEncryptAlpha1Handler := connect.NewUnaryHandler(
 		DaprSubtleEncryptAlpha1Procedure,
 		svc.SubtleEncryptAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SubtleEncryptAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSubtleDecryptAlpha1Handler := connect.NewUnaryHandler(
 		DaprSubtleDecryptAlpha1Procedure,
 		svc.SubtleDecryptAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SubtleDecryptAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSubtleWrapKeyAlpha1Handler := connect.NewUnaryHandler(
 		DaprSubtleWrapKeyAlpha1Procedure,
 		svc.SubtleWrapKeyAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SubtleWrapKeyAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSubtleUnwrapKeyAlpha1Handler := connect.NewUnaryHandler(
 		DaprSubtleUnwrapKeyAlpha1Procedure,
 		svc.SubtleUnwrapKeyAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SubtleUnwrapKeyAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSubtleSignAlpha1Handler := connect.NewUnaryHandler(
 		DaprSubtleSignAlpha1Procedure,
 		svc.SubtleSignAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SubtleSignAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprSubtleVerifyAlpha1Handler := connect.NewUnaryHandler(
 		DaprSubtleVerifyAlpha1Procedure,
 		svc.SubtleVerifyAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("SubtleVerifyAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprStartWorkflowAlpha1Handler := connect.NewUnaryHandler(
 		DaprStartWorkflowAlpha1Procedure,
 		svc.StartWorkflowAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("StartWorkflowAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetWorkflowAlpha1Handler := connect.NewUnaryHandler(
 		DaprGetWorkflowAlpha1Procedure,
 		svc.GetWorkflowAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetWorkflowAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprPurgeWorkflowAlpha1Handler := connect.NewUnaryHandler(
 		DaprPurgeWorkflowAlpha1Procedure,
 		svc.PurgeWorkflowAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("PurgeWorkflowAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprTerminateWorkflowAlpha1Handler := connect.NewUnaryHandler(
 		DaprTerminateWorkflowAlpha1Procedure,
 		svc.TerminateWorkflowAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("TerminateWorkflowAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprPauseWorkflowAlpha1Handler := connect.NewUnaryHandler(
 		DaprPauseWorkflowAlpha1Procedure,
 		svc.PauseWorkflowAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("PauseWorkflowAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprResumeWorkflowAlpha1Handler := connect.NewUnaryHandler(
 		DaprResumeWorkflowAlpha1Procedure,
 		svc.ResumeWorkflowAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ResumeWorkflowAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprRaiseEventWorkflowAlpha1Handler := connect.NewUnaryHandler(
 		DaprRaiseEventWorkflowAlpha1Procedure,
 		svc.RaiseEventWorkflowAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("RaiseEventWorkflowAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprStartWorkflowBeta1Handler := connect.NewUnaryHandler(
 		DaprStartWorkflowBeta1Procedure,
 		svc.StartWorkflowBeta1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("StartWorkflowBeta1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetWorkflowBeta1Handler := connect.NewUnaryHandler(
 		DaprGetWorkflowBeta1Procedure,
 		svc.GetWorkflowBeta1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetWorkflowBeta1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprPurgeWorkflowBeta1Handler := connect.NewUnaryHandler(
 		DaprPurgeWorkflowBeta1Procedure,
 		svc.PurgeWorkflowBeta1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("PurgeWorkflowBeta1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprTerminateWorkflowBeta1Handler := connect.NewUnaryHandler(
 		DaprTerminateWorkflowBeta1Procedure,
 		svc.TerminateWorkflowBeta1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("TerminateWorkflowBeta1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprPauseWorkflowBeta1Handler := connect.NewUnaryHandler(
 		DaprPauseWorkflowBeta1Procedure,
 		svc.PauseWorkflowBeta1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("PauseWorkflowBeta1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprResumeWorkflowBeta1Handler := connect.NewUnaryHandler(
 		DaprResumeWorkflowBeta1Procedure,
 		svc.ResumeWorkflowBeta1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ResumeWorkflowBeta1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprRaiseEventWorkflowBeta1Handler := connect.NewUnaryHandler(
 		DaprRaiseEventWorkflowBeta1Procedure,
 		svc.RaiseEventWorkflowBeta1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("RaiseEventWorkflowBeta1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprShutdownHandler := connect.NewUnaryHandler(
 		DaprShutdownProcedure,
 		svc.Shutdown,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("Shutdown")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprScheduleJobAlpha1Handler := connect.NewUnaryHandler(
 		DaprScheduleJobAlpha1Procedure,
 		svc.ScheduleJobAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ScheduleJobAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprScheduleJobHandler := connect.NewUnaryHandler(
 		DaprScheduleJobProcedure,
@@ -1700,7 +1828,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprGetJobAlpha1Handler := connect.NewUnaryHandler(
 		DaprGetJobAlpha1Procedure,
 		svc.GetJobAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("GetJobAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprGetJobHandler := connect.NewUnaryHandler(
 		DaprGetJobProcedure,
@@ -1710,7 +1839,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprDeleteJobAlpha1Handler := connect.NewUnaryHandler(
 		DaprDeleteJobAlpha1Procedure,
 		svc.DeleteJobAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("DeleteJobAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprDeleteJobHandler := connect.NewUnaryHandler(
 		DaprDeleteJobProcedure,
@@ -1720,7 +1850,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprDeleteJobsByPrefixAlpha1Handler := connect.NewUnaryHandler(
 		DaprDeleteJobsByPrefixAlpha1Procedure,
 		svc.DeleteJobsByPrefixAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("DeleteJobsByPrefixAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprDeleteJobsByPrefixHandler := connect.NewUnaryHandler(
 		DaprDeleteJobsByPrefixProcedure,
@@ -1730,7 +1861,8 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprListJobsAlpha1Handler := connect.NewUnaryHandler(
 		DaprListJobsAlpha1Procedure,
 		svc.ListJobsAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ListJobsAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprListJobsHandler := connect.NewUnaryHandler(
 		DaprListJobsProcedure,
@@ -1740,12 +1872,14 @@ func NewDaprHandler(svc DaprHandler, opts ...connect.HandlerOption) (string, htt
 	daprConverseAlpha1Handler := connect.NewUnaryHandler(
 		DaprConverseAlpha1Procedure,
 		svc.ConverseAlpha1,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ConverseAlpha1")),
+		connect.WithHandlerOptions(opts...),
 	)
 	daprConverseAlpha2Handler := connect.NewUnaryHandler(
 		DaprConverseAlpha2Procedure,
 		svc.ConverseAlpha2,
-		opts...,
+		connect.WithSchema(daprMethods.ByName("ConverseAlpha2")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.runtime.v1.Dapr/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

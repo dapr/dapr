@@ -49,7 +49,7 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 
 	var inActivity atomic.Bool
 	releaseCh := make(chan struct{})
-	r.workflow.Registry().AddOrchestratorN("purge", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddWorkflowN("purge", func(ctx *task.WorkflowContext) (any, error) {
 		timer := ctx.CreateTimer(time.Second * 1000)
 		waiter := ctx.WaitForSingleEvent("helloworld", time.Second*1000)
 		require.NoError(t, ctx.CallActivity("foo").Await(ctx))
@@ -65,7 +65,7 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 
 	client := r.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "purge")
+	id, err := client.ScheduleNewWorkflow(ctx, "purge")
 	require.NoError(t, err)
 
 	assert.Eventually(t, inActivity.Load, time.Second*30, time.Millisecond*10)
@@ -73,8 +73,8 @@ func (r *reminders) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"), 3)
 	}, time.Second*10, time.Millisecond*10)
 
-	require.NoError(t, client.TerminateOrchestration(ctx, id))
-	require.NoError(t, client.PurgeOrchestrationState(ctx, id))
+	require.NoError(t, client.TerminateWorkflow(ctx, id))
+	require.NoError(t, client.PurgeWorkflowState(ctx, id))
 	close(releaseCh)
 	assert.Empty(t, r.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))
 }

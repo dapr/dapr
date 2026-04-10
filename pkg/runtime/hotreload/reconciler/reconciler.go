@@ -22,6 +22,7 @@ import (
 	"k8s.io/utils/clock"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/healthz"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -79,6 +80,22 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 	return r
 }
 
+func NewMCPServers(opts Options[mcpserverapi.MCPServer]) *Reconciler[mcpserverapi.MCPServer] {
+	r := &Reconciler[mcpserverapi.MCPServer]{
+		kind:    mcpserverapi.Kind,
+		htarget: opts.Healthz.AddTarget("mcpserver-reconciler"),
+		clock:   clock.RealClock{},
+		manager: &mcpservers{
+			Loader: opts.Loader.MCPServers(),
+			store:  opts.CompStore,
+			proc:   opts.Processor,
+			auth:   opts.Authorizer,
+		},
+	}
+	r.loop = loopFactory.NewLoop(r)
+	return r
+}
+
 func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subscription] {
 	r := &Reconciler[subapi.Subscription]{
 		kind:    subapi.Kind,
@@ -97,7 +114,10 @@ func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subs
 func (r *Reconciler[T]) Run(ctx context.Context) error {
 	conn, err := r.manager.Stream(ctx)
 	if err != nil {
-		return fmt.Errorf("error running component stream: %w", err)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("error running %s stream: %w", r.kind, err)
 	}
 
 	r.htarget.Ready()

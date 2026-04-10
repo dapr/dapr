@@ -72,7 +72,6 @@ type placement struct {
 	port     string
 	table    table.Interface
 	ready    *atomic.Bool
-	errCh    chan error
 
 	loop loop.Interface[loops.EventPlace]
 }
@@ -125,8 +124,6 @@ func New(opts Options) (Interface, error) {
 
 	var ready atomic.Bool
 
-	errCh := make(chan error, 1)
-
 	return &placement{
 		ready:    &ready,
 		hostname: opts.Hostname,
@@ -149,9 +146,6 @@ func New(opts Options) (Interface, error) {
 				Namespace: opts.Namespace,
 			},
 			DisseminationTimeout: time.Second * 5,
-			Cancel: func(cause error) {
-				errCh <- cause
-			},
 		}),
 	}, nil
 }
@@ -168,14 +162,6 @@ func (p *placement) Run(ctx context.Context) error {
 
 	return concurrency.NewRunnerManager(
 		p.loop.Run,
-		func(ctx context.Context) error {
-			select {
-			case err := <-p.errCh:
-				return err
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		},
 		func(ctx context.Context) error {
 			p.loop.Enqueue(&loops.PlacementReconnect{
 				ActorTypes: new(atypes),

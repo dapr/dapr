@@ -92,7 +92,7 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 
 	var inActivity atomic.Int64
 	releaseCh := make(chan struct{})
-	u.workflow.Registry().AddOrchestratorN("bar", func(ctx *task.OrchestrationContext) (any, error) {
+	u.workflow.Registry().AddWorkflowN("bar", func(ctx *task.WorkflowContext) (any, error) {
 		tasks := make([]task.Task, n)
 		for i := range n {
 			tasks[i] = ctx.CallActivity("foo")
@@ -111,7 +111,7 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 
 	client := u.workflow.BackendClient(t, ctx)
 
-	_, err := client.ScheduleNewOrchestration(ctx, "bar", api.WithInstanceID("unhealthy-test"))
+	_, err := client.ScheduleNewWorkflow(ctx, "bar", api.WithInstanceID("unhealthy-test"))
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
