@@ -488,21 +488,32 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		{"signing certificates", metadata.GetSigningCertificateLength()},
 	} {
 		if entry.value > maxStateEntries {
-			return nil, fmt.Errorf("workflow '%s' metadata %s length %d exceeds maximum %d", actorID, entry.name, entry.value, maxStateEntries)
+			return nil, wferrors.NewVerificationError(
+				fmt.Errorf("workflow '%s' metadata %s length %d exceeds maximum %d", actorID, entry.name, entry.value, maxStateEntries),
+			)
 		}
 	}
+
+	// Safe to convert after maxStateEntries bounds check above.
+	//nolint:gosec
+	inboxLen := int(metadata.GetInboxLength())
+	//nolint:gosec
+	historyLen := int(metadata.GetHistoryLength())
+	//nolint:gosec
+	signingCertLen := int(metadata.GetSigningCertificateLength())
+	//nolint:gosec
+	signatureLen := int(metadata.GetSignatureLength())
 
 	// Load inbox, history, signing certs, signatures, and custom status using a bulk request
 	wState := NewState(opts)
 	wState.Generation = metadata.GetGeneration()
-	wState.Inbox = make([]*backend.HistoryEvent, 0, metadata.GetInboxLength())
-	wState.History = make([]*backend.HistoryEvent, 0, metadata.GetHistoryLength())
-	wState.RawHistory = make([][]byte, 0, metadata.GetHistoryLength())
-	wState.SigningCertificates = make([]*backend.SigningCertificate, 0, metadata.GetSigningCertificateLength())
-	wState.Signatures = make([]*backend.HistorySignature, 0, metadata.GetSignatureLength())
+	wState.Inbox = make([]*backend.HistoryEvent, 0, inboxLen)
+	wState.History = make([]*backend.HistoryEvent, 0, historyLen)
+	wState.RawHistory = make([][]byte, 0, historyLen)
+	wState.SigningCertificates = make([]*backend.SigningCertificate, 0, signingCertLen)
+	wState.Signatures = make([]*backend.HistorySignature, 0, signatureLen)
 
-	totalKeys := metadata.GetInboxLength() + metadata.GetHistoryLength() +
-		metadata.GetSigningCertificateLength() + metadata.GetSignatureLength() + 1
+	totalKeys := inboxLen + historyLen + signingCertLen + signatureLen + 1
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,

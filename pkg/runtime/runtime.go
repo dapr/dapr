@@ -312,7 +312,7 @@ func newDaprRuntime(ctx context.Context,
 		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
 	}
 
-	wfe := wfengine.New(wfengine.Options{
+	wfe, err := wfengine.New(wfengine.Options{
 		AppID:                           runtimeConfig.id,
 		Namespace:                       namespace,
 		Actors:                          actors,
@@ -326,6 +326,9 @@ func newDaprRuntime(ctx context.Context,
 		ComponentStore:                  compStore,
 		Signer:                          sec.Signer(),
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	jobsManager, err := scheduler.New(scheduler.Options{
 		Namespace:        namespace,
