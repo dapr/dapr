@@ -55,7 +55,7 @@ func (r *raiseevent) Setup(t *testing.T) []framework.Option {
 func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	r.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	r.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		r.called.Add(1)
 		task := ctx.WaitForSingleEvent("event1", 1*time.Minute)
 		if r.called.Load() == 1 {
@@ -78,7 +78,7 @@ func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 
 	// scheduling a workflow with a provided start time
 	// this call won't wait for the workflow to start executing
-	id, err := client.ScheduleNewOrchestration(ctx, "foo", api.WithStartTime(time.Now()))
+	id, err := client.ScheduleNewWorkflow(ctx, "foo", api.WithStartTime(time.Now()))
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -109,7 +109,7 @@ func (r *raiseevent) Run(t *testing.T, ctx context.Context) {
 
 	waitCompletionCtx, waitCompletionCancel := context.WithTimeout(ctx, time.Second*10)
 	t.Cleanup(waitCompletionCancel)
-	meta, err := client.WaitForOrchestrationCompletion(waitCompletionCtx, id)
+	meta, err := client.WaitForWorkflowCompletion(waitCompletionCtx, id)
 	require.NoError(t, err)
 	assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, meta.GetRuntimeStatus())
 }

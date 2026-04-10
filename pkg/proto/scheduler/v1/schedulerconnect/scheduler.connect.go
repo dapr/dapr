@@ -18,7 +18,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SchedulerName is the fully-qualified name of the Scheduler service.
@@ -87,46 +87,55 @@ type SchedulerClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewSchedulerClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SchedulerClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	schedulerMethods := v1.File_dapr_proto_scheduler_v1_scheduler_proto.Services().ByName("Scheduler").Methods()
 	return &schedulerClient{
 		scheduleJob: connect.NewClient[v1.ScheduleJobRequest, v1.ScheduleJobResponse](
 			httpClient,
 			baseURL+SchedulerScheduleJobProcedure,
-			opts...,
+			connect.WithSchema(schedulerMethods.ByName("ScheduleJob")),
+			connect.WithClientOptions(opts...),
 		),
 		getJob: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
 			httpClient,
 			baseURL+SchedulerGetJobProcedure,
-			opts...,
+			connect.WithSchema(schedulerMethods.ByName("GetJob")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteJob: connect.NewClient[v1.DeleteJobRequest, v1.DeleteJobResponse](
 			httpClient,
 			baseURL+SchedulerDeleteJobProcedure,
-			opts...,
+			connect.WithSchema(schedulerMethods.ByName("DeleteJob")),
+			connect.WithClientOptions(opts...),
 		),
 		watchJobs: connect.NewClient[v1.WatchJobsRequest, v1.WatchJobsResponse](
 			httpClient,
 			baseURL+SchedulerWatchJobsProcedure,
-			opts...,
+			connect.WithSchema(schedulerMethods.ByName("WatchJobs")),
+			connect.WithClientOptions(opts...),
 		),
 		listJobs: connect.NewClient[v1.ListJobsRequest, v1.ListJobsResponse](
 			httpClient,
 			baseURL+SchedulerListJobsProcedure,
-			opts...,
+			connect.WithSchema(schedulerMethods.ByName("ListJobs")),
+			connect.WithClientOptions(opts...),
 		),
 		watchHosts: connect.NewClient[v1.WatchHostsRequest, v1.WatchHostsResponse](
 			httpClient,
 			baseURL+SchedulerWatchHostsProcedure,
-			opts...,
+			connect.WithSchema(schedulerMethods.ByName("WatchHosts")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteByMetadata: connect.NewClient[v1.DeleteByMetadataRequest, v1.DeleteByMetadataResponse](
 			httpClient,
 			baseURL+SchedulerDeleteByMetadataProcedure,
-			opts...,
+			connect.WithSchema(schedulerMethods.ByName("DeleteByMetadata")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteByNamePrefix: connect.NewClient[v1.DeleteByNamePrefixRequest, v1.DeleteByNamePrefixResponse](
 			httpClient,
 			baseURL+SchedulerDeleteByNamePrefixProcedure,
-			opts...,
+			connect.WithSchema(schedulerMethods.ByName("DeleteByNamePrefix")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -214,45 +223,54 @@ type SchedulerHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewSchedulerHandler(svc SchedulerHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	schedulerMethods := v1.File_dapr_proto_scheduler_v1_scheduler_proto.Services().ByName("Scheduler").Methods()
 	schedulerScheduleJobHandler := connect.NewUnaryHandler(
 		SchedulerScheduleJobProcedure,
 		svc.ScheduleJob,
-		opts...,
+		connect.WithSchema(schedulerMethods.ByName("ScheduleJob")),
+		connect.WithHandlerOptions(opts...),
 	)
 	schedulerGetJobHandler := connect.NewUnaryHandler(
 		SchedulerGetJobProcedure,
 		svc.GetJob,
-		opts...,
+		connect.WithSchema(schedulerMethods.ByName("GetJob")),
+		connect.WithHandlerOptions(opts...),
 	)
 	schedulerDeleteJobHandler := connect.NewUnaryHandler(
 		SchedulerDeleteJobProcedure,
 		svc.DeleteJob,
-		opts...,
+		connect.WithSchema(schedulerMethods.ByName("DeleteJob")),
+		connect.WithHandlerOptions(opts...),
 	)
 	schedulerWatchJobsHandler := connect.NewBidiStreamHandler(
 		SchedulerWatchJobsProcedure,
 		svc.WatchJobs,
-		opts...,
+		connect.WithSchema(schedulerMethods.ByName("WatchJobs")),
+		connect.WithHandlerOptions(opts...),
 	)
 	schedulerListJobsHandler := connect.NewUnaryHandler(
 		SchedulerListJobsProcedure,
 		svc.ListJobs,
-		opts...,
+		connect.WithSchema(schedulerMethods.ByName("ListJobs")),
+		connect.WithHandlerOptions(opts...),
 	)
 	schedulerWatchHostsHandler := connect.NewServerStreamHandler(
 		SchedulerWatchHostsProcedure,
 		svc.WatchHosts,
-		opts...,
+		connect.WithSchema(schedulerMethods.ByName("WatchHosts")),
+		connect.WithHandlerOptions(opts...),
 	)
 	schedulerDeleteByMetadataHandler := connect.NewUnaryHandler(
 		SchedulerDeleteByMetadataProcedure,
 		svc.DeleteByMetadata,
-		opts...,
+		connect.WithSchema(schedulerMethods.ByName("DeleteByMetadata")),
+		connect.WithHandlerOptions(opts...),
 	)
 	schedulerDeleteByNamePrefixHandler := connect.NewUnaryHandler(
 		SchedulerDeleteByNamePrefixProcedure,
 		svc.DeleteByNamePrefix,
-		opts...,
+		connect.WithSchema(schedulerMethods.ByName("DeleteByNamePrefix")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/dapr.proto.scheduler.v1.Scheduler/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
