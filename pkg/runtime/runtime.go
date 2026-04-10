@@ -313,9 +313,9 @@ func newDaprRuntime(ctx context.Context,
 		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
 	}
 
-	var signer *signer.Signer
+	var wfSigner *signer.Signer
 	if sec != nil {
-		signer = sec.Signer()
+		wfSigner = sec.Signer()
 	}
 
 	wfe, err := wfengine.New(wfengine.Options{
@@ -330,7 +330,7 @@ func newDaprRuntime(ctx context.Context,
 		WorkflowsRemoteActivityReminder: globalConfig.IsFeatureEnabled(config.WorkflowsRemoteActivityReminder),
 		WorkflowSignState:               globalConfig.IsFeatureEnabled(config.WorkflowSignState),
 		ComponentStore:                  compStore,
-		Signer:                          signer,
+		Signer:                          wfSigner,
 	})
 	if err != nil {
 		return nil, err
