@@ -1235,14 +1235,12 @@ func stringValueOrEmpty(value *string) string {
 
 func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
 	if a.CompStore().ConfigurationsLen() == 0 {
-		err := apierrors.Basic(codes.FailedPrecondition, http.StatusInternalServerError, errorcodes.ConfigurationStoreNotConfigured, messages.ErrConfigurationStoresNotConfigured)
-		return nil, err
+		return nil, apierrors.ConfigurationStore("").NotConfigured(a.AppID())
 	}
 
 	conf, ok := a.CompStore().GetConfiguration(name)
 	if !ok {
-		err := apierrors.Basic(codes.InvalidArgument, http.StatusInternalServerError, errorcodes.ConfigurationStoreNotFound, fmt.Sprintf(messages.ErrConfigurationStoreNotFound, name))
-		return nil, err
+		return nil, apierrors.ConfigurationStore(name).NotFound(a.AppID())
 	}
 	return conf, nil
 }
@@ -1273,7 +1271,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		richError := apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.ConfigurationGet, fmt.Sprintf(messages.ErrConfigurationGet, req.Keys, in.GetStoreName(), err.Error()))
+		richError := apierrors.ConfigurationStore(in.GetStoreName()).GetFailed(req.Keys, err)
 		apiServerLogger.Debug(richError)
 		return response, richError
 	}
@@ -1426,7 +1424,7 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.GetStoreName(), diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
-		richError := apierrors.Basic(codes.InvalidArgument, http.StatusInternalServerError, errorcodes.ConfigurationSubscribe, fmt.Sprintf(messages.ErrConfigurationSubscribe, componentReq.Keys, request.GetStoreName(), err))
+		richError := apierrors.ConfigurationStore(request.GetStoreName()).SubscribeFailed(componentReq.Keys, err)
 		apiServerLogger.Debug(richError)
 		return "", richError
 	}
