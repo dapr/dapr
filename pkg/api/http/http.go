@@ -703,20 +703,20 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 func (a *api) getConfigurationStoreWithRequestValidation(w nethttp.ResponseWriter, r *nethttp.Request) (configuration.Store, string, error) {
 	if a.universal.CompStore().ConfigurationsLen() == 0 {
-		resp := messages.NewAPIErrorHTTP(messages.ErrConfigurationStoresNotConfigured, errorcodes.ConfigurationStoreNotConfigured, nethttp.StatusInternalServerError)
-		respondWithError(w, resp)
-		log.Debug(resp)
-		return nil, "", errors.New(resp.Message())
+		err := apierrors.ConfigurationStore("").NotConfigured(a.universal.AppID())
+		respondWithError(w, err)
+		log.Debug(err)
+		return nil, "", err
 	}
 
 	storeName := chi.URLParam(r, storeNameParam)
 
 	conf, ok := a.universal.CompStore().GetConfiguration(storeName)
 	if !ok {
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName), errorcodes.ConfigurationStoreNotFound, nethttp.StatusBadRequest)
-		respondWithError(w, resp)
-		log.Debug(resp)
-		return nil, "", errors.New(resp.Message())
+		err := apierrors.ConfigurationStore(storeName).NotFound(a.universal.AppID())
+		respondWithError(w, err)
+		log.Debug(err)
+		return nil, "", err
 	}
 	return conf, storeName, nil
 }
@@ -830,9 +830,9 @@ func (a *api) onSubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Requ
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()), errorcodes.ConfigurationSubscribe, nethttp.StatusInternalServerError)
-		respondWithError(w, resp)
-		log.Debug(resp)
+		apiErr := apierrors.ConfigurationStore(storeName).SubscribeFailed(keys, err)
+		respondWithError(w, apiErr)
+		log.Debug(apiErr)
 		return
 	}
 
@@ -909,9 +909,9 @@ func (a *api) onGetConfiguration(w nethttp.ResponseWriter, r *nethttp.Request) {
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()), errorcodes.ConfigurationGet, nethttp.StatusInternalServerError)
-		respondWithError(w, resp)
-		log.Debug(resp)
+		apiErr := apierrors.ConfigurationStore(storeName).GetFailed(keys, err)
+		respondWithError(w, apiErr)
+		log.Debug(apiErr)
 		return
 	}
 
