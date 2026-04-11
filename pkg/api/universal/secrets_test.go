@@ -24,7 +24,7 @@ import (
 
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/messages"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -42,13 +42,13 @@ func TestSecretStoreNotConfigured(t *testing.T) {
 	t.Run("GetSecret", func(t *testing.T) {
 		_, err := fakeAPI.GetSecret(t.Context(), &runtimev1pb.GetSecretRequest{})
 		require.Error(t, err)
-		require.ErrorIs(t, err, messages.ErrSecretStoreNotConfigured)
+		require.ErrorIs(t, err, apierrors.SecretStore("").NotConfigured())
 	})
 
 	t.Run("GetBulkSecret", func(t *testing.T) {
 		_, err := fakeAPI.GetBulkSecret(t.Context(), &runtimev1pb.GetBulkSecretRequest{})
 		require.Error(t, err)
-		require.ErrorIs(t, err, messages.ErrSecretStoreNotConfigured)
+		require.ErrorIs(t, err, apierrors.SecretStore("").NotConfigured())
 	})
 }
 
