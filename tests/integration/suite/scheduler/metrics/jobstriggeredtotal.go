@@ -48,7 +48,6 @@ func (j *jobstriggeredtotal) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-//nolint:testifylint
 func (j *jobstriggeredtotal) Run(t *testing.T, ctx context.Context) {
 	j.actors.WaitUntilRunning(t, ctx)
 
