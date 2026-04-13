@@ -23,6 +23,7 @@ import (
 
 type server struct {
 	componentUpdateFn     func(*operatorv1.ComponentUpdateRequest, operatorv1.Operator_ComponentUpdateServer) error
+	configurationUpdateFn func(*operatorv1.ConfigurationUpdateRequest, operatorv1.Operator_ConfigurationUpdateServer) error
 	getConfigurationFn    func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error)
 	getResiliencyFn       func(context.Context, *operatorv1.GetResiliencyRequest) (*operatorv1.GetResiliencyResponse, error)
 	httpEndpointUpdateFn  func(*operatorv1.HTTPEndpointUpdateRequest, operatorv1.Operator_HTTPEndpointUpdateServer) error
@@ -33,6 +34,7 @@ type server struct {
 	listSubscriptionsFn   func(context.Context, *emptypb.Empty) (*operatorv1.ListSubscriptionsResponse, error)
 	listSubscriptionsV2Fn func(context.Context, *operatorv1.ListSubscriptionsRequest) (*operatorv1.ListSubscriptionsResponse, error)
 	mcpServerUpdateFn     func(*operatorv1.MCPServerUpdateRequest, operatorv1.Operator_MCPServerUpdateServer) error
+	resiliencyUpdateFn    func(*operatorv1.ResiliencyUpdateRequest, operatorv1.Operator_ResiliencyUpdateServer) error
 	subscriptionUpdateFn  func(*operatorv1.SubscriptionUpdateRequest, operatorv1.Operator_SubscriptionUpdateServer) error
 }
 
@@ -51,7 +53,7 @@ func (s *server) GetConfiguration(ctx context.Context, in *operatorv1.GetConfigu
 }
 
 func (s *server) GetResiliency(ctx context.Context, in *operatorv1.GetResiliencyRequest) (*operatorv1.GetResiliencyResponse, error) {
-	if s.getConfigurationFn != nil {
+	if s.getResiliencyFn != nil {
 		return s.getResiliencyFn(ctx, in)
 	}
 	return nil, nil
@@ -116,6 +118,20 @@ func (s *server) ListSubscriptionsV2(ctx context.Context, in *operatorv1.ListSub
 func (s *server) SubscriptionUpdate(req *operatorv1.SubscriptionUpdateRequest, srv operatorv1.Operator_SubscriptionUpdateServer) error {
 	if s.subscriptionUpdateFn != nil {
 		return s.subscriptionUpdateFn(req, srv)
+	}
+	return nil
+}
+
+func (s *server) ConfigurationUpdate(req *operatorv1.ConfigurationUpdateRequest, srv operatorv1.Operator_ConfigurationUpdateServer) error {
+	if s.configurationUpdateFn != nil {
+		return s.configurationUpdateFn(req, srv)
+	}
+	return nil
+}
+
+func (s *server) ResiliencyUpdate(req *operatorv1.ResiliencyUpdateRequest, srv operatorv1.Operator_ResiliencyUpdateServer) error {
+	if s.resiliencyUpdateFn != nil {
+		return s.resiliencyUpdateFn(req, srv)
 	}
 	return nil
 }

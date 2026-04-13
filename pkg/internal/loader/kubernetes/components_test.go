@@ -43,9 +43,6 @@ func (o *mockOperator) GetConfiguration(ctx context.Context, in *operatorv1pb.Ge
 func (o *mockOperator) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
 	component := v1alpha1.Component{}
 	component.Name = "test"
-	component.Labels = map[string]string{
-		"podName": in.GetPodName(),
-	}
 	component.Spec = v1alpha1.ComponentSpec{
 		Type: "testtype",
 	}
@@ -103,7 +100,6 @@ func TestLoadComponents(t *testing.T) {
 		config: config.KubernetesConfig{
 			ControlPlaneAddress: fmt.Sprintf("localhost:%v", port),
 		},
-		podName: "testPodName",
 	}
 
 	response, err := request.Load(t.Context())
@@ -111,5 +107,4 @@ func TestLoadComponents(t *testing.T) {
 	assert.NotNil(t, response)
 	assert.Equal(t, "test", response[0].Name)
 	assert.Equal(t, "testtype", response[0].Spec.Type)
-	assert.Equal(t, "testPodName", response[0].Labels["podName"])
 }

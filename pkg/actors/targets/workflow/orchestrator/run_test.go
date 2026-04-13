@@ -170,3 +170,144 @@ func Test_runWorkflow_stateIsolation(t *testing.T) {
 		"ContinuedAsNew should not be set on cached rstate after failed execution",
 	)
 }
+
+// Test_runWorkflow_canSaveMovesCarryoverToInbox verifies that when CAN
+// progress is saved (the engine exceeded MaxContinueAsNewCount), carryover
+// EventRaised events are moved from History to Inbox. This prevents duplicate
+// event delivery on retry: without the move, the retry would pass all
+// original inbox events as NewEvents alongside the carryover OldEvents,
+// causing the workflow to see and process duplicate events.
+func Test_runWorkflow_canSaveMovesCarryoverToInbox(t *testing.T) {
+	const instanceID = "test-can-carryover"
+
+	startEvent := &protos.HistoryEvent{
+		EventId:   -1,
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ExecutionStarted{
+			ExecutionStarted: &protos.ExecutionStartedEvent{
+				Name:  "TestWorkflow",
+				Input: wrapperspb.String(`0`),
+				WorkflowInstance: &protos.WorkflowInstance{
+					InstanceId: instanceID,
+				},
+			},
+		},
+	}
+
+	history := []*backend.HistoryEvent{
+		{
+			EventId: -1, Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_WorkflowStarted{
+				WorkflowStarted: &protos.WorkflowStartedEvent{},
+			},
+		},
+		startEvent,
+	}
+
+	inbox := make([]*backend.HistoryEvent, 5)
+	for i := range inbox {
+		inbox[i] = &protos.HistoryEvent{
+			EventId:   int32(i),
+			Timestamp: timestamppb.Now(),
+			EventType: &protos.HistoryEvent_EventRaised{
+				EventRaised: &protos.EventRaisedEvent{
+					Name: "incr",
+				},
+			},
+		}
+	}
+
+	state := wfenginestate.NewState(wfenginestate.Options{
+		AppID:             "testapp",
+		WorkflowActorType: "workflow",
+		ActivityActorType: "activity",
+	})
+	for _, e := range inbox {
+		state.AddToInbox(e)
+	}
+	for _, e := range history {
+		state.AddToHistory(e)
+	}
+
+	rstate := runtimestate.NewWorkflowRuntimeState(instanceID, nil, history)
+
+	carryover := inbox[3:]
+	canState := &protos.WorkflowRuntimeState{
+		InstanceId:     instanceID,
+		ContinuedAsNew: true,
+		StartEvent: &protos.ExecutionStartedEvent{
+			Name:  "TestWorkflow",
+			Input: wrapperspb.String(`3`),
+			WorkflowInstance: &protos.WorkflowInstance{
+				InstanceId: instanceID,
+			},
+		},
+		OldEvents: []*protos.HistoryEvent{},
+		NewEvents: append([]*protos.HistoryEvent{
+			{
+				EventId: -1, Timestamp: timestamppb.Now(),
+				EventType: &protos.HistoryEvent_WorkflowStarted{
+					WorkflowStarted: &protos.WorkflowStartedEvent{},
+				},
+			},
+			{
+				EventId:   -1,
+				Timestamp: timestamppb.Now(),
+				EventType: &protos.HistoryEvent_ExecutionStarted{
+					ExecutionStarted: &protos.ExecutionStartedEvent{
+						Name:  "TestWorkflow",
+						Input: wrapperspb.String(`3`),
+						WorkflowInstance: &protos.WorkflowInstance{
+							InstanceId: instanceID,
+						},
+					},
+				},
+			},
+		}, carryover...),
+	}
+
+	scheduler := func(_ context.Context, wi *backend.WorkflowWorkItem) error {
+		proto.Reset(wi.State)
+		proto.Merge(wi.State, canState)
+		wi.Properties[todo.CallbackChannelProperty].(chan bool) <- false
+		return nil
+	}
+
+	fact, err := New(t.Context(), Options{
+		AppID:             "testapp",
+		WorkflowActorType: "workflow",
+		ActivityActorType: "activity",
+		Scheduler:         scheduler,
+		ActorTypeBuilder:  common.NewActorTypeBuilder("default"),
+		Actors:            fake.New(),
+	})
+	require.NoError(t, err)
+
+	o := fact.GetOrCreate(instanceID).(*orchestrator)
+	o.state = state
+	o.rstate = rstate
+	o.ometa = o.ometaFromState(rstate, startEvent.GetExecutionStarted())
+
+	reminder := &actorapi.Reminder{Name: "new-event-test"}
+	completed, runErr := o.runWorkflow(t.Context(), reminder)
+
+	assert.Equal(t, todo.RunCompletedFalse, completed)
+	require.Error(t, runErr)
+
+	assert.Len(t, o.state.Inbox, len(carryover))
+
+	for _, e := range o.state.History {
+		assert.Nil(t, e.GetEventRaised())
+	}
+
+	hasExecutionStarted := false
+	for _, e := range o.state.History {
+		if e.GetExecutionStarted() != nil {
+			hasExecutionStarted = true
+			break
+		}
+	}
+	assert.True(t, hasExecutionStarted)
+
+	assert.Equal(t, `3`, o.rstate.GetStartEvent().GetInput().GetValue())
+}

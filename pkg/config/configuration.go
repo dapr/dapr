@@ -622,32 +622,38 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name.
-func LoadKubernetesConfiguration(config string, namespace string, podName string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
+// Returns the processed Configuration and the raw configapi.Configuration resource.
+func LoadKubernetesConfiguration(config string, namespace string, operatorClient operatorv1pb.OperatorClient) (*Configuration, *configapi.Configuration, error) {
 	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
-		PodName:   podName,
 	}, grpcRetry.WithMax(operatorMaxRetries), grpcRetry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	b := resp.GetConfiguration()
 	if len(b) == 0 {
-		return nil, fmt.Errorf("configuration %s not found", config)
+		return nil, nil, fmt.Errorf("configuration %s not found", config)
 	}
 	conf := LoadDefaultConfiguration()
 	if err = json.Unmarshal(b, conf); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	// Also parse the raw API resource for use by the SIGHUP reconciler.
+	var configResource configapi.Configuration
+	if err = json.Unmarshal(b, &configResource); err != nil {
+		return nil, nil, err
 	}
 
 	err = conf.sortAndValidateSecretsConfiguration()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	conf.sortMetricsSpec()
 	conf.SetDefaultFeatures()
-	return conf, nil
+	return conf, &configResource, nil
 }
 
 // Update configuration from Otlp Environment Variables, if they exist.

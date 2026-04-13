@@ -64,7 +64,7 @@ func (a *Authz) authz(ctx context.Context, ns, appID string) error {
 	}
 
 	if id.Namespace() != ns || id.AppID() != appID {
-		log.Debugf("identity does not match metadata: client=%s, req=%s/%s", id, ns, appID)
+		log.Debugf("identity does not match metadata: client=%v, req=%s/%s", id, ns, appID)
 		return status.Errorf(codes.PermissionDenied, "identity does not match request")
 	}
 
