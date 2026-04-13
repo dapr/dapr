@@ -2,6 +2,9 @@ apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
 metadata:
   name: wfacl-e2e-policy
+scopes:
+  - wfacl-caller
+  - wfacl-target
 spec:
   defaultAction: deny
   rules:
@@ -20,6 +23,9 @@ spec:
   - callers:
     - appID: "wfacl-target"
     operations:
+    - type: workflow
+      name: "*"
+      action: allow
     - type: activity
       name: "*"
       action: allow
