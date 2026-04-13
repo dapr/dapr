@@ -13,7 +13,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.17.3
-	github.com/dapr/durabletask-go v0.11.4-0.20260406161632-36d7b5486fa8
+	github.com/dapr/durabletask-go v0.11.4-0.20260413145313-c4b7279b6a8e
 	github.com/dapr/kit v0.17.1-0.20260402173438-be272d92042b
 	github.com/diagridio/go-etcd-cron v0.12.4
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -37,7 +37,7 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lestrrat-go/jwx/v2 v2.1.6
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
-	github.com/modelcontextprotocol/go-sdk v1.2.0
+	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/client_model v0.6.2
@@ -67,7 +67,7 @@ require (
 	go.uber.org/ratelimit v0.3.0
 	golang.org/x/crypto v0.49.0
 	golang.org/x/net v0.52.0
-	golang.org/x/oauth2 v0.34.0
+	golang.org/x/oauth2 v0.35.0
 	golang.org/x/sync v0.20.0
 	gonum.org/v1/plot v0.16.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409
@@ -281,7 +281,7 @@ require (
 	github.com/gogap/stack v0.0.0-20150131034635-fef68dddd4f8 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
@@ -291,7 +291,7 @@ require (
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/jsonschema-go v0.3.0 // indirect
+	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
@@ -409,6 +409,7 @@ require (
 	github.com/rs/zerolog v1.31.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.13.0+incompatible // indirect
 	github.com/shirou/gopsutil/v3 v3.24.5 // indirect

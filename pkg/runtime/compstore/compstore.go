@@ -58,7 +58,6 @@ type ComponentStore struct {
 	subscriptions           *subscriptions
 	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
 	mcpServers              []mcpserverV1alpha1.MCPServer
-<<<<<<< HEAD
 	mcpToolSchemas          map[string]map[string]map[string]any // serverName -> toolName -> inputSchema
 	configurationResources  []configapi.Configuration
 	resiliencyResources     []resiliencyapi.Resiliency

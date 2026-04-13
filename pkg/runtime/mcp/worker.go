@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -63,17 +64,17 @@ const (
 // dispatching to the user's app.
 //
 // The executor registers:
-//   - A wildcard orchestrator ("*") that dispatches to listTools or callTool
-//     based on the orchestration name suffix (.ListTools / .CallTool), and
+//   - A wildcard workflow ("*") that dispatches to listTools or callTool
+//     based on the workflow name suffix (.ListTools / .CallTool), and
 //     invokes configured beforeCall / afterCall middleware workflows.
 //   - "dapr-mcp-list-tools" activity: dials the MCP server and lists tools.
 //   - "dapr-mcp-call-tool" activity: dials the MCP server and calls a tool.
 func NewBuiltinExecutor(opts ExecutorOptions) backend.Executor {
 	registry := task.NewTaskRegistry()
 
-	// Wildcard orchestrator: dispatches based on name suffix, runs middleware.
-	if err := registry.AddOrchestratorN("*", makeOrchestrator(opts.Store)); err != nil {
-		workerLog.Warnf("failed to register MCP wildcard orchestrator: %s", err)
+	// Wildcard workflow: dispatches based on name suffix, runs middleware.
+	if err := registry.AddWorkflowN("*", makeOrchestrator(opts.Store)); err != nil {
+		workerLog.Warnf("failed to register MCP wildcard workflow: %s", err)
 	}
 
 	// Fixed-name activity: list tools from MCP server.
@@ -120,10 +121,7 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.OrchestrationC
 
 			// beforeListTools middleware pipeline
 			if err := runBeforeListTools(ctx, &server, serverName); err != nil {
-				return &CallToolResult{IsError: true, Content: []ContentItem{{
-					Type: textContentType,
-					Text: fmt.Sprintf("beforeListTools: %s", err),
-				}}}, nil
+				return nil, errors.New("beforeListTools failed: " + err.Error())
 			}
 
 			var result ListToolsResult
@@ -344,7 +342,7 @@ func makeCallToolActivity(opts ExecutorOptions) task.Activity {
 		}
 		defer session.Close()
 
-		// The MCP SDK v1.2.0 detaches the connection context, so enforce
+		// The MCP SDK detaches the connection context, so enforce
 		// our own timeout by closing the session if the deadline fires.
 		timer := time.AfterFunc(timeout, func() {
 			workerLog.Warnf("call-tool: timeout (%s) reached for MCPServer %q, closing session", timeout, input.MCPServerName)
@@ -391,8 +389,14 @@ func buildTransport(server *mcpserverapi.MCPServer, httpClient *http.Client) (mc
 
 	case server.Spec.Endpoint.Stdio != nil:
 		cmd := exec.Command(server.Spec.Endpoint.Stdio.Command, server.Spec.Endpoint.Stdio.Args...) //nolint:gosec
-		for _, env := range server.Spec.Endpoint.Stdio.Env {
-			cmd.Env = append(cmd.Env, env.Name+"="+env.Value.String())
+		// Inherit the parent environment (PATH, HOME, etc.) so the subprocess can
+		// locate its interpreter and dependencies; configured vars are appended
+		// and take precedence over any inherited entries with the same name.
+		if len(server.Spec.Endpoint.Stdio.Env) > 0 {
+			cmd.Env = os.Environ()
+			for _, env := range server.Spec.Endpoint.Stdio.Env {
+				cmd.Env = append(cmd.Env, env.Name+"="+env.Value.String())
+			}
 		}
 		return &mcp.CommandTransport{Command: cmd}, nil
 

@@ -52,23 +52,23 @@ func (r *RoutingExecutor) EnableMCP(mcpExec backend.Executor) {
 	r.mcp.CompareAndSwap(nil, &mcpExec)
 }
 
-// ExecuteOrchestrator implements backend.Executor.
-// Orchestrations whose name starts with "dapr.mcp." are routed to the in-process MCP executor;
+// ExecuteWorkflow implements backend.Executor.
+// Workflows whose name starts with "dapr.mcp." are routed to the in-process MCP executor;
 // all others are forwarded to the gRPC executor.
-func (r *RoutingExecutor) ExecuteOrchestrator(
+func (r *RoutingExecutor) ExecuteWorkflow(
 	ctx context.Context,
 	iid api.InstanceID,
 	oldEvents []*protos.HistoryEvent,
 	newEvents []*protos.HistoryEvent,
-) (*protos.OrchestratorResponse, error) {
+) (*protos.WorkflowResponse, error) {
 	if isMCPOrchestration(oldEvents, newEvents) {
 		p := r.mcp.Load()
 		if p == nil {
 			return nil, fmt.Errorf("dapr.mcp.* orchestration received but no MCPServer resources are loaded")
 		}
-		return (*p).ExecuteOrchestrator(ctx, iid, oldEvents, newEvents)
+		return (*p).ExecuteWorkflow(ctx, iid, oldEvents, newEvents)
 	}
-	return r.grpc.ExecuteOrchestrator(ctx, iid, oldEvents, newEvents)
+	return r.grpc.ExecuteWorkflow(ctx, iid, oldEvents, newEvents)
 }
 
 // ExecuteActivity implements backend.Executor.

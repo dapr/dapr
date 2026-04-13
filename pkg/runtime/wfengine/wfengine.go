@@ -56,7 +56,7 @@ type Interface interface {
 
 	// ActivateMCPServers ensures workflow actors are registered,
 	// so that built-in dapr.mcp.* orchestrations can be scheduled even when no user workflow client has connected via GetWorkItems.
-	// It is called bythe runtime after MCPServer manifests are loaded.
+	// It is called by the runtime after MCPServer manifests are loaded.
 	ActivateMCPServers(ctx context.Context) error
 }
 

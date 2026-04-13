@@ -134,10 +134,10 @@ func buildOAuth2Client(
 	}
 
 	cfg := clientcredentials.Config{
-		// ClientID is intentionally left empty:
-		// some token endpoints (e.g. those that use client_secret_post or JWT-bearer assertions)
-		// do not require a separate client_id.
-		// Users who need a client_id should add it as a plain header in spec.headers.
+		// ClientID may be empty for non-standard flows (e.g. JWT-bearer assertions or
+		// endpoints that key solely on client_secret); RFC 6749 client_credentials
+		// requires it, so populate it from the spec when set.
+		ClientID:     o.ClientID,
 		ClientSecret: clientSecret,
 		TokenURL:     o.Issuer,
 		Scopes:       o.Scopes,
@@ -190,7 +190,7 @@ type jwtRoundTripper struct {
 
 func (rt *jwtRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// TODO: this fetches a new JWT per request. In future,
-	// cache with a short TTL to avoid overloading spiffe workfload api under load.
+	// cache with a short TTL to avoid overloading the SPIFFE workload API under load.
 	token, err := rt.fetcher.FetchJWT(req.Context(), rt.audience)
 	if err != nil {
 		return nil, fmt.Errorf("SPIFFE JWT fetch failed: %w", err)
