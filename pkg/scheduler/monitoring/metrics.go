@@ -53,8 +53,25 @@ var (
 		"scheduler/trigger_latency",
 		"The total time it takes to trigger a job from the scheduler service.",
 		stats.UnitMilliseconds)
+	jobsDeletedTotal = stats.Int64(
+		"scheduler/jobs_deleted_total",
+		"The total number of deleted jobs.",
+		stats.UnitDimensionless)
+	jobsBulkDeletedTotal = stats.Int64(
+		"scheduler/jobs_bulk_deleted_total",
+		"The total number of bulk job deletion operations.",
+		stats.UnitDimensionless)
+	jobsCreatedFailedTotal = stats.Int64(
+		"scheduler/jobs_created_failed_total",
+		"The total number of failed job creation attempts.",
+		stats.UnitDimensionless)
+	sidecarErrorsTotal = stats.Int64(
+		"scheduler/sidecar_errors_total",
+		"The total number of sidecar connection errors.",
+		stats.UnitDimensionless)
 
-	tagType = tag.MustNewKey("type")
+	tagType   = tag.MustNewKey("type")
+	tagReason = tag.MustNewKey("reason")
 )
 
 var tagSidecarsConnected = utils.WithTags(sidecarsConnectedGauge.Name())
@@ -169,6 +186,63 @@ func RecordJobsUndeliveredCount(jobMetadata *schedulerv1pb.JobMetadata) {
 	stats.RecordWithTags(context.Background(), tag, jobsUndeliveredTotal.M(1))
 }
 
+var (
+	tagDeletedJob     = utils.WithTags(jobsDeletedTotal.Name(), tagType, "job")
+	tagDeletedActor   = utils.WithTags(jobsDeletedTotal.Name(), tagType, "actor")
+	tagDeletedUnknown = utils.WithTags(jobsDeletedTotal.Name(), tagType, "unknown")
+)
+
+// RecordJobsDeletedCount records the number of jobs deleted from the scheduler service.
+func RecordJobsDeletedCount(jobMetadata *schedulerv1pb.JobMetadata) {
+	var tag []tag.Mutator
+	switch jobMetadata.GetTarget().GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Job:
+		tag = tagDeletedJob
+	case *schedulerv1pb.JobTargetMetadata_Actor:
+		tag = tagDeletedActor
+	default:
+		tag = tagDeletedUnknown
+	}
+
+	stats.RecordWithTags(context.Background(), tag, jobsDeletedTotal.M(1))
+}
+
+var tagBulkDeleted = utils.WithTags(jobsBulkDeletedTotal.Name())
+
+// RecordJobsBulkDeletedCount records a bulk job deletion operation.
+func RecordJobsBulkDeletedCount() {
+	stats.RecordWithTags(context.Background(), tagBulkDeleted, jobsBulkDeletedTotal.M(1))
+}
+
+var (
+	tagCreatedFailedJob     = utils.WithTags(jobsCreatedFailedTotal.Name(), tagType, "job")
+	tagCreatedFailedActor   = utils.WithTags(jobsCreatedFailedTotal.Name(), tagType, "actor")
+	tagCreatedFailedUnknown = utils.WithTags(jobsCreatedFailedTotal.Name(), tagType, "unknown")
+)
+
+// RecordJobsCreatedFailedCount records a failed job creation attempt.
+func RecordJobsCreatedFailedCount(jobMetadata *schedulerv1pb.JobMetadata) {
+	var tag []tag.Mutator
+	switch jobMetadata.GetTarget().GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Job:
+		tag = tagCreatedFailedJob
+	case *schedulerv1pb.JobTargetMetadata_Actor:
+		tag = tagCreatedFailedActor
+	default:
+		tag = tagCreatedFailedUnknown
+	}
+
+	stats.RecordWithTags(context.Background(), tag, jobsCreatedFailedTotal.M(1))
+}
+
+// RecordSidecarError records a sidecar connection error with a reason.
+func RecordSidecarError(reason string) {
+	stats.RecordWithTags(context.Background(),
+		utils.WithTags(sidecarErrorsTotal.Name(), tagReason, reason),
+		sidecarErrorsTotal.M(1),
+	)
+}
+
 // InitMetrics initialize the scheduler service metrics.
 func InitMetrics() error {
 	err := view.Register(
@@ -178,6 +252,10 @@ func InitMetrics() error {
 		utils.NewMeasureView(triggerLatency, []tag.Key{tagType}, view.Distribution(0, 100, 500, 1000, 5000, 10000)),
 		utils.NewMeasureView(jobsFailedTotal, []tag.Key{tagType}, view.Count()),
 		utils.NewMeasureView(jobsUndeliveredTotal, []tag.Key{tagType}, view.Count()),
+		utils.NewMeasureView(jobsDeletedTotal, []tag.Key{tagType}, view.Count()),
+		utils.NewMeasureView(jobsBulkDeletedTotal, []tag.Key{}, view.Count()),
+		utils.NewMeasureView(jobsCreatedFailedTotal, []tag.Key{tagType}, view.Count()),
+		utils.NewMeasureView(sidecarErrorsTotal, []tag.Key{tagReason}, view.Count()),
 	)
 
 	return err
