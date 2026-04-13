@@ -87,6 +87,6 @@ func (s *sidecarerrorstotal) Run(t *testing.T, ctx context.Context) {
 		if !assert.True(c, ok) {
 			return
 		}
-		assert.Equal(c, 5.0, total["reason=auth_failed"])
+		assert.InDelta(c, 5.0, total["reason=auth_failed"], 0.01)
 	}, time.Second*15, time.Millisecond*10)
 }

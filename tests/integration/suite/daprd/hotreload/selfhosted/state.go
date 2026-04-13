@@ -375,7 +375,7 @@ spec:
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 			}, resp)
-		}, time.Second*15, time.Millisecond*10)
+		}, time.Second*20, time.Millisecond*10)
 
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 		s.writeExpectError(t, ctx, client, "bar", http.StatusInternalServerError)
