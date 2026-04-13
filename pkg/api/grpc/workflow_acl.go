@@ -32,50 +32,42 @@ const workflowACLDeniedMsg = "access denied by workflow access policy"
 // Returns nil if no policy applies or the call is allowed; returns
 // PermissionDenied if denied.
 func (a *api) callActorValidateWorkflowACL(ctx context.Context, in *internalv1pb.InternalInvokeRequest) error {
-	actorType := in.GetActor().GetActorType()
-	opType, isWorkflowActor := workflowacl.ParseActorType(actorType)
-	if !isWorkflowActor {
-		return nil
-	}
-
 	policies := a.workflowAccessPolicies.Load()
-	if policies == nil {
-		return nil
-	}
-
-	method := in.GetMessage().GetMethod()
-	data := in.GetMessage().GetData().GetValue()
 
 	callerAppID, callerNamespace, err := a.extractCallerIdentity(ctx)
 	if err != nil {
+		// Identity extraction only fails if mTLS is missing. If there are
+		// no policies, allow the call (backward compatible).
+		if policies == nil {
+			return nil
+		}
 		return err
+	}
+
+	result, err := workflowacl.EnforceRequest(
+		policies, callerAppID,
+		in.GetActor().GetActorType(),
+		in.GetMessage().GetMethod(),
+		in.GetMessage().GetData().GetValue(),
+	)
+	if err != nil {
+		return status.Errorf(codes.Internal, "workflow access policy: %v", err)
+	}
+	if result == nil {
+		return nil
 	}
 
 	if nsErr := a.checkNamespace(callerNamespace); nsErr != nil {
 		return nsErr
 	}
 
-	opName, subject, err := workflowacl.ExtractOperationName(opType, method, data)
-	if err != nil {
-		return status.Errorf(codes.Internal, "workflow access policy: failed to extract operation name: %v", err)
-	}
-	if !subject {
-		if !policies.IsCallerKnown(callerAppID) {
-			a.logger.Warnf("Workflow access policy denied app '%s' for method '%s' on %s actor (caller not in any allow rule)", callerAppID, method, opType)
-			diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(opType), method)
-			return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
-		}
-		diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(opType), method)
-		return nil
-	}
-
-	if !policies.Evaluate(callerAppID, opType, opName) {
-		a.logger.Warnf("Workflow access policy denied app '%s' from scheduling %s '%s'", callerAppID, opType, opName)
-		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(opType), "schedule")
+	if !result.Allowed {
+		a.logger.Warnf("Workflow access policy denied app '%s' for %s operation '%s'", callerAppID, result.OpType, result.Operation)
+		diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(result.OpType), result.Operation)
 		return status.Errorf(codes.PermissionDenied, workflowACLDeniedMsg)
 	}
 
-	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(opType), "schedule")
+	diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(result.OpType), result.Operation)
 	return nil
 }
 

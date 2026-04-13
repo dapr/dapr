@@ -289,6 +289,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 				mcpServerUpdateFn:            opts.mcpServerUpdateFn,
 				resiliencyUpdateFn:           opts.resiliencyUpdateFn,
 				subscriptionUpdateFn:         opts.subscriptionUpdateFn,
+				listWorkflowAccessPoliciesFn: opts.listWorkflowAccessPoliciesFn,
 				workflowAccessPolicyUpdateFn: opts.workflowAccessPolicyUpdateFn,
 			}
 

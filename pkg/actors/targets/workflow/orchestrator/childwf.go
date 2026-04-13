@@ -82,7 +82,7 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 			// If the call was denied by a workflow access policy, fail the
 			// child orchestration immediately rather than retrying.
 			if isPermissionDenied(err) {
-				return o.failChildWorkflow(ctx, e, err)
+				return o.failChildWorkflow(ctx, e.GetEventId(), err)
 			}
 			return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
 		}
@@ -92,7 +92,8 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 }
 
 // isPermissionDenied checks whether the error (possibly wrapped) contains a
-// gRPC PermissionDenied status code.
+// gRPC PermissionDenied status code. Walks both single-error and multi-error
+// chains.
 func isPermissionDenied(err error) bool {
 	if err == nil {
 		return false
@@ -103,9 +104,11 @@ func isPermissionDenied(err error) bool {
 		return true
 	}
 
-	// Walk the error chain for wrapped gRPC errors.
-	for unwrapped := errors.Unwrap(err); unwrapped != nil; unwrapped = errors.Unwrap(unwrapped) {
-		if st, ok := status.FromError(unwrapped); ok && st.Code() == codes.PermissionDenied {
+	// Walk the full error chain. errors.As traverses both Unwrap() error
+	// and Unwrap() []error chains (multi-error wrappers like errors.Join).
+	var wrapped interface{ GRPCStatus() *status.Status }
+	if errors.As(err, &wrapped) {
+		if wrapped.GRPCStatus().Code() == codes.PermissionDenied {
 			return true
 		}
 	}
@@ -113,20 +116,14 @@ func isPermissionDenied(err error) bool {
 	return false
 }
 
-// failChildWorkflow creates a SubOrchestrationInstanceFailed event on the
-// parent orchestrator when the child workflow call is permanently rejected
-// (e.g. by a WorkflowAccessPolicy). It uses a reminder-based approach to
-// deliver the failure event in a fresh execution cycle, avoiding conflicts
-// with the current run loop's ClearInbox/saveInternalState calls.
-func (o *orchestrator) failChildWorkflow(ctx context.Context, e *protos.HistoryEvent, callErr error) error {
-	// Get the TaskScheduledId from the ParentInstance in the ExecutionStarted
-	// event. This ID corresponds to the SubOrchestrationInstanceCreated event
-	// in the parent's history that the engine needs to correlate with this failure.
-	var taskScheduledID int32
-	if es := e.GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
-		taskScheduledID = es.GetParentInstance().GetTaskScheduledId()
-	}
-
+// failChildWorkflow creates a ChildWorkflowInstanceFailed event on the parent
+// orchestrator when the child workflow call is permanently rejected (e.g. by a
+// WorkflowAccessPolicy). It uses a reminder-based approach to deliver the
+// failure event in a fresh execution cycle, avoiding conflicts with the current
+// run loop's ClearInbox/saveInternalState calls.
+// taskScheduledID is the correlation ID that the parent orchestrator engine
+// uses to match this failure with the original sub-orchestration request.
+func (o *orchestrator) failChildWorkflow(ctx context.Context, taskScheduledID int32, callErr error) error {
 	failedEvent := &protos.HistoryEvent{
 		EventId:   -1,
 		Timestamp: timestamppb.New(time.Now()),

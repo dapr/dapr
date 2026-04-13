@@ -14,6 +14,7 @@ limitations under the License.
 package workflow
 
 import (
+	"fmt"
 	"path"
 	"strings"
 
@@ -220,4 +221,49 @@ func literalPrefixLen(pattern string) int {
 // containsWildcard returns true if the pattern contains any glob wildcard.
 func containsWildcard(pattern string) bool {
 	return strings.ContainsAny(pattern, "*?[")
+}
+
+// EnforceRequestResult describes the outcome of a policy enforcement check.
+type EnforceRequestResult struct {
+	Allowed   bool
+	OpType    OperationType
+	Operation string // "schedule" for subject methods, or the method name
+}
+
+// EnforceRequest evaluates compiled policies against an actor request. It
+// parses the actor type, extracts the operation name, and returns the policy
+// decision. This is the single enforcement path used by both the gRPC handler
+// (remote calls) and the local router (same-sidecar calls).
+// Returns nil result if the request is not for a workflow/activity actor or
+// policies are nil (allow-all).
+func EnforceRequest(policies *CompiledPolicies, callerAppID string, actorType string, method string, data []byte) (*EnforceRequestResult, error) {
+	opType, isWorkflowActor := ParseActorType(actorType)
+	if !isWorkflowActor {
+		return nil, nil
+	}
+
+	if policies == nil {
+		return nil, nil
+	}
+
+	opName, subject, err := ExtractOperationName(opType, method, data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract operation name: %w", err)
+	}
+
+	if !subject {
+		allowed := policies.IsCallerKnown(callerAppID)
+		return &EnforceRequestResult{
+			Allowed:   allowed,
+			OpType:    opType,
+			Operation: method,
+		}, nil
+	}
+
+	allowed := policies.Evaluate(callerAppID, opType, opName)
+	return &EnforceRequestResult{
+		Allowed:   allowed,
+		OpType:    opType,
+		Operation: "schedule",
+	}, nil
 }

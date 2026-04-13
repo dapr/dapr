@@ -1515,41 +1515,26 @@ func (a *DaprRuntime) buildWorkflowACLChecker() actorrouter.WorkflowACLChecker {
 	}
 
 	return func(callerAppID string, req *internalv1pb.InternalInvokeRequest) error {
-		policies := a.daprGRPCAPI.GetWorkflowAccessPolicies()
-		if policies == nil {
-			return nil
-		}
-
-		actorType := req.GetActor().GetActorType()
-		opType, isWorkflowActor := workflowacl.ParseActorType(actorType)
-		if !isWorkflowActor {
-			return nil
-		}
-
-		method := req.GetMessage().GetMethod()
-		data := req.GetMessage().GetData().GetValue()
-
-		opName, subject, err := workflowacl.ExtractOperationName(opType, method, data)
+		result, err := workflowacl.EnforceRequest(
+			a.daprGRPCAPI.GetWorkflowAccessPolicies(), callerAppID,
+			req.GetActor().GetActorType(),
+			req.GetMessage().GetMethod(),
+			req.GetMessage().GetData().GetValue(),
+		)
 		if err != nil {
-			return status.Errorf(codes.Internal, "workflow access policy: failed to extract operation name: %v", err)
+			return status.Errorf(codes.Internal, "workflow access policy: %v", err)
 		}
-		if !subject {
-			if !policies.IsCallerKnown(callerAppID) {
-				log.Warnf("Workflow access policy denied app '%s' for method '%s' on %s actor (caller not in any allow rule)", callerAppID, method, opType)
-				diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(opType), method)
-				return status.Errorf(codes.PermissionDenied, "access denied by workflow access policy")
-			}
-			diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(opType), method)
+		if result == nil {
 			return nil
 		}
 
-		if !policies.Evaluate(callerAppID, opType, opName) {
-			log.Warnf("Workflow access policy denied app '%s' from scheduling %s '%s'", callerAppID, opType, opName)
-			diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(opType), "schedule")
+		if !result.Allowed {
+			log.Warnf("Workflow access policy denied app '%s' for %s operation '%s'", callerAppID, result.OpType, result.Operation)
+			diag.DefaultMonitoring.WorkflowACLActionDenied(callerAppID, string(result.OpType), result.Operation)
 			return status.Errorf(codes.PermissionDenied, "access denied by workflow access policy")
 		}
 
-		diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(opType), "schedule")
+		diag.DefaultMonitoring.WorkflowACLActionAllowed(callerAppID, string(result.OpType), result.Operation)
 		return nil
 	}
 }
