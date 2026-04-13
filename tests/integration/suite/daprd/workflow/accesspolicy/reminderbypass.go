@@ -67,7 +67,6 @@ func (r *reminderbypass) Setup(t *testing.T) []framework.Option {
 	policyStore := store.New(metav1.GroupVersionKind{
 		Group: "dapr.io", Version: "v1alpha1", Kind: "WorkflowAccessPolicy",
 	})
-	// Policy only allows "legit-caller". "attacker-app" is NOT in any rule.
 	policyStore.Add(&wfaclapi.WorkflowAccessPolicy{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
 		ObjectMeta: metav1.ObjectMeta{Name: "bypass-test", Namespace: "default"},
@@ -83,7 +82,6 @@ func (r *reminderbypass) Setup(t *testing.T) []framework.Option {
 					},
 				},
 				{
-					// Target must be able to execute its own activities.
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "bypass-target"}},
 					Operations: []wfaclapi.WorkflowOperationRule{
 						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
@@ -167,7 +165,6 @@ func (r *reminderbypass) Run(t *testing.T, ctx context.Context) {
 	r.target.WaitUntilRunning(t, ctx)
 	r.attacker.WaitUntilRunning(t, ctx)
 
-	// Set up orchestrator on attacker that tries to call workflows on target.
 	registry := task.NewTaskRegistry()
 	require.NoError(t, registry.AddWorkflowN("AttackWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
@@ -191,7 +188,6 @@ func (r *reminderbypass) Run(t *testing.T, ctx context.Context) {
 		return output, nil
 	}))
 
-	// Register victim workflows/activities on the target.
 	targetRegistry := task.NewTaskRegistry()
 	require.NoError(t, targetRegistry.AddWorkflowN("VictimWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
@@ -211,10 +207,6 @@ func (r *reminderbypass) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, time.Millisecond*10)
 
 	t.Run("attacker cannot schedule cross-app workflow on target", func(t *testing.T) {
-		// The attacker tries to schedule an orchestrator that calls the target.
-		// The policy denies the attacker from even creating workflows (since
-		// attacker-app is not in the callers list for any rule). The denial
-		// may happen at ScheduleNewWorkflow or WaitForWorkflowCompletion.
 		id, err := attackerClient.ScheduleNewWorkflow(ctx, "AttackWorkflow")
 		if err != nil {
 			// Denied at scheduling — the local policy check blocks the attacker.

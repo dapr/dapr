@@ -66,8 +66,6 @@ func (w *workflowacl) Setup(t *testing.T) []framework.Option {
 	w.pStore = store.New(metav1.GroupVersionKind{
 		Group: "dapr.io", Version: "v1alpha1", Kind: "WorkflowAccessPolicy",
 	})
-	// Policy: only "metric-caller" may schedule workflows on the target.
-	// Default deny blocks all other callers.
 	w.pStore.Add(&wfaclapi.WorkflowAccessPolicy{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
 		ObjectMeta: metav1.ObjectMeta{Name: "metric-test", Namespace: "default"},
@@ -82,7 +80,6 @@ func (w *workflowacl) Setup(t *testing.T) []framework.Option {
 					},
 				},
 				{
-					// Target must be able to execute its own workflows and activities.
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "metric-target"}},
 					Operations: []wfaclapi.WorkflowOperationRule{
 						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
@@ -217,8 +214,6 @@ func (w *workflowacl) Run(t *testing.T, ctx context.Context) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := w.target.Metrics(c, ctx).All()
-			// The target should have recorded an allow for the caller's
-			// workflow schedule operation.
 			allowKey := "dapr_runtime_workflow_acl_action_allowed_total|app_id:metric-target|operation:schedule|src_app_id:metric-caller|type:workflow"
 			assert.GreaterOrEqual(c, int(metrics[allowKey]), 1,
 				"expected at least 1 workflow ACL allow metric on target")

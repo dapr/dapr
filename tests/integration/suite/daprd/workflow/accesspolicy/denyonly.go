@@ -67,11 +67,6 @@ func (d *denyonly) Setup(t *testing.T) []framework.Option {
 	policyStore := store.New(metav1.GroupVersionKind{
 		Group: "dapr.io", Version: "v1alpha1", Kind: "WorkflowAccessPolicy",
 	})
-	// Policy where:
-	// - "allowed-caller" has an allow rule for AllowedWF
-	// - "denyonly-caller" ONLY has a deny rule (no allow rules)
-	// After the VULN-1 fix, denyonly-caller should be rejected for all
-	// methods, including non-subject methods like AddWorkflowEvent.
 	policyStore.Add(&wfaclapi.WorkflowAccessPolicy{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
 		ObjectMeta: metav1.ObjectMeta{Name: "denyonly-test", Namespace: "default"},
@@ -87,14 +82,12 @@ func (d *denyonly) Setup(t *testing.T) []framework.Option {
 					},
 				},
 				{
-					// Target must be able to invoke its own activities.
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "denyonly-target"}},
 					Operations: []wfaclapi.WorkflowOperationRule{
 						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
 					},
 				},
 				{
-					// denyonly-caller only appears in a deny rule.
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "denyonly-caller"}},
 					Operations: []wfaclapi.WorkflowOperationRule{
 						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionDeny},
@@ -178,8 +171,6 @@ func (d *denyonly) Run(t *testing.T, ctx context.Context) {
 	d.target.WaitUntilRunning(t, ctx)
 	d.denyOnlyApp.WaitUntilRunning(t, ctx)
 
-	// Register an orchestrator on the deny-only caller that tries to call
-	// a sub-orchestrator on the target.
 	denyOnlyRegistry := task.NewTaskRegistry()
 	require.NoError(t, denyOnlyRegistry.AddWorkflowN("TryScheduleFromDenyOnly", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
@@ -192,7 +183,6 @@ func (d *denyonly) Run(t *testing.T, ctx context.Context) {
 		return output, nil
 	}))
 
-	// Register target workflows.
 	targetRegistry := task.NewTaskRegistry()
 	require.NoError(t, targetRegistry.AddWorkflowN("AllowedWF", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
@@ -209,8 +199,6 @@ func (d *denyonly) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, time.Millisecond*10)
 
 	t.Run("deny-only caller cannot schedule workflows on target", func(t *testing.T) {
-		// denyonly-caller only appears in a deny rule, so IsCallerKnown
-		// returns false and the request is rejected before evaluation.
 		id, err := denyOnlyClient.ScheduleNewWorkflow(ctx, "TryScheduleFromDenyOnly")
 		if err != nil {
 			assert.Contains(t, err.Error(), "PermissionDenied")

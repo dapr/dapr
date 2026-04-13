@@ -65,8 +65,6 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 		),
 	)
 
-	// App0 (default ns): orchestrator that tries to call sub-orchestrator
-	// on app1 in a different namespace.
 	c.wf.Registry().AddWorkflowN("CrossNsWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var output string
 		err := ctx.CallChildWorkflow("TargetWF",
@@ -78,7 +76,6 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 		return output, nil
 	})
 
-	// App1 (other-ns): target workflow that should never be reached.
 	c.wf.RegistryN(1).AddWorkflowN("TargetWF", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
 	})
@@ -95,10 +92,6 @@ func (c *crossnamespace) Run(t *testing.T, ctx context.Context) {
 	c.wf.BackendClientN(t, ctx, 1)
 
 	t.Run("cross-namespace workflow call is blocked by placement isolation", func(t *testing.T) {
-		// Schedule the workflow. The sub-orchestrator call targeting the
-		// other namespace will hang because placement namespace isolation
-		// prevents the actor lookup. Verify this by checking the caller's
-		// logs for the actor-not-found error.
 		_, err := client0.ScheduleNewWorkflow(ctx, "CrossNsWorkflow", api.WithInput("test"))
 		require.NoError(t, err)
 

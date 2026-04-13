@@ -68,8 +68,6 @@ func (ia *invokeactor) Setup(t *testing.T) []framework.Option {
 	policyStore := store.New(metav1.GroupVersionKind{
 		Group: "dapr.io", Version: "v1alpha1", Kind: "WorkflowAccessPolicy",
 	})
-	// Policy scoped to target. Only "legit-caller" is allowed.
-	// "invokeactor-attacker" is NOT in any rule.
 	policyStore.Add(&wfaclapi.WorkflowAccessPolicy{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
 		ObjectMeta: metav1.ObjectMeta{Name: "invokeactor-test", Namespace: "default"},
@@ -167,7 +165,6 @@ func (ia *invokeactor) Run(t *testing.T, ctx context.Context) {
 	ia.target.WaitUntilRunning(t, ctx)
 	ia.attacker.WaitUntilRunning(t, ctx)
 
-	// Register a workflow on the target so the actor type is hosted.
 	targetRegistry := task.NewTaskRegistry()
 	require.NoError(t, targetRegistry.AddWorkflowN("SecretWF", func(ctx *task.WorkflowContext) (any, error) {
 		return nil, nil
@@ -175,7 +172,6 @@ func (ia *invokeactor) Run(t *testing.T, ctx context.Context) {
 	targetClient := dtclient.NewTaskHubGrpcClient(ia.target.GRPCConn(t, ctx), logger.New(t))
 	require.NoError(t, targetClient.StartWorkItemListener(ctx, targetRegistry))
 
-	// Register a dummy workflow on attacker so actors are ready.
 	attackerRegistry := task.NewTaskRegistry()
 	require.NoError(t, attackerRegistry.AddWorkflowN("DummyWF", func(ctx *task.WorkflowContext) (any, error) {
 		return "dummy", nil
@@ -188,8 +184,6 @@ func (ia *invokeactor) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, len(ia.attacker.GetMetadata(t, ctx).ActorRuntime.ActiveActors), 1)
 	}, time.Second*20, time.Millisecond*10)
 
-	// Build a crafted CreateWorkflowInstanceRequest protobuf payload
-	// that would normally be sent by the workflow engine via CallActor.
 	craftedPayload, err := proto.Marshal(&protos.CreateWorkflowInstanceRequest{
 		StartEvent: &protos.HistoryEvent{
 			EventType: &protos.HistoryEvent_ExecutionStarted{
@@ -204,11 +198,6 @@ func (ia *invokeactor) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	// The attacker uses InvokeActor on its OWN public gRPC API, targeting
-	// the victim's workflow actor type. The router on the attacker will see
-	// this is a remote actor (different appID), look up the address via
-	// placement, and forward via internal CallActor to the target, which
-	// runs the ACL check.
 	attackerDaprClient := runtimev1pb.NewDaprClient(ia.attacker.GRPCConn(t, ctx))
 
 	t.Run("crafted InvokeActor targeting remote workflow actor is denied", func(t *testing.T) {
@@ -219,15 +208,10 @@ func (ia *invokeactor) Run(t *testing.T, ctx context.Context) {
 			Data:      craftedPayload,
 		})
 		require.Error(t, err)
-		// The target's ACL check denies the attacker because
-		// invokeactor-attacker is not in any allow rule.
 		assert.Contains(t, err.Error(), "access denied by workflow access policy")
 	})
 
 	t.Run("crafted InvokeActor for non-subject method is denied", func(t *testing.T) {
-		// The attacker tries to invoke AddWorkflowEvent, a non-subject method.
-		// The ACL falls back to IsCallerKnown, which rejects the attacker
-		// since they have no allow rules.
 		_, err := attackerDaprClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
 			ActorType: "dapr.internal.default.invokeactor-target.workflow",
 			ActorId:   "some-instance",

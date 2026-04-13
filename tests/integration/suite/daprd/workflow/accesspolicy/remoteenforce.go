@@ -72,8 +72,6 @@ func (r *remoteenforce) Setup(t *testing.T) []framework.Option {
 	policyStore := store.New(metav1.GroupVersionKind{
 		Group: "dapr.io", Version: "v1alpha1", Kind: "WorkflowAccessPolicy",
 	})
-	// Policy scoped ONLY to "remote-target". The caller does NOT load it.
-	// Only "allowed-caller" can schedule workflows. "remote-caller" is denied.
 	policyStore.Add(&wfaclapi.WorkflowAccessPolicy{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
 		ObjectMeta: metav1.ObjectMeta{Name: "remote-test", Namespace: "default"},
@@ -88,7 +86,6 @@ func (r *remoteenforce) Setup(t *testing.T) []framework.Option {
 					},
 				},
 				{
-					// Target must be able to execute its own activities.
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "remote-target"}},
 					Operations: []wfaclapi.WorkflowOperationRule{
 						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
@@ -152,13 +149,10 @@ func (r *remoteenforce) Setup(t *testing.T) []framework.Option {
 		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 	}
 
-	// Caller: "remote-caller" — NOT in the policy scopes, so it loads
-	// NO policies. Its local router ACL check is nil (allow all).
 	r.caller = daprd.New(t, append(commonOpts,
 		daprd.WithAppID("remote-caller"),
 	)...)
 
-	// Target: "remote-target" — in the policy scopes, loads the deny policy.
 	r.target = daprd.New(t, append(commonOpts,
 		daprd.WithAppID("remote-target"),
 	)...)
@@ -204,11 +198,6 @@ func (r *remoteenforce) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, time.Millisecond*10)
 
 	t.Run("callee denies unauthorized caller via SPIFFE identity", func(t *testing.T) {
-		// The caller has NO local policies (nil). The local router ACL check
-		// passes (nil = allow all). The cross-app call reaches the target's
-		// CallActor gRPC handler, which checks the caller's SPIFFE identity
-		// ("remote-caller") against the policy. Since "remote-caller" is NOT
-		// in the callers list, the target denies the call.
 		id, err := callerClient.ScheduleNewWorkflow(ctx, "CrossAppCall")
 		require.NoError(t, err)
 

@@ -40,11 +40,13 @@ func init() {
 }
 
 // workflowaccesspolicy tests disk-based hot-reloading of WorkflowAccessPolicy
-// resources in selfhosted mode. Because mTLS is not active in selfhosted mode
-// without a full kubernetes setup, policies that require SPIFFE identity will
-// deny all callers (no identity can be extracted). This validates the hotreload
-// path: no policy -> workflow succeeds; add policy -> workflow denied (no
-// identity); delete policy -> workflow succeeds again.
+// resources in selfhosted mode. Local calls (same-sidecar) are enforced via
+// the router's WorkflowACLChecker using the app ID directly (no SPIFFE
+// required). Remote cross-app calls in selfhosted mode without mTLS would be
+// denied because SPIFFE identity cannot be extracted from the gRPC context.
+// This test validates the hot-reload path with local calls: no policy ->
+// workflow succeeds; add policy allowing self -> workflow still succeeds;
+// delete policy -> workflow succeeds (nil policies = allow all).
 type workflowaccesspolicy struct {
 	daprd  *daprd.Daprd
 	place  *placement.Placement
@@ -112,11 +114,6 @@ func (w *workflowaccesspolicy) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("write policy and delete it, verifying hot-reload picks up changes", func(t *testing.T) {
-		// In selfhosted mode without mTLS, policy enforcement cannot verify
-		// caller identity, so self-invoked workflows are not affected by the
-		// policy. Instead, we verify the hot-reload mechanism by writing a
-		// policy file that allows the local app, confirming workflows still
-		// succeed, and then deleting it.
 		policyYAML := `
 apiVersion: dapr.io/v1alpha1
 kind: WorkflowAccessPolicy
@@ -134,14 +131,13 @@ spec:
 `
 		require.NoError(t, os.WriteFile(filepath.Join(w.resDir, "policy.yaml"), []byte(policyYAML), 0o600))
 
-		// Give hot-reload time to pick up the file, then verify workflows
-		// still succeed (the policy allows the local app).
-		time.Sleep(2 * time.Second)
-		id, err := backendClient.ScheduleNewWorkflow(ctx, "TestWF")
-		require.NoError(t, err)
-		metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
-		require.NoError(t, err)
-		assert.True(t, api.WorkflowMetadataIsComplete(metadata))
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			id, err := backendClient.ScheduleNewWorkflow(ctx, "TestWF")
+			assert.NoError(c, err)
+			metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
+			assert.NoError(c, err)
+			assert.True(c, api.WorkflowMetadataIsComplete(metadata))
+		}, time.Second*20, time.Millisecond*100)
 	})
 
 	t.Run("delete policy file, workflow succeeds (nil policies = allow all)", func(t *testing.T) {
@@ -153,6 +149,6 @@ spec:
 			metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 			assert.NoError(c, err)
 			assert.True(c, api.WorkflowMetadataIsComplete(metadata))
-		}, time.Second*20, time.Millisecond*500)
+		}, time.Second*20, time.Millisecond*100)
 	})
 }

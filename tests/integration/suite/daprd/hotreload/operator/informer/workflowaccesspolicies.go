@@ -184,7 +184,6 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("add deny policy via informer, cross-app workflow denied", func(t *testing.T) {
-		// Add a policy scoped to the target that denies the caller.
 		policy := &wfaclapi.WorkflowAccessPolicy{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "WorkflowAccessPolicy"},
 			ObjectMeta: metav1.ObjectMeta{Name: "deny-caller", Namespace: "default"},
@@ -192,7 +191,6 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 			Spec: wfaclapi.WorkflowAccessPolicySpec{
 				DefaultAction: wfaclapi.PolicyActionDeny,
 				Rules: []wfaclapi.WorkflowAccessPolicyRule{{
-					// Allow the target to run its own activities.
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-target"}},
 					Operations: []wfaclapi.WorkflowOperationRule{{
 						Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow,
@@ -232,7 +230,6 @@ func (w *workflowaccesspolicies) Run(t *testing.T, ctx context.Context) {
 						}},
 					},
 					{
-						// Target must be able to process its own workflows and activities.
 						Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-reload-target"}},
 						Operations: []wfaclapi.WorkflowOperationRule{
 							{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
