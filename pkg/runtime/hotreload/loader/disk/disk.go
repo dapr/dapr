@@ -171,7 +171,7 @@ func (d *disk) Run(ctx context.Context) error {
 					if err := d.resiliencies.trigger(ctx, dirData); err != nil {
 						return err
 					}
-					if err := d.workflowAccessPolicies.trigger(ctx); err != nil {
+					if err := d.workflowAccessPolicies.trigger(ctx, dirData); err != nil {
 						return err
 					}
 				}

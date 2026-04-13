@@ -43,6 +43,7 @@ type Validator struct {
 	celValidator    *cel.Validator
 	schemaValidator apivalidation.SchemaValidator
 	initOnce        sync.Once
+	initErr         error
 	crdYAML         []byte
 	name            string
 }
@@ -112,12 +113,11 @@ func (v *Validator) init() error {
 // constraints (enum, minLength, minItems, required, etc.) and any CEL
 // XValidation rules. The resource must be JSON-serializable. Returns nil if valid.
 func (v *Validator) Validate(resource any) error {
-	var err error
 	v.initOnce.Do(func() {
-		err = v.init()
+		v.initErr = v.init()
 	})
-	if err != nil {
-		return fmt.Errorf("%s validator unavailable, skipping validation: %w", v.name, err)
+	if v.initErr != nil {
+		return fmt.Errorf("%s validator initialization failed; validation could not be completed: %w", v.name, v.initErr)
 	}
 
 	raw, err := json.Marshal(resource)

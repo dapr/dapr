@@ -42,12 +42,6 @@ import (
 
 var tr *runner.TestRunner
 
-func randomID() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
 func TestMain(m *testing.M) {
 	utils.SetupLogs("workflow_accesspolicy")
 	utils.InitHTTPClient(true)
@@ -158,4 +152,12 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 			}
 		}, 60*time.Second, 2*time.Second)
 	})
+}
+
+func randomID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		panic("failed to generate random ID: " + err.Error())
+	}
+	return hex.EncodeToString(b)
 }

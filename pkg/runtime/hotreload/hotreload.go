@@ -223,8 +223,6 @@ func (r *Reloader) Run(ctx context.Context) error {
 		return nil
 	}
 
-	log.Info("Hot reloading enabled. Daprd will reload 'Component', 'Subscription', 'MCPServer', 'Configuration', 'HTTPEndpoint' and 'Resiliency' resources when they are added, updated or deleted.")
-
 	runners := []concurrency.Runner{
 		r.loader.Run,
 		r.componentsReconciler.Run,
