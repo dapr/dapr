@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	schedclient "github.com/dapr/dapr/pkg/runtime/scheduler/client"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
@@ -174,7 +175,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Second / 2):
+		case <-time.After(retry.Jitter(time.Second / 2)):
 		}
 	}
 
