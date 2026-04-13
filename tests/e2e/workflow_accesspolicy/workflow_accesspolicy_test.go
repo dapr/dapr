@@ -14,13 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package workflow_accesspolicy_e2e tests WorkflowAccessPolicy enforcement
-// in a real Kubernetes cluster with actual Dapr sidecars and mTLS.
-//
-// Prerequisites:
-//   - Apply tests/config/kubernetes_wfacl_config.yaml (Configuration CRD)
-//   - Apply tests/config/kubernetes_wfacl_policy.yaml (WorkflowAccessPolicy CRD)
-//   - Build and push the e2e-workflowsapp image
 package workflow_accesspolicy_e2e
 
 import (
