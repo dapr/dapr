@@ -81,7 +81,7 @@ func (j *jobstriggeredtotal) Run(t *testing.T, ctx context.Context) {
 		if !assert.True(c, ok) {
 			return
 		}
-		assert.Equal(c, 9.0, total["type=job"])
-		assert.Equal(c, 6.0, total["type=actor"])
+		assert.InDelta(c, 9.0, total["type=job"], 0.01)
+		assert.InDelta(c, 6.0, total["type=actor"], 0.01)
 	}, time.Second*15, time.Millisecond*10)
 }

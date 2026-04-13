@@ -104,6 +104,6 @@ func (j *jobsbulkdeletedtotal) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := j.scheduler.Metrics(t, ctx).All()
-		assert.Equal(c, 2.0, metrics["dapr_scheduler_jobs_bulk_deleted_total"])
+		assert.InDelta(c, 2.0, metrics["dapr_scheduler_jobs_bulk_deleted_total"], 0.01)
 	}, time.Second*15, time.Millisecond*10)
 }
