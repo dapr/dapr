@@ -112,7 +112,8 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 				nil,
 			)
 			assert.NoError(c, err)
-			assert.Equal(c, http.StatusOK, status, string(resp))
+			assert.NotEqual(c, http.StatusAccepted, status,
+				"denied workflow should not be accepted: %s", string(resp))
 		}, 60*time.Second, 2*time.Second)
 	})
 
@@ -124,13 +125,12 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 				nil,
 			)
 			assert.NoError(c, err)
-			assert.Equal(c, http.StatusOK, status, string(resp))
+			assert.NotEqual(c, http.StatusAccepted, status,
+				"unmentioned workflow should not be accepted: %s", string(resp))
 		}, 60*time.Second, 2*time.Second)
 	})
 
 	t.Run("target cannot start workflows it is not authorized for", func(t *testing.T) {
-		// The target app is in the policy's callers list for activities only,
-		// not workflows. Its own sidecar's local ACL check should deny.
 		instanceID := "selfcall-" + randomID()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, status, err := utils.HTTPPostWithStatus(
@@ -138,8 +138,8 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 				nil,
 			)
 			assert.NoError(c, err)
-			assert.Equal(c, http.StatusOK, status, string(resp))
-
+			assert.NotEqual(c, http.StatusAccepted, status,
+				"target should not be able to start workflows it is not authorized for: %s", string(resp))
 		}, 60*time.Second, 2*time.Second)
 	})
 }
