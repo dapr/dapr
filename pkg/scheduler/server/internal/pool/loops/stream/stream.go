@@ -22,6 +22,7 @@ import (
 	"github.com/diagridio/go-etcd-cron/api"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool/loops"
 	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
@@ -124,6 +125,7 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 
 	if err := s.channel.Send(job); err != nil {
 		log.Warnf("Error sending job to stream %s/%s: %s", s.ns, s.appID, err)
+		monitoring.RecordSidecarError("send_failed")
 		s.nsLoop.Enqueue(&loops.ConnCloseStream{
 			StreamIDx: s.idx,
 			Namespace: s.ns,
