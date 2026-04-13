@@ -51,19 +51,19 @@ func (f *fetch) Setup(t *testing.T) []framework.Option {
 func (f *fetch) Run(t *testing.T, ctx context.Context) {
 	f.workflow.WaitUntilRunning(t, ctx)
 
-	f.workflow.Registry().AddOrchestratorN("getter", func(ctx *task.OrchestrationContext) (any, error) {
+	f.workflow.Registry().AddWorkflowN("getter", func(ctx *task.WorkflowContext) (any, error) {
 		ctx.SetCustomStatus("my custom status")
 		return "return value", nil
 	})
 
 	client := f.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "getter", api.WithInput("input value"))
+	id, err := client.ScheduleNewWorkflow(ctx, "getter", api.WithInput("input value"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	meta, err := client.FetchOrchestrationMetadata(ctx, id, api.WithFetchPayloads(true))
+	meta, err := client.FetchWorkflowMetadata(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
 	assert.Equal(t, `"input value"`, meta.GetInput().GetValue())
 	assert.Equal(t, `"return value"`, meta.GetOutput().GetValue())

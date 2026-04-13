@@ -22,6 +22,7 @@ import (
 	"k8s.io/utils/clock"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	mcpserverapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/healthz"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -30,10 +31,15 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/loop"
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.hotreload.reconciler")
+var (
+	log         = logger.NewLogger("dapr.runtime.hotreload.reconciler")
+	loopFactory = loop.New[Event](16)
+)
 
 type Options[T differ.Resource] struct {
 	Loader     loader.Interface
@@ -49,6 +55,7 @@ type Reconciler[T differ.Resource] struct {
 	htarget healthz.Target
 
 	clock clock.WithTicker
+	loop  loop.Interface[Event]
 }
 
 type manager[T differ.Resource] interface {
@@ -58,10 +65,10 @@ type manager[T differ.Resource] interface {
 }
 
 func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
-	return &Reconciler[compapi.Component]{
-		clock:   clock.RealClock{},
+	r := &Reconciler[compapi.Component]{
 		kind:    compapi.Kind,
 		htarget: opts.Healthz.AddTarget("component-reconciler"),
+		clock:   clock.RealClock{},
 		manager: &components{
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
@@ -69,69 +76,148 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 			auth:   opts.Authorizer,
 		},
 	}
+	r.loop = loopFactory.NewLoop(r)
+	return r
+}
+
+func NewMCPServers(opts Options[mcpserverapi.MCPServer]) *Reconciler[mcpserverapi.MCPServer] {
+	r := &Reconciler[mcpserverapi.MCPServer]{
+		kind:    mcpserverapi.Kind,
+		htarget: opts.Healthz.AddTarget("mcpserver-reconciler"),
+		clock:   clock.RealClock{},
+		manager: &mcpservers{
+			Loader: opts.Loader.MCPServers(),
+			store:  opts.CompStore,
+			proc:   opts.Processor,
+			auth:   opts.Authorizer,
+		},
+	}
+	r.loop = loopFactory.NewLoop(r)
+	return r
 }
 
 func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subscription] {
-	return &Reconciler[subapi.Subscription]{
-		clock:   clock.RealClock{},
+	r := &Reconciler[subapi.Subscription]{
 		kind:    subapi.Kind,
 		htarget: opts.Healthz.AddTarget("subscription-reconciler"),
+		clock:   clock.RealClock{},
 		manager: &subscriptions{
 			Loader: opts.Loader.Subscriptions(),
 			store:  opts.CompStore,
 			proc:   opts.Processor,
 		},
 	}
+	r.loop = loopFactory.NewLoop(r)
+	return r
 }
 
 func (r *Reconciler[T]) Run(ctx context.Context) error {
 	conn, err := r.manager.Stream(ctx)
 	if err != nil {
-		return fmt.Errorf("error running component stream: %w", err)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("error running %s stream: %w", r.kind, err)
 	}
 
 	r.htarget.Ready()
 
-	return r.watchForEvents(ctx, conn)
-}
-
-func (r *Reconciler[T]) watchForEvents(ctx context.Context, conn *loader.StreamConn[T]) error {
 	log.Infof("Starting to watch %s updates", r.kind)
 
+	defer loopFactory.CacheLoop(r.loop)
+
+	return concurrency.NewRunnerManager(
+		r.loop.Run,
+		r.watchTicker,
+		func(ctx context.Context) error {
+			return r.watchConn(ctx, conn)
+		},
+	).Run(ctx)
+}
+
+func (r *Reconciler[T]) watchTicker(ctx context.Context) error {
 	ticker := r.clock.NewTicker(time.Second * 60)
 	defer ticker.Stop()
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	for {
 		select {
 		case <-ctx.Done():
+			r.loop.Close(&shutdown{Error: ctx.Err()})
 			return nil
 		case <-ticker.C():
-			log.Debugf("Running scheduled %s reconcile", r.kind)
-
-			resources, err := r.manager.List(ctx)
-			if err != nil {
-				log.Errorf("Error listing %s: %s", r.kind, err)
-				continue
-			}
-
-			r.reconcile(ctx, differ.Diff(resources))
-		case <-conn.ReconcileCh:
-			log.Debugf("Reconciling all %s", r.kind)
-
-			resources, err := r.manager.List(ctx)
-			if err != nil {
-				log.Errorf("Error listing %s: %s", r.kind, err)
-				continue
-			}
-
-			r.reconcile(ctx, differ.Diff(resources))
-		case event := <-conn.EventCh:
-			r.handleEvent(ctx, event)
+			r.loop.Enqueue(new(tick))
 		}
 	}
+}
+
+func (r *Reconciler[T]) watchConn(ctx context.Context, conn *loader.StreamConn[T]) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-conn.ReconcileCh:
+			r.loop.Enqueue(new(reconcile))
+		case event := <-conn.EventCh:
+			r.loop.Enqueue(&resourceEvent[T]{Event: event})
+		}
+	}
+}
+
+func (r *Reconciler[T]) Handle(ctx context.Context, event Event) error {
+	switch e := event.(type) {
+	case *tick:
+		r.handleTick(ctx)
+	case *reconcile:
+		r.handleReconcile(ctx)
+	case *resourceEvent[T]:
+		r.handleResourceEvent(ctx, e.Event)
+	case *shutdown:
+		r.handleShutdown(e)
+	default:
+		panic(fmt.Sprintf("unknown reconciler event type: %T", e))
+	}
+
+	return nil
+}
+
+func (r *Reconciler[T]) handleTick(ctx context.Context) {
+	log.Debugf("Running scheduled %s reconcile", r.kind)
+	r.doReconcile(ctx)
+}
+
+func (r *Reconciler[T]) handleReconcile(ctx context.Context) {
+	log.Debugf("Reconciling all %s", r.kind)
+	r.doReconcile(ctx)
+}
+
+func (r *Reconciler[T]) doReconcile(ctx context.Context) {
+	resources, err := r.manager.List(ctx)
+	if err != nil {
+		log.Errorf("Error listing %s: %s", r.kind, err)
+		return
+	}
+
+	r.reconcile(ctx, differ.Diff(resources))
+}
+
+func (r *Reconciler[T]) handleResourceEvent(ctx context.Context, event *loader.Event[T]) {
+	log.Debugf("Received %s event %s: %s", event.Resource.Kind(), event.Type, event.Resource.LogName())
+
+	switch event.Type {
+	case operatorpb.ResourceEventType_CREATED:
+		log.Debugf("Received %s creation: %s", r.kind, event.Resource.LogName())
+		r.manager.update(ctx, event.Resource)
+	case operatorpb.ResourceEventType_UPDATED:
+		log.Debugf("Received %s update: %s", r.kind, event.Resource.LogName())
+		r.manager.update(ctx, event.Resource)
+	case operatorpb.ResourceEventType_DELETED:
+		log.Debugf("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
+		r.manager.delete(ctx, event.Resource)
+	}
+}
+
+func (r *Reconciler[T]) handleShutdown(e *shutdown) {
+	log.Debugf("reconciler loop shutdown: %v", e.Error)
 }
 
 func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) {
@@ -153,8 +239,7 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 		for _, resource := range group.resources {
 			go func(resource T, eventType operatorpb.ResourceEventType) {
 				defer wg.Done()
-
-				r.handleEvent(ctx, &loader.Event[T]{
+				r.handleResourceEvent(ctx, &loader.Event[T]{
 					Type:     eventType,
 					Resource: resource,
 				})
@@ -162,21 +247,5 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 		}
 
 		wg.Wait()
-	}
-}
-
-func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T]) {
-	log.Debugf("Received %s event %s: %s", event.Resource.Kind(), event.Type, event.Resource.LogName())
-
-	switch event.Type {
-	case operatorpb.ResourceEventType_CREATED:
-		log.Debugf("Received %s creation: %s", r.kind, event.Resource.LogName())
-		r.manager.update(ctx, event.Resource)
-	case operatorpb.ResourceEventType_UPDATED:
-		log.Debugf("Received %s update: %s", r.kind, event.Resource.LogName())
-		r.manager.update(ctx, event.Resource)
-	case operatorpb.ResourceEventType_DELETED:
-		log.Debugf("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
-		r.manager.delete(ctx, event.Resource)
 	}
 }

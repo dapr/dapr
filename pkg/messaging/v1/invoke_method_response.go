@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -165,17 +164,26 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 		return imr.r, nil
 	}
 
-	// Clone the object
-	m := proto.Clone(imr.r).(*internalv1pb.InternalInvokeResponse)
-
-	// Read the data and store it in the object
+	// Read the data first so we can include it directly in the shallow copy.
 	data, err := imr.RawDataFull()
-	if err != nil || len(data) == 0 {
-		return m, err
+	if err != nil {
+		return nil, err
 	}
-	m.Message.Data = &anypb.Any{
-		Value:   data,
-		TypeUrl: imr.dataTypeURL, // Could be empty
+
+	// Create a shallow copy instead of a deep proto.Clone.
+	// We only need a new Message.Data field; headers/trailers/status are
+	// shared read-only references that callers do not modify.
+	m := &internalv1pb.InternalInvokeResponse{
+		Status:   imr.r.GetStatus(),
+		Headers:  imr.r.GetHeaders(),
+		Trailers: imr.r.GetTrailers(),
+		Message: &commonv1pb.InvokeResponse{
+			ContentType: imr.r.GetMessage().GetContentType(),
+			Data: &anypb.Any{
+				Value:   data,
+				TypeUrl: imr.dataTypeURL, // Could be empty
+			},
+		},
 	}
 
 	return m, nil

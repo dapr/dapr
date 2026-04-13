@@ -13,7 +13,7 @@ spec:
 {{- if eq .Values.global.ha.enabled true }}
   replicas: {{ .Values.global.ha.replicaCount }}
 {{- else }}
-  replicas: {{ .Values.replicaCount }}  
+  replicas: {{ .Values.replicaCount }}
 {{- end }}
   selector:
     matchLabels:

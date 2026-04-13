@@ -31,6 +31,7 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	mcpapi "github.com/dapr/dapr/pkg/apis/mcpserver/v1alpha1"
 	resapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subv1api "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subv2api "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -92,6 +93,22 @@ func WithClusterNamespaceListFromStore(t *testing.T, store *store.Store) Option 
 
 func WithClusterDaprHTTPEndpointList(t *testing.T, endpoints *httpendapi.HTTPEndpointList) Option {
 	return handleClusterListResource(t, "/apis/dapr.io/v1alpha1/httpendpoints", endpoints)
+}
+
+func WithClusterDaprMCPServerList(t *testing.T, mcpservers *mcpapi.MCPServerList) Option {
+	return handleClusterListResource(t, "/apis/dapr.io/v1alpha1/mcpservers", mcpservers)
+}
+
+func WithClusterDaprConfigurationListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/apis/dapr.io/v1alpha1/configurations", store)
+}
+
+func WithClusterDaprHTTPEndpointListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/apis/dapr.io/v1alpha1/httpendpoints", store)
+}
+
+func WithClusterDaprResiliencyListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/apis/dapr.io/v1alpha1/resiliencies", store)
 }
 
 func WithClusterPodList(t *testing.T, pods *corev1.PodList) Option {
@@ -162,7 +179,9 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 			WithClusterDaprComponentList(t, &compapi.ComponentList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ComponentList"}}),
 			WithClusterDaprSubscriptionListV2(t, &subv2api.SubscriptionList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v2alpha1", Kind: "SubscriptionList"}}),
 			WithClusterDaprHTTPEndpointList(t, &httpendapi.HTTPEndpointList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "HTTPEndpointList"}}),
+			WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"}}),
 			WithClusterDaprResiliencyList(t, &resapi.ResiliencyList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ResiliencyList"}}),
+			WithClusterDaprMCPServerList(t, &mcpapi.MCPServerList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "MCPServerList"}}),
 			WithClusterNamespaceList(t, &corev1.NamespaceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "NamespaceList"}}),
 		} {
 			op(o)

@@ -104,10 +104,10 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 		delayTime := 30 * time.Second
 		var executedActivity atomic.Bool
 		r := task.NewTaskRegistry()
-		r.AddOrchestratorN("Root", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("Root", func(ctx *task.WorkflowContext) (any, error) {
 			tasks := make([]task.Task, 0, 3)
 			for i := range 3 {
-				task := ctx.CallSubOrchestrator("L1", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L1_"+strconv.Itoa(i)))
+				task := ctx.CallChildWorkflow("L1", task.WithChildWorkflowInstanceID(string(ctx.ID)+"_L1_"+strconv.Itoa(i)))
 				tasks = append(tasks, task)
 			}
 			for _, task := range tasks {
@@ -115,11 +115,11 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 			}
 			return nil, nil
 		})
-		r.AddOrchestratorN("L1", func(ctx *task.OrchestrationContext) (any, error) {
-			ctx.CallSubOrchestrator("L2", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L2")).Await(nil)
+		r.AddWorkflowN("L1", func(ctx *task.WorkflowContext) (any, error) {
+			ctx.CallChildWorkflow("L2", task.WithChildWorkflowInstanceID(string(ctx.ID)+"_L2")).Await(nil)
 			return nil, nil
 		})
-		r.AddOrchestratorN("L2", func(ctx *task.OrchestrationContext) (any, error) {
+		r.AddWorkflowN("L2", func(ctx *task.WorkflowContext) (any, error) {
 			ctx.CreateTimer(delayTime).Await(nil)
 			ctx.CallActivity("Fail").Await(nil)
 			return nil, nil
@@ -144,7 +144,7 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 				orchestrationIDs = append(orchestrationIDs, string(id)+"_L1_"+strconv.Itoa(i), string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
 			}
 			for _, orchID := range orchestrationIDs {
-				meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
+				meta, err := backendClient.FetchWorkflowMetadata(ctx, api.InstanceID(orchID))
 				assert.NoError(c, err)
 				// All orchestrations should be running
 				assert.Equal(c, api.RUNTIME_STATUS_RUNNING.String(), meta.GetRuntimeStatus().String())
@@ -155,7 +155,7 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 		tt.terminateWorkflow(t, ctx, string(id))
 
 		// Wait for the root orchestration to complete and verify its terminated status
-		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
+		metadata, err := backendClient.WaitForWorkflowCompletion(ctx, id)
 		require.NoError(t, err)
 		require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.GetRuntimeStatus())
 
@@ -165,7 +165,7 @@ func (tt *terminate) Run(t *testing.T, ctx context.Context) {
 			orchIDs = append(orchIDs, string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
 		}
 		for _, orchID := range orchIDs {
-			_, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID(orchID))
+			_, err := backendClient.WaitForWorkflowCompletion(ctx, api.InstanceID(orchID))
 			require.NoError(t, err)
 		}
 
