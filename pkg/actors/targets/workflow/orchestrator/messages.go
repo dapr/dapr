@@ -120,16 +120,15 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 		WithContentType(invokev1.ProtobufContentType),
 	); err != nil {
 		// If the call was denied by a workflow access policy, fail the child
-		// orchestration immediately rather than retrying.
+		// orchestration immediately rather than retrying. Only do this when
+		// we can correlate the failure to a parent task via ParentInstance.
 		if isPermissionDenied(err) && historyEvent != nil {
-			var taskScheduledID int32
 			if es := historyEvent.GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
-				taskScheduledID = es.GetParentInstance().GetTaskScheduledId()
+				if fErr := o.failChildWorkflow(ctx, es.GetParentInstance().GetTaskScheduledId(), err); fErr != nil {
+					return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
+				}
+				return nil
 			}
-			if fErr := o.failChildWorkflow(ctx, taskScheduledID, err); fErr != nil {
-				return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
-			}
-			return nil
 		}
 
 		if router := historyEvent.GetRouter(); router != nil && router.TargetAppID != nil {

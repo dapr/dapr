@@ -42,7 +42,6 @@ type nopolicy struct {
 }
 
 func (n *nopolicy) Setup(t *testing.T) []framework.Option {
-	// No sentry/mTLS needed — no policies means allow-all before identity check.
 	n.wf = workflow.New(t,
 		workflow.WithDaprds(2),
 		workflow.WithDaprdOptions(0,

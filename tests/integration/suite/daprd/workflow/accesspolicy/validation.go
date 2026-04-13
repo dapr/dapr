@@ -74,7 +74,6 @@ spec:
 
 	v.resDir = t.TempDir()
 
-	// Capture "failed validation" log lines to confirm the validator ran.
 	v.validationLog = logline.New(t,
 		logline.WithStdoutLineContains(
 			"failed validation",
@@ -144,10 +143,8 @@ spec:
       action: bogus
 `), 0o600))
 
-		// Wait for the validator to log the rejection.
 		v.validationLog.EventuallyFoundAll(t)
 
-		// Verify: invalid policy not loaded → allow all → workflow succeeds.
 		assert.True(t, v.scheduleAndComplete(ctx, backendClient))
 	})
 
@@ -168,9 +165,6 @@ spec:
       action: allow
 `), 0o600))
 
-		// Verify: invalid policy not loaded → allow all → workflow succeeds.
-		// EventuallyWithT retries until the workflow completes, which confirms
-		// the hot-reload has processed (and rejected) the file.
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, v.scheduleAndComplete(ctx, backendClient))
 		}, time.Second*10, time.Millisecond*200)
@@ -240,7 +234,6 @@ spec:
 	})
 
 	t.Run("valid policy is loaded and enforced after invalid ones", func(t *testing.T) {
-		// Remove all invalid files and write a valid deny-all policy.
 		for _, f := range []string{"policy.yaml", "policy2.yaml", "policy3.yaml", "policy4.yaml", "policy5.yaml"} {
 			os.Remove(filepath.Join(v.resDir, f))
 		}
@@ -260,9 +253,6 @@ spec:
       action: allow
 `), 0o600))
 
-		// Wait until the valid policy is loaded and enforced. The local app
-		// "wfacl-validation" is not in the callers list, so scheduling should
-		// fail with PermissionDenied.
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			_, err := backendClient.ScheduleNewWorkflow(ctx, "TestWF")
 			assert.Error(c, err, "valid policy should deny local app")

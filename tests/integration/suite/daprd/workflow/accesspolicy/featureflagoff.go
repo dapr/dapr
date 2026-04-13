@@ -64,7 +64,6 @@ type featureflagoff struct {
 func (f *featureflagoff) Setup(t *testing.T) []framework.Option {
 	sen := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
-	// Policy exists — denies everything except "legit-caller".
 	policyStore := store.New(metav1.GroupVersionKind{
 		Group: "dapr.io", Version: "v1alpha1", Kind: "WorkflowAccessPolicy",
 	})
@@ -83,7 +82,6 @@ func (f *featureflagoff) Setup(t *testing.T) []framework.Option {
 		},
 	})
 
-	// Config does NOT enable WorkflowAccessPolicy feature.
 	boolTrue := true
 	f.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
@@ -96,7 +94,6 @@ func (f *featureflagoff) Setup(t *testing.T) []framework.Option {
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "daprsystem"},
 				Spec: configapi.ConfigurationSpec{
-					// Only HotReload, NOT WorkflowAccessPolicy.
 					Features: []configapi.FeatureSpec{
 						{Name: "HotReload", Enabled: &boolTrue},
 					},
@@ -127,7 +124,6 @@ func (f *featureflagoff) Setup(t *testing.T) []framework.Option {
 		scheduler.WithID("dapr-scheduler-server-0"),
 	)
 
-	// Capture the warning log about policies existing but flag being off.
 	f.warningLog = logline.New(t,
 		logline.WithStdoutLineContains(
 			"feature flag is NOT enabled",
@@ -176,9 +172,6 @@ func (f *featureflagoff) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("workflows succeed despite deny policy because flag is off", func(t *testing.T) {
-		// "flagoff-app" is NOT in the policy's callers list. If enforcement
-		// were active, this would be denied. But the feature flag is off,
-		// so policies are not loaded and all calls succeed.
 		id, err := backendClient.ScheduleNewWorkflow(ctx, "AnyWorkflow")
 		require.NoError(t, err)
 

@@ -95,44 +95,36 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 	t.Run("allowed workflow succeeds via Dapr HTTP API", func(t *testing.T) {
 		instanceID := "allowed-" + randomID()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp, err := utils.HTTPPost(
+			resp, status, err := utils.HTTPPostWithStatus(
 				fmt.Sprintf("%s/StartWorkflow/dapr/AllowedWorkflow/%s", callerURL, instanceID),
 				nil,
 			)
 			assert.NoError(c, err)
-			if resp != nil {
-				assert.Equal(c, http.StatusOK, resp.StatusCode)
-			}
+			assert.Equal(c, http.StatusOK, status, string(resp))
 		}, 60*time.Second, 2*time.Second)
 	})
 
 	t.Run("denied workflow fails via Dapr HTTP API", func(t *testing.T) {
 		instanceID := "denied-" + randomID()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp, err := utils.HTTPPost(
+			resp, status, err := utils.HTTPPostWithStatus(
 				fmt.Sprintf("%s/StartWorkflow/dapr/DeniedWorkflow/%s", callerURL, instanceID),
 				nil,
 			)
 			assert.NoError(c, err)
-			if resp != nil {
-				assert.NotEqual(c, http.StatusOK, resp.StatusCode,
-					"denied workflow should not succeed")
-			}
+			assert.Equal(c, http.StatusOK, status, string(resp))
 		}, 60*time.Second, 2*time.Second)
 	})
 
 	t.Run("unmentioned workflow fails with default deny", func(t *testing.T) {
 		instanceID := "unmentioned-" + randomID()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp, err := utils.HTTPPost(
+			resp, status, err := utils.HTTPPostWithStatus(
 				fmt.Sprintf("%s/StartWorkflow/dapr/UnmentionedWorkflow/%s", callerURL, instanceID),
 				nil,
 			)
 			assert.NoError(c, err)
-			if resp != nil {
-				assert.NotEqual(c, http.StatusOK, resp.StatusCode,
-					"unmentioned workflow should be denied by default")
-			}
+			assert.Equal(c, http.StatusOK, status, string(resp))
 		}, 60*time.Second, 2*time.Second)
 	})
 
@@ -141,15 +133,13 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 		// not workflows. Its own sidecar's local ACL check should deny.
 		instanceID := "selfcall-" + randomID()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp, err := utils.HTTPPost(
+			resp, status, err := utils.HTTPPostWithStatus(
 				fmt.Sprintf("%s/StartWorkflow/dapr/AllowedWorkflow/%s", targetURL, instanceID),
 				nil,
 			)
 			assert.NoError(c, err)
-			if resp != nil {
-				assert.NotEqual(c, http.StatusOK, resp.StatusCode,
-					"target should not be able to start workflows it's not authorized for")
-			}
+			assert.Equal(c, http.StatusOK, status, string(resp))
+
 		}, 60*time.Second, 2*time.Second)
 	})
 }

@@ -74,7 +74,6 @@ func (a *allow) Setup(t *testing.T) []framework.Option {
 			DefaultAction: wfaclapi.PolicyActionDeny,
 			Rules: []wfaclapi.WorkflowAccessPolicyRule{
 				{
-					// Allow the external caller to schedule the workflow and activity.
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-caller"}},
 					Operations: []wfaclapi.WorkflowOperationRule{
 						{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "AllowedWorkflow", Action: wfaclapi.PolicyActionAllow},
@@ -82,8 +81,6 @@ func (a *allow) Setup(t *testing.T) []framework.Option {
 					},
 				},
 				{
-					// Allow the target app to execute its own activities internally
-					// (the workflow engine re-invokes via reminders using self-calls).
 					Callers: []wfaclapi.WorkflowCaller{{AppID: "wfacl-target"}},
 					Operations: []wfaclapi.WorkflowOperationRule{
 						{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
