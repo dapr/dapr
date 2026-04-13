@@ -262,8 +262,8 @@ func (s *serviceMetrics) Init(meter view.Meter, appID string, latencyDistributio
 		diagUtils.NewMeasureView(s.appPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
 
-		diagUtils.NewMeasureView(s.workflowACLAllowed, []tag.Key{appIDKey, namespaceKey, sourceAppIDKey, operationKey, typeKey}, view.Count()),
-		diagUtils.NewMeasureView(s.workflowACLDenied, []tag.Key{appIDKey, namespaceKey, sourceAppIDKey, operationKey, typeKey}, view.Count()),
+		diagUtils.NewMeasureView(s.workflowACLAllowed, []tag.Key{appIDKey, sourceAppIDKey, operationKey, typeKey}, view.Count()),
+		diagUtils.NewMeasureView(s.workflowACLDenied, []tag.Key{appIDKey, sourceAppIDKey, operationKey, typeKey}, view.Count()),
 
 		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, typeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey}, view.Count()),
@@ -534,7 +534,6 @@ func (s *serviceMetrics) WorkflowACLActionAllowed(callerAppID, opType, operation
 			stats.WithTags(diagUtils.WithTags(
 				s.workflowACLAllowed.Name(),
 				appIDKey, s.appID,
-				namespaceKey, "",
 				sourceAppIDKey, callerAppID,
 				operationKey, operation,
 				typeKey, opType)...),
@@ -551,7 +550,6 @@ func (s *serviceMetrics) WorkflowACLActionDenied(callerAppID, opType, operation 
 			stats.WithTags(diagUtils.WithTags(
 				s.workflowACLDenied.Name(),
 				appIDKey, s.appID,
-				namespaceKey, "",
 				sourceAppIDKey, callerAppID,
 				operationKey, operation,
 				typeKey, opType)...),
