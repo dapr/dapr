@@ -19,6 +19,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -48,7 +51,7 @@ func (s *sidecarerrorstotal) Run(t *testing.T, ctx context.Context) {
 	client := s.scheduler.Client(t, ctx)
 
 	for range 3 {
-		client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
+		_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 			Name: "test",
 			Job:  &schedulerv1pb.Job{Schedule: new("@every 100s")},
 			Metadata: &schedulerv1pb.JobMetadata{
@@ -59,10 +62,12 @@ func (s *sidecarerrorstotal) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		})
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	}
 
 	for range 2 {
-		client.DeleteJob(ctx, &schedulerv1pb.DeleteJobRequest{
+		_, err := client.DeleteJob(ctx, &schedulerv1pb.DeleteJobRequest{
 			Name: "test",
 			Metadata: &schedulerv1pb.JobMetadata{
 				AppId:     "",
@@ -72,6 +77,8 @@ func (s *sidecarerrorstotal) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		})
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

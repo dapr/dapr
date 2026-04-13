@@ -79,7 +79,7 @@ var (
 		stats.UnitDimensionless)
 	sidecarErrorsTotal = stats.Int64(
 		"scheduler/sidecar_errors_total",
-		"The total number of sidecar connection errors.",
+		"The total number of sidecar communication and authorization errors.",
 		stats.UnitDimensionless)
 
 	tagType           = tag.MustNewKey("type")
@@ -275,12 +275,25 @@ func RecordJobsCreatedFailedCount(jobMetadata *schedulerv1pb.JobMetadata) {
 	stats.RecordWithTags(context.Background(), tag, jobsCreatedFailedTotal.M(1))
 }
 
-// RecordSidecarError records a sidecar connection error with a reason.
-func RecordSidecarError(reason string) {
-	stats.RecordWithTags(context.Background(),
-		utils.WithTags(sidecarErrorsTotal.Name(), tagReason, reason),
-		sidecarErrorsTotal.M(1),
-	)
+var (
+	tagSidecarErrorSendFailed = utils.WithTags(sidecarErrorsTotal.Name(), tagReason, "send_failed")
+	tagSidecarErrorRecvFailed = utils.WithTags(sidecarErrorsTotal.Name(), tagReason, "recv_failed")
+	tagSidecarErrorAuthFailed = utils.WithTags(sidecarErrorsTotal.Name(), tagReason, "auth_failed")
+)
+
+// RecordSidecarSendError records a sidecar stream send error.
+func RecordSidecarSendError() {
+	stats.RecordWithTags(context.Background(), tagSidecarErrorSendFailed, sidecarErrorsTotal.M(1))
+}
+
+// RecordSidecarRecvError records a sidecar stream receive error.
+func RecordSidecarRecvError() {
+	stats.RecordWithTags(context.Background(), tagSidecarErrorRecvFailed, sidecarErrorsTotal.M(1))
+}
+
+// RecordSidecarAuthError records a sidecar authorization error.
+func RecordSidecarAuthError() {
+	stats.RecordWithTags(context.Background(), tagSidecarErrorAuthFailed, sidecarErrorsTotal.M(1))
 }
 
 // InitMetrics initialize the scheduler service metrics.
