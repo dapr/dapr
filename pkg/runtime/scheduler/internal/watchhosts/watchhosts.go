@@ -21,13 +21,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dapr/dapr/pkg/retry"
-
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops"
 	"github.com/dapr/dapr/pkg/scheduler/client"
