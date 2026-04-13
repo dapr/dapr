@@ -40,8 +40,6 @@ type reconnect struct {
 func (r *reconnect) Setup(t *testing.T) []framework.Option {
 	r.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithDaprdOptions(0),
-		workflow.WithDaprdOptions(1),
 	)
 
 	return []framework.Option{
