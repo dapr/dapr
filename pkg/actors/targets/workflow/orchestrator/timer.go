@@ -156,17 +156,17 @@ func (o *orchestrator) deleteCancelledEventTimers(ctx context.Context, rs *proto
 	} {
 		for _, e := range events {
 			if tc := e.GetTimerCreated(); tc != nil {
-				var name string
+				var name *string
 				if ee := tc.GetExternalEvent(); ee != nil {
-					name = ee.GetName()
+					name = new(ee.GetName())
 				} else if tc.Name != nil && tc.GetOrigin() == nil {
 					// TODO: We're doing `Name` matching for backwards compatibility.
 					// By around v1.19 we should only match with
 					// `origin.external_event` and remove the fallback logic.
-					name = tc.GetName()
+					name = new(tc.GetName())
 				}
-				if name != "" {
-					key := strings.ToUpper(name)
+				if name != nil {
+					key := strings.ToUpper(*name)
 					pendingEventTimers[key] = append(pendingEventTimers[key], e.GetEventId())
 				}
 			} else if tf := e.GetTimerFired(); tf != nil {
