@@ -219,7 +219,7 @@ func (w *workflowacl) Run(t *testing.T, ctx context.Context) {
 			metrics := w.target.Metrics(c, ctx).All()
 			// The target should have recorded an allow for the caller's
 			// workflow schedule operation.
-			allowKey := "dapr_runtime_workflow_acl_action_allowed_total|app_id:metric-target|namespace:|operation:schedule|src_app_id:metric-caller|type:workflow"
+			allowKey := "dapr_runtime_workflow_acl_action_allowed_total|app_id:metric-target|operation:schedule|src_app_id:metric-caller|type:workflow"
 			assert.GreaterOrEqual(c, int(metrics[allowKey]), 1,
 				"expected at least 1 workflow ACL allow metric on target")
 		}, time.Second*10, time.Millisecond*10)
@@ -234,7 +234,7 @@ func (w *workflowacl) Run(t *testing.T, ctx context.Context) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := w.target.Metrics(c, ctx).All()
-			denyKey := "dapr_runtime_workflow_acl_action_denied_total|app_id:metric-target|namespace:|operation:schedule|src_app_id:metric-caller|type:workflow"
+			denyKey := "dapr_runtime_workflow_acl_action_denied_total|app_id:metric-target|operation:schedule|src_app_id:metric-caller|type:workflow"
 			assert.GreaterOrEqual(c, int(metrics[denyKey]), 1,
 				"expected at least 1 workflow ACL deny metric on target")
 		}, time.Second*10, time.Millisecond*10)
