@@ -50,7 +50,6 @@ func (j *jobsundeliveredtotal) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-//nolint:testifylint
 func (j *jobsundeliveredtotal) Run(t *testing.T, ctx context.Context) {
 	j.actors.WaitUntilRunning(t, ctx)
 
