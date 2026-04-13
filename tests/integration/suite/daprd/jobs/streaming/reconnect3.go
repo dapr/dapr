@@ -114,7 +114,7 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 		_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     strconv.Itoa(i),
-				Schedule: new("@every 1s"),
+				Schedule: new("@every 100ms"),
 			},
 		})
 		require.NoError(t, err)

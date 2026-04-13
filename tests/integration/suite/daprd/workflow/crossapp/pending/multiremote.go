@@ -86,7 +86,7 @@ func (m *multiremote) Setup(t *testing.T) []framework.Option {
 		daprd.WithLogLevel("debug"),
 	)
 
-	m.registry1.AddOrchestratorN("MultiRemoteWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	m.registry1.AddWorkflowN("MultiRemoteWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, err
@@ -143,12 +143,12 @@ func (m *multiremote) Run(t *testing.T, ctx context.Context) {
 	client2 := client.NewTaskHubGrpcClient(m.daprd2.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client2.StartWorkItemListener(ctx, m.registry2))
 
-	id, err := client1.ScheduleNewOrchestration(ctx, "MultiRemoteWorkflow", api.WithInput("hello"))
+	id, err := client1.ScheduleNewWorkflow(ctx, "MultiRemoteWorkflow", api.WithInput("hello"))
 	require.NoError(t, err)
 
-	metadata, err := client1.WaitForOrchestrationStart(ctx, id)
+	metadata, err := client1.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.RuntimeStatus)
+	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.GetRuntimeStatus())
 
 	m.daprd3.Run(t, ctx)
 	t.Cleanup(func() { m.daprd3.Cleanup(t) })
@@ -157,8 +157,8 @@ func (m *multiremote) Run(t *testing.T, ctx context.Context) {
 	client3 := client.NewTaskHubGrpcClient(m.daprd3.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, client3.StartWorkItemListener(ctx, m.registry3))
 
-	metadata, err = client1.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+	metadata, err = client1.WaitForWorkflowCompletion(ctx, id, api.WithFetchPayloads(true))
 	require.NoError(t, err)
-	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.True(t, api.WorkflowMetadataIsComplete(metadata))
 	assert.Equal(t, `"online:hello,offline:hello"`, metadata.GetOutput().GetValue())
 }

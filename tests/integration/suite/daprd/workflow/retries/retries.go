@@ -49,7 +49,7 @@ func (e *retries) Run(t *testing.T, ctx context.Context) {
 	e.workflow.WaitUntilRunning(t, ctx)
 
 	var activityCalled atomic.Int64
-	e.workflow.Registry().AddOrchestratorN("retries", func(ctx *task.OrchestrationContext) (any, error) {
+	e.workflow.Registry().AddWorkflowN("retries", func(ctx *task.WorkflowContext) (any, error) {
 		err := ctx.CallActivity("failActivity", task.WithActivityRetryPolicy(&task.RetryPolicy{
 			MaxAttempts:          3,
 			InitialRetryInterval: 10 * time.Millisecond,
@@ -66,11 +66,11 @@ func (e *retries) Run(t *testing.T, ctx context.Context) {
 	})
 
 	cl := e.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "retries")
+	id, err := cl.ScheduleNewWorkflow(ctx, "retries")
 	require.NoError(t, err)
-	_, err = cl.WaitForOrchestrationCompletion(ctx, id)
+	_, err = cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	require.NoError(t, cl.TerminateOrchestration(ctx, id))
+	require.NoError(t, cl.TerminateWorkflow(ctx, id))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(3), activityCalled.Load())

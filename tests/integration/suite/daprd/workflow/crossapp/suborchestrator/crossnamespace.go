@@ -56,7 +56,7 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 		workflow.WithDaprdOptions(1, daprd.WithNamespace("other")),
 	)
 
-	c.workflow.RegistryN(1).AddOrchestratorN("ProcessData", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.RegistryN(1).AddWorkflowN("ProcessData", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app1 sub-orchestrator: %w", err)
@@ -64,16 +64,16 @@ func (c *crossnamespace) Setup(t *testing.T) []framework.Option {
 		return "Processed by app1: " + input, nil
 	})
 
-	c.workflow.Registry().AddOrchestratorN("CrossNamespaceWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry().AddWorkflowN("CrossNamespaceWorkflow", func(ctx *task.WorkflowContext) (any, error) {
 		var input string
 		if err := ctx.GetInput(&input); err != nil {
 			return nil, fmt.Errorf("failed to get input in app0: %w", err)
 		}
 
 		var output string
-		err := ctx.CallSubOrchestrator("ProcessData",
-			task.WithSubOrchestratorInput(input),
-			task.WithSubOrchestratorAppID(c.workflow.DaprN(1).AppID())).
+		err := ctx.CallChildWorkflow("ProcessData",
+			task.WithChildWorkflowInput(input),
+			task.WithChildWorkflowAppID(c.workflow.DaprN(1).AppID())).
 			Await(&output)
 		if err != nil {
 			return fmt.Sprintf("Cross-namespace call failed as expected: %v", err), nil
@@ -92,12 +92,12 @@ func (c *crossnamespace) Run(t *testing.T, ctx context.Context) {
 	client := c.workflow.BackendClient(t, ctx)
 	c.workflow.BackendClientN(t, ctx, 1)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "CrossNamespaceWorkflow", api.WithInput("Hello from app0"))
+	id, err := client.ScheduleNewWorkflow(ctx, "CrossNamespaceWorkflow", api.WithInput("Hello from app0"))
 	require.NoError(t, err)
 
-	metadata, err := client.WaitForOrchestrationStart(ctx, id)
+	metadata, err := client.WaitForWorkflowStart(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.RuntimeStatus)
+	assert.Equal(t, api.RUNTIME_STATUS_RUNNING, metadata.GetRuntimeStatus())
 
 	c.actorNotFoundLogLine.EventuallyFoundAll(t)
 }
