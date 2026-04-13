@@ -125,7 +125,7 @@ func (s *stream) handleTriggerRequest(req *loops.TriggerRequest) {
 
 	if err := s.channel.Send(job); err != nil {
 		log.Warnf("Error sending job to stream %s/%s: %s", s.ns, s.appID, err)
-		monitoring.RecordSidecarError("send_failed")
+		monitoring.RecordSidecarSendError()
 		s.nsLoop.Enqueue(&loops.ConnCloseStream{
 			StreamIDx: s.idx,
 			Namespace: s.ns,

@@ -43,7 +43,7 @@ func (s *stream) recvLoop() {
 		}
 
 		log.Warnf("Error receiving from stream %s/%s: %s", s.ns, s.appID, err)
-		monitoring.RecordSidecarError("recv_failed")
+		monitoring.RecordSidecarRecvError()
 		return
 	}
 }

@@ -51,7 +51,7 @@ func (a *Authz) WatchInitial(ctx context.Context, initial *schedulerv1pb.WatchJo
 func (a *Authz) authz(ctx context.Context, ns, appID string) error {
 	if len(ns) == 0 || len(appID) == 0 {
 		log.Debugf("missing namespace or appID in metadata: ns=%s, appID=%s", ns, appID)
-		monitoring.RecordSidecarError("auth_failed")
+		monitoring.RecordSidecarAuthError()
 		return status.Errorf(codes.InvalidArgument, "missing namespace or appID in request")
 	}
 
@@ -62,13 +62,13 @@ func (a *Authz) authz(ctx context.Context, ns, appID string) error {
 	id, ok, err := spiffe.FromGRPCContext(ctx)
 	if err != nil || !ok {
 		log.Debugf("failed to get identity from context: err=%v, ok=%t", err, ok)
-		monitoring.RecordSidecarError("auth_failed")
+		monitoring.RecordSidecarAuthError()
 		return status.Errorf(codes.Unauthenticated, "failed to get identity from context")
 	}
 
 	if id.Namespace() != ns || id.AppID() != appID {
 		log.Debugf("identity does not match metadata: client=%v, req=%s/%s", id, ns, appID)
-		monitoring.RecordSidecarError("auth_failed")
+		monitoring.RecordSidecarAuthError()
 		return status.Errorf(codes.PermissionDenied, "identity does not match request")
 	}
 
