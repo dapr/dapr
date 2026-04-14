@@ -1,5 +1,5 @@
 # Build the k6 binary with the extension
-FROM golang:1.25.8 AS builder
+FROM golang:1.25.9 AS builder
 
 WORKDIR $GOPATH/src/go.k6.io/k6
 # See https://github.com/grafana/xk6/releases for which release aligns with our go version, latest requires go 1.25.x
