@@ -240,7 +240,7 @@ func TestLoadKubernetesResiliency(t *testing.T) {
 		getOperatorClient(fmt.Sprintf("localhost:%d", port)))
 	assert.NotNil(t, resiliency)
 	assert.Len(t, resiliency, 1)
-	assert.Equal(t, "Resiliency", resiliency[0].Kind)
+	assert.Equal(t, "Resiliency", resiliency[0].Kind())
 	assert.Equal(t, "resiliency", resiliency[0].Name)
 }
 
@@ -249,9 +249,9 @@ func TestLoadStandaloneResiliency(t *testing.T) {
 		configs := LoadLocalResiliency(log, "app1", "./testdata")
 		assert.NotNil(t, configs)
 		assert.Len(t, configs, 2)
-		assert.Equal(t, "Resiliency", configs[0].Kind)
+		assert.Equal(t, "Resiliency", configs[0].Kind())
 		assert.Equal(t, "resiliency", configs[0].Name)
-		assert.Equal(t, "Resiliency", configs[1].Kind)
+		assert.Equal(t, "Resiliency", configs[1].Kind())
 		assert.Equal(t, "resiliency", configs[1].Name)
 	})
 

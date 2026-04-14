@@ -46,7 +46,7 @@ func (d *activity) Setup(t *testing.T) []framework.Option {
 func (d *activity) Run(t *testing.T, ctx context.Context) {
 	d.workflow.WaitUntilRunning(t, ctx)
 
-	d.workflow.Registry().AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
+	d.workflow.Registry().AddWorkflowN("foo", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CallActivity("noop").Await(nil))
 		require.NoError(t, ctx.WaitForSingleEvent("bar", time.Minute).Await(nil))
 		return nil, nil
@@ -56,7 +56,7 @@ func (d *activity) Run(t *testing.T, ctx context.Context) {
 	})
 
 	cl := d.workflow.BackendClient(t, ctx)
-	id, err := cl.ScheduleNewOrchestration(ctx, "foo")
+	id, err := cl.ScheduleNewWorkflow(ctx, "foo")
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -68,9 +68,9 @@ func (d *activity) Run(t *testing.T, ctx context.Context) {
 
 	require.NoError(t, cl.RaiseEvent(ctx, id, "bar"))
 
-	meta, err := cl.WaitForOrchestrationCompletion(ctx, id)
+	meta, err := cl.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	require.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.RuntimeStatus.String())
+	require.Equal(t, "ORCHESTRATION_STATUS_COMPLETED", meta.GetRuntimeStatus().String())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Empty(c, d.workflow.Scheduler().ListAllKeys(t, ctx, "dapr/jobs"))

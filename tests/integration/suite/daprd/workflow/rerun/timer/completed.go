@@ -46,7 +46,7 @@ func (c *completed) Setup(t *testing.T) []framework.Option {
 func (c *completed) Run(t *testing.T, ctx context.Context) {
 	c.workflow.WaitUntilRunning(t, ctx)
 
-	c.workflow.Registry().AddOrchestratorN("completed-timer", func(ctx *task.OrchestrationContext) (any, error) {
+	c.workflow.Registry().AddWorkflowN("completed-timer", func(ctx *task.WorkflowContext) (any, error) {
 		require.NoError(t, ctx.CreateTimer(time.Second).Await(nil))
 		require.NoError(t, ctx.CallActivity("bar").Await(nil))
 		return nil, nil
@@ -58,18 +58,18 @@ func (c *completed) Run(t *testing.T, ctx context.Context) {
 
 	client := c.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "completed-timer", api.WithInstanceID("ijk"))
+	id, err := client.ScheduleNewWorkflow(ctx, "completed-timer", api.WithInstanceID("ijk"))
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
 	newID, err := client.RerunWorkflowFromEvent(ctx, id, 0)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 
 	newID, err = client.RerunWorkflowFromEvent(ctx, id, 1)
 	require.NoError(t, err)
-	_, err = client.WaitForOrchestrationCompletion(ctx, newID)
+	_, err = client.WaitForWorkflowCompletion(ctx, newID)
 	require.NoError(t, err)
 }

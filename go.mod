@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.26.1
+go 1.26.2
 
 require (
 	connectrpc.com/connect v1.19.1
@@ -12,9 +12,9 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/dapr/components-contrib v1.17.2
-	github.com/dapr/durabletask-go v0.11.1
-	github.com/dapr/kit v0.17.1-0.20260316190405-af26c703b2b1
+	github.com/dapr/components-contrib v1.17.3
+	github.com/dapr/durabletask-go v0.11.4-0.20260406161632-36d7b5486fa8
+	github.com/dapr/kit v0.17.1-0.20260402173438-be272d92042b
 	github.com/diagridio/go-etcd-cron v0.12.4
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
@@ -77,6 +77,7 @@ require (
 	k8s.io/api v0.32.3
 	k8s.io/apiextensions-apiserver v0.31.0
 	k8s.io/apimachinery v0.33.0
+	k8s.io/apiserver v0.31.0
 	k8s.io/cli-runtime v0.30.2
 	k8s.io/client-go v0.32.3
 	k8s.io/code-generator v0.31.0
@@ -133,6 +134,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.50.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.50.0 // indirect
 	github.com/IBM/sarama v1.45.2 // indirect
+	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect
 	github.com/RoaringBitmap/roaring/v2 v2.8.0 // indirect
@@ -206,6 +208,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.12.0 // indirect
+	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20230905024940-24af94b03874 // indirect
 	github.com/bufbuild/protocompile v0.6.0 // indirect
 	github.com/campoy/embedmd v1.0.0 // indirect
@@ -486,6 +489,7 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	k8s.io/component-base v0.31.0 // indirect
 	k8s.io/gengo/v2 v2.0.0-20240826214909-a7b603a56eb7 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
