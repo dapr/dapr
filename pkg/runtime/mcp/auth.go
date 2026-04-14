@@ -64,10 +64,10 @@ func buildHTTPClient(
 	}
 
 	// Clone the default transport so each MCP connection gets its own dial
-	// settings and doesn't share state with other HTTP clients. The Timeout
-	// on the http.Client is intentionally not set here — the per-call deadline
-	// is managed via callCtx. However, the DialContext timeout ensures that
-	// stuck TCP connections fail fast.
+	// settings and doesn't share state with other HTTP clients. The returned
+	// http.Clients set Timeout as an overall request bound; per-call contexts
+	// still control cancellation/deadlines, and the DialContext timeout on the
+	// cloned transport ensures stuck TCP connections fail fast.
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	var authTransport http.RoundTripper = transport
 

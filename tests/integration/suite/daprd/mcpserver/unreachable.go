@@ -50,13 +50,15 @@ type listToolsUnreachable struct {
 }
 
 func (s *listToolsUnreachable) Setup(t *testing.T) []framework.Option {
-	// Grab an unused port by binding to :0, recording the port, then closing
-	// the listener. Connection attempts to this port will get "connection
-	// refused" deterministically — no risk of colliding with a real service.
+	// Listen on an ephemeral port but never Accept. The kernel completes the
+	// TCP handshake (so the port stays occupied and no other process can
+	// claim it), but the MCP HTTP request receives no response and
+	// eventually hits the 5s endpoint timeout. This is deterministic —
+	// unlike the close-and-hope-nobody-rebinds pattern.
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
+	t.Cleanup(func() { l.Close() })
 	deadPort := l.Addr().(*net.TCPAddr).Port
-	require.NoError(t, l.Close())
 
 	appProc := app.New(t)
 

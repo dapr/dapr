@@ -109,11 +109,16 @@ func NewBuiltinRegistry(opts ExecutorOptions) *task.TaskRegistry {
 // component store for middleware lookup.
 //
 // For each suffix:
-//   - .ListTools  -> optional beforeCall -> dapr-mcp-list-tools activity -> optional afterCall
-//   - .CallTool   -> optional beforeCall -> dapr-mcp-call-tool activity  -> optional afterCall
 //
-// beforeCall: awaited; any error aborts the call with CallToolResult{IsError:true}.
-// afterCall:  fire-and-forget; errors do not affect the result.
+// ListTools path:
+//   - beforeListTools is awaited; any error fails the orchestration.
+//   - dapr-mcp-list-tools activity errors fail the orchestration.
+//   - afterListTools hooks are awaited; errors are logged but do not affect the result.
+//
+// CallTool path:
+//   - beforeCallTool is awaited; any error aborts with CallToolResult{IsError:true}.
+//   - dapr-mcp-call-tool activity errors are returned as CallToolResult{IsError:true}.
+//   - afterCallTool hooks are awaited; errors are logged but do not affect the result.
 func makeOrchestrator(store *compstore.ComponentStore) func(*task.OrchestrationContext) (any, error) {
 	return func(ctx *task.OrchestrationContext) (any, error) {
 		name := ctx.Name
