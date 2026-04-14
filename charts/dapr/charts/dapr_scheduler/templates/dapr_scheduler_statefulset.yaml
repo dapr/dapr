@@ -259,6 +259,7 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
+{{- include "dapr.validatePodAntiAffinityPolicy" . }}
         podAntiAffinity:
 {{- if eq .Values.global.ha.podAntiAffinityPolicy "requiredDuringSchedulingIgnoredDuringExecution" }}
           requiredDuringSchedulingIgnoredDuringExecution:
