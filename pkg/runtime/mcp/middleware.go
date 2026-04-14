@@ -21,7 +21,7 @@ import (
 // runBeforeCallTool executes the beforeCallTool middleware pipeline in order.
 // If any hook returns an error, the chain stops and the error is returned.
 func runBeforeCallTool(
-	ctx *task.OrchestrationContext,
+	ctx *task.WorkflowContext,
 	server *mcpserverapi.MCPServer,
 	serverName, tool string,
 	arguments map[string]any,
@@ -34,8 +34,8 @@ func runBeforeCallTool(
 		if hook.Workflow == nil {
 			continue
 		}
-		t := ctx.CallSubOrchestrator(hook.Workflow.WorkflowName,
-			task.WithSubOrchestratorInput(input))
+		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
+			task.WithChildWorkflowInput(input))
 		if err := t.Await(nil); err != nil {
 			return err
 		}
@@ -44,9 +44,10 @@ func runBeforeCallTool(
 }
 
 // runAfterCallTool executes the afterCallTool middleware pipeline in order.
-// Errors are logged but do not affect the result returned to the caller.
+// Each hook is awaited so errors can be logged, but failures do not affect
+// the result returned to the caller.
 func runAfterCallTool(
-	ctx *task.OrchestrationContext,
+	ctx *task.WorkflowContext,
 	server *mcpserverapi.MCPServer,
 	serverName, tool string,
 	arguments map[string]any,
@@ -60,15 +61,18 @@ func runAfterCallTool(
 		if hook.Workflow == nil {
 			continue
 		}
-		// Fire-and-forget: do not await the task.
-		ctx.CallSubOrchestrator(hook.Workflow.WorkflowName,
-			task.WithSubOrchestratorInput(input))
+		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
+			task.WithChildWorkflowInput(input))
+		if err := t.Await(nil); err != nil {
+			workerLog.Warnf("afterCallTool hook %q failed for tool %q on MCPServer %q: %s",
+				hook.Workflow.WorkflowName, tool, serverName, err)
+		}
 	}
 }
 
 // runBeforeListTools executes the beforeListTools middleware pipeline in order.
 func runBeforeListTools(
-	ctx *task.OrchestrationContext,
+	ctx *task.WorkflowContext,
 	server *mcpserverapi.MCPServer,
 	serverName string,
 ) error {
@@ -80,8 +84,8 @@ func runBeforeListTools(
 		if hook.Workflow == nil {
 			continue
 		}
-		t := ctx.CallSubOrchestrator(hook.Workflow.WorkflowName,
-			task.WithSubOrchestratorInput(input))
+		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
+			task.WithChildWorkflowInput(input))
 		if err := t.Await(nil); err != nil {
 			return err
 		}
@@ -90,8 +94,10 @@ func runBeforeListTools(
 }
 
 // runAfterListTools executes the afterListTools middleware pipeline in order.
+// See runAfterCallTool for semantics — errors are logged but don't affect
+// the result.
 func runAfterListTools(
-	ctx *task.OrchestrationContext,
+	ctx *task.WorkflowContext,
 	server *mcpserverapi.MCPServer,
 	serverName string,
 	result any,
@@ -104,7 +110,11 @@ func runAfterListTools(
 		if hook.Workflow == nil {
 			continue
 		}
-		ctx.CallSubOrchestrator(hook.Workflow.WorkflowName,
-			task.WithSubOrchestratorInput(input))
+		t := ctx.CallChildWorkflow(hook.Workflow.WorkflowName,
+			task.WithChildWorkflowInput(input))
+		if err := t.Await(nil); err != nil {
+			workerLog.Warnf("afterListTools hook %q failed for MCPServer %q: %s",
+				hook.Workflow.WorkflowName, serverName, err)
+		}
 	}
 }

@@ -227,7 +227,7 @@ func TestConvertCallToolResult(t *testing.T) {
 		require.Len(t, got.Content, 1)
 		assert.Equal(t, imageContentType, got.Content[0].Type)
 		assert.Equal(t, "image/png", got.Content[0].MimeType)
-		assert.Equal(t, "imgdata", got.Content[0].Data)
+		assert.Equal(t, "aW1nZGF0YQ==", got.Content[0].Data) // base64("imgdata")
 	})
 
 	t.Run("audio content", func(t *testing.T) {
@@ -240,7 +240,7 @@ func TestConvertCallToolResult(t *testing.T) {
 		require.Len(t, got.Content, 1)
 		assert.Equal(t, audioContentType, got.Content[0].Type)
 		assert.Equal(t, "audio/wav", got.Content[0].MimeType)
-		assert.Equal(t, "audiodata", got.Content[0].Data)
+		assert.Equal(t, "YXVkaW9kYXRh", got.Content[0].Data) // base64("audiodata")
 	})
 
 	t.Run("resource link content", func(t *testing.T) {

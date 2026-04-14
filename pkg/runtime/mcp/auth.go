@@ -69,24 +69,21 @@ func buildHTTPClient(
 	// is managed via callCtx. However, the DialContext timeout ensures that
 	// stuck TCP connections fail fast.
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	var authTransport http.RoundTripper = transport
 
-	// Base transport: static header injection.
-	var base http.RoundTripper = &headerRoundTripper{
-		headers: headers,
-		base:    transport,
-	}
-
-	// OAuth2 client credentials — wraps base transport with token injection.
+	// OAuth2 client credentials — wraps raw transport with token injection.
 	if auth != nil && auth.OAuth2 != nil && secrets != nil {
-		client, err := buildOAuth2Client(ctx, auth, secrets, base)
+		client, err := buildOAuth2Client(ctx, auth, secrets, authTransport)
 		if err != nil {
 			return nil, err
 		}
+		// Wrap the oauth2 client's transport with static header injection.
+		client.Transport = &headerRoundTripper{headers: headers, base: client.Transport}
 		client.Timeout = timeout
 		return client, nil
 	}
 
-	// SPIFFE JWT — wraps base transport, injects the SVID per-request.
+	// SPIFFE JWT — wraps raw transport, injects the SVID per-request.
 	if auth != nil &&
 		auth.SPIFFE != nil &&
 		auth.SPIFFE.JWT != nil &&
@@ -94,17 +91,23 @@ func buildHTTPClient(
 		jwtSpec := auth.SPIFFE.JWT
 		return &http.Client{
 			Timeout: timeout,
-			Transport: &jwtRoundTripper{
-				header:   jwtSpec.Header,
-				prefix:   stringDeref(jwtSpec.HeaderValuePrefix),
-				audience: jwtSpec.Audience,
-				fetcher:  jwt,
-				base:     base,
+			Transport: &headerRoundTripper{
+				headers: headers,
+				base: &jwtRoundTripper{
+					header:   jwtSpec.Header,
+					prefix:   stringDeref(jwtSpec.HeaderValuePrefix),
+					audience: jwtSpec.Audience,
+					fetcher:  jwt,
+					base:     authTransport,
+				},
 			},
 		}, nil
 	}
 
-	return &http.Client{Transport: base, Timeout: timeout}, nil
+	return &http.Client{
+		Transport: &headerRoundTripper{headers: headers, base: transport},
+		Timeout:   timeout,
+	}, nil
 }
 
 // buildOAuth2Client fetches the client_secret from the secret store and builds

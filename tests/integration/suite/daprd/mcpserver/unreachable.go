@@ -16,6 +16,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"testing"
 
@@ -49,9 +50,13 @@ type listToolsUnreachable struct {
 }
 
 func (s *listToolsUnreachable) Setup(t *testing.T) []framework.Option {
-	// Use port 1 which is a privileged port — nothing will be listening there
-	// on localhost in a test environment, so the connection is always refused.
-	const deadPort = 1
+	// Grab an unused port by binding to :0, recording the port, then closing
+	// the listener. Connection attempts to this port will get "connection
+	// refused" deterministically — no risk of colliding with a real service.
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	deadPort := l.Addr().(*net.TCPAddr).Port
+	require.NoError(t, l.Close())
 
 	appProc := app.New(t)
 

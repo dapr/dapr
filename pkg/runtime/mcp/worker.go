@@ -15,6 +15,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -457,12 +458,14 @@ func convertCallToolResult(r *mcp.CallToolResult) *CallToolResult {
 		case *mcp.TextContent:
 			out.Content = append(out.Content, ContentItem{Type: textContentType, Text: v.Text})
 		case *mcp.ImageContent:
+			// v.Data is raw bytes (Go's JSON unmarshaler decoded the base64 wire
+			// format). Re-encode to base64 for our JSON output.
 			out.Content = append(out.Content, ContentItem{
-				Type: imageContentType, Data: string(v.Data), MimeType: v.MIMEType,
+				Type: imageContentType, Data: base64.StdEncoding.EncodeToString(v.Data), MimeType: v.MIMEType,
 			})
 		case *mcp.AudioContent:
 			out.Content = append(out.Content, ContentItem{
-				Type: audioContentType, Data: string(v.Data), MimeType: v.MIMEType,
+				Type: audioContentType, Data: base64.StdEncoding.EncodeToString(v.Data), MimeType: v.MIMEType,
 			})
 		case *mcp.ResourceLink:
 			if raw, err := json.Marshal(v); err == nil {

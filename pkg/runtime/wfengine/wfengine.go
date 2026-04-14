@@ -311,7 +311,7 @@ func (f *spiffeJWTFetcher) FetchJWT(ctx context.Context, audience string) (strin
 	if !ok {
 		return "", fmt.Errorf("SPIFFE JWT source not available in context")
 	}
-	svid, err := jwtSource.FetchJWTSVID(ctx, jwtsvid.Params{Audience: audience})
+	svid, err := jwtSource.FetchJWTSVID(ctxWithSVID, jwtsvid.Params{Audience: audience})
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch SPIFFE JWT SVID: %w", err)
 	}

@@ -14,12 +14,12 @@ limitations under the License.
 package mcpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -157,7 +157,7 @@ func startMCPWorkflow(ctx context.Context, t *testing.T, httpClient *http.Client
 	data, err := json.Marshal(input)
 	require.NoError(t, err)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(string(data)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(data))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 
