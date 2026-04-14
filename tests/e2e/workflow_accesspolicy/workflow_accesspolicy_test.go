@@ -105,8 +105,7 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 				nil,
 			)
 			assert.NoError(c, err)
-			assert.Equal(c, http.StatusInternalServerError, status,
-				"denied workflow should fail with access policy denial")
+			assert.Equal(c, http.StatusInternalServerError, status)
 		}, 60*time.Second, 2*time.Second)
 	})
 
@@ -118,8 +117,7 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 				nil,
 			)
 			assert.NoError(c, err)
-			assert.Equal(c, http.StatusInternalServerError, status,
-				"unmentioned workflow should fail with default deny")
+			assert.Equal(c, http.StatusInternalServerError, status)
 		}, 60*time.Second, 2*time.Second)
 	})
 
