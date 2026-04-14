@@ -2923,9 +2923,7 @@ func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, 
 		url += urlSb2919.String()
 		url = url[:len(url)-1]
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	r, _ := nethttp.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+	r, _ := nethttp.NewRequestWithContext(context.Background(), method, url, bytes.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 
 	for i := 0; i < len(headers); i += 2 {
