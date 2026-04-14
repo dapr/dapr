@@ -105,13 +105,10 @@ func (n *namedactivity) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	// "fast" has no per-name limit, so all 4 fast activities should start.
-	// "slow" is limited to 1 concurrent, so only 1 should be running.
+	// "fast" has no per-name limit so all 4 should start.
+	// "slow" is limited to 1 concurrent so only 1 should be running.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(4), fastInside.Load())
-	}, time.Second*10, time.Millisecond*10)
-
-	// Only 1 slow activity should be running.
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), slowInside.Load())
 	}, time.Second*10, time.Millisecond*10)
 

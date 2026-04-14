@@ -110,12 +110,9 @@ func (c *combined) Run(t *testing.T, ctx context.Context) {
 	// - Up to 2 "unlimited" activities fill the remaining global slots
 	// - Total concurrent = 3 (global gate)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		total := limitedInside.Load() + unlimitedInside.Load()
-		assert.Equal(c, int64(3), total)
+		assert.Equal(c, int64(1), limitedInside.Load())
+		assert.Equal(c, int64(2), unlimitedInside.Load())
 	}, time.Second*10, time.Millisecond*10)
-
-	assert.Equal(t, int64(1), limitedInside.Load())
-	assert.Equal(t, int64(2), unlimitedInside.Load())
 
 	time.Sleep(time.Second * 2)
 	assert.Equal(t, int64(1), limitedInside.Load())

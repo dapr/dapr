@@ -66,6 +66,7 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 
 	var inside atomic.Int64
 	doneCh := make(chan struct{})
+	defer close(doneCh)
 
 	for i := range 2 {
 		a.workflow.RegistryN(i).AddWorkflowN("globalmax", func(ctx *task.WorkflowContext) (any, error) {
@@ -113,6 +114,4 @@ func (a *activity) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(4), inside.Load())
 	}, time.Second*10, time.Millisecond*10)
-
-	close(doneCh)
 }

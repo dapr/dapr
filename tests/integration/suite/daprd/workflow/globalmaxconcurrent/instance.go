@@ -35,7 +35,8 @@ func init() {
 }
 
 // instance tests that globalMaxConcurrentWorkflowInvocations is enforced
-// across multiple daprd replicas sharing the same scheduler.
+// across multiple daprd replicas sharing the same scheduler. Uses 3 replicas
+// to prove the limit isn't just an artifact of having 2 daprds.
 type instance struct {
 	workflow *workflow.Workflow
 }
@@ -51,9 +52,10 @@ spec:
 `
 	const appID = "globalmax-instance"
 	i.workflow = workflow.New(t,
-		workflow.WithDaprds(2),
+		workflow.WithDaprds(3),
 		workflow.WithDaprdOptions(0, daprd.WithConfigManifests(t, configManifest), daprd.WithAppID(appID)),
 		workflow.WithDaprdOptions(1, daprd.WithConfigManifests(t, configManifest), daprd.WithAppID(appID)),
+		workflow.WithDaprdOptions(2, daprd.WithConfigManifests(t, configManifest), daprd.WithAppID(appID)),
 	)
 
 	return []framework.Option{
@@ -66,8 +68,9 @@ func (i *instance) Run(t *testing.T, ctx context.Context) {
 
 	var inside atomic.Int64
 	doneCh := make(chan struct{})
+	defer close(doneCh)
 
-	for idx := range 2 {
+	for idx := range 3 {
 		i.workflow.RegistryN(idx).AddWorkflowN("globalmax", func(ctx *task.WorkflowContext) (any, error) {
 			inside.Add(1)
 			<-doneCh
@@ -77,21 +80,21 @@ func (i *instance) Run(t *testing.T, ctx context.Context) {
 
 	client0 := i.workflow.BackendClientN(t, ctx, 0)
 	client1 := i.workflow.BackendClientN(t, ctx, 1)
+	client2 := i.workflow.BackendClientN(t, ctx, 2)
 
-	// Schedule 2 workflows across instances (at the limit).
+	// Schedule 3 workflows across 3 instances - only 2 should run (the limit).
 	_, err := client0.ScheduleNewWorkflow(ctx, "globalmax", api.WithStartTime(time.Now()))
 	require.NoError(t, err)
 	_, err = client1.ScheduleNewWorkflow(ctx, "globalmax", api.WithStartTime(time.Now()))
+	require.NoError(t, err)
+	_, err = client2.ScheduleNewWorkflow(ctx, "globalmax", api.WithStartTime(time.Now()))
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(2), inside.Load())
 	}, time.Second*10, time.Millisecond*10)
 
-	// Schedule a 3rd - should be held back.
-	_, err = client0.ScheduleNewWorkflow(ctx, "globalmax", api.WithStartTime(time.Now()))
-	require.NoError(t, err)
-
+	// 3rd should be held back.
 	time.Sleep(time.Second * 2)
 	assert.Equal(t, int64(2), inside.Load())
 
@@ -100,6 +103,4 @@ func (i *instance) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(3), inside.Load())
 	}, time.Second*10, time.Millisecond*10)
-
-	close(doneCh)
 }
