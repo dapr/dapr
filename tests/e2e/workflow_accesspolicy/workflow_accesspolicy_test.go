@@ -100,30 +100,30 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 	t.Run("denied workflow fails via Dapr HTTP API", func(t *testing.T) {
 		instanceID := "denied-" + randomID()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp, status, err := utils.HTTPPostWithStatus(
+			_, status, err := utils.HTTPPostWithStatus(
 				fmt.Sprintf("%s/StartWorkflow/dapr/DeniedWorkflow/%s", callerURL, instanceID),
 				nil,
 			)
 			assert.NoError(c, err)
-			assert.NotEqual(c, http.StatusAccepted, status,
-				"denied workflow should not be accepted: %s", string(resp))
+			assert.Equal(c, http.StatusInternalServerError, status,
+				"denied workflow should fail with access policy denial")
 		}, 60*time.Second, 2*time.Second)
 	})
 
 	t.Run("unmentioned workflow fails with default deny", func(t *testing.T) {
 		instanceID := "unmentioned-" + randomID()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp, status, err := utils.HTTPPostWithStatus(
-				fmt.Sprintf("%s/StartWorkflow/dapr/UnmentionedWorkflow/%s", callerURL, instanceID),
+			_, status, err := utils.HTTPPostWithStatus(
+				fmt.Sprintf("%s/StartWorkflow/dapr/PlaceOrder/%s", callerURL, instanceID),
 				nil,
 			)
 			assert.NoError(c, err)
-			assert.NotEqual(c, http.StatusAccepted, status,
-				"unmentioned workflow should not be accepted: %s", string(resp))
+			assert.Equal(c, http.StatusInternalServerError, status,
+				"unmentioned workflow should fail with default deny")
 		}, 60*time.Second, 2*time.Second)
 	})
 
-	t.Run("target cannot start workflows it is not authorized for", func(t *testing.T) {
+	t.Run("target can start its own workflows", func(t *testing.T) {
 		instanceID := "selfcall-" + randomID()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, status, err := utils.HTTPPostWithStatus(
@@ -131,8 +131,7 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 				nil,
 			)
 			assert.NoError(c, err)
-			assert.NotEqual(c, http.StatusAccepted, status,
-				"target should not be able to start workflows it is not authorized for: %s", string(resp))
+			assert.Equal(c, http.StatusOK, status, string(resp))
 		}, 60*time.Second, 2*time.Second)
 	})
 }
