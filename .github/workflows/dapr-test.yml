@@ -356,10 +356,9 @@ jobs:
         run: |
           if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
             # For Linux, we use images based on Mariner
-            DOCKERFILE=Dockerfile-mariner make docker-push
-          else
-            make docker-push
+            export DOCKERFILE=Dockerfile-mariner
           fi
+          make docker-push-retry
         shell: bash
       - name: Build and push E2E test apps
         if: env.TEST_PREFIX != ''
