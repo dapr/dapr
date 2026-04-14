@@ -106,6 +106,17 @@ func plainHeader(name, value string) commonapi.NameValuePair {
 	}
 }
 
+func TestNewBuiltinRegistry(t *testing.T) {
+	store := compstore.New()
+	registry := NewBuiltinRegistry(ExecutorOptions{Store: store})
+	require.NotNil(t, registry, "NewBuiltinRegistry should return a non-nil registry")
+}
+
+func TestExportedPrefixConstants(t *testing.T) {
+	assert.Equal(t, "dapr.mcp.", WorkflowNamePrefix)
+	assert.Equal(t, "dapr-mcp-", ActivityNamePrefix)
+}
+
 func TestMCPServerName(t *testing.T) {
 	tests := []struct {
 		orchestrationName string

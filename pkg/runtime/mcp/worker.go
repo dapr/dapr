@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/durabletask-go/task"
 	"github.com/dapr/kit/logger"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -59,17 +58,32 @@ const (
 	jsonFieldRequired = "required"
 )
 
-// NewBuiltinExecutor returns a backend.Executor that handles all built-in
-// dapr.mcp.* orchestrations and dapr-mcp-* activities in-process without
-// dispatching to the user's app.
+// WorkflowNamePrefix is the name prefix shared by all built-in MCP
+// orchestrations. It can be used as the WorkflowNamePrefix in a
+// backend.SinkOptions registration.
+const WorkflowNamePrefix = orchestrationNamePrefix // "dapr.mcp."
+
+// ActivityNamePrefix is the name prefix shared by all built-in MCP
+// activities. It can be used as the ActivityNamePrefix in a
+// backend.SinkOptions registration.
+const ActivityNamePrefix = "dapr-mcp-"
+
+// NewBuiltinRegistry returns a task.TaskRegistry that handles all built-in
+// dapr.mcp.* orchestrations and dapr-mcp-* activities in-process.
 //
-// The executor registers:
+// The returned registry is intended to be used with a
+// client.InProcessClient backed by a backend.WorkItemSink registered on
+// the grpcExecutor. This replaces the previous architecture where a
+// separate backend.Executor ran MCP workflows in a parallel execution
+// path.
+//
+// The registry contains:
 //   - A wildcard workflow ("*") that dispatches to listTools or callTool
 //     based on the workflow name suffix (.ListTools / .CallTool), and
 //     invokes configured beforeCall / afterCall middleware workflows.
 //   - "dapr-mcp-list-tools" activity: dials the MCP server and lists tools.
 //   - "dapr-mcp-call-tool" activity: dials the MCP server and calls a tool.
-func NewBuiltinExecutor(opts ExecutorOptions) backend.Executor {
+func NewBuiltinRegistry(opts ExecutorOptions) *task.TaskRegistry {
 	registry := task.NewTaskRegistry()
 
 	// Wildcard workflow: dispatches based on name suffix, runs middleware.
@@ -87,7 +101,7 @@ func NewBuiltinExecutor(opts ExecutorOptions) backend.Executor {
 		workerLog.Warnf("failed to register %s activity: %s", activityCallTool, err)
 	}
 
-	return task.NewTaskExecutor(registry)
+	return registry
 }
 
 // makeOrchestrator returns the wildcard orchestrator function, closing over the

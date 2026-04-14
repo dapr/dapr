@@ -36,6 +36,7 @@ import (
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
+	dtclient "github.com/dapr/durabletask-go/client"
 	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
 	"github.com/dapr/kit/logger"
 	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
@@ -83,17 +84,16 @@ type engine struct {
 	actors            actors.Interface
 	getWorkItemsCount *atomic.Int32
 
-	worker  backend.TaskHubWorker
-	backend *backendactors.Actors
-	client  workflows.Workflow
+	worker   backend.TaskHubWorker
+	backend  *backendactors.Actors
+	client   workflows.Workflow
+	executor backend.Executor
 
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 
-	// mcpExec and mcpOpts support lazy initialization of the built-in MCP executor.
-	// NewBuiltinExecutor is only called from ActivateMCPServers so
-	// that sidecars with no MCPServer resources incur no MCP-related allocations.
-	mcpExec *mcp.RoutingExecutor
-	mcpOpts mcp.ExecutorOptions
+	// mcpOpts configures the built-in MCP registry.
+	mcpOpts   mcp.ExecutorOptions
+	mcpClient *dtclient.InProcessClient
 }
 
 func New(opts Options) Interface {
@@ -153,17 +153,15 @@ func New(opts Options) Interface {
 
 	// TODO: handle somewhere that users cannot use a managed workflow name themselves.
 
-	// Wrap the gRPC executor with the routing executor.
-	// The built-in MCP executor is installed lazily in ActivateMCPServers when the first
-	// MCPServer manifest is loaded,
-	// so sidecars without MCPServer resources pay no MCP allocation cost at startup.
-	mcpExec := mcp.NewRoutingExecutor(grpcExec)
+	// MCP orchestrations are routed to an in-process sink registered on the
+	// gRPC executor by ActivateMCPServers. Until then, the gRPC executor
+	// operates exactly as before — all work items go to the external SDK.
 	mcpOpts := mcp.ExecutorOptions{
 		Store:   opts.ComponentStore,
 		Secrets: mcp.NewCompstoreSecretGetter(opts.ComponentStore),
 		JWT:     newSPIFFEJWTFetcher(opts.Security),
 	}
-	executor := mcpExec
+	executor := grpcExec
 
 	var topts []backend.NewTaskWorkerOptions
 	if opts.Spec.GetMaxConcurrentWorkflowInvocations() != nil {
@@ -201,9 +199,9 @@ func New(opts Options) Interface {
 		actors:               opts.Actors,
 		worker:               worker,
 		backend:              abackend,
+		executor:             grpcExec,
 		registerGrpcServerFn: registerGrpcServerFn,
 		getWorkItemsCount:    &getWorkItemsCount,
-		mcpExec:              mcpExec,
 		mcpOpts:              mcpOpts,
 		client: &client{
 			logger: wfBackendLogger,
@@ -254,14 +252,42 @@ func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
 	}
 }
 
-// ActivateMCPServers registers workflow actors with the actor runtime,
-// so that built-in dapr.mcp.* orchestrations can be scheduled even when no user app has connected via GetWorkItems.
-// It is idempotent: registering when actors are already registered is a no-op.
+// ActivateMCPServers registers an in-process work-item sink and worker for
+// the built-in dapr.mcp.* orchestrations and dapr-mcp-* activities, then
+// ensures workflow actors are registered with the actor runtime. This
+// allows MCP workflows to be scheduled even when no user app has connected
+// via GetWorkItems.
 func (wfe *engine) ActivateMCPServers(ctx context.Context) error {
 	log.Debug("Activating workflow actors for MCP server orchestrations")
-	// Lazily construct the built-in MCP executor the first time an MCPServer
-	// manifest is loaded. EnableMCP is a no-op on subsequent calls.
-	wfe.mcpExec.EnableMCP(mcp.NewBuiltinExecutor(wfe.mcpOpts))
+
+	// Build the task registry containing the MCP wildcard orchestrator and
+	// the two MCP transport activities.
+	registry := mcp.NewBuiltinRegistry(wfe.mcpOpts)
+
+	// Create the in-process client that will serve as the work-item sink.
+	ipClient := dtclient.NewTaskHubInProcessClient(wfe.backend, wfBackendLogger)
+
+	// Register the client as a sink for MCP-prefixed workflows and
+	// activities. The grpcExecutor routes matching work items to this
+	// client instead of the external gRPC stream.
+	registrar, ok := wfe.executor.(backend.SinkRegistrar)
+	if !ok {
+		return fmt.Errorf("executor does not implement SinkRegistrar; cannot register MCP in-process sink")
+	}
+	if err := registrar.RegisterSink(backend.SinkOptions{
+		WorkflowNamePrefix: mcp.WorkflowNamePrefix, // "dapr.mcp."
+		ActivityNamePrefix: mcp.ActivityNamePrefix, // "dapr-mcp-"
+	}, ipClient); err != nil {
+		log.Warnf("MCP sink registration returned: %s (may be duplicate; continuing)", err)
+	}
+
+	// Start the background processor that drains the sink and dispatches to the task registry.
+	if err := ipClient.StartWorkItemListener(ctx, registry); err != nil {
+		return fmt.Errorf("failed to start MCP in-process work-item listener: %w", err)
+	}
+
+	wfe.mcpClient = ipClient
+
 	return wfe.backend.RegisterActors(ctx)
 }
 
