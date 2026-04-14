@@ -765,11 +765,9 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Load and apply workflow access policies before starting servers.
 	if a.globalConfig.IsFeatureEnabled(config.WorkflowAccessPolicy) {
 		if err = a.loadWorkflowAccessPolicies(ctx); err != nil {
-			log.Warnf("Failed to load workflow access policies: %s", err)
+			return fmt.Errorf("failed to load workflow access policies: %w", err)
 		}
 
-		// Enable hot-reloading of workflow access policies so that changes
-		// take effect without restarting the sidecar.
 		a.reloader.SetPolicyRecompiler(reconciler.WorkflowAccessPolicyOptions{
 			AppID:     a.runtimeConfig.id,
 			Loader:    a.reloader.Loader(),
