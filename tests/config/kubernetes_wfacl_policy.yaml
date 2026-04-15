@@ -8,24 +8,24 @@ scopes:
 spec:
   defaultAction: deny
   rules:
-  - callers:
-    - appID: "wfacl-caller"
-    operations:
-    - type: workflow
-      name: "AllowedWorkflow"
-      action: allow
-    - type: workflow
-      name: "DeniedWorkflow"
-      action: deny
-    - type: activity
-      name: "*"
-      action: allow
-  - callers:
-    - appID: "wfacl-target"
-    operations:
-    - type: workflow
-      name: "*"
-      action: allow
-    - type: activity
-      name: "*"
-      action: allow
+    - callers:
+        - appID: "wfacl-caller"
+      operations:
+        - type: workflow
+          name: "AllowedWorkflow"
+          action: allow
+        - type: workflow
+          name: "DeniedWorkflow"
+          action: deny
+        - type: activity
+          name: "*"
+          action: allow
+    - callers:
+        - appID: "wfacl-target"
+      operations:
+        - type: workflow
+          name: "*"
+          action: allow
+        - type: activity
+          name: "*"
+          action: allow
