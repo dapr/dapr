@@ -40,7 +40,7 @@ func init() {
 	suite.Register(new(listToolsUnreachable))
 }
 
-// listToolsUnreachable verifies that the dapr.mcp.<name>.ListTools workflow
+// listToolsUnreachable verifies that the dapr.internal.mcp.<name>.ListTools workflow
 // fails (non-nil failure state) when the MCP server is unreachable.
 type listToolsUnreachable struct {
 	daprd      *daprd.Daprd
@@ -108,7 +108,7 @@ func (s *listToolsUnreachable) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools fails when MCP server is unreachable", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.dead-server.ListTools", map[string]any{"mcpServerName": "dead-server"})
+			"dapr.internal.mcp.dead-server.ListTools", map[string]any{"mcpServerName": "dead-server"})
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

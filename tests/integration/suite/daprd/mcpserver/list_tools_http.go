@@ -45,7 +45,7 @@ func init() {
 	suite.Register(new(listToolsHTTP))
 }
 
-// listToolsHTTP verifies that the dapr.mcp.<name>.ListTools workflow returns
+// listToolsHTTP verifies that the dapr.internal.mcp.<name>.ListTools workflow returns
 // the correct tool definitions when the MCPServer uses the streamable_http transport.
 type listToolsHTTP struct {
 	daprd      *daprd.Daprd
@@ -131,7 +131,7 @@ func (s *listToolsHTTP) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools via streamable_http returns expected tools", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather.ListTools", map[string]any{"mcpServerName": "weather"})
+			"dapr.internal.mcp.weather.ListTools", map[string]any{"mcpServerName": "weather"})
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
@@ -149,7 +149,7 @@ func (s *listToolsHTTP) Run(t *testing.T, ctx context.Context) {
 	})
 }
 
-// startMCPWorkflow starts a dapr.mcp.* workflow via the HTTP API and returns the instance ID.
+// startMCPWorkflow starts a dapr.internal.mcp.* workflow via the HTTP API and returns the instance ID.
 func startMCPWorkflow(ctx context.Context, t *testing.T, httpClient *http.Client, httpPort int, workflowName string, input any) string {
 	t.Helper()
 

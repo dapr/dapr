@@ -152,7 +152,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{"city": "Austin"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather.CallTool", input)
+			"dapr.internal.mcp.weather.CallTool", input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
@@ -173,7 +173,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{"name": "dapr"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.greeter.CallTool", input)
+			"dapr.internal.mcp.greeter.CallTool", input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))
@@ -190,7 +190,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 	t.Run("ListTools returns different tools per server", func(t *testing.T) {
 		// Weather server
 		weatherID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather.ListTools", map[string]any{"mcpServerName": "weather"})
+			"dapr.internal.mcp.weather.ListTools", map[string]any{"mcpServerName": "weather"})
 		weatherMeta, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(weatherID), api.WithFetchPayloads(true))
 		require.NoError(t, err)
@@ -206,7 +206,7 @@ func (s *multipleServers) Run(t *testing.T, ctx context.Context) {
 
 		// Greeter server
 		greeterID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.greeter.ListTools", map[string]any{"mcpServerName": "greeter"})
+			"dapr.internal.mcp.greeter.ListTools", map[string]any{"mcpServerName": "greeter"})
 		greeterMeta, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(greeterID), api.WithFetchPayloads(true))
 		require.NoError(t, err)

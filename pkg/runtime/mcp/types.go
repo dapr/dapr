@@ -92,7 +92,8 @@ type AfterCallInput struct {
 }
 
 // orchestrationNamePrefix is the prefix shared by all built-in MCP orchestrations.
-const orchestrationNamePrefix = "dapr.mcp."
+// All dapr-internal workflows live under dapr.internal.*; MCP claims the mcp sub-namespace.
+const orchestrationNamePrefix = "dapr.internal.mcp."
 
 // suffixListTools is the suffix identifying a ListTools orchestration.
 const suffixListTools = ".ListTools"

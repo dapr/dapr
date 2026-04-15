@@ -43,7 +43,7 @@ func init() {
 	suite.Register(new(listToolsSSE))
 }
 
-// listToolsSSE verifies that the dapr.mcp.<name>.ListTools workflow returns
+// listToolsSSE verifies that the dapr.internal.mcp.<name>.ListTools workflow returns
 // the correct tool definitions when the MCPServer uses the legacy SSE transport.
 type listToolsSSE struct {
 	daprd      *daprd.Daprd
@@ -117,7 +117,7 @@ func (s *listToolsSSE) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ListTools via SSE transport returns expected tools", func(t *testing.T) {
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather-sse.ListTools", map[string]any{"mcpServerName": "weather-sse"})
+			"dapr.internal.mcp.weather-sse.ListTools", map[string]any{"mcpServerName": "weather-sse"})
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

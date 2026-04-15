@@ -127,7 +127,7 @@ func (s *callToolSSE) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{"city": "Denver"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather-sse.CallTool", input)
+			"dapr.internal.mcp.weather-sse.CallTool", input)
 
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(
 			ctx, api.InstanceID(instanceID), api.WithFetchPayloads(true))

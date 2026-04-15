@@ -112,21 +112,16 @@ func TestNewBuiltinRegistry(t *testing.T) {
 	require.NotNil(t, registry, "NewBuiltinRegistry should return a non-nil registry")
 }
 
-func TestExportedPrefixConstants(t *testing.T) {
-	assert.Equal(t, "dapr.mcp.", WorkflowNamePrefix)
-	assert.Equal(t, "dapr-mcp-", ActivityNamePrefix)
-}
-
 func TestMCPServerName(t *testing.T) {
 	tests := []struct {
 		orchestrationName string
 		suffix            string
 		want              string
 	}{
-		{"dapr.mcp.myserver.ListTools", suffixListTools, "myserver"},
-		{"dapr.mcp.my-server.CallTool", suffixCallTool, "my-server"},
-		{"dapr.mcp.dotted.name.ListTools", suffixListTools, "dotted.name"},
-		{"dapr.mcp..ListTools", suffixListTools, ""},
+		{"dapr.internal.mcp.myserver.ListTools", suffixListTools, "myserver"},
+		{"dapr.internal.mcp.my-server.CallTool", suffixCallTool, "my-server"},
+		{"dapr.internal.mcp.dotted.name.ListTools", suffixListTools, "dotted.name"},
+		{"dapr.internal.mcp..ListTools", suffixListTools, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.orchestrationName, func(t *testing.T) {

@@ -36,7 +36,7 @@ import (
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/durabletask-go/backend"
-	dtclient "github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
 	"github.com/dapr/kit/logger"
 	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
@@ -56,7 +56,7 @@ type Interface interface {
 	ActivityActorType() string
 
 	// ActivateMCPServers ensures workflow actors are registered,
-	// so that built-in dapr.mcp.* orchestrations can be scheduled even when no user workflow client has connected via GetWorkItems.
+	// so that built-in dapr.internal.mcp.* orchestrations can be scheduled even when no user workflow client has connected via GetWorkItems.
 	// It is called by the runtime after MCPServer manifests are loaded.
 	ActivateMCPServers(ctx context.Context) error
 }
@@ -84,16 +84,15 @@ type engine struct {
 	actors            actors.Interface
 	getWorkItemsCount *atomic.Int32
 
-	worker   backend.TaskHubWorker
-	backend  *backendactors.Actors
-	client   workflows.Workflow
-	executor backend.Executor
+	worker  backend.TaskHubWorker
+	backend *backendactors.Actors
+	client  workflows.Workflow
 
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 
 	// mcpOpts configures the built-in MCP registry.
-	mcpOpts   mcp.ExecutorOptions
-	mcpClient *dtclient.InProcessClient
+	mcpOpts     mcp.ExecutorOptions
+	mcpRegistry *task.TaskRegistry
 }
 
 func New(opts Options) Interface {
@@ -120,6 +119,17 @@ func New(opts Options) Interface {
 		getWorkItemsCount atomic.Int32
 		lock              sync.Mutex
 	)
+
+	// Build the MCP task registry + in-process executor.
+	// The registry stays empty until ActivateMCPServers populates it,
+	// so then work items routed by the worker on wi.Internal start flowing through.
+	mcpOpts := mcp.ExecutorOptions{
+		Store:   opts.ComponentStore,
+		Secrets: mcp.NewCompstoreSecretGetter(opts.ComponentStore),
+		JWT:     newSPIFFEJWTFetcher(opts.Security),
+	}
+	mcpRegistry := task.NewTaskRegistry()
+	internalExecutor := task.NewTaskExecutor(mcpRegistry)
 
 	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
@@ -149,19 +159,10 @@ func New(opts Options) Interface {
 			return nil
 		}),
 		backend.WithStreamSendTimeout(time.Second*10),
+		backend.WithInternalNamePrefix("dapr.internal."),
 	)
 
 	// TODO: handle somewhere that users cannot use a managed workflow name themselves.
-
-	// MCP orchestrations are routed to an in-process sink registered on the
-	// gRPC executor by ActivateMCPServers. Until then, the gRPC executor
-	// operates exactly as before — all work items go to the external SDK.
-	mcpOpts := mcp.ExecutorOptions{
-		Store:   opts.ComponentStore,
-		Secrets: mcp.NewCompstoreSecretGetter(opts.ComponentStore),
-		JWT:     newSPIFFEJWTFetcher(opts.Security),
-	}
-	executor := grpcExec
 
 	var topts []backend.NewTaskWorkerOptions
 	if opts.Spec.GetMaxConcurrentWorkflowInvocations() != nil {
@@ -170,12 +171,12 @@ func New(opts Options) Interface {
 		}
 	}
 
-	// There are separate "workers" for executing orchestrations (workflows) and activities
 	oworker := backend.NewWorkflowWorker(backend.WorkflowWorkerOptions{
-		Backend:  abackend,
-		Executor: executor,
-		Logger:   wfBackendLogger,
-		AppID:    opts.AppID,
+		Backend:          abackend,
+		Executor:         grpcExec,
+		InternalExecutor: internalExecutor,
+		Logger:           wfBackendLogger,
+		AppID:            opts.AppID,
 	}, topts...)
 
 	topts = nil
@@ -185,9 +186,10 @@ func New(opts Options) Interface {
 		}
 	}
 
-	aworker := backend.NewActivityTaskWorker(
+	aworker := backend.NewActivityTaskWorkerWithInternal(
 		abackend,
-		executor,
+		grpcExec,
+		internalExecutor,
 		wfBackendLogger,
 		topts...,
 	)
@@ -199,10 +201,10 @@ func New(opts Options) Interface {
 		actors:               opts.Actors,
 		worker:               worker,
 		backend:              abackend,
-		executor:             grpcExec,
 		registerGrpcServerFn: registerGrpcServerFn,
 		getWorkItemsCount:    &getWorkItemsCount,
 		mcpOpts:              mcpOpts,
+		mcpRegistry:          mcpRegistry,
 		client: &client{
 			logger: wfBackendLogger,
 			client: backend.NewTaskHubClient(abackend),
@@ -252,42 +254,13 @@ func (wfe *engine) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
 	}
 }
 
-// ActivateMCPServers registers an in-process work-item sink and worker for
-// the built-in dapr.mcp.* orchestrations and dapr-mcp-* activities, then
-// ensures workflow actors are registered with the actor runtime. This
-// allows MCP workflows to be scheduled even when no user app has connected
-// via GetWorkItems.
+// ActivateMCPServers populates the in-process MCP task registry with the
+// built-in dapr.internal.mcp.* orchestrations and activities, then ensures
+// workflow actors are registered with the actor runtime.
 func (wfe *engine) ActivateMCPServers(ctx context.Context) error {
 	log.Debug("Activating workflow actors for MCP server orchestrations")
 
-	// Build the task registry containing the MCP wildcard orchestrator and
-	// the two MCP transport activities.
-	registry := mcp.NewBuiltinRegistry(wfe.mcpOpts)
-
-	// Create the in-process client that will serve as the work-item sink.
-	ipClient := dtclient.NewTaskHubInProcessClient(wfe.backend, wfBackendLogger)
-
-	// Register the client as a sink for MCP-prefixed workflows and
-	// activities. The grpcExecutor routes matching work items to this
-	// client instead of the external gRPC stream.
-	registrar, ok := wfe.executor.(backend.SinkRegistrar)
-	if !ok {
-		return fmt.Errorf("executor does not implement SinkRegistrar; cannot register MCP in-process sink")
-	}
-	if err := registrar.RegisterSink(backend.SinkOptions{
-		WorkflowNamePrefix: mcp.WorkflowNamePrefix, // "dapr.mcp."
-		ActivityNamePrefix: mcp.ActivityNamePrefix, // "dapr-mcp-"
-	}, ipClient); err != nil {
-		log.Warnf("MCP sink registration returned: %s (may be duplicate; continuing)", err)
-	}
-
-	// Start the background processor that drains the sink and dispatches to the task registry.
-	if err := ipClient.StartWorkItemListener(ctx, registry); err != nil {
-		return fmt.Errorf("failed to start MCP in-process work-item listener: %w", err)
-	}
-
-	wfe.mcpClient = ipClient
-
+	mcp.PopulateBuiltinRegistry(wfe.mcpRegistry, wfe.mcpOpts)
 	return wfe.backend.RegisterActors(ctx)
 }
 

@@ -158,7 +158,7 @@ func (s *restartMidCall) Run(t *testing.T, ctx context.Context) {
 			"arguments":     map[string]any{"city": "Seattle"},
 		}
 		instanceID := startMCPWorkflow(ctx, t, s.httpClient, s.daprd.HTTPPort(),
-			"dapr.mcp.weather.CallTool", input)
+			"dapr.internal.mcp.weather.CallTool", input)
 
 		// Wait until the first MCP tool call is in-flight inside the activity.
 		select {

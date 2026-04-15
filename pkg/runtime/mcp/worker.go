@@ -37,10 +37,10 @@ var workerLog = logger.NewLogger("dapr.runtime.mcp.worker")
 
 const (
 	// activityListTools is the fixed activity name for the ListTools transport call.
-	activityListTools = "dapr-mcp-list-tools"
+	activityListTools = "dapr.internal.mcp.list-tools"
 
 	// activityCallTool is the fixed activity name for the CallTool transport call.
-	activityCallTool = "dapr-mcp-call-tool"
+	activityCallTool = "dapr.internal.mcp.call-tool"
 
 	// defaultMCPTimeout is the per-call deadline when no endpoint.timeout is set.
 	defaultMCPTimeout = 30 * time.Second
@@ -59,34 +59,17 @@ const (
 	jsonFieldRequired = "required"
 )
 
-// WorkflowNamePrefix is the name prefix shared by all built-in MCP
-// orchestrations. It can be used as the WorkflowNamePrefix in a
-// backend.SinkOptions registration.
-const WorkflowNamePrefix = orchestrationNamePrefix // "dapr.mcp."
-
-// ActivityNamePrefix is the name prefix shared by all built-in MCP
-// activities. It can be used as the ActivityNamePrefix in a
-// backend.SinkOptions registration.
-const ActivityNamePrefix = "dapr-mcp-"
-
 // NewBuiltinRegistry returns a task.TaskRegistry that handles all built-in
-// dapr.mcp.* orchestrations and dapr-mcp-* activities in-process.
-//
-// The returned registry is intended to be used with a
-// client.InProcessClient backed by a backend.WorkItemSink registered on
-// the grpcExecutor. This replaces the previous architecture where a
-// separate backend.Executor ran MCP workflows in a parallel execution
-// path.
-//
-// The registry contains:
-//   - A wildcard workflow ("*") that dispatches to listTools or callTool
-//     based on the workflow name suffix (.ListTools / .CallTool), and
-//     invokes configured beforeCall / afterCall middleware workflows.
-//   - "dapr-mcp-list-tools" activity: dials the MCP server and lists tools.
-//   - "dapr-mcp-call-tool" activity: dials the MCP server and calls a tool.
+// dapr.internal.mcp.* orchestrations and activities in-process.
 func NewBuiltinRegistry(opts ExecutorOptions) *task.TaskRegistry {
 	registry := task.NewTaskRegistry()
+	PopulateBuiltinRegistry(registry, opts)
+	return registry
+}
 
+// PopulateBuiltinRegistry adds the MCP wildcard orchestrator and the two
+// transport activities to an existing task.TaskRegistry.
+func PopulateBuiltinRegistry(registry *task.TaskRegistry, opts ExecutorOptions) {
 	// Wildcard workflow: dispatches based on name suffix, runs middleware.
 	if err := registry.AddWorkflowN("*", makeOrchestrator(opts.Store)); err != nil {
 		workerLog.Warnf("failed to register MCP wildcard workflow: %s", err)
@@ -101,8 +84,6 @@ func NewBuiltinRegistry(opts ExecutorOptions) *task.TaskRegistry {
 	if err := registry.AddActivityN(activityCallTool, makeCallToolActivity(opts)); err != nil {
 		workerLog.Warnf("failed to register %s activity: %s", activityCallTool, err)
 	}
-
-	return registry
 }
 
 // makeOrchestrator returns the wildcard orchestrator function, closing over the
@@ -112,15 +93,15 @@ func NewBuiltinRegistry(opts ExecutorOptions) *task.TaskRegistry {
 //
 // ListTools path:
 //   - beforeListTools is awaited; any error fails the orchestration.
-//   - dapr-mcp-list-tools activity errors fail the orchestration.
+//   - dapr.internal.mcp.list-tools activity errors fail the orchestration.
 //   - afterListTools hooks are awaited; errors are logged but do not affect the result.
 //
 // CallTool path:
 //   - beforeCallTool is awaited; any error aborts with CallToolResult{IsError:true}.
-//   - dapr-mcp-call-tool activity errors are returned as CallToolResult{IsError:true}.
+//   - dapr.internal.mcp.call-tool activity errors are returned as CallToolResult{IsError:true}.
 //   - afterCallTool hooks are awaited; errors are logged but do not affect the result.
-func makeOrchestrator(store *compstore.ComponentStore) func(*task.OrchestrationContext) (any, error) {
-	return func(ctx *task.OrchestrationContext) (any, error) {
+func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContext) (any, error) {
+	return func(ctx *task.WorkflowContext) (any, error) {
 		name := ctx.Name
 
 		switch {
@@ -209,7 +190,7 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.OrchestrationC
 }
 
 // mcpServerName extracts the MCPServer resource name from an orchestration name
-// of the form "dapr.mcp.<name><suffix>".
+// of the form "dapr.internal.mcp.<name><suffix>".
 func mcpServerName(orchestrationName, suffix string) string {
 	trimmed := strings.TrimPrefix(orchestrationName, orchestrationNamePrefix)
 	return strings.TrimSuffix(trimmed, suffix)
