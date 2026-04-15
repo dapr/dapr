@@ -72,7 +72,7 @@ func (JobTargetType) EnumDescriptor() ([]byte, []int) {
 }
 
 // WatchJobsRequestResultStatus is sent by clients to signal where the job
-// triggering was sucessful or failed, in which case should be handled by the
+// triggering was successful or failed, in which case should be handled by the
 // failure policy of the job.
 type WatchJobsRequestResultStatus int32
 
