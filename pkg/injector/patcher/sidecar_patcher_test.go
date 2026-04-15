@@ -398,22 +398,29 @@ func TestPatching(t *testing.T) {
 				}
 				assert.Equal(t, "testns", daprdEnvVars["NAMESPACE"])
 
-				assert.Len(t, daprdContainer.VolumeMounts, 1)
+				assert.Len(t, daprdContainer.VolumeMounts, 2)
 				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)
 				assert.Equal(t, "/var/run/secrets/dapr.io/sentrytoken", daprdContainer.VolumeMounts[0].MountPath)
 				assert.True(t, daprdContainer.VolumeMounts[0].ReadOnly)
+				assert.Equal(t, "dapr-trust-bundle", daprdContainer.VolumeMounts[1].Name)
+				assert.Equal(t, "/var/run/secrets/dapr.io/tls", daprdContainer.VolumeMounts[1].MountPath)
+				assert.True(t, daprdContainer.VolumeMounts[1].ReadOnly)
 
 				assert.NotNil(t, daprdContainer.LivenessProbe)
 				assert.Equal(t, 3501, daprdContainer.LivenessProbe.TCPSocket.Port.IntValue())
 
 				// Assertions on added volumes
-				assert.Len(t, pod.Spec.Volumes, 1)
+				assert.Len(t, pod.Spec.Volumes, 2)
 				tokenVolume := pod.Spec.Volumes[0]
 				assert.Equal(t, "dapr-identity-token", tokenVolume.Name)
 				assert.NotNil(t, tokenVolume.Projected)
 				require.Len(t, tokenVolume.Projected.Sources, 1)
 				require.NotNil(t, tokenVolume.Projected.Sources[0].ServiceAccountToken)
 				assert.Equal(t, "spiffe://foo.bar/ns/example/dapr-sentry", tokenVolume.Projected.Sources[0].ServiceAccountToken.Audience)
+				trustBundleVolume := pod.Spec.Volumes[1]
+				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.Name)
+				assert.NotNil(t, trustBundleVolume.ConfigMap)
+				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.ConfigMap.Name)
 
 				// Assertions on added labels
 				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarInjectedLabel])
@@ -440,7 +447,7 @@ func TestPatching(t *testing.T) {
 				assertDaprdContainerFn(t, pod)
 
 				// Check the presence of the volume
-				assert.Len(t, pod.Spec.Volumes, 2)
+				assert.Len(t, pod.Spec.Volumes, 3)
 				socketVolume := pod.Spec.Volumes[0]
 				assert.Equal(t, "dapr-unix-domain-socket", socketVolume.Name)
 				assert.NotNil(t, socketVolume.EmptyDir)
@@ -451,6 +458,10 @@ func TestPatching(t *testing.T) {
 				require.Len(t, tokenVolume.Projected.Sources, 1)
 				require.NotNil(t, tokenVolume.Projected.Sources[0].ServiceAccountToken)
 				assert.Equal(t, "spiffe://foo.bar/ns/example/dapr-sentry", tokenVolume.Projected.Sources[0].ServiceAccountToken.Audience)
+				trustBundleVolume := pod.Spec.Volumes[2]
+				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.Name)
+				assert.NotNil(t, trustBundleVolume.ConfigMap)
+				assert.Equal(t, "dapr-trust-bundle", trustBundleVolume.ConfigMap.Name)
 
 				// Check the presence of the volume mount in the app container
 				appContainer := pod.Spec.Containers[0]
@@ -460,7 +471,7 @@ func TestPatching(t *testing.T) {
 
 				// Check the presence of the volume mount in the daprd container
 				daprdContainer := pod.Spec.Containers[1]
-				assert.Len(t, daprdContainer.VolumeMounts, 2)
+				assert.Len(t, daprdContainer.VolumeMounts, 3)
 				assert.Equal(t, "dapr-unix-domain-socket", daprdContainer.VolumeMounts[0].Name)
 				assert.Equal(t, "/var/run/dapr-sockets", daprdContainer.VolumeMounts[0].MountPath)
 

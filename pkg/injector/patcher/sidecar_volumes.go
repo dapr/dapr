@@ -66,6 +66,23 @@ func (c *SidecarConfig) getUnixDomainSocketVolumeMount() (vol corev1.Volume, dap
 	return
 }
 
+// getTrustBundleVolume returns a volume that mounts the dapr-trust-bundle ConfigMap.
+// Mounting as a volume (rather than using the DAPR_TRUST_ANCHORS env var alone) lets
+// Kubernetes propagate ConfigMap updates to running pods automatically, which is
+// required for live trust anchor distribution during root CA rotation.
+func (c *SidecarConfig) getTrustBundleVolume() corev1.Volume {
+	return corev1.Volume{
+		Name: injectorConsts.TrustBundleVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: injectorConsts.TrustBundleVolumeName,
+				},
+			},
+		},
+	}
+}
+
 // getTokenVolume returns the volume projection for the Kubernetes service account.
 // Requests a new projected volume with a service account token for our specific audience.
 func (c *SidecarConfig) getTokenVolume() corev1.Volume {
