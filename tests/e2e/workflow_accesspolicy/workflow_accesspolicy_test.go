@@ -93,7 +93,7 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 				nil,
 			)
 			assert.NoError(c, err)
-			assert.Equal(c, http.StatusOK, status, string(resp))
+			assert.Equalf(c, http.StatusOK, status, "response body: %s", string(resp))
 		}, 60*time.Second, 2*time.Second)
 	})
 
@@ -129,7 +129,7 @@ func TestWorkflowAccessPolicy(t *testing.T) {
 				nil,
 			)
 			assert.NoError(c, err)
-			assert.Equal(c, http.StatusOK, status, string(resp))
+			assert.Equalf(c, http.StatusOK, status, "response body: %s", string(resp))
 		}, 60*time.Second, 2*time.Second)
 	})
 }
