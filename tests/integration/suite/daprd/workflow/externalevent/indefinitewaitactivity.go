@@ -48,10 +48,6 @@ func init() {
 // so the `TaskScheduled(id=0)` match succeeds. If the SDK does not drop the
 // optional timer, replay fails with a non-determinism error and the workflow
 // never completes.
-//
-// This test is expected to FAIL until durabletask-go is updated to include
-// the backwards-compatibility patch; it is the red/green signal for that
-// dependency bump.
 type indefiniteWaitActivity struct {
 	workflow *workflow.Workflow
 }

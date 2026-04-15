@@ -41,10 +41,6 @@ func init() {
 // at id=0; the incoming TimerCreated is a different, non-optional timer at
 // id=0. The SDK must detect this and drop the optional timer even when both
 // pending and incoming are CreateTimer.
-//
-// This test is expected to FAIL until durabletask-go is updated to include
-// the backwards-compatibility patch; it is the red/green signal for that
-// dependency bump.
 type indefiniteWaitTimer struct {
 	workflow *workflow.Workflow
 }
