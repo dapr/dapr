@@ -123,7 +123,6 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		return nil, vErr
 	}
 
-	//nolint:protogetter
 	req := &api.CreateReminderRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
