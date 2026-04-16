@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -563,32 +564,44 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	method := msg.GetMethod()
 	var headers []commonapi.NameValuePair
 
-	uri := strings.Builder{}
+	var base string
 
 	if appID != "" {
 		// If appID includes http(s)://, use that as base URL
 		// Otherwise, use baseAddress if this is an internal endpoint, or the base URL from the external endpoint configuration if external
 		if strings.HasPrefix(appID, "https://") || strings.HasPrefix(appID, "http://") {
-			uri.WriteString(appID)
+			base = appID
 		} else if endpoint, ok := h.compStore.GetHTTPEndpoint(appID); ok {
-			uri.WriteString(endpoint.Spec.BaseURL)
+			base = endpoint.Spec.BaseURL
 			headers = endpoint.Spec.Headers
 		} else {
-			uri.WriteString(h.baseAddress)
+			base = h.baseAddress
 		}
 	} else {
-		uri.WriteString(h.baseAddress)
+		base = h.baseAddress
 	}
 
-	if len(method) > 0 && method[0] != '/' {
-		uri.WriteRune('/')
+	uri, err := url.Parse(base)
+	if err != nil {
+		return nil, err
 	}
-	uri.WriteString(method)
+
+	uri.RawQuery = ""
+	uri.Fragment = ""
+
+	if len(method) > 0 && method[0] != '/' {
+		method = "/" + method
+	}
+
+	// Preserve reserved characters in the method path. Building a request URL from a
+	// plain string can cause Go to reinterpret '#' as a fragment, '?' as query syntax,
+	// and '%' as an escape sequence instead of path data.
+	uri.Path = strings.TrimSuffix(uri.Path, "/") + method
+	uri.RawPath = uri.EscapedPath()
 
 	qs := req.EncodeHTTPQueryString()
 	if qs != "" {
-		uri.WriteRune('?')
-		uri.WriteString(qs)
+		uri.RawQuery = qs
 	}
 
 	channelReq, err := http.NewRequestWithContext(ctx, verb, uri.String(), req.RawData())
