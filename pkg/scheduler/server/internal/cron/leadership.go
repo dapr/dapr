@@ -15,21 +15,27 @@ package cron
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
 	"github.com/dapr/kit/events/broadcaster"
 )
 
 // leadership processes leadership updates from go-etcd-cron. It unmarshals the
-// host addresses and broadcasts them to WatchHosts subscribers.
+// host addresses, broadcasts them to WatchHosts subscribers, and pushes the
+// cluster size and this scheduler's index into the connection pool so
+// concurrency gates stay in sync with membership.
 type leadership struct {
 	hostBroadcaster *broadcaster.Broadcaster[[]*schedulerv1pb.Host]
 	lock            *sync.RWMutex
 	currHosts       *[]*schedulerv1pb.Host
 	readyCh         chan struct{}
+	ownAddress      string
+	pool            *pool.Pool
 }
 
 // Handle processes a single leadership update. Called sequentially by the
@@ -49,6 +55,9 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 		hosts[i] = &host
 	}
 
+	count, idx := schedulerPosition(hosts, h.ownAddress)
+	h.pool.SetSchedulerInfo(count, idx)
+
 	h.lock.Lock()
 	*h.currHosts = hosts
 
@@ -63,4 +72,36 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 	h.lock.Unlock()
 
 	return nil
+}
+
+// schedulerPosition derives (count, idx) by sorting hosts by address (stable
+// across schedulers) and locating ownAddress. If ownAddress is absent the
+// index falls back to 0, keeping gate math safe until membership converges.
+func schedulerPosition(hosts []*schedulerv1pb.Host, ownAddress string) (int32, int32) {
+	count := int32(len(hosts))
+	if count < 1 {
+		return 1, 0
+	}
+
+	sorted := slices.Clone(hosts)
+	slices.SortFunc(sorted, func(a, b *schedulerv1pb.Host) int {
+		switch {
+		case a.GetAddress() < b.GetAddress():
+			return -1
+		case a.GetAddress() > b.GetAddress():
+			return 1
+		default:
+			return 0
+		}
+	})
+
+	var idx int32
+	for i, host := range sorted {
+		if host.GetAddress() == ownAddress {
+			idx = int32(i)
+			break
+		}
+	}
+
+	return count, idx
 }

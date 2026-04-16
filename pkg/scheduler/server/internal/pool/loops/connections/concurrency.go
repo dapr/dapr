@@ -20,26 +20,35 @@ import (
 const maxPendingPerGate = 100_000
 
 // concurrencyGate enforces a local concurrency limit for a given gate key.
-// Each scheduler enforces globalLimit / schedulerCount as its local share.
+// Each scheduler enforces a deterministic share of globalLimit so that the
+// cluster-wide sum equals globalLimit when globalLimit >= schedulerCount.
 type concurrencyGate struct {
 	globalLimit uint32
 	current     uint32
 	pending     []*loops.TriggerRequest
 }
 
-func localLimitFromGlobal(globalLimit, schedulerCount uint32) uint32 {
+// localLimitFromGlobal computes the local concurrency limit for a scheduler.
+// Base slots are distributed evenly; the remainder is assigned to schedulers
+// with the lowest indices so the cluster-wide sum equals globalLimit. When
+// globalLimit < schedulerCount the share would be zero; we allow 1 everywhere
+// to avoid starvation, at the cost of exceeding globalLimit.
+func localLimitFromGlobal(globalLimit, schedulerCount, schedulerIdx uint32) uint32 {
 	if schedulerCount <= 1 {
 		return globalLimit
 	}
-	local := globalLimit / schedulerCount
-	if local < 1 {
+	base := globalLimit / schedulerCount
+	if base < 1 {
 		return 1
 	}
-	return local
+	if schedulerIdx < globalLimit%schedulerCount {
+		return base + 1
+	}
+	return base
 }
 
-func (g *concurrencyGate) tryAcquire(schedulerCount uint32) bool {
-	if g.current < localLimitFromGlobal(g.globalLimit, schedulerCount) {
+func (g *concurrencyGate) tryAcquire(schedulerCount, schedulerIdx uint32) bool {
+	if g.current < localLimitFromGlobal(g.globalLimit, schedulerCount, schedulerIdx) {
 		g.current++
 		return true
 	}

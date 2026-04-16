@@ -30,15 +30,13 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler.server.pool")
 
 type Options struct {
-	Cron           api.Interface
-	SchedulerCount func() int32
+	Cron api.Interface
 }
 
 // Pool represents a connection pool for namespace/appID separation of sidecars
 // to schedulers.
 type Pool struct {
-	cron           api.Interface
-	schedulerCount func() int32
+	cron api.Interface
 
 	nsLoop  loop.Interface[loops.EventNS]
 	readyCh chan struct{}
@@ -46,18 +44,16 @@ type Pool struct {
 
 func New(opts Options) *Pool {
 	return &Pool{
-		readyCh:        make(chan struct{}),
-		cron:           opts.Cron,
-		schedulerCount: opts.SchedulerCount,
+		readyCh: make(chan struct{}),
+		cron:    opts.Cron,
 	}
 }
 
 func (p *Pool) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	p.nsLoop = namespaces.New(namespaces.Options{
-		Cron:           p.cron,
-		CancelPool:     cancel,
-		SchedulerCount: p.schedulerCount,
+		Cron:       p.cron,
+		CancelPool: cancel,
 	})
 
 	close(p.readyCh)
@@ -98,5 +94,18 @@ func (p *Pool) Trigger(job *internalsv1pb.JobEvent, fn func(api.TriggerResponseR
 	p.nsLoop.Enqueue(&loops.TriggerRequest{
 		Job:      job,
 		ResultFn: fn,
+	})
+}
+
+// SetSchedulerInfo publishes the scheduler cluster size and this scheduler's
+// index into the pool. The update fans out through the namespaces loop to
+// every connection loop so concurrency gate shares stay in sync with
+// membership changes.
+func (p *Pool) SetSchedulerInfo(count, idx int32) {
+	<-p.readyCh
+
+	p.nsLoop.Enqueue(&loops.SchedulerInfoUpdate{
+		Count: count,
+		Idx:   idx,
 	})
 }

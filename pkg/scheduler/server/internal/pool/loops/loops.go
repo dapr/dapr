@@ -77,6 +77,16 @@ type ConcurrencyRelease struct {
 	GateKeys []string
 }
 
+// SchedulerInfoUpdate propagates the current scheduler cluster size and this
+// scheduler's index within it, pushed by the leadership loop whenever the host
+// list changes. Flows pool -> namespaces -> every connection loop.
+type SchedulerInfoUpdate struct {
+	*nsbase
+	*connbase
+	Count int32
+	Idx   int32
+}
+
 // Shutdown is the event for shutting down the scheduler loops.
 type Shutdown struct {
 	*nsbase
