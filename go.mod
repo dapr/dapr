@@ -12,8 +12,8 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/dapr/components-contrib v1.17.3
-	github.com/dapr/durabletask-go v0.11.4-0.20260406161632-36d7b5486fa8
-	github.com/dapr/kit v0.17.1-0.20260402173438-be272d92042b
+	github.com/dapr/durabletask-go v0.11.4-0.20260406193405-a2363591769b
+	github.com/dapr/kit v0.17.1-0.20260409110905-18c6fce40d5d
 	github.com/diagridio/go-etcd-cron v0.12.4
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.2.2
