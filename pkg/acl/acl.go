@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/PuerkitoBio/purell"
-
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -141,14 +139,6 @@ func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP 
 	return &accessControlList, nil
 }
 
-func normalizeOperation(operation string) (string, error) {
-	s, err := purell.NormalizeURLString(operation, purell.FlagsUsuallySafeGreedy|purell.FlagRemoveDuplicateSlashes)
-	if err != nil {
-		return "", err
-	}
-	return s, nil
-}
-
 func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, isHTTP bool, acl *config.AccessControlList) (bool, string) {
 	// Apply access control list filter
 	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
@@ -162,18 +152,13 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 		log.Debugf("Error while reading spiffe id from client cert. applying default global policy action")
 	}
 
-	operation, err = normalizeOperation(operation)
-	var errMessage string
-
-	if err != nil {
-		errMessage = fmt.Sprintf("error in method normalization: %v", err)
-		log.Debugf(errMessage)
-		return false, errMessage
-	}
-
+	// The operation is expected to be already normalized by the caller
+	// (NormalizeMethod at the service invocation entry point). The ACL is a pure
+	// policy evaluation layer- it does not mutate its input.
 	action, actionPolicy := isOperationAllowedByAccessControlPolicy(spiffeID, operation, httpVerb, isHTTP, acl)
 	emitACLMetrics(spiffeID, actionPolicy, action)
 
+	var errMessage string
 	if !action {
 		errMessage = fmt.Sprintf("access control policy has denied access to id: %s operation: %s verb: %s", spiffeID.URL(), operation, httpVerb)
 		log.Debug(errMessage)
