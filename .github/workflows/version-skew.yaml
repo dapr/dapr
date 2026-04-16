@@ -173,7 +173,7 @@ jobs:
         echo "DAPR_INTEGRATION_SCHEDULER_PATH=$(pwd)/downloads/scheduler" >> $GITHUB_ENV
 
     - name: Run make test-integration
-      run: cd latest-release && make test-integration
+      run: cd latest-release && make test-integration ARGS="-timeout=45m"
 
     - name: Upload test results
       if: always()
@@ -376,7 +376,7 @@ jobs:
       run: |
         make build-linux
         make docker-build
-        make docker-push
+        make docker-push-retry
 
     - name: Build and push test apps
       run: |

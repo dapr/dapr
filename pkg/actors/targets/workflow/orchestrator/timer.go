@@ -120,7 +120,7 @@ func (o *orchestrator) createTimerReminder(ctx context.Context, name string, dat
 // deleteCancelledEventTimers scans the workflow history to find timer reminders
 // associated with WaitForSingleEvent calls where the event has been received
 // before the timer fired, and deletes those now-unnecessary timer reminders.
-// 1. Find all TimerCreated events with an origin.external_event or Name set (i.e., event-associated timers)
+// 1. Find all TimerCreated events associated with external events (origin.external_event or legacy Name field)
 // 2. Remove any that have already fired (matching TimerFired events)
 // 3. For each new EventRaised, consume one matching unfired timer (FIFO order)
 // 4. Delete the timer reminders for consumed timers
@@ -155,17 +155,20 @@ func (o *orchestrator) deleteCancelledEventTimers(ctx context.Context, rs *proto
 		newEvents,
 	} {
 		for _, e := range events {
-			// TODO: We're doing `Name` matching for backwards compatibility.
-			// By around v1.19 we should make it only match with `origin.external_event` and remove the fallback logic.
-			if tc := e.GetTimerCreated(); tc != nil && (tc.GetExternalEvent() != nil || tc.Name != nil) {
-				var name string
+			if tc := e.GetTimerCreated(); tc != nil {
+				var name *string
 				if ee := tc.GetExternalEvent(); ee != nil {
-					name = ee.GetName()
-				} else {
-					name = tc.GetName()
+					name = new(ee.GetName())
+				} else if tc.Name != nil && tc.GetOrigin() == nil {
+					// TODO: We're doing `Name` matching for backwards compatibility.
+					// By around v1.19 we should only match with
+					// `origin.external_event` and remove the fallback logic.
+					name = new(tc.GetName())
 				}
-				key := strings.ToUpper(name)
-				pendingEventTimers[key] = append(pendingEventTimers[key], e.GetEventId())
+				if name != nil {
+					key := strings.ToUpper(*name)
+					pendingEventTimers[key] = append(pendingEventTimers[key], e.GetEventId())
+				}
 			} else if tf := e.GetTimerFired(); tf != nil {
 				firedTimerIDs[tf.GetTimerId()] = true
 			}
