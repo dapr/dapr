@@ -147,7 +147,7 @@ func TestLocalLimitFromGlobal_SumEqualsGlobal(t *testing.T) {
 				continue
 			}
 			var sum uint32
-			for idx := uint32(0); idx < count; idx++ {
+			for idx := range count {
 				sum += localLimitFromGlobal(global, count, idx)
 			}
 			assert.Equal(t, global, sum, "count=%d global=%d", count, global)

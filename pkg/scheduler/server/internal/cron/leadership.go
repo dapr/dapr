@@ -78,6 +78,7 @@ func (h *leadership) Handle(ctx context.Context, anyhosts []*anypb.Any) error {
 // across schedulers) and locating ownAddress. If ownAddress is absent the
 // index falls back to 0, keeping gate math safe until membership converges.
 func schedulerPosition(hosts []*schedulerv1pb.Host, ownAddress string) (int32, int32) {
+	//nolint:gosec
 	count := int32(len(hosts))
 	if count < 1 {
 		return 1, 0
