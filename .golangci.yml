@@ -3,6 +3,11 @@ run:
   # default concurrency is a available CPU number
   concurrency: 4
 
+  # Pin the target language version so linters built with Go 1.24 (e.g.
+  # golangci-lint v1.64.x) can still run against a toolchain-bumped
+  # module. The source does not use Go 1.25-only language features.
+  go: "1.24"
+
   # timeout for analysis, e.g. 30s, 5m, default is 1m
   timeout: 15m
 
