@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
@@ -49,6 +50,12 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 			a.logger.Debug(err)
 			return nil, err
 		}
+	}
+
+	if vErr := method.ValidateName(in.GetName()); vErr != nil {
+		vErr = messages.ErrBadRequest.WithFormat(vErr)
+		a.logger.Debug(vErr)
+		return nil, vErr
 	}
 
 	req := &api.CreateTimerRequest{
@@ -108,6 +115,12 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 			a.logger.Debug(err)
 			return nil, err
 		}
+	}
+
+	if vErr := method.ValidateName(in.GetName()); vErr != nil {
+		vErr = messages.ErrBadRequest.WithFormat(vErr)
+		a.logger.Debug(vErr)
+		return nil, vErr
 	}
 
 	req := &api.CreateReminderRequest{

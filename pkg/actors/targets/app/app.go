@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -176,7 +177,11 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 }
 
 func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
-	invokeMethod := "remind/" + reminder.Name
+	invokeMethod, err := method.NormalizeMethod("remind/" + reminder.Name)
+	if err != nil {
+		return fmt.Errorf("invalid reminder name: %w", err)
+	}
+
 	data, err := json.Marshal(&api.ReminderResponse{
 		DueTime: reminder.DueTime,
 		Period:  reminder.Period.String(),
@@ -204,7 +209,11 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error 
 }
 
 func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
-	invokeMethod := "timer/" + reminder.Name
+	invokeMethod, err := method.NormalizeMethod("timer/" + reminder.Name)
+	if err != nil {
+		return fmt.Errorf("invalid timer name: %w", err)
+	}
+
 	data, err := json.Marshal(&api.TimerResponse{
 		Callback: reminder.Callback,
 		Data:     reminder.Data,

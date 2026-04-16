@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -403,7 +404,13 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
 	msg := req.Message()
 	verb := msg.GetHttpExtension().GetVerb().String()
-	method := msg.GetMethod()
+	// Defense-in-depth: resolve path traversal before building the outbound
+	// URL. The caller should have already normalized via NormalizeMethod, but
+	// we apply path.Clean here to guarantee no ../ reaches the target app.
+	method := path.Clean(msg.GetMethod())
+	if method == "." {
+		method = ""
+	}
 	var headers []commonapi.NameValuePair
 
 	uri := strings.Builder{}
