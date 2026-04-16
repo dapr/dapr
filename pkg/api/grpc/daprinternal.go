@@ -33,6 +33,7 @@ import (
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
+	"github.com/dapr/dapr/pkg/messaging/method"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -369,11 +370,24 @@ func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream in
 	return nil
 }
 
-// Used by CallLocal and CallLocalStream to check the request against the access control list
+// Used by CallLocal and CallLocalStream to check the request against the access control list.
+// The method is normalized (forbidden characters rejected, path traversal resolved) as
+// defense-in-depth before ACL evaluation. The normalized form is written back to the
+// request so dispatch uses the same canonical string.
 func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMethodRequest) error {
+	// Normalize method as defense-in-depth (caller should have already normalized).
+	operation := req.Message().GetMethod()
+	normalized, err := method.NormalizeMethod(operation)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "invalid method: %v", err)
+	}
+	if normalized != operation {
+		req.Message().Method = normalized
+		operation = normalized
+	}
+
 	if a.accessControlList != nil {
 		// An access control policy has been specified for the app. Apply the policies.
-		operation := req.Message().GetMethod()
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
 		appProtocolIsHTTP := a.AppConnectionConfig().Protocol.IsHTTP()
