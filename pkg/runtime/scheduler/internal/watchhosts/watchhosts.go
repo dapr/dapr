@@ -83,7 +83,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(retry.Jitter(time.Second)):
+			case <-time.After(retry.Jitter(time.Second, time.Second/2)):
 				continue
 			}
 		}

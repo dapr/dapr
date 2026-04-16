@@ -175,7 +175,7 @@ func (p *placement) handleReconnect(ctx context.Context, recon *loops.PlacementR
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(retry.Jitter(time.Second / 2)):
+		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 		}
 	}
 

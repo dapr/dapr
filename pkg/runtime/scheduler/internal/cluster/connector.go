@@ -54,7 +54,7 @@ func (c *connector) run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(retry.Jitter(time.Second / 2)):
+			case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 				continue
 			}
 		}
@@ -74,7 +74,7 @@ func (c *connector) run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(retry.Jitter(time.Second / 2)):
+			case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 				continue
 			}
 		}
@@ -102,7 +102,7 @@ func (c *connector) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(retry.Jitter(time.Second / 2)):
+		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 		}
 	}
 }

@@ -23,9 +23,13 @@ const (
 	DefaultLinearRetryCount      = 3
 )
 
-// Jitter returns a random duration in the range [base/2, base*3/2).
+// Jitter returns a random duration in the range [base-jitter, base+jitter).
+// Returns base if jitter is zero or negative.
 //
 //nolint:gosec
-func Jitter(base time.Duration) time.Duration {
-	return base/2 + time.Duration(rand.Int63n(int64(base)))
+func Jitter(base, jitter time.Duration) time.Duration {
+	if jitter <= 0 {
+		return base
+	}
+	return base - jitter + time.Duration(rand.Int63n(int64(jitter*2)))
 }

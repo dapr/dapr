@@ -39,7 +39,7 @@ func (s *Leadership) resolveRaftAdvertiseAddr(ctx context.Context, bindAddr stri
 		select {
 		case <-ctx.Done():
 			return nil, err
-		case <-time.After(retry.Jitter(nameResolveRetryInterval)):
+		case <-time.After(retry.Jitter(nameResolveRetryInterval, nameResolveRetryInterval/2)):
 			// nop
 		}
 	}
