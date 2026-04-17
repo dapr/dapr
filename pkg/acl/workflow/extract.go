@@ -44,18 +44,37 @@ const (
 // actor. Returns the operation type and true if it is a workflow/activity actor,
 // or empty string and false otherwise.
 func ParseActorType(actorType string) (OperationType, bool) {
-	if !strings.HasPrefix(actorType, actorTypePrefix) {
-		return "", false
-	}
+	op, _, _, ok := SplitActorType(actorType)
+	return op, ok
+}
 
-	switch {
-	case strings.HasSuffix(actorType, suffixWorkflow):
-		return OperationTypeWorkflow, true
-	case strings.HasSuffix(actorType, suffixActivity):
-		return OperationTypeActivity, true
-	default:
-		return "", false
+// SplitActorType extracts the (operation, namespace, appID) triple from a
+// workflow/activity actor type string of the form
+// "dapr.internal.<namespace>.<appID>.<workflow|activity>". Returns ok=false
+// if the input doesn't match that shape. AppIDs may not contain dots; the
+// renderer always emits "<ns>.<app>.<kind>" so the last dot-separated
+// segment before the suffix is the appID and everything before it is the
+// namespace (which may itself contain dots).
+func SplitActorType(actorType string) (op OperationType, namespace, appID string, ok bool) {
+	if !strings.HasPrefix(actorType, actorTypePrefix) {
+		return "", "", "", false
 	}
+	rest := actorType[len(actorTypePrefix):]
+	switch {
+	case strings.HasSuffix(rest, suffixWorkflow):
+		op = OperationTypeWorkflow
+		rest = strings.TrimSuffix(rest, suffixWorkflow)
+	case strings.HasSuffix(rest, suffixActivity):
+		op = OperationTypeActivity
+		rest = strings.TrimSuffix(rest, suffixActivity)
+	default:
+		return "", "", "", false
+	}
+	dot := strings.LastIndexByte(rest, '.')
+	if dot <= 0 || dot == len(rest)-1 {
+		return op, "", "", true
+	}
+	return op, rest[:dot], rest[dot+1:], true
 }
 
 // ExtractOperationName extracts the workflow or activity name from the request

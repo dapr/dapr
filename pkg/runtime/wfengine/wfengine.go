@@ -52,6 +52,10 @@ type Interface interface {
 
 	ActivityActorType() string
 	WorkflowActorType() string
+
+	// SetXNSDispatcher installs the cross-namespace dispatcher. Must be
+	// called before the engine starts handling work items.
+	SetXNSDispatcher(orchestrator.XNSDispatcher)
 }
 
 type Options struct {
@@ -63,6 +67,11 @@ type Options struct {
 	Resiliency     resiliency.Provider
 	EventSink      orchestrator.EventSink
 	ComponentStore *compstore.ComponentStore
+
+	// XNSDispatcher performs the cross-namespace service-invocation hop for
+	// child workflows and activities scheduled with a target namespace. Nil
+	// when the WorkflowCrossNamespace feature is disabled.
+	XNSDispatcher orchestrator.XNSDispatcher
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
@@ -114,6 +123,7 @@ func New(opts Options) (Interface, error) {
 		ComponentStore:  opts.ComponentStore,
 		RetentionPolicy: retPolicy,
 		Signer:          s,
+		XNSDispatcher:   opts.XNSDispatcher,
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -163,10 +173,11 @@ func New(opts Options) (Interface, error) {
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
 	oworker := backend.NewWorkflowWorker(backend.WorkflowWorkerOptions{
-		Backend:  abackend,
-		Executor: executor,
-		Logger:   wfBackendLogger,
-		AppID:    opts.AppID,
+		Backend:   abackend,
+		Executor:  executor,
+		Logger:    wfBackendLogger,
+		AppID:     opts.AppID,
+		Namespace: opts.Namespace,
 	}, topts...)
 
 	topts = nil
@@ -197,6 +208,13 @@ func New(opts Options) (Interface, error) {
 			client: backend.NewTaskHubClient(abackend),
 		},
 	}, nil
+}
+
+// SetXNSDispatcher late-binds the cross-namespace dispatcher on the backend.
+// Must be called before the engine starts registering actors (i.e. before
+// the first workflow work-item connection).
+func (wfe *engine) SetXNSDispatcher(d orchestrator.XNSDispatcher) {
+	wfe.backend.SetXNSDispatcher(d)
 }
 
 func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {

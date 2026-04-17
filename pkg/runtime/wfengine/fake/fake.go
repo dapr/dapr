@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/workflows"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/orchestrator"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
@@ -101,6 +102,9 @@ func (f *Fake) ActivityActorType() string {
 func (f *Fake) WorkflowActorType() string {
 	return ""
 }
+
+// SetXNSDispatcher is a no-op in the fake.
+func (f *Fake) SetXNSDispatcher(_ orchestrator.XNSDispatcher) {}
 
 func (f *Fake) RuntimeMetadata() *runtimev1pb.MetadataWorkflows {
 	return f.runtimeMetadataFn()

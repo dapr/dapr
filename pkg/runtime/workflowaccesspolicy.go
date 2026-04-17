@@ -71,7 +71,7 @@ func (a *DaprRuntime) loadWorkflowAccessPolicies(ctx context.Context) error {
 		valid = append(valid, p)
 	}
 
-	compiled := workflowacl.Compile(valid)
+	compiled := workflowacl.Compile(valid, a.namespace)
 	a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
 
 	if compiled != nil {
@@ -89,9 +89,9 @@ func (a *DaprRuntime) buildWorkflowACLChecker() actorrouter.WorkflowACLChecker {
 		return nil
 	}
 
-	return func(callerAppID string, req *internalv1pb.InternalInvokeRequest) error {
+	return func(callerNamespace, callerAppID string, req *internalv1pb.InternalInvokeRequest) error {
 		result, err := workflowacl.EnforceRequest(
-			a.daprGRPCAPI.GetWorkflowAccessPolicies(), callerAppID,
+			a.daprGRPCAPI.GetWorkflowAccessPolicies(), callerNamespace, callerAppID,
 			req.GetActor().GetActorType(),
 			req.GetMessage().GetMethod(),
 			req.GetMessage().GetData().GetValue(),

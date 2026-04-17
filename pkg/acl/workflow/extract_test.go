@@ -172,6 +172,36 @@ func TestParseActorType_JustPrefix(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestSplitActorType(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		op        OperationType
+		namespace string
+		appID     string
+		ok        bool
+	}{
+		{name: "workflow", input: "dapr.internal.default.myapp.workflow", op: OperationTypeWorkflow, namespace: "default", appID: "myapp", ok: true},
+		{name: "activity", input: "dapr.internal.default.myapp.activity", op: OperationTypeActivity, namespace: "default", appID: "myapp", ok: true},
+		{name: "namespace with dots", input: "dapr.internal.my.namespace.myapp.workflow", op: OperationTypeWorkflow, namespace: "my.namespace", appID: "myapp", ok: true},
+		{name: "missing prefix", input: "other.default.myapp.workflow", ok: false},
+		{name: "neither workflow nor activity", input: "dapr.internal.default.myapp.executor", ok: false},
+		{name: "missing appID segment", input: "dapr.internal.myapp.workflow", op: OperationTypeWorkflow, namespace: "", appID: "", ok: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			op, ns, app, ok := SplitActorType(tt.input)
+			assert.Equal(t, tt.ok, ok)
+			if !tt.ok {
+				return
+			}
+			assert.Equal(t, tt.op, op)
+			assert.Equal(t, tt.namespace, ns)
+			assert.Equal(t, tt.appID, app)
+		})
+	}
+}
+
 func TestExtractOperationName_WorkflowNilStartEvent(t *testing.T) {
 	req := &protos.CreateWorkflowInstanceRequest{
 		StartEvent: &protos.HistoryEvent{

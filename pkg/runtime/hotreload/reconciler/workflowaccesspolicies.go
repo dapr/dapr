@@ -32,6 +32,7 @@ type PolicyRecompiler func(policies *workflowacl.CompiledPolicies)
 // WorkflowAccessPolicyOptions holds options for creating a WorkflowAccessPolicy reconciler.
 type WorkflowAccessPolicyOptions struct {
 	AppID      string
+	Namespace  string
 	Loader     loader.Interface
 	CompStore  *compstore.ComponentStore
 	Recompiler PolicyRecompiler
@@ -40,6 +41,7 @@ type WorkflowAccessPolicyOptions struct {
 
 type workflowAccessPolicies struct {
 	appID      string
+	namespace  string
 	store      *compstore.ComponentStore
 	recompiler PolicyRecompiler
 	loader.Loader[wfaclapi.WorkflowAccessPolicy]
@@ -53,6 +55,7 @@ func NewWorkflowAccessPolicies(opts WorkflowAccessPolicyOptions) *Reconciler[wfa
 		manager: &workflowAccessPolicies{
 			Loader:     opts.Loader.WorkflowAccessPolicies(),
 			appID:      opts.AppID,
+			namespace:  opts.Namespace,
 			store:      opts.CompStore,
 			recompiler: opts.Recompiler,
 		},
@@ -73,7 +76,7 @@ func (w *workflowAccessPolicies) recompileAll() {
 			scoped = append(scoped, p)
 		}
 	}
-	compiled := workflowacl.Compile(scoped)
+	compiled := workflowacl.Compile(scoped, w.namespace)
 	w.recompiler(compiled)
 	log.Infof("Recompiled %d workflow access policy resource(s) (of %d total)", len(scoped), len(all))
 }

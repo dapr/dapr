@@ -75,8 +75,10 @@ const (
 	// creating a verifiable chain of signatures. Disabled by default.
 	WorkflowHistorySigning Feature = "WorkflowHistorySigning"
 
-	// Enables workflow access control policies. When enabled, WorkflowAccessPolicy
-	// resources are loaded and enforced at the target sidecar's CallActor handler.
+	// Enables workflow access control policies. When enabled,
+	// WorkflowAccessPolicy resources are loaded and enforced at the target
+	// sidecar's CallActor handler. This also enables cross namespace calls,
+	// however they must be strictly allowed in a WorkflowAccessPolicy.
 	WorkflowAccessPolicy Feature = "WorkflowAccessPolicy"
 )
 
