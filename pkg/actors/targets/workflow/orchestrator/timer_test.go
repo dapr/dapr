@@ -414,6 +414,80 @@ func Test_deleteCancelledEventTimers(t *testing.T) {
 		assert.Equal(t, []string{"timer-3"}, deletedNames)
 	})
 
+	t.Run("timer with ActivityRetry origin is not cancelled by EventRaised", func(t *testing.T) {
+		t.Parallel()
+		deleteCalled := false
+		reminders := remindersfake.New().WithDelete(func(_ context.Context, _ *actorapi.DeleteReminderRequest) error {
+			deleteCalled = true
+			return nil
+		})
+		o := newOrchestrator(reminders)
+
+		// Name is set and matches the EventRaised name. Without the
+		// origin-based exclusion this timer would be incorrectly deleted.
+		matchingName := "bar"
+		rs := &protos.WorkflowRuntimeState{
+			OldEvents: []*protos.HistoryEvent{
+				{
+					EventId: 0,
+					EventType: &protos.HistoryEvent_TimerCreated{
+						TimerCreated: &protos.TimerCreatedEvent{
+							Name: &matchingName,
+							Origin: &protos.TimerCreatedEvent_ActivityRetry{
+								ActivityRetry: &protos.TimerOriginActivityRetry{
+									TaskExecutionId: "exec-123",
+								},
+							},
+						},
+					},
+				},
+			},
+			NewEvents: []*protos.HistoryEvent{
+				eventRaised("bar"),
+			},
+		}
+		err := o.deleteCancelledEventTimers(t.Context(), rs)
+		require.NoError(t, err)
+		assert.False(t, deleteCalled)
+	})
+
+	t.Run("timer with ChildWorkflowRetry origin is not cancelled by EventRaised", func(t *testing.T) {
+		t.Parallel()
+		deleteCalled := false
+		reminders := remindersfake.New().WithDelete(func(_ context.Context, _ *actorapi.DeleteReminderRequest) error {
+			deleteCalled = true
+			return nil
+		})
+		o := newOrchestrator(reminders)
+
+		// Name is set and matches the EventRaised name. Without the
+		// origin-based exclusion this timer would be incorrectly deleted.
+		matchingName := "bar"
+		rs := &protos.WorkflowRuntimeState{
+			OldEvents: []*protos.HistoryEvent{
+				{
+					EventId: 0,
+					EventType: &protos.HistoryEvent_TimerCreated{
+						TimerCreated: &protos.TimerCreatedEvent{
+							Name: &matchingName,
+							Origin: &protos.TimerCreatedEvent_ChildWorkflowRetry{
+								ChildWorkflowRetry: &protos.TimerOriginChildWorkflowRetry{
+									InstanceId: "child-123",
+								},
+							},
+						},
+					},
+				},
+			},
+			NewEvents: []*protos.HistoryEvent{
+				eventRaised("bar"),
+			},
+		}
+		err := o.deleteCancelledEventTimers(t.Context(), rs)
+		require.NoError(t, err)
+		assert.False(t, deleteCalled)
+	})
+
 	t.Run("timer without Name field is ignored", func(t *testing.T) {
 		t.Parallel()
 		deleteCalled := false
