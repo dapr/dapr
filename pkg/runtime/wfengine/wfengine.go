@@ -49,6 +49,10 @@ type Interface interface {
 	RuntimeMetadata() *runtimev1pb.MetadataWorkflows
 
 	ActivityActorType() string
+
+	// SetXNSDispatcher installs the cross-namespace dispatcher. Must be
+	// called before the engine starts handling work items.
+	SetXNSDispatcher(orchestrator.XNSDispatcher)
 }
 
 type Options struct {
@@ -60,6 +64,11 @@ type Options struct {
 	Resiliency     resiliency.Provider
 	EventSink      orchestrator.EventSink
 	ComponentStore *compstore.ComponentStore
+
+	// XNSDispatcher performs the cross-namespace service-invocation hop for
+	// child workflows and activities scheduled with a target namespace. Nil
+	// when the WorkflowCrossNamespace feature is disabled.
+	XNSDispatcher orchestrator.XNSDispatcher
 
 	EnableClusteredDeployment       bool
 	WorkflowsRemoteActivityReminder bool
@@ -93,6 +102,7 @@ func New(opts Options) Interface {
 		EventSink:       opts.EventSink,
 		ComponentStore:  opts.ComponentStore,
 		RetentionPolicy: retPolicy,
+		XNSDispatcher:   opts.XNSDispatcher,
 
 		EnableClusteredDeployment:       opts.EnableClusteredDeployment,
 		WorkflowsRemoteActivityReminder: opts.WorkflowsRemoteActivityReminder,
@@ -176,6 +186,13 @@ func New(opts Options) Interface {
 			client: backend.NewTaskHubClient(abackend),
 		},
 	}
+}
+
+// SetXNSDispatcher late-binds the cross-namespace dispatcher on the backend.
+// Must be called before the engine starts registering actors (i.e. before
+// the first workflow work-item connection).
+func (wfe *engine) SetXNSDispatcher(d orchestrator.XNSDispatcher) {
+	wfe.backend.SetXNSDispatcher(d)
 }
 
 func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {

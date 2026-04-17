@@ -93,6 +93,12 @@ func (a *Universal) Namespace() string {
 	return a.namespace
 }
 
+// GlobalConfig returns the runtime configuration. Used by enforcement paths
+// that need to check feature flags (e.g. WorkflowCrossNamespace).
+func (a *Universal) GlobalConfig() *config.Configuration {
+	return a.globalConfig
+}
+
 func (a *Universal) Resiliency() resiliency.Provider {
 	return a.resiliency
 }

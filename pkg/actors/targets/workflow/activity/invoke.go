@@ -18,11 +18,13 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/targets/workflow/common"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
@@ -68,15 +70,12 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
 
-	var state backend.HistoryEvent
-	if err := reminder.Data.UnmarshalTo(&state); err != nil {
-		return fmt.Errorf("failed to decode activity reminder: %w", err)
+	state, err := a.decodeReminderEvent(reminder)
+	if err != nil {
+		return err
 	}
 
-	err := a.executeActivity(ctx, reminder.Name, &state)
-
-	// Returning nil signals that we want the execution to be retried in the next
-	// period interval
+	err = a.executeActivity(ctx, reminder.Name, state)
 	switch {
 	case err == nil:
 		return nil
@@ -89,8 +88,36 @@ func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Remind
 	case wferrors.IsRecoverable(err):
 		log.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", a.actorID, err)
 		return err
-	default: // Other error
+	default:
 		log.Errorf("%s: execution failed with an error: %v", a.actorID, err)
 		return err
+	}
+}
+
+// decodeReminderEvent returns the scheduling HistoryEvent carried by a
+// reminder. Normal same-namespace invocations pack the HistoryEvent
+// directly; cross-namespace xns-exec reminders instead wrap it in a
+// CrossNSDispatchRequest (caller-supplied deterministic key in the
+// reminder name, HistoryEvent in Payload). Unwrapping is keyed off the
+// reminder name prefix so the rest of handleReminder treats both paths
+// identically and error classification is shared.
+func (a *activity) decodeReminderEvent(reminder *actorapi.Reminder) (*backend.HistoryEvent, error) {
+	switch {
+	case strings.HasPrefix(reminder.Name, common.ReminderPrefixXNSExec):
+		var dispatch internalsv1pb.CrossNSDispatchRequest
+		if err := reminder.Data.UnmarshalTo(&dispatch); err != nil {
+			return nil, fmt.Errorf("failed to decode cross-ns activity reminder: %w", err)
+		}
+		var his backend.HistoryEvent
+		if err := proto.Unmarshal(dispatch.GetPayload(), &his); err != nil {
+			return nil, fmt.Errorf("failed to decode cross-ns activity payload: %w", err)
+		}
+		return &his, nil
+	default:
+		var his backend.HistoryEvent
+		if err := reminder.Data.UnmarshalTo(&his); err != nil {
+			return nil, fmt.Errorf("failed to decode activity reminder: %w", err)
+		}
+		return &his, nil
 	}
 }

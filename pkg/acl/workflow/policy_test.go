@@ -18,6 +18,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/kit/ptr"
+
 	wfaclapi "github.com/dapr/dapr/pkg/apis/workflowaccesspolicy/v1alpha1"
 )
 
@@ -30,27 +32,27 @@ func makePolicy(name string, rules []wfaclapi.WorkflowAccessPolicyRule) wfaclapi
 }
 
 func TestCompile_NilWhenNoPolicies(t *testing.T) {
-	cp := Compile(nil)
+	cp := Compile(nil, "")
 	assert.Nil(t, cp)
 
-	cp = Compile([]wfaclapi.WorkflowAccessPolicy{})
+	cp = Compile([]wfaclapi.WorkflowAccessPolicy{}, "")
 	assert.Nil(t, cp)
 }
 
 func TestEvaluate_NilPoliciesAllowAll(t *testing.T) {
 	var cp *CompiledPolicies
-	assert.True(t, cp.Evaluate("any-app", OperationTypeWorkflow, "AnyWorkflow"))
+	assert.True(t, cp.Evaluate("", "any-app", OperationTypeWorkflow, "AnyWorkflow"))
 }
 
 func TestEvaluate_DefaultDenyWhenPoliciesExist(t *testing.T) {
 	// Policy with no rules — defaults to deny all.
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
 		makePolicy("deny-all", nil),
-	})
+	}, "")
 
 	// Even though the policy has no rules, a non-nil CompiledPolicies
 	// means policies exist, so the default is deny.
-	assert.False(t, cp.Evaluate("any-app", OperationTypeWorkflow, "AnyWorkflow"))
+	assert.False(t, cp.Evaluate("", "any-app", OperationTypeWorkflow, "AnyWorkflow"))
 }
 
 func TestEvaluate_AllowSpecificCaller(t *testing.T) {
@@ -67,12 +69,12 @@ func TestEvaluate_AllowSpecificCaller(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
-	assert.True(t, cp.Evaluate("checkout", OperationTypeWorkflow, "ProcessOrder"))
-	assert.False(t, cp.Evaluate("other-app", OperationTypeWorkflow, "ProcessOrder"))
-	assert.False(t, cp.Evaluate("checkout", OperationTypeWorkflow, "OtherWorkflow"))
-	assert.False(t, cp.Evaluate("checkout", OperationTypeActivity, "ProcessOrder"))
+	assert.True(t, cp.Evaluate("", "checkout", OperationTypeWorkflow, "ProcessOrder"))
+	assert.False(t, cp.Evaluate("", "other-app", OperationTypeWorkflow, "ProcessOrder"))
+	assert.False(t, cp.Evaluate("", "checkout", OperationTypeWorkflow, "OtherWorkflow"))
+	assert.False(t, cp.Evaluate("", "checkout", OperationTypeActivity, "ProcessOrder"))
 }
 
 func TestEvaluate_GlobPatterns(t *testing.T) {
@@ -94,12 +96,12 @@ func TestEvaluate_GlobPatterns(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessOrder"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessRefund"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "CancelOrder"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeActivity, "AnyActivity"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessOrder"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessRefund"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "CancelOrder"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeActivity, "AnyActivity"))
 }
 
 func TestEvaluate_MostSpecificWins(t *testing.T) {
@@ -126,14 +128,14 @@ func TestEvaluate_MostSpecificWins(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
 	// "Process*" (prefix len 7) is more specific than "*" (prefix len 0)
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessOrder"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessOrder"))
 	// Exact match "ProcessSecret" is more specific than glob "Process*"
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessSecret"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessSecret"))
 	// Wildcard "*" matches but action is deny
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "CancelOrder"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "CancelOrder"))
 }
 
 func TestEvaluate_DenyWinsTies(t *testing.T) {
@@ -160,10 +162,10 @@ func TestEvaluate_DenyWinsTies(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
 	// Same specificity, deny wins.
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "OrderProcess"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "OrderProcess"))
 }
 
 func TestEvaluate_MultipleCallers(t *testing.T) {
@@ -183,11 +185,11 @@ func TestEvaluate_MultipleCallers(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "Any"))
-	assert.True(t, cp.Evaluate("app-b", OperationTypeWorkflow, "Any"))
-	assert.False(t, cp.Evaluate("app-c", OperationTypeWorkflow, "Any"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "Any"))
+	assert.True(t, cp.Evaluate("", "app-b", OperationTypeWorkflow, "Any"))
+	assert.False(t, cp.Evaluate("", "app-c", OperationTypeWorkflow, "Any"))
 }
 
 func TestEvaluate_MultiplePoliciesMerged(t *testing.T) {
@@ -216,12 +218,12 @@ func TestEvaluate_MultiplePoliciesMerged(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "WorkflowA"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "WorkflowB"))
-	assert.True(t, cp.Evaluate("app-b", OperationTypeWorkflow, "WorkflowB"))
-	assert.False(t, cp.Evaluate("app-b", OperationTypeWorkflow, "WorkflowA"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "WorkflowA"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "WorkflowB"))
+	assert.True(t, cp.Evaluate("", "app-b", OperationTypeWorkflow, "WorkflowB"))
+	assert.False(t, cp.Evaluate("", "app-b", OperationTypeWorkflow, "WorkflowA"))
 }
 
 func TestEvaluate_InvalidGlobSkipped(t *testing.T) {
@@ -243,10 +245,10 @@ func TestEvaluate_InvalidGlobSkipped(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
 	// The invalid glob should be skipped, the valid one should still work.
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ValidWorkflow"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ValidWorkflow"))
 }
 
 func TestEvaluate_SelfInvocation(t *testing.T) {
@@ -264,10 +266,10 @@ func TestEvaluate_SelfInvocation(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
-	assert.True(t, cp.Evaluate("my-app", OperationTypeWorkflow, "SelfWorkflow"))
-	assert.False(t, cp.Evaluate("other-app", OperationTypeWorkflow, "SelfWorkflow"))
+	assert.True(t, cp.Evaluate("", "my-app", OperationTypeWorkflow, "SelfWorkflow"))
+	assert.False(t, cp.Evaluate("", "other-app", OperationTypeWorkflow, "SelfWorkflow"))
 }
 
 func TestLiteralPrefixLen(t *testing.T) {
@@ -303,12 +305,12 @@ func TestEvaluate_DefaultActionAllow(t *testing.T) {
 				}},
 			}},
 		},
-	}})
+	}}, "")
 
 	// SpecificWF is explicitly denied.
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "SpecificWF"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "SpecificWF"))
 	// OtherWF has no matching rule — DefaultAction "allow" kicks in.
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "OtherWF"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "OtherWF"))
 }
 
 func TestEvaluate_DefaultActionDeny(t *testing.T) {
@@ -325,10 +327,10 @@ func TestEvaluate_DefaultActionDeny(t *testing.T) {
 				}},
 			}},
 		},
-	}})
+	}}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "AllowedWF"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "OtherWF"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "AllowedWF"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "OtherWF"))
 }
 
 func TestEvaluate_DefaultActionEmpty(t *testing.T) {
@@ -345,10 +347,10 @@ func TestEvaluate_DefaultActionEmpty(t *testing.T) {
 				}},
 			}},
 		},
-	}})
+	}}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "AllowedWF"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "OtherWF"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "AllowedWF"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "OtherWF"))
 }
 
 func TestEvaluate_MultiplePoliciesDenyWinsDefault(t *testing.T) {
@@ -356,9 +358,9 @@ func TestEvaluate_MultiplePoliciesDenyWinsDefault(t *testing.T) {
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
 		{Spec: wfaclapi.WorkflowAccessPolicySpec{DefaultAction: wfaclapi.PolicyActionAllow}},
 		{Spec: wfaclapi.WorkflowAccessPolicySpec{DefaultAction: wfaclapi.PolicyActionDeny}},
-	})
+	}, "")
 
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "AnyWF"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "AnyWF"))
 }
 
 func TestEvaluate_EmptyCallersSkipped(t *testing.T) {
@@ -374,10 +376,10 @@ func TestEvaluate_EmptyCallersSkipped(t *testing.T) {
 				Action: wfaclapi.PolicyActionAllow,
 			}},
 		}}),
-	})
+	}, "")
 
 	// Empty callers rule is skipped → no matching rule → default deny.
-	assert.False(t, cp.Evaluate("any-app", OperationTypeWorkflow, "AnyWF"))
+	assert.False(t, cp.Evaluate("", "any-app", OperationTypeWorkflow, "AnyWF"))
 }
 
 func TestEvaluate_CrossPolicyConflictingActions(t *testing.T) {
@@ -397,12 +399,12 @@ func TestEvaluate_CrossPolicyConflictingActions(t *testing.T) {
 	}})
 
 	// Allow first, deny second.
-	cp := Compile([]wfaclapi.WorkflowAccessPolicy{allowPolicy, denyPolicy})
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessOrder"))
+	cp := Compile([]wfaclapi.WorkflowAccessPolicy{allowPolicy, denyPolicy}, "")
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessOrder"))
 
 	// Deny first, allow second — still deny wins.
-	cp = Compile([]wfaclapi.WorkflowAccessPolicy{denyPolicy, allowPolicy})
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessOrder"))
+	cp = Compile([]wfaclapi.WorkflowAccessPolicy{denyPolicy, allowPolicy}, "")
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessOrder"))
 }
 
 func TestEvaluate_QuestionMarkGlob(t *testing.T) {
@@ -413,12 +415,12 @@ func TestEvaluate_QuestionMarkGlob(t *testing.T) {
 				Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "Process?", Action: wfaclapi.PolicyActionAllow,
 			}},
 		}}),
-	})
+	}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessA"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessZ"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessAB"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "Process"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessA"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessZ"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessAB"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "Process"))
 }
 
 func TestEvaluate_CharacterClassGlob(t *testing.T) {
@@ -430,13 +432,13 @@ func TestEvaluate_CharacterClassGlob(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "Process[ABC]", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessOrder"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "processOrder"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeActivity, "ProcessA"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeActivity, "ProcessC"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeActivity, "ProcessD"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessOrder"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "processOrder"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeActivity, "ProcessA"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeActivity, "ProcessC"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeActivity, "ProcessD"))
 }
 
 func TestEvaluate_CaseSensitive(t *testing.T) {
@@ -448,13 +450,13 @@ func TestEvaluate_CaseSensitive(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "Process*", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessOrder"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "processorder"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "PROCESSORDER"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessAnything"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "processanything"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessOrder"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "processorder"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "PROCESSORDER"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessAnything"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "processanything"))
 }
 
 func TestEvaluate_TypeIsolation(t *testing.T) {
@@ -465,11 +467,11 @@ func TestEvaluate_TypeIsolation(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeActivity, Name: "*", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
 	// Activity rule should NOT match workflow queries.
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "AnyWorkflow"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeActivity, "AnyActivity"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "AnyWorkflow"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeActivity, "AnyActivity"))
 
 	// Reverse: workflow-only rule.
 	cp2 := Compile([]wfaclapi.WorkflowAccessPolicy{
@@ -479,10 +481,10 @@ func TestEvaluate_TypeIsolation(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
-	assert.True(t, cp2.Evaluate("app-a", OperationTypeWorkflow, "AnyWorkflow"))
-	assert.False(t, cp2.Evaluate("app-a", OperationTypeActivity, "AnyActivity"))
+	assert.True(t, cp2.Evaluate("", "app-a", OperationTypeWorkflow, "AnyWorkflow"))
+	assert.False(t, cp2.Evaluate("", "app-a", OperationTypeActivity, "AnyActivity"))
 }
 
 func TestEvaluate_MultipleRulesForSameCaller(t *testing.T) {
@@ -501,11 +503,11 @@ func TestEvaluate_MultipleRulesForSameCaller(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "WF1"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "WF2"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "WF3"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "WF1"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "WF2"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "WF3"))
 }
 
 func TestEvaluate_ExactMatchBeatsGlobAtSamePrefix(t *testing.T) {
@@ -517,13 +519,13 @@ func TestEvaluate_ExactMatchBeatsGlobAtSamePrefix(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "ProcessOrder", Action: wfaclapi.PolicyActionDeny},
 			},
 		}}),
-	})
+	}, "")
 
 	// Exact match "ProcessOrder" (deny) beats glob "ProcessOrder*" (allow)
 	// because isExact=true wins over isExact=false.
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessOrder"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessOrder"))
 	// But "ProcessOrderX" only matches the glob, so it's allowed.
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "ProcessOrderX"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "ProcessOrderX"))
 }
 
 func TestEvaluate_EmptyOperationName(t *testing.T) {
@@ -534,10 +536,10 @@ func TestEvaluate_EmptyOperationName(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
 	// Empty operation name should still match "*".
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, ""))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, ""))
 }
 
 func TestEvaluate_SpecialCharactersInName(t *testing.T) {
@@ -550,12 +552,12 @@ func TestEvaluate_SpecialCharactersInName(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "my_workflow", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "my.workflow"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "my-workflow"))
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "my_workflow"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "myXworkflow"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "my.workflow"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "my-workflow"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "my_workflow"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "myXworkflow"))
 }
 
 func TestEvaluate_ManyPoliciesStress(t *testing.T) {
@@ -583,10 +585,10 @@ func TestEvaluate_ManyPoliciesStress(t *testing.T) {
 		}},
 	}}))
 
-	cp := Compile(policies)
+	cp := Compile(policies, "")
 	// Exact match "WF_SpecificOne" (allow) beats glob "WF_*" (deny).
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "WF_SpecificOne"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "WF_Other"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "WF_SpecificOne"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "WF_Other"))
 }
 
 func TestCompile_AllRulesInvalidGlobSkipped(t *testing.T) {
@@ -598,12 +600,12 @@ func TestCompile_AllRulesInvalidGlobSkipped(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "[also-invalid", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
 	// All operations invalid → rule has 0 compiled ops → not added.
 	// But CompiledPolicies is still non-nil (policies exist), so default deny.
 	assert.NotNil(t, cp)
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "anything"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "anything"))
 }
 
 func TestCompile_EmptyRulesInPolicy(t *testing.T) {
@@ -611,10 +613,10 @@ func TestCompile_EmptyRulesInPolicy(t *testing.T) {
 	// (policies exist = default deny), but with 0 compiled rules.
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
 		makePolicy("empty", nil),
-	})
+	}, "")
 
 	assert.NotNil(t, cp)
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "anything"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "anything"))
 }
 
 func TestEvaluate_CallerNotInAnyRule(t *testing.T) {
@@ -625,10 +627,10 @@ func TestEvaluate_CallerNotInAnyRule(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
 	// app-b not in any rule → no match → default deny.
-	assert.False(t, cp.Evaluate("app-b", OperationTypeWorkflow, "AnyWF"))
+	assert.False(t, cp.Evaluate("", "app-b", OperationTypeWorkflow, "AnyWF"))
 }
 
 func TestEvaluate_BroadCallerWithDenyOverride(t *testing.T) {
@@ -649,16 +651,16 @@ func TestEvaluate_BroadCallerWithDenyOverride(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
 	// app-a: "SecretWF" — both rules match, but "SecretWF" (exact, deny) is more specific than "*" (glob, allow).
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "SecretWF"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "SecretWF"))
 	// app-a: other workflows — only broad rule matches → allow.
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "PublicWF"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "PublicWF"))
 	// app-b: SecretWF — only broad rule matches (app-b not in deny rule) → allow.
-	assert.True(t, cp.Evaluate("app-b", OperationTypeWorkflow, "SecretWF"))
+	assert.True(t, cp.Evaluate("", "app-b", OperationTypeWorkflow, "SecretWF"))
 	// app-c: not in any rule → default deny.
-	assert.False(t, cp.Evaluate("app-c", OperationTypeWorkflow, "PublicWF"))
+	assert.False(t, cp.Evaluate("", "app-c", OperationTypeWorkflow, "PublicWF"))
 }
 
 // --- Standalone validation edge cases ---
@@ -673,10 +675,10 @@ func TestCompile_Standalone_InvalidActionSilentlyFails(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "WF", Action: wfaclapi.PolicyAction("invalid")},
 			},
 		}}),
-	})
+	}, "")
 
 	// "invalid" action is not "allow", so Evaluate returns false (effective deny).
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "WF"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "WF"))
 }
 
 func TestCompile_Standalone_InvalidTypeSilentlyFails(t *testing.T) {
@@ -687,11 +689,11 @@ func TestCompile_Standalone_InvalidTypeSilentlyFails(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationType("bogus"), Name: "*", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
 	// "bogus" type never matches workflow or activity queries → dead rule.
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "WF"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeActivity, "Act"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "WF"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeActivity, "Act"))
 }
 
 func TestCompile_Standalone_EmptyNamePattern(t *testing.T) {
@@ -702,18 +704,18 @@ func TestCompile_Standalone_EmptyNamePattern(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
 	// Empty pattern only matches empty operation name.
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, ""))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "AnyWF"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, ""))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "AnyWF"))
 }
 
 // --- IsCallerKnown tests ---
 
 func TestIsCallerKnown_NilPoliciesAllowAll(t *testing.T) {
 	var cp *CompiledPolicies
-	assert.True(t, cp.IsCallerKnown("any-app"))
+	assert.True(t, cp.IsCallerKnown("", "any-app"))
 }
 
 func TestIsCallerKnown_CallerWithAllowRule(t *testing.T) {
@@ -724,10 +726,10 @@ func TestIsCallerKnown_CallerWithAllowRule(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "WF1", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
-	assert.True(t, cp.IsCallerKnown("app-a"))
-	assert.False(t, cp.IsCallerKnown("app-b"))
+	assert.True(t, cp.IsCallerKnown("", "app-a"))
+	assert.False(t, cp.IsCallerKnown("", "app-b"))
 }
 
 func TestIsCallerKnown_CallerOnlyInDenyRule(t *testing.T) {
@@ -741,9 +743,9 @@ func TestIsCallerKnown_CallerOnlyInDenyRule(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionDeny},
 			},
 		}}),
-	})
+	}, "")
 
-	assert.False(t, cp.IsCallerKnown("deny-only-app"))
+	assert.False(t, cp.IsCallerKnown("", "deny-only-app"))
 }
 
 func TestIsCallerKnown_CallerInMixedRules(t *testing.T) {
@@ -764,9 +766,9 @@ func TestIsCallerKnown_CallerInMixedRules(t *testing.T) {
 				},
 			},
 		}),
-	})
+	}, "")
 
-	assert.True(t, cp.IsCallerKnown("mixed-app"))
+	assert.True(t, cp.IsCallerKnown("", "mixed-app"))
 }
 
 func TestIsCallerKnown_CallerInRuleWithMixedActions(t *testing.T) {
@@ -779,9 +781,9 @@ func TestIsCallerKnown_CallerInRuleWithMixedActions(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "SecretWF", Action: wfaclapi.PolicyActionDeny},
 			},
 		}}),
-	})
+	}, "")
 
-	assert.True(t, cp.IsCallerKnown("app-a"))
+	assert.True(t, cp.IsCallerKnown("", "app-a"))
 }
 
 func TestIsCallerKnown_MultiplePolicies(t *testing.T) {
@@ -799,20 +801,20 @@ func TestIsCallerKnown_MultiplePolicies(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
-	assert.True(t, cp.IsCallerKnown("allow-app"))
-	assert.False(t, cp.IsCallerKnown("deny-app"))
-	assert.False(t, cp.IsCallerKnown("unknown-app"))
+	assert.True(t, cp.IsCallerKnown("", "allow-app"))
+	assert.False(t, cp.IsCallerKnown("", "deny-app"))
+	assert.False(t, cp.IsCallerKnown("", "unknown-app"))
 }
 
 func TestIsCallerKnown_EmptyPolicyNoRules(t *testing.T) {
 	// Non-nil compiled policies but no rules.
 	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
 		makePolicy("empty", nil),
-	})
+	}, "")
 
-	assert.False(t, cp.IsCallerKnown("any-app"))
+	assert.False(t, cp.IsCallerKnown("", "any-app"))
 }
 
 func TestCompile_Standalone_EmptyAppIDInCaller(t *testing.T) {
@@ -823,11 +825,11 @@ func TestCompile_Standalone_EmptyAppIDInCaller(t *testing.T) {
 				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
 			},
 		}}),
-	})
+	}, "")
 
 	// Empty AppID in callers map — only matches callers with empty ID.
-	assert.True(t, cp.Evaluate("", OperationTypeWorkflow, "WF"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "WF"))
+	assert.True(t, cp.Evaluate("", "", OperationTypeWorkflow, "WF"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "WF"))
 }
 
 func TestCompile_Standalone_NoDefaultAction(t *testing.T) {
@@ -842,8 +844,62 @@ func TestCompile_Standalone_NoDefaultAction(t *testing.T) {
 				},
 			}},
 		},
-	}})
+	}}, "")
 
-	assert.True(t, cp.Evaluate("app-a", OperationTypeWorkflow, "Allowed"))
-	assert.False(t, cp.Evaluate("app-a", OperationTypeWorkflow, "Other"))
+	assert.True(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "Allowed"))
+	assert.False(t, cp.Evaluate("", "app-a", OperationTypeWorkflow, "Other"))
+}
+
+// --- Cross-namespace caller tests ---
+
+// Same-namespace caller matches a rule with nil Namespace (legacy behavior).
+func TestEvaluate_SameNsCallerWithNamespacelessRule(t *testing.T) {
+	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
+		makePolicy("p", []wfaclapi.WorkflowAccessPolicyRule{{
+			Callers: []wfaclapi.WorkflowCaller{{AppID: "caller"}}, // Namespace: nil
+			Operations: []wfaclapi.WorkflowOperationRule{
+				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "WF", Action: wfaclapi.PolicyActionAllow},
+			},
+		}}),
+	}, "target-ns")
+
+	assert.True(t, cp.Evaluate("target-ns", "caller", OperationTypeWorkflow, "WF"))
+	assert.False(t, cp.Evaluate("other-ns", "caller", OperationTypeWorkflow, "WF"), "cross-ns caller must not match a nil-ns rule")
+}
+
+// With the feature gate enabled, an explicit cross-ns rule matches a cross-ns caller.
+func TestEvaluate_CrossNsCallerAllowedWhenFeatureEnabled(t *testing.T) {
+	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
+		makePolicy("p", []wfaclapi.WorkflowAccessPolicyRule{{
+			Callers: []wfaclapi.WorkflowCaller{{AppID: "caller", Namespace: ptr.Of("other-ns")}},
+			Operations: []wfaclapi.WorkflowOperationRule{
+				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "WF", Action: wfaclapi.PolicyActionAllow},
+			},
+		}}),
+	}, "target-ns")
+
+	assert.True(t, cp.Evaluate("other-ns", "caller", OperationTypeWorkflow, "WF"))
+	assert.False(t, cp.Evaluate("target-ns", "caller", OperationTypeWorkflow, "WF"), "same-ns caller must not match a cross-ns rule")
+	assert.False(t, cp.Evaluate("yet-another-ns", "caller", OperationTypeWorkflow, "WF"), "different cross-ns must not match")
+}
+
+// IsCallerKnown keys on (ns, appID) — a same-appID caller in a different
+// namespace is NOT known unless a rule allows them.
+func TestIsCallerKnown_NamespaceAware(t *testing.T) {
+	cp := Compile([]wfaclapi.WorkflowAccessPolicy{
+		makePolicy("p", []wfaclapi.WorkflowAccessPolicyRule{{
+			Callers: []wfaclapi.WorkflowCaller{
+				{AppID: "caller"}, // same-ns
+				{AppID: "friend", Namespace: ptr.Of("other-ns")}, // cross-ns
+			},
+			Operations: []wfaclapi.WorkflowOperationRule{
+				{Type: wfaclapi.WorkflowOperationTypeWorkflow, Name: "*", Action: wfaclapi.PolicyActionAllow},
+			},
+		}}),
+	}, "target-ns")
+
+	assert.True(t, cp.IsCallerKnown("target-ns", "caller"))
+	assert.False(t, cp.IsCallerKnown("other-ns", "caller"), "same AppID in a different ns is a different caller")
+	assert.True(t, cp.IsCallerKnown("other-ns", "friend"))
+	assert.False(t, cp.IsCallerKnown("target-ns", "friend"), "cross-ns rule must not leak into same-ns")
 }

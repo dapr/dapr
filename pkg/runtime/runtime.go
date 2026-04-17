@@ -99,6 +99,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	wfxns "github.com/dapr/dapr/pkg/runtime/wfengine/xns"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 )
@@ -676,6 +677,19 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.initDirectMessaging(a.nameResolver)
 
+	// Install the cross-namespace dispatcher on the workflow engine now that
+	// the name resolver and gRPC manager are ready. Cross-namespace calls
+	// are gated by WorkflowAccessPolicy — the target side refuses any
+	// inbound cross-namespace RPC that no policy permits, so the dispatcher
+	// is always safe to install.
+	resolverMulti, _ := a.nameResolver.(nr.ResolverMulti)
+	a.wfengine.SetXNSDispatcher(wfxns.New(wfxns.Options{
+		Resolver:          a.nameResolver,
+		ResolverMulti:     resolverMulti,
+		GetGRPCConnection: a.grpc.GetGRPCConnection,
+		InternalGRPCPort:  a.runtimeConfig.internalGRPCPort,
+	}))
+
 	a.initPluggableComponents(ctx)
 
 	a.appendBuiltinSecretStore(ctx)
@@ -758,6 +772,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 		a.reloader.SetPolicyRecompiler(reconciler.WorkflowAccessPolicyOptions{
 			AppID:     a.runtimeConfig.id,
+			Namespace: a.namespace,
 			Loader:    a.reloader.Loader(),
 			CompStore: a.compStore,
 			Recompiler: func(compiled *workflowacl.CompiledPolicies) {
@@ -1457,7 +1472,7 @@ func (a *DaprRuntime) loadWorkflowAccessPoliciesKubernetes(ctx context.Context) 
 		a.compStore.AddWorkflowAccessPolicy(policy)
 	}
 
-	compiled := workflowacl.Compile(policies)
+	compiled := workflowacl.Compile(policies, a.namespace)
 	a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
 
 	if compiled != nil {
@@ -1482,7 +1497,7 @@ func (a *DaprRuntime) loadWorkflowAccessPoliciesStandalone(ctx context.Context) 
 		policies = append(policies, loaded...)
 	}
 
-	compiled := workflowacl.Compile(policies)
+	compiled := workflowacl.Compile(policies, a.namespace)
 	a.daprGRPCAPI.SetWorkflowAccessPolicies(compiled)
 
 	if compiled != nil {
@@ -1500,9 +1515,9 @@ func (a *DaprRuntime) buildWorkflowACLChecker() actorrouter.WorkflowACLChecker {
 		return nil
 	}
 
-	return func(callerAppID string, req *internalv1pb.InternalInvokeRequest) error {
+	return func(callerNamespace, callerAppID string, req *internalv1pb.InternalInvokeRequest) error {
 		result, err := workflowacl.EnforceRequest(
-			a.daprGRPCAPI.GetWorkflowAccessPolicies(), callerAppID,
+			a.daprGRPCAPI.GetWorkflowAccessPolicies(), callerNamespace, callerAppID,
 			req.GetActor().GetActorType(),
 			req.GetMessage().GetMethod(),
 			req.GetMessage().GetData().GetValue(),

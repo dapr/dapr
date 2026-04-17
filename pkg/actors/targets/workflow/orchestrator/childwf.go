@@ -72,19 +72,41 @@ func (o *orchestrator) callChildWorkflows(ctx context.Context, startEventName st
 		}
 
 		id := e.GetChildWorkflowInstanceCreated().GetInstanceId()
-		req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
-			WithActor(o.actorType, id).
-			WithData(reqP).
-			WithContentType(invokev1.ProtobufContentType)
 
-		_, err = o.router.Call(ctx, req)
-		if err != nil {
-			// If the call was denied by a workflow access policy, fail the
-			// child orchestration immediately rather than retrying.
-			if isPermissionDenied(err) {
-				return o.failChildWorkflow(ctx, e.GetEventId(), err)
+		switch o.classifyRouting(e.GetRouter()) {
+		case RoutingCrossNS:
+			targetNs := e.GetRouter().GetTargetNamespace()
+			targetAppID := e.GetRouter().GetTargetAppID()
+			targetActorType := o.actorTypeBuilder.WorkflowNS(targetNs, targetAppID)
+			parentExecID := ""
+			if rs := o.rstate; rs != nil {
+				parentExecID = rs.GetStartEvent().GetWorkflowInstance().GetExecutionId().GetValue()
 			}
-			return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
+			childExecID := startEvent.GetExecutionStarted().GetWorkflowInstance().GetExecutionId().GetValue()
+			if xerr := o.dispatchCrossNS(ctx,
+				targetNs, targetAppID,
+				targetActorType, id,
+				todo.CreateWorkflowInstanceMethod,
+				reqP,
+				parentExecID, id, childExecID,
+				e.GetEventId(),
+			); xerr != nil {
+				return fmt.Errorf("failed to dispatch cross-namespace child workflow '%s' to '%s/%s': %w", id, targetNs, targetAppID, xerr)
+			}
+			continue
+
+		case RoutingLocal, RoutingCrossApp:
+			req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
+				WithActor(o.actorType, id).
+				WithData(reqP).
+				WithContentType(invokev1.ProtobufContentType)
+
+			if _, err = o.router.Call(ctx, req); err != nil {
+				if isPermissionDenied(err) {
+					return o.failChildWorkflow(ctx, e.GetEventId(), err)
+				}
+				return fmt.Errorf("failed to call child workflow '%s': %w", id, err)
+			}
 		}
 	}
 

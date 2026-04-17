@@ -200,6 +200,14 @@ func (m *mockGRPCAPI) CallActorReminder(ctx context.Context, in *internalv1pb.Re
 	return new(emptypb.Empty), nil
 }
 
+func (m *mockGRPCAPI) CallWorkflowCrossNamespace(ctx context.Context, req *internalv1pb.CrossNSDispatchRequest) (*internalv1pb.CrossNSAck, error) {
+	return &internalv1pb.CrossNSAck{}, nil
+}
+
+func (m *mockGRPCAPI) DeliverWorkflowResultCrossNamespace(ctx context.Context, req *internalv1pb.CrossNSResultRequest) (*internalv1pb.CrossNSAck, error) {
+	return &internalv1pb.CrossNSAck{}, nil
+}
+
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }

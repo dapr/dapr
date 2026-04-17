@@ -53,6 +53,13 @@ type Options struct {
 	EventSink        EventSink
 	ActorTypeBuilder *common.ActorTypeBuilder
 	RetentionPolicy  *config.WorkflowStateRetentionPolicy
+
+	// XNSDispatcher performs the sidecar-to-sidecar service-invocation hop
+	// for cross-namespace workflow and activity calls. When nil, cross-ns
+	// dispatch reminders that fire will error out — callers should only
+	// produce them when the WorkflowCrossNamespace feature is enabled and a
+	// dispatcher is wired.
+	XNSDispatcher XNSDispatcher
 }
 
 type factory struct {
@@ -69,6 +76,7 @@ type factory struct {
 	eventSink        EventSink
 	actorTypeBuilder *common.ActorTypeBuilder
 	retentionPolicy  *config.WorkflowStateRetentionPolicy
+	xnsDispatcher    XNSDispatcher
 
 	scheduler todo.WorkflowScheduler
 
@@ -120,6 +128,7 @@ func New(ctx context.Context, opts Options) (targets.Factory, error) {
 		placement:          placement,
 		retentionPolicy:    opts.RetentionPolicy,
 		scheduler:          opts.Scheduler,
+		xnsDispatcher:      opts.XNSDispatcher,
 		deactivateCh:       deactivateCh,
 	}, nil
 }

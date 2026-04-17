@@ -57,7 +57,98 @@ service ServiceInvocation {
   // CallActorStream is used to invoke actor method with request and streaming
   // response.
   rpc CallActorStream (InternalInvokeRequest) returns (stream InternalInvokeResponse) {}
+
+  // CallWorkflowCrossNamespace dispatches a cross-namespace workflow/activity
+  // invocation from a caller sidecar to the target sidecar. The target sidecar
+  // authorizes via WorkflowAccessPolicy and creates an idempotency-keyed local
+  // reminder that carries the work to the local workflow/activity actor.
+  // Returns an ACK once the reminder is persisted; does not wait for the
+  // work to complete.
+  rpc CallWorkflowCrossNamespace (CrossNSDispatchRequest) returns (CrossNSAck) {}
+
+  // DeliverWorkflowResultCrossNamespace ships a completion event from a
+  // cross-namespace child workflow or activity back to the parent orchestrator's
+  // sidecar. The receiver validates the parent orchestrator's current
+  // executionId against the request to drop stale results (parent was purged
+  // or re-created) and creates an idempotency-keyed local reminder that
+  // delivers the event to the parent's inbox.
+  rpc DeliverWorkflowResultCrossNamespace (CrossNSResultRequest) returns (CrossNSAck) {}
 }
+
+// CrossNSSource identifies the caller for logging and idempotency derivation.
+// The security boundary remains the SPIFFE ID on the mTLS connection; these
+// fields are informational only.
+message CrossNSSource {
+  string namespace = 1;
+  string app_id = 2;
+  string orchestrator_id = 3;
+  string execution_id = 4;
+  int32 task_id = 5;
+}
+
+// CrossNSDispatchRequest carries a cross-namespace workflow or activity
+// invocation from the caller to the target sidecar.
+message CrossNSDispatchRequest {
+  // Required. Deterministic idempotency key derived by the caller from the
+  // tuple (source ns, source app, parent orchestrator id, parent execution id,
+  // child instance id, child execution id, task id, hop="dispatch"). The target
+  // uses this as the local reminder name so that caller retries are no-ops.
+  string idempotency_key = 1;
+
+  // Required. Target app ID (the sidecar hosting this handler).
+  string target_app_id = 2;
+
+  // Required. Dapr-internal actor type to ultimately invoke, for example
+  // "dapr.internal.<ns>.<app>.workflow" or ".activity". The receiver uses this
+  // to route the local reminder to the correct actor.
+  string actor_type = 3;
+
+  // Required. Actor ID of the target actor.
+  string actor_id = 4;
+
+  // Required. Inner method to invoke on the target actor:
+  // "CreateWorkflowInstance" or "Execute".
+  string method = 5;
+
+  // Required. Marshaled inner payload (backend.CreateWorkflowInstanceRequest
+  // or backend.ExecuteActivityRequest). Opaque to the handler except for
+  // delivering it as reminder data.
+  bytes payload = 6;
+
+  // Informational caller context.
+  CrossNSSource source = 7;
+}
+
+// CrossNSResultRequest carries a completion event back to the parent
+// orchestrator's sidecar.
+message CrossNSResultRequest {
+  // Required. Deterministic idempotency key for the result hop.
+  string idempotency_key = 1;
+
+  // Required. Target (parent) app ID.
+  string target_app_id = 2;
+
+  // Required. Marshaled durabletask HistoryEvent carrying the result (e.g.
+  // TaskCompleted / TaskFailed / SubOrchestrationInstanceCompleted /
+  // SubOrchestrationInstanceFailed).
+  bytes event = 3;
+
+  // Required. Parent orchestrator instance ID.
+  string parent_instance_id = 4;
+
+  // Required. Parent orchestrator execution ID at the time the cross-ns
+  // dispatch was made. Receivers reject the result if this does not match
+  // the parent's current executionId (stale result from a purged run).
+  string parent_execution_id = 5;
+
+  // Informational source context.
+  CrossNSSource source = 6;
+}
+
+// CrossNSAck is the common ACK for both cross-namespace RPCs. Success is
+// indicated by gRPC status OK; error conditions use standard gRPC codes
+// (PermissionDenied, Unimplemented, AlreadyExists, Internal).
+message CrossNSAck {}
 
 // Actor represents actor using actor_type and actor_id
 message Actor {
