@@ -83,8 +83,9 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(time.Second)
-	assert.Equal(t, int64(1), g.called.Load())
+	require.Never(t, func() bool {
+		return g.called.Load() > 1
+	}, time.Second*2, time.Millisecond*10)
 	g.holdCall <- struct{}{}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(2), g.called.Load())
