@@ -32,8 +32,15 @@ var endpointGroupJobsV1Alpha1 = &endpoints.EndpointGroup{
 	AppendSpanAttributes: nil,
 }
 
+var endpointGroupJobsV1 = &endpoints.EndpointGroup{
+	Name:                 endpoints.EndpointGroupJobs,
+	Version:              endpoints.EndpointGroupVersion1,
+	AppendSpanAttributes: nil,
+}
+
 func (a *api) constructJobsEndpoints() []endpoints.Endpoint {
 	return []endpoints.Endpoint{
+		// Alpha endpoints (deprecated)
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "jobs/{name}",
@@ -59,6 +66,37 @@ func (a *api) constructJobsEndpoints() []endpoints.Endpoint {
 			Route:   "jobs/{name}",
 			Version: apiVersionV1alpha1,
 			Group:   endpointGroupJobsV1Alpha1,
+			Handler: a.onGetJobHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetJob",
+			},
+		},
+		// Stable v1.0 endpoints
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "jobs/{name}",
+			Version: apiVersionV1,
+			Group:   endpointGroupJobsV1,
+			Handler: a.onCreateScheduleHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "ScheduleJob",
+			},
+		},
+		{
+			Methods: []string{http.MethodDelete},
+			Route:   "jobs/{name}",
+			Version: apiVersionV1,
+			Group:   endpointGroupJobsV1,
+			Handler: a.onDeleteJobHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "DeleteJob",
+			},
+		},
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "jobs/{name}",
+			Version: apiVersionV1,
+			Group:   endpointGroupJobsV1,
 			Handler: a.onGetJobHandler(),
 			Settings: endpoints.EndpointSettings{
 				Name: "GetJob",

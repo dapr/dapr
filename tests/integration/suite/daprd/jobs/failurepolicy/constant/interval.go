@@ -68,7 +68,7 @@ func (i *interval) Run(t *testing.T, ctx context.Context) {
 	i.scheduler.WaitUntilRunning(t, ctx)
 	i.daprd.WaitUntilRunning(t, ctx)
 
-	_, err := i.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+	_, err := i.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 		Job: &rtv1.Job{
 			Name:    "test",
 			DueTime: new("0s"),
