@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/loops"
 	"github.com/dapr/dapr/pkg/scheduler/client"
@@ -82,7 +83,7 @@ func (w *WatchHosts) Run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(time.Second):
+			case <-time.After(retry.Jitter(time.Second, time.Second/2)):
 				continue
 			}
 		}
