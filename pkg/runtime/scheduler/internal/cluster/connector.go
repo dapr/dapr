@@ -19,6 +19,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/router"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 )
@@ -53,7 +54,7 @@ func (c *connector) run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(time.Second / 2):
+			case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 				continue
 			}
 		}
@@ -73,7 +74,7 @@ func (c *connector) run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(time.Second / 2):
+			case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 				continue
 			}
 		}
@@ -101,7 +102,7 @@ func (c *connector) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Second / 2):
+		case <-time.After(retry.Jitter(time.Second/2, time.Second/4)):
 		}
 	}
 }
