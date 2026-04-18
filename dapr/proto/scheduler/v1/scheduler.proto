@@ -140,18 +140,32 @@ message WatchJobsRequestInitial {
 // ConcurrencyLimit defines a global concurrency limit enforced by the
 // scheduler across all replicas.
 message ConcurrencyLimit {
-  // group is the broad concurrency group that triggers belong to (e.g., all
-  // workflow invocations or all activity invocations for an app).
-  string group = 1;
-
-  // name is an optional identifier for a specific item within the group
-  // (e.g., a specific activity or workflow name like "SendEmail"). When set,
-  // the limit applies only to triggers matching both the group and this name.
-  optional string name = 2;
-
   // max_concurrent is the maximum number of concurrent in-flight triggers
   // across all replicas for this limit.
-  int32 max_concurrent = 3;
+  int32 max_concurrent = 1;
+
+  // name is an optional identifier for a specific item within the target
+  // (e.g., a specific activity or workflow name like "SendEmail"). When set,
+  // the limit applies only to triggers matching both the target and this name.
+  optional string name = 2;
+
+  // target identifies which triggers this limit applies to. Additional target
+  // types may be added in the future without breaking existing limits.
+  // TODO: add a `job` variant keyed by app_id to apply limits to app-targeted
+  // Jobs (non-actor triggers) when needed.
+  oneof target {
+    // actor applies the limit to actor reminder triggers with a matching
+    // actor type.
+    ConcurrencyLimitActor actor = 3;
+  }
+}
+
+// ConcurrencyLimitActor applies a concurrency limit to actor reminder
+// triggers of a given actor type.
+message ConcurrencyLimitActor {
+  // type is the actor type the limit applies to (e.g., the workflow or
+  // activity actor type).
+  string type = 1;
 }
 
 // WatchJobsRequestResultStatus is sent by clients to signal where the job

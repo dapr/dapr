@@ -80,7 +80,12 @@ func (m *multiapp) Run(t *testing.T, ctx context.Context) {
 					schedulerv1.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER,
 				},
 				ConcurrencyLimits: []*schedulerv1.ConcurrencyLimit{
-					{Group: "typeA", MaxConcurrent: 1},
+					{
+						Target: &schedulerv1.ConcurrencyLimit_Actor{
+							Actor: &schedulerv1.ConcurrencyLimitActor{Type: "typeA"},
+						},
+						MaxConcurrent: 1,
+					},
 				},
 			},
 		},

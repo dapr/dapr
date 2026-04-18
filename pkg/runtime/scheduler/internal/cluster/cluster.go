@@ -146,16 +146,19 @@ func (c *Cluster) buildConcurrencyLimits() []*schedulerv1pb.ConcurrencyLimit {
 
 	var limits []*schedulerv1pb.ConcurrencyLimit
 
+	workflowActor := &schedulerv1pb.ConcurrencyLimitActor{Type: c.wfengine.WorkflowActorType()}
+	activityActor := &schedulerv1pb.ConcurrencyLimitActor{Type: c.wfengine.ActivityActorType()}
+
 	if v := c.workflowSpec.GetGlobalMaxConcurrentWorkflowInvocations(); v != nil {
 		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
-			Group:         c.wfengine.WorkflowActorType(),
+			Target:        &schedulerv1pb.ConcurrencyLimit_Actor{Actor: workflowActor},
 			MaxConcurrent: *v,
 		})
 	}
 
 	if v := c.workflowSpec.GetGlobalMaxConcurrentActivityInvocations(); v != nil {
 		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
-			Group:         c.wfengine.ActivityActorType(),
+			Target:        &schedulerv1pb.ConcurrencyLimit_Actor{Actor: activityActor},
 			MaxConcurrent: *v,
 		})
 	}
@@ -165,7 +168,7 @@ func (c *Cluster) buildConcurrencyLimits() []*schedulerv1pb.ConcurrencyLimit {
 			continue
 		}
 		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
-			Group:         c.wfengine.WorkflowActorType(),
+			Target:        &schedulerv1pb.ConcurrencyLimit_Actor{Actor: workflowActor},
 			Name:          l.Name,
 			MaxConcurrent: *l.MaxConcurrent,
 		})
@@ -176,7 +179,7 @@ func (c *Cluster) buildConcurrencyLimits() []*schedulerv1pb.ConcurrencyLimit {
 			continue
 		}
 		limits = append(limits, &schedulerv1pb.ConcurrencyLimit{
-			Group:         c.wfengine.ActivityActorType(),
+			Target:        &schedulerv1pb.ConcurrencyLimit_Actor{Actor: activityActor},
 			Name:          l.Name,
 			MaxConcurrent: *l.MaxConcurrent,
 		})

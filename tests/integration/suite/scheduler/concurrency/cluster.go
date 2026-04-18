@@ -51,7 +51,10 @@ func (m *multiScheduler) Run(t *testing.T, ctx context.Context) {
 	m.cluster.WaitUntilRunning(t, ctx)
 
 	concurrencyLimit := &schedulerv1.ConcurrencyLimit{
-		Group: "mytype", MaxConcurrent: 6,
+		Target: &schedulerv1.ConcurrencyLimit_Actor{
+			Actor: &schedulerv1.ConcurrencyLimitActor{Type: "mytype"},
+		},
+		MaxConcurrent: 6,
 	}
 	initial := &schedulerv1.WatchJobsRequestInitial{
 		AppId:      "myapp",

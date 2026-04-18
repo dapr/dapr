@@ -78,8 +78,20 @@ func (ind *independent) Run(t *testing.T, ctx context.Context) {
 					schedulerv1.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER,
 				},
 				ConcurrencyLimits: []*schedulerv1.ConcurrencyLimit{
-					{Group: "mytype", Name: ptr.Of("alpha"), MaxConcurrent: 1},
-					{Group: "mytype", Name: ptr.Of("beta"), MaxConcurrent: 1},
+					{
+						Target: &schedulerv1.ConcurrencyLimit_Actor{
+							Actor: &schedulerv1.ConcurrencyLimitActor{Type: "mytype"},
+						},
+						Name:          ptr.Of("alpha"),
+						MaxConcurrent: 1,
+					},
+					{
+						Target: &schedulerv1.ConcurrencyLimit_Actor{
+							Actor: &schedulerv1.ConcurrencyLimitActor{Type: "mytype"},
+						},
+						Name:          ptr.Of("beta"),
+						MaxConcurrent: 1,
+					},
 				},
 			},
 		},

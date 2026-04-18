@@ -161,7 +161,11 @@ func (c *connections) updateConcurrencyLimits(streamIDx uint64, req *schedulerv1
 		if limit.GetMaxConcurrent() <= 0 {
 			continue
 		}
-		key := limit.GetGroup()
+		actor := limit.GetActor()
+		if actor == nil {
+			continue
+		}
+		key := actor.GetType()
 		if limit.Name != nil {
 			key += ":" + limit.GetName()
 		}

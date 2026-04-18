@@ -72,7 +72,12 @@ func (g *group) Run(t *testing.T, ctx context.Context) {
 					schedulerv1.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER,
 				},
 				ConcurrencyLimits: []*schedulerv1.ConcurrencyLimit{
-					{Group: "mytype", MaxConcurrent: 2},
+					{
+						Target: &schedulerv1.ConcurrencyLimit_Actor{
+							Actor: &schedulerv1.ConcurrencyLimitActor{Type: "mytype"},
+						},
+						MaxConcurrent: 2,
+					},
 				},
 			},
 		},
