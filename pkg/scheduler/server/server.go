@@ -41,6 +41,17 @@ import (
 
 var log = logger.NewLogger("dapr.scheduler.server")
 
+// Controller is a long-lived k8s controller that must only be created
+// once per process because controller-runtime registers controller names globally in the metrics registry.
+type (
+	Controller        = controller.Controller
+	ControllerOptions = controller.Options
+)
+
+func NewController(opts ControllerOptions) (*Controller, error) {
+	return controller.New(opts)
+}
+
 type Options struct {
 	Healthz                   healthz.Healthz
 	Security                  security.Handler
@@ -49,6 +60,7 @@ type Options struct {
 	Port                      int
 	Mode                      modes.DaprMode
 	KubeConfig                *string
+	Controller                *controller.Controller
 
 	Workers uint32
 
@@ -84,7 +96,7 @@ type Server struct {
 	serializer *serialize.Serializer
 	cron       cron.Interface
 	etcd       etcd.Interface
-	controller concurrency.Runner
+	controller *controller.Controller
 
 	hzAPIServer healthz.Target
 
@@ -145,24 +157,15 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 		Workers: opts.Workers,
 	})
 
-	var ctrl concurrency.Runner
-	if opts.Mode == modes.KubernetesMode {
-		var err error
-		ctrl, err = controller.New(controller.Options{
-			KubeConfig: opts.KubeConfig,
-			Cron:       cron,
-			Healthz:    opts.Healthz,
-		})
-		if err != nil {
-			return nil, err
-		}
+	if opts.Controller != nil {
+		opts.Controller.SetCron(cron)
 	}
 
 	return &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
 		sec:           opts.Security,
-		controller:    ctrl,
+		controller:    opts.Controller,
 		cron:          cron,
 		etcd:          etcd,
 		serializer: serialize.New(serialize.Options{
@@ -201,7 +204,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	if s.controller != nil {
-		runners = append(runners, s.controller)
+		runners = append(runners, s.controller.Run)
 	}
 
 	mngr := concurrency.NewRunnerCloserManager(log, nil, runners...)
