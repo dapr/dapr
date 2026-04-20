@@ -58,6 +58,12 @@ const possibleScenarios = {
         iterations: 10000,
         maxDuration: '3600s',
     },
+    t_1200_1200: {
+        executor: 'shared-iterations',
+        vus: 1200,
+        iterations: 1200,
+        maxDuration: '120s',
+    },
 }
 
 let enabledScenarios = {}
@@ -74,10 +80,12 @@ export const options = {
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}`
 
 function execute() {
-    console.log(
-        'Executing the execute function with idInTest: ' +
-            `${exec.scenario.iterationInTest}`
-    )
+    if (__ENV.K6_VERBOSE_LOG) {
+        console.log(
+            'Executing the execute function with idInTest: ' +
+                `${exec.scenario.iterationInTest}`
+        )
+    }
     let data = JSON.stringify({
         workflow_name: __ENV.WORKFLOW_NAME,
         workflow_input: __ENV.WORKFLOW_INPUT,
@@ -92,7 +100,9 @@ function execute() {
         data,
         params
     )
-    console.log('http response', JSON.stringify(res))
+    if (__ENV.K6_VERBOSE_LOG) {
+        console.log('http response', JSON.stringify(res))
+    }
     return res
 }
 
