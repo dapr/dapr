@@ -675,6 +675,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingComponents(ctx)
 
+	// Check if there was an error during component processing
+	if procErr := a.processor.ProcessError(); procErr != nil {
+		return fmt.Errorf("failed to process components: %s", procErr)
+	}
+
 	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
