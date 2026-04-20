@@ -151,10 +151,30 @@ type WorkflowSpec struct {
 	// If omitted, no maximum will be enforced.
 	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty" yaml:"maxConcurrentActivityInvocations,omitempty"`
 
+	// globalMaxConcurrentWorkflowInvocations is the maximum number of concurrent
+	// workflow invocations across all replicas, enforced by the scheduler.
+	// If omitted, no global maximum will be enforced.
+	GlobalMaxConcurrentWorkflowInvocations *int32 `json:"globalMaxConcurrentWorkflowInvocations,omitempty" yaml:"globalMaxConcurrentWorkflowInvocations,omitempty"`
+	// globalMaxConcurrentActivityInvocations is the maximum number of concurrent
+	// activity invocations across all replicas, enforced by the scheduler.
+	// If omitted, no global maximum will be enforced.
+	GlobalMaxConcurrentActivityInvocations *int32 `json:"globalMaxConcurrentActivityInvocations,omitempty" yaml:"globalMaxConcurrentActivityInvocations,omitempty"`
+
+	// Per-workflow-name concurrency limits enforced globally by the scheduler.
+	WorkflowConcurrencyLimits []NamedConcurrencyLimit `json:"workflowConcurrencyLimits,omitempty" yaml:"workflowConcurrencyLimits,omitempty"`
+	// Per-activity-name concurrency limits enforced globally by the scheduler.
+	ActivityConcurrencyLimits []NamedConcurrencyLimit `json:"activityConcurrencyLimits,omitempty" yaml:"activityConcurrencyLimits,omitempty"`
+
 	// StateRetentionPolicy defines the retention configuration for workflow
 	// state once a workflow reaches a terminal state. If not set, workflow
 	// instances will not be automatically purged.
 	StateRetentionPolicy *WorkflowStateRetentionPolicy `json:"stateRetentionPolicy,omitempty" yaml:"stateRetentionPolicy,omitempty"`
+}
+
+// NamedConcurrencyLimit defines a per-name concurrency limit.
+type NamedConcurrencyLimit struct {
+	Name          *string `json:"name"          yaml:"name"`
+	MaxConcurrent *int32  `json:"maxConcurrent" yaml:"maxConcurrent"`
 }
 
 // WorkflowStateRetentionPolicy defines the retention policy of workflow state
@@ -223,6 +243,20 @@ func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() *int32 {
 		return nil
 	}
 	return new(w.MaxConcurrentActivityInvocations)
+}
+
+func (w *WorkflowSpec) GetGlobalMaxConcurrentWorkflowInvocations() *int32 {
+	if w == nil || w.GlobalMaxConcurrentWorkflowInvocations == nil || *w.GlobalMaxConcurrentWorkflowInvocations <= 0 {
+		return nil
+	}
+	return w.GlobalMaxConcurrentWorkflowInvocations
+}
+
+func (w *WorkflowSpec) GetGlobalMaxConcurrentActivityInvocations() *int32 {
+	if w == nil || w.GlobalMaxConcurrentActivityInvocations == nil || *w.GlobalMaxConcurrentActivityInvocations <= 0 {
+		return nil
+	}
+	return w.GlobalMaxConcurrentActivityInvocations
 }
 
 type SecretsSpec struct {
