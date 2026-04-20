@@ -2514,11 +2514,10 @@ func TestV1Workflow(t *testing.T) {
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_INSTANCE_ID_INVALID", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrInvalidInstanceID.WithFormat("invalid$ID").Message(), resp.ErrorBody["message"])
+		assert.Equal(t, "workflow instance ID 'invalid$ID' is invalid: only alphanumeric and underscore characters are allowed", resp.ErrorBody["message"])
 	})
 
 	t.Run("Start with too long instance ID", func(t *testing.T) {
-		maxInstanceIDLength := 64
 		apiPath := "v1.0/workflows/dapr/workflowName/start?instanceID=this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed"
 		resp := fakeServer(t).DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -2526,7 +2525,7 @@ func TestV1Workflow(t *testing.T) {
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
 		assert.Equal(t, "ERR_INSTANCE_ID_TOO_LONG", resp.ErrorBody["errorCode"])
-		assert.Equal(t, messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIDLength).Message(), resp.ErrorBody["message"])
+		assert.Equal(t, "workflow instance ID exceeds the max length of 64 characters", resp.ErrorBody["message"])
 	})
 
 	/////////////////////
