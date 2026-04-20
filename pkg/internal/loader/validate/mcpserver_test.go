@@ -14,7 +14,6 @@ limitations under the License.
 package validate
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,7 +29,7 @@ func TestMCPServer_ExactlyOneTransport(t *testing.T) {
 		s := &mcpserverapi.MCPServer{}
 		s.Name = testServerName
 		s.Spec.Endpoint.StreamableHTTP = &mcpserverapi.MCPStreamableHTTP{URL: "http://example.com"}
-		err := MCPServer(context.Background(), s)
+		err := MCPServer(s)
 		require.NoError(t, err)
 	})
 
@@ -38,7 +37,7 @@ func TestMCPServer_ExactlyOneTransport(t *testing.T) {
 		s := &mcpserverapi.MCPServer{}
 		s.Name = testServerName
 		s.Spec.Endpoint.SSE = &mcpserverapi.MCPSSE{URL: "http://example.com"}
-		err := MCPServer(context.Background(), s)
+		err := MCPServer(s)
 		require.NoError(t, err)
 	})
 
@@ -46,14 +45,14 @@ func TestMCPServer_ExactlyOneTransport(t *testing.T) {
 		s := &mcpserverapi.MCPServer{}
 		s.Name = testServerName
 		s.Spec.Endpoint.Stdio = &mcpserverapi.MCPStdio{Command: "echo"}
-		err := MCPServer(context.Background(), s)
+		err := MCPServer(s)
 		require.NoError(t, err)
 	})
 
 	t.Run("invalid: no transport set", func(t *testing.T) {
 		s := &mcpserverapi.MCPServer{}
 		s.Name = testServerName
-		err := MCPServer(context.Background(), s)
+		err := MCPServer(s)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly one of streamableHTTP, sse, or stdio must be set")
 	})
@@ -63,7 +62,7 @@ func TestMCPServer_ExactlyOneTransport(t *testing.T) {
 		s.Name = testServerName
 		s.Spec.Endpoint.StreamableHTTP = &mcpserverapi.MCPStreamableHTTP{URL: "http://example.com"}
 		s.Spec.Endpoint.SSE = &mcpserverapi.MCPSSE{URL: "http://example.com"}
-		err := MCPServer(context.Background(), s)
+		err := MCPServer(s)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly one of streamableHTTP, sse, or stdio must be set")
 	})

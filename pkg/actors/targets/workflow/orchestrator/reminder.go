@@ -45,25 +45,34 @@ func (o *orchestrator) createReminderWithType(ctx context.Context, namePrefix st
 		return "", fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 
+	name := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
+	return o.createReminderWithName(ctx, name, data, start, actorType)
+}
+
+// createReminderWithName creates a reminder with a caller-supplied name. Used
+// for deterministic/idempotent reminders where the name encodes the
+// operation identity (for example cross-namespace dispatch/result hops).
+// Creating the same name twice is a no-op at the scheduler level.
+func (o *orchestrator) createReminderWithName(ctx context.Context, name string, data proto.Message, start time.Time, actorType string) (string, error) {
 	dueTime := start.UTC().Format(time.RFC3339)
-	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
 
 	var adata *anypb.Any
 	if data != nil {
+		var err error
 		adata, err = anypb.New(data)
 		if err != nil {
 			return "", err
 		}
 	}
 
-	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, reminderName, dueTime)
+	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", actorType, o.actorID, name, dueTime)
 
-	return reminderName, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
+	return name, o.reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: actorType,
 		ActorID:   o.actorID,
 		Data:      adata,
 		DueTime:   dueTime,
-		Name:      reminderName,
+		Name:      name,
 		// One shot, retry forever, every second.
 		FailurePolicy: &commonv1pb.JobFailurePolicy{
 			Policy: &commonv1pb.JobFailurePolicy_Constant{

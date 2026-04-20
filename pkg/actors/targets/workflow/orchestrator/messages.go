@@ -82,7 +82,21 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 	}
 	actorType := o.actorType
 
-	if historyEvent != nil && historyEvent.GetRouter() != nil {
+	switch o.classifyRouting(historyEvent.GetRouter()) {
+	case RoutingCrossNS:
+		router := historyEvent.GetRouter()
+		switch msg := m.(type) {
+		case *backend.CreateWorkflowInstanceRequest:
+			return o.dispatchCrossNSCreate(ctx, router, msg, target, b)
+		case *backend.HistoryEvent:
+			switch {
+			case msg.GetChildWorkflowInstanceCompleted() != nil,
+				msg.GetChildWorkflowInstanceFailed() != nil:
+				return o.shipCrossNSResult(ctx, msg, router.GetTargetAppID(), router.GetTargetNamespace(), target, b)
+			}
+		}
+
+	case RoutingCrossApp:
 		router := historyEvent.GetRouter()
 		log.Debugf("Cross-app suborchestrator call: target appID=%s, source appID=%s", router.GetTargetAppID(), router.GetSourceAppID())
 
@@ -93,12 +107,13 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 			}
 		case *backend.HistoryEvent:
 			var routeAppID string
-			if m.GetChildWorkflowInstanceCompleted() != nil || m.GetChildWorkflowInstanceFailed() != nil {
+			switch {
+			case m.GetChildWorkflowInstanceCompleted() != nil, m.GetChildWorkflowInstanceFailed() != nil:
 				if router.TargetAppID == nil {
 					return errors.New("sub-orchestrator completion events should have a target appID")
 				}
 				routeAppID = router.GetTargetAppID()
-			} else {
+			default:
 				routeAppID = router.GetSourceAppID()
 			}
 
@@ -106,6 +121,8 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 				actorType = o.actorTypeBuilder.Workflow(routeAppID)
 			}
 		}
+
+	case RoutingLocal:
 	}
 
 	log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s||%s'", o.actorID, method, actorType, target)
@@ -119,10 +136,23 @@ func (o *orchestrator) callStateMessage(ctx context.Context, m proto.Message, hi
 		WithData(b).
 		WithContentType(invokev1.ProtobufContentType),
 	); err != nil {
+		// If the call was denied by a workflow access policy, fail the child
+		// orchestration immediately rather than retrying. Only do this when
+		// we can correlate the failure to a parent task via ParentInstance.
+		if isPermissionDenied(err) && historyEvent != nil {
+			if es := historyEvent.GetExecutionStarted(); es != nil && es.GetParentInstance() != nil {
+				if fErr := o.failChildWorkflow(ctx, es.GetParentInstance().GetTaskScheduledId(), err); fErr != nil {
+					return fmt.Errorf("failed to record child workflow failure: %w (original: %v)", fErr, err)
+				}
+				return nil
+			}
+		}
+
 		if router := historyEvent.GetRouter(); router != nil && router.TargetAppID != nil {
 			return fmt.Errorf("failed to invoke '%s' on remote app '%s' (the app may not be available): %w", method, router.GetTargetAppID(), err)
 		}
-		return fmt.Errorf("failed to invoke '%s' on actor '%s': %w", method, target, err)
+
+		return fmt.Errorf("failed to invoke method '%s' on actor '%s': %w", method, target, err)
 	}
 
 	return nil

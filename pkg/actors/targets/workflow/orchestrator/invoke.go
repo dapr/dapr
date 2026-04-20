@@ -108,6 +108,18 @@ func (o *orchestrator) handleReminder(ctx context.Context, reminder *actorapi.Re
 	case strings.HasPrefix(reminder.Name, common.ReminderPrefixActivityResult):
 		return o.addWorkflowEvent(ctx, reminder.Data.GetValue())
 
+	case strings.HasPrefix(reminder.Name, common.ReminderPrefixXNSDispatch):
+		return o.handleXNSDispatchReminder(ctx, reminder)
+
+	case strings.HasPrefix(reminder.Name, common.ReminderPrefixXNSResultIn):
+		return o.handleXNSResultInReminder(ctx, reminder)
+
+	case strings.HasPrefix(reminder.Name, common.ReminderPrefixXNSResult):
+		return o.handleXNSResultReminder(ctx, reminder)
+
+	case strings.HasPrefix(reminder.Name, common.ReminderPrefixXNSExec):
+		return o.handleXNSExecReminder(ctx, reminder)
+
 	default:
 		return fmt.Errorf("unable to handle reminder '%s' for workflow actor '%s': unknown reminder type", reminder.Name, o.actorID)
 	}
