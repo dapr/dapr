@@ -133,6 +133,8 @@ func (c *cron) Run(ctx context.Context) error {
 		lock:            &c.lock,
 		currHosts:       &c.currHosts,
 		readyCh:         c.readyCh,
+		ownAddress:      c.host.GetAddress(),
+		pool:            c.connectionPool,
 	})
 
 	return concurrency.NewRunnerManager(
