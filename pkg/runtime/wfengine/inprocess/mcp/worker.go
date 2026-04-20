@@ -68,31 +68,21 @@ const (
 	jsonFieldRequired = "required"
 )
 
-// NewRegistry returns a task.TaskRegistry that handles all built-in
-// dapr.internal.mcp.* orchestrations and activities in-process.
-func NewRegistry(opts Options) *task.TaskRegistry {
-	registry := task.NewTaskRegistry()
-	Populate(registry, opts)
-	return registry
-}
-
-// Populate adds the MCP wildcard orchestrator and the two
-// transport activities to an existing task.TaskRegistry.
-func Populate(registry *task.TaskRegistry, opts Options) {
-	// Wildcard workflow: dispatches based on name suffix, runs middleware.
+// RegisterMCP adds the MCP wildcard orchestrator and the two transport
+// activities to an existing task.TaskRegistry. Returns an error if any
+// registration fails — this indicates a programming error that should
+// cause the runtime to shut down.
+func RegisterMCP(registry *task.TaskRegistry, opts Options) error {
 	if err := registry.AddWorkflowN("*", makeOrchestrator(opts.Store)); err != nil {
-		workerLog.Warnf("failed to register MCP wildcard workflow: %s", err)
+		return fmt.Errorf("failed to register MCP wildcard workflow: %w", err)
 	}
-
-	// Fixed-name activity: list tools from MCP server.
 	if err := registry.AddActivityN(activityListTools, makeListToolsActivity(opts)); err != nil {
-		workerLog.Warnf("failed to register %s activity: %s", activityListTools, err)
+		return fmt.Errorf("failed to register %s activity: %w", activityListTools, err)
 	}
-
-	// Fixed-name activity: call a tool on the MCP server.
 	if err := registry.AddActivityN(activityCallTool, makeCallToolActivity(opts)); err != nil {
-		workerLog.Warnf("failed to register %s activity: %s", activityCallTool, err)
+		return fmt.Errorf("failed to register %s activity: %w", activityCallTool, err)
 	}
+	return nil
 }
 
 // makeOrchestrator returns the wildcard orchestrator function, closing over the
@@ -101,8 +91,8 @@ func Populate(registry *task.TaskRegistry, opts Options) {
 // For each suffix:
 //
 // ListTools path:
-//   - beforeListTools is awaited; any error fails the orchestration.
-//   - dapr.internal.mcp.list-tools activity errors fail the orchestration.
+//   - beforeListTools is awaited; any error fails the workflow.
+//   - dapr.internal.mcp.list-tools activity errors fail the workflow.
 //   - afterListTools hooks are awaited; errors are logged but do not affect the result.
 //
 // CallTool path:
@@ -114,8 +104,8 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 		name := ctx.Name
 
 		switch {
-		case strings.HasSuffix(name, SuffixListTools):
-			serverName := mcpServerName(name, SuffixListTools)
+		case strings.HasSuffix(name, MethodListTools):
+			serverName := mcpServerName(name, MethodListTools)
 			server, ok := store.GetMCPServer(serverName)
 			if !ok {
 				return &ListToolsResult{}, fmt.Errorf("MCPServer %q not found", serverName)
@@ -123,7 +113,7 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 
 			var input ListToolsInput
 			if err := ctx.GetInput(&input); err != nil {
-				input = ListToolsInput{}
+				return nil, errors.New("failed to parse ListToolsInput: " + err.Error())
 			}
 			if input.MCPServerName == "" {
 				input.MCPServerName = serverName
@@ -146,8 +136,8 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 			runAfterListTools(ctx, &server, serverName, result)
 			return result, nil
 
-		case strings.HasSuffix(name, SuffixCallTool):
-			serverName := mcpServerName(name, SuffixCallTool)
+		case strings.HasSuffix(name, MethodCallTool):
+			serverName := mcpServerName(name, MethodCallTool)
 			server, ok := store.GetMCPServer(serverName)
 			if !ok {
 				return &CallToolResult{}, fmt.Errorf("MCPServer %q not found", serverName)
@@ -192,17 +182,17 @@ func makeOrchestrator(store *compstore.ComponentStore) func(*task.WorkflowContex
 			return result, nil
 
 		default:
-			return nil, fmt.Errorf("unknown MCP orchestration name %q: expected suffix %q or %q",
-				name, SuffixListTools, SuffixCallTool)
+			return nil, fmt.Errorf("unknown MCP workflow name %q: expected suffix %q or %q",
+				name, MethodListTools, MethodCallTool)
 		}
 	}
 }
 
-// mcpServerName extracts the MCPServer resource name from an orchestration name
-// of the form "dapr.internal.mcp.<name><suffix>".
-func mcpServerName(orchestrationName, suffix string) string {
-	trimmed := strings.TrimPrefix(orchestrationName, OrchestrationNamePrefix)
-	return strings.TrimSuffix(trimmed, suffix)
+// mcpServerName extracts the MCPServer resource name from a workflow name
+// of the form "dapr.internal.mcp.<name>.<method>".
+func mcpServerName(workflowName, method string) string {
+	trimmed := strings.TrimPrefix(workflowName, WorkflowNamePrefix)
+	return strings.TrimSuffix(trimmed, method)
 }
 
 // makeListToolsActivity returns a task.Activity that calls ListTools on the
@@ -280,8 +270,8 @@ func makeListToolsActivity(opts Options) task.Activity {
 				}
 				if t.InputSchema != nil {
 					if schema, ok := t.InputSchema.(map[string]any); ok {
-						td.InputSchema = schema
 						if raw, err := json.Marshal(schema); err == nil {
+							td.InputSchema = raw
 							opts.Store.SetMCPToolSchema(input.MCPServerName, t.Name, raw)
 						}
 					}
@@ -479,8 +469,8 @@ func convertCallToolResult(r *mcp.CallToolResult) *CallToolResult {
 		case *mcp.TextContent:
 			out.Content = append(out.Content, ContentItem{Type: textContentType, Text: v.Text})
 		case *mcp.ImageContent:
-			// v.Data is raw bytes (Go's JSON unmarshaler decoded the base64 wire
-			// format). Re-encode to base64 for our JSON output.
+			// v.Data is raw bytes (Go's JSON unmarshaler decoded the base64 wire format).
+			// Re-encode to base64 for our JSON output.
 			out.Content = append(out.Content, ContentItem{
 				Type: imageContentType, Data: base64.StdEncoding.EncodeToString(v.Data), MimeType: v.MIMEType,
 			})

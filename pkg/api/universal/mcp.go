@@ -67,10 +67,8 @@ func (a *Universal) ListMCPToolsAlpha1(ctx context.Context, in *runtimev1pb.List
 			Name:        t.Name,
 			Description: t.Description,
 		}
-		if t.InputSchema != nil {
-			if raw, err := json.Marshal(t.InputSchema); err == nil {
-				td.InputSchema = raw
-			}
+		if len(t.InputSchema) > 0 {
+			td.InputSchema = t.InputSchema
 		}
 		resp.Tools = append(resp.Tools, td)
 	}

@@ -19,6 +19,8 @@ limitations under the License.
 package inprocess
 
 import (
+	"fmt"
+
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/inprocess/mcp"
 	"github.com/dapr/dapr/pkg/security"
@@ -35,16 +37,18 @@ type Options struct {
 // NewExecutor creates a task.TaskExecutor backed by a registry that is
 // eagerly populated with all known in-process workflow subsystems.
 // Therefore, workflows handle missing resources gracefully at call time (e.g. "MCPServer not found").
-func NewExecutor(opts Options) backend.Executor {
+func NewExecutor(opts Options) (backend.Executor, error) {
 	registry := task.NewTaskRegistry()
 
 	// MCP subsystem: wildcard orchestrator + transport activities.
-	mcp.Populate(registry, mcp.Options{
+	if err := mcp.RegisterMCP(registry, mcp.Options{
 		Store: opts.ComponentStore,
 		JWT:   security.NewSPIFFEJWTFetcher(opts.Security),
-	})
+	}); err != nil {
+		return nil, fmt.Errorf("failed to register MCP in-process workflows: %w", err)
+	}
 
 	// Future in-process subsystems would register here.
 
-	return task.NewTaskExecutor(registry)
+	return task.NewTaskExecutor(registry), nil
 }

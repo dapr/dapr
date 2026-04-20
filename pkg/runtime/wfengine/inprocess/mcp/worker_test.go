@@ -127,11 +127,7 @@ func plainHeader(name, value string) commonapi.NameValuePair {
 	}
 }
 
-func TestNewRegistry(t *testing.T) {
-	store := compstore.New()
-	registry := NewRegistry(Options{Store: store})
-	require.NotNil(t, registry, "NewRegistry should return a non-nil registry")
-}
+
 
 func TestMCPServerName(t *testing.T) {
 	tests := []struct {
@@ -139,10 +135,10 @@ func TestMCPServerName(t *testing.T) {
 		suffix            string
 		want              string
 	}{
-		{"dapr.internal.mcp.myserver.ListTools", SuffixListTools, "myserver"},
-		{"dapr.internal.mcp.my-server.CallTool", SuffixCallTool, "my-server"},
-		{"dapr.internal.mcp.dotted.name.ListTools", SuffixListTools, "dotted.name"},
-		{"dapr.internal.mcp..ListTools", SuffixListTools, ""},
+		{"dapr.internal.mcp.myserver.ListTools", MethodListTools, "myserver"},
+		{"dapr.internal.mcp.my-server.CallTool", MethodCallTool, "my-server"},
+		{"dapr.internal.mcp.dotted.name.ListTools", MethodListTools, "dotted.name"},
+		{"dapr.internal.mcp..ListTools", MethodListTools, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.orchestrationName, func(t *testing.T) {
@@ -336,7 +332,7 @@ func TestValidateToolArguments(t *testing.T) {
 	})
 
 	t.Run("schema with no required field passes", func(t *testing.T) {
-		setTestSchema(t, store,"myserver", "greet", map[string]any{
+		setTestSchema(t, store, "myserver", "greet", map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"name": map[string]any{"type": "string"}},
 		})
@@ -345,7 +341,7 @@ func TestValidateToolArguments(t *testing.T) {
 	})
 
 	t.Run("missing required argument fails", func(t *testing.T) {
-		setTestSchema(t, store,"myserver", "weather", map[string]any{
+		setTestSchema(t, store, "myserver", "weather", map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"city": map[string]any{"type": "string"}},
 			"required":   []any{"city"},
@@ -361,7 +357,7 @@ func TestValidateToolArguments(t *testing.T) {
 	})
 
 	t.Run("multiple missing required arguments listed", func(t *testing.T) {
-		setTestSchema(t, store,"myserver", "multi", map[string]any{
+		setTestSchema(t, store, "myserver", "multi", map[string]any{
 			"type":     "object",
 			"required": []any{"a", "b", "c"},
 		})
@@ -516,7 +512,7 @@ func TestMakeCallToolActivity_MissingRequiredArg(t *testing.T) {
 			StreamableHTTP: &mcpserverapi.MCPStreamableHTTP{URL: ts.URL},
 		},
 	}))
-	setTestSchema(t, store,"myserver", "greet", map[string]any{
+	setTestSchema(t, store, "myserver", "greet", map[string]any{
 		"type":       "object",
 		"properties": map[string]any{"name": map[string]any{"type": "string"}},
 		"required":   []any{"name"},

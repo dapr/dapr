@@ -83,7 +83,7 @@ type engine struct {
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
 
-func New(opts Options) Interface {
+func New(opts Options) (Interface, error) {
 	var retPolicy *config.WorkflowStateRetentionPolicy
 	if opts.Spec != nil {
 		retPolicy = opts.Spec.StateRetentionPolicy
@@ -108,10 +108,13 @@ func New(opts Options) Interface {
 		lock              sync.Mutex
 	)
 
-	internalExecutor := inprocess.NewExecutor(inprocess.Options{
+	internalExecutor, err := inprocess.NewExecutor(inprocess.Options{
 		ComponentStore: opts.ComponentStore,
 		Security:       opts.Security,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create in-process workflow executor: %w", err)
+	}
 
 	grpcExec, registerGrpcServerFn := backend.NewGrpcExecutor(abackend, log,
 		backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
@@ -189,7 +192,7 @@ func New(opts Options) Interface {
 			logger: wfBackendLogger,
 			client: backend.NewTaskHubClient(abackend),
 		},
-	}
+	}, nil
 }
 
 func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {
