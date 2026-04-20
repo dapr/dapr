@@ -39,6 +39,7 @@ const (
 	AppCallback_ListInputBindings_FullMethodName      = "/dapr.proto.runtime.v1.AppCallback/ListInputBindings"
 	AppCallback_OnBindingEvent_FullMethodName         = "/dapr.proto.runtime.v1.AppCallback/OnBindingEvent"
 	AppCallback_OnBulkTopicEvent_FullMethodName       = "/dapr.proto.runtime.v1.AppCallback/OnBulkTopicEvent"
+	AppCallback_OnJobEvent_FullMethodName             = "/dapr.proto.runtime.v1.AppCallback/OnJobEvent"
 )
 
 // AppCallbackClient is the client API for AppCallback service.
@@ -60,6 +61,8 @@ type AppCallbackClient interface {
 	OnBindingEvent(ctx context.Context, in *BindingEventRequest, opts ...grpc.CallOption) (*BindingEventResponse, error)
 	// Subscribes bulk events from Pubsub
 	OnBulkTopicEvent(ctx context.Context, in *TopicEventBulkRequest, opts ...grpc.CallOption) (*TopicEventBulkResponse, error)
+	// Sends job back to the app's endpoint at trigger time.
+	OnJobEvent(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*JobEventResponse, error)
 }
 
 type appCallbackClient struct {
@@ -124,6 +127,15 @@ func (c *appCallbackClient) OnBulkTopicEvent(ctx context.Context, in *TopicEvent
 	return out, nil
 }
 
+func (c *appCallbackClient) OnJobEvent(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*JobEventResponse, error) {
+	out := new(JobEventResponse)
+	err := c.cc.Invoke(ctx, AppCallback_OnJobEvent_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AppCallbackServer is the server API for AppCallback service.
 // All implementations should embed UnimplementedAppCallbackServer
 // for forward compatibility
@@ -143,6 +155,8 @@ type AppCallbackServer interface {
 	OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error)
 	// Subscribes bulk events from Pubsub
 	OnBulkTopicEvent(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error)
+	// Sends job back to the app's endpoint at trigger time.
+	OnJobEvent(context.Context, *JobEventRequest) (*JobEventResponse, error)
 }
 
 // UnimplementedAppCallbackServer should be embedded to have forward compatible implementations.
@@ -166,6 +180,9 @@ func (UnimplementedAppCallbackServer) OnBindingEvent(context.Context, *BindingEv
 }
 func (UnimplementedAppCallbackServer) OnBulkTopicEvent(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBulkTopicEvent not implemented")
+}
+func (UnimplementedAppCallbackServer) OnJobEvent(context.Context, *JobEventRequest) (*JobEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OnJobEvent not implemented")
 }
 
 // UnsafeAppCallbackServer may be embedded to opt out of forward compatibility for this service.
@@ -287,6 +304,24 @@ func _AppCallback_OnBulkTopicEvent_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AppCallback_OnJobEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JobEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AppCallbackServer).OnJobEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AppCallback_OnJobEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AppCallbackServer).OnJobEvent(ctx, req.(*JobEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AppCallback_ServiceDesc is the grpc.ServiceDesc for AppCallback service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -317,6 +352,10 @@ var AppCallback_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "OnBulkTopicEvent",
 			Handler:    _AppCallback_OnBulkTopicEvent_Handler,
+		},
+		{
+			MethodName: "OnJobEvent",
+			Handler:    _AppCallback_OnJobEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -425,7 +464,8 @@ type AppCallbackAlphaClient interface {
 	// Deprecated: Do not use.
 	// Subscribes bulk events from Pubsub
 	OnBulkTopicEventAlpha1(ctx context.Context, in *TopicEventBulkRequest, opts ...grpc.CallOption) (*TopicEventBulkResponse, error)
-	// Sends job back to the app's endpoint at trigger time.
+	// Deprecated: Do not use.
+	// Deprecated: Sends job back to the app's endpoint at trigger time.
 	OnJobEventAlpha1(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*JobEventResponse, error)
 }
 
@@ -447,6 +487,7 @@ func (c *appCallbackAlphaClient) OnBulkTopicEventAlpha1(ctx context.Context, in 
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *appCallbackAlphaClient) OnJobEventAlpha1(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*JobEventResponse, error) {
 	out := new(JobEventResponse)
 	err := c.cc.Invoke(ctx, AppCallbackAlpha_OnJobEventAlpha1_FullMethodName, in, out, opts...)
@@ -463,7 +504,8 @@ type AppCallbackAlphaServer interface {
 	// Deprecated: Do not use.
 	// Subscribes bulk events from Pubsub
 	OnBulkTopicEventAlpha1(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error)
-	// Sends job back to the app's endpoint at trigger time.
+	// Deprecated: Do not use.
+	// Deprecated: Sends job back to the app's endpoint at trigger time.
 	OnJobEventAlpha1(context.Context, *JobEventRequest) (*JobEventResponse, error)
 }
 

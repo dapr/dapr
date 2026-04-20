@@ -130,6 +130,22 @@ func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, request *runtimev1p
 }
 
 // OnJobEvent is called by daprd once daprd receives a job from the scheduler at trigger time
+func (s *server) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	jobName := request.GetName()
+	data := request.GetData().GetValue()
+
+	addTriggeredJob(triggeredJob{
+		TypeURL: request.GetData().GetTypeUrl(),
+		Value:   string(request.GetData().GetValue()),
+	})
+
+	log.Printf("Received job event for job %s with data: %s", jobName, data)
+
+	// Respond to Dapr with an ack that the job was processed.
+	return &runtimev1pb.JobEventResponse{}, nil
+}
+
+// OnJobEventAlpha1 is called by daprd once daprd receives a job from the scheduler at trigger time
 func (s *server) OnJobEventAlpha1(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
 	jobName := request.GetName()
 	data := request.GetData().GetValue()
@@ -162,7 +178,7 @@ func getJobGRPC(name string) (*runtimev1pb.GetJobResponse, error) {
 
 	var err error
 	var receivedJob *runtimev1pb.GetJobResponse
-	if receivedJob, err = daprClient.GetJobAlpha1(context.Background(), job); err != nil {
+	if receivedJob, err = daprClient.GetJob(context.Background(), job); err != nil {
 		return nil, err
 	}
 
@@ -272,7 +288,7 @@ func scheduleJobGRPC(name string, jobWrapper JobWrapper) error {
 		},
 	}
 
-	if _, err := daprClient.ScheduleJobAlpha1(context.Background(), job); err != nil {
+	if _, err := daprClient.ScheduleJob(context.Background(), job); err != nil {
 		return err
 	}
 
@@ -317,7 +333,7 @@ func deleteJobGRPC(name string) error {
 		Name: name,
 	}
 
-	if _, err := daprClient.DeleteJobAlpha1(context.Background(), job); err != nil {
+	if _, err := daprClient.DeleteJob(context.Background(), job); err != nil {
 		log.Printf("Error deleting job via daprs grpc protocol: %s", err)
 		return err
 	}
