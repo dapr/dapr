@@ -70,7 +70,7 @@ func (s *success) Run(t *testing.T, ctx context.Context) {
 	data, _ := anypb.New(wrapperspb.Bytes([]byte("hello world")))
 
 	t.Run("successful job trigger", func(t *testing.T) {
-		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+		_, err := client.ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     "success",
 				DueTime:  new("0s"),
