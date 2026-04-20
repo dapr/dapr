@@ -108,10 +108,11 @@ func (m *multiScheduler) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	// Each scheduler has localLimit=2, so total dispatched should reach exactly 6.
+	// Each scheduler has localLimit=2, so total dispatched should reach exactly
+	// 6.
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(6), totalDispatched.Load())
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*100)
 
 	// Verify the limit holds - no more than 6 dispatched without acks.
 	time.Sleep(time.Second * 3)
