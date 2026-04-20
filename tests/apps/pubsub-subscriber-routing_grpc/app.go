@@ -230,6 +230,10 @@ func (s *server) OnBulkTopicEvent(ctx context.Context, in *runtimev1pb.TopicEven
 	return &runtimev1pb.TopicEventBulkResponse{}, nil
 }
 
+func (s *server) OnJobEvent(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return &runtimev1pb.JobEventResponse{}, nil
+}
+
 // Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr.
 // To invoke our app with a binding named storage.
 func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
