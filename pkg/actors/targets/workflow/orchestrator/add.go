@@ -73,7 +73,8 @@ func (o *orchestrator) addWorkflowEvent(ctx context.Context, historyEventBytes [
 	if len(state.History) > 0 {
 		dueTime = state.History[0].Timestamp.AsTime()
 	}
-	if _, err := o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, dueTime, sourceAppID); err != nil {
+	wfName := o.getExecutionStartedEvent(state).GetName()
+	if _, err := o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, dueTime, sourceAppID, &wfName); err != nil {
 		return err
 	}
 

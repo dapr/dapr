@@ -61,8 +61,15 @@ func (a *activity) handleInvoke(ctx context.Context, req *internalsv1pb.Internal
 		return nil, fmt.Errorf("failed to decode activity request: %w", err)
 	}
 
+	var activityName *string
+	if ts := his.GetTaskScheduled(); ts != nil {
+		if n := ts.GetName(); n != "" {
+			activityName = &n
+		}
+	}
+
 	// The actual execution is triggered by a reminder
-	return nil, a.createReminder(ctx, &his, dueTime)
+	return nil, a.createReminder(ctx, &his, dueTime, activityName)
 }
 
 func (a *activity) handleReminder(ctx context.Context, reminder *actorapi.Reminder) error {

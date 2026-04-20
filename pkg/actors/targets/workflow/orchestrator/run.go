@@ -203,7 +203,7 @@ func (o *orchestrator) runWorkflow(ctx context.Context, reminder *actorapi.Remin
 				}
 
 				if len(carryover) > 0 {
-					if _, err = o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, time.Now(), o.appID); err != nil {
+					if _, err = o.createWorkflowReminder(ctx, reminderPrefixNewEvent, nil, time.Now(), o.appID, &workflowName); err != nil {
 						return todo.RunCompletedFalse, err
 					}
 				}

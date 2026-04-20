@@ -623,6 +623,10 @@ func (abe *Actors) ActivityActorType() string {
 	return abe.activityActorType
 }
 
+func (abe *Actors) WorkflowActorType() string {
+	return abe.workflowActorType
+}
+
 // CancelActivityTask implements backend.Backend.
 func (abe *Actors) CancelActivityTask(ctx context.Context, instanceID api.InstanceID, taskID int32) error {
 	return abe.callWithBackoff(ctx, func() error {
