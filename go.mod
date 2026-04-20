@@ -6,7 +6,6 @@ require (
 	connectrpc.com/connect v1.19.1
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/PaesslerAG/jsonpath v0.1.1
-	github.com/PuerkitoBio/purell v1.2.1
 	github.com/aavaz-ai/pii-scrubber v0.0.0-20220812094047-3fa450ab6973
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
