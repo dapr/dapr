@@ -260,6 +260,14 @@ type MCPOAuth2 struct {
 	Audience *string `json:"audience,omitempty"`
 	//+optional
 	Scopes []string `json:"scopes,omitempty"`
+	// ClientID is the OAuth2 client identifier sent to the token endpoint.
+	// Required by RFC 6749 for the standard client_credentials flow (form parameter
+	// or HTTP Basic username). May be left empty for non-standard flows (e.g. JWT-bearer
+	// assertions or token endpoints that key solely on the client_secret). Client IDs
+	// are typically public identifiers; use spec.headers with a secretKeyRef if your
+	// environment requires sourcing the value from a secret store.
+	//+optional
+	ClientID string `json:"clientID,omitempty"`
 	// SecretKeyRef references the client secret in the configured secret store.
 	//+optional
 	SecretKeyRef *common.SecretKeyRef `json:"secretKeyRef,omitempty"`
