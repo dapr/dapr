@@ -58,25 +58,25 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 	t.Run("overwrite if exists", func(t *testing.T) {
 		jobName := "overwrite1"
 
-		_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
+		_, err := client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
 			Name:     jobName,
 			Schedule: new("@daily"),
 			Repeats:  new(uint32(1)),
 		}})
 		require.NoError(t, err)
 
-		job, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{Name: jobName})
+		job, err := client.GetJob(ctx, &rtv1.GetJobRequest{Name: jobName})
 		require.Equal(t, "@daily", job.GetJob().GetSchedule())
 		require.NoError(t, err)
 
-		_, err = client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
+		_, err = client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{Job: &rtv1.Job{
 			Name:     jobName,
 			Schedule: new("@weekly"),
 			Repeats:  new(uint32(1)),
 		}, Overwrite: true})
 		require.NoError(t, err)
 
-		modifiedJob, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{Name: jobName})
+		modifiedJob, err := client.GetJob(ctx, &rtv1.GetJobRequest{Name: jobName})
 		require.NoError(t, err)
 		require.NotEqual(t, job.GetJob().GetSchedule(), modifiedJob.GetJob().GetSchedule())
 		require.Equal(t, "@weekly", modifiedJob.GetJob().GetSchedule())
@@ -88,7 +88,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 			Schedule: new("@daily"),
 			Repeats:  new(uint32(1)),
 		}}
-		_, err := client.ScheduleJobAlpha1(ctx, r)
+		_, err := client.ScheduleJob(ctx, r)
 		require.NoError(t, err)
 
 		for _, req := range []*rtv1.ScheduleJobRequest{
@@ -98,11 +98,11 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 				Repeats:  new(uint32(1)),
 			}, Overwrite: false},
 		} {
-			_, err := client.ScheduleJobAlpha1(ctx, req)
+			_, err := client.ScheduleJob(ctx, req)
 			require.Error(t, err)
 			require.Equal(t, codes.AlreadyExists, status.Code(err))
 
-			overwrite2Job, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{Name: "overwrite2"})
+			overwrite2Job, err := client.GetJob(ctx, &rtv1.GetJobRequest{Name: "overwrite2"})
 			require.NoError(t, err)
 			require.Equal(t, "@daily", overwrite2Job.GetJob().GetSchedule())
 		}
