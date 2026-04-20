@@ -63,7 +63,7 @@ func (j *jobsfailedtotal) Run(t *testing.T, ctx context.Context) {
 	client := j.actors.GRPCClient(t, ctx)
 
 	for i := range 5 {
-		_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
+		_, err := client.ScheduleJob(ctx, &rtv1.ScheduleJobRequest{
 			Job: &rtv1.Job{
 				Name:    strconv.Itoa(i),
 				DueTime: new("0s"),

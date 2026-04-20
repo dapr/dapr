@@ -59,7 +59,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	httpClient := client.HTTP(t)
 
 	t.Run("bad json", func(t *testing.T) {
-		postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/test", b.daprd.HTTPPort())
+		postURL := fmt.Sprintf("http://localhost:%d/v1.0/jobs/test", b.daprd.HTTPPort())
 		for _, body := range []string{
 			"",
 			"{}",
@@ -91,7 +91,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			{"test3", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "{\"@type\": \"type.googleapis.com/google.protobuf.StringValue\", \"value\": \"Hello, World!\"}"}`},
 			{"test4", `{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "Hello, World!"}`},
 		} {
-			postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", b.daprd.HTTPPort(), r.name)
+			postURL := fmt.Sprintf("http://localhost:%d/v1.0/jobs/%s", b.daprd.HTTPPort(), r.name)
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(r.body))
 			require.NoError(t, err)
 			resp, err := httpClient.Do(req)
