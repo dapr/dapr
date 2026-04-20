@@ -28,46 +28,6 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-// Fortio perf result with percentiles + histogram
-type percentilePoint struct {
-	Percentile float64 `json:"Percentile"`
-	Value      float64 `json:"Value"`
-}
-
-type durationHistogram struct {
-	Count int     `json:"Count"`
-	Min   float64 `json:"Min"`
-	Max   float64 `json:"Max"`
-	Sum   float64 `json:"Sum"`
-	Avg   float64 `json:"Avg"`
-	Data  []struct {
-		Start   float64 `json:"Start"`
-		End     float64 `json:"End"`
-		Percent float64 `json:"Percent"`
-		Count   int     `json:"Count"`
-	} `json:"Data"`
-	Percentiles []percentilePoint `json:"Percentiles,omitempty"`
-}
-
-type FortioResult struct {
-	RunType            string             `json:"RunType"`
-	RequestedQPS       string             `json:"RequestedQPS"`
-	RequestedDuration  string             `json:"RequestedDuration"`
-	ActualQPS          float64            `json:"ActualQPS"`
-	ActualDuration     float64            `json:"ActualDuration"`
-	NumThreads         int                `json:"NumThreads"`
-	DurationHistogram  durationHistogram  `json:"DurationHistogram"`
-	Percentiles        []percentilePoint  `json:"Percentiles"`
-	ErrorsDurationHist *durationHistogram `json:"ErrorsDurationHistogram,omitempty"`
-	Dapr               string             `json:"Dapr,omitempty"`
-	URL                string             `json:"URL,omitempty"`
-	RetCodes           map[string]int     `json:"RetCodes,omitempty"`
-	Sizes              map[string]any     `json:"Sizes,omitempty"`
-	HeaderSizes        map[string]any     `json:"HeaderSizes,omitempty"`
-	ConnectionStats    map[string]any     `json:"ConnectionStats,omitempty"`
-	IPCountMap         map[string]int     `json:"IPCountMap,omitempty"`
-}
-
 // processFortioSummary parses Fortio style json perf output & converts them into a Runner
 // then stores them using the same aggregation mechanism
 func processFortioSummary(objJSON, testName, pkg, baseOutputDir string, resourceByTest map[string]*ResourceUsage) {
@@ -122,6 +82,19 @@ func processFortioSummary(objJSON, testName, pkg, baseOutputDir string, resource
 	}
 	storeRunner(r, info, ru)
 
+	if res.NumThreads > 0 {
+		mapKey := info.apiName + "/"
+		if info.transport != "" {
+			mapKey += info.transport + "/"
+		}
+		mapKey += info.groupKey
+		cr := combinedResults[mapKey]
+		if cr.numThreads == 0 {
+			cr.numThreads = res.NumThreads
+			combinedResults[mapKey] = cr
+		}
+	}
+
 	makeQPSChart(res, filePrefix, info.outDir)
 	makeDurationRequestedVsActualChart(res, filePrefix, info.outDir)
 	makeDurationHistogramCharts(res, filePrefix, info.outDir)
@@ -152,11 +125,11 @@ func convertFortioPerfToRunner(res FortioResult, runType string) Runner {
 			total += v
 			lk := strings.ToLower(strings.TrimSpace(k))
 			switch runTypeLower {
-			case "grpc":
+			case transportGRPC:
 				if lk == "serving" {
 					success += v
 				}
-			case "http":
+			case transportHTTP:
 				if strings.HasPrefix(k, "2") {
 					success += v
 				}

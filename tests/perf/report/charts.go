@@ -16,6 +16,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -29,6 +30,7 @@ type combinedTestResult struct {
 	outDir         string
 	runners        []Runner
 	resourceUsages []*ResourceUsage
+	numThreads     int // Fortio NumThreads (conns), 0 for k6 tests
 }
 
 var combinedResults = make(map[string]combinedTestResult)
@@ -54,55 +56,10 @@ func debugf(format string, args ...any) {
 	}
 }
 
-type Values struct {
-	Min   float64 `json:"min"`
-	Med   float64 `json:"med"`
-	P75   float64 `json:"p(75)"`
-	Avg   float64 `json:"avg"`
-	P90   float64 `json:"p(90)"`
-	P95   float64 `json:"p(95)"`
-	P99   float64 `json:"p(99)"`
-	P999  float64 `json:"p(99.9)"`
-	Max   float64 `json:"max"`
-	Rate  float64 `json:"rate,omitempty"`
-	Count float64 `json:"count,omitempty"`
-}
-
-type Metric struct {
-	Values Values `json:"values"`
-}
-
-// for k6 output, but also used by fortio for common charts for common fields
-type Runner struct {
-	HTTPReqDuration   Metric `json:"http_req_duration"`
-	HTTPReqWaiting    Metric `json:"http_req_waiting"`
-	HTTPReqConnecting Metric `json:"http_req_connecting"`
-	HTTPReqTLS        Metric `json:"http_req_tls_handshaking"`
-	HTTPReqSending    Metric `json:"http_req_sending"`
-	HTTPReqReceiving  Metric `json:"http_req_receiving"`
-	HTTPReqBlocked    Metric `json:"http_req_blocked"`
-	HTTPReqFailed     Metric `json:"http_req_failed"`
-	IterationDuration Metric `json:"iteration_duration"`
-	Iterations        Metric `json:"iterations"`
-	Checks            Metric `json:"checks"`
-	VUsMax            Metric `json:"vus_max"`
-	DataReceived      Metric `json:"data_received"`
-	DataSent          Metric `json:"data_sent"`
-}
-
-func (m Metric) IsZero() bool { return m.Values.Avg == 0 && m.Values.Max == 0 }
-
-// json file output fields
-type goTestEvent struct {
-	Time    string `json:"Time"`
-	Action  string `json:"Action"`
-	Package string `json:"Package"`
-	Test    string `json:"Test,omitempty"`
-	Output  string `json:"Output,omitempty"`
-}
+type goTestEvent = TestEvent // json file output fields
 
 const (
-	inputPath = "./test_report_perf.json"
+	defaultInputPath = "./test_report_perf.json"
 )
 
 // Variant comparison aggregation for pubsub tests & can be expanded on in the
@@ -118,10 +75,19 @@ var pubsubComparisons = make(map[string]variantComparison)
 
 // create charts based on perf json output
 func main() {
-	// TODO: cassie update inputPath once automated & running in CI
-	f, err := os.Open(inputPath)
+	version := flag.String("version", os.Getenv("DAPR_RELEASE_VERSION"), "Release version (e.g., v1.18.0). Defaults to DAPR_RELEASE_VERSION env var")
+	inputPath := flag.String("input-file", defaultInputPath, "Path to test_report_perf.json")
+	model := flag.String("model", "", "Ollama model name (skip highlights if empty)")
+	ollamaURL := flag.String("ollama-url", "http://localhost:11434", "Ollama base URL")
+	flag.Parse()
+
+	if *version == "" {
+		fmt.Fprintln(os.Stderr, "error: --version is required (or set DAPR_RELEASE_VERSION)")
+		os.Exit(1)
+	}
+	f, err := os.Open(*inputPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error opening %s: %v\n", inputPath, err)
+		fmt.Fprintf(os.Stderr, "error opening %s: %v\n", *inputPath, err)
 		os.Exit(1)
 	}
 	defer f.Close()
@@ -129,11 +95,10 @@ func main() {
 	// used for local debugging of charts
 	debugEnabled = strings.TrimSpace(os.Getenv("CHARTS_DEBUG")) != ""
 	if debugEnabled {
-		debugf("reading %s", inputPath)
+		debugf("reading %s for version %s", *inputPath, *version)
 	}
 
-	// TODO: cassie update this once automated based on release version
-	baseOutputDir := filepath.Join("charts", "v1.17.0")
+	baseOutputDir := filepath.Join("charts", *version)
 	if err = os.MkdirAll(baseOutputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error creating charts directory %s: %v\n", baseOutputDir, err)
 		os.Exit(1)
@@ -417,6 +382,10 @@ func main() {
 	log.Printf("Generated READMEs for charts in %s\n", baseOutputDir)
 
 	log.Printf("Generated charts for performance tests in %s\n", baseOutputDir)
+
+	if *model != "" {
+		generateHighlights(*version, baseOutputDir, *model, *ollamaURL)
+	}
 }
 
 // aggregateResourceUsages averages ResourceUsage across runs
@@ -468,6 +437,8 @@ func aggregateRunners(rs []Runner) Runner {
 			sum.Avg += v.Avg
 			sum.P90 += v.P90
 			sum.P95 += v.P95
+			sum.P99 += v.P99
+			sum.P999 += v.P999
 			sum.Max += v.Max
 			sum.Rate += v.Rate
 			sum.Count += v.Count
@@ -479,6 +450,8 @@ func aggregateRunners(rs []Runner) Runner {
 				Avg:   sum.Avg / lenRunners,
 				P90:   sum.P90 / lenRunners,
 				P95:   sum.P95 / lenRunners,
+				P99:   sum.P99 / lenRunners,
+				P999:  sum.P999 / lenRunners,
 				Max:   sum.Max / lenRunners,
 				Rate:  sum.Rate / lenRunners,
 				Count: sum.Count / lenRunners,

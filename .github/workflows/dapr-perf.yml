@@ -36,6 +36,13 @@ on:
   # Dispatch on external events
   repository_dispatch:
     types: [perf-test]
+  # Called by dapr-perf-highlights.yml after a release to run perf tests against a specific ref
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to check out (e.g. refs/tags/v1.18.0)'
+        required: true
+        type: string
 
 permissions: {}
 
@@ -74,6 +81,12 @@ jobs:
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Set up for workflow call
+        if: github.event_name == 'workflow_call'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=${{ inputs.ref }}" >> $GITHUB_ENV
         shell: bash
       - name: Set up for dispatched events
         if: github.event_name == 'repository_dispatch'
@@ -223,6 +236,12 @@ jobs:
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Set up for workflow call
+        if: github.event_name == 'workflow_call'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=${{ inputs.ref }}" >> $GITHUB_ENV
         shell: bash
       - name: Set up for dispatched events
         if: github.event_name == 'repository_dispatch'
@@ -378,6 +397,12 @@ jobs:
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Set up for workflow call
+        if: github.event_name == 'workflow_call'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=${{ inputs.ref }}" >> $GITHUB_ENV
         shell: bash
       - name: Set up for dispatched events
         if: github.event_name == 'repository_dispatch'

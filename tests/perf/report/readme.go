@@ -153,14 +153,14 @@ func writeReadmes(baseOutputDir string) {
 	for dir := range dirsWithPng {
 		parent := filepath.Dir(dir)
 		base := filepath.Base(dir)
-		if base != "http" && base != "grpc" {
+		if base != transportHTTP && base != transportGRPC {
 			continue
 		}
 		if seenParent[parent] {
 			continue
 		}
-		httpDir := filepath.Join(parent, "http")
-		grpcDir := filepath.Join(parent, "grpc")
+		httpDir := filepath.Join(parent, transportHTTP)
+		grpcDir := filepath.Join(parent, transportGRPC)
 		hasHTTP := dirsWithPng[httpDir]
 		hasGRPC := dirsWithPng[grpcDir]
 		if !hasHTTP && !hasGRPC {
@@ -181,8 +181,8 @@ func writeReadmes(baseOutputDir string) {
 			appendReadmeContent(&b, grpcDir, "grpc/")
 		}
 		// Pubsub exception: also include bulk/http and bulk/grpc when present
-		bulkHTTP := filepath.Join(parent, "bulk", "http")
-		bulkGRPC := filepath.Join(parent, "bulk", "grpc")
+		bulkHTTP := filepath.Join(parent, "bulk", transportHTTP)
+		bulkGRPC := filepath.Join(parent, "bulk", transportGRPC)
 		hasBulkHTTP := dirsWithPng[bulkHTTP]
 		hasBulkGRPC := dirsWithPng[bulkGRPC]
 		if hasBulkHTTP || hasBulkGRPC {
