@@ -100,3 +100,15 @@ const suffixListTools = ".ListTools"
 
 // suffixCallTool is the suffix identifying a CallTool orchestration.
 const suffixCallTool = ".CallTool"
+
+// ListToolsWorkflowName returns the full workflow name for a ListTools
+// operation on the given MCPServer.
+func ListToolsWorkflowName(serverName string) string {
+	return orchestrationNamePrefix + serverName + suffixListTools
+}
+
+// CallToolWorkflowName returns the full workflow name for a CallTool
+// operation on the given MCPServer.
+func CallToolWorkflowName(serverName string) string {
+	return orchestrationNamePrefix + serverName + suffixCallTool
+}
