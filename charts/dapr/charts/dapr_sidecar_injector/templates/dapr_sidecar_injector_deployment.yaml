@@ -43,7 +43,14 @@ spec:
       hostNetwork: true
       {{- end }}
       serviceAccountName: dapr-injector
+    {{- with .Values.global.initContainers.injector }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
       containers:
+    {{- with .Values.global.extraContainers.injector }}
+        {{- toYaml . | nindent 6 }}
+    {{- end }}
       - name: dapr-sidecar-injector
         livenessProbe:
           httpGet:
