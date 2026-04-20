@@ -31,19 +31,31 @@ import (
 	"github.com/dapr/kit/crypto/spiffe/trustanchors/fake"
 )
 
+// SigningData holds signatures, certificates, and raw history events for a
+// workflow instance, loaded from the state store for verification.
+type SigningData struct {
+	// RawSignatures are the raw serialized bytes of each HistorySignature
+	// as stored. Required for digest computation in chain verification.
+	RawSignatures [][]byte
+	// Signatures are the parsed HistorySignature protos.
+	Signatures []*protos.HistorySignature
+	// Certs are the signing certificates.
+	Certs []*protos.SigningCertificate
+	// RawEvents are the raw serialized bytes of each history event as stored.
+	RawEvents [][]byte
+}
+
 // UnmarshalSigningData reads and unmarshals signatures, certificates, and raw
 // history events from the SQLite state store for the given workflow instance.
-// Returns raw signature bytes alongside parsed protos, as raw bytes are needed
-// for digest computation in chain verification.
-func UnmarshalSigningData(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) (rawSigs [][]byte, sigs []*protos.HistorySignature, certs []*protos.SigningCertificate, rawEvents [][]byte) {
+func UnmarshalSigningData(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) SigningData {
 	t.Helper()
 
 	sigValues := db.ReadStateValues(t, ctx, instanceID, "signature")
 	certValues := db.ReadStateValues(t, ctx, instanceID, "sigcert")
-	rawEvents = db.ReadStateValues(t, ctx, instanceID, "history")
+	rawEvents := db.ReadStateValues(t, ctx, instanceID, "history")
 
-	rawSigs = make([][]byte, len(sigValues))
-	sigs = make([]*protos.HistorySignature, len(sigValues))
+	rawSigs := make([][]byte, len(sigValues))
+	sigs := make([]*protos.HistorySignature, len(sigValues))
 	for i, v := range sigValues {
 		sigs[i] = new(protos.HistorySignature)
 		require.NoError(t, proto.Unmarshal(v, sigs[i]))
@@ -51,13 +63,34 @@ func UnmarshalSigningData(t *testing.T, ctx context.Context, db *sqlite.SQLite, 
 		copy(rawSigs[i], v)
 	}
 
-	certs = make([]*protos.SigningCertificate, len(certValues))
+	certs := make([]*protos.SigningCertificate, len(certValues))
 	for i, v := range certValues {
 		certs[i] = new(protos.SigningCertificate)
 		require.NoError(t, proto.Unmarshal(v, certs[i]))
 	}
 
-	return rawSigs, sigs, certs, rawEvents
+	return SigningData{
+		RawSignatures: rawSigs,
+		Signatures:    sigs,
+		Certs:         certs,
+		RawEvents:     rawEvents,
+	}
+}
+
+// SignatureCount returns the number of signature entries stored for the
+// given workflow instance. Use this in tests to verify signing happened
+// or did not happen, instead of calling CountStateKeys directly with a
+// raw key prefix string (which is error-prone).
+func SignatureCount(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) int {
+	t.Helper()
+	return len(db.ReadStateValues(t, ctx, instanceID, "signature"))
+}
+
+// CertificateCount returns the number of signing certificate entries stored
+// for the given workflow instance.
+func CertificateCount(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string) int {
+	t.Helper()
+	return len(db.ReadStateValues(t, ctx, instanceID, "sigcert"))
 }
 
 // VerifySignatureChain verifies the full history signature chain for a
@@ -66,19 +99,19 @@ func UnmarshalSigningData(t *testing.T, ctx context.Context, db *sqlite.SQLite, 
 func VerifySignatureChain(t *testing.T, ctx context.Context, db *sqlite.SQLite, instanceID string, trustAnchors []byte) {
 	t.Helper()
 
-	rawSigs, _, certs, rawEvents := UnmarshalSigningData(t, ctx, db, instanceID)
+	data := UnmarshalSigningData(t, ctx, db, instanceID)
 
-	require.NotEmpty(t, rawSigs, "expected signature records")
-	require.NotEmpty(t, certs, "expected certificate records")
-	require.NotEmpty(t, rawEvents, "expected history records")
+	require.NotEmpty(t, data.RawSignatures, "expected signature records")
+	require.NotEmpty(t, data.Certs, "expected certificate records")
+	require.NotEmpty(t, data.RawEvents, "expected history records")
 
 	authorities := parsePEMCertificates(t, trustAnchors)
 	s := signer.New(nil, fake.New(authorities...))
 
 	require.NoError(t, historysigning.VerifyChain(historysigning.VerifyChainOptions{
-		RawSignatures: rawSigs,
-		Certs:         certs,
-		AllRawEvents:  rawEvents,
+		RawSignatures: data.RawSignatures,
+		Certs:         data.Certs,
+		AllRawEvents:  data.RawEvents,
 		Signer:        s,
 	}))
 }

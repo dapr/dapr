@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api/protos"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
@@ -95,7 +96,7 @@ func (tp *tampered) Run(tt *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(tt, err)
 
-	assert.Positive(tt, tp.db.CountStateKeys(tt, ctx, "signature"))
+	assert.Positive(tt, fworkflow.SignatureCount(tt, ctx, tp.db, id))
 
 	// Tamper with a history event by modifying its EventId.
 	db := tp.db.GetConnection(tt)

@@ -130,7 +130,7 @@ func (m *multireplica) Run(t *testing.T, ctx context.Context) {
 	// Send the first event from replica 1 and wait for it to be processed.
 	require.NoError(t, client.RaiseEvent(ctx, id, "event-0"))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Positive(c, m.db.CountStateKeys(t, ctx, "signature"))
+		assert.Positive(c, fworkflow.SignatureCount(t, ctx, m.db, id))
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Cycle through replicas. Each iteration: kill current, create new
@@ -138,7 +138,7 @@ func (m *multireplica) Run(t *testing.T, ctx context.Context) {
 	// processed (signature count increases).
 	currentDaprd := m.daprd1
 	for i := 1; i < totalReplicas; i++ {
-		prevSigCount := m.db.CountStateKeys(t, ctx, "signature")
+		prevSigCount := fworkflow.SignatureCount(t, ctx, m.db, id)
 		currentDaprd.Kill(t)
 
 		newDaprd := m.newDaprd(t)
@@ -153,7 +153,7 @@ func (m *multireplica) Run(t *testing.T, ctx context.Context) {
 
 		// Wait for the new replica to process the event and sign it.
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Greater(c, m.db.CountStateKeys(t, ctx, "signature"), prevSigCount)
+			assert.Greater(c, fworkflow.SignatureCount(t, ctx, m.db, id), prevSigCount)
 		}, 10*time.Second, 100*time.Millisecond)
 
 		currentDaprd = newDaprd
@@ -169,7 +169,7 @@ func (m *multireplica) Run(t *testing.T, ctx context.Context) {
 	// orchestrator moved between all 3 replicas (via kill/recreate), each
 	// replica signed history events with its unique cert. All 3 must be in the
 	// certificate table.
-	certCount := m.db.CountStateKeys(t, ctx, "sigcert")
+	certCount := fworkflow.CertificateCount(t, ctx, m.db, id)
 	assert.GreaterOrEqual(t, certCount, totalReplicas,
 		"expected at least %d certificates (one per replica), got %d", totalReplicas, certCount)
 

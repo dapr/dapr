@@ -98,7 +98,7 @@ func (c *certrotation) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, dworkflow.StatusRunning, meta.RuntimeStatus)
 
-	assert.Positive(t, c.db.CountStateKeys(t, ctx, "sigcert"))
+	assert.Positive(t, fworkflow.CertificateCount(t, ctx, c.db, id))
 
 	// Restart daprd to force sentry to issue a new SVID certificate.
 	c.daprd.Restart(t, ctx)
@@ -113,7 +113,7 @@ func (c *certrotation) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	// After restart sentry issues a new cert, so we expect at least 2 sigcerts.
-	assert.GreaterOrEqual(t, c.db.CountStateKeys(t, ctx, "sigcert"), 2)
+	assert.GreaterOrEqual(t, fworkflow.CertificateCount(t, ctx, c.db, id), 2)
 
 	fworkflow.VerifySignatureChain(t, ctx, c.db, id, c.sentry.CABundle().X509.TrustAnchors)
 	fworkflow.VerifyCertAppID(t, ctx, c.db, id, c.daprd.AppID())

@@ -104,8 +104,8 @@ func (c *continueasnew) Run(t *testing.T, ctx context.Context) {
 	fworkflow.VerifySignatureChain(t, ctx, c.db, id, c.sentry.CABundle().X509.TrustAnchors)
 	fworkflow.VerifyCertAppID(t, ctx, c.db, id, c.daprd.AppID())
 
-	// ContinueAsNew resets history, so the history record count should be small.
-	//nolint:dogsled
-	_, _, _, rawEvents := fworkflow.UnmarshalSigningData(t, ctx, c.db, id)
-	assert.Less(t, len(rawEvents), 10, "ContinueAsNew should reset history, keeping it small")
+	// After ContinueAsNew, history is reset and the final iteration has
+	// exactly 3 events: WorkflowStarted, ExecutionStarted, and ExecutionCompleted.
+	data := fworkflow.UnmarshalSigningData(t, ctx, c.db, id)
+	assert.Len(t, data.RawEvents, 3, "ContinueAsNew final iteration should have exactly 3 events")
 }

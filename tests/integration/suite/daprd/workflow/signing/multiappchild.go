@@ -127,7 +127,7 @@ func (m *multiappchild) Run(t *testing.T, ctx context.Context) {
 	_, err = client1.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	assert.Positive(t, m.db.CountStateKeys(t, ctx, "sigcert"))
+	assert.Positive(t, fworkflow.CertificateCount(t, ctx, m.db, id))
 
 	fworkflow.VerifySignatureChain(t, ctx, m.db, id, m.sentry.CABundle().X509.TrustAnchors)
 	fworkflow.VerifyCertAppID(t, ctx, m.db, id, "sign-parent-app")

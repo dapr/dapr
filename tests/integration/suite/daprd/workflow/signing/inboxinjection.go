@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
@@ -44,10 +45,11 @@ func init() {
 }
 
 // inboxInjection verifies that injecting a fake TaskCompleted event into the
-// inbox is rejected when signing is enabled. A TaskCompleted referencing a
-// TaskScheduledId that was never scheduled in the signed history is detected
-// by validateInboxEvents and causes the orchestrator run to fail, leaving
-// the workflow in RUNNING state without processing the injected event.
+// inbox is rejected when signing is enabled. The workflow schedules a real
+// activity and then waits for an external event. A TaskCompleted referencing
+// a TaskScheduledId that was never scheduled in the signed history is purged
+// by filterValidInboxEvents, leaving the workflow in RUNNING state without
+// processing the injected event.
 type inboxInjection struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -91,11 +93,17 @@ func (i *inboxInjection) Run(tt *testing.T, ctx context.Context) {
 
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("sign-inbox-inject", func(ctx *dworkflow.WorkflowContext) (any, error) {
+		if err := ctx.CallActivity("noop").Await(nil); err != nil {
+			return nil, err
+		}
 		var payload string
 		if err := ctx.WaitForExternalEvent("continue", time.Second*30).Await(&payload); err != nil {
 			return nil, err
 		}
 		return payload, nil
+	})
+	reg.AddActivityN("noop", func(ctx dworkflow.ActivityContext) (any, error) {
+		return nil, nil
 	})
 
 	client := dworkflow.NewClient(i.daprd.GRPCConn(tt, ctx))
@@ -107,7 +115,13 @@ func (i *inboxInjection) Run(tt *testing.T, ctx context.Context) {
 	meta, err := client.WaitForWorkflowStart(ctx, id)
 	require.NoError(tt, err)
 	assert.Equal(tt, dworkflow.StatusRunning, meta.RuntimeStatus)
-	assert.Positive(tt, i.db.CountStateKeys(tt, ctx, "signature"))
+
+	// Wait until the activity has completed and been signed into history
+	// (parent has scheduled and awaited the task, and is now waiting for
+	// the external event).
+	require.EventuallyWithT(tt, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c, fworkflow.SignatureCount(tt, ctx, i.db, id), 2)
+	}, time.Second*10, time.Millisecond*100)
 
 	// Inject a fake TaskCompleted event into the inbox referencing a
 	// TaskScheduledId (9999) that was never scheduled in the workflow history.

@@ -105,7 +105,7 @@ func (m *multiactivity) Run(t *testing.T, ctx context.Context) {
 	_, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
 
-	assert.GreaterOrEqual(t, m.db.CountStateKeys(t, ctx, "signature"), 5)
+	assert.GreaterOrEqual(t, fworkflow.SignatureCount(t, ctx, m.db, id), 5)
 
 	fworkflow.VerifySignatureChain(t, ctx, m.db, id, m.sentry.CABundle().X509.TrustAnchors)
 	fworkflow.VerifyCertAppID(t, ctx, m.db, id, m.daprd.AppID())

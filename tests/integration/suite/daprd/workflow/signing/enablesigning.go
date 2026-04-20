@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
@@ -92,7 +93,7 @@ func (e *enablesigning) Run(t *testing.T, ctx context.Context) {
 
 	_, err = client1.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, 0, e.db.CountStateKeys(t, ctx, "signature"))
+	assert.Equal(t, 0, fworkflow.SignatureCount(t, ctx, e.db, id))
 
 	e.daprd1.Kill(t)
 

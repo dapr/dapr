@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
@@ -92,13 +93,13 @@ func (p *purge) Run(tt *testing.T, ctx context.Context) {
 	require.NoError(tt, err)
 
 	// Verify signatures and certificates exist before purge.
-	assert.Positive(tt, p.db.CountStateKeys(tt, ctx, "signature"))
-	assert.Positive(tt, p.db.CountStateKeys(tt, ctx, "sigcert"))
+	assert.Positive(tt, fworkflow.SignatureCount(tt, ctx, p.db, id))
+	assert.Positive(tt, fworkflow.CertificateCount(tt, ctx, p.db, id))
 
 	// Purge the workflow.
 	require.NoError(tt, client.PurgeWorkflowState(ctx, id))
 
 	// Verify all signing data has been removed.
-	assert.Equal(tt, 0, p.db.CountStateKeys(tt, ctx, "signature"))
-	assert.Equal(tt, 0, p.db.CountStateKeys(tt, ctx, "sigcert"))
+	assert.Equal(tt, 0, fworkflow.SignatureCount(tt, ctx, p.db, id))
+	assert.Equal(tt, 0, fworkflow.CertificateCount(tt, ctx, p.db, id))
 }

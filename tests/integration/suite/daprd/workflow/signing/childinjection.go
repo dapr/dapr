@@ -15,11 +15,17 @@ package signing
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -27,7 +33,10 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api/protos"
+	"github.com/dapr/durabletask-go/backend"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
 
@@ -38,9 +47,8 @@ func init() {
 // childInjection verifies that injecting a fake ChildWorkflowInstanceCompleted
 // event into the inbox is rejected when signing is enabled. A
 // ChildWorkflowInstanceCompleted referencing a TaskScheduledId that was never
-// scheduled in the signed history is detected by validateInboxEvents and causes
-// the orchestrator run to fail, leaving the workflow in RUNNING state without
-// processing the injected event.
+// scheduled in the signed history is detected by filterValidInboxEvents and
+// purged before being processed, leaving the workflow in RUNNING state.
 type childInjection struct {
 	sentry *sentry.Sentry
 	place  *placement.Placement
@@ -84,12 +92,9 @@ func (i *childInjection) Run(tt *testing.T, ctx context.Context) {
 
 	reg := dworkflow.NewRegistry()
 	reg.AddWorkflowN("sign-child-inject-parent", func(ctx *dworkflow.WorkflowContext) (any, error) {
-		// Schedule a real child workflow.
 		if err := ctx.CallChildWorkflow("sign-child-inject-child").Await(nil); err != nil {
 			return nil, err
 		}
-		// Wait for an external event so the parent stays RUNNING after the
-		// child completes.
 		var payload string
 		if err := ctx.WaitForExternalEvent("continue", time.Second*30).Await(&payload); err != nil {
 			return nil, err
@@ -106,13 +111,83 @@ func (i *childInjection) Run(tt *testing.T, ctx context.Context) {
 	id, err := client.ScheduleWorkflow(ctx, "sign-child-inject-parent")
 	require.NoError(tt, err)
 
-	// Wait for the workflow to be running and give the child time to complete.
 	meta, err := client.WaitForWorkflowStart(ctx, id)
 	require.NoError(tt, err)
 	assert.Equal(tt, dworkflow.StatusRunning, meta.RuntimeStatus)
 
-	// Wait until the parent is waiting for the external event (child has
-	// completed and the parent has progressed past CallChildWorkflow).
+	// Wait until the child workflow's completion has been signed into the
+	// parent's history (parent has progressed past CallChildWorkflow and is
+	// now waiting for the external event).
+	require.EventuallyWithT(tt, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c, fworkflow.SignatureCount(tt, ctx, i.db, id), 2)
+	}, time.Second*10, time.Millisecond*100)
+
+	// Inject a fake ChildWorkflowInstanceCompleted event into the inbox
+	// referencing a TaskScheduledId (9999) that was never scheduled in the
+	// workflow's signed history.
+	appID := i.daprd.AppID()
+	actorType := "dapr.internal.default." + appID + ".workflow"
+	db := i.db.GetConnection(tt)
+	tableName := i.db.TableName()
+	keyPrefix := appID + "||" + actorType + "||" + id + "||"
+
+	fakeEvt := &protos.HistoryEvent{
+		EventId:   int32(-1),
+		Timestamp: timestamppb.Now(),
+		EventType: &protos.HistoryEvent_ChildWorkflowInstanceCompleted{
+			ChildWorkflowInstanceCompleted: &protos.ChildWorkflowInstanceCompletedEvent{
+				TaskScheduledId: int32(9999),
+				Result:          wrapperspb.String(`"injected-child-result"`),
+			},
+		},
+	}
+	raw, err := proto.Marshal(fakeEvt)
+	require.NoError(tt, err)
+
+	encoded := base64.StdEncoding.EncodeToString(raw)
+	inboxKey := fmt.Sprintf("%sinbox-%06d", keyPrefix, 0)
+
+	_, err = db.ExecContext(ctx,
+		fmt.Sprintf("INSERT OR REPLACE INTO '%s' (key, value, is_binary, etag) VALUES (?, ?, 1, ?)", tableName),
+		inboxKey, encoded, strconv.FormatInt(time.Now().UnixNano(), 10),
+	)
+	require.NoError(tt, err)
+
+	// Update the workflow metadata to reflect the injected inbox event.
+	metaKey := keyPrefix + "metadata"
+	var existingVal string
+	require.NoError(tt, db.QueryRowContext(ctx,
+		fmt.Sprintf("SELECT value FROM '%s' WHERE key = ?", tableName),
+		metaKey,
+	).Scan(&existingVal))
+
+	var wfMeta backend.BackendWorkflowStateMetadata
+	metaRaw, err := base64.StdEncoding.DecodeString(existingVal)
+	require.NoError(tt, err)
+	require.NoError(tt, proto.Unmarshal(metaRaw, &wfMeta))
+
+	wfMeta.InboxLength = uint64(1)
+	metaRaw, err = proto.Marshal(&wfMeta)
+	require.NoError(tt, err)
+
+	metaEncoded := base64.StdEncoding.EncodeToString(metaRaw)
+	_, err = db.ExecContext(ctx,
+		fmt.Sprintf("INSERT OR REPLACE INTO '%s' (key, value, is_binary, etag) VALUES (?, ?, 1, ?)", tableName),
+		metaKey, metaEncoded, strconv.FormatInt(time.Now().UnixNano(), 10),
+	)
+	require.NoError(tt, err)
+
+	// Restart daprd to clear the in-memory cache and force re-loading state
+	// from the store. This triggers the orchestrator to process the inbox.
+	i.daprd.Restart(tt, ctx)
+	i.daprd.WaitUntilRunning(tt, ctx)
+
+	client = dworkflow.NewClient(i.daprd.GRPCConn(tt, ctx))
+	require.NoError(tt, client.StartWorker(ctx, reg))
+
+	// The workflow should remain RUNNING because the injected
+	// ChildWorkflowInstanceCompleted was rejected by inbox validation
+	// (no matching ChildWorkflowInstanceCreated for TaskScheduledId 9999).
 	require.EventuallyWithT(tt, func(c *assert.CollectT) {
 		meta, err = client.FetchWorkflowMetadata(ctx, id)
 		if !assert.NoError(c, err) {
@@ -132,7 +207,4 @@ func (i *childInjection) Run(tt *testing.T, ctx context.Context) {
 	meta, err = client.WaitForWorkflowCompletion(ctx, id)
 	require.NoError(tt, err)
 	assert.Equal(tt, dworkflow.StatusCompleted, meta.RuntimeStatus)
-
-	// Verify signatures exist for the completed workflow.
-	assert.Positive(tt, i.db.CountStateKeys(tt, ctx, "signature"))
 }

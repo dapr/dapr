@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
@@ -105,7 +106,7 @@ func (s *signinggap) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, client1.RaiseEvent(ctx, id, "event1"))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Positive(c, s.db.CountStateKeys(t, ctx, "signature"))
+		assert.Positive(c, fworkflow.SignatureCount(t, ctx, s.db, id))
 	}, time.Second*10, time.Millisecond*100)
 
 	s.daprd1.Kill(t)

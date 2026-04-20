@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	fworkflow "github.com/dapr/dapr/tests/integration/framework/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
 )
@@ -103,5 +104,5 @@ func (tr *terminate) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, dworkflow.StatusTerminated, meta.RuntimeStatus)
 
-	assert.Positive(t, tr.db.CountStateKeys(t, ctx, "signature"))
+	assert.Positive(t, fworkflow.SignatureCount(t, ctx, tr.db, id))
 }

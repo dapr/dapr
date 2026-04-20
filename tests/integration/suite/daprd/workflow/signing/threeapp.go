@@ -155,8 +155,8 @@ func (a *threeapp) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, dworkflow.StatusCompleted, meta.RuntimeStatus)
 
-	assert.Positive(t, a.db.CountStateKeys(t, ctx, "signature"))
-	assert.GreaterOrEqual(t, a.db.CountStateKeys(t, ctx, "sigcert"), 1)
+	assert.Positive(t, fworkflow.SignatureCount(t, ctx, a.db, id))
+	assert.GreaterOrEqual(t, fworkflow.CertificateCount(t, ctx, a.db, id), 1)
 
 	fworkflow.VerifySignatureChain(t, ctx, a.db, id, a.sentry.CABundle().X509.TrustAnchors)
 	fworkflow.VerifyCertAppID(t, ctx, a.db, id, "sign-three-a")
