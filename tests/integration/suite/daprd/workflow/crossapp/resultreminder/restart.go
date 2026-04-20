@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
 	"github.com/dapr/dapr/tests/integration/suite"
 	dworkflow "github.com/dapr/durabletask-go/workflow"
@@ -39,21 +38,8 @@ type restart struct {
 }
 
 func (r *restart) Setup(t *testing.T) []framework.Option {
-	config := `
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: myconfig
-spec:
-  features:
-  - name: WorkflowsRemoteActivityReminder
-    enabled: true
-`
-
 	r.workflow = workflow.New(t,
 		workflow.WithDaprds(2),
-		workflow.WithDaprdOptions(0, daprd.WithConfigManifests(t, config)),
-		workflow.WithDaprdOptions(1, daprd.WithConfigManifests(t, config)),
 	)
 
 	return []framework.Option{
