@@ -93,6 +93,17 @@ func Run() {
 			if serr != nil {
 				return serr
 			}
+			var ctrl *server.Controller
+			if modes.DaprMode(opts.Mode) == modes.KubernetesMode {
+				var cerr error
+				ctrl, cerr = server.NewController(server.ControllerOptions{
+					KubeConfig: opts.KubeConfig,
+					Healthz:    healthz,
+				})
+				if cerr != nil {
+					return cerr
+				}
+			}
 
 			getServer := func() (*server.Server, error) {
 				server, serr := server.New(ctx, server.Options{
@@ -100,9 +111,10 @@ func Run() {
 					ListenAddress:             opts.ListenAddress,
 					OverrideBroadcastHostPort: opts.OverrideBroadcastHostPort,
 
-					Mode:     modes.DaprMode(opts.Mode),
-					Security: secHandler,
-					Healthz:  healthz,
+					Mode:       modes.DaprMode(opts.Mode),
+					Security:   secHandler,
+					Healthz:    healthz,
+					Controller: ctrl,
 
 					KubeConfig:                     opts.KubeConfig,
 					EtcdEmbed:                      opts.EtcdEmbed,
