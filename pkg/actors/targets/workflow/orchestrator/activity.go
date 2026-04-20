@@ -129,7 +129,7 @@ func (o *orchestrator) failActivity(ctx context.Context, e *backend.HistoryEvent
 		},
 	}
 
-	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID); err != nil {
+	if _, err := o.createWorkflowReminder(ctx, common.ReminderPrefixActivityResult, failedEvent, time.Now(), o.appID, nil); err != nil {
 		return fmt.Errorf("failed to create activity failure reminder: %w", err)
 	}
 
