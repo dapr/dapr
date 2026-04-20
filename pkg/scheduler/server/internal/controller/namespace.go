@@ -15,6 +15,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,14 +27,19 @@ import (
 )
 
 type namespace struct {
-	cron     cron.Interface
+	ctrl     *Controller
 	nsReader client.Reader
 }
 
 func (n *namespace) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log.Debugf("Reconciling namespace %s", req.Name)
 
-	cronClient, err := n.cron.Client(ctx)
+	cr, ok := n.ctrl.cron.Load().(cron.Interface)
+	if !ok {
+		return ctrl.Result{}, errors.New("controller cron not yet initialized")
+	}
+
+	cronClient, err := cr.Client(ctx)
 	if err != nil {
 		log.Errorf("Failed to get etcd cron client: %s", err)
 		return ctrl.Result{}, err
