@@ -40,6 +40,12 @@ type Actors struct {
 	sched *scheduler.Scheduler
 	daprd *daprd.Daprd
 
+	// sharedControlPlane is true when this Actors instance received its
+	// placement, scheduler, and db from an external source.
+	// When true, Cleanup skips these shared resources so the owner can
+	// shut them down in its own lifecycle.
+	sharedControlPlane bool
+
 	runOnce     sync.Once
 	cleanupOnce sync.Once
 }
@@ -118,11 +124,12 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	}
 
 	return &Actors{
-		app:   app,
-		db:    opts.db,
-		place: opts.placement,
-		sched: opts.scheduler,
-		daprd: daprd.New(t, dopts...),
+		app:                app,
+		db:                 opts.db,
+		place:              opts.placement,
+		sched:              opts.scheduler,
+		daprd:              daprd.New(t, dopts...),
+		sharedControlPlane: opts.sharedControlPlane,
 	}
 }
 
@@ -139,9 +146,11 @@ func (a *Actors) Run(t *testing.T, ctx context.Context) {
 func (a *Actors) Cleanup(t *testing.T) {
 	a.cleanupOnce.Do(func() {
 		a.daprd.Cleanup(t)
-		a.sched.Cleanup(t)
-		a.place.Cleanup(t)
-		a.db.Cleanup(t)
+		if !a.sharedControlPlane {
+			a.sched.Cleanup(t)
+			a.place.Cleanup(t)
+			a.db.Cleanup(t)
+		}
 		a.app.Cleanup(t)
 	})
 }
