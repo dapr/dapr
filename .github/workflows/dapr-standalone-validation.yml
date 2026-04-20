@@ -93,6 +93,8 @@ jobs:
           cd .baseline
           git status
           make ./dist/${GOOS}_${GOARCH}/release/daprd
+          mkdir -p $HOME/.dapr/bin/
+          cp dist/${GOOS}_${GOARCH}/release/daprd $HOME/.dapr/bin/daprd
           cd ..
       - name: Validate sidecar's basic resource utilization
         env:
